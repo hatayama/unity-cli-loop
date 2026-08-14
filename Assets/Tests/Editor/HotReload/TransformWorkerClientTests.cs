@@ -4,6 +4,8 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Newtonsoft.Json;
+
 using NUnit.Framework;
 
 using UnityEditor.Compilation;
@@ -1571,6 +1573,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return string.Join(", ", names);
+        }
+
+        /// <summary>
+        /// What: worker System.Text.Json may omit null nested arrays while Unity Newtonsoft
+        /// deserializes omitted fields as null; empty arrays round-trip as empty. Client coalesce
+        /// must turn both into non-null empty arrays so later readers never see null.
+        /// </summary>
+        [Test]
+        public void Deserialize_RemovedMembersAndCalledAddedMethodKeys_NullAndEmptyRoundTrip()
+        {
+            string omittedJson =
+                "{\"shimSource\":\"\",\"entries\":[{\"methodName\":\"Caller\"}],\"skipped\":[],\"parseErrors\":[]}";
+            TransformWorkerOutputDto omitted =
+                JsonConvert.DeserializeObject<TransformWorkerOutputDto>(omittedJson);
+            Assert.That(omitted.removedMembers, Is.Null, "Omitted removedMembers must deserialize as null.");
+            Assert.That(
+                omitted.entries[0].calledAddedMethodKeys,
+                Is.Null,
+                "Omitted calledAddedMethodKeys must deserialize as null.");
+
+            omitted.removedMembers ??= Array.Empty<TransformWorkerRemovedMemberDto>();
+            omitted.entries[0].calledAddedMethodKeys ??= Array.Empty<string>();
+            Assert.That(omitted.removedMembers, Is.Empty);
+            Assert.That(omitted.entries[0].calledAddedMethodKeys, Is.Empty);
+
+            string emptyJson =
+                "{\"shimSource\":\"\",\"entries\":[{\"methodName\":\"Caller\",\"calledAddedMethodKeys\":[]}],"
+                + "\"removedMembers\":[]}";
+            TransformWorkerOutputDto empty = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(emptyJson);
+            Assert.That(empty.removedMembers, Is.Not.Null);
+            Assert.That(empty.removedMembers.Length, Is.EqualTo(0));
+            Assert.That(empty.entries[0].calledAddedMethodKeys, Is.Not.Null);
+            Assert.That(empty.entries[0].calledAddedMethodKeys.Length, Is.EqualTo(0));
+
+            string nestedJson =
+                "{\"removedMembers\":[{\"kind\":\"method\",\"name\":\"Gone\"}],"
+                + "\"entries\":[{\"methodName\":\"Caller\",\"calledAddedMethodKeys\":[\"T::Added()\"]}]}";
+            TransformWorkerOutputDto nested = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(nestedJson);
+            Assert.That(nested.removedMembers.Length, Is.EqualTo(1));
+            Assert.That(nested.removedMembers[0].kind, Is.EqualTo("method"));
+            Assert.That(nested.removedMembers[0].name, Is.EqualTo("Gone"));
+            Assert.That(nested.entries[0].calledAddedMethodKeys, Is.EqualTo(new[] { "T::Added()" }));
         }
     }
 }

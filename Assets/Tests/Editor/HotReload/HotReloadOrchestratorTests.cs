@@ -1700,6 +1700,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
         }
 
+        /// <summary>
+        /// What: an added method plus its caller plus an unrelated shim-compile failure still
+        /// isolates per-method (the file is not collapsed to a single (shim-compile) Failed).
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodCallerAndUnrelatedShimFailure_IsolatesWithoutWipingFile()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public int ExistingValue()\n        {\n            return 10;\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ExistingFail(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingFail(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n    }",
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }\n    }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("AddedMethodIsolation.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+
+            bool failIsolated = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(nameof(HotReloadAddedMemberHost.ExistingFail)))
+                {
+                    failIsolated = true;
+                }
+            }
+
+            Assert.That(
+                failIsolated,
+                Is.True,
+                "ExistingFail must isolate as a per-method Failed.\n" + FormatOutcomes(result));
+
+            HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
+            Assert.That(host.ExistingValue(), Is.EqualTo(10));
+            Assert.That(host.ExistingCaller(3), Is.EqualTo(4));
+        }
+
         private static int FindLineNumberContaining(string source, string fragment)
         {
             string[] lines = source.Replace("\r\n", "\n").Split('\n');
@@ -1754,6 +1812,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return string.Join("\n", lines);
+        }
+
+        private static string ResolveAddedMemberHostPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadAddedMemberHost.cs");
+            Assert.That(File.Exists(path), Is.True, "Added-member host source missing: " + path);
+            return Path.GetFullPath(path);
         }
 
         private static string ResolveE2EFixturePath()

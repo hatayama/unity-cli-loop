@@ -833,7 +833,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<HotReloadMethodOutcome> failedMethodOutcomes =
                 BuildFailedMethodOutcomes(attribution, assemblyResolvePath);
-            string[] excludedMethodKeys = BuildExcludedMethodKeys(attribution.FailedEntries);
+            string[] excludedMethodKeys = BuildExcludedMethodKeys(
+                attribution.FailedEntries,
+                workerOutput.entries);
 
             return await RunIsolationRetryAsync(
                 workerInput,
@@ -936,15 +938,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return failedMethodOutcomes;
         }
 
-        private static string[] BuildExcludedMethodKeys(IReadOnlyList<TransformWorkerEntryDto> failedEntries)
+        private static string[] BuildExcludedMethodKeys(
+            IReadOnlyList<TransformWorkerEntryDto> failedEntries,
+            TransformWorkerEntryDto[] allEntries)
         {
-            string[] excludedMethodKeys = new string[failedEntries.Count];
-            for (int index = 0; index < failedEntries.Count; index++)
+            HashSet<string> excludedKeys = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<string> failedAddedMethodKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto failedEntry in failedEntries)
             {
-                excludedMethodKeys[index] = BuildMethodKey(failedEntries[index]);
+                string methodKey = BuildMethodKey(failedEntry);
+                if (failedEntry.patchKind == HotReloadConstants.PatchKindAddedMethod)
+                {
+                    // Why not exclude the added method: dropping its shim leaves remaining
+                    // callers with CS0103 and isolation collapses to a file-level Failed (G1).
+                    failedAddedMethodKeys.Add(methodKey);
+                    continue;
+                }
+
+                excludedKeys.Add(methodKey);
             }
 
-            return excludedMethodKeys;
+            if (failedAddedMethodKeys.Count == 0 || allEntries == null)
+            {
+                string[] keys = new string[excludedKeys.Count];
+                excludedKeys.CopyTo(keys);
+                return keys;
+            }
+
+            foreach (TransformWorkerEntryDto entry in allEntries)
+            {
+                if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod
+                    || entry.calledAddedMethodKeys == null)
+                {
+                    continue;
+                }
+
+                foreach (string calledKey in entry.calledAddedMethodKeys)
+                {
+                    if (failedAddedMethodKeys.Contains(calledKey))
+                    {
+                        excludedKeys.Add(BuildMethodKey(entry));
+                        break;
+                    }
+                }
+            }
+
+            string[] result = new string[excludedKeys.Count];
+            excludedKeys.CopyTo(result);
+            return result;
         }
 
         /// <summary>

@@ -91,10 +91,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 output.entries ??= Array.Empty<TransformWorkerEntryDto>();
                 output.skipped ??= Array.Empty<TransformWorkerSkippedDto>();
                 output.parseErrors ??= Array.Empty<string>();
+                output.declarationDriftWarnings ??= Array.Empty<string>();
+                output.unchangedMethods ??= Array.Empty<TransformWorkerUnchangedMethodDto>();
+                output.removedMembers ??= Array.Empty<TransformWorkerRemovedMemberDto>();
                 output.shimSource ??= string.Empty;
                 foreach (TransformWorkerEntryDto entry in output.entries)
                 {
                     entry.patchKind ??= string.Empty;
+                    entry.calledAddedMethodKeys ??= Array.Empty<string>();
+                    entry.parameterTypeFullNames ??= Array.Empty<string>();
                 }
 
                 return TransformWorkerClientResult.SuccessResult(output);

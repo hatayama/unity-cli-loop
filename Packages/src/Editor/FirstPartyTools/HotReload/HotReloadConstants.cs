@@ -45,7 +45,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string BurstCompileAttributeFullName = "Unity.Burst.BurstCompileAttribute";
 
         public const string NewMemberCompileHint =
-            "Adding new members requires a real compile (uloop compile); hot reload only replaces existing method bodies.";
+            "Same-file added methods are applied by hot reload; cross-file references and unsupported "
+            + "member kinds still require a real compile (uloop compile).";
+
+        // Wire value for TransformWorkerEntryDto.patchKind when the worker emits a shim for a
+        // method that exists only in the edited source. Keep in sync with PatchKinds.AddedMethod
+        // in TransformWorker~/TransformWorker.cs.
+        public const string PatchKindAddedMethod = "addedMethod";
+
+        // Wire values for TransformWorkerRemovedMemberDto.kind.
+        public const string RemovedMemberKindMethod = "method";
+        public const string RemovedMemberKindField = "field";
 
         public const string MissingUsingCompileHint =
             "This can mean a missing using or global using (hot reload collects global usings from the edited file's assembly).";

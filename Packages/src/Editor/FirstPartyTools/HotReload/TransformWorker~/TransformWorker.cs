@@ -258,14 +258,15 @@ public static class TransformWorkerProgram
         Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap = null;
         Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap = null;
         Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap = null;
+        CompilationUnitSyntax baselineSnapshotRoot = null;
         // Null disables comparison; empty string is a real (empty) baseline text.
         if (input.SnapshotSource != null)
         {
-            CompilationUnitSyntax snapshotRoot = CSharpSyntaxTree.ParseText(
+            baselineSnapshotRoot = CSharpSyntaxTree.ParseText(
                     SourceText.From(input.SnapshotSource, Encoding.UTF8),
                     parseOptions)
                 .GetCompilationUnitRoot();
-            Dictionary<string, MethodDeclarationSyntax> snapMethods = BuildSyntaxMethodMapOrNull(snapshotRoot);
+            Dictionary<string, MethodDeclarationSyntax> snapMethods = BuildSyntaxMethodMapOrNull(baselineSnapshotRoot);
             // Why plainRoot: annotated current nodes break AreEquivalent for some shapes (see plainRoot above).
             Dictionary<string, MethodDeclarationSyntax> currentMethods = BuildSyntaxMethodMapOrNull(plainRoot);
             if (snapMethods != null && currentMethods != null)
@@ -277,17 +278,10 @@ public static class TransformWorkerProgram
                 plainCurrentMethodMap = currentMethods;
                 // Why null is kept as-is: a colliding property/indexer key only disables accessor
                 // gating for this file; method-level baseline matching still applies.
-                snapshotPropertyMap = BuildSyntaxPropertyMapOrNull(snapshotRoot);
-                snapshotIndexerMap = BuildSyntaxIndexerMapOrNull(snapshotRoot);
+                snapshotPropertyMap = BuildSyntaxPropertyMapOrNull(baselineSnapshotRoot);
+                snapshotIndexerMap = BuildSyntaxIndexerMapOrNull(baselineSnapshotRoot);
                 plainCurrentPropertyMap = BuildSyntaxPropertyMapOrNull(plainRoot);
                 plainCurrentIndexerMap = BuildSyntaxIndexerMapOrNull(plainRoot);
-                // Why plainRoot (not annotated root): StripMethodBodiesRewriter only clears method
-                // bodies, so accessor/ctor annotations would otherwise fake outside-body drift.
-                AppendOutsideMethodBodyDriftWarningIfNeeded(
-                    snapshotRoot,
-                    plainRoot,
-                    Path.GetFileName(input.SourcePath),
-                    declarationDriftWarnings);
             }
             else
             {
@@ -299,11 +293,14 @@ public static class TransformWorkerProgram
         List<WorkerEntry> entries = new List<WorkerEntry>();
         List<WorkerSkipped> skipped = new List<WorkerSkipped>();
         List<WorkerUnchangedMethod> unchangedMethods = new List<WorkerUnchangedMethod>();
+        List<WorkerRemovedMember> removedMembers = new List<WorkerRemovedMember>();
         List<ShimTypeBuilder> shimTypes = new List<ShimTypeBuilder>();
         int globalShimMethodCounter = 0;
         int shimTypeCounter = 0;
         List<UsingDirectiveSyntax> assemblyGlobalUsings =
             CollectAssemblyGlobalUsings(input, parseOptions);
+        AddedMethodCatalog addedMethodCatalog = new AddedMethodCatalog();
+        List<TypeEmitState> typeEmitStates = new List<TypeEmitState>();
 
         foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
         {
@@ -327,134 +324,77 @@ public static class TransformWorkerProgram
                 hasBaseline ? plainCurrentPropertyMap : null,
                 hasBaseline ? plainCurrentIndexerMap : null);
 
-            List<MethodDeclarationSyntax> methods = typeDeclaration.Members
-                .OfType<MethodDeclarationSyntax>()
-                .ToList();
-
-            ShimTypeBuilder currentShimType = null;
-            foreach (MethodDeclarationSyntax methodDeclaration in methods)
+            TypeEmitState typeState = new TypeEmitState
             {
-                IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(methodDeclaration);
-                if (methodSymbol == null)
-                {
-                    continue;
-                }
+                TypeDeclaration = typeDeclaration,
+                TypeSymbol = typeSymbol,
+                TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax
+            };
+            (int nextShimTypeCounter, int nextGlobalShimMethodCounter) = QueueTypeMethods(
+                typeState,
+                semanticModel,
+                targetTypesAssemblySymbol,
+                input,
+                hasBaseline,
+                snapshotMethodMap,
+                plainCurrentMethodMap,
+                root,
+                assemblyGlobalUsings,
+                shimTypes,
+                addedMethodCatalog,
+                skipped,
+                unchangedMethods,
+                declarationDriftWarnings,
+                shimTypeCounter,
+                globalShimMethodCounter);
+            shimTypeCounter = nextShimTypeCounter;
+            globalShimMethodCounter = nextGlobalShimMethodCounter;
+            typeEmitStates.Add(typeState);
+        }
 
-                string[] parameterTypeFullNames = methodSymbol.Parameters
-                    .Select(CecilTypeNames.ToParameterTypeFullName)
-                    .ToArray();
+        if (hasBaseline)
+        {
+            CollectRemovedMethods(
+                snapshotMethodMap,
+                plainCurrentMethodMap,
+                addedMethodCatalog,
+                removedMembers);
+        }
 
-                // The orchestrator already reported this method as Failed from the first compile
-                // round; re-emitting it would fail the retry compile again.
-                string methodKey = BuildMethodKey(
-                    CecilTypeNames.ToMetadataName(typeSymbol), methodSymbol.Name, parameterTypeFullNames);
-                if (input.ExcludedMethodKeys.Contains(methodKey))
-                {
-                    continue;
-                }
+        SkipMethodsThatCaptureAddedMethodGroups(
+            typeEmitStates,
+            semanticModel,
+            addedMethodCatalog,
+            skipped);
 
-                // Why after ExcludedMethodKeys: exclusion means "already Failed on first round", so
-                // it must win. Unchanged methods add no per-method signal — skipping them cuts
-                // response noise and avoids pause-point collateral on untouched methods. Identities
-                // are returned so the orchestrator can revert a leftover patch when source matches
-                // the baseline again.
-                if (hasBaseline)
-                {
-                    string syntaxMethodKey = BuildSyntaxMethodKey(typeMetadataNameFromSyntax, methodDeclaration);
-                    // Why plainDecl: compare unannotated nodes; annotated methodDeclaration breaks
-                    // AreEquivalent for long-return / unchecked / switch shapes (see plainRoot).
-                    if (snapshotMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax snapshotDecl)
-                        && plainCurrentMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax plainDecl)
-                        && SyntaxFactory.AreEquivalent(snapshotDecl, plainDecl, topLevel: false))
-                    {
-                        unchangedMethods.Add(new WorkerUnchangedMethod
-                        {
-                            TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
-                            MethodName = methodSymbol.Name,
-                            ParameterTypeFullNames = parameterTypeFullNames
-                        });
-                        continue;
-                    }
-                }
+        if (hasBaseline && baselineSnapshotRoot != null)
+        {
+            // Why after classification: added/removed method declarations must be stripped
+            // before AreEquivalent, or every method addition would fire "not applied".
+            AppendOutsideMethodBodyDriftWarningIfNeeded(
+                baselineSnapshotRoot,
+                plainRoot,
+                Path.GetFileName(input.SourcePath),
+                declarationDriftWarnings,
+                addedMethodCatalog);
+        }
 
-                SyntaxNode methodBodyNode =
-                    (SyntaxNode)methodDeclaration.Body ?? methodDeclaration.ExpressionBody;
-                MethodTransformDecision decision = DecideMethodTransform(
-                    typeDeclaration,
-                    typeSymbol,
-                    methodDeclaration,
-                    methodSymbol,
-                    methodBodyNode,
-                    semanticModel);
-                if (decision.SkipReason != null)
-                {
-                    skipped.Add(new WorkerSkipped
-                    {
-                        Method = FormatMethodLabel(methodSymbol),
-                        Reason = decision.SkipReason
-                    });
-                    continue;
-                }
-
-                if (currentShimType == null)
-                {
-                    string shimTypeName = typeSymbol.Name + "_UloopHotReloadShims_" + shimTypeCounter;
-                    shimTypeCounter++;
-                    string namespaceName = typeSymbol.ContainingNamespace == null
-                        || typeSymbol.ContainingNamespace.IsGlobalNamespace
-                        ? string.Empty
-                        : typeSymbol.ContainingNamespace.ToDisplayString();
-                    currentShimType = new ShimTypeBuilder(
-                        shimTypeName,
-                        namespaceName,
-                        CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings));
-                    shimTypes.Add(currentShimType);
-                }
-
-                string shimMethodName = methodSymbol.Name + "__shim" + globalShimMethodCounter;
-                globalShimMethodCounter++;
-
-                FileLinePositionSpan originalSpan = methodDeclaration.GetLocation().GetLineSpan();
-                int sourceStartLine = originalSpan.StartLinePosition.Line + 1;
-                int sourceEndLine = originalSpan.EndLinePosition.Line + 1;
-
-                // Eligibility uses a disposable plan; the rewriter lazily GetOrAdd-s into the
-                // shim-type-level plan so AllocateName stays unique across methods in the type.
-                // methodDeclaration already carries uloop-line annotations from the parse-time pass.
-                AccessorPlan rewritePlan = decision.UsesDelegation
-                    ? currentShimType.AccessorPlan
-                    : null;
-                MethodDeclarationSyntax rewrittenMethod = RewriteMethodBody(
-                    methodDeclaration,
-                    methodSymbol,
-                    typeSymbol,
-                    semanticModel,
-                    rewritePlan);
-                currentShimType.AddMethod(rewrittenMethod, shimMethodName);
-
-                entries.Add(new WorkerEntry
-                {
-                    TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
-                    MethodName = methodSymbol.Name,
-                    ParameterTypeFullNames = parameterTypeFullNames,
-                    ShimTypeName = currentShimType.ShimTypeName,
-                    ShimMethodName = shimMethodName,
-                    PatchKind = decision.PatchKind,
-                    SourceStartLine = sourceStartLine,
-                    SourceEndLine = sourceEndLine,
-                    LifecycleNote = ComputeLifecycleNote(methodDeclaration, methodSymbol, typeSymbol)
-                });
-            }
-
-            foreach (PropertyDeclarationSyntax propertyDeclaration in typeDeclaration.Members
+        foreach (TypeEmitState typeState in typeEmitStates)
+        {
+            EmitQueuedMethods(
+                typeState,
+                semanticModel,
+                addedMethodCatalog,
+                entries);
+            foreach (PropertyDeclarationSyntax propertyDeclaration in typeState.TypeDeclaration.Members
                 .OfType<PropertyDeclarationSyntax>())
             {
                 (ShimTypeBuilder nextShimType, int nextShimTypeCounter, int nextGlobalShimMethodCounter) =
                     AppendPropertyGetterEntry(
                         propertyDeclaration,
-                        typeDeclaration,
-                        typeSymbol,
-                        typeMetadataNameFromSyntax,
+                        typeState.TypeDeclaration,
+                        typeState.TypeSymbol,
+                        typeState.TypeMetadataNameFromSyntax,
                         semanticModel,
                         root,
                         input,
@@ -467,11 +407,22 @@ public static class TransformWorkerProgram
                         shimTypes,
                         shimTypeCounter,
                         globalShimMethodCounter,
-                        currentShimType,
-                        assemblyGlobalUsings);
-                currentShimType = nextShimType;
+                        typeState.CurrentShimType,
+                        assemblyGlobalUsings,
+                        addedMethodCatalog);
+                typeState.CurrentShimType = nextShimType;
                 shimTypeCounter = nextShimTypeCounter;
                 globalShimMethodCounter = nextGlobalShimMethodCounter;
+            }
+        }
+
+        bool hasAccessorDelegates = false;
+        foreach (ShimTypeBuilder shimType in shimTypes)
+        {
+            if (shimType.AccessorPlan.Entries.Count > 0)
+            {
+                hasAccessorDelegates = true;
+                break;
             }
         }
 
@@ -484,7 +435,9 @@ public static class TransformWorkerProgram
             DeclarationDriftWarnings = declarationDriftWarnings.ToArray(),
             ParseErrors = parseErrors.ToArray(),
             UnchangedMethods = unchangedMethods.ToArray(),
-            BaselineDisabledByDuplicateKeys = baselineDisabledByDuplicateKeys
+            BaselineDisabledByDuplicateKeys = baselineDisabledByDuplicateKeys,
+            RemovedMembers = removedMembers.ToArray(),
+            HasAccessorDelegates = hasAccessorDelegates
         };
     }
 
@@ -754,7 +707,7 @@ public static class TransformWorkerProgram
         + "run 'uloop compile' to apply accessor edits.";
 
     private const string OutsideMethodBodyDriftWarningFormat =
-        "Edits outside method bodies in {0} (fields, initializers, attributes, or added/removed members) are not applied by hot reload; run uloop compile to pick them up.";
+        "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
 
     // Syntax-based method key for same-file snapshot vs current comparison. Do not mix with
     // BuildMethodKey (Cecil/metadata names used by the orchestrator exclusion path).
@@ -968,15 +921,49 @@ public static class TransformWorkerProgram
         CompilationUnitSyntax snapshotRoot,
         CompilationUnitSyntax currentRoot,
         string fileName,
-        List<string> declarationDriftWarnings)
+        List<string> declarationDriftWarnings,
+        AddedMethodCatalog addedMethodCatalog)
     {
-        StripMethodBodiesRewriter rewriter = new StripMethodBodiesRewriter();
-        SyntaxNode strippedSnapshot = rewriter.Visit(snapshotRoot);
-        SyntaxNode strippedCurrent = rewriter.Visit(currentRoot);
+        StripHandledMethodDeclarationsRewriter stripSnapshot =
+            new StripHandledMethodDeclarationsRewriter(addedMethodCatalog.RemovedSyntaxKeys);
+        StripHandledMethodDeclarationsRewriter stripCurrent =
+            new StripHandledMethodDeclarationsRewriter(addedMethodCatalog.AddedSyntaxKeys);
+        StripMethodBodiesRewriter bodyStripper = new StripMethodBodiesRewriter();
+        SyntaxNode strippedSnapshot = bodyStripper.Visit(stripSnapshot.Visit(snapshotRoot));
+        SyntaxNode strippedCurrent = bodyStripper.Visit(stripCurrent.Visit(currentRoot));
         if (!SyntaxFactory.AreEquivalent(strippedSnapshot, strippedCurrent, topLevel: false))
         {
             declarationDriftWarnings.Add(
                 string.Format(CultureInfo.InvariantCulture, OutsideMethodBodyDriftWarningFormat, fileName));
+        }
+    }
+
+    private sealed class StripHandledMethodDeclarationsRewriter : CSharpSyntaxRewriter
+    {
+        private readonly HashSet<string> _syntaxKeysToStrip;
+
+        public StripHandledMethodDeclarationsRewriter(IReadOnlyCollection<string> syntaxKeysToStrip)
+        {
+            _syntaxKeysToStrip = new HashSet<string>(syntaxKeysToStrip, StringComparer.Ordinal);
+        }
+
+        public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
+        {
+            TypeDeclarationSyntax typeDeclaration = node.Parent as TypeDeclarationSyntax;
+            if (typeDeclaration == null)
+            {
+                return base.VisitMethodDeclaration(node);
+            }
+
+            string syntaxKey = BuildSyntaxMethodKey(
+                BuildTypeMetadataNameFromSyntax(typeDeclaration),
+                node);
+            if (_syntaxKeysToStrip.Contains(syntaxKey))
+            {
+                return null;
+            }
+
+            return base.VisitMethodDeclaration(node);
         }
     }
 
@@ -1282,7 +1269,8 @@ public static class TransformWorkerProgram
             int shimTypeCounter,
             int globalShimMethodCounter,
             ShimTypeBuilder currentShimType,
-            List<UsingDirectiveSyntax> assemblyGlobalUsings)
+            List<UsingDirectiveSyntax> assemblyGlobalUsings,
+            AddedMethodCatalog addedMethodCatalog)
     {
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
@@ -1391,7 +1379,8 @@ public static class TransformWorkerProgram
             getterSymbol,
             typeSymbol,
             semanticModel,
-            rewritePlan);
+            rewritePlan,
+            addedMethodCatalog);
         currentShimType.AddMethod(rewrittenMethod, shimMethodName);
 
         entries.Add(new WorkerEntry
@@ -1486,9 +1475,14 @@ public static class TransformWorkerProgram
         IMethodSymbol getterSymbol,
         INamedTypeSymbol targetType,
         SemanticModel semanticModel,
-        AccessorPlan accessorPlan)
+        AccessorPlan accessorPlan,
+        AddedMethodCatalog addedMethodCatalog)
     {
-        ShimBodyRewriter rewriter = new ShimBodyRewriter(semanticModel, targetType, accessorPlan);
+        ShimBodyRewriter rewriter = new ShimBodyRewriter(
+            semanticModel,
+            targetType,
+            accessorPlan,
+            addedMethodCatalog);
         SyntaxNode rewrittenBody = rewriter.Visit(getterBodyNode);
         // Why transfer: Visit may rebuild ArrowExpressionClause nodes and drop #line annotations.
         rewrittenBody = TransferUloopLineAnnotations(getterBodyNode, rewrittenBody);
@@ -2030,16 +2024,507 @@ public static class TransformWorkerProgram
         }
     }
 
+    private static (int ShimTypeCounter, int GlobalShimMethodCounter) QueueTypeMethods(
+        TypeEmitState typeState,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetTypesAssemblySymbol,
+        WorkerInput input,
+        bool hasBaseline,
+        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
+        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap,
+        CompilationUnitSyntax root,
+        List<UsingDirectiveSyntax> assemblyGlobalUsings,
+        List<ShimTypeBuilder> shimTypes,
+        AddedMethodCatalog addedMethodCatalog,
+        List<WorkerSkipped> skipped,
+        List<WorkerUnchangedMethod> unchangedMethods,
+        List<string> declarationDriftWarnings,
+        int shimTypeCounter,
+        int globalShimMethodCounter)
+    {
+        INamedTypeSymbol compiledType = FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
+        foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
+            .OfType<MethodDeclarationSyntax>())
+        {
+            IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(methodDeclaration);
+            if (methodSymbol == null)
+            {
+                continue;
+            }
+
+            string[] parameterTypeFullNames = methodSymbol.Parameters
+                .Select(CecilTypeNames.ToParameterTypeFullName)
+                .ToArray();
+            string methodKey = BuildMethodKey(
+                CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
+                methodSymbol.Name,
+                parameterTypeFullNames);
+            // Why skip explicit-interface methods: compiled GetMembers(simpleName) does not
+            // see them (metadata name is Interface.Method), so they would be misclassified as
+            // Added and skip the unchanged/baseline path.
+            bool isAddedMethod = compiledType != null
+                && methodDeclaration.ExplicitInterfaceSpecifier == null
+                && !CompiledTypeHasOrdinaryMethod(compiledType, methodSymbol);
+
+            // Why added methods ignore ExcludedMethodKeys: dropping their shim leaves callers
+            // with CS0103 on retry and collapses isolation to a file-level Failed (G1).
+            if (!isAddedMethod && input.ExcludedMethodKeys.Contains(methodKey))
+            {
+                continue;
+            }
+
+            string syntaxMethodKey = BuildSyntaxMethodKey(
+                typeState.TypeMetadataNameFromSyntax,
+                methodDeclaration);
+            if (!isAddedMethod && hasBaseline)
+            {
+                // Why plainDecl: compare unannotated nodes; annotated methodDeclaration breaks
+                // AreEquivalent for long-return / unchecked / switch shapes (see plainRoot).
+                if (snapshotMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax snapshotDecl)
+                    && plainCurrentMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax plainDecl)
+                    && SyntaxFactory.AreEquivalent(snapshotDecl, plainDecl, topLevel: false))
+                {
+                    unchangedMethods.Add(new WorkerUnchangedMethod
+                    {
+                        TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
+                        MethodName = methodSymbol.Name,
+                        ParameterTypeFullNames = parameterTypeFullNames
+                    });
+                    continue;
+                }
+            }
+
+            SyntaxNode methodBodyNode =
+                (SyntaxNode)methodDeclaration.Body ?? methodDeclaration.ExpressionBody;
+            MethodTransformDecision decision = DecideMethodTransform(
+                typeState.TypeDeclaration,
+                typeState.TypeSymbol,
+                methodDeclaration,
+                methodSymbol,
+                methodBodyNode,
+                semanticModel);
+            if (isAddedMethod && decision.SkipReason == null)
+            {
+                string addedSkip = EvaluateAddedMethodSkipReason(methodSymbol);
+                if (addedSkip != null)
+                {
+                    decision = MethodTransformDecision.Skip(addedSkip);
+                }
+                else
+                {
+                    decision = MethodTransformDecision.AddedMethod(decision.UsesDelegation);
+                }
+            }
+
+            if (decision.SkipReason != null)
+            {
+                skipped.Add(new WorkerSkipped
+                {
+                    Method = FormatMethodLabel(methodSymbol),
+                    Reason = decision.SkipReason
+                });
+                continue;
+            }
+
+            ShimTypeBuilder shimType;
+            (shimType, shimTypeCounter) = EnsureShimType(
+                typeState,
+                root,
+                assemblyGlobalUsings,
+                shimTypes,
+                shimTypeCounter);
+            string shimMethodName = methodSymbol.Name + "__shim" + globalShimMethodCounter;
+            globalShimMethodCounter++;
+
+            FileLinePositionSpan originalSpan = methodDeclaration.GetLocation().GetLineSpan();
+            QueuedShimMethod queued = new QueuedShimMethod
+            {
+                MethodDeclaration = methodDeclaration,
+                MethodSymbol = methodSymbol,
+                Decision = decision,
+                ShimMethodName = shimMethodName,
+                ShimType = shimType,
+                SourceStartLine = originalSpan.StartLinePosition.Line + 1,
+                SourceEndLine = originalSpan.EndLinePosition.Line + 1,
+                ParameterTypeFullNames = parameterTypeFullNames,
+                MethodKey = methodKey,
+                IsAddedMethod = isAddedMethod
+            };
+            typeState.QueuedMethods.Add(queued);
+
+            if (isAddedMethod)
+            {
+                addedMethodCatalog.Register(
+                    new AddedMethodBinding
+                    {
+                        MethodKey = methodKey,
+                        ShimTypeName = shimType.ShimTypeName,
+                        ShimMethodName = shimMethodName,
+                        NamespaceName = shimType.NamespaceName,
+                        IsStatic = methodSymbol.IsStatic
+                    });
+                addedMethodCatalog.AddAddedSyntaxKey(syntaxMethodKey);
+                AppendUnityMessageWarningIfNeeded(
+                    typeState.TypeSymbol,
+                    methodSymbol,
+                    declarationDriftWarnings);
+            }
+        }
+
+        return (shimTypeCounter, globalShimMethodCounter);
+    }
+
+    private static (ShimTypeBuilder ShimType, int ShimTypeCounter) EnsureShimType(
+        TypeEmitState typeState,
+        CompilationUnitSyntax root,
+        List<UsingDirectiveSyntax> assemblyGlobalUsings,
+        List<ShimTypeBuilder> shimTypes,
+        int shimTypeCounter)
+    {
+        if (typeState.CurrentShimType != null)
+        {
+            return (typeState.CurrentShimType, shimTypeCounter);
+        }
+
+        string shimTypeName = typeState.TypeSymbol.Name + "_UloopHotReloadShims_" + shimTypeCounter;
+        shimTypeCounter++;
+        string namespaceName = typeState.TypeSymbol.ContainingNamespace == null
+            || typeState.TypeSymbol.ContainingNamespace.IsGlobalNamespace
+            ? string.Empty
+            : typeState.TypeSymbol.ContainingNamespace.ToDisplayString();
+        typeState.CurrentShimType = new ShimTypeBuilder(
+            shimTypeName,
+            namespaceName,
+            CollectUsingsForType(root, typeState.TypeDeclaration, assemblyGlobalUsings));
+        shimTypes.Add(typeState.CurrentShimType);
+        return (typeState.CurrentShimType, shimTypeCounter);
+    }
+
+    private static void EmitQueuedMethods(
+        TypeEmitState typeState,
+        SemanticModel semanticModel,
+        AddedMethodCatalog addedMethodCatalog,
+        List<WorkerEntry> entries)
+    {
+        foreach (QueuedShimMethod queued in typeState.QueuedMethods)
+        {
+            AccessorPlan rewritePlan = queued.Decision.UsesDelegation
+                ? queued.ShimType.AccessorPlan
+                : null;
+            MethodDeclarationSyntax rewrittenMethod = RewriteMethodBody(
+                queued.MethodDeclaration,
+                queued.MethodSymbol,
+                typeState.TypeSymbol,
+                semanticModel,
+                rewritePlan,
+                addedMethodCatalog);
+            queued.ShimType.AddMethod(rewrittenMethod, queued.ShimMethodName);
+
+            SyntaxNode bodyNode =
+                (SyntaxNode)queued.MethodDeclaration.Body ?? queued.MethodDeclaration.ExpressionBody;
+            string[] calledAddedMethodKeys = CollectCalledAddedMethodKeys(
+                bodyNode,
+                semanticModel,
+                addedMethodCatalog,
+                queued.MethodKey);
+
+            entries.Add(new WorkerEntry
+            {
+                TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
+                MethodName = queued.MethodSymbol.Name,
+                ParameterTypeFullNames = queued.ParameterTypeFullNames,
+                ShimTypeName = queued.ShimType.ShimTypeName,
+                ShimMethodName = queued.ShimMethodName,
+                PatchKind = queued.Decision.PatchKind,
+                CalledAddedMethodKeys = calledAddedMethodKeys,
+                SourceStartLine = queued.SourceStartLine,
+                SourceEndLine = queued.SourceEndLine,
+                LifecycleNote = ComputeLifecycleNote(
+                    queued.MethodDeclaration,
+                    queued.MethodSymbol,
+                    typeState.TypeSymbol)
+            });
+        }
+    }
+
+    private static void CollectRemovedMethods(
+        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
+        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap,
+        AddedMethodCatalog addedMethodCatalog,
+        List<WorkerRemovedMember> removedMembers)
+    {
+        HashSet<string> seenNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, MethodDeclarationSyntax> pair in snapshotMethodMap)
+        {
+            if (plainCurrentMethodMap.ContainsKey(pair.Key))
+            {
+                continue;
+            }
+
+            addedMethodCatalog.AddRemovedSyntaxKey(pair.Key);
+            string name = pair.Value.Identifier.Text;
+            if (!seenNames.Add(name))
+            {
+                continue;
+            }
+
+            removedMembers.Add(new WorkerRemovedMember
+            {
+                Kind = RemovedMemberKinds.Method,
+                Name = name
+            });
+        }
+    }
+
+    private static void SkipMethodsThatCaptureAddedMethodGroups(
+        List<TypeEmitState> typeEmitStates,
+        SemanticModel semanticModel,
+        AddedMethodCatalog addedMethodCatalog,
+        List<WorkerSkipped> skipped)
+    {
+        foreach (TypeEmitState typeState in typeEmitStates)
+        {
+            List<QueuedShimMethod> remaining = new List<QueuedShimMethod>();
+            foreach (QueuedShimMethod queued in typeState.QueuedMethods)
+            {
+                SyntaxNode bodyNode =
+                    (SyntaxNode)queued.MethodDeclaration.Body ?? queued.MethodDeclaration.ExpressionBody;
+                if (bodyNode != null
+                    && BodyReferencesAddedInstanceMethodGroup(bodyNode, semanticModel, addedMethodCatalog))
+                {
+                    skipped.Add(new WorkerSkipped
+                    {
+                        Method = FormatMethodLabel(queued.MethodSymbol),
+                        Reason = AddedMethodSkipReasons.MethodGroupReference
+                    });
+                    if (queued.IsAddedMethod)
+                    {
+                        addedMethodCatalog.Unregister(queued.MethodKey);
+                    }
+
+                    continue;
+                }
+
+                remaining.Add(queued);
+            }
+
+            typeState.QueuedMethods.Clear();
+            typeState.QueuedMethods.AddRange(remaining);
+        }
+    }
+
+    private static bool BodyReferencesAddedInstanceMethodGroup(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedMethodCatalog addedMethodCatalog)
+    {
+        foreach (IdentifierNameSyntax name in bodyNode.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
+        {
+            if (IsInvocationCalleeName(name) || NameofRules.IsInsideNameofArgument(name))
+            {
+                continue;
+            }
+
+            ISymbol symbol = semanticModel.GetSymbolInfo(name).Symbol;
+            if (symbol is IMethodSymbol methodSymbol
+                && !methodSymbol.IsStatic
+                && addedMethodCatalog.Contains(BuildMethodKeyFromSymbol(methodSymbol)))
+            {
+                return true;
+            }
+        }
+
+        foreach (MemberAccessExpressionSyntax access in bodyNode.DescendantNodesAndSelf()
+            .OfType<MemberAccessExpressionSyntax>())
+        {
+            if ((access.Parent is InvocationExpressionSyntax invocation && invocation.Expression == access)
+                || NameofRules.IsInsideNameofArgument(access))
+            {
+                continue;
+            }
+
+            ISymbol symbol = semanticModel.GetSymbolInfo(access).Symbol;
+            if (symbol is IMethodSymbol methodSymbol
+                && !methodSymbol.IsStatic
+                && addedMethodCatalog.Contains(BuildMethodKeyFromSymbol(methodSymbol)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsInvocationCalleeName(IdentifierNameSyntax name)
+    {
+        if (name.Parent is InvocationExpressionSyntax invocation && invocation.Expression == name)
+        {
+            return true;
+        }
+
+        if (name.Parent is MemberAccessExpressionSyntax memberAccess
+            && memberAccess.Name == name
+            && memberAccess.Parent is InvocationExpressionSyntax memberInvocation
+            && memberInvocation.Expression == memberAccess)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string[] CollectCalledAddedMethodKeys(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedMethodCatalog addedMethodCatalog,
+        string selfMethodKey)
+    {
+        if (bodyNode == null)
+        {
+            return Array.Empty<string>();
+        }
+
+        HashSet<string> keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (InvocationExpressionSyntax invocation in bodyNode.DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>())
+        {
+            if (NameofRules.IsNameofInvocation(invocation))
+            {
+                continue;
+            }
+
+            ISymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol;
+            if (symbol is not IMethodSymbol methodSymbol)
+            {
+                continue;
+            }
+
+            string calledKey = BuildMethodKeyFromSymbol(methodSymbol);
+            if (calledKey == selfMethodKey)
+            {
+                continue;
+            }
+
+            if (addedMethodCatalog.Contains(calledKey))
+            {
+                keys.Add(calledKey);
+            }
+        }
+
+        if (keys.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        string[] result = new string[keys.Count];
+        keys.CopyTo(result);
+        return result;
+    }
+
+    private static INamedTypeSymbol FindCompiledType(
+        INamedTypeSymbol sourceType,
+        IAssemblySymbol targetTypesAssemblySymbol)
+    {
+        if (sourceType == null || targetTypesAssemblySymbol == null)
+        {
+            return null;
+        }
+
+        return targetTypesAssemblySymbol.GetTypeByMetadataName(ToReflectionMetadataName(sourceType));
+    }
+
+    private static bool CompiledTypeHasOrdinaryMethod(
+        INamedTypeSymbol compiledType,
+        IMethodSymbol sourceMethod)
+    {
+        string[] sourceParameterTypeFullNames = sourceMethod.Parameters
+            .Select(CecilTypeNames.ToParameterTypeFullName)
+            .ToArray();
+        foreach (ISymbol member in compiledType.GetMembers(sourceMethod.Name))
+        {
+            if (member is not IMethodSymbol compiledMethod
+                || compiledMethod.MethodKind != MethodKind.Ordinary
+                || compiledMethod.IsStatic != sourceMethod.IsStatic
+                || compiledMethod.Parameters.Length != sourceParameterTypeFullNames.Length)
+            {
+                continue;
+            }
+
+            bool parametersMatch = true;
+            for (int index = 0; index < sourceParameterTypeFullNames.Length; index++)
+            {
+                if (CecilTypeNames.ToParameterTypeFullName(compiledMethod.Parameters[index])
+                    != sourceParameterTypeFullNames[index])
+                {
+                    parametersMatch = false;
+                    break;
+                }
+            }
+
+            if (parametersMatch)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string EvaluateAddedMethodSkipReason(IMethodSymbol methodSymbol)
+    {
+        if (methodSymbol.IsAbstract || methodSymbol.IsVirtual || methodSymbol.IsOverride)
+        {
+            return AddedMethodSkipReasons.VirtualOrAbstract;
+        }
+
+        return null;
+    }
+
+    private static void AppendUnityMessageWarningIfNeeded(
+        INamedTypeSymbol typeSymbol,
+        IMethodSymbol methodSymbol,
+        List<string> declarationDriftWarnings)
+    {
+        if (!IsUnityEngineMonoBehaviourDerived(typeSymbol)
+            || !UnityMessageNames.Contains(methodSymbol.Name))
+        {
+            return;
+        }
+
+        declarationDriftWarnings.Add(
+            string.Format(
+                CultureInfo.InvariantCulture,
+                UnityMessageNames.AddedMessageWarningFormat,
+                methodSymbol.Name,
+                typeSymbol.ToDisplayString()));
+    }
+
+    private static string BuildMethodKeyFromSymbol(IMethodSymbol methodSymbol)
+    {
+        string[] parameterTypeFullNames = methodSymbol.Parameters
+            .Select(CecilTypeNames.ToParameterTypeFullName)
+            .ToArray();
+        return BuildMethodKey(
+            CecilTypeNames.ToMetadataName(methodSymbol.ContainingType),
+            methodSymbol.Name,
+            parameterTypeFullNames);
+    }
+
     private static MethodDeclarationSyntax RewriteMethodBody(
         MethodDeclarationSyntax methodDeclaration,
         IMethodSymbol methodSymbol,
         INamedTypeSymbol targetType,
         SemanticModel semanticModel,
-        AccessorPlan accessorPlan)
+        AccessorPlan accessorPlan,
+        AddedMethodCatalog addedMethodCatalog)
     {
         // Why a single rewriter: rewriting the tree invalidates SemanticModel for new nodes.
         // Qualify + accessor rewrite both classify symbols on the original tree in one Visit pass.
-        ShimBodyRewriter rewriter = new ShimBodyRewriter(semanticModel, targetType, accessorPlan);
+        ShimBodyRewriter rewriter = new ShimBodyRewriter(
+            semanticModel,
+            targetType,
+            accessorPlan,
+            addedMethodCatalog);
         MethodDeclarationSyntax rewritten = (MethodDeclarationSyntax)rewriter.Visit(methodDeclaration);
         return ShimMethodFactory.ToShimMethod(rewritten, methodSymbol);
     }
@@ -3559,15 +4044,18 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     private readonly SemanticModel _semanticModel;
     private readonly INamedTypeSymbol _targetType;
     private readonly AccessorPlan _accessorPlan;
+    private readonly AddedMethodCatalog _addedMethodCatalog;
 
     public ShimBodyRewriter(
         SemanticModel semanticModel,
         INamedTypeSymbol targetType,
-        AccessorPlan accessorPlan)
+        AccessorPlan accessorPlan,
+        AddedMethodCatalog addedMethodCatalog)
     {
         _semanticModel = semanticModel;
         _targetType = targetType;
         _accessorPlan = accessorPlan;
+        _addedMethodCatalog = addedMethodCatalog ?? new AddedMethodCatalog();
     }
 
     public override SyntaxNode VisitThisExpression(ThisExpressionSyntax node)
@@ -3637,14 +4125,39 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitInvocationExpression(InvocationExpressionSyntax node)
     {
-        if (_accessorPlan == null
-            || TransformWorkerProgram.NameofRules.IsNameofInvocation(node)
-            || TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        // Why first: added-member rewrite must not depend on _accessorPlan. Transplant bodies
+        // have a null plan and would skip rewrite; delegation bodies would otherwise bind
+        // Harmony accessors onto members that do not exist on the compiled type (B1).
+        if (TransformWorkerProgram.NameofRules.IsNameofInvocation(node))
+        {
+            ExpressionSyntax folded = TryFoldNameofAddedMember(node);
+            if (folded != null)
+            {
+                return folded;
+            }
+
+            return base.VisitInvocationExpression(node);
+        }
+
+        if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
         {
             return base.VisitInvocationExpression(node);
         }
 
-        ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol;
+        ISymbol invokedSymbol = _semanticModel.GetSymbolInfo(node).Symbol;
+        if (invokedSymbol is IMethodSymbol addedMethod
+            && addedMethod.MethodKind == MethodKind.Ordinary
+            && _addedMethodCatalog.TryGet(BuildAddedMethodKey(addedMethod), out AddedMethodBinding binding))
+        {
+            return RewriteAddedMethodInvocation(node, addedMethod, binding);
+        }
+
+        if (_accessorPlan == null)
+        {
+            return base.VisitInvocationExpression(node);
+        }
+
+        ISymbol symbol = invokedSymbol;
         if (symbol is not IMethodSymbol methodSymbol
             || methodSymbol.MethodKind != MethodKind.Ordinary
             || !AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol)
@@ -3670,6 +4183,89 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
                 SyntaxFactory.IdentifierName(entry.DelegateFieldName),
                 SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)))
             .WithTriviaFrom(node);
+    }
+
+    private ExpressionSyntax TryFoldNameofAddedMember(InvocationExpressionSyntax nameofInvocation)
+    {
+        if (nameofInvocation.ArgumentList.Arguments.Count != 1)
+        {
+            return null;
+        }
+
+        ExpressionSyntax argument = nameofInvocation.ArgumentList.Arguments[0].Expression;
+        ISymbol symbol = ResolveNameofArgumentSymbol(argument);
+        if (symbol is not IMethodSymbol methodSymbol
+            || !_addedMethodCatalog.Contains(BuildAddedMethodKey(methodSymbol)))
+        {
+            return null;
+        }
+
+        return SyntaxFactory.LiteralExpression(
+                SyntaxKind.StringLiteralExpression,
+                SyntaxFactory.Literal(methodSymbol.Name))
+            .WithTriviaFrom(nameofInvocation);
+    }
+
+    private ISymbol ResolveNameofArgumentSymbol(ExpressionSyntax argument)
+    {
+        // Why CandidateSymbols: nameof(method) is a method group, so Symbol is often null
+        // and the unique candidate is the added method we need to fold.
+        SymbolInfo symbolInfo = _semanticModel.GetSymbolInfo(argument);
+        if (symbolInfo.Symbol != null)
+        {
+            return symbolInfo.Symbol;
+        }
+
+        if (symbolInfo.CandidateSymbols.Length == 1)
+        {
+            return symbolInfo.CandidateSymbols[0];
+        }
+
+        return null;
+    }
+
+    private SyntaxNode RewriteAddedMethodInvocation(
+        InvocationExpressionSyntax node,
+        IMethodSymbol addedMethod,
+        AddedMethodBinding binding)
+    {
+        string qualifiedShimType = string.IsNullOrEmpty(binding.NamespaceName)
+            ? "global::" + binding.ShimTypeName
+            : "global::" + binding.NamespaceName + "." + binding.ShimTypeName;
+        ExpressionSyntax shimTypeExpression = SyntaxFactory.ParseTypeName(qualifiedShimType);
+        ExpressionSyntax shimAccess = SyntaxFactory.MemberAccessExpression(
+            SyntaxKind.SimpleMemberAccessExpression,
+            shimTypeExpression,
+            SyntaxFactory.IdentifierName(binding.ShimMethodName));
+
+        List<ArgumentSyntax> arguments = new List<ArgumentSyntax>();
+        if (!addedMethod.IsStatic)
+        {
+            ExpressionSyntax receiver = ExtractReceiver(node.Expression);
+            arguments.Add(SyntaxFactory.Argument(VisitReceiver(receiver)));
+        }
+
+        foreach (ArgumentSyntax argument in node.ArgumentList.Arguments)
+        {
+            arguments.Add((ArgumentSyntax)Visit(argument));
+        }
+
+        return SyntaxFactory.InvocationExpression(
+                shimAccess,
+                SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)))
+            .WithTriviaFrom(node);
+    }
+
+    private static string BuildAddedMethodKey(IMethodSymbol methodSymbol)
+    {
+        string[] parameterTypeFullNames = methodSymbol.Parameters
+            .Select(CecilTypeNames.ToParameterTypeFullName)
+            .ToArray();
+        return methodSymbol.ContainingType == null
+            ? methodSymbol.Name
+            : CecilTypeNames.ToMetadataName(methodSymbol.ContainingType)
+                + "::" + methodSymbol.Name + "("
+                + string.Join(",", parameterTypeFullNames) + ")";
     }
 
     public override SyntaxNode VisitAssignmentExpression(AssignmentExpressionSyntax node)
@@ -4373,6 +4969,174 @@ internal static class CecilTypeNames
     }
 }
 
+internal sealed class TypeEmitState
+{
+    public TypeDeclarationSyntax TypeDeclaration { get; set; }
+
+    public INamedTypeSymbol TypeSymbol { get; set; }
+
+    public string TypeMetadataNameFromSyntax { get; set; }
+
+    public ShimTypeBuilder CurrentShimType { get; set; }
+
+    public List<QueuedShimMethod> QueuedMethods { get; } = new List<QueuedShimMethod>();
+}
+
+internal sealed class QueuedShimMethod
+{
+    public MethodDeclarationSyntax MethodDeclaration { get; set; }
+
+    public IMethodSymbol MethodSymbol { get; set; }
+
+    public MethodTransformDecision Decision { get; set; }
+
+    public string ShimMethodName { get; set; }
+
+    public ShimTypeBuilder ShimType { get; set; }
+
+    public int SourceStartLine { get; set; }
+
+    public int SourceEndLine { get; set; }
+
+    public string[] ParameterTypeFullNames { get; set; }
+
+    public string MethodKey { get; set; }
+
+    public bool IsAddedMethod { get; set; }
+}
+
+internal sealed class AddedMethodBinding
+{
+    public string MethodKey { get; set; }
+
+    public string ShimTypeName { get; set; }
+
+    public string ShimMethodName { get; set; }
+
+    public string NamespaceName { get; set; }
+
+    public bool IsStatic { get; set; }
+}
+
+internal sealed class AddedMethodCatalog
+{
+    private readonly Dictionary<string, AddedMethodBinding> _byKey =
+        new Dictionary<string, AddedMethodBinding>(StringComparer.Ordinal);
+    private readonly HashSet<string> _addedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> _removedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
+
+    public IReadOnlyCollection<string> AddedSyntaxKeys => _addedSyntaxKeys;
+
+    public IReadOnlyCollection<string> RemovedSyntaxKeys => _removedSyntaxKeys;
+
+    public void Register(AddedMethodBinding binding)
+    {
+        _byKey[binding.MethodKey] = binding;
+    }
+
+    public void AddAddedSyntaxKey(string syntaxKey)
+    {
+        _addedSyntaxKeys.Add(syntaxKey);
+    }
+
+    public void AddRemovedSyntaxKey(string syntaxKey)
+    {
+        _removedSyntaxKeys.Add(syntaxKey);
+    }
+
+    public bool Contains(string methodKey)
+    {
+        return methodKey != null && _byKey.ContainsKey(methodKey);
+    }
+
+    public bool TryGet(string methodKey, out AddedMethodBinding binding)
+    {
+        return _byKey.TryGetValue(methodKey, out binding);
+    }
+
+    public void Unregister(string methodKey)
+    {
+        if (methodKey != null)
+        {
+            _byKey.Remove(methodKey);
+        }
+    }
+}
+
+internal static class AddedMethodSkipReasons
+{
+    public const string VirtualOrAbstract =
+        "Added virtual, override, or abstract methods are skipped; the compiled type has no vtable slot. "
+        + "Run 'uloop compile' to add them.";
+
+    public const string MethodGroupReference =
+        "Methods that capture an added instance method as a method group or delegate are skipped; "
+        + "the shim signature does not match. Run 'uloop compile'.";
+}
+
+internal static class UnityMessageNames
+{
+    // Keep in sync with the Unity-message set documented in the hot-reload skill.
+    public const string AddedMessageWarningFormat =
+        "Added Unity message '{0}' on {1} will not be invoked by the engine until 'uloop compile'; "
+        + "Unity discovers messages by reflection on the compiled type.";
+
+    private static readonly HashSet<string> Names = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "Awake",
+        "Start",
+        "OnEnable",
+        "OnDisable",
+        "OnDestroy",
+        "Update",
+        "LateUpdate",
+        "FixedUpdate",
+        "OnGUI",
+        "Reset",
+        "OnValidate",
+        "OnCollisionEnter",
+        "OnCollisionExit",
+        "OnCollisionStay",
+        "OnTriggerEnter",
+        "OnTriggerExit",
+        "OnTriggerStay",
+        "OnCollisionEnter2D",
+        "OnCollisionExit2D",
+        "OnCollisionStay2D",
+        "OnTriggerEnter2D",
+        "OnTriggerExit2D",
+        "OnTriggerStay2D",
+        "OnMouseDown",
+        "OnMouseUp",
+        "OnMouseEnter",
+        "OnMouseExit",
+        "OnMouseOver",
+        "OnMouseDrag",
+        "OnBecameVisible",
+        "OnBecameInvisible",
+        "OnApplicationQuit",
+        "OnApplicationPause",
+        "OnApplicationFocus",
+        "OnTransformChildrenChanged",
+        "OnTransformParentChanged",
+        "OnRectTransformDimensionsChange",
+        "OnParticleCollision",
+        "OnParticleTrigger",
+        "OnControllerColliderHit",
+        "OnJointBreak",
+        "OnJointBreak2D",
+        "OnAnimatorMove",
+        "OnAnimatorIK",
+        "OnDrawGizmos",
+        "OnDrawGizmosSelected"
+    };
+
+    public static bool Contains(string methodName)
+    {
+        return methodName != null && Names.Contains(methodName);
+    }
+}
+
 internal sealed class WorkerInput
 {
     public string SourcePath { get; set; }
@@ -4416,6 +5180,17 @@ internal sealed class WorkerOutput
     public WorkerUnchangedMethod[] UnchangedMethods { get; set; }
 
     public bool BaselineDisabledByDuplicateKeys { get; set; }
+
+    public WorkerRemovedMember[] RemovedMembers { get; set; }
+
+    public bool HasAccessorDelegates { get; set; }
+}
+
+internal sealed class WorkerRemovedMember
+{
+    public string Kind { get; set; }
+
+    public string Name { get; set; }
 }
 
 internal sealed class WorkerUnchangedMethod
@@ -4439,8 +5214,11 @@ internal sealed class WorkerEntry
 
     public string ShimMethodName { get; set; }
 
-    // "transplant" | "delegation" — see PatchKinds.
+    // "transplant" | "delegation" | "addedMethod" — see PatchKinds.
     public string PatchKind { get; set; }
+
+    // Method keys of added methods this entry's body invokes. Empty when none.
+    public string[] CalledAddedMethodKeys { get; set; }
 
     // 1-based, both ends inclusive, within the original edited source file.
     public int SourceStartLine { get; set; }
@@ -4471,6 +5249,15 @@ internal static class PatchKinds
 {
     public const string Transplant = "transplant";
     public const string Delegation = "delegation";
+
+    // Keep in sync with HotReloadConstants.PatchKindAddedMethod.
+    public const string AddedMethod = "addedMethod";
+}
+
+internal static class RemovedMemberKinds
+{
+    public const string Method = "method";
+    public const string Field = "field";
 }
 
 internal sealed class MethodTransformDecision
@@ -4479,7 +5266,7 @@ internal sealed class MethodTransformDecision
 
     public string PatchKind { get; private set; }
 
-    public bool UsesDelegation => PatchKind == PatchKinds.Delegation;
+    public bool UsesDelegation { get; private set; }
 
     public static MethodTransformDecision Skip(string reason)
     {
@@ -4493,7 +5280,20 @@ internal sealed class MethodTransformDecision
 
     public static MethodTransformDecision Delegation()
     {
-        return new MethodTransformDecision { PatchKind = PatchKinds.Delegation };
+        return new MethodTransformDecision
+        {
+            PatchKind = PatchKinds.Delegation,
+            UsesDelegation = true
+        };
+    }
+
+    public static MethodTransformDecision AddedMethod(bool usesDelegation)
+    {
+        return new MethodTransformDecision
+        {
+            PatchKind = PatchKinds.AddedMethod,
+            UsesDelegation = usesDelegation
+        };
     }
 }
 

@@ -50,6 +50,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // True when snapshotSource was provided but a duplicate syntax-method key on either side
         // disabled baseline comparison (silent patch-all fallback). False when snapshotSource is null.
         public bool baselineDisabledByDuplicateKeys;
+
+        // Members present in the snapshot (or compiled assembly for fields in later PRs) but
+        // absent from the edited source. Null/omitted deserializes as empty after client coalesce.
+        public TransformWorkerRemovedMemberDto[] removedMembers;
+
+        // True when any emitted shim type contains Harmony accessor delegates. Drives Harmony
+        // reference injection; patchKind "addedMethod" entries can also need accessors (B2).
+        public bool hasAccessorDelegates;
+    }
+
+    [Serializable]
+    internal sealed class TransformWorkerRemovedMemberDto
+    {
+        // "method" | "field"
+        public string kind;
+        public string name;
     }
 
     [Serializable]
@@ -69,8 +85,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string shimTypeName;
         public string shimMethodName;
 
-        // "transplant" | "delegation". Null/empty is treated as transplant by the orchestrator.
+        // "transplant" | "delegation" | "addedMethod". Null/empty is treated as transplant by the orchestrator.
         public string patchKind;
+
+        // Method keys of added methods this entry's body calls. Null/omitted is empty.
+        // Isolation retry excludes these callers instead of dropping the added-method shim (G1).
+        public string[] calledAddedMethodKeys;
 
         // 1-based, both ends inclusive, within the original edited source file (not shimSource).
         // Used to attribute shim compile errors whose #line-mapped locations fall in this method.
