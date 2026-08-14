@@ -93,6 +93,19 @@ and resets the running PlayMode session, so compiling member-by-member pays that
 repeatedly. After the one compile, re-enter PlayMode and continue exploring on the freshly
 compiled code.
 
+### One-shot code: a patch only changes the next call
+
+Hot reload changes what a method does on its *next* call — it never re-runs a call that
+already happened. Methods that run exactly once per session (`Awake`, `Start`, `OnEnable`,
+initialization helpers called from them, anything that seeds state at startup) patch
+successfully but show no effect: the one call they get is already in the past when the
+patch lands. The response marks Unity's one-shot lifecycle messages with `LifecycleNote`
+(see Output). To see an initialization change take effect, run `uloop compile` and restart
+Play Mode — a fresh Play entry reloads the domain and drops the patch, so the patched body
+alone cannot carry the change into the next session. Better, keep values you expect to
+tune out of one-shot paths entirely: read them in a body that runs per frame or per event,
+and patch that body instead.
+
 ### Tunable values: prefer a getter over a const
 
 `const` edits never take effect through hot reload: C# bakes const values into every
@@ -104,6 +117,11 @@ call site at compile time. When you expect to tune a value while Play Mode is ru
 A getter body is an ordinary patchable method body, so editing the literal and running
 `uloop hot-reload` updates every consumer on its next call — across all files, without
 restarting Play Mode. Keep `const` for values you never tune at runtime.
+
+This works only for consumers that read the getter on a live call path — a per-frame
+`Update`, a physics step, an event handler. A consumer that read the getter once during
+initialization and cached the value in a field never observes the new value: the patch
+lands, but nothing reads the getter again (the one-shot rule above).
 
 Each `uloop compile` also establishes a per-assembly source baseline: a snapshot of
 the sources exactly as they were compiled, captured after the compile's domain reload
@@ -180,7 +198,10 @@ a pause is not evidence either way.
   domain reload) lands the exact same edit permanently. There is nothing to undo first;
   behavior converges by construction.
 - Patches and loaded shim assemblies are static Editor state and disappear on the next
-  domain reload. There is no persistence and no automatic re-apply.
+  domain reload — that includes entering Play Mode with Domain Reload enabled (the
+  default), not just `uloop compile`. `uloop control-play-mode --action Play` warns with
+  the counts when it is about to drop patches or pause points. There is no persistence
+  and no automatic re-apply.
 - Never reflected by hot reload: new fields, field initializer changes, new types, and
   signature changes. Those always need `uloop compile`.
 - A run with `Failed` outcomes still applies every other patch — outcomes are
@@ -219,6 +240,15 @@ again as soon as a transition restores their line. The practical workflow: itera
 hot reload and place pause points on edited lines in either order — enable then patch,
 or patch then enable. `uloop compile` is needed only when a marker stays suppressed
 because its line no longer resolves in any live body.
+
+A pause point inside a Unity physics message (`OnCollisionEnter2D`, `OnTriggerEnter`,
+and similar) or inside a method already bound into a delegate before enable can stay
+at zero hits even though the body runs: Unity may have resolved that dispatch path
+before the marker was armed (the pause-point skill's troubleshooting covers recovery).
+Hot-reloading a temporary log line into the same body gives a one-way reachability
+check — the log appearing (read it with `uloop get-logs`) proves the body ran even
+though the marker missed. The log staying absent proves nothing, because the same
+cached dispatch can bypass a hot-reload patch too.
 
 ## Output
 
