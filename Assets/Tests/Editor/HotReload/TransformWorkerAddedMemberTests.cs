@@ -700,6 +700,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: MethodDelegate bind emit for a non-void instance method includes explicit
+        /// delegateArgs (virtualCall false plus a Type[] of the declaring type), not a trailing null.
+        /// </summary>
+        [Test]
+        public async Task Emit_InstanceMethodDelegateBind_IncludesExplicitDelegateArgs()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            System.Func<int> read = () => PrivateCall();\n"
+                + "            return read();\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("EmitInstanceMethodDelegateBind.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.hasAccessorDelegates, Is.True);
+            Assert.That(
+                result.Output.shimSource,
+                Does.Contain(", false, new global::System.Type[]{typeof("),
+                "Instance MethodDelegate bind must pass explicit delegateArgs, not null.\n"
+                + result.Output.shimSource);
+        }
+
+        /// <summary>
         /// What: a private call in a conditional-access argument list inside a lambda is
         /// accessor-rewritten (Delegation), not left verbatim.
         /// </summary>
