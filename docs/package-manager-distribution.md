@@ -23,6 +23,12 @@ including beta tags. There is no separate stable-only formula yet.
 - `uloop update` refuses Homebrew-managed installs and directs users to
   `brew upgrade uloop`. The dispatcher freshness path does the same for required
   updates and skips optional auto-updates.
+- The Unity Settings window and the Setup Wizard offer no CLI action for a
+  Homebrew-managed install: the primary button is disabled and reads
+  `Managed by Homebrew`. Installing from Unity would place a second, package-owned
+  binary in `~/.local/bin` while brew keeps its own on PATH. When such an install is
+  below the pin minimum, the status line names the required version and
+  `brew upgrade uloop` so the disabled button is not a dead end.
 
 ## Known follow-ups
 

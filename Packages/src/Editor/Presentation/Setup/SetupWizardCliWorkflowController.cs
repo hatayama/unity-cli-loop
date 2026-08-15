@@ -83,7 +83,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliIsDispatcher,
                 requiredCliVersion,
                 _isInstallingCli,
-                _needsCliPathSetup);
+                _needsCliPathSetup,
+                IsHomebrewManagedCli());
+        }
+
+        private bool IsHomebrewManagedCli()
+        {
+            return _cliSetupApplicationService.IsHomebrewManagedInstallPath(
+                _cliSetupApplicationService.GetCachedCliExecutablePath());
         }
 
         private void HandleInstallCli()
@@ -116,7 +123,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliIsDispatcher: false,
                 requiredCliVersion: GetMinimumRequiredCliVersion(),
                 isInstallingCli: _isInstallingCli,
-                needsCliPathSetup: _needsCliPathSetup);
+                needsCliPathSetup: _needsCliPathSetup,
+                isHomebrewManagedCli: IsHomebrewManagedCli());
             _installProgressView.Show();
             Progress<string> installProgress = new(_installProgressView.SetDetailLine);
 
@@ -187,7 +195,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliIsDispatcher: _cliSetupApplicationService.GetCachedCliIsDispatcher(),
                 requiredCliVersion: GetMinimumRequiredCliVersion(),
                 isInstallingCli: _isInstallingCli,
-                needsCliPathSetup: _needsCliPathSetup);
+                needsCliPathSetup: _needsCliPathSetup,
+                isHomebrewManagedCli: IsHomebrewManagedCli());
 
             try
             {

@@ -75,6 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
     public interface INativeCliInstaller
     {
         bool IsPackageOwnedCurrentUserInstallPath(string cliExecutablePath, RuntimePlatform platform);
+        bool IsHomebrewManagedInstallPath(string cliExecutablePath);
         bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform);
         Task<CliInstallResult> InstallGlobalCliAsync(
             RuntimePlatform platform,
@@ -167,6 +168,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             RuntimePlatform platform)
         {
             return _nativeCliInstaller.IsPackageOwnedCurrentUserInstallPath(cliExecutablePath, platform);
+        }
+
+        public bool IsHomebrewManagedInstallPath(string cliExecutablePath)
+        {
+            return _nativeCliInstaller.IsHomebrewManagedInstallPath(cliExecutablePath);
         }
 
         public bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform)

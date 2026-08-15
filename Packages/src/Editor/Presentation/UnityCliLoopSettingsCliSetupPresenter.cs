@@ -442,6 +442,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
                 cliExecutablePath,
                 UnityEngine.Application.platform);
+            bool isHomebrewManagedCli = _cliSetupApplicationService.IsHomebrewManagedInstallPath(cliExecutablePath);
             bool isChecking = !_cliSetupApplicationService.IsCliCheckCompleted()
                 || isRefreshingVersion
                 || isRefreshingCliPathSetup;
@@ -465,6 +466,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 state.NeedsUpdate,
                 canUninstallCli,
                 needsCliPathSetup,
+                isHomebrewManagedCli,
                 isInstallingCli,
                 isChecking,
                 isSkillStateChecking,

@@ -54,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool cliIsDispatcher,
             string requiredCliVersion,
             bool isInstallingCli,
-            bool needsCliPathSetup)
+            bool needsCliPathSetup,
+            bool isHomebrewManagedCli)
         {
             CliSetupCompatibilityState state = CliSetupCompatibility.Evaluate(
                 cliVersion,
@@ -66,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 false,
                 state.NeedsUpdate,
                 needsCliPathSetup,
+                isHomebrewManagedCli,
                 cliVersion,
                 requiredCliVersion);
             bool cliVersionMatched = state.IsCompatible && cliInstalled;
@@ -74,12 +76,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliVersionMatched,
                 needsCliPathSetup,
                 isInstallingCli,
-                isChecking: false);
+                isChecking: false,
+                isHomebrewManagedCli);
 
             bool cliCompatible = cliInstalled && cliVersionMatched;
             _statusLabel.text = GetCliStatusTextForSetupWizard(
                 cliInstalled,
                 cliCompatible,
+                isHomebrewManagedCli,
                 cliVersion,
                 requiredCliVersion);
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--success", cliCompatible);
@@ -91,6 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static string GetCliStatusTextForSetupWizard(
             bool cliInstalled,
             bool cliCompatible,
+            bool isHomebrewManagedCli,
             string cliVersion,
             string requiredCliVersion)
         {
@@ -102,6 +107,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (cliCompatible)
             {
                 return $"v{cliVersion}";
+            }
+
+            if (isHomebrewManagedCli)
+            {
+                return CliSetupLabelFormatter.GetHomebrewUpgradeStatusText(cliVersion, requiredCliVersion);
             }
 
             if (CliSetupLabelFormatter.ShouldShowRequiredVersionText(cliVersion, requiredCliVersion))
@@ -118,12 +128,18 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isChecking,
             bool needsUpdate,
             bool needsCliPathSetup,
+            bool isHomebrewManagedCli,
             string cliVersion,
             string requiredCliVersion)
         {
             if (isChecking)
             {
                 return "Checking...";
+            }
+
+            if (isHomebrewManagedCli)
+            {
+                return CliSetupLabelFormatter.HOMEBREW_MANAGED_BUTTON_TEXT;
             }
 
             if (isInstallingCli)
@@ -159,8 +175,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool cliVersionMatched,
             bool needsCliPathSetup,
             bool isInstallingCli,
-            bool isChecking)
+            bool isChecking,
+            bool isHomebrewManagedCli)
         {
+            if (isHomebrewManagedCli)
+            {
+                return false;
+            }
+
             return !isInstallingCli && !isChecking && (!cliInstalled || !cliVersionMatched || needsCliPathSetup);
         }
     }

@@ -61,6 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 needsUpdate: false,
                 canUninstallCli: true,
                 needsCliPathSetup: false,
+                isHomebrewManagedCli: false,
                 isInstallingCli: false,
                 isChecking: false,
                 isSkillStateChecking: false,
