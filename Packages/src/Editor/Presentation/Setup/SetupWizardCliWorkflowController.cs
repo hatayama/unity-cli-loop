@@ -28,6 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal SetupWizardCliWorkflowController(
             VisualElement cliStatusIcon,
             Label cliStatusLabel,
+            Label cliHomebrewUpgradeMessage,
             Button installCliButton,
             VisualElement installProgressContainer,
             Label installProgressLabel,
@@ -49,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _cliStepPresenter = new SetupWizardCliStepPresenter(
                 cliStatusIcon,
                 cliStatusLabel,
+                cliHomebrewUpgradeMessage,
                 installCliButton,
                 HandleInstallCli);
         }

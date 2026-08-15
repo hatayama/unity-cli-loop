@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private readonly VisualElement _cliStatusIcon;
         private readonly Label _cliStatusLabel;
+        private readonly Label _cliHomebrewUpgradeMessage;
         private readonly Button _refreshCliVersionButton;
         private readonly Button _installCliButton;
         private readonly CliInstallProgressView _installProgressView;
@@ -36,6 +37,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _cliStatusIcon = root.Q<VisualElement>("cli-status-icon");
             _cliStatusLabel = root.Q<Label>("cli-status-label");
+            _cliHomebrewUpgradeMessage = root.Q<Label>("cli-homebrew-upgrade-message");
+            // Why: the warning carries a command to run, so it must be copyable.
+            // UI Toolkit only starts a selection on a focusable text element.
+            _cliHomebrewUpgradeMessage.focusable = true;
+            _cliHomebrewUpgradeMessage.selection.isSelectable = true;
             _refreshCliVersionButton = root.Q<Button>("refresh-cli-version-button");
             _installCliButton = root.Q<Button>("install-cli-button");
             _installProgressView = new CliInstallProgressView(
@@ -102,10 +108,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _cliStatusLabel.text = GetCliStatusText(
                 data.IsChecking,
                 data.IsCliInstalled,
-                data.IsHomebrewManagedCli,
-                data.NeedsUpdate,
-                data.CliVersion,
-                data.RequiredCliVersion);
+                data.CliVersion);
+            UpdateHomebrewUpgradeMessage(data);
+        }
+
+        private void UpdateHomebrewUpgradeMessage(CliSetupData data)
+        {
+            bool isVisible = !data.IsChecking && data.IsHomebrewManagedCli && data.NeedsUpdate;
+            _cliHomebrewUpgradeMessage.text = isVisible
+                ? CliSetupLabelFormatter.GetHomebrewUpgradeGuidanceText(data.CliVersion, data.RequiredCliVersion)
+                : string.Empty;
+            ViewDataBinder.ToggleClass(
+                _cliHomebrewUpgradeMessage,
+                "unity-cli-loop-warning-message--visible",
+                isVisible);
         }
 
         private void UpdateRefreshButton(CliSetupData data)
@@ -237,10 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static string GetCliStatusText(
             bool isChecking,
             bool isCliInstalled,
-            bool isHomebrewManagedCli,
-            bool needsUpdate,
-            string cliVersion,
-            string requiredCliVersion)
+            string cliVersion)
         {
             if (isChecking)
             {
@@ -250,11 +263,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (!isCliInstalled || cliVersion == null)
             {
                 return "CLI: Not installed";
-            }
-
-            if (isHomebrewManagedCli && needsUpdate)
-            {
-                return "CLI: " + CliSetupLabelFormatter.GetHomebrewUpgradeStatusText(cliVersion, requiredCliVersion);
             }
 
             return $"CLI: v{cliVersion}";

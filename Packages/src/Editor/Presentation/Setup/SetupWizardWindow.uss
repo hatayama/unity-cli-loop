@@ -148,6 +148,22 @@
     margin-bottom: 10px;
 }
 
+.setup-warning-message {
+    display: none;
+    background-color: #5c4a00;
+    border-color: #7a6400;
+    color: var(--setup-color-warning);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px;
+    margin-bottom: 4px;
+    white-space: normal;
+}
+
+.setup-warning-message--visible {
+    display: flex;
+}
+
 .setup-progress-bar {
     height: 14px;
     margin-top: 6px;

@@ -74,35 +74,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
         }
 
-        [TestCase(true, false, false, false, null, "3.0.0", "CLI: Checking...")]
-        [TestCase(false, false, false, false, null, "3.0.0", "CLI: Not installed")]
-        [TestCase(false, true, false, false, "3.0.0", "3.0.0", "CLI: v3.0.0")]
-        [TestCase(false, true, true, false, "3.0.0", "3.0.0", "CLI: v3.0.0")]
-        [TestCase(
-            false,
-            true,
-            true,
-            true,
-            "2.9.0",
-            "3.0.0",
-            "CLI: v2.9.0 (requires v3.0.0; run: brew upgrade uloop)")]
+        [TestCase(true, false, null, "CLI: Checking...")]
+        [TestCase(false, false, null, "CLI: Not installed")]
+        [TestCase(false, true, "3.0.0", "CLI: v3.0.0")]
         public void GetCliStatusText_ReturnsExpectedText(
             bool isChecking,
             bool isCliInstalled,
-            bool isHomebrewManagedCli,
-            bool needsUpdate,
             string cliVersion,
-            string requiredCliVersion,
             string expectedText)
         {
-            // Verifies that a Homebrew-managed CLI below the pin minimum shows the brew upgrade command.
+            // Verifies the status line stays a short single-line summary of the detected CLI.
             string text = CliSetupSection.GetCliStatusText(
                 isChecking,
                 isCliInstalled,
-                isHomebrewManagedCli,
-                needsUpdate,
-                cliVersion,
-                requiredCliVersion);
+                cliVersion);
 
             Assert.That(text, Is.EqualTo(expectedText));
         }
@@ -124,6 +109,69 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Button installCliButton = root.Q<Button>("install-cli-button");
             Assert.That(installCliButton.text, Is.EqualTo("Managed by Homebrew"));
             Assert.That(installCliButton.enabledSelf, Is.False);
+        }
+
+        [Test]
+        public void Update_WhenHomebrewManagedCliNeedsUpdate_ShowsUpgradeWarning()
+        {
+            // Verifies the brew upgrade command is shown in a dedicated warning block, not in the status line.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Installed,
+                isHomebrewManagedCli: true,
+                needsUpdate: true,
+                cliVersion: "2.9.0");
+
+            section.Update(data);
+
+            Label statusLabel = root.Q<Label>("cli-status-label");
+            Label warningLabel = root.Q<Label>("cli-homebrew-upgrade-message");
+            Assert.That(statusLabel.text, Is.EqualTo("CLI: v2.9.0"));
+            Assert.That(
+                warningLabel.text,
+                Is.EqualTo("Homebrew-managed CLI v2.9.0 is older than the required v3.0.0.\nbrew upgrade uloop"));
+            Assert.That(warningLabel.ClassListContains("unity-cli-loop-warning-message--visible"), Is.True);
+        }
+
+        [Test]
+        public void Update_WhenHomebrewManagedCliIsUpToDate_HidesUpgradeWarning()
+        {
+            // Verifies the upgrade warning stays hidden while the Homebrew CLI satisfies the required version.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Installed,
+                isHomebrewManagedCli: true);
+
+            section.Update(data);
+
+            Label warningLabel = root.Q<Label>("cli-homebrew-upgrade-message");
+            Assert.That(warningLabel.text, Is.Empty);
+            Assert.That(warningLabel.ClassListContains("unity-cli-loop-warning-message--visible"), Is.False);
+        }
+
+        [Test]
+        public void Update_WhenCliIsNotHomebrewManaged_HidesUpgradeWarning()
+        {
+            // Verifies a package-installed CLI that needs an update keeps using the primary button, not the warning.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Installed,
+                needsUpdate: true,
+                cliVersion: "2.9.0");
+
+            section.Update(data);
+
+            Label warningLabel = root.Q<Label>("cli-homebrew-upgrade-message");
+            Assert.That(warningLabel.ClassListContains("unity-cli-loop-warning-message--visible"), Is.False);
         }
 
         [TestCase(true, false, true, true)]
@@ -399,6 +447,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             root.Add(new VisualElement { name = "cli-status-icon" });
             root.Add(new Label { name = "cli-status-label" });
             root.Add(new Button { name = "refresh-cli-version-button" });
+            root.Add(new Label { name = "cli-homebrew-upgrade-message" });
             root.Add(new Button { name = "install-cli-button" });
             VisualElement installProgress = new() { name = "cli-install-progress" };
             installProgress.Add(new Label { name = "cli-install-progress-label" });
@@ -433,13 +482,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SkillInstallState selectedTargetInstallState,
             IReadOnlyList<SkillSetupTargetInfo> installableSkillTargets = null,
             bool? isSkillStateChecking = null,
-            bool isHomebrewManagedCli = false)
+            bool isHomebrewManagedCli = false,
+            bool needsUpdate = false,
+            string cliVersion = "3.0.0")
         {
             return new CliSetupData(
                 isCliInstalled,
-                cliVersion: "3.0.0",
+                cliVersion,
                 requiredCliVersion: "3.0.0",
-                needsUpdate: false,
+                needsUpdate,
                 canUninstallCli: true,
                 needsCliPathSetup: false,
                 isHomebrewManagedCli,

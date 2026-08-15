@@ -27,8 +27,9 @@ including beta tags. There is no separate stable-only formula yet.
   Homebrew-managed install: the primary button is disabled and reads
   `Managed by Homebrew`. Installing from Unity would place a second, package-owned
   binary in `~/.local/bin` while brew keeps its own on PATH. When such an install is
-  below the pin minimum, the status line names the required version and
-  `brew upgrade uloop` so the disabled button is not a dead end.
+  below the pin minimum, a warning block above the button names the required version
+  and the selectable `brew upgrade uloop` command so the disabled button is not a
+  dead end.
 
 ## Known follow-ups
 

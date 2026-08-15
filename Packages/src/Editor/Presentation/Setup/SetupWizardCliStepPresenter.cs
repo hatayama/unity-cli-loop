@@ -13,21 +13,30 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private readonly VisualElement _statusIcon;
         private readonly Label _statusLabel;
+        private readonly Label _homebrewUpgradeMessage;
         private readonly Button _installButton;
 
         internal SetupWizardCliStepPresenter(
             VisualElement statusIcon,
             Label statusLabel,
+            Label homebrewUpgradeMessage,
             Button installButton,
             System.Action onInstallClicked)
         {
             Debug.Assert(statusIcon != null, "statusIcon must not be null");
             Debug.Assert(statusLabel != null, "statusLabel must not be null");
+            Debug.Assert(homebrewUpgradeMessage != null, "homebrewUpgradeMessage must not be null");
             Debug.Assert(installButton != null, "installButton must not be null");
             Debug.Assert(onInstallClicked != null, "onInstallClicked must not be null");
 
             _statusIcon = statusIcon ?? throw new System.ArgumentNullException(nameof(statusIcon));
             _statusLabel = statusLabel ?? throw new System.ArgumentNullException(nameof(statusLabel));
+            _homebrewUpgradeMessage = homebrewUpgradeMessage
+                ?? throw new System.ArgumentNullException(nameof(homebrewUpgradeMessage));
+            // Why: the warning carries a command to run, so it must be copyable.
+            // UI Toolkit only starts a selection on a focusable text element.
+            _homebrewUpgradeMessage.focusable = true;
+            _homebrewUpgradeMessage.selection.isSelectable = true;
             _installButton = installButton ?? throw new System.ArgumentNullException(nameof(installButton));
             _installButton.clicked += onInstallClicked
                 ?? throw new System.ArgumentNullException(nameof(onInstallClicked));
@@ -38,6 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--success", false);
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--pending", true);
             _statusLabel.text = "Checking...";
+            UpdateHomebrewUpgradeMessage(isVisible: false, cliVersion: null, requiredCliVersion: null);
             _installButton.SetEnabled(false);
             _installButton.text = "Checking...";
         }
@@ -83,7 +93,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _statusLabel.text = GetCliStatusTextForSetupWizard(
                 cliInstalled,
                 cliCompatible,
-                isHomebrewManagedCli,
+                cliVersion,
+                requiredCliVersion);
+            UpdateHomebrewUpgradeMessage(
+                isHomebrewManagedCli && cliInstalled && !cliCompatible,
                 cliVersion,
                 requiredCliVersion);
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--success", cliCompatible);
@@ -92,10 +105,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _installButton.text = buttonText;
         }
 
+        private void UpdateHomebrewUpgradeMessage(bool isVisible, string cliVersion, string requiredCliVersion)
+        {
+            _homebrewUpgradeMessage.text = isVisible
+                ? CliSetupLabelFormatter.GetHomebrewUpgradeGuidanceText(cliVersion, requiredCliVersion)
+                : string.Empty;
+            ViewDataBinder.ToggleClass(_homebrewUpgradeMessage, "setup-warning-message--visible", isVisible);
+        }
+
         internal static string GetCliStatusTextForSetupWizard(
             bool cliInstalled,
             bool cliCompatible,
-            bool isHomebrewManagedCli,
             string cliVersion,
             string requiredCliVersion)
         {
@@ -107,11 +127,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             if (cliCompatible)
             {
                 return $"v{cliVersion}";
-            }
-
-            if (isHomebrewManagedCli)
-            {
-                return CliSetupLabelFormatter.GetHomebrewUpgradeStatusText(cliVersion, requiredCliVersion);
             }
 
             if (CliSetupLabelFormatter.ShouldShowRequiredVersionText(cliVersion, requiredCliVersion))

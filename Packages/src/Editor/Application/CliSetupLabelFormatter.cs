@@ -12,11 +12,16 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public const string HOMEBREW_MANAGED_BUTTON_TEXT = "Managed by Homebrew";
 
         /// <summary>
-        /// Formats the status text that tells a Homebrew user how to reach the required CLI version.
+        /// Formats the warning text that tells a Homebrew user how to reach the required CLI version.
         /// </summary>
-        public static string GetHomebrewUpgradeStatusText(string cliVersion, string requiredCliVersion)
+        /// <remarks>
+        /// Why the line break: the command must stay on its own line so it can be selected and copied
+        /// without picking up the surrounding sentence.
+        /// </remarks>
+        public static string GetHomebrewUpgradeGuidanceText(string cliVersion, string requiredCliVersion)
         {
-            return $"v{cliVersion} (requires v{requiredCliVersion}; run: {CliConstants.HOMEBREW_UPGRADE_COMMAND})";
+            return $"Homebrew-managed CLI v{cliVersion} is older than the required v{requiredCliVersion}.\n"
+                + $"{CliConstants.HOMEBREW_UPGRADE_COMMAND}";
         }
 
         public static string GetCliReplacementButtonText(string action, string cliVersion, string requiredCliVersion)

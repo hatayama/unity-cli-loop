@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             VisualElement nodejsOk,
             VisualElement cliStatusIcon,
             Label cliStatusLabel,
+            Label cliHomebrewUpgradeMessage,
             Button installCliButton,
             VisualElement installProgressContainer,
             Label installProgressLabel,
@@ -65,6 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _cliWorkflow = new SetupWizardCliWorkflowController(
                 cliStatusIcon,
                 cliStatusLabel,
+                cliHomebrewUpgradeMessage,
                 installCliButton,
                 installProgressContainer,
                 installProgressLabel,

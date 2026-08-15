@@ -19,6 +19,7 @@
                     <ui:VisualElement name="cli-status-icon" class="setup-status-icon" />
                     <ui:Label name="cli-status-label" text="Checking..." class="setup-step__status-label" />
                 </ui:VisualElement>
+                <ui:Label name="cli-homebrew-upgrade-message" text="" class="setup-warning-message" />
                 <ui:Button name="install-cli-button" text="Install CLI" class="setup-button" />
                 <ui:VisualElement name="cli-install-progress" class="setup-install-progress" style="display: none;">
                     <ui:Label name="cli-install-progress-label" text="" class="setup-install-progress__detail" />

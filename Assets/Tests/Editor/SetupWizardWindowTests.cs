@@ -497,30 +497,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(label, Is.EqualTo(expectedLabel));
         }
 
-        [TestCase(false, false, false, null, "3.0.0", "Not installed")]
-        [TestCase(true, true, false, "3.0.0", "3.0.0", "v3.0.0")]
-        [TestCase(true, false, false, "2.9.0", "3.0.0", "v2.9.0 (requires v3.0.0)")]
-        [TestCase(true, false, false, "3.0.0", "3.0.0", "v3.0.0 (update required)")]
-        [TestCase(true, true, true, "3.0.0", "3.0.0", "v3.0.0")]
-        [TestCase(true, false, true, "2.9.0", "3.0.0", "v2.9.0 (requires v3.0.0; run: brew upgrade uloop)")]
+        [TestCase(false, false, null, "3.0.0", "Not installed")]
+        [TestCase(true, true, "3.0.0", "3.0.0", "v3.0.0")]
+        [TestCase(true, false, "2.9.0", "3.0.0", "v2.9.0 (requires v3.0.0)")]
+        [TestCase(true, false, "3.0.0", "3.0.0", "v3.0.0 (update required)")]
         public void GetCliStatusTextForSetupWizard_ReturnsExpectedLabel(
             bool cliInstalled,
             bool cliCompatible,
-            bool isHomebrewManagedCli,
             string cliVersion,
             string requiredCliVersion,
             string expectedLabel)
         {
-            // Verifies that same-version replacement prompts do not expose dispatcher internals,
-            // and that a Homebrew-managed CLI below the pin minimum shows the brew upgrade command.
+            // Verifies that same-version replacement prompts do not expose dispatcher internals.
             string label = SetupWizardCliStepPresenter.GetCliStatusTextForSetupWizard(
                 cliInstalled,
                 cliCompatible,
-                isHomebrewManagedCli,
                 cliVersion,
                 requiredCliVersion);
 
             Assert.That(label, Is.EqualTo(expectedLabel));
+        }
+
+        [TestCase(true, "2.9.0", true, "Homebrew-managed CLI v2.9.0 is older than the required v3.0.0.\nbrew upgrade uloop")]
+        [TestCase(true, "3.0.0", false, "")]
+        [TestCase(false, "2.9.0", false, "")]
+        public void Update_TogglesHomebrewUpgradeWarning(
+            bool isHomebrewManagedCli,
+            string cliVersion,
+            bool expectedVisible,
+            string expectedText)
+        {
+            // Verifies the wizard shows the brew upgrade command as a warning block only for an outdated Homebrew CLI.
+            VisualElement statusIcon = new();
+            Label statusLabel = new();
+            Label homebrewUpgradeMessage = new() { name = "cli-homebrew-upgrade-message" };
+            Button installButton = new();
+            SetupWizardCliStepPresenter presenter = new(
+                statusIcon,
+                statusLabel,
+                homebrewUpgradeMessage,
+                installButton,
+                () => { });
+
+            presenter.Update(
+                cliInstalled: true,
+                cliVersion,
+                cliIsDispatcher: true,
+                requiredCliVersion: "3.0.0",
+                isInstallingCli: false,
+                needsCliPathSetup: false,
+                isHomebrewManagedCli);
+
+            Assert.That(
+                homebrewUpgradeMessage.ClassListContains("setup-warning-message--visible"),
+                Is.EqualTo(expectedVisible));
+            Assert.That(homebrewUpgradeMessage.text, Is.EqualTo(expectedText));
         }
 
         [TestCase(false, false, false, false, false, false, true)]
