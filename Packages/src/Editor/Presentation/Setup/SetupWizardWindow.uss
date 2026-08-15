@@ -148,6 +148,8 @@
     margin-bottom: 10px;
 }
 
+/* Why the explicit side margins: the warning must line up with the button below it,
+   so both declare the same horizontal margin instead of inheriting the Button default. */
 .setup-warning-message {
     display: none;
     background-color: #5c4a00;
@@ -156,8 +158,16 @@
     border-width: 1px;
     border-radius: 3px;
     padding: 8px;
-    margin-bottom: 4px;
+    margin-top: 6px;
+    margin-bottom: 8px;
+    margin-left: 3px;
+    margin-right: 3px;
     white-space: normal;
+}
+
+#install-cli-button {
+    margin-left: 3px;
+    margin-right: 3px;
 }
 
 .setup-warning-message--visible {

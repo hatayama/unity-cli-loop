@@ -132,7 +132,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(statusLabel.text, Is.EqualTo("CLI: v2.9.0"));
             Assert.That(
                 warningLabel.text,
-                Is.EqualTo("Homebrew-managed CLI v2.9.0 is older than the required v3.0.0.\nbrew upgrade uloop"));
+                Is.EqualTo("Homebrew-managed CLI v2.9.0 is older than the required v3.0.0.\n"
+                    + "Run this command in your terminal:\nbrew upgrade uloop"));
             Assert.That(warningLabel.ClassListContains("unity-cli-loop-warning-message--visible"), Is.True);
         }
 

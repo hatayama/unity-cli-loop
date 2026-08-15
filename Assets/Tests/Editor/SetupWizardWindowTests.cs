@@ -518,7 +518,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(label, Is.EqualTo(expectedLabel));
         }
 
-        [TestCase(true, "2.9.0", true, "Homebrew-managed CLI v2.9.0 is older than the required v3.0.0.\nbrew upgrade uloop")]
+        [TestCase(
+            true,
+            "2.9.0",
+            true,
+            "Homebrew-managed CLI v2.9.0 is older than the required v3.0.0.\n"
+            + "Run this command in your terminal:\nbrew upgrade uloop")]
         [TestCase(true, "3.0.0", false, "")]
         [TestCase(false, "2.9.0", false, "")]
         public void Update_TogglesHomebrewUpgradeWarning(

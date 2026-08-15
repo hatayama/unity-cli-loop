@@ -15,12 +15,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
         /// Formats the warning text that tells a Homebrew user how to reach the required CLI version.
         /// </summary>
         /// <remarks>
-        /// Why the line break: the command must stay on its own line so it can be selected and copied
-        /// without picking up the surrounding sentence.
+        /// Why the line breaks: the command is not run by Unity, so the text has to say where it belongs,
+        /// and the command must stay on its own line so it can be selected and copied without picking up
+        /// the surrounding sentence.
         /// </remarks>
         public static string GetHomebrewUpgradeGuidanceText(string cliVersion, string requiredCliVersion)
         {
             return $"Homebrew-managed CLI v{cliVersion} is older than the required v{requiredCliVersion}.\n"
+                + "Run this command in your terminal:\n"
                 + $"{CliConstants.HOMEBREW_UPGRADE_COMMAND}";
         }
 
