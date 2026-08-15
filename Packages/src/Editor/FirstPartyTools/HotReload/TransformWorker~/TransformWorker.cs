@@ -2285,19 +2285,13 @@ public static class TransformWorkerProgram
             // Why skip explicit-interface methods: compiled GetMembers(simpleName) does not
             // see them (metadata name is Interface.Method), so they would be misclassified as
             // Added and skip the unchanged/baseline path.
-            (CompiledMethodMatch compiledMatch, string _) =
-                MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
-            bool isAddedMethod = methodDeclaration.ExplicitInterfaceSpecifier == null
-                && compiledMatch != CompiledMethodMatch.Matched;
-            bool replacesCompiledMethod = compiledMatch == CompiledMethodMatch.ReturnTypeChanged;
-            if (replacesCompiledMethod)
+            bool isAddedMethod = false;
+            bool replacesCompiledMethod = false;
+            if (methodDeclaration.ExplicitInterfaceSpecifier == null)
             {
-                AddRemovedMethodName(removedMembers, methodSymbol.Name);
-                AddRemovedMethodSignature(
-                    removedMethodSignatures,
-                    typeState.TypeSymbol,
-                    methodSymbol.Name,
-                    parameterTypeFullNames);
+                CompiledMethodMatch compiledMatch = MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
+                isAddedMethod = compiledMatch != CompiledMethodMatch.Matched;
+                replacesCompiledMethod = compiledMatch == CompiledMethodMatch.ReturnTypeChanged;
             }
 
             if (isAddedMethod)
@@ -2423,6 +2417,16 @@ public static class TransformWorkerProgram
                 ReplacesCompiledMethod = replacesCompiledMethod
             };
             typeState.QueuedMethods.Add(queued);
+
+            if (replacesCompiledMethod)
+            {
+                AddRemovedMethodName(removedMembers, methodSymbol.Name);
+                AddRemovedMethodSignature(
+                    removedMethodSignatures,
+                    typeState.TypeSymbol,
+                    methodSymbol.Name,
+                    parameterTypeFullNames);
+            }
 
             if (isAddedMethod)
             {
@@ -3090,7 +3094,7 @@ public static class TransformWorkerProgram
         return targetTypesAssemblySymbol.GetTypeByMetadataName(ToReflectionMetadataName(sourceType));
     }
 
-    private static (CompiledMethodMatch Match, string CompiledReturnTypeFullName) MatchCompiledOrdinaryMethod(
+    private static CompiledMethodMatch MatchCompiledOrdinaryMethod(
         INamedTypeSymbol compiledType,
         IMethodSymbol sourceMethod)
     {
@@ -3123,17 +3127,30 @@ public static class TransformWorkerProgram
                 continue;
             }
 
-            string compiledReturnTypeFullName = CecilTypeNames.ToCecilFullName(compiledMethod.ReturnType);
-            string sourceReturnTypeFullName = CecilTypeNames.ToCecilFullName(sourceMethod.ReturnType);
-            if (compiledReturnTypeFullName == sourceReturnTypeFullName)
+            if (ReturnTypesMatch(compiledMethod, sourceMethod))
             {
-                return (CompiledMethodMatch.Matched, compiledReturnTypeFullName);
+                return CompiledMethodMatch.Matched;
             }
 
-            return (CompiledMethodMatch.ReturnTypeChanged, compiledReturnTypeFullName);
+            return CompiledMethodMatch.ReturnTypeChanged;
         }
 
-        return (CompiledMethodMatch.NotFound, null);
+        return CompiledMethodMatch.NotFound;
+    }
+
+    private static bool ReturnTypesMatch(IMethodSymbol compiledMethod, IMethodSymbol sourceMethod)
+    {
+        if (CecilTypeNames.ToCecilFullName(compiledMethod.ReturnType)
+            != CecilTypeNames.ToCecilFullName(sourceMethod.ReturnType))
+        {
+            return false;
+        }
+
+        // Why compare byref flags separately: ToCecilFullName sees only ITypeSymbol, so
+        // int F() and ref int F() both become System.Int32. Missing this would transplant
+        // the new body onto the old non-byref signature.
+        return compiledMethod.ReturnsByRef == sourceMethod.ReturnsByRef
+            && compiledMethod.ReturnsByRefReadonly == sourceMethod.ReturnsByRefReadonly;
     }
 
     private static bool CompiledTypeHasField(INamedTypeSymbol compiledType, IFieldSymbol sourceField)
@@ -3403,7 +3420,7 @@ public static class TransformWorkerProgram
 
         if (symbol is IMethodSymbol methodSymbol && methodSymbol.MethodKind == MethodKind.Ordinary)
         {
-            (CompiledMethodMatch match, string _) = MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
+            CompiledMethodMatch match = MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
             // Why map ReturnTypeChanged to added: the compiled method still has the old
             // signature, so treating it as a direct shim reference would bind the old body.
             return match != CompiledMethodMatch.Matched;

@@ -1102,6 +1102,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue), "vtable slot");
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue)), Is.Null);
+            Assert.That(result.Output.removedMembers, Is.Empty);
+            Assert.That(result.Output.removedMethodSignatures, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: changing a value return to a ref return is ReturnTypeChanged, not Matched,
+        /// because ToCecilFullName alone cannot see byref.
+        /// </summary>
+        [Test]
+        public async Task Classify_RefReturnTypeChange_IsAddedReplacement()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public ref int ExistingValue()\n        {\n            return ref PublicSeed;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("RefReturnTypeChange.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto entry = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            Assert.That(entry, Is.Not.Null);
+            Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(entry.replacesCompiledMethod, Is.True);
         }
 
         /// <summary>
