@@ -819,10 +819,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CountWarningsContaining(result.Warnings, "Removed members stay present"),
                 Is.EqualTo(1),
                 "Reconstructed fixture source omits compiled members once.");
+            int staleSignatureCount = CountWarningsContaining(
+                result.Warnings,
+                "Compiled code outside this file still calls the removed signature");
             Assert.That(
                 result.Warnings.Count,
-                Is.EqualTo(3),
-                "Exactly one inline-risk, one drift, and one removed-members warning.");
+                Is.EqualTo(3 + staleSignatureCount),
+                "Exactly one inline-risk, one drift, one removed-members warning, plus stale-signature rows.");
         }
 
         /// <summary>
@@ -933,10 +936,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CountWarningsContaining(result.Warnings, "Removed members stay present"),
                 Is.EqualTo(2),
                 "Duplicate file inputs each emit a removed-members warning.");
+            int staleSignatureCount = CountWarningsContaining(
+                result.Warnings,
+                "Compiled code outside this file still calls the removed signature");
             Assert.That(
                 result.Warnings.Count,
-                Is.EqualTo(5),
-                "One aggregated inline-risk warning plus two drift and two removed-members warnings.");
+                Is.EqualTo(5 + staleSignatureCount),
+                "One aggregated inline-risk warning plus two drift, two removed-members, and stale-signature rows.");
 
             string aggregatedWarning = null;
             foreach (string warning in result.Warnings)
@@ -2030,6 +2036,152 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a return-type change whose compiled callers all live in the edited file applies
+        /// as Added plus a Patched caller, and the caller returns the new method's value.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_SameFileCallers_AppliesAddedAndPatchesCaller()
+        {
+            string fixturePath = ResolveSignatureChangeSameFileFixturePath();
+            string edited = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSameFile.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, nameof(HotReloadSignatureChangeSameFileFixture.Target));
+            AssertHasPatched(result, nameof(HotReloadSignatureChangeSameFileFixture.ExistingCaller));
+            Assert.That(result.ActivePatchTotal, Is.EqualTo(2));
+
+            HotReloadSignatureChangeSameFileFixture host = new HotReloadSignatureChangeSameFileFixture();
+            Assert.That(host.ExistingCaller(3), Is.EqualTo(4));
+        }
+
+        /// <summary>
+        /// What: a return-type change with a compiled caller in another class is skipped together
+        /// with the same-file caller, while an unrelated body edit in the same file still patches.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_ExternalCaller_SkipsReplacementAndSameFileCaller()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                    "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeExternal.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasSkipped(
+                result,
+                nameof(HotReloadSignatureChangeExternalHost.Target),
+                "The return type of");
+            AssertHasSkipped(
+                result,
+                nameof(HotReloadSignatureChangeExternalHost.SameFileCaller),
+                HotReloadConstants.SignatureChangedGatedCallerSkipReason);
+            AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
+
+            HotReloadSignatureChangeExternalHost host = new HotReloadSignatureChangeExternalHost();
+            Assert.That(host.Unrelated(3), Is.EqualTo(4));
+            Assert.That(host.Target(3), Is.EqualTo(3));
+            Assert.That(host.SameFileCaller(3), Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: deleting a method that still has a compiled caller outside the file applies other
+        /// edits and names that caller in a stale-signature warning.
+        /// </summary>
+        [Test]
+        public async Task Run_DeletedMethod_ExternalCaller_WarnsStaleSignature()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int Unrelated(int value)\n        {\n            return value;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ToDelete(int value)\n        {\n            return value;\n        }",
+                "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            Assert.That(edited, Does.Not.Contain("ToDelete"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeDeleted.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
+            string expectedCallerKey =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeExternalCaller::CallDeleted(System.Int32)";
+            string expectedSignatureKey =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeExternalHost::ToDelete(System.Int32)";
+            string expectedWarning = string.Format(
+                HotReloadConstants.StaleSignatureCallersWarningFormat,
+                expectedSignatureKey,
+                expectedCallerKey);
+            Assert.That(result.Warnings, Does.Contain(expectedWarning), FormatOutcomes(result));
+
+            HotReloadSignatureChangeExternalHost host = new HotReloadSignatureChangeExternalHost();
+            Assert.That(host.Unrelated(3), Is.EqualTo(4));
+        }
+
+        /// <summary>
+        /// What: re-applying the same same-file return-type change does not double the added-member
+        /// registry or ActivePatchTotal.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_Reapply_DoesNotDoubleRegistry()
+        {
+            string fixturePath = ResolveSignatureChangeSameFileFixturePath();
+            string edited = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeReapply1.cs", edited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasAdded(first, nameof(HotReloadSignatureChangeSameFileFixture.Target));
+            int firstRegistryCount = CountAddedMembersContaining(
+                nameof(HotReloadSignatureChangeSameFileFixture.Target));
+            Assert.That(first.ActivePatchTotal, Is.EqualTo(2));
+            Assert.That(firstRegistryCount, Is.EqualTo(1));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeReapply2.cs", edited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            AssertHasAdded(second, nameof(HotReloadSignatureChangeSameFileFixture.Target));
+            Assert.That(second.ActivePatchTotal, Is.EqualTo(2));
+            Assert.That(
+                CountAddedMembersContaining(nameof(HotReloadSignatureChangeSameFileFixture.Target)),
+                Is.EqualTo(1));
+
+            HotReloadSignatureChangeSameFileFixture host = new HotReloadSignatureChangeSameFileFixture();
+            Assert.That(host.ExistingCaller(3), Is.EqualTo(4));
+        }
+
+        /// <summary>
         /// What: after applying an added method, a later hot-reload against the on-disk baseline
         /// (all-unchanged) clears that file's added-member ledger so --status and Play warnings
         /// do not keep counting it.
@@ -2449,6 +2601,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReloadAddedMethodApplyFixture.cs");
             Assert.That(File.Exists(path), Is.True, "Added-method apply fixture source missing: " + path);
             return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSignatureChangeSameFileFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSignatureChangeSameFileFixture.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Signature-change same-file fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSignatureChangeExternalHostPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSignatureChangeExternalHost.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Signature-change external host source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string WithSameFileReturnTypeChange(string onDisk)
+        {
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            return edited;
+        }
+
+        private static int CountAddedMembersContaining(string methodName)
+        {
+            int count = 0;
+            foreach (HotReloadAddedMemberInfo added in HotReloadAddedMemberRegistry.Describe())
+            {
+                if (added.MethodKey.Contains(methodName))
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static string ResolveAddedFieldApplyFixturePath()

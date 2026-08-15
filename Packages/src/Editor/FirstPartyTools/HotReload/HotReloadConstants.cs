@@ -69,6 +69,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Calls an added method whose shim failed to compile; the caller was left unpatched. "
             + "Run 'uloop compile'.";
 
+        public const string SignatureChangedGateSkipReasonFormat =
+            "The return type of '{0}' changed, but compiled code outside this file still calls the old method. Applying it would leave those callers on the old version. Run 'uloop compile'.";
+
+        public const string SignatureChangedGatedCallerSkipReason =
+            "Calls a method whose signature change was not applied because compiled callers exist outside this file; this caller was left unpatched. Run 'uloop compile'.";
+
+        public const string StaleSignatureCallersWarningFormat =
+            "Compiled code outside this file still calls the removed signature '{0}': {1}. Those call sites keep the previous behavior until 'uloop compile'.";
+
         // Wire value for TransformWorkerRemovedMemberDto.kind.
         // Keep in sync with RemovedMemberKinds in TransformWorker~/TransformWorker.cs.
         public const string RemovedMemberKindMethod = "method";
