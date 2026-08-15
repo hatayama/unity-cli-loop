@@ -296,6 +296,7 @@ public static class TransformWorkerProgram
         List<WorkerSkipped> skipped = new List<WorkerSkipped>();
         List<WorkerUnchangedMethod> unchangedMethods = new List<WorkerUnchangedMethod>();
         List<WorkerRemovedMember> removedMembers = new List<WorkerRemovedMember>();
+        List<WorkerRemovedMethodSignature> removedMethodSignatures = new List<WorkerRemovedMethodSignature>();
         List<ShimTypeBuilder> shimTypes = new List<ShimTypeBuilder>();
         int globalShimMethodCounter = 0;
         int shimTypeCounter = 0;
@@ -349,6 +350,8 @@ public static class TransformWorkerProgram
                 skipped,
                 unchangedMethods,
                 declarationDriftWarnings,
+                removedMembers,
+                removedMethodSignatures,
                 shimTypeCounter,
                 globalShimMethodCounter);
             shimTypeCounter = nextShimTypeCounter;
@@ -363,6 +366,12 @@ public static class TransformWorkerProgram
                 plainCurrentMethodMap,
                 addedMethodCatalog,
                 removedMembers);
+            CollectRemovedMethodSignaturesForDeletedNames(
+                typeEmitStates,
+                semanticModel,
+                targetTypesAssemblySymbol,
+                removedMembers,
+                removedMethodSignatures);
             Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap =
                 BuildSyntaxFieldMapOrNull(baselineSnapshotRoot);
             Dictionary<string, VariableDeclaratorSyntax> currentFieldMap =
@@ -466,6 +475,7 @@ public static class TransformWorkerProgram
             UnchangedMethods = unchangedMethods.ToArray(),
             BaselineDisabledByDuplicateKeys = baselineDisabledByDuplicateKeys,
             RemovedMembers = removedMembers.ToArray(),
+            RemovedMethodSignatures = removedMethodSignatures.ToArray(),
             HasAccessorDelegates = hasAccessorDelegates,
             HasAddedFieldRewrites = addedFieldCatalog.HasStoreRewrites
         };
@@ -2236,6 +2246,8 @@ public static class TransformWorkerProgram
         List<WorkerSkipped> skipped,
         List<WorkerUnchangedMethod> unchangedMethods,
         List<string> declarationDriftWarnings,
+        List<WorkerRemovedMember> removedMembers,
+        List<WorkerRemovedMethodSignature> removedMethodSignatures,
         int shimTypeCounter,
         int globalShimMethodCounter)
     {
@@ -2273,8 +2285,14 @@ public static class TransformWorkerProgram
             // Why skip explicit-interface methods: compiled GetMembers(simpleName) does not
             // see them (metadata name is Interface.Method), so they would be misclassified as
             // Added and skip the unchanged/baseline path.
-            bool isAddedMethod = methodDeclaration.ExplicitInterfaceSpecifier == null
-                && !CompiledTypeHasOrdinaryMethod(compiledType, methodSymbol);
+            bool isAddedMethod = false;
+            bool replacesCompiledMethod = false;
+            if (methodDeclaration.ExplicitInterfaceSpecifier == null)
+            {
+                CompiledMethodMatch compiledMatch = MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
+                isAddedMethod = compiledMatch != CompiledMethodMatch.Matched;
+                replacesCompiledMethod = compiledMatch == CompiledMethodMatch.ReturnTypeChanged;
+            }
 
             if (isAddedMethod)
             {
@@ -2395,9 +2413,20 @@ public static class TransformWorkerProgram
                 SourceEndLine = originalSpan.EndLinePosition.Line + 1,
                 ParameterTypeFullNames = parameterTypeFullNames,
                 MethodKey = methodKey,
-                IsAddedMethod = isAddedMethod
+                IsAddedMethod = isAddedMethod,
+                ReplacesCompiledMethod = replacesCompiledMethod
             };
             typeState.QueuedMethods.Add(queued);
+
+            if (replacesCompiledMethod)
+            {
+                AddRemovedMethodName(removedMembers, methodSymbol.Name);
+                AddRemovedMethodSignature(
+                    removedMethodSignatures,
+                    typeState.TypeSymbol,
+                    methodSymbol.Name,
+                    parameterTypeFullNames);
+            }
 
             if (isAddedMethod)
             {
@@ -2491,7 +2520,8 @@ public static class TransformWorkerProgram
                 LifecycleNote = ComputeLifecycleNote(
                     queued.MethodDeclaration,
                     queued.MethodSymbol,
-                    typeState.TypeSymbol)
+                    typeState.TypeSymbol),
+                ReplacesCompiledMethod = queued.ReplacesCompiledMethod
             });
         }
     }
@@ -2503,6 +2533,14 @@ public static class TransformWorkerProgram
         List<WorkerRemovedMember> removedMembers)
     {
         HashSet<string> seenNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (WorkerRemovedMember existing in removedMembers)
+        {
+            if (existing.Kind == RemovedMemberKinds.Method)
+            {
+                seenNames.Add(existing.Name);
+            }
+        }
+
         foreach (KeyValuePair<string, MethodDeclarationSyntax> pair in snapshotMethodMap)
         {
             if (plainCurrentMethodMap.ContainsKey(pair.Key))
@@ -2523,6 +2561,169 @@ public static class TransformWorkerProgram
                 Name = name
             });
         }
+    }
+
+    private static void CollectRemovedMethodSignaturesForDeletedNames(
+        List<TypeEmitState> typeEmitStates,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetTypesAssemblySymbol,
+        List<WorkerRemovedMember> removedMembers,
+        List<WorkerRemovedMethodSignature> removedMethodSignatures)
+    {
+        HashSet<string> removedMethodNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (WorkerRemovedMember removed in removedMembers)
+        {
+            if (removed.Kind == RemovedMemberKinds.Method)
+            {
+                removedMethodNames.Add(removed.Name);
+            }
+        }
+
+        if (removedMethodNames.Count == 0)
+        {
+            return;
+        }
+
+        foreach (TypeEmitState typeState in typeEmitStates)
+        {
+            if (typeState.TypeDeclaration.Modifiers.Any(SyntaxKind.PartialKeyword))
+            {
+                // Why skip: a compiled type includes methods declared in other files of a
+                // partial. A name missing from this file is not proof the method was deleted.
+                continue;
+            }
+
+            INamedTypeSymbol compiledType = FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
+            if (compiledType == null)
+            {
+                continue;
+            }
+
+            foreach (ISymbol member in compiledType.GetMembers())
+            {
+                if (member is not IMethodSymbol compiledMethod
+                    || compiledMethod.MethodKind != MethodKind.Ordinary
+                    || !removedMethodNames.Contains(compiledMethod.Name))
+                {
+                    continue;
+                }
+
+                if (SourceDeclarationCoversCompiledMethod(typeState, semanticModel, compiledMethod))
+                {
+                    continue;
+                }
+
+                string[] parameterTypeFullNames = compiledMethod.Parameters
+                    .Select(CecilTypeNames.ToParameterTypeFullName)
+                    .ToArray();
+                AddRemovedMethodSignature(
+                    removedMethodSignatures,
+                    typeState.TypeSymbol,
+                    compiledMethod.Name,
+                    parameterTypeFullNames);
+            }
+        }
+    }
+
+    private static bool SourceDeclarationCoversCompiledMethod(
+        TypeEmitState typeState,
+        SemanticModel semanticModel,
+        IMethodSymbol compiledMethod)
+    {
+        string[] compiledParameterTypeFullNames = compiledMethod.Parameters
+            .Select(CecilTypeNames.ToParameterTypeFullName)
+            .ToArray();
+        foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
+            .OfType<MethodDeclarationSyntax>())
+        {
+            IMethodSymbol sourceMethod = semanticModel.GetDeclaredSymbol(methodDeclaration);
+            if (sourceMethod == null
+                || sourceMethod.MethodKind != MethodKind.Ordinary
+                || sourceMethod.Name != compiledMethod.Name
+                || sourceMethod.IsStatic != compiledMethod.IsStatic
+                || sourceMethod.Parameters.Length != compiledParameterTypeFullNames.Length)
+            {
+                continue;
+            }
+
+            bool parametersMatch = true;
+            for (int index = 0; index < compiledParameterTypeFullNames.Length; index++)
+            {
+                if (CecilTypeNames.ToParameterTypeFullName(sourceMethod.Parameters[index])
+                    != compiledParameterTypeFullNames[index])
+                {
+                    parametersMatch = false;
+                    break;
+                }
+            }
+
+            if (parametersMatch)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void AddRemovedMethodName(List<WorkerRemovedMember> removedMembers, string name)
+    {
+        foreach (WorkerRemovedMember existing in removedMembers)
+        {
+            if (existing.Kind == RemovedMemberKinds.Method && existing.Name == name)
+            {
+                return;
+            }
+        }
+
+        removedMembers.Add(new WorkerRemovedMember
+        {
+            Kind = RemovedMemberKinds.Method,
+            Name = name
+        });
+    }
+
+    private static void AddRemovedMethodSignature(
+        List<WorkerRemovedMethodSignature> removedMethodSignatures,
+        INamedTypeSymbol sourceType,
+        string methodName,
+        string[] parameterTypeFullNames)
+    {
+        string typeMetadataName = CecilTypeNames.ToMetadataName(sourceType);
+        foreach (WorkerRemovedMethodSignature existing in removedMethodSignatures)
+        {
+            if (existing.TypeMetadataName == typeMetadataName
+                && existing.MethodName == methodName
+                && ParameterTypeFullNamesEqual(existing.ParameterTypeFullNames, parameterTypeFullNames))
+            {
+                return;
+            }
+        }
+
+        removedMethodSignatures.Add(new WorkerRemovedMethodSignature
+        {
+            TypeMetadataName = typeMetadataName,
+            MethodName = methodName,
+            ParameterTypeFullNames = parameterTypeFullNames
+        });
+    }
+
+    private static bool ParameterTypeFullNamesEqual(string[] left, string[] right)
+    {
+        if (left == null || right == null || left.Length != right.Length)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < left.Length; index++)
+        {
+            if (left[index] != right[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static void CollectRemovedFields(
@@ -2893,7 +3094,7 @@ public static class TransformWorkerProgram
         return targetTypesAssemblySymbol.GetTypeByMetadataName(ToReflectionMetadataName(sourceType));
     }
 
-    private static bool CompiledTypeHasOrdinaryMethod(
+    private static CompiledMethodMatch MatchCompiledOrdinaryMethod(
         INamedTypeSymbol compiledType,
         IMethodSymbol sourceMethod)
     {
@@ -2921,13 +3122,35 @@ public static class TransformWorkerProgram
                 }
             }
 
-            if (parametersMatch)
+            if (!parametersMatch)
             {
-                return true;
+                continue;
             }
+
+            if (ReturnTypesMatch(compiledMethod, sourceMethod))
+            {
+                return CompiledMethodMatch.Matched;
+            }
+
+            return CompiledMethodMatch.ReturnTypeChanged;
         }
 
-        return false;
+        return CompiledMethodMatch.NotFound;
+    }
+
+    private static bool ReturnTypesMatch(IMethodSymbol compiledMethod, IMethodSymbol sourceMethod)
+    {
+        if (CecilTypeNames.ToCecilFullName(compiledMethod.ReturnType)
+            != CecilTypeNames.ToCecilFullName(sourceMethod.ReturnType))
+        {
+            return false;
+        }
+
+        // Why compare byref flags separately: ToCecilFullName sees only ITypeSymbol, so
+        // int F() and ref int F() both become System.Int32. Missing this would transplant
+        // the new body onto the old non-byref signature.
+        return compiledMethod.ReturnsByRef == sourceMethod.ReturnsByRef
+            && compiledMethod.ReturnsByRefReadonly == sourceMethod.ReturnsByRefReadonly;
     }
 
     private static bool CompiledTypeHasField(INamedTypeSymbol compiledType, IFieldSymbol sourceField)
@@ -3197,7 +3420,10 @@ public static class TransformWorkerProgram
 
         if (symbol is IMethodSymbol methodSymbol && methodSymbol.MethodKind == MethodKind.Ordinary)
         {
-            return !CompiledTypeHasOrdinaryMethod(compiledType, methodSymbol);
+            CompiledMethodMatch match = MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
+            // Why map ReturnTypeChanged to added: the compiled method still has the old
+            // signature, so treating it as a direct shim reference would bind the old body.
+            return match != CompiledMethodMatch.Matched;
         }
 
         foreach (ISymbol member in compiledType.GetMembers(symbol.Name))
@@ -6603,7 +6829,7 @@ internal static class CecilTypeNames
         return typeName;
     }
 
-    private static string ToCecilFullName(ITypeSymbol typeSymbol)
+    public static string ToCecilFullName(ITypeSymbol typeSymbol)
     {
         // Why here (not only the parameter top level): source `List<dynamic>` / `dynamic[]`
         // nest TypeKind.Dynamic while compiled metadata uses System.Object at the same depth.
@@ -6709,6 +6935,8 @@ internal sealed class QueuedShimMethod
     public string MethodKey { get; set; }
 
     public bool IsAddedMethod { get; set; }
+
+    public bool ReplacesCompiledMethod { get; set; }
 }
 
 internal sealed class AddedMethodBinding
@@ -7090,6 +7318,8 @@ internal sealed class WorkerOutput
 
     public WorkerRemovedMember[] RemovedMembers { get; set; }
 
+    public WorkerRemovedMethodSignature[] RemovedMethodSignatures { get; set; }
+
     public bool HasAccessorDelegates { get; set; }
 
     // True when shim bodies rewrite added-field accesses to HotReloadAddedFieldStore.
@@ -7102,6 +7332,22 @@ internal sealed class WorkerRemovedMember
     public string Kind { get; set; }
 
     public string Name { get; set; }
+}
+
+internal sealed class WorkerRemovedMethodSignature
+{
+    public string TypeMetadataName { get; set; }
+
+    public string MethodName { get; set; }
+
+    public string[] ParameterTypeFullNames { get; set; }
+}
+
+internal enum CompiledMethodMatch
+{
+    NotFound,
+    Matched,
+    ReturnTypeChanged
 }
 
 internal sealed class WorkerUnchangedMethod
@@ -7138,6 +7384,8 @@ internal sealed class WorkerEntry
 
     // Null when the method is not a one-shot lifecycle method and is not only called from them.
     public string LifecycleNote { get; set; }
+
+    public bool ReplacesCompiledMethod { get; set; }
 }
 
 internal static class LifecycleNotes

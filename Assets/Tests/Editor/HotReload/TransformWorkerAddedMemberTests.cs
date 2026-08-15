@@ -1047,6 +1047,170 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.removedMembers, Is.Empty);
         }
 
+        /// <summary>
+        /// What: a return-type-only change is classified as an addedMethod replacement with
+        /// replacesCompiledMethod, the old name in removedMembers, and the old identity in
+        /// removedMethodSignatures.
+        /// </summary>
+        [Test]
+        public async Task Classify_ReturnTypeChange_IsAddedReplacementWithRemovedSignature()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public long ExistingValue()\n        {\n            return 1L;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("ReturnTypeChange.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto entry = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            Assert.That(entry, Is.Not.Null);
+            Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(entry.replacesCompiledMethod, Is.True);
+            AssertHasRemovedMemberName(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            Assert.That(
+                HasRemovedSignature(
+                    result.Output,
+                    typeof(HotReloadAddedMemberHost).FullName,
+                    nameof(HotReloadAddedMemberHost.ExistingValue)),
+                Is.True);
+        }
+
+        /// <summary>
+        /// What: a return-type change that is also virtual is skipped with the existing
+        /// added-method vtable reason.
+        /// </summary>
+        [Test]
+        public async Task Classify_ReturnTypeChangeOnVirtual_IsSkippedWithVtableReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public virtual long ExistingValue()\n        {\n            return 1L;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("ReturnTypeChangeVirtual.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue), "vtable slot");
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue)), Is.Null);
+            Assert.That(result.Output.removedMembers, Is.Empty);
+            Assert.That(result.Output.removedMethodSignatures, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: changing a value return to a ref return is ReturnTypeChanged, not Matched,
+        /// because ToCecilFullName alone cannot see byref.
+        /// </summary>
+        [Test]
+        public async Task Classify_RefReturnTypeChange_IsAddedReplacement()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public ref int ExistingValue()\n        {\n            return ref PublicSeed;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("RefReturnTypeChange.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto entry = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            Assert.That(entry, Is.Not.Null);
+            Assert.That(entry.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(entry.replacesCompiledMethod, Is.True);
+        }
+
+        /// <summary>
+        /// What: a parameter-type change reports the old compiled identity in
+        /// removedMethodSignatures in addition to the name-only removed warning.
+        /// </summary>
+        [Test]
+        public async Task Classify_ParameterTypeChange_ReportsOldSignature()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(string value)\n        {\n            return value.Length;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("ParameterTypeChange.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasRemovedMemberName(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(
+                HasRemovedSignature(
+                    result.Output,
+                    typeof(HotReloadAddedMemberHost).FullName,
+                    nameof(HotReloadAddedMemberHost.ExistingCaller),
+                    "System.Int32"),
+                Is.True);
+        }
+
+        /// <summary>
+        /// What: deleting a method on a partial type keeps the name warning and leaves
+        /// removedMethodSignatures empty so other-file declarations are not treated as deleted.
+        /// </summary>
+        [Test]
+        public async Task Classify_PartialTypeMethodDeletion_OmitsRemovedSignatures()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PartialRemoved()\n        {\n            return 2;\n        }\n",
+                string.Empty,
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("PartialMethodDeletion.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasRemovedMemberName(result, nameof(HotReloadAddedMemberPartialHost.PartialRemoved));
+            Assert.That(result.Output.removedMethodSignatures, Is.Not.Null);
+            Assert.That(result.Output.removedMethodSignatures, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: an existing method whose return type is unchanged stays a normal edit
+        /// (not an addedMethod replacement).
+        /// </summary>
+        [Test]
+        public async Task Classify_UnchangedReturnType_IsNotReplacement()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public int ExistingValue()\n        {\n            return 99;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("UnchangedReturnType.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto entry = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            Assert.That(entry, Is.Not.Null);
+            Assert.That(entry.patchKind, Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(entry.replacesCompiledMethod, Is.False);
+        }
+
         private static async Task<TransformWorkerClientResult> RunHostWithAddedMembersAsync(string extraMembers)
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
@@ -1086,6 +1250,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return null;
+        }
+
+        private static void AssertHasRemovedMemberName(TransformWorkerClientResult result, string name)
+        {
+            Assert.That(result.Output.removedMembers, Is.Not.Null);
+            foreach (TransformWorkerRemovedMemberDto removed in result.Output.removedMembers)
+            {
+                if (removed.kind == HotReloadConstants.RemovedMemberKindMethod && removed.name == name)
+                {
+                    return;
+                }
+            }
+
+            Assert.Fail("Expected removed member name '" + name + "'.");
+        }
+
+        private static bool HasRemovedSignature(
+            TransformWorkerOutputDto output,
+            string typeMetadataName,
+            string methodName,
+            params string[] parameterTypeFullNames)
+        {
+            if (output.removedMethodSignatures == null)
+            {
+                return false;
+            }
+
+            foreach (TransformWorkerRemovedMethodSignatureDto signature in output.removedMethodSignatures)
+            {
+                if (signature.typeMetadataName != typeMetadataName || signature.methodName != methodName)
+                {
+                    continue;
+                }
+
+                if (signature.parameterTypeFullNames == null
+                    || signature.parameterTypeFullNames.Length != parameterTypeFullNames.Length)
+                {
+                    continue;
+                }
+
+                bool match = true;
+                for (int index = 0; index < parameterTypeFullNames.Length; index++)
+                {
+                    if (signature.parameterTypeFullNames[index] != parameterTypeFullNames[index])
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+
+                if (match)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static void AssertHasSkip(
