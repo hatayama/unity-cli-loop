@@ -111,6 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             output.declarationDriftWarnings ??= Array.Empty<string>();
             output.unchangedMethods ??= Array.Empty<TransformWorkerUnchangedMethodDto>();
             output.removedMembers ??= Array.Empty<TransformWorkerRemovedMemberDto>();
+            output.removedMethodSignatures ??= Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
             output.shimSource ??= string.Empty;
             foreach (TransformWorkerEntryDto entry in output.entries)
             {

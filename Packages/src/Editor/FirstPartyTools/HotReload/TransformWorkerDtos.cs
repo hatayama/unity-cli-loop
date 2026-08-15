@@ -67,6 +67,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // True when any emitted shim body rewrites an added-field access to HotReloadAddedFieldStore.
         // Drives ToolContracts assembly injection at both the first compile and isolation retry.
         public bool hasAddedFieldRewrites;
+
+        // Compiled identities of methods that left the edited file (or whose return type changed).
+        // Null/omitted deserializes as empty after client coalesce.
+        public TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures;
+    }
+
+    [Serializable]
+    internal sealed class TransformWorkerRemovedMethodSignatureDto
+    {
+        public string typeMetadataName;
+        public string methodName;
+        public string[] parameterTypeFullNames;
     }
 
     [Serializable]
@@ -109,6 +121,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Null/empty when the method is not a one-shot lifecycle method and is not only called
         // from them inside this file.
         public string lifecycleNote;
+
+        // True when this addedMethod entry replaces a compiled method whose return type changed.
+        public bool replacesCompiledMethod;
     }
 
     [Serializable]

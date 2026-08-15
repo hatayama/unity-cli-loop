@@ -1609,6 +1609,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClient.CoalesceOutput(omitted);
             Assert.That(omitted.removedMembers, Is.Not.Null);
             Assert.That(omitted.removedMembers, Is.Empty);
+            Assert.That(omitted.removedMethodSignatures, Is.Not.Null);
+            Assert.That(omitted.removedMethodSignatures, Is.Empty);
             Assert.That(omitted.entries[0].calledAddedMethodKeys, Is.Not.Null);
             Assert.That(omitted.entries[0].calledAddedMethodKeys, Is.Empty);
             Assert.That(omitted.declarationDriftWarnings, Is.Not.Null);

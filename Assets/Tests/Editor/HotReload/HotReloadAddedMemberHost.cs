@@ -261,4 +261,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return "ok";
         }
     }
+
+    /// <summary>
+    /// Partial host so worker tests can prove deleted-method signatures are omitted on partials.
+    /// </summary>
+    public partial class HotReloadAddedMemberPartialHost
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int PartialKept()
+        {
+            return 1;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int PartialRemoved()
+        {
+            return 2;
+        }
+    }
 }
