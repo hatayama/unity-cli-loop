@@ -100,6 +100,12 @@ Choose the capture mode when enabling a pause point:
 
 `--max-history` defaults to 20 and accepts values from 1 through 100. When the limit is exceeded, the oldest frames are dropped and `HistoryDroppedCount` reports how many were removed. `pause-point-status` returns the current `Mode`, `MaxHistory`, history frames, and dropped count.
 
+Re-enabling the same `file:line` replaces the marker instead of updating it: the
+marker starts a new generation and the previous `CapturedVariableHistory` is
+discarded, so a re-enable never carries frames over. Read the history you still
+need with `pause-point-status` before re-enabling (for example before raising
+`--max-preview-elements` or changing the mode).
+
 To inspect value changes one Editor Step at a time, pair a `continuous` marker with a `control-play-mode --action Step` + `pause-point-status` loop — see [references/captured-variables.md](references/captured-variables.md) for the loop and its caveats.
 
 For multi-step verification, avoid repeating enable→await→clear cycles with the default single-shot mode: pass `--mode continuous` to `enable-pause-point`, or enable several file:line markers at once — markers are independent and can stay armed simultaneously.

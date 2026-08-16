@@ -253,6 +253,10 @@ below) — raising is only expressible inside the declaring type, which a shim i
 
 ## When a patch reports `Patched` but behavior does not change
 
+Run `uloop get-logs` first. An exception thrown inside the patched body, or an
+error logged while the reload applied, appears there immediately and explains
+"Patched but no visible change" faster than any marker-based digging.
+
 `Patched` means the method body was replaced, not that the method ran. Before suspecting
 the patch, confirm the method is actually reached: arm `uloop enable-pause-point --mode
 trace` on a line inside the edited method body — it resolves against the patched body
