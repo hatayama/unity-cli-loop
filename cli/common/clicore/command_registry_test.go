@@ -12,7 +12,6 @@ func TestNativeCommandEntriesDeclareOwners(t *testing.T) {
 		VersionCommandName:              DispatcherOwned,
 		SkillsCommandName:               DispatcherOwned,
 		PackageCommandName:              DispatcherOwned,
-		CompletionCommand:               DispatcherOwned,
 		"list":                          RunnerOwned,
 		"sync":                          RunnerOwned,
 		"focus-window":                  RunnerOwned,
@@ -43,7 +42,6 @@ func TestIsDispatcherOwnedCommandName(t *testing.T) {
 		VersionCommandName,
 		SkillsCommandName,
 		PackageCommandName,
-		CompletionCommand,
 	} {
 		if !IsDispatcherOwnedCommandName(command) {
 			t.Fatalf("%s must be dispatcher-owned", command)
@@ -84,7 +82,6 @@ func TestIsRunnerOwnedCommandName(t *testing.T) {
 		VersionCommandName,
 		SkillsCommandName,
 		PackageCommandName,
-		CompletionCommand,
 		CompileCommandName,
 		"",
 	} {
