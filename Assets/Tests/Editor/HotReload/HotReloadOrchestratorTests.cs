@@ -1967,6 +1967,163 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added method that reads a compiled private const returns the folded
+        /// literal and is Added (const is not rewritten to StaticFieldRefAccess).
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethod_PrivateConstRead_ReturnsFoldedLiteral()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedReadConst();\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int AddedReadConst()\n        {\n            return PrivateConstThree;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedPrivateConstRead.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedReadConst");
+            AssertHasPatched(result, nameof(HotReloadAddedPrivateAccessFixture.ExistingCaller));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: an added method whose closure body reads a compiled private const still
+        /// returns the folded literal (const stays out of accessor rewrite).
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethod_ClosurePrivateConstRead_ReturnsFoldedLiteral()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedReadConstClosure();\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int AddedReadConstClosure()\n        {\n"
+                + "            System.Func<int> read = () => PrivateConstThree;\n"
+                + "            return read();\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedClosurePrivateConstRead.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedReadConstClosure");
+            AssertHasPatched(result, nameof(HotReloadAddedPrivateAccessFixture.ExistingCaller));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: an added method that mixes a private const with a private instance field
+        /// returns the sum (const folds, field uses an accessor) without failing bind.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethod_MixedConstAndPrivateInstanceField_ReturnsSum()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedMixed();\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int AddedMixed()\n        {\n            return PrivateConstThree + _instanceSecret;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedMixedConstAndField.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedMixed");
+            AssertHasPatched(result, nameof(HotReloadAddedPrivateAccessFixture.ExistingCaller));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(10));
+        }
+
+        /// <summary>
+        /// What: an added method that writes a compiled private static field (simple assign
+        /// then +=) is Added and the compiled reader returns the written value.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethod_PrivateStaticFieldWrite_ReadsBackWrittenValue()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedWriteStatic();\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int AddedWriteStatic()\n        {\n"
+                + "            _staticWritable = 5;\n"
+                + "            _staticWritable += 3;\n"
+                + "            return _staticWritable;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            host.ResetStaticWritable();
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedPrivateStaticWrite.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedWriteStatic");
+            AssertHasPatched(result, nameof(HotReloadAddedPrivateAccessFixture.ExistingCaller));
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(8));
+            Assert.That(host.ReadStaticWritable(), Is.EqualTo(8));
+            host.ResetStaticWritable();
+        }
+
+        /// <summary>
+        /// What: an existing patched method that reads a private static field through a
+        /// closure (pre-existing delegation path) is Patched and returns the compiled value.
+        /// </summary>
+        [Test]
+        public async Task Run_ExistingDelegation_PrivateStaticFieldRead_ReturnsCompiledValue()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            System.Func<int> read = () => _staticSecret;\n"
+                + "            return read();\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("ExistingDelegationPrivateStaticRead.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedPrivateAccessFixture.ExistingCaller));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(11));
+        }
+
+        /// <summary>
         /// What: an added method that calls a compiled private instance method is Added
         /// and the patched caller returns that method's value (MethodDelegate path).
         /// </summary>

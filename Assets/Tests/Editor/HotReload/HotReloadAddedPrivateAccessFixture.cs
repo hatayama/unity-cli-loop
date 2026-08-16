@@ -12,6 +12,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static int _staticSecret = 11;
 
+        private static int _staticWritable;
+
+        private const int PrivateConstThree = 3;
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int ReadInstanceSecret()
         {
@@ -22,6 +26,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int ReadStaticSecret()
         {
             return _staticSecret;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ReadPrivateConst()
+        {
+            return PrivateConstThree;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ReadStaticWritable()
+        {
+            return _staticWritable;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void ResetStaticWritable()
+        {
+            _staticWritable = 0;
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
