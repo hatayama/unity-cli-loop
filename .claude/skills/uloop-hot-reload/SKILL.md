@@ -129,19 +129,20 @@ it report `Patched`. Every added-member rule applies — same-file visibility, t
 Editor-session illusion, and the `virtual`/generic/interface exclusions.
 
 A gate protects compiled callers: the change applies only when every live compiled
-call site of the old signature is itself patched in the same run. A caller in
-another file — or an *unedited* method in the same file (an implicit `int`→`long`
-widening can leave a caller's source untouched) — would keep calling the old
-method silently, so the run reports the changed method and its edited callers as
-`Skipped` instead; land the change with `uloop compile`. Call sites inside methods
+call site of the old signature is patched by the same file's reload. A caller in
+another file — even one edited in the same run — or an *unedited* method in the
+same file (an implicit `int`→`long` widening can leave a caller's source
+untouched) would keep calling the old method silently, so the run reports the
+changed method and its edited callers as `Skipped` instead; land the change with
+`uloop compile`. Call sites inside methods
 that the same edit removes or re-signatures do not gate: those compiled bodies are
 already stale, and anything still reaching them stays on the consistent old
 behavior.
 
 Renaming a method or changing its parameter list follows the delete rules rather
 than the gate: the new signature is an ordinary added method, the old one is
-reported removed, and when compiled call sites of the old signature remain outside
-the run, a `Warnings` entry names each caller — those call sites keep the previous
+reported removed, and a `Warnings` entry names each compiled call site of the old
+signature that the reload leaves unpatched — those call sites keep the previous
 behavior until `uloop compile`. Deleting a method emits the same warning when
 compiled callers remain.
 
