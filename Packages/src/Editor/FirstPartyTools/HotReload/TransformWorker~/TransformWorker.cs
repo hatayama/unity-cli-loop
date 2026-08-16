@@ -2469,7 +2469,9 @@ public static class TransformWorkerProgram
                     RecordHandledAddedMethodSyntaxKey(
                         addedMethodCatalog,
                         BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration),
-                        replacesCompiledMethod);
+                        replacesCompiledMethod,
+                        snapshotMethodMap,
+                        plainCurrentMethodMap);
                     continue;
                 }
             }
@@ -2503,7 +2505,9 @@ public static class TransformWorkerProgram
                     RecordHandledAddedMethodSyntaxKey(
                         addedMethodCatalog,
                         syntaxMethodKey,
-                        replacesCompiledMethod);
+                        replacesCompiledMethod,
+                        snapshotMethodMap,
+                        plainCurrentMethodMap);
                 }
 
                 continue;
@@ -2566,7 +2570,9 @@ public static class TransformWorkerProgram
                     RecordHandledAddedMethodSyntaxKey(
                         addedMethodCatalog,
                         syntaxMethodKey,
-                        replacesCompiledMethod);
+                        replacesCompiledMethod,
+                        snapshotMethodMap,
+                        plainCurrentMethodMap);
                 }
 
                 continue;
@@ -2624,7 +2630,9 @@ public static class TransformWorkerProgram
                 RecordHandledAddedMethodSyntaxKey(
                     addedMethodCatalog,
                     syntaxMethodKey,
-                    replacesCompiledMethod);
+                    replacesCompiledMethod,
+                    snapshotMethodMap,
+                    plainCurrentMethodMap);
                 AppendUnityMessageWarningIfNeeded(
                     typeState.TypeSymbol,
                     methodSymbol,
@@ -2854,19 +2862,58 @@ public static class TransformWorkerProgram
         return false;
     }
 
-    // Why both sides: a return-type-only change keeps the same syntax key (name+params).
-    // Stripping only the current tree leaves the snapshot's old return type as unhandled
-    // outside-body drift even though the gate or Added row already reported it.
+    // Why strip current always, snapshot only when equivalent: a return-type-only
+    // change keeps the same syntax key (name+params). Stripping only the current tree
+    // leaves the snapshot's old return type as unhandled outside-body drift. Stripping
+    // both unconditionally hid attribute/accessibility diffs that still need the warning.
     private static void RecordHandledAddedMethodSyntaxKey(
         AddedMethodCatalog addedMethodCatalog,
         string syntaxKey,
-        bool replacesCompiledMethod)
+        bool replacesCompiledMethod,
+        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
+        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap)
     {
         addedMethodCatalog.AddAddedSyntaxKey(syntaxKey);
-        if (replacesCompiledMethod)
+        if (!replacesCompiledMethod || snapshotMethodMap == null || plainCurrentMethodMap == null)
+        {
+            return;
+        }
+
+        snapshotMethodMap.TryGetValue(syntaxKey, out MethodDeclarationSyntax snapshotDecl);
+        plainCurrentMethodMap.TryGetValue(syntaxKey, out MethodDeclarationSyntax currentDecl);
+        if (AreDeclarationsEquivalentIgnoringBodyAndReturnType(snapshotDecl, currentDecl))
         {
             addedMethodCatalog.AddRemovedSyntaxKey(syntaxKey);
         }
+    }
+
+    private static bool AreDeclarationsEquivalentIgnoringBodyAndReturnType(
+        MethodDeclarationSyntax snapshotDecl,
+        MethodDeclarationSyntax currentDecl)
+    {
+        if (snapshotDecl == null || currentDecl == null)
+        {
+            return false;
+        }
+
+        MethodDeclarationSyntax normalizedSnapshot =
+            NormalizeDeclarationIgnoringBodyAndReturnType(snapshotDecl);
+        MethodDeclarationSyntax normalizedCurrent =
+            NormalizeDeclarationIgnoringBodyAndReturnType(currentDecl);
+        return SyntaxFactory.AreEquivalent(normalizedSnapshot, normalizedCurrent, topLevel: false);
+    }
+
+    private static MethodDeclarationSyntax NormalizeDeclarationIgnoringBodyAndReturnType(
+        MethodDeclarationSyntax method)
+    {
+        TypeSyntax placeholderReturn = SyntaxFactory.PredefinedType(
+            SyntaxFactory.Token(SyntaxKind.VoidKeyword));
+        return method
+            .WithReturnType(placeholderReturn)
+            .WithBody(null)
+            .WithExpressionBody(null)
+            .WithSemicolonToken(SyntaxFactory.Token(SyntaxKind.SemicolonToken))
+            .NormalizeWhitespace();
     }
 
     private static void AddRemovedMethodName(List<WorkerRemovedMember> removedMembers, string name)
@@ -4454,13 +4501,13 @@ public static class TransformWorkerProgram
         return ShimMethodFactory.ToShimMethod(rewritten, methodSymbol);
     }
 
+    // Keep in sync with HotReloadPatcher.FormatMethodKeyParts.
     // Why FormatMethodKeyParts shape: Methods[].Method must use one label for every Kind.
     // Roslyn FullyQualifiedFormat (global::, type arguments) was the Skipped-only outlier.
     private static string FormatMethodLabel(IMethodSymbol methodSymbol)
     {
-        string typeMetadataName = methodSymbol.ContainingType == null
-            ? string.Empty
-            : CecilTypeNames.ToMetadataName(methodSymbol.ContainingType).Replace('/', '+');
+        string typeMetadataName =
+            CecilTypeNames.ToMetadataName(methodSymbol.ContainingType).Replace('/', '+');
         string[] parameterTypeFullNames = methodSymbol.Parameters
             .Select(CecilTypeNames.ToParameterTypeFullName)
             .ToArray();

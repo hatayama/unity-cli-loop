@@ -475,6 +475,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a return-type change plus an attribute on the same declaration still fires
+        /// the outside-body warning (the remaining declaration diff is not stripped).
+        /// </summary>
+        [Test]
+        public async Task Drift_ReturnTypeAndAttribute_WithSnapshot_FiresOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithExistingValueReturnTypeChange(onDisk).Replace(
+                "        public long ExistingValue()",
+                "        [System.Obsolete]\n        public long ExistingValue()",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("DriftReturnTypeAndAttribute.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.Some.Contain("Edits outside method bodies"),
+                "Attribute drift must still fire after a handled return-type change.");
+        }
+
+        /// <summary>
         /// What: excluding an added method key still emits that added method so remaining callers
         /// can compile on isolation retry (G1).
         /// </summary>
@@ -997,6 +1021,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FindSkipMethod(result, "ExistingDefault"),
                 Is.EqualTo(expectedLabel),
                 "Skipped Methods[].Method must use the FormatMethodKeyParts label.");
+        }
+
+        /// <summary>
+        /// What: a worker skip on a nested generic multi-parameter method uses the same
+        /// Methods[].Method label as FormatMethodKeyParts.
+        /// </summary>
+        [Test]
+        public async Task Skip_NestedGenericMultiArg_UsesFormatMethodKeyPartsLabel()
+        {
+            const string projectRelativePath =
+                "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "            int GenericPing<T>(int left, string right) => 1;",
+                "            int GenericPing<T>(int left, string right) => 2;",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("SkipNestedGenericLabel.cs", edited),
+                projectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeof(HotReloadMethodLabelNestedHost.INestedGeneric).FullName,
+                "GenericPing",
+                new[] { "System.Int32", "System.String" },
+                genericArity: 1);
+            Assert.That(
+                FindSkipMethod(result, "GenericPing"),
+                Is.EqualTo(expectedLabel),
+                "Nested generic multi-arg skip labels must match FormatMethodKeyParts.");
+            AssertHasSkip(result, "GenericPing", "Interface members are not patchable");
         }
 
         /// <summary>
