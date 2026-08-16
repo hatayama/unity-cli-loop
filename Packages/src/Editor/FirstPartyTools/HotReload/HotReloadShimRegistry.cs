@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadPausePointCoordination.GetShimLookupForFile = LookupForFile;
             HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = LoadVerifiedSnapshotSourceForFile;
+            HotReloadPausePointCoordination.GetVerifiedSnapshotSource = LoadVerifiedSnapshotSource;
         }
 
         /// <summary>
@@ -95,6 +96,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             FileGeneration generation = GenerationsByPath[generationKey];
+            string dllPath = FindFirstAssemblyLocation(generation);
+            if (string.IsNullOrEmpty(dllPath))
+            {
+                return null;
+            }
+
+            return LoadVerifiedSnapshotSource(generationKey, dllPath);
+        }
+
+        private static string LoadVerifiedSnapshotSource(string projectRelativeFile, string dllPath)
+        {
+            if (string.IsNullOrEmpty(projectRelativeFile) || string.IsNullOrEmpty(dllPath))
+            {
+                return null;
+            }
+
+            return HotReloadSourceBaseline.LoadVerifiedSnapshotSource(projectRelativeFile, dllPath);
+        }
+
+        // Why first method: every method registered for one source file lives in the same
+        // compiled assembly, so any DeclaringType.Assembly.Location is the dllPath the
+        // snapshot checksum is keyed on.
+        private static string FindFirstAssemblyLocation(FileGeneration generation)
+        {
             foreach (MethodBase originalMethod in generation.Methods.Keys)
             {
                 Type declaringType = originalMethod.DeclaringType;
@@ -104,12 +129,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 string dllPath = declaringType.Assembly.Location;
-                if (string.IsNullOrEmpty(dllPath))
+                if (!string.IsNullOrEmpty(dllPath))
                 {
-                    continue;
+                    return dllPath;
                 }
-
-                return HotReloadSourceBaseline.LoadVerifiedSnapshotSource(generationKey, dllPath);
             }
 
             return null;

@@ -338,9 +338,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     committed = patchResult.Success;
                     if (committed)
                     {
-                        // Why update after restore: status must show the line that will fire next.
-                        string restoredLineText = PausePointLineTextReader.ReadResolvedLineText(
+                        // Why snapshot: restore uses compiled line numbers; the disk file may
+                        // still be the edited source, so disk text would lie the same way enable did.
+                        string dllPath = restoredMethod.DeclaringType != null
+                            ? restoredMethod.DeclaringType.Assembly.Location
+                            : null;
+                        string restoredLineText = PausePointLineTextReader.ReadCompiledSnapshotLineText(
                             request.NormalizedFile,
+                            dllPath,
                             resolveResult.Resolution.ResolvedLine);
                         UloopPausePointRegistry.SetResolvedLine(
                             id,
