@@ -1907,6 +1907,99 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added method that directly reads a compiled private instance field
+        /// (no lambda) is Added and the patched caller returns that field's value.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethod_DirectPrivateInstanceFieldRead_ReturnsCompiledValue()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedReadInstance();\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int AddedReadInstance()\n        {\n            return _instanceSecret;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedDirectPrivateInstance.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedReadInstance");
+            AssertHasPatched(result, nameof(HotReloadAddedPrivateAccessFixture.ExistingCaller));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// What: an added method that directly reads a compiled private static field
+        /// (FB10 RowColors shape) is Added and the patched caller returns that field's value.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethod_DirectPrivateStaticFieldRead_ReturnsCompiledValue()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedReadStatic();\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int AddedReadStatic()\n        {\n            return _staticSecret;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedDirectPrivateStatic.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedReadStatic");
+            AssertHasPatched(result, nameof(HotReloadAddedPrivateAccessFixture.ExistingCaller));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(11));
+        }
+
+        /// <summary>
+        /// What: a return-type change that becomes Added still reads a compiled private
+        /// instance field, and the patched same-file caller returns that field's value.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_AddedMethodReadsPrivateField_ReturnsCompiledValue()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int ReadInstanceSecret()\n        {\n            return _instanceSecret;\n        }",
+                    "        public long ReadInstanceSecret()\n        {\n            return _instanceSecret;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                    "        public int ExistingCaller(int value)\n        {\n            return (int)ReadInstanceSecret();\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedSignatureChangePrivateField.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, nameof(HotReloadAddedPrivateAccessFixture.ReadInstanceSecret));
+            AssertHasPatched(result, nameof(HotReloadAddedPrivateAccessFixture.ExistingCaller));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(7));
+        }
+
+        /// <summary>
         /// What: adding a method and calling it from the same file applies the added shim
         /// (Kind Added) and the patched caller returns the new method's result.
         /// </summary>
@@ -3031,6 +3124,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return string.Join("\n", lines);
+        }
+
+        private static string ResolveAddedPrivateAccessFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadAddedPrivateAccessFixture.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Added private-access fixture source missing: " + path);
+            return Path.GetFullPath(path);
         }
 
         private static string ResolveAddedMethodApplyFixturePath()
