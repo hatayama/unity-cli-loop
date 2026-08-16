@@ -2466,8 +2466,10 @@ public static class TransformWorkerProgram
                 addedMethodCatalog.MarkClassifiedAdded(methodKey);
                 if (input.ExcludedAddedMethodKeys.Contains(methodKey))
                 {
-                    addedMethodCatalog.AddAddedSyntaxKey(
-                        BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration));
+                    RecordHandledAddedMethodSyntaxKey(
+                        addedMethodCatalog,
+                        BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration),
+                        replacesCompiledMethod);
                     continue;
                 }
             }
@@ -2498,7 +2500,10 @@ public static class TransformWorkerProgram
                 });
                 if (isAddedMethod)
                 {
-                    addedMethodCatalog.AddAddedSyntaxKey(syntaxMethodKey);
+                    RecordHandledAddedMethodSyntaxKey(
+                        addedMethodCatalog,
+                        syntaxMethodKey,
+                        replacesCompiledMethod);
                 }
 
                 continue;
@@ -2558,7 +2563,10 @@ public static class TransformWorkerProgram
                 {
                     // Why strip skipped added declarations: otherwise drift warns about
                     // fields/initializers for a method the skip reason already explained.
-                    addedMethodCatalog.AddAddedSyntaxKey(syntaxMethodKey);
+                    RecordHandledAddedMethodSyntaxKey(
+                        addedMethodCatalog,
+                        syntaxMethodKey,
+                        replacesCompiledMethod);
                 }
 
                 continue;
@@ -2613,7 +2621,10 @@ public static class TransformWorkerProgram
                         NamespaceName = shimType.NamespaceName,
                         IsStatic = methodSymbol.IsStatic
                     });
-                addedMethodCatalog.AddAddedSyntaxKey(syntaxMethodKey);
+                RecordHandledAddedMethodSyntaxKey(
+                    addedMethodCatalog,
+                    syntaxMethodKey,
+                    replacesCompiledMethod);
                 AppendUnityMessageWarningIfNeeded(
                     typeState.TypeSymbol,
                     methodSymbol,
@@ -2841,6 +2852,21 @@ public static class TransformWorkerProgram
         }
 
         return false;
+    }
+
+    // Why both sides: a return-type-only change keeps the same syntax key (name+params).
+    // Stripping only the current tree leaves the snapshot's old return type as unhandled
+    // outside-body drift even though the gate or Added row already reported it.
+    private static void RecordHandledAddedMethodSyntaxKey(
+        AddedMethodCatalog addedMethodCatalog,
+        string syntaxKey,
+        bool replacesCompiledMethod)
+    {
+        addedMethodCatalog.AddAddedSyntaxKey(syntaxKey);
+        if (replacesCompiledMethod)
+        {
+            addedMethodCatalog.AddRemovedSyntaxKey(syntaxKey);
+        }
     }
 
     private static void AddRemovedMethodName(List<WorkerRemovedMember> removedMembers, string name)
@@ -4428,9 +4454,39 @@ public static class TransformWorkerProgram
         return ShimMethodFactory.ToShimMethod(rewritten, methodSymbol);
     }
 
+    // Why FormatMethodKeyParts shape: Methods[].Method must use one label for every Kind.
+    // Roslyn FullyQualifiedFormat (global::, type arguments) was the Skipped-only outlier.
     private static string FormatMethodLabel(IMethodSymbol methodSymbol)
     {
-        return AccessorPlan.BuildMemberKey(methodSymbol);
+        string typeMetadataName = methodSymbol.ContainingType == null
+            ? string.Empty
+            : CecilTypeNames.ToMetadataName(methodSymbol.ContainingType).Replace('/', '+');
+        string[] parameterTypeFullNames = methodSymbol.Parameters
+            .Select(CecilTypeNames.ToParameterTypeFullName)
+            .ToArray();
+        StringBuilder builder = new StringBuilder();
+        builder.Append(typeMetadataName);
+        builder.Append('.');
+        builder.Append(methodSymbol.Name);
+        if (methodSymbol.Arity > 0)
+        {
+            builder.Append('`');
+            builder.Append(methodSymbol.Arity.ToString(CultureInfo.InvariantCulture));
+        }
+
+        builder.Append('(');
+        for (int index = 0; index < parameterTypeFullNames.Length; index++)
+        {
+            if (index > 0)
+            {
+                builder.Append(',');
+            }
+
+            builder.Append(parameterTypeFullNames[index].Replace('/', '+'));
+        }
+
+        builder.Append(')');
+        return builder.ToString();
     }
 
     private static List<UsingDirectiveSyntax> CollectUsingsForType(

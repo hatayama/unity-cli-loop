@@ -409,6 +409,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a snapshot plus a return-type-only change does not fire the outside-body warning
+        /// because the replacement declaration is stripped from both trees.
+        /// </summary>
+        [Test]
+        public async Task Drift_ReturnTypeOnlyChange_WithSnapshot_DoesNotFireOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithExistingValueReturnTypeChange(onDisk);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("DriftReturnTypeOnlySnapshot.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Handled return-type change must not fire outside-body drift.\n"
+                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+        }
+
+        /// <summary>
+        /// What: the same return-type-only change without a verified snapshot never emits the
+        /// outside-body warning (comparison runs only when a baseline snapshot exists).
+        /// </summary>
+        [Test]
+        public async Task Drift_ReturnTypeOnlyChange_WithoutSnapshot_DoesNotFireOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithExistingValueReturnTypeChange(onDisk);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("DriftReturnTypeOnlyNoSnapshot.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: null);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "No-snapshot return-type change must not fire outside-body drift.\n"
+                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+        }
+
+        /// <summary>
+        /// What: a snapshot plus a return-type change and a field-initializer edit still fires
+        /// the outside-body warning for the unhandled field drift.
+        /// </summary>
+        [Test]
+        public async Task Drift_ReturnTypeAndFieldInitializer_WithSnapshot_FiresOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithExistingValueReturnTypeChange(onDisk).Replace(
+                "public int PublicSeed = 3;",
+                "public int PublicSeed = 4;",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("DriftReturnTypeAndField.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.Some.Contain("Edits outside method bodies"),
+                "Field initializer drift must still fire after a handled return-type change is stripped.");
+        }
+
+        /// <summary>
         /// What: excluding an added method key still emits that added method so remaining callers
         /// can compile on isolation retry (G1).
         /// </summary>
@@ -922,6 +988,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, "ExistingDefault", "Interface members are not patchable");
             Assert.That(FindEntry(result, "ExistingDefault"), Is.Null);
+            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeof(IHotReloadAddedMemberDefault).FullName,
+                "ExistingDefault",
+                Array.Empty<string>(),
+                genericArity: 0);
+            Assert.That(
+                FindSkipMethod(result, "ExistingDefault"),
+                Is.EqualTo(expectedLabel),
+                "Skipped Methods[].Method must use the FormatMethodKeyParts label.");
         }
 
         /// <summary>
@@ -1304,6 +1379,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
         }
 
+        private static string WithExistingValueReturnTypeChange(string onDisk)
+        {
+            string edited = onDisk.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public long ExistingValue()\n        {\n            return 1L;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            return edited;
+        }
+
         private static string WithHostMembers(string onDisk, string extraMembers)
         {
             Assert.That(onDisk, Does.Contain(HostCloseMarker));
@@ -1412,6 +1497,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Expected skip for '" + methodNameFragment + "' with reason containing '"
                 + reasonFragment + "'. Skipped="
                 + FormatSkipped(result.Output.skipped));
+        }
+
+        private static string FindSkipMethod(
+            TransformWorkerClientResult result,
+            string methodNameFragment)
+        {
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null && skipped.method.Contains(methodNameFragment))
+                {
+                    return skipped.method;
+                }
+            }
+
+            return null;
         }
 
         private static string FindSkipReason(

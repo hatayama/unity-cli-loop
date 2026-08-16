@@ -2399,10 +2399,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
+            string expectedExternalLabel =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeExternalHost.Target(System.Int32)";
+            string expectedExternalReason = string.Format(
+                HotReloadConstants.SignatureChangedGateSkipReasonFormat,
+                expectedExternalLabel);
             AssertHasSkipped(
                 result,
                 nameof(HotReloadSignatureChangeExternalHost.Target),
-                "The return type of");
+                expectedExternalReason);
+            Assert.That(
+                expectedExternalReason,
+                Does.Contain("Run 'uloop compile'."),
+                "Other-file uncovered callers keep the compile-only CTA.");
+            Assert.That(
+                expectedExternalReason,
+                Does.Not.Contain("Editing those callers' bodies in this file"),
+                "Other-file uncovered callers must not use the same-file insert.");
             AssertHasSkipped(
                 result,
                 nameof(HotReloadSignatureChangeExternalHost.SameFileCaller),
@@ -2537,7 +2551,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an unchanged same-file caller that only needs an implicit int-to-long conversion
-        /// is not an apply entry, so the return-type change is skipped with the hot-reload wording.
+        /// is not an apply entry, so the return-type change is skipped with the same-file wording
+        /// and is not listed as a removed member.
         /// </summary>
         [Test]
         public async Task Run_ReturnTypeChange_UnchangedSameFileCaller_SkipsReplacement()
@@ -2559,12 +2574,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string expectedLabel =
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeUnchangedCallerFixture.Target(System.Int32)";
+            string expectedReason = string.Format(
+                HotReloadConstants.SignatureChangedGateSkipReasonSameFileCallersFormat,
+                expectedLabel);
             AssertHasSkipped(
                 result,
                 nameof(HotReloadSignatureChangeUnchangedCallerFixture.Target),
-                string.Format(
-                    HotReloadConstants.SignatureChangedGateSkipReasonFormat,
-                    expectedLabel));
+                expectedReason);
+            Assert.That(
+                expectedReason,
+                Does.Contain(
+                    "Editing those callers' bodies in this file and reloading again applies them together, or run 'uloop compile'."));
+            Assert.That(
+                CountWarningsContaining(result.Warnings, "Removed members stay present"),
+                Is.EqualTo(0),
+                "A gated (not applied) replacement must not appear as a removed member.\n"
+                + string.Join("\n", result.Warnings));
         }
 
         /// <summary>

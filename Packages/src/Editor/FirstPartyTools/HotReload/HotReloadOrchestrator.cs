@@ -240,11 +240,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            if (workerOutput.removedMembers != null && workerOutput.removedMembers.Length > 0)
-            {
-                warnings.Add(FormatRemovedMembersWarning(workerOutput.removedMembers));
-            }
-
             TransformWorkerUnchangedMethodDto[] unchangedMethods =
                 workerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>();
             int unchangedMethodCount = unchangedMethods.Length;
@@ -264,6 +259,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines,
                 assemblyResolvePath,
                 ct).ConfigureAwait(false);
+            // Why after the gate: a gated replacement is not applied, so listing it under
+            // "Removed members stay present... edited bodies no longer call them" is false.
+            string removedMembersWarning = FormatRemovedMembersWarning(
+                workerOutput.removedMembers,
+                gateResult.GatedReplacementMethodNames);
+            if (removedMembersWarning != null)
+            {
+                warnings.Add(removedMembersWarning);
+            }
+
             if (gateResult.FileFailed)
             {
                 // Why not apply first-pass entries: a gate retry null means the replacement was
@@ -947,8 +952,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static string FormatRemovedMembersWarning(TransformWorkerRemovedMemberDto[] removedMembers)
+        private static string FormatRemovedMembersWarning(
+            TransformWorkerRemovedMemberDto[] removedMembers,
+            IReadOnlyCollection<string> gatedReplacementMethodNames)
         {
+            if (removedMembers == null || removedMembers.Length == 0)
+            {
+                return null;
+            }
+
+            HashSet<string> gatedNames = new HashSet<string>(
+                gatedReplacementMethodNames ?? Array.Empty<string>(),
+                StringComparer.Ordinal);
             List<string> names = new List<string>();
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerRemovedMemberDto removed in removedMembers)
@@ -958,7 +973,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                if (removed.kind == HotReloadConstants.RemovedMemberKindMethod
+                    && gatedNames.Contains(removed.name))
+                {
+                    continue;
+                }
+
                 names.Add(removed.name);
+            }
+
+            if (names.Count == 0)
+            {
+                return null;
             }
 
             return string.Format(
@@ -1431,8 +1457,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             IsolationExclusions exclusions = BuildIsolationExclusions(gatedReplacements, entries);
+            HashSet<string> editedFileTypeMetadataNames = CollectEditedFileTypeMetadataNames(
+                entries,
+                workerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>());
             List<HotReloadMethodOutcome> skippedOutcomes = BuildGatedReplacementSkipOutcomes(
                 gatedReplacements,
+                uncoveredCallersByTarget,
+                hits,
+                editedFileTypeMetadataNames,
                 assemblyResolvePath);
             skippedOutcomes.AddRange(
                 BuildSkippedCallerOutcomes(
@@ -1449,17 +1481,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetDllPath,
                 defines,
                 ct).ConfigureAwait(false);
+            List<string> gatedReplacementMethodNames =
+                CollectGatedReplacementMethodNames(gatedReplacements);
             if (retry.Isolation == null)
             {
-                return SignatureChangeGateResult.Failed(retry.FailureMessage);
+                return SignatureChangeGateResult.Failed(retry.FailureMessage)
+                    .WithGatedReplacementMethodNames(gatedReplacementMethodNames);
             }
 
             return SignatureChangeGateResult.Retried(
-                retry.Isolation,
-                skippedOutcomes,
-                staleWarnings,
-                hits,
-                CollectScanTargetKeys(targets));
+                    retry.Isolation,
+                    skippedOutcomes,
+                    staleWarnings,
+                    hits,
+                    CollectScanTargetKeys(targets))
+                .WithGatedReplacementMethodNames(gatedReplacementMethodNames);
         }
 
         private static List<TransformWorkerEntryDto> CollectReplacementEntries(
@@ -1704,8 +1740,91 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return gated;
         }
 
+        private static List<string> CollectGatedReplacementMethodNames(
+            IReadOnlyList<TransformWorkerEntryDto> gatedReplacements)
+        {
+            List<string> names = new List<string>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto entry in gatedReplacements)
+            {
+                if (entry == null || string.IsNullOrEmpty(entry.methodName) || !seen.Add(entry.methodName))
+                {
+                    continue;
+                }
+
+                names.Add(entry.methodName);
+            }
+
+            return names;
+        }
+
+        private static HashSet<string> CollectEditedFileTypeMetadataNames(
+            TransformWorkerEntryDto[] entries,
+            TransformWorkerUnchangedMethodDto[] unchangedMethods)
+        {
+            HashSet<string> typeNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                if (!string.IsNullOrEmpty(entry.typeMetadataName))
+                {
+                    typeNames.Add(entry.typeMetadataName.Replace('/', '+'));
+                }
+            }
+
+            foreach (TransformWorkerUnchangedMethodDto unchanged in unchangedMethods)
+            {
+                if (!string.IsNullOrEmpty(unchanged.typeMetadataName))
+                {
+                    typeNames.Add(unchanged.typeMetadataName.Replace('/', '+'));
+                }
+            }
+
+            return typeNames;
+        }
+
+        private static bool AreAllUncoveredCallersInEditedFile(
+            string targetMethodKey,
+            IReadOnlyList<string> uncoveredCallerKeys,
+            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            HashSet<string> editedFileTypeMetadataNames)
+        {
+            if (uncoveredCallerKeys == null || uncoveredCallerKeys.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (string callerKey in uncoveredCallerKeys)
+            {
+                bool foundHit = false;
+                foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+                {
+                    if (hit.TargetMethodKey != targetMethodKey || hit.CallerMethodKey != callerKey)
+                    {
+                        continue;
+                    }
+
+                    foundHit = true;
+                    string callerType = (hit.CallerTypeMetadataName ?? string.Empty).Replace('/', '+');
+                    if (!editedFileTypeMetadataNames.Contains(callerType))
+                    {
+                        return false;
+                    }
+                }
+
+                if (!foundHit)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         private static List<HotReloadMethodOutcome> BuildGatedReplacementSkipOutcomes(
             IReadOnlyList<TransformWorkerEntryDto> gatedReplacements,
+            Dictionary<string, List<string>> uncoveredCallersByTarget,
+            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            HashSet<string> editedFileTypeMetadataNames,
             string assemblyResolvePath)
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
@@ -1716,12 +1835,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     entry.methodName,
                     entry.parameterTypeFullNames ?? Array.Empty<string>(),
                     entry.genericArity);
+                string methodKey = BuildMethodKey(entry);
+                string reasonFormat = HotReloadConstants.SignatureChangedGateSkipReasonFormat;
+                if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> uncoveredCallers)
+                    && AreAllUncoveredCallersInEditedFile(
+                        methodKey,
+                        uncoveredCallers,
+                        hits,
+                        editedFileTypeMetadataNames))
+                {
+                    reasonFormat = HotReloadConstants.SignatureChangedGateSkipReasonSameFileCallersFormat;
+                }
+
                 outcomes.Add(
                     HotReloadMethodOutcome.Skipped(
                         methodLabel,
-                        string.Format(
-                            HotReloadConstants.SignatureChangedGateSkipReasonFormat,
-                            methodLabel),
+                        string.Format(reasonFormat, methodLabel),
                         assemblyResolvePath));
             }
 
@@ -1867,6 +1996,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public List<string> Warnings { get; }
             public List<HotReloadCallSiteScanner.CallSiteHit> Hits { get; }
             public List<string> ScanTargetKeys { get; }
+            public List<string> GatedReplacementMethodNames { get; private set; }
 
             private SignatureChangeGateResult(
                 bool fileFailed,
@@ -1888,6 +2018,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Warnings = warnings ?? new List<string>();
                 Hits = hits ?? new List<HotReloadCallSiteScanner.CallSiteHit>();
                 ScanTargetKeys = scanTargetKeys ?? new List<string>();
+                GatedReplacementMethodNames = new List<string>();
+            }
+
+            public SignatureChangeGateResult WithGatedReplacementMethodNames(List<string> names)
+            {
+                GatedReplacementMethodNames = names ?? new List<string>();
+                return this;
             }
 
             public static SignatureChangeGateResult NoWork()
