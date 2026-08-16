@@ -109,5 +109,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result, Is.False);
         }
+
+        /// <summary>
+        /// Verifies the package stands down only when a usable CLI was detected at a Homebrew path.
+        /// </summary>
+        [TestCase(true, true, true)]
+        [TestCase(true, false, false)]
+        [TestCase(false, true, false)]
+        [TestCase(false, false, false)]
+        public void ShouldDeferToHomebrew_ReturnsExpectedValue(
+            bool isHomebrewManagedPath,
+            bool isCliDetected,
+            bool expected)
+        {
+            bool result = HomebrewManagedCliPolicy.ShouldDeferToHomebrew(isHomebrewManagedPath, isCliDetected);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
     }
 }

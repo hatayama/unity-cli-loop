@@ -44,6 +44,19 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         }
 
         /// <summary>
+        /// Reports whether the package must stand down and leave CLI installs and updates to Homebrew.
+        /// </summary>
+        /// <remarks>
+        /// Why isCliDetected: shell detection reports a path even when the binary answers no version
+        /// probe, and a Homebrew path alone would then disable every primary action while the status
+        /// line still reads "not installed", leaving no way forward.
+        /// </remarks>
+        public static bool ShouldDeferToHomebrew(bool isHomebrewManagedPath, bool isCliDetected)
+        {
+            return isHomebrewManagedPath && isCliDetected;
+        }
+
+        /// <summary>
         /// Builds the Cellar formula directory that a prefix/bin executable would be linked from.
         /// </summary>
         private static string BuildCellarFormulaDirectory(string[] segments)

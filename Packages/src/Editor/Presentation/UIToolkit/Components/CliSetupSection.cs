@@ -114,7 +114,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateHomebrewUpgradeMessage(CliSetupData data)
         {
-            bool isVisible = !data.IsChecking && data.IsHomebrewManagedCli && data.NeedsUpdate;
+            bool isVisible = !data.IsChecking
+                && HomebrewManagedCliPolicy.ShouldDeferToHomebrew(data.IsHomebrewManagedCli, data.IsCliInstalled)
+                && data.NeedsUpdate;
             _cliHomebrewUpgradeMessage.text = isVisible
                 ? CliSetupLabelFormatter.GetHomebrewUpgradeGuidanceText(data.CliVersion, data.RequiredCliVersion)
                 : string.Empty;
@@ -144,7 +146,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool enabled = IsInstallCliButtonEnabled(
                 data.IsInstallingCli,
                 data.IsChecking,
-                data.IsHomebrewManagedCli);
+                data.IsHomebrewManagedCli,
+                data.IsCliInstalled);
             bool isUninstallStyle = !data.NeedsCliPathSetup && IsUninstallCliAction(
                 data.IsCliInstalled,
                 data.NeedsUpdate,
@@ -208,7 +211,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return "Checking...";
             }
 
-            if (isHomebrewManagedCli)
+            if (HomebrewManagedCliPolicy.ShouldDeferToHomebrew(isHomebrewManagedCli, isCliInstalled))
             {
                 return CliSetupLabelFormatter.HOMEBREW_MANAGED_BUTTON_TEXT;
             }
@@ -245,9 +248,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal static bool IsInstallCliButtonEnabled(
             bool isInstallingCli,
             bool isChecking,
-            bool isHomebrewManagedCli)
+            bool isHomebrewManagedCli,
+            bool isCliInstalled)
         {
-            return !isInstallingCli && !isChecking && !isHomebrewManagedCli;
+            return !isInstallingCli
+                && !isChecking
+                && !HomebrewManagedCliPolicy.ShouldDeferToHomebrew(isHomebrewManagedCli, isCliInstalled);
         }
 
         internal static string GetCliStatusText(

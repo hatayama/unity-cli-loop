@@ -30,6 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(true, false, false, false, false, false, true, "3.0.0", "3.0.0", "Managed by Homebrew")]
         [TestCase(true, false, false, true, false, false, true, "2.9.0", "3.0.0", "Managed by Homebrew")]
         [TestCase(true, false, true, false, false, false, true, "3.0.0", "3.0.0", "Checking...")]
+        [TestCase(false, false, false, false, false, false, true, null, "3.0.0", "Install CLI")]
         public void GetInstallCliButtonText_ReturnsExpectedText(
             bool isCliInstalled,
             bool isInstallingCli,
@@ -56,20 +57,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(text, Is.EqualTo(expectedText));
         }
 
-        [TestCase(false, false, false, true)]
-        [TestCase(true, false, false, false)]
-        [TestCase(false, true, false, false)]
-        [TestCase(false, false, true, false)]
+        [TestCase(false, false, false, true, true)]
+        [TestCase(true, false, false, true, false)]
+        [TestCase(false, true, false, true, false)]
+        [TestCase(false, false, true, true, false)]
+        [TestCase(false, false, true, false, true)]
         public void IsInstallCliButtonEnabled_ReturnsExpectedValue(
             bool isInstallingCli,
             bool isChecking,
             bool isHomebrewManagedCli,
+            bool isCliInstalled,
             bool expectedEnabled)
         {
+            // Verifies a Homebrew path with no usable CLI keeps the install action reachable.
             bool enabled = CliSetupSection.IsInstallCliButtonEnabled(
                 isInstallingCli,
                 isChecking,
-                isHomebrewManagedCli);
+                isHomebrewManagedCli,
+                isCliInstalled);
 
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
         }
@@ -132,7 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(statusLabel.text, Is.EqualTo("CLI: v2.9.0"));
             Assert.That(
                 warningLabel.text,
-                Is.EqualTo("Homebrew-managed CLI v2.9.0 is older than the required v3.0.0.\n"
+                Is.EqualTo("Homebrew-managed CLI v2.9.0 does not meet the required v3.0.0.\n"
                     + "Run this command in your terminal:\nbrew upgrade uloop"));
             Assert.That(warningLabel.ClassListContains("unity-cli-loop-warning-message--visible"), Is.True);
         }

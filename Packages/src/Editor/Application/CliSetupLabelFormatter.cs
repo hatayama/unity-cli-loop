@@ -18,10 +18,12 @@ namespace io.github.hatayama.UnityCliLoop.Application
         /// Why the line breaks: the command is not run by Unity, so the text has to say where it belongs,
         /// and the command must stay on its own line so it can be selected and copied without picking up
         /// the surrounding sentence.
+        /// Why not "older than": an update is also required when the detected binary is not the dispatcher
+        /// or reports a version that cannot be compared, and neither case means the version is lower.
         /// </remarks>
         public static string GetHomebrewUpgradeGuidanceText(string cliVersion, string requiredCliVersion)
         {
-            return $"Homebrew-managed CLI v{cliVersion} is older than the required v{requiredCliVersion}.\n"
+            return $"Homebrew-managed CLI v{cliVersion} does not meet the required v{requiredCliVersion}.\n"
                 + "Run this command in your terminal:\n"
                 + $"{CliConstants.HOMEBREW_UPGRADE_COMMAND}";
         }

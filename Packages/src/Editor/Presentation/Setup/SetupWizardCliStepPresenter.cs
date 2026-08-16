@@ -96,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliVersion,
                 requiredCliVersion);
             UpdateHomebrewUpgradeMessage(
-                isHomebrewManagedCli && cliInstalled && !cliCompatible,
+                HomebrewManagedCliPolicy.ShouldDeferToHomebrew(isHomebrewManagedCli, cliInstalled) && !cliCompatible,
                 cliVersion,
                 requiredCliVersion);
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--success", cliCompatible);
@@ -152,7 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return "Checking...";
             }
 
-            if (isHomebrewManagedCli)
+            if (HomebrewManagedCliPolicy.ShouldDeferToHomebrew(isHomebrewManagedCli, cliInstalled))
             {
                 return CliSetupLabelFormatter.HOMEBREW_MANAGED_BUTTON_TEXT;
             }
@@ -193,7 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isChecking,
             bool isHomebrewManagedCli)
         {
-            if (isHomebrewManagedCli)
+            if (HomebrewManagedCliPolicy.ShouldDeferToHomebrew(isHomebrewManagedCli, cliInstalled))
             {
                 return false;
             }
