@@ -73,8 +73,8 @@ fi
 BASELINE_MARKER="[HotReloadSignatureChangeHarness] same=1;baseline"
 APPLIED_MARKER="[HotReloadSignatureChangeHarness] same=10;applied"
 PRISTINE_NEEDLE="Debug.Log(\"[HotReloadSignatureChangeHarness] same=\" + SameFileValue() + \";baseline\");"
-GATE_REASON="compiled code outside this hot reload still calls the old method"
-CALLER_REASON="this caller was left unpatched"
+GATE_REASON="this hot reload does not patch every compiled call site of the old method"
+CALLER_REASON="this caller was left unpatched too"
 
 # Why fail-fast on a dirty tree: a prior kill -9 can leave the patched members on disk;
 # backing that up would let the run PASS and then restore the dirty bytes.

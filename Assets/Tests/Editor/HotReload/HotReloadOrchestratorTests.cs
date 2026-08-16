@@ -821,7 +821,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Reconstructed fixture source omits compiled members once.");
             int staleSignatureCount = CountWarningsContaining(
                 result.Warnings,
-                "Compiled code outside this hot reload still calls the removed signature");
+                "Compiled call sites of the removed signature");
             Assert.That(
                 result.Warnings.Count,
                 Is.EqualTo(3 + staleSignatureCount),
@@ -938,7 +938,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Duplicate file inputs each emit a removed-members warning.");
             int staleSignatureCount = CountWarningsContaining(
                 result.Warnings,
-                "Compiled code outside this hot reload still calls the removed signature");
+                "Compiled call sites of the removed signature");
             Assert.That(
                 result.Warnings.Count,
                 Is.EqualTo(5 + staleSignatureCount),
