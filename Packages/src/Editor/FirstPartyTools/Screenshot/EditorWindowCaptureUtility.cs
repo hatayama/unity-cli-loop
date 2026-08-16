@@ -304,13 +304,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Reads and vertically flips the Play Mode view RT into a Texture2D (top-left origin).
-        private static Texture2D ReadPlayModeViewTexture(RenderTexture rt, float resolutionScale)
+        internal static Texture2D ReadPlayModeViewTexture(RenderTexture rt, float resolutionScale)
         {
             RenderTextureDescriptor flipDescriptor = new(rt.width, rt.height, rt.format, 0);
-            if (QualitySettings.activeColorSpace == ColorSpace.Linear)
-            {
-                flipDescriptor.sRGB = false;
-            }
+            // Why sRGB: Blit samples the source through sRGB decode in Linear color space, so the
+            // destination must re-encode on write; ReadPixels copies raw destination bytes into the
+            // PNG, which viewers interpret as sRGB. In Gamma color space this flag is ignored.
+            flipDescriptor.sRGB = true;
 
             // Capture the caller's active target before Blit: Blit leaves the destination
             // assigned to RenderTexture.active, so saving afterwards would "restore" the
