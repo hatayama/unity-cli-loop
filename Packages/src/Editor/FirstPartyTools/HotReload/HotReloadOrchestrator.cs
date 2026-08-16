@@ -433,11 +433,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                // Why arity 0: unchanged DTO has no genericArity field. A miss skips revert
+                // (fail-safe) instead of matching a same-name non-generic sibling.
                 HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
                     assemblyName,
                     unchanged.typeMetadataName,
                     unchanged.methodName,
-                    unchanged.parameterTypeFullNames);
+                    unchanged.parameterTypeFullNames,
+                    0);
                 if (!matchResult.Success)
                 {
                     continue;
@@ -461,13 +464,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] parameterTypeFullNames = entry.parameterTypeFullNames ?? Array.Empty<string>();
             // Pre-Resolve label: same shape as --status (params + nested '+' normalization).
             // After Resolve, prefer FormatMethodKey(MethodBase) so reflection ToString() wins.
-            // Why genericArity 0: TransformWorkerEntryDto has no arity field; open generics are
-            // rare here, and Resolve replaces this label with FormatMethodKey(MethodBase).
             string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
                 entry.typeMetadataName,
                 entry.methodName,
                 parameterTypeFullNames,
-                genericArity: 0);
+                entry.genericArity);
 
             if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod)
             {
@@ -497,7 +498,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblyName,
                 entry.typeMetadataName,
                 entry.methodName,
-                parameterTypeFullNames);
+                parameterTypeFullNames,
+                entry.genericArity);
             if (!matchResult.Success)
             {
                 return HotReloadMethodOutcome.Failed(methodLabel, matchResult.ErrorMessage, filePath);
@@ -965,20 +967,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Keep in sync with TransformWorkerProgram.BuildMethodKey (out-of-process worker side)
         // and HotReloadCallSiteScanner.CreateHit.
+        // Why arity suffix: Caller(int) and Caller<T>(int) must not share a wire key.
+        // Arity 0 keeps the bare name so existing non-generic keys stay stable.
         private static string BuildMethodKey(TransformWorkerEntryDto entry)
         {
             return BuildMethodKeyParts(
                 entry.typeMetadataName,
                 entry.methodName,
-                entry.parameterTypeFullNames);
+                entry.parameterTypeFullNames,
+                entry.genericArity);
         }
 
         private static string BuildMethodKeyParts(
             string typeMetadataName,
             string methodName,
-            string[] parameterTypeFullNames)
+            string[] parameterTypeFullNames,
+            int genericArity)
         {
-            return typeMetadataName + "::" + methodName + "("
+            string nameWithArity = methodName;
+            if (genericArity > 0)
+            {
+                nameWithArity = methodName + "`" + genericArity.ToString();
+            }
+
+            return typeMetadataName + "::" + nameWithArity + "("
                 + string.Join(",", parameterTypeFullNames ?? Array.Empty<string>()) + ")";
         }
 
@@ -1129,12 +1141,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodOutcome> failedMethodOutcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto failedEntry in attribution.FailedEntries)
             {
-                // Why genericArity 0: TransformWorkerEntryDto has no arity field (see ApplyEntry).
                 string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
                     failedEntry.typeMetadataName,
                     failedEntry.methodName,
                     failedEntry.parameterTypeFullNames ?? Array.Empty<string>(),
-                    genericArity: 0);
+                    failedEntry.genericArity);
                 List<string> entryErrorMessages = attribution.ErrorMessagesByEntry[failedEntry];
                 failedMethodOutcomes.Add(
                     HotReloadMethodOutcome.Failed(
@@ -1261,7 +1272,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     caller.typeMetadataName,
                     caller.methodName,
                     caller.parameterTypeFullNames ?? Array.Empty<string>(),
-                    genericArity: 0);
+                    caller.genericArity);
                 skippedCallerOutcomes.Add(
                     HotReloadMethodOutcome.Skipped(
                         methodLabel,
@@ -1345,7 +1356,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         soleEntry.typeMetadataName,
                         soleEntry.methodName,
                         soleEntry.parameterTypeFullNames ?? Array.Empty<string>(),
-                        genericArity: 0);
+                        soleEntry.genericArity);
                 }
 
                 return ShimFirstCompileResult.Failed(
@@ -1481,7 +1492,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     assemblyName,
                     entry.typeMetadataName,
                     entry.methodName,
-                    entry.parameterTypeFullNames);
+                    entry.parameterTypeFullNames,
+                    entry.genericArity);
             }
 
             foreach (TransformWorkerRemovedMethodSignatureDto signature in removedSignatures)
@@ -1492,7 +1504,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     assemblyName,
                     signature.typeMetadataName,
                     signature.methodName,
-                    signature.parameterTypeFullNames);
+                    signature.parameterTypeFullNames,
+                    signature.genericArity);
             }
 
             return targets.ToArray();
@@ -1504,9 +1517,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblyName,
             string typeMetadataName,
             string methodName,
-            string[] parameterTypeFullNames)
+            string[] parameterTypeFullNames,
+            int genericArity)
         {
-            string methodKey = BuildMethodKeyParts(typeMetadataName, methodName, parameterTypeFullNames);
+            string methodKey = BuildMethodKeyParts(
+                typeMetadataName,
+                methodName,
+                parameterTypeFullNames,
+                genericArity);
             if (!seenKeys.Add(methodKey))
             {
                 return;
@@ -1517,7 +1535,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     assemblyName,
                     typeMetadataName,
                     methodName,
-                    parameterTypeFullNames ?? Array.Empty<string>()));
+                    parameterTypeFullNames ?? Array.Empty<string>(),
+                    genericArity));
         }
 
         private static HashSet<string> CollectCoveredMethodKeys(
@@ -1541,7 +1560,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     BuildMethodKeyParts(
                         target.TypeMetadataName,
                         target.MethodName,
-                        target.ParameterTypeFullNames));
+                        target.ParameterTypeFullNames,
+                        target.GenericArity));
             }
 
             return coveredKeys;
@@ -1585,7 +1605,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string methodKey = BuildMethodKeyParts(
                     signature.typeMetadataName,
                     signature.methodName,
-                    signature.parameterTypeFullNames);
+                    signature.parameterTypeFullNames,
+                    signature.genericArity);
                 if (!uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> callers)
                     || callers.Count == 0)
                 {
@@ -1657,7 +1678,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     BuildMethodKeyParts(
                         target.TypeMetadataName,
                         target.MethodName,
-                        target.ParameterTypeFullNames));
+                        target.ParameterTypeFullNames,
+                        target.GenericArity));
             }
 
             return keys;
@@ -1692,7 +1714,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     entry.typeMetadataName,
                     entry.methodName,
                     entry.parameterTypeFullNames ?? Array.Empty<string>(),
-                    genericArity: 0);
+                    entry.genericArity);
                 outcomes.Add(
                     HotReloadMethodOutcome.Skipped(
                         methodLabel,

@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadCallSiteScanner
     {
         /// <summary>
-        /// Identity of a compiled method to search for (assembly + type + name + parameter types).
+        /// Identity of a compiled method to search for (assembly + type + name + arity + parameter types).
         /// </summary>
         public readonly struct CompiledMethodIdentity
         {
@@ -26,22 +26,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public readonly string TypeMetadataName;
             public readonly string MethodName;
             public readonly string[] ParameterTypeFullNames;
+            public readonly int GenericArity;
 
             public CompiledMethodIdentity(
                 string assemblyName,
                 string typeMetadataName,
                 string methodName,
-                string[] parameterTypeFullNames)
+                string[] parameterTypeFullNames,
+                int genericArity)
             {
                 Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
                 Debug.Assert(!string.IsNullOrEmpty(typeMetadataName), "typeMetadataName must not be null or empty.");
                 Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be null or empty.");
                 Debug.Assert(parameterTypeFullNames != null, "parameterTypeFullNames must not be null.");
+                Debug.Assert(genericArity >= 0, "genericArity must not be negative.");
 
                 AssemblyName = assemblyName;
                 TypeMetadataName = typeMetadataName;
                 MethodName = methodName;
                 ParameterTypeFullNames = parameterTypeFullNames;
+                GenericArity = genericArity;
             }
         }
 
@@ -273,7 +277,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         methodReference,
                         target.TypeMetadataName,
                         target.MethodName,
-                        target.ParameterTypeFullNames))
+                        target.ParameterTypeFullNames,
+                        target.GenericArity))
                 {
                     return (true, target);
                 }
@@ -296,14 +301,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 caller,
                 target.TypeMetadataName,
                 target.MethodName,
-                target.ParameterTypeFullNames);
+                target.ParameterTypeFullNames,
+                target.GenericArity);
         }
 
         private static bool MatchesIdentity(
             MethodReference methodReference,
             string typeMetadataName,
             string methodName,
-            string[] parameterTypeFullNames)
+            string[] parameterTypeFullNames,
+            int genericArity)
         {
             MethodReference openMethod = methodReference.GetElementMethod();
             if (openMethod.DeclaringType == null)
@@ -320,6 +327,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             if (openMethod.Name != methodName)
+            {
+                return false;
+            }
+
+            // Why compare arity: Caller(int) and Caller<T>(int) share name and parameters.
+            // Treating them as the same identity fail-opens the signature-change gate.
+            if (openMethod.GenericParameters.Count != genericArity)
             {
                 return false;
             }
@@ -427,17 +441,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Keep in sync with TransformWorkerProgram.BuildMethodKey (out-of-process worker)
             // and HotReloadOrchestrator.BuildMethodKey (Unity package side).
+            // Why arity suffix: Caller(int) and Caller<T>(int) must not share a wire key.
             return new CallSiteHit
             {
                 CallerAssemblyName = assemblyName,
                 CallerTypeMetadataName = typeMetadataName,
                 CallerMethodName = caller.Name,
                 CallerParameterTypeFullNames = parameterTypeFullNames,
-                CallerMethodKey = typeMetadataName + "::" + caller.Name + "("
-                    + string.Join(",", parameterTypeFullNames) + ")",
-                TargetMethodKey = target.TypeMetadataName + "::" + target.MethodName + "("
-                    + string.Join(",", target.ParameterTypeFullNames) + ")"
+                CallerMethodKey = FormatWireMethodKey(
+                    typeMetadataName,
+                    caller.Name,
+                    parameterTypeFullNames,
+                    caller.GenericParameters.Count),
+                TargetMethodKey = FormatWireMethodKey(
+                    target.TypeMetadataName,
+                    target.MethodName,
+                    target.ParameterTypeFullNames,
+                    target.GenericArity)
             };
+        }
+
+        private static string FormatWireMethodKey(
+            string typeMetadataName,
+            string methodName,
+            string[] parameterTypeFullNames,
+            int genericArity)
+        {
+            string nameWithArity = methodName;
+            if (genericArity > 0)
+            {
+                nameWithArity = methodName + "`" + genericArity.ToString();
+            }
+
+            return typeMetadataName + "::" + nameWithArity + "("
+                + string.Join(",", parameterTypeFullNames) + ")";
         }
     }
 }

@@ -2257,6 +2257,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a compiled generic Caller&lt;T&gt;(int) that calls Target is not covered by an
+        /// edited non-generic Caller(int), so the return-type change is skipped.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_GenericArityCaller_SkipsReplacement()
+        {
+            string fixturePath = ResolveSignatureChangeGenericCallerFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Caller(int value)\n        {\n            return value;\n        }",
+                    "        public int Caller(int value)\n        {\n            return value + 1;\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeGenericCaller.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasSkipped(
+                result,
+                nameof(HotReloadSignatureChangeGenericCallerFixture.Target),
+                "The return type of");
+            AssertHasPatched(result, nameof(HotReloadSignatureChangeGenericCallerFixture.Caller));
+        }
+
+        /// <summary>
         /// What: deleting a same-file helper that called Target does not gate Target's return-type
         /// change when no other compiled caller remains.
         /// </summary>
@@ -2827,6 +2860,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.Exists(path),
                 Is.True,
                 "Signature-change helper-delete fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSignatureChangeGenericCallerFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSignatureChangeGenericCallerFixture.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Signature-change generic-caller fixture source missing: " + path);
             return Path.GetFullPath(path);
         }
 

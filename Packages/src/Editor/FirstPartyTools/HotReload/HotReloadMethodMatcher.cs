@@ -17,19 +17,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         /// <summary>
         /// Resolves <paramref name="methodName"/> on <paramref name="typeMetadataName"/> inside
-        /// <paramref name="assemblyName"/> whose parameters match
-        /// <paramref name="parameterTypeFullNames"/> exactly (Cecil FullName, no <c>this</c>).
+        /// <paramref name="assemblyName"/> whose parameters and generic arity match
+        /// <paramref name="parameterTypeFullNames"/> and <paramref name="genericArity"/>
+        /// exactly (Cecil FullName, no <c>this</c>).
         /// </summary>
         public static HotReloadMethodMatchResult Resolve(
             string assemblyName,
             string typeMetadataName,
             string methodName,
-            string[] parameterTypeFullNames)
+            string[] parameterTypeFullNames,
+            int genericArity)
         {
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(typeMetadataName), "typeMetadataName must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be null or empty.");
             Debug.Assert(parameterTypeFullNames != null, "parameterTypeFullNames must not be null.");
+            Debug.Assert(genericArity >= 0, "genericArity must not be negative.");
 
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string dllPath = Path.Combine(
@@ -56,7 +59,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"Type '{typeMetadataName}' was not found in assembly '{assemblyName}'.");
             }
 
-            MethodDefinition methodDefinition = FindMatchingMethod(typeDefinition, methodName, parameterTypeFullNames);
+            MethodDefinition methodDefinition = FindMatchingMethod(
+                typeDefinition,
+                methodName,
+                parameterTypeFullNames,
+                genericArity);
             if (methodDefinition == null)
             {
                 return HotReloadMethodMatchResult.Failure(
@@ -72,11 +79,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static MethodDefinition FindMatchingMethod(
             TypeDefinition typeDefinition,
             string methodName,
-            string[] parameterTypeFullNames)
+            string[] parameterTypeFullNames,
+            int genericArity)
         {
             foreach (MethodDefinition candidate in typeDefinition.Methods)
             {
                 if (candidate.Name != methodName)
+                {
+                    continue;
+                }
+
+                if (candidate.GenericParameters.Count != genericArity)
                 {
                     continue;
                 }

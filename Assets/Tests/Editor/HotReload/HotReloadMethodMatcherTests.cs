@@ -25,7 +25,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TestAssemblyName,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.Add),
-                new[] { "System.Int32", "System.Int32" });
+                new[] { "System.Int32", "System.Int32" },
+                0);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Method, Is.Not.Null);
@@ -48,7 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TestAssemblyName,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.Add),
-                new[] { "System.Int32", "System.Int32", "System.Int32" });
+                new[] { "System.Int32", "System.Int32", "System.Int32" },
+                0);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Method.GetParameters().Length, Is.EqualTo(3));
@@ -69,7 +71,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TestAssemblyName,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.Add),
-                new[] { "System.String", "System.Int32" });
+                new[] { "System.String", "System.Int32" },
+                0);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.FailureReason, Is.EqualTo(HotReloadMethodMatchFailureReason.MethodNotFound));
@@ -85,7 +88,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TestAssemblyName,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.StaticPing),
-                new string[0]);
+                new string[0],
+                0);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Method.IsStatic, Is.True);
