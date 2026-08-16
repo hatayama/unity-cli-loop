@@ -1831,7 +1831,7 @@ public static class TransformWorkerProgram
                 methodSymbol,
                 typeSymbol,
                 bodyNode,
-                out AccessorPlan disposablePlan,
+                out AccessorPlan feasibilityPlan,
                 out string accessorRejectReason))
         {
             return MethodTransformDecision.Skip(
@@ -1840,7 +1840,7 @@ public static class TransformWorkerProgram
 
         // Safety net: detection said "needs accessors" but eligibility found nothing to rewrite
         // (e.g. local-function-only async body). Transplant is correct — the body is unchanged.
-        if (disposablePlan.Entries.Count == 0)
+        if (feasibilityPlan.Entries.Count == 0)
         {
             return MethodTransformDecision.Transplant();
         }
@@ -2050,8 +2050,7 @@ public static class TransformWorkerProgram
                     return AccessibilityRules.IsInaccessibleAccessor(initializerProperty.SetMethod);
                 }
 
-                return initializerSymbol != null
-                    && AccessibilityRules.IsInaccessibleFromExternalAssembly(initializerSymbol);
+                return IsInaccessibleNonConstSymbol(initializerSymbol);
             }
 
             ISymbol leftSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
@@ -2066,8 +2065,7 @@ public static class TransformWorkerProgram
                 return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
             }
 
-            return leftSymbol != null
-                && AccessibilityRules.IsInaccessibleFromExternalAssembly(leftSymbol);
+            return IsInaccessibleNonConstSymbol(leftSymbol);
         }
 
         if (node is PostfixUnaryExpressionSyntax postfix
@@ -2120,7 +2118,7 @@ public static class TransformWorkerProgram
                 return AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod);
             }
 
-            return symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
+            return IsInaccessibleNonConstSymbol(symbol);
         }
 
         if (node is MemberBindingExpressionSyntax memberBinding)
@@ -2135,7 +2133,7 @@ public static class TransformWorkerProgram
             return bound != null
                 && bound is not INamespaceSymbol
                 && bound is not ITypeSymbol
-                && AccessibilityRules.IsInaccessibleFromExternalAssembly(bound);
+                && IsInaccessibleNonConstSymbol(bound);
         }
 
         if (node is IdentifierNameSyntax or GenericNameSyntax)
@@ -2170,7 +2168,7 @@ public static class TransformWorkerProgram
                 return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
             }
 
-            return symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
+            return IsInaccessibleNonConstSymbol(symbol);
         }
 
         if (node is MemberAccessExpressionSyntax memberAccess)
@@ -2199,10 +2197,23 @@ public static class TransformWorkerProgram
                 return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
             }
 
-            return symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
+            return IsInaccessibleNonConstSymbol(symbol);
         }
 
         return false;
+    }
+
+    // Why exclude const: a const field is IsStatic, but it has no runtime storage.
+    // Publicized references fold the literal at compile time, so treating const as
+    // inaccessible would force a StaticFieldRefAccess bind that cannot succeed.
+    private static bool IsInaccessibleNonConstSymbol(ISymbol symbol)
+    {
+        if (symbol is IFieldSymbol fieldSymbol && fieldSymbol.IsConst)
+        {
+            return false;
+        }
+
+        return symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
     }
 
     private static bool IsInaccessibleIncrementOperand(
@@ -2216,7 +2227,7 @@ public static class TransformWorkerProgram
                 || AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
         }
 
-        return symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol);
+        return IsInaccessibleNonConstSymbol(symbol);
     }
 
     internal static class NameofRules
@@ -4194,16 +4205,17 @@ public static class TransformWorkerProgram
                 methodSymbol,
                 typeSymbol,
                 methodBodyNode,
-                out AccessorPlan disposablePlan,
+                out AccessorPlan feasibilityPlan,
                 out string accessorRejectReason))
         {
             return MethodTransformDecision.Skip(
                 AddedMethodSkipReasons.InaccessibleAccessNoRewrite
                 + " Accessor rewrite unavailable: "
-                + accessorRejectReason);
+                + accessorRejectReason
+                + " Run 'uloop compile'.");
         }
 
-        bool usesDelegation = disposablePlan != null && disposablePlan.Entries.Count > 0;
+        bool usesDelegation = feasibilityPlan.Entries.Count > 0;
         return MethodTransformDecision.AddedMethod(usesDelegation);
     }
 
@@ -5418,6 +5430,11 @@ internal static class AccessorEligibility
                 return false;
             }
 
+            if (fieldSymbol.IsConst)
+            {
+                return true;
+            }
+
             plan.GetOrAddField(fieldSymbol);
             return true;
         }
@@ -5531,6 +5548,11 @@ internal static class AccessorEligibility
             if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
             {
                 return false;
+            }
+
+            if (fieldSymbol.IsConst)
+            {
+                return true;
             }
 
             plan.GetOrAddField(fieldSymbol);
@@ -6099,6 +6121,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         if (leftSymbol is IFieldSymbol fieldSymbol
+            && !fieldSymbol.IsConst
             && AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
         {
             AccessorEntry entry = _accessorPlan.GetOrAddField(fieldSymbol);
@@ -6513,6 +6536,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         SyntaxNode triviaSource)
     {
         if (symbol is IFieldSymbol fieldSymbol
+            && !fieldSymbol.IsConst
             && AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
         {
             AccessorEntry entry = _accessorPlan.GetOrAddField(fieldSymbol);
@@ -7417,7 +7441,7 @@ internal static class AddedMethodSkipReasons
     public const string InaccessibleAccessNoRewrite =
         "Added methods whose bodies access private/internal members are skipped when the access "
         + "has no accessor rewrite (the added method JIT-compiles normally and fails accessibility "
-        + "checks). Run 'uloop compile'.";
+        + "checks).";
 }
 
 internal static class UnityMessageNames

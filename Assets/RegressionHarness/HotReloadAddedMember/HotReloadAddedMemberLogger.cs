@@ -14,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.RegressionHarness
     {
         private int _secret = 7;
 
+        // Why: keep _secret referenced so the compiled harness type does not warn CS0414.
         public int CompiledSecret()
         {
             return _secret;
