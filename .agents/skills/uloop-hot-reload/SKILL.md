@@ -134,10 +134,9 @@ another file — even one edited in the same run — or an *unedited* method in 
 same file (an implicit `int`→`long` widening can leave a caller's source
 untouched) would keep calling the old method silently, so the run reports the
 changed method and its edited callers as `Skipped` instead; land the change with
-`uloop compile`. Call sites inside methods
-that the same edit removes or re-signatures do not gate: those compiled bodies are
-already stale, and anything still reaching them stays on the consistent old
-behavior.
+`uloop compile`. Call sites inside methods that the same edit removes or
+re-signatures do not gate: those compiled bodies are already stale, and anything
+still reaching them stays on the consistent old behavior.
 
 Renaming a method or changing its parameter list follows the delete rules rather
 than the gate: the new signature is an ordinary added method, the old one is
