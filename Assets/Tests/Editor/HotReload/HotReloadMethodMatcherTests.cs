@@ -25,7 +25,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TestAssemblyName,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.Add),
-                new[] { "System.Int32", "System.Int32" });
+                new[] { "System.Int32", "System.Int32" },
+                0);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Method, Is.Not.Null);
@@ -48,7 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TestAssemblyName,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.Add),
-                new[] { "System.Int32", "System.Int32", "System.Int32" });
+                new[] { "System.Int32", "System.Int32", "System.Int32" },
+                0);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Method.GetParameters().Length, Is.EqualTo(3));
@@ -69,7 +71,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TestAssemblyName,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.Add),
-                new[] { "System.String", "System.Int32" });
+                new[] { "System.String", "System.Int32" },
+                0);
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.FailureReason, Is.EqualTo(HotReloadMethodMatchFailureReason.MethodNotFound));
@@ -85,11 +88,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 TestAssemblyName,
                 FixtureTypeMetadataName,
                 nameof(HotReloadCoreFixture.StaticPing),
-                new string[0]);
+                new string[0],
+                0);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Method.IsStatic, Is.True);
             Assert.That(result.Method, Is.EqualTo(typeof(HotReloadCoreFixture).GetMethod(nameof(HotReloadCoreFixture.StaticPing))));
+        }
+
+        /// <summary>
+        /// What: Resolve distinguishes Caller(int) from Caller&lt;T&gt;(int) by generic arity
+        /// so an unchanged generic row cannot resolve to the non-generic sibling.
+        /// </summary>
+        [Test]
+        public void Resolve_SameNameAndParameters_SelectsByGenericArity()
+        {
+            const string typeMetadataName =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeGenericCallerFixture";
+            string[] parameterTypeFullNames = { "System.Int32" };
+
+            HotReloadMethodMatchResult nonGeneric = HotReloadMethodMatcher.Resolve(
+                TestAssemblyName,
+                typeMetadataName,
+                nameof(HotReloadSignatureChangeGenericCallerFixture.Caller),
+                parameterTypeFullNames,
+                0);
+            HotReloadMethodMatchResult generic = HotReloadMethodMatcher.Resolve(
+                TestAssemblyName,
+                typeMetadataName,
+                nameof(HotReloadSignatureChangeGenericCallerFixture.Caller),
+                parameterTypeFullNames,
+                1);
+
+            Assert.That(nonGeneric.Success, Is.True, nonGeneric.ErrorMessage);
+            Assert.That(generic.Success, Is.True, generic.ErrorMessage);
+
+            MethodInfo nonGenericMethod = (MethodInfo)nonGeneric.Method;
+            MethodInfo genericMethod = (MethodInfo)generic.Method;
+            Assert.That(nonGenericMethod.IsGenericMethod, Is.False);
+            Assert.That(genericMethod.IsGenericMethodDefinition, Is.True);
+            Assert.That(genericMethod.GetGenericArguments().Length, Is.EqualTo(1));
+            Assert.That(nonGeneric.Method, Is.Not.EqualTo(generic.Method));
         }
 
         /// <summary>

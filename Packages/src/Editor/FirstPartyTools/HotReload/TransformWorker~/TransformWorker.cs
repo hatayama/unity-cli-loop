@@ -117,9 +117,22 @@ public static class TransformWorkerProgram
 
     // Keep in sync with HotReloadOrchestrator.BuildMethodKey (Unity package side)
     // and HotReloadCallSiteScanner.CreateHit.
-    private static string BuildMethodKey(string typeMetadataName, string methodName, string[] parameterTypeFullNames)
+    // Why arity suffix: Caller(int) and Caller<T>(int) must not share a wire key.
+    // Arity 0 keeps the bare name so existing non-generic keys stay stable.
+    private static string BuildMethodKey(
+        string typeMetadataName,
+        string methodName,
+        string[] parameterTypeFullNames,
+        int genericArity)
     {
-        return typeMetadataName + "::" + methodName + "(" + string.Join(",", parameterTypeFullNames ?? Array.Empty<string>()) + ")";
+        string nameWithArity = methodName;
+        if (genericArity > 0)
+        {
+            nameWithArity = methodName + "`" + genericArity.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return typeMetadataName + "::" + nameWithArity + "("
+            + string.Join(",", parameterTypeFullNames ?? Array.Empty<string>()) + ")";
     }
 
     private static WorkerOutput TransformFile(WorkerInput input)
@@ -1470,7 +1483,8 @@ public static class TransformWorkerProgram
         string methodKey = BuildMethodKey(
             CecilTypeNames.ToMetadataName(typeSymbol),
             getterSymbol.Name,
-            parameterTypeFullNames);
+            parameterTypeFullNames,
+            getterSymbol.Arity);
         if (input.ExcludedMethodKeys.Contains(methodKey))
         {
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
@@ -1489,7 +1503,8 @@ public static class TransformWorkerProgram
                 {
                     TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
                     MethodName = getterSymbol.Name,
-                    ParameterTypeFullNames = parameterTypeFullNames
+                    ParameterTypeFullNames = parameterTypeFullNames,
+                    GenericArity = getterSymbol.Arity
                 });
                 return (currentShimType, shimTypeCounter, globalShimMethodCounter);
             }
@@ -1583,6 +1598,7 @@ public static class TransformWorkerProgram
             TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
             MethodName = getterSymbol.Name,
             ParameterTypeFullNames = parameterTypeFullNames,
+            GenericArity = getterSymbol.Arity,
             ShimTypeName = currentShimType.ShimTypeName,
             ShimMethodName = shimMethodName,
             PatchKind = decision.PatchKind,
@@ -2281,7 +2297,8 @@ public static class TransformWorkerProgram
             string methodKey = BuildMethodKey(
                 CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
                 methodSymbol.Name,
-                parameterTypeFullNames);
+                parameterTypeFullNames,
+                methodSymbol.Arity);
             // Why skip explicit-interface methods: compiled GetMembers(simpleName) does not
             // see them (metadata name is Interface.Method), so they would be misclassified as
             // Added and skip the unchanged/baseline path.
@@ -2349,7 +2366,8 @@ public static class TransformWorkerProgram
                     {
                         TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
                         MethodName = methodSymbol.Name,
-                        ParameterTypeFullNames = parameterTypeFullNames
+                        ParameterTypeFullNames = parameterTypeFullNames,
+                        GenericArity = methodSymbol.Arity
                     });
                     continue;
                 }
@@ -2425,7 +2443,8 @@ public static class TransformWorkerProgram
                     removedMethodSignatures,
                     typeState.TypeSymbol,
                     methodSymbol.Name,
-                    parameterTypeFullNames);
+                    parameterTypeFullNames,
+                    methodSymbol.Arity);
             }
 
             if (isAddedMethod)
@@ -2511,6 +2530,7 @@ public static class TransformWorkerProgram
                 TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
                 MethodName = queued.MethodSymbol.Name,
                 ParameterTypeFullNames = queued.ParameterTypeFullNames,
+                GenericArity = queued.MethodSymbol.Arity,
                 ShimTypeName = queued.ShimType.ShimTypeName,
                 ShimMethodName = queued.ShimMethodName,
                 PatchKind = queued.Decision.PatchKind,
@@ -2620,7 +2640,8 @@ public static class TransformWorkerProgram
                     removedMethodSignatures,
                     typeState.TypeSymbol,
                     compiledMethod.Name,
-                    parameterTypeFullNames);
+                    parameterTypeFullNames,
+                    compiledMethod.Arity);
             }
         }
     }
@@ -2640,6 +2661,7 @@ public static class TransformWorkerProgram
             if (sourceMethod == null
                 || sourceMethod.MethodKind != MethodKind.Ordinary
                 || sourceMethod.Name != compiledMethod.Name
+                || sourceMethod.Arity != compiledMethod.Arity
                 || sourceMethod.IsStatic != compiledMethod.IsStatic
                 || sourceMethod.Parameters.Length != compiledParameterTypeFullNames.Length)
             {
@@ -2687,13 +2709,15 @@ public static class TransformWorkerProgram
         List<WorkerRemovedMethodSignature> removedMethodSignatures,
         INamedTypeSymbol sourceType,
         string methodName,
-        string[] parameterTypeFullNames)
+        string[] parameterTypeFullNames,
+        int genericArity)
     {
         string typeMetadataName = CecilTypeNames.ToMetadataName(sourceType);
         foreach (WorkerRemovedMethodSignature existing in removedMethodSignatures)
         {
             if (existing.TypeMetadataName == typeMetadataName
                 && existing.MethodName == methodName
+                && existing.GenericArity == genericArity
                 && ParameterTypeFullNamesEqual(existing.ParameterTypeFullNames, parameterTypeFullNames))
             {
                 return;
@@ -2704,7 +2728,8 @@ public static class TransformWorkerProgram
         {
             TypeMetadataName = typeMetadataName,
             MethodName = methodName,
-            ParameterTypeFullNames = parameterTypeFullNames
+            ParameterTypeFullNames = parameterTypeFullNames,
+            GenericArity = genericArity
         });
     }
 
@@ -3103,8 +3128,10 @@ public static class TransformWorkerProgram
             .ToArray();
         foreach (ISymbol member in compiledType.GetMembers(sourceMethod.Name))
         {
+            // Why compare Arity: Caller(int) and Caller<T>(int) must not share a compiled match.
             if (member is not IMethodSymbol compiledMethod
                 || compiledMethod.MethodKind != MethodKind.Ordinary
+                || compiledMethod.Arity != sourceMethod.Arity
                 || compiledMethod.IsStatic != sourceMethod.IsStatic
                 || compiledMethod.Parameters.Length != sourceParameterTypeFullNames.Length)
             {
@@ -4164,7 +4191,8 @@ public static class TransformWorkerProgram
         return BuildMethodKey(
             CecilTypeNames.ToMetadataName(methodSymbol.ContainingType),
             methodSymbol.Name,
-            parameterTypeFullNames);
+            parameterTypeFullNames,
+            methodSymbol.Arity);
     }
 
     private static MethodDeclarationSyntax RewriteMethodBody(
@@ -7448,6 +7476,8 @@ internal sealed class WorkerRemovedMethodSignature
     public string MethodName { get; set; }
 
     public string[] ParameterTypeFullNames { get; set; }
+
+    public int GenericArity { get; set; }
 }
 
 internal enum CompiledMethodMatch
@@ -7472,6 +7502,8 @@ internal sealed class WorkerUnchangedMethod
     public string MethodName { get; set; }
 
     public string[] ParameterTypeFullNames { get; set; }
+
+    public int GenericArity { get; set; }
 }
 
 internal sealed class WorkerEntry
@@ -7481,6 +7513,8 @@ internal sealed class WorkerEntry
     public string MethodName { get; set; }
 
     public string[] ParameterTypeFullNames { get; set; }
+
+    public int GenericArity { get; set; }
 
     public string ShimTypeName { get; set; }
 

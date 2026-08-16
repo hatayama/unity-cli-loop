@@ -86,6 +86,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             return await AsyncSelfRecursive(remaining - 1);
         }
+
+        public static int CalledFromGenericArityCaller()
+        {
+            return 5;
+        }
+
+        public static int Caller(int value)
+        {
+            return value;
+        }
+
+        public static int Caller<T>(int value)
+        {
+            CalledFromGenericArityCaller();
+            return value;
+        }
     }
 
     /// <summary>
