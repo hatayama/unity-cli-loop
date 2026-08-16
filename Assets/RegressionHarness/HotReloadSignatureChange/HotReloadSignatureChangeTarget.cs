@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.RegressionHarness
 
         private void Update()
         {
-            Debug.Log("[HotReloadSignatureChangeHarness] same=" + SameFileValue());
+            Debug.Log("[HotReloadSignatureChangeHarness] same=" + SameFileValue() + ";baseline");
         }
     }
 }

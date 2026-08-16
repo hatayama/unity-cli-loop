@@ -128,12 +128,15 @@ becomes an added method with its own `Added` row, and the edited methods that ca
 it report `Patched`. Every added-member rule applies — same-file visibility, the
 Editor-session illusion, and the `virtual`/generic/interface exclusions.
 
-A gate protects compiled callers: the change applies only when every compiled call
-site of the old signature is itself patched in the same run. A caller in another
-file — or an *unedited* method in the same file (an implicit `int`→`long` widening
-can leave a caller's source untouched) — would keep calling the old method
-silently, so the run reports the changed method and its edited callers as `Skipped`
-instead; land the change with `uloop compile`.
+A gate protects compiled callers: the change applies only when every live compiled
+call site of the old signature is itself patched in the same run. A caller in
+another file — or an *unedited* method in the same file (an implicit `int`→`long`
+widening can leave a caller's source untouched) — would keep calling the old
+method silently, so the run reports the changed method and its edited callers as
+`Skipped` instead; land the change with `uloop compile`. Call sites inside methods
+that the same edit removes or re-signatures do not gate: those compiled bodies are
+already stale, and anything still reaching them stays on the consistent old
+behavior.
 
 Renaming a method or changing its parameter list follows the delete rules rather
 than the gate: the new signature is an ordinary added method, the old one is
@@ -241,7 +244,7 @@ below) — raising is only expressible inside the declaring type, which a shim i
 | Shim compile error (e.g. the body calls a member that does not exist yet) | Failing methods are isolated: each reports `Failed` with its own compiler errors (plus the `uloop compile` hint when they indicate a missing member) while the remaining methods still patch. When errors cannot be attributed per method, the whole file reports one `(shim-compile)` entry; if only one method was edited, the failure is attributed to that method's name instead |
 | Patch rejected or crashed at apply time (e.g. `[BurstCompile]`, a patch-engine emit failure) | The entry carries the rejection reason or the underlying engine error; other methods in the run still apply |
 | Accessor binding failed for a shim type | The source references a member the compiled assembly does not have yet; every delegation-patched method in that shim type reports the binder error — run `uloop compile` and retry |
-| The run had to drop an edited caller after its signature-change gate had passed (the caller's own shim failed to compile) | Per-file entry with `Method` = `(signature-change-gate)`; applying the rest would strand that caller on the old method, so nothing from the file is applied — fix the failing caller's edit or run `uloop compile` |
+| The signature-change gate could not finish the run safely — the retry that skips a gated change failed, or shim-compile isolation dropped an edited caller that had covered a change | Per-file entry with `Method` = `(signature-change-gate)` carrying the specific cause; nothing from the file is applied — fix the failing edit or run `uloop compile` |
 
 ## When a patch reports `Patched` but behavior does not change
 

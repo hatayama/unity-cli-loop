@@ -70,9 +70,9 @@ if [ ! -f "$SOURCE_ABS" ]; then
     exit 2
 fi
 
-BASELINE_MARKER="[HotReloadSignatureChangeHarness] same=1"
+BASELINE_MARKER="[HotReloadSignatureChangeHarness] same=1;baseline"
 APPLIED_MARKER="[HotReloadSignatureChangeHarness] same=10;applied"
-PRISTINE_NEEDLE="Debug.Log(\"[HotReloadSignatureChangeHarness] same=\" + SameFileValue());"
+PRISTINE_NEEDLE="Debug.Log(\"[HotReloadSignatureChangeHarness] same=\" + SameFileValue() + \";baseline\");"
 GATE_REASON="compiled code outside this hot reload still calls the old method"
 CALLER_REASON="this caller was left unpatched"
 
@@ -238,7 +238,7 @@ namespace io.github.hatayama.UnityCliLoop.RegressionHarness
 
         private void Update()
         {
-            Debug.Log("[HotReloadSignatureChangeHarness] same=" + SameFileValue());
+            Debug.Log("[HotReloadSignatureChangeHarness] same=" + SameFileValue() + ";baseline");
         }
     }
 }
