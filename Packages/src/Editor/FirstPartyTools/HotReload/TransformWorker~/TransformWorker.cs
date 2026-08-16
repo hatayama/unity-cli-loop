@@ -3181,8 +3181,9 @@ public static class TransformWorkerProgram
     }
 
     /// <summary>
-    /// What: matches a source field to a compiled field by name, then reports type or
-    /// static/const drift separately so callers can skip instead of rewriting storage.
+    /// What: matches a source field to a compiled member by name, then reports type,
+    /// static/const, or property/event kind drift so callers can skip instead of
+    /// rewriting storage.
     /// </summary>
     private static CompiledFieldMatch MatchCompiledField(
         INamedTypeSymbol compiledType,
@@ -3192,6 +3193,13 @@ public static class TransformWorkerProgram
         {
             if (member is not IFieldSymbol compiledField)
             {
+                // Why: a compiled property or event still owns this name. Treating the
+                // source field as added would duplicate storage in the side table.
+                if (member.Kind == SymbolKind.Property || member.Kind == SymbolKind.Event)
+                {
+                    return CompiledFieldMatch.MemberKindChanged;
+                }
+
                 continue;
             }
 
@@ -3218,7 +3226,8 @@ public static class TransformWorkerProgram
     private static bool IsCompiledFieldDeclarationChange(CompiledFieldMatch fieldMatch)
     {
         return fieldMatch == CompiledFieldMatch.FieldTypeChanged
-            || fieldMatch == CompiledFieldMatch.FieldModifiersChanged;
+            || fieldMatch == CompiledFieldMatch.FieldModifiersChanged
+            || fieldMatch == CompiledFieldMatch.MemberKindChanged;
     }
 
     private static string TryFormatCompiledFieldDeclarationChangeReason(
@@ -3238,6 +3247,14 @@ public static class TransformWorkerProgram
             return string.Format(
                 CultureInfo.InvariantCulture,
                 AddedFieldSkipReasons.FieldModifiersChanged,
+                fieldName);
+        }
+
+        if (fieldMatch == CompiledFieldMatch.MemberKindChanged)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                AddedFieldSkipReasons.MemberKindChanged,
                 fieldName);
         }
 
@@ -3512,9 +3529,9 @@ public static class TransformWorkerProgram
 
         if (symbol is IFieldSymbol fieldSymbol)
         {
-            // Why map any non-Matched result to added: FieldTypeChanged and
-            // FieldModifiersChanged still name the compiled field, so treating
-            // them as a direct shim reference would bind the old storage.
+            // Why map any non-Matched result to added: FieldTypeChanged,
+            // FieldModifiersChanged, and MemberKindChanged still name compiled
+            // storage, so treating them as a direct shim reference would bind it.
             return MatchCompiledField(compiledType, fieldSymbol) != CompiledFieldMatch.Matched;
         }
 
@@ -7306,6 +7323,9 @@ internal static class AddedFieldSkipReasons
     public const string FieldModifiersChanged =
         "Field '{0}' changed its static or const modifier in the compiled assembly. Run 'uloop compile'.";
 
+    public const string MemberKindChanged =
+        "Field '{0}' is declared as a property or an event in the compiled assembly. Run 'uloop compile'.";
+
     public const string SerializeWarningFormat =
         "Added field '{0}' has a serialization attribute, so it will not appear in the Inspector "
         + "or serialize until 'uloop compile'.";
@@ -7492,7 +7512,8 @@ internal enum CompiledFieldMatch
     NotFound,
     Matched,
     FieldTypeChanged,
-    FieldModifiersChanged
+    FieldModifiersChanged,
+    MemberKindChanged
 }
 
 internal sealed class WorkerUnchangedMethod
