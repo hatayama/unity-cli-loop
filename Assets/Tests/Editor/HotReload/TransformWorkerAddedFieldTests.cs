@@ -39,6 +39,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FieldTypeChangedReason =
             "Field 'PublicSeed' has a different type in the compiled assembly. Run 'uloop compile'.";
 
+        private const string FieldModifiersChangedReason =
+            "Field 'PublicSeed' changed its static or const modifier in the compiled assembly. Run 'uloop compile'.";
+
         /// <summary>
         /// What: a field present only in the edited source is rewritten to the store, an existing
         /// field stays a real field access, and a snapshot-only field is reported removed.
@@ -733,9 +736,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Skip_FieldTypeChangedIncompatible_SkipsReaderAndWriter_LeavesUntouchedMethod()
         {
-            await AssertFieldTypeChangeSkipsTouchingMethodsAsync(
+            await AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
                 "public string PublicSeed = \"x\";",
-                "FieldTypeChangedIncompatible.cs");
+                "FieldTypeChangedIncompatible.cs",
+                FieldTypeChangedReason);
         }
 
         /// <summary>
@@ -745,14 +749,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Skip_FieldTypeChangedIntToLong_SkipsReaderAndWriter_LeavesUntouchedMethod()
         {
-            await AssertFieldTypeChangeSkipsTouchingMethodsAsync(
+            await AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
                 "public long PublicSeed = 3;",
-                "FieldTypeChangedIntToLong.cs");
+                "FieldTypeChangedIntToLong.cs",
+                FieldTypeChangedReason);
         }
 
-        private static async Task AssertFieldTypeChangeSkipsTouchingMethodsAsync(
+        /// <summary>
+        /// What: changing a compiled instance field to static skips readers and writers with
+        /// FieldModifiersChanged and does not emit the added-field Inspector warning.
+        /// </summary>
+        [Test]
+        public async Task Skip_FieldModifiersChangedToStatic_SkipsReaderAndWriter_LeavesUntouchedMethod()
+        {
+            await AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
+                "[SerializeField] public static int PublicSeed = 3;",
+                "FieldModifiersChangedToStatic.cs",
+                FieldModifiersChangedReason);
+        }
+
+        /// <summary>
+        /// What: changing a compiled instance field to const skips readers and writers with
+        /// FieldModifiersChanged, covering the implicit static bit, without an Inspector warning.
+        /// </summary>
+        [Test]
+        public async Task Skip_FieldModifiersChangedToConst_SkipsReaderAndWriter_LeavesUntouchedMethod()
+        {
+            await AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
+                "[SerializeField] public const int PublicSeed = 3;",
+                "FieldModifiersChangedToConst.cs",
+                FieldModifiersChangedReason);
+        }
+
+        /// <summary>
+        /// What: a [SerializeField] compiled field whose type changes is skipped with
+        /// FieldTypeChanged and does not emit the added-field Inspector warning.
+        /// </summary>
+        [Test]
+        public async Task Skip_FieldTypeChangedSerializeField_SkipsWithoutInspectorWarning()
+        {
+            await AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
+                "[SerializeField] public long PublicSeed = 3;",
+                "FieldTypeChangedSerializeField.cs",
+                FieldTypeChangedReason);
+        }
+
+        private static async Task AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
             string replacementFieldDeclaration,
-            string editedFileName)
+            string editedFileName,
+            string expectedSkipReason)
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(
@@ -779,12 +824,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), FieldTypeChangedReason);
-            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingFail), FieldTypeChangedReason);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), expectedSkipReason);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingFail), expectedSkipReason);
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue)), Is.Not.Null);
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingFail)), Is.Null);
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+            AssertHasNoAddedFieldSerializeWarning(result);
         }
 
         private static async Task<TransformWorkerClientResult> RunWorkerOnSourceAsync(
@@ -930,6 +976,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Expected skip for '" + methodNameFragment + "' with reason containing '"
                 + reasonFragment + "'. Skipped="
                 + FormatSkipped(result.Output.skipped));
+        }
+
+        private static void AssertHasNoAddedFieldSerializeWarning(TransformWorkerClientResult result)
+        {
+            foreach (string warning in result.Output.declarationDriftWarnings)
+            {
+                if (warning != null && warning.Contains("will not appear in the Inspector"))
+                {
+                    Assert.Fail(
+                        "Declaration-changed compiled fields must not emit the added-field "
+                        + "Inspector warning. Warnings="
+                        + string.Join("\n", result.Output.declarationDriftWarnings));
+                }
+            }
         }
 
         private static string FormatSkipped(TransformWorkerSkippedDto[] skipped)
