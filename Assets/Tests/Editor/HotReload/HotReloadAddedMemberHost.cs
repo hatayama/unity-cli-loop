@@ -97,6 +97,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Compiled host with an auto-property and an event so a same-name field declaration
+    /// can be classified against live compiled members instead of a side-table store.
+    /// </summary>
+    public class HotReloadFieldKindChangeFixture
+    {
+        public int Hp { get; set; }
+
+        public event Action ScoreChanged;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void ClearScoreChanged()
+        {
+            ScoreChanged = null;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int UntouchedKind()
+        {
+            return 1;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ReadKind(int value)
+        {
+            return value;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int WriteKind(int value)
+        {
+            return value;
+        }
+    }
+
+    /// <summary>
     /// Compiled struct host so added-field tests can skip struct types against a real type.
     /// GetOrInit boxes struct receivers and would reinitialize on every access.
     /// </summary>

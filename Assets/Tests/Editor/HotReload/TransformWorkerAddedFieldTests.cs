@@ -42,6 +42,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FieldModifiersChangedReason =
             "Field 'PublicSeed' changed its static or const modifier in the compiled assembly. Run 'uloop compile'.";
 
+        private const string MemberKindChangedReasonFormat =
+            "Field '{0}' is declared as a property or an event in the compiled assembly. Run 'uloop compile'.";
+
+        private const string FieldKindChangeProjectRelativePath =
+            "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
+
+        private const string FieldKindChangeUntouchedOriginal =
+            "        public int UntouchedKind()\n        {\n            return 1;\n        }";
+
+        private const string FieldKindChangeReadOriginal =
+            "        public int ReadKind(int value)\n        {\n            return value;\n        }";
+
+        private const string FieldKindChangeWriteOriginal =
+            "        public int WriteKind(int value)\n        {\n            return value;\n        }";
+
         /// <summary>
         /// What: a field present only in the edited source is rewritten to the store, an existing
         /// field stays a real field access, and a snapshot-only field is reported removed.
@@ -794,6 +809,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FieldTypeChangedReason);
         }
 
+        /// <summary>
+        /// What: rewriting a compiled auto-property Hp to a field skips readers and writers
+        /// instead of duplicating storage in the added-field side table.
+        /// </summary>
+        [Test]
+        public async Task Skip_PropertyRewrittenAsField_SkipsReaderAndWriter_LeavesUntouchedMethod()
+        {
+            await AssertCompiledMemberKindChangeSkipsTouchingMethodsAsync(
+                "        public int Hp { get; set; }",
+                "[SerializeField] public int Hp;",
+                "Hp",
+                "PropertyRewrittenAsField.cs");
+        }
+
+        /// <summary>
+        /// What: rewriting a compiled event ScoreChanged to a field skips readers and writers
+        /// instead of duplicating storage in the added-field side table.
+        /// </summary>
+        [Test]
+        public async Task Skip_EventRewrittenAsField_SkipsReaderAndWriter_LeavesUntouchedMethod()
+        {
+            await AssertCompiledMemberKindChangeSkipsTouchingMethodsAsync(
+                "        public event Action ScoreChanged;",
+                "[SerializeField] public int ScoreChanged;",
+                "ScoreChanged",
+                "EventRewrittenAsField.cs");
+        }
+
         private static async Task AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
             string replacementFieldDeclaration,
             string editedFileName,
@@ -829,6 +872,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue)), Is.Not.Null);
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingFail)), Is.Null);
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+            AssertHasNoAddedFieldSerializeWarning(result);
+        }
+
+        private static async Task AssertCompiledMemberKindChangeSkipsTouchingMethodsAsync(
+            string compiledMemberDeclaration,
+            string replacementFieldDeclaration,
+            string fieldName,
+            string editedFileName)
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            Assert.That(onDisk, Does.Contain(compiledMemberDeclaration));
+            string edited = onDisk.Replace(
+                compiledMemberDeclaration,
+                "        " + replacementFieldDeclaration,
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                FieldKindChangeReadOriginal,
+                "        public int ReadKind(int value)\n        {\n"
+                + "            return " + fieldName + " + value;\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                FieldKindChangeWriteOriginal,
+                "        public int WriteKind(int value)\n        {\n"
+                + "            " + fieldName + " = value;\n            return value;\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                FieldKindChangeUntouchedOriginal,
+                "        public int UntouchedKind()\n        {\n            return 2;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited(editedFileName, edited),
+                FieldKindChangeProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string expectedSkipReason = string.Format(MemberKindChangedReasonFormat, fieldName);
+            AssertHasSkip(result, nameof(HotReloadFieldKindChangeFixture.ReadKind), expectedSkipReason);
+            AssertHasSkip(result, nameof(HotReloadFieldKindChangeFixture.WriteKind), expectedSkipReason);
+            Assert.That(FindEntry(result, nameof(HotReloadFieldKindChangeFixture.UntouchedKind)), Is.Not.Null);
+            Assert.That(FindEntry(result, nameof(HotReloadFieldKindChangeFixture.ReadKind)), Is.Null);
+            Assert.That(FindEntry(result, nameof(HotReloadFieldKindChangeFixture.WriteKind)), Is.Null);
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
             AssertHasNoAddedFieldSerializeWarning(result);
         }
