@@ -65,8 +65,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(false, "", false, true, false, "InstallOrUpdate")]
         [TestCase(false, "3.0.0", true, false, true, "None")]
         [TestCase(false, "2.9.0", true, false, true, "None")]
-        [TestCase(true, "3.0.0", true, false, true, "None")]
-        [TestCase(false, null, false, false, true, "InstallOrUpdate")]
+        [TestCase(false, null, false, false, true, "None")]
+        [TestCase(true, "3.0.0", true, false, true, "RepairPath")]
+        [TestCase(true, "2.9.0", true, false, true, "RepairPath")]
         public void ResolveCliPrimaryButtonAction_ReturnsClickedPrimaryAction(
             bool needsCliPathSetup,
             string cliVersion,
@@ -76,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string expected)
         {
             // Verifies that the Settings window chooses repair only when dispatcher replacement is unnecessary,
-            // and that a detected Homebrew install leaves no executable action at all.
+            // and that a Homebrew-managed path leaves PATH repair as its only executable action.
             CliSetupPrimaryAction result =
                 UnityCliLoopSettingsCliSetupPresenter.ResolveCliPrimaryButtonAction(
                     needsCliPathSetup,

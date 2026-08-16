@@ -108,8 +108,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
             // Why here: the refresh above can reveal a Homebrew install that appeared after the click,
             // and installing over it would leave a second binary beside the one brew owns.
-            if (HomebrewManagedCliPolicy.ShouldDeferToHomebrew(IsHomebrewManagedCli(), IsCliInstalled(cliVersion)))
+            // PATH repair stays allowed because it writes no binary.
+            if (IsHomebrewManagedCli())
             {
+                if (_needsCliPathSetup)
+                {
+                    await HandleRepairCliPathSetup(ct);
+                    return;
+                }
+
                 _refreshUi(true);
                 return;
             }

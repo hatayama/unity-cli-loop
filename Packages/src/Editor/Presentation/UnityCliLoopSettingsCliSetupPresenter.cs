@@ -156,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 needsUpdate,
                 isCliInstalled,
                 canUninstallCli,
-                HomebrewManagedCliPolicy.ShouldDeferToHomebrew(isHomebrewManagedCli, isCliInstalled));
+                isHomebrewManagedCli);
         }
 
         internal static CliSetupPrimaryAction ResolveExecutableCliPrimaryButtonAction(

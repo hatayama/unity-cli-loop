@@ -33,17 +33,19 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         /// Why the Homebrew branch lives here and not only in the button state: the primary action is
         /// resolved again after a forced refresh, so a Homebrew install that appears between click and
         /// action would otherwise still run an install and leave a second binary beside brew's own.
+        /// Why PATH repair survives it: repair neither writes nor removes a binary, it only makes an
+        /// already installed package-owned CLI reachable, so it is the one action that stays safe.
         /// </remarks>
         public static CliSetupPrimaryAction ResolveSettingsPrimaryAction(
             bool needsCliPathSetup,
             bool needsUpdate,
             bool isCliInstalled,
             bool canUninstallCli,
-            bool shouldDeferToHomebrew)
+            bool isHomebrewManagedCli)
         {
-            if (shouldDeferToHomebrew)
+            if (isHomebrewManagedCli)
             {
-                return CliSetupPrimaryAction.None;
+                return needsCliPathSetup ? CliSetupPrimaryAction.RepairPath : CliSetupPrimaryAction.None;
             }
 
             if (ShouldRepairCliPath(needsCliPathSetup, needsUpdate))

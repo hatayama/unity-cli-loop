@@ -114,11 +114,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateHomebrewUpgradeMessage(CliSetupData data)
         {
+            bool isCliUsable = !string.IsNullOrEmpty(data.CliVersion) && !data.NeedsUpdate;
             bool isVisible = !data.IsChecking
-                && HomebrewManagedCliPolicy.ShouldDeferToHomebrew(
-                    data.IsHomebrewManagedCli,
-                    !string.IsNullOrEmpty(data.CliVersion))
-                && data.NeedsUpdate;
+                && HomebrewManagedCliPolicy.ShouldShowUpgradeGuidance(data.IsHomebrewManagedCli, isCliUsable);
             _cliHomebrewUpgradeMessage.text = isVisible
                 ? CliSetupLabelFormatter.GetHomebrewUpgradeGuidanceText(data.CliVersion, data.RequiredCliVersion)
                 : string.Empty;
@@ -149,7 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 data.IsInstallingCli,
                 data.IsChecking,
                 data.IsHomebrewManagedCli,
-                data.CliVersion);
+                data.NeedsCliPathSetup);
             bool isUninstallStyle = !data.NeedsCliPathSetup && IsUninstallCliAction(
                 data.IsCliInstalled,
                 data.NeedsUpdate,
@@ -213,11 +211,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return "Checking...";
             }
 
-            if (HomebrewManagedCliPolicy.ShouldDeferToHomebrew(
-                    isHomebrewManagedCli,
-                    !string.IsNullOrEmpty(cliVersion)))
+            if (isHomebrewManagedCli)
             {
-                return CliSetupLabelFormatter.HOMEBREW_MANAGED_BUTTON_TEXT;
+                if (isInstallingCli)
+                {
+                    return "Fixing PATH...";
+                }
+
+                return needsCliPathSetup
+                    ? "Fix PATH"
+                    : CliSetupLabelFormatter.HOMEBREW_MANAGED_BUTTON_TEXT;
             }
 
             bool isUninstallAction = IsUninstallCliAction(isCliInstalled, needsUpdate, canUninstallCli);
@@ -253,13 +256,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isInstallingCli,
             bool isChecking,
             bool isHomebrewManagedCli,
-            string cliVersion)
+            bool needsCliPathSetup)
         {
-            return !isInstallingCli
-                && !isChecking
-                && !HomebrewManagedCliPolicy.ShouldDeferToHomebrew(
-                    isHomebrewManagedCli,
-                    !string.IsNullOrEmpty(cliVersion));
+            if (isInstallingCli || isChecking)
+            {
+                return false;
+            }
+
+            return !isHomebrewManagedCli || needsCliPathSetup;
         }
 
         internal static string GetCliStatusText(

@@ -473,7 +473,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(false, false, true, false, false, false, null, "3.0.0", "Checking...")]
         [TestCase(true, false, false, false, false, true, "3.0.0", "3.0.0", "Managed by Homebrew")]
         [TestCase(true, false, false, true, false, true, "2.9.0", "3.0.0", "Managed by Homebrew")]
-        [TestCase(false, false, false, false, false, true, null, "3.0.0", "Install CLI")]
+        [TestCase(false, false, false, false, false, true, null, "3.0.0", "Managed by Homebrew")]
+        [TestCase(true, false, false, false, true, true, "3.0.0", "3.0.0", "Fix PATH")]
+        [TestCase(true, true, false, false, true, true, "3.0.0", "3.0.0", "Fixing PATH...")]
         public void GetCliButtonTextForSetupWizard_ReturnsExpectedLabel(
             bool cliInstalled,
             bool isInstallingCli,
@@ -525,15 +527,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             true,
             "Homebrew-managed CLI v2.9.0 does not meet the required v3.0.0.\n"
             + "Run this command in your terminal:\nbrew upgrade uloop")]
+        [TestCase(
+            true,
+            null,
+            true,
+            "Homebrew-managed CLI did not report a version.\n"
+            + "Run this command in your terminal:\nbrew reinstall uloop")]
         [TestCase(true, "3.0.0", false, "")]
         [TestCase(false, "2.9.0", false, "")]
+        [TestCase(false, null, false, "")]
         public void Update_TogglesHomebrewUpgradeWarning(
             bool isHomebrewManagedCli,
             string cliVersion,
             bool expectedVisible,
             string expectedText)
         {
-            // Verifies the wizard shows the brew upgrade command as a warning block only for an outdated Homebrew CLI.
+            // Verifies the wizard explains every unusable Homebrew CLI, and stays silent otherwise.
             VisualElement statusIcon = new();
             Label statusLabel = new();
             Label homebrewUpgradeMessage = new() { name = "cli-homebrew-upgrade-message" };
@@ -546,7 +555,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => { });
 
             presenter.Update(
-                cliInstalled: true,
+                cliInstalled: !string.IsNullOrEmpty(cliVersion),
                 cliVersion,
                 cliIsDispatcher: true,
                 requiredCliVersion: "3.0.0",
@@ -567,7 +576,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(false, false, false, true, false, false, false)]
         [TestCase(false, false, false, false, true, false, false)]
         [TestCase(true, false, false, false, false, true, false)]
-        [TestCase(false, false, false, false, false, true, true)]
+        [TestCase(false, false, false, false, false, true, false)]
+        [TestCase(true, false, true, false, false, true, true)]
         public void IsCliButtonEnabledForSetupWizard_ReturnsExpectedValue(
             bool cliInstalled,
             bool cliVersionMatched,
@@ -577,7 +587,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool isHomebrewManagedCli,
             bool expectedEnabled)
         {
-            // Verifies a Homebrew path with no usable CLI keeps the install action reachable.
+            // Verifies a Homebrew-managed CLI leaves only PATH repair, which writes no binary, enabled.
             bool enabled = SetupWizardCliStepPresenter.IsCliButtonEnabledForSetupWizard(
                 cliInstalled,
                 cliVersionMatched,

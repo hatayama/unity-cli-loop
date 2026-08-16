@@ -96,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliVersion,
                 requiredCliVersion);
             UpdateHomebrewUpgradeMessage(
-                HomebrewManagedCliPolicy.ShouldDeferToHomebrew(isHomebrewManagedCli, cliInstalled) && !cliCompatible,
+                HomebrewManagedCliPolicy.ShouldShowUpgradeGuidance(isHomebrewManagedCli, cliCompatible),
                 cliVersion,
                 requiredCliVersion);
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--success", cliCompatible);
@@ -152,9 +152,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return "Checking...";
             }
 
-            if (HomebrewManagedCliPolicy.ShouldDeferToHomebrew(isHomebrewManagedCli, cliInstalled))
+            if (isHomebrewManagedCli)
             {
-                return CliSetupLabelFormatter.HOMEBREW_MANAGED_BUTTON_TEXT;
+                if (isInstallingCli)
+                {
+                    return "Fixing PATH...";
+                }
+
+                return needsCliPathSetup
+                    ? "Fix PATH"
+                    : CliSetupLabelFormatter.HOMEBREW_MANAGED_BUTTON_TEXT;
             }
 
             if (isInstallingCli)
@@ -193,12 +200,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isChecking,
             bool isHomebrewManagedCli)
         {
-            if (HomebrewManagedCliPolicy.ShouldDeferToHomebrew(isHomebrewManagedCli, cliInstalled))
+            if (isInstallingCli || isChecking)
             {
                 return false;
             }
 
-            return !isInstallingCli && !isChecking && (!cliInstalled || !cliVersionMatched || needsCliPathSetup);
+            if (isHomebrewManagedCli)
+            {
+                return needsCliPathSetup;
+            }
+
+            return !cliInstalled || !cliVersionMatched || needsCliPathSetup;
         }
     }
 }

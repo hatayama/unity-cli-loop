@@ -30,7 +30,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(true, false, false, false, false, false, true, "3.0.0", "3.0.0", "Managed by Homebrew")]
         [TestCase(true, false, false, true, false, false, true, "2.9.0", "3.0.0", "Managed by Homebrew")]
         [TestCase(true, false, true, false, false, false, true, "3.0.0", "3.0.0", "Checking...")]
-        [TestCase(false, false, false, false, false, false, true, null, "3.0.0", "Install CLI")]
+        [TestCase(false, false, false, false, false, false, true, null, "3.0.0", "Managed by Homebrew")]
+        [TestCase(true, false, false, false, false, true, true, "3.0.0", "3.0.0", "Fix PATH")]
+        [TestCase(true, true, false, false, false, true, true, "3.0.0", "3.0.0", "Fixing PATH...")]
         public void GetInstallCliButtonText_ReturnsExpectedText(
             bool isCliInstalled,
             bool isInstallingCli,
@@ -57,25 +59,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(text, Is.EqualTo(expectedText));
         }
 
-        [TestCase(false, false, false, "3.0.0", true)]
-        [TestCase(true, false, false, "3.0.0", false)]
-        [TestCase(false, true, false, "3.0.0", false)]
-        [TestCase(false, false, true, "3.0.0", false)]
-        [TestCase(false, false, true, null, true)]
-        [TestCase(false, false, true, "", true)]
+        [TestCase(false, false, false, false, true)]
+        [TestCase(true, false, false, false, false)]
+        [TestCase(false, true, false, false, false)]
+        [TestCase(false, false, true, false, false)]
+        [TestCase(false, false, true, true, true)]
+        [TestCase(true, false, true, true, false)]
         public void IsInstallCliButtonEnabled_ReturnsExpectedValue(
             bool isInstallingCli,
             bool isChecking,
             bool isHomebrewManagedCli,
-            string cliVersion,
+            bool needsCliPathSetup,
             bool expectedEnabled)
         {
-            // Verifies a Homebrew path whose binary reports no version keeps the install action reachable.
+            // Verifies a Homebrew-managed CLI leaves only PATH repair, which writes no binary, enabled.
             bool enabled = CliSetupSection.IsInstallCliButtonEnabled(
                 isInstallingCli,
                 isChecking,
                 isHomebrewManagedCli,
-                cliVersion);
+                needsCliPathSetup);
 
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
         }
@@ -136,6 +138,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Button installCliButton = root.Q<Button>("install-cli-button");
             Assert.That(installCliButton.text, Is.EqualTo("Fix PATH"));
             Assert.That(installCliButton.enabledSelf, Is.True);
+        }
+
+        [Test]
+        public void Update_WhenHomebrewPathReportsNoVersion_ShowsReinstallGuidance()
+        {
+            // Verifies a broken Homebrew binary is explained instead of offering a duplicate install.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: false,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Installed,
+                isHomebrewManagedCli: true,
+                cliVersion: null);
+
+            section.Update(data);
+
+            Button installCliButton = root.Q<Button>("install-cli-button");
+            Label warningLabel = root.Q<Label>("cli-homebrew-upgrade-message");
+            Assert.That(installCliButton.text, Is.EqualTo("Managed by Homebrew"));
+            Assert.That(installCliButton.enabledSelf, Is.False);
+            Assert.That(
+                warningLabel.text,
+                Is.EqualTo("Homebrew-managed CLI did not report a version.\n"
+                    + "Run this command in your terminal:\nbrew reinstall uloop"));
+            Assert.That(warningLabel.ClassListContains("unity-cli-loop-warning-message--visible"), Is.True);
         }
 
         [Test]

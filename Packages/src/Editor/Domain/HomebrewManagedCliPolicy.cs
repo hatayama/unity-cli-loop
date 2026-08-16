@@ -45,16 +45,16 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         }
 
         /// <summary>
-        /// Reports whether the package must stand down and leave CLI installs and updates to Homebrew.
+        /// Reports whether the guidance that points at a brew command must be shown.
         /// </summary>
         /// <remarks>
-        /// Why isCliDetected: shell detection reports a path even when the binary answers no version
-        /// probe, and a Homebrew path alone would then disable every primary action while the status
-        /// line still reads "not installed", leaving no way forward.
+        /// Why not gate the stand-down on this too: a Homebrew path whose binary answers no version
+        /// probe is still owned by brew, so installing over it would split ownership. Such a path
+        /// stands down like any other and is explained by this guidance instead.
         /// </remarks>
-        public static bool ShouldDeferToHomebrew(bool isHomebrewManagedPath, bool isCliDetected)
+        public static bool ShouldShowUpgradeGuidance(bool isHomebrewManagedPath, bool isCliUsable)
         {
-            return isHomebrewManagedPath && isCliDetected;
+            return isHomebrewManagedPath && !isCliUsable;
         }
 
         /// <summary>

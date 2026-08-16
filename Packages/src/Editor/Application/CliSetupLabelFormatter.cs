@@ -12,7 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public const string HOMEBREW_MANAGED_BUTTON_TEXT = "Managed by Homebrew";
 
         /// <summary>
-        /// Formats the warning text that tells a Homebrew user how to reach the required CLI version.
+        /// Formats the warning text that tells a Homebrew user which brew command makes the CLI usable.
         /// </summary>
         /// <remarks>
         /// Why the line breaks: the command is not run by Unity, so the text has to say where it belongs,
@@ -23,6 +23,15 @@ namespace io.github.hatayama.UnityCliLoop.Application
         /// </remarks>
         public static string GetHomebrewUpgradeGuidanceText(string cliVersion, string requiredCliVersion)
         {
+            if (string.IsNullOrEmpty(cliVersion))
+            {
+                // Why reinstall: a binary that answers no version probe is broken rather than outdated,
+                // and upgrading an already current formula would report nothing to do.
+                return "Homebrew-managed CLI did not report a version.\n"
+                    + "Run this command in your terminal:\n"
+                    + $"{CliConstants.HOMEBREW_REINSTALL_COMMAND}";
+            }
+
             return $"Homebrew-managed CLI v{cliVersion} does not meet the required v{requiredCliVersion}.\n"
                 + "Run this command in your terminal:\n"
                 + $"{CliConstants.HOMEBREW_UPGRADE_COMMAND}";
