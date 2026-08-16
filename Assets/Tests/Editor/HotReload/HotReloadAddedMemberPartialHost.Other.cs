@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.CompilerServices;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
@@ -8,6 +9,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public partial class HotReloadAddedMemberPartialHost
     {
+        public int PartialOtherProperty { get; set; }
+
+        public event Action PartialOtherEvent;
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int PartialOtherFile()
         {

@@ -762,8 +762,11 @@ public static class TransformWorkerProgram
         return Convert.ToString(value, CultureInfo.InvariantCulture);
     }
 
-    private const string CompiledPropertyOrEventKindChangeWarningFormat =
-        "Compiled property or event '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.";
+    private const string CompiledPropertyKindChangeWarningFormat =
+        "Compiled property '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.";
+
+    private const string CompiledEventKindChangeWarningFormat =
+        "Compiled event '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.";
 
     /// <summary>
     /// What: names compiled properties and events that the edited source deleted or
@@ -784,6 +787,16 @@ public static class TransformWorkerProgram
         foreach (BaseTypeDeclarationSyntax typeDeclaration
             in root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
         {
+            // Why syntax PartialKeyword: the worker compilation sees only this file. A
+            // compiled property or event declared in another partial file is absent from
+            // the source symbol and would look permanently removed. Locations cannot be
+            // used — metadata symbols have no source locations.
+            if (typeDeclaration is TypeDeclarationSyntax typedDeclaration
+                && typedDeclaration.Modifiers.Any(SyntaxKind.PartialKeyword))
+            {
+                continue;
+            }
+
             INamedTypeSymbol sourceType = semanticModel.GetDeclaredSymbol(typeDeclaration);
             if (sourceType == null)
             {
@@ -814,37 +827,42 @@ public static class TransformWorkerProgram
     {
         foreach (ISymbol compiledMember in compiledType.GetMembers())
         {
-            string missingName = TryGetMissingCompiledPropertyOrEventName(compiledMember, sourceType);
-            if (missingName == null)
+            string warning = TryFormatMissingCompiledPropertyOrEventWarning(compiledMember, sourceType);
+            if (warning == null)
             {
                 continue;
             }
 
-            warnings.Add(
-                string.Format(
-                    CultureInfo.InvariantCulture,
-                    CompiledPropertyOrEventKindChangeWarningFormat,
-                    missingName));
+            warnings.Add(warning);
         }
     }
 
-    private static string TryGetMissingCompiledPropertyOrEventName(
+    private static string TryFormatMissingCompiledPropertyOrEventWarning(
         ISymbol compiledMember,
         INamedTypeSymbol sourceType)
     {
+        // Why still check IsImplicitlyDeclared: source-compiled symbols can be implicit.
+        // Metadata symbols from the PE almost always report false, so this is best-effort
+        // and does not filter compiler-generated members out of the compiled assembly.
         if (compiledMember is IPropertySymbol property
             && !property.IsIndexer
             && !property.IsImplicitlyDeclared
             && !SourceDeclaresProperty(sourceType, property.Name))
         {
-            return property.Name;
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                CompiledPropertyKindChangeWarningFormat,
+                sourceType.ToDisplayString() + "." + property.Name);
         }
 
         if (compiledMember is IEventSymbol compiledEvent
             && !compiledEvent.IsImplicitlyDeclared
             && !SourceDeclaresEvent(sourceType, compiledEvent.Name))
         {
-            return compiledEvent.Name;
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                CompiledEventKindChangeWarningFormat,
+                sourceType.ToDisplayString() + "." + compiledEvent.Name);
         }
 
         return null;

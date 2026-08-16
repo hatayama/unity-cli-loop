@@ -1432,6 +1432,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: replacing compiled property Hp with a field surfaces the named warning on
+        /// HotReloadOrchestratorResult.Warnings, not only the worker DTO.
+        /// </summary>
+        [Test]
+        public async Task Run_PropertyRewrittenAsField_WarnsOnOrchestratorResult()
+        {
+            string fixturePath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int Hp { get; set; }",
+                "        public int Hp;",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("OrchestratorPropertyKindChange.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            string expectedWarning = string.Format(
+                "Compiled property '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.",
+                typeof(HotReloadFieldKindChangeFixture).FullName + ".Hp");
+            Assert.That(
+                result.Warnings,
+                Does.Contain(expectedWarning),
+                string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
         /// What: a file declaring a field-like event hot-reloads its subscriber and handler methods
         /// (no CS0229 from the publicized backing field) — the edited subscriber body (net two
         /// subscriptions via += / -=) must actually apply (HandledCount == 10, not the original
@@ -3841,6 +3872,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private int _secret = 10;
         " + tuningConst + @"
+        // Why keep these compiled properties: omitting them makes property-removed
+        // warnings fire and breaks exact Warnings.Count asserts in this template.
         private int? Score { get; set; }
         private int Value { get; set; }
 

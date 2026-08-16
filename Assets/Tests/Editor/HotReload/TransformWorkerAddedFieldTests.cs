@@ -45,8 +45,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string MemberKindChangedReasonFormat =
             "Field '{0}' is declared as a property or an event in the compiled assembly. Run 'uloop compile'.";
 
-        private const string CompiledPropertyOrEventWarningFormat =
-            "Compiled property or event '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.";
+        private const string CompiledPropertyWarningFormat =
+            "Compiled property '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.";
+
+        private const string CompiledEventWarningFormat =
+            "Compiled event '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.";
 
         private const string FieldKindChangeProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
@@ -850,6 +853,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await AssertCompiledPropertyOrEventWarningAsync(
                 "        public int Hp { get; set; }",
                 "        public int Hp;",
+                CompiledPropertyWarningFormat,
                 "Hp",
                 "WarnPropertyRewrittenAsField.cs");
         }
@@ -864,6 +868,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await AssertCompiledPropertyOrEventWarningAsync(
                 "        public event Action ScoreChanged;",
                 "        public int ScoreChanged;",
+                CompiledEventWarningFormat,
                 "ScoreChanged",
                 "WarnEventRewrittenAsField.cs");
         }
@@ -878,13 +883,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await AssertCompiledPropertyOrEventWarningAsync(
                 "        public int Hp { get; set; }\n",
                 string.Empty,
+                CompiledPropertyWarningFormat,
                 "Hp",
                 "WarnPropertyRemoved.cs");
         }
 
         /// <summary>
         /// What: deleting compiled event ScoreChanged without touching a method body still
-        /// names it in the compiled property-or-event warning.
+        /// names it in the compiled event warning. Declaration deletion leaves a dangling
+        /// reference in ClearScoreChanged; a binding-error skip row from that leftover
+        /// call is noise, not the behavior under test.
         /// </summary>
         [Test]
         public async Task Warn_CompiledEventRemoved_WithoutTouchingBodies()
@@ -892,6 +900,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             await AssertCompiledPropertyOrEventWarningAsync(
                 "        public event Action ScoreChanged;\n",
                 string.Empty,
+                CompiledEventWarningFormat,
                 "ScoreChanged",
                 "WarnEventRemoved.cs");
         }
@@ -913,8 +922,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FieldKindChangeProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertHasNoCompiledPropertyOrEventWarning(result, "ExtraScore");
+            AssertHasNoCompiledKindChangeWarningForMember(result, "ExtraScore");
             AssertHasNoSkipContaining(result, "ExtraScore");
+        }
+
+        /// <summary>
+        /// What: adding a property does not emit the compiled property warning and does
+        /// not add an individual Skipped row for that property (SKILL discrepancy kept).
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedProperty_DoesNotWarnOrSkipTheProperty()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int Hp { get; set; }",
+                "        public int Hp { get; set; }\n        public int ExtraHp { get; set; }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedPropertyNoCompiledKindWarning.cs", edited),
+                FieldKindChangeProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasNoCompiledKindChangeWarningForMember(result, "ExtraHp");
+            AssertHasNoSkipContaining(result, "ExtraHp");
+        }
+
+        /// <summary>
+        /// What: a property declared only on the other file of a partial type does not
+        /// produce a compiled-property-removed warning when this file is hot-reloaded.
+        /// </summary>
+        [Test]
+        public async Task Warn_PartialOtherFilePropertyOrEvent_DoesNotWarnAsRemoved()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PartialKept()\n        {\n            return 1;\n        }",
+                "        public int PartialKept()\n        {\n            return 11;\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PartialOtherFilePropertyNoFalseWarning.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasNoCompiledKindChangeWarningForMember(result, "PartialOtherProperty");
+            AssertHasNoCompiledKindChangeWarningForMember(result, "PartialOtherEvent");
+        }
+
+        /// <summary>
+        /// What: keeping a compiled explicit-interface property declaration while editing
+        /// another method does not emit a compiled-property-removed warning.
+        /// </summary>
+        [Test]
+        public async Task Warn_ExplicitInterfacePropertyKept_DoesNotWarnAsRemoved()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                FieldKindChangeUntouchedOriginal,
+                "        public int UntouchedKind()\n        {\n            return 2;\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("ExplicitInterfacePropertyKept.cs", edited),
+                FieldKindChangeProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasNoCompiledKindChangeWarningForMember(result, "ExplicitHp");
         }
 
         private static async Task AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
@@ -1001,6 +1072,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static async Task AssertCompiledPropertyOrEventWarningAsync(
             string compiledMemberDeclaration,
             string replacementDeclaration,
+            string warningFormat,
             string memberName,
             string editedFileName)
         {
@@ -1018,8 +1090,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             string expectedWarning = string.Format(
-                CompiledPropertyOrEventWarningFormat,
-                memberName);
+                warningFormat,
+                typeof(HotReloadFieldKindChangeFixture).FullName + "." + memberName);
             AssertHasDeclarationDriftWarning(result, expectedWarning);
         }
 
@@ -1041,18 +1113,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + string.Join("\n", warnings));
         }
 
-        private static void AssertHasNoCompiledPropertyOrEventWarning(
+        private static void AssertHasNoCompiledKindChangeWarningForMember(
             TransformWorkerClientResult result,
             string memberName)
         {
-            string unexpected = string.Format(CompiledPropertyOrEventWarningFormat, memberName);
             string[] warnings = result.Output.declarationDriftWarnings ?? Array.Empty<string>();
             foreach (string warning in warnings)
             {
-                if (warning == unexpected)
+                if (warning == null)
+                {
+                    continue;
+                }
+
+                bool isKindChange = warning.StartsWith("Compiled property '", StringComparison.Ordinal)
+                    || warning.StartsWith("Compiled event '", StringComparison.Ordinal);
+                if (isKindChange && warning.Contains(memberName, StringComparison.Ordinal))
                 {
                     Assert.Fail(
-                        "Added event must not emit the compiled property-or-event warning. Warnings="
+                        "Member '" + memberName + "' must not emit a compiled kind-change warning. Warnings="
                         + string.Join("\n", warnings));
                 }
             }
@@ -1060,15 +1138,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static void AssertHasNoSkipContaining(
             TransformWorkerClientResult result,
-            string methodNameFragment)
+            string fragment)
         {
             foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
             {
-                if (skipped.method != null
-                    && skipped.method.Contains(methodNameFragment, StringComparison.Ordinal))
+                bool methodHit = skipped.method != null
+                    && skipped.method.Contains(fragment, StringComparison.Ordinal);
+                bool reasonHit = skipped.reason != null
+                    && skipped.reason.Contains(fragment, StringComparison.Ordinal);
+                if (methodHit || reasonHit)
                 {
                     Assert.Fail(
-                        "Added event must not produce a Skipped row. Skipped="
+                        "Fragment '" + fragment + "' must not appear in a Skipped row. Skipped="
                         + FormatSkipped(result.Output.skipped));
                 }
             }
