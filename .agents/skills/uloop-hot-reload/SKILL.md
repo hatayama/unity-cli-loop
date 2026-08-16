@@ -104,8 +104,10 @@ member is reported in `Warnings`, but its IL remains callable from unedited code
 until `uloop compile`.
 
 Adding a type (`class`, `struct`, `enum`, `record`), a property, an event, an
-indexer, a constructor, or an operator is still out of scope and reported as
-`Skipped`; land those with `uloop compile`.
+indexer, a constructor, or an operator is still out of scope. These additions
+are not reported per member — no `Skipped` row names them; at most they
+surface as outside-body drift in `Warnings`. Treat silence as "not applied"
+and land them with `uloop compile`.
 
 Outside method bodies, only member additions (previous section) take effect.
 Every other declaration edit — changing a `const` value, a compiled field's
