@@ -86,6 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public readonly bool NeedsUpdate;
         public readonly bool CanUninstallCli;
         public readonly bool NeedsCliPathSetup;
+        public readonly bool IsHomebrewManagedCli;
         public readonly bool IsInstallingCli;
         public readonly bool IsChecking;
         public readonly bool IsSkillStateChecking;
@@ -106,6 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsUpdate,
             bool canUninstallCli,
             bool needsCliPathSetup,
+            bool isHomebrewManagedCli,
             bool isInstallingCli,
             bool isChecking,
             bool isSkillStateChecking,
@@ -125,6 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             NeedsUpdate = needsUpdate;
             CanUninstallCli = canUninstallCli;
             NeedsCliPathSetup = needsCliPathSetup;
+            IsHomebrewManagedCli = isHomebrewManagedCli;
             IsInstallingCli = isInstallingCli;
             IsChecking = isChecking;
             IsSkillStateChecking = isSkillStateChecking;

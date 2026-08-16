@@ -28,6 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         internal SetupWizardCliWorkflowController(
             VisualElement cliStatusIcon,
             Label cliStatusLabel,
+            Label cliHomebrewUpgradeMessage,
             Button installCliButton,
             VisualElement installProgressContainer,
             Label installProgressLabel,
@@ -49,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _cliStepPresenter = new SetupWizardCliStepPresenter(
                 cliStatusIcon,
                 cliStatusLabel,
+                cliHomebrewUpgradeMessage,
                 installCliButton,
                 HandleInstallCli);
         }
@@ -83,7 +85,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliIsDispatcher,
                 requiredCliVersion,
                 _isInstallingCli,
-                _needsCliPathSetup);
+                _needsCliPathSetup,
+                IsHomebrewManagedCli());
+        }
+
+        private bool IsHomebrewManagedCli()
+        {
+            return _cliSetupApplicationService.IsHomebrewManagedInstallPath(
+                _cliSetupApplicationService.GetCachedCliExecutablePath());
         }
 
         private void HandleInstallCli()
@@ -97,6 +106,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
             bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
+            // Why here: the refresh above can reveal a Homebrew install that appeared after the click,
+            // and installing over it would leave a second binary beside the one brew owns.
+            // PATH repair stays allowed because it writes no binary.
+            if (IsHomebrewManagedCli())
+            {
+                if (_needsCliPathSetup)
+                {
+                    await HandleRepairCliPathSetup(ct);
+                    return;
+                }
+
+                _refreshUi(true);
+                return;
+            }
+
             CliSetupCompatibilityState state = EvaluateCliSetupCompatibilityForSetupWizard(
                 cliVersion,
                 cliIsDispatcher,
@@ -116,7 +140,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliIsDispatcher: false,
                 requiredCliVersion: GetMinimumRequiredCliVersion(),
                 isInstallingCli: _isInstallingCli,
-                needsCliPathSetup: _needsCliPathSetup);
+                needsCliPathSetup: _needsCliPathSetup,
+                isHomebrewManagedCli: IsHomebrewManagedCli());
             _installProgressView.Show();
             Progress<string> installProgress = new(_installProgressView.SetDetailLine);
 
@@ -187,7 +212,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliIsDispatcher: _cliSetupApplicationService.GetCachedCliIsDispatcher(),
                 requiredCliVersion: GetMinimumRequiredCliVersion(),
                 isInstallingCli: _isInstallingCli,
-                needsCliPathSetup: _needsCliPathSetup);
+                needsCliPathSetup: _needsCliPathSetup,
+                isHomebrewManagedCli: IsHomebrewManagedCli());
 
             try
             {

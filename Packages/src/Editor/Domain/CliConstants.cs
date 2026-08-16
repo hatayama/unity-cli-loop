@@ -37,6 +37,9 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string V3_CLI_INVOCATION_MIGRATION_SKILL_NAME = "v3-cli-invocation-migration";
         public const string UNITY_PACKAGES_DIR_NAME = "Packages";
         public const string PACKAGE_SOURCE_DIR_NAME = "src";
+        public const string HOMEBREW_CELLAR_DIR_NAME = "Cellar";
+        public const string HOMEBREW_UPGRADE_COMMAND = "brew upgrade " + EXECUTABLE_NAME;
+        public const string HOMEBREW_REINSTALL_COMMAND = "brew reinstall " + EXECUTABLE_NAME;
         public const string GLOBAL_UNIX_COMMAND_NAME = EXECUTABLE_NAME;
         public const string GLOBAL_WINDOWS_COMMAND_NAME = EXECUTABLE_NAME + ".exe";
     }

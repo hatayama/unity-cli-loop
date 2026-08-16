@@ -297,6 +297,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             VisualElement cliStatusIcon = rootVisualElement.Q<VisualElement>("cli-status-icon");
             Label cliStatusLabel = rootVisualElement.Q<Label>("cli-status-label");
+            Label cliHomebrewUpgradeMessage = rootVisualElement.Q<Label>("cli-homebrew-upgrade-message");
             Button installCliButton = rootVisualElement.Q<Button>("install-cli-button");
             VisualElement installProgressContainer = rootVisualElement.Q<VisualElement>("cli-install-progress");
             Label installProgressLabel = rootVisualElement.Q<Label>("cli-install-progress-label");
@@ -323,6 +324,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 nodejsOk,
                 cliStatusIcon,
                 cliStatusLabel,
+                cliHomebrewUpgradeMessage,
                 installCliButton,
                 installProgressContainer,
                 installProgressLabel,
