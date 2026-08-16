@@ -62,5 +62,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(SourcePausePointSourceLineReader.ReadLineText(_tempFilePath, 0), Is.Empty);
             Assert.That(SourcePausePointSourceLineReader.ReadLineText(_tempFilePath, -1), Is.Empty);
         }
+
+        /// <summary>
+        /// What: reading a 1-based line from in-memory source text trims it and accepts CRLF.
+        /// </summary>
+        [Test]
+        public void ReadLineTextFromSource_WhenLineExists_ReturnsTrimmedText()
+        {
+            string result = SourcePausePointSourceLineReader.ReadLineTextFromSource(
+                "line one\r\n    line two   \r\nline three\n",
+                2);
+
+            Assert.That(result, Is.EqualTo("line two"));
+        }
+
+        /// <summary>
+        /// What: a missing snapshot (null or empty source) yields an empty line text.
+        /// </summary>
+        [Test]
+        public void ReadLineTextFromSource_WhenSourceIsMissing_ReturnsEmpty()
+        {
+            Assert.That(SourcePausePointSourceLineReader.ReadLineTextFromSource(null, 1), Is.Empty);
+            Assert.That(SourcePausePointSourceLineReader.ReadLineTextFromSource(string.Empty, 1), Is.Empty);
+        }
     }
 }

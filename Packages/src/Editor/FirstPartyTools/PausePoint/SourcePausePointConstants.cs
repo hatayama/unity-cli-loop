@@ -174,5 +174,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string RestoreAfterHotReloadRevertFailedReason =
             "Instrumentation could not be restored after the hot-reload patch was reverted; the line "
             + "no longer resolves in the compiled assembly. Re-enable the marker after 'uloop compile'.";
+
+        // Why: unpatched methods keep the compiled line map while the editor shows the edited
+        // file. Agents otherwise arm a different method with no signal (FB9).
+        public const string HotReloadCompiledLineMapWarningFormat =
+            "'{0}' has active hot-reload patches. For methods this reload did not patch, --line "
+            + "resolves against the last compiled source, not the edited file. Verify "
+            + "ResolvedMethod and ResolvedLineText, or run 'uloop compile' and re-enable.";
     }
 }

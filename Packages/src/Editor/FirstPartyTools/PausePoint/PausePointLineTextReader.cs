@@ -21,5 +21,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string absoluteFilePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), normalizedFile);
             return SourcePausePointSourceLineReader.ReadLineText(absoluteFilePath, resolvedLine);
         }
+
+        // Why snapshot only: compiled ResolvedLine against the edited disk file is the FB9 lie.
+        // A missing snapshot stays empty rather than falling back to disk.
+        public static string ReadCompiledSnapshotLineText(
+            string projectRelativeFile,
+            string dllPath,
+            int resolvedLine)
+        {
+            string snapshot = HotReloadPausePointCoordination.GetVerifiedSnapshotSource?.Invoke(
+                projectRelativeFile,
+                dllPath);
+            return SourcePausePointSourceLineReader.ReadLineTextFromSource(snapshot, resolvedLine);
+        }
     }
 }
