@@ -102,6 +102,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             CalledFromGenericArityCaller();
             return value;
         }
+
+        public static int CalledFromCrossAssembly()
+        {
+            return 6;
+        }
     }
 
     /// <summary>
