@@ -1503,7 +1503,8 @@ public static class TransformWorkerProgram
                 {
                     TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
                     MethodName = getterSymbol.Name,
-                    ParameterTypeFullNames = parameterTypeFullNames
+                    ParameterTypeFullNames = parameterTypeFullNames,
+                    GenericArity = getterSymbol.Arity
                 });
                 return (currentShimType, shimTypeCounter, globalShimMethodCounter);
             }
@@ -2365,7 +2366,8 @@ public static class TransformWorkerProgram
                     {
                         TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
                         MethodName = methodSymbol.Name,
-                        ParameterTypeFullNames = parameterTypeFullNames
+                        ParameterTypeFullNames = parameterTypeFullNames,
+                        GenericArity = methodSymbol.Arity
                     });
                     continue;
                 }
@@ -7500,6 +7502,8 @@ internal sealed class WorkerUnchangedMethod
     public string MethodName { get; set; }
 
     public string[] ParameterTypeFullNames { get; set; }
+
+    public int GenericArity { get; set; }
 }
 
 internal sealed class WorkerEntry

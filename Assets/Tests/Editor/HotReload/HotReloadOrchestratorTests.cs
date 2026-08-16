@@ -2286,7 +2286,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 nameof(HotReloadSignatureChangeGenericCallerFixture.Target),
                 "The return type of");
-            AssertHasPatched(result, nameof(HotReloadSignatureChangeGenericCallerFixture.Caller));
+            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeGenericCallerFixture",
+                "Caller",
+                new[] { "System.Int32" },
+                genericArity: 0);
+            AssertHasPatched(result, expectedCallerLabel);
+        }
+
+        /// <summary>
+        /// What: an unchanged compiled Caller&lt;T&gt;(int) must not revert a live patch on
+        /// Caller(int) when a later shim-compile failure skips isolation (patch-preservation path).
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedGenericCaller_DoesNotRevertPatchedNonGenericSibling()
+        {
+            string fixturePath = ResolveSignatureChangeGenericCallerFixturePath();
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string targetDllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                "UnityCLILoop.Tests.Editor.HotReload"
+                + HotReloadConstants.CompiledAssemblyExtension);
+            Assert.That(
+                HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
+                    "Assets/Tests/Editor/HotReload/HotReloadSignatureChangeGenericCallerFixture.cs",
+                    targetDllPath),
+                Is.Not.Null,
+                "Verified snapshot must resolve so Caller<T> is listed as unchanged.");
+
+            string onDisk = File.ReadAllText(fixturePath);
+            string patchedSource = onDisk.Replace(
+                "        public int Caller(int value)\n        {\n            return value;\n        }",
+                "        public int Caller(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(patchedSource, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("GenericCallerPatchThenPreserve1.cs", patchedSource),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(patched);
+            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeGenericCallerFixture",
+                "Caller",
+                new[] { "System.Int32" },
+                genericArity: 0);
+            AssertHasPatched(patched, expectedCallerLabel);
+
+            HotReloadSignatureChangeGenericCallerFixture fixture =
+                new HotReloadSignatureChangeGenericCallerFixture();
+            Assert.That(fixture.Caller(5), Is.EqualTo(6));
+
+            string uncompilableSource = onDisk.Replace(
+                "        public int Caller(int value)\n        {\n            return value;\n        }",
+                "        public int Caller(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
+                StringComparison.Ordinal);
+            Assert.That(uncompilableSource, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult failed = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("GenericCallerPatchThenPreserve2.cs", uncompilableSource),
+                CancellationToken.None);
+
+            bool callerFailed = false;
+            foreach (HotReloadMethodOutcome outcome in failed.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method == expectedCallerLabel)
+                {
+                    callerFailed = true;
+                }
+            }
+
+            Assert.That(
+                callerFailed,
+                Is.True,
+                "Run2 must fail the non-generic Caller on the isolation-skip path.\n"
+                + FormatOutcomes(failed));
+            Assert.That(
+                fixture.Caller(5),
+                Is.EqualTo(6),
+                "Unchanged Caller<T> must not peel the live Caller(int) patch.");
         }
 
         /// <summary>

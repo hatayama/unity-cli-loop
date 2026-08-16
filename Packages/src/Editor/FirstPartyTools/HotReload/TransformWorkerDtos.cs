@@ -98,6 +98,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string typeMetadataName;
         public string methodName;
         public string[] parameterTypeFullNames;
+
+        // Open generic arity. 0 for non-generic methods so existing keys stay unchanged.
+        public int genericArity;
     }
 
     [Serializable]

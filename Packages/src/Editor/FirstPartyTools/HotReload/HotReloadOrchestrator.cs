@@ -433,14 +433,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                // Why arity 0: unchanged DTO has no genericArity field. A miss skips revert
-                // (fail-safe) instead of matching a same-name non-generic sibling.
+                // Why pass unchanged.genericArity: Caller(int) and Caller<T>(int) share name
+                // and parameters. Arity 0 would resolve the generic unchanged row to the
+                // non-generic sibling and peel its live patch.
                 HotReloadMethodMatchResult matchResult = HotReloadMethodMatcher.Resolve(
                     assemblyName,
                     unchanged.typeMetadataName,
                     unchanged.methodName,
                     unchanged.parameterTypeFullNames,
-                    0);
+                    unchanged.genericArity);
                 if (!matchResult.Success)
                 {
                     continue;
