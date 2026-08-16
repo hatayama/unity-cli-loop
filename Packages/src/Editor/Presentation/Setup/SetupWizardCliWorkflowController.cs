@@ -106,6 +106,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
             bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
+            // Why here: the refresh above can reveal a Homebrew install that appeared after the click,
+            // and installing over it would leave a second binary beside the one brew owns.
+            if (HomebrewManagedCliPolicy.ShouldDeferToHomebrew(IsHomebrewManagedCli(), IsCliInstalled(cliVersion)))
+            {
+                _refreshUi(true);
+                return;
+            }
+
             CliSetupCompatibilityState state = EvaluateCliSetupCompatibilityForSetupWizard(
                 cliVersion,
                 cliIsDispatcher,

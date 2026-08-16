@@ -116,12 +116,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
                 cliExecutablePath,
                 UnityEngine.Application.platform);
+            bool isHomebrewManagedCli = _cliSetupApplicationService.IsHomebrewManagedInstallPath(cliExecutablePath);
             string requiredCliVersion = _cliSetupApplicationService.GetMinimumRequiredCliVersion();
             return ResolveCliPrimaryButtonAction(
                 needsCliPathSetup,
                 cliVersion,
                 cliIsDispatcher,
                 canUninstallCli,
+                isHomebrewManagedCli,
                 requiredCliVersion);
         }
 
@@ -144,6 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string cliVersion,
             bool cliIsDispatcher,
             bool canUninstallCli,
+            bool isHomebrewManagedCli,
             string requiredCliVersion)
         {
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher, requiredCliVersion);
@@ -152,7 +155,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 needsCliPathSetup,
                 needsUpdate,
                 isCliInstalled,
-                canUninstallCli);
+                canUninstallCli,
+                HomebrewManagedCliPolicy.ShouldDeferToHomebrew(isHomebrewManagedCli, isCliInstalled));
         }
 
         internal static CliSetupPrimaryAction ResolveExecutableCliPrimaryButtonAction(

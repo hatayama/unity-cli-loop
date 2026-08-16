@@ -61,6 +61,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies that an executable outside a prefix/bin directory is never probed as a Homebrew link.
+        /// </summary>
+        [Test]
+        public void IsHomebrewManagedPath_WithNonBinParentDirectory_DoesNotProbeCellar()
+        {
+            List<string> probedDirectories = new();
+
+            bool result = HomebrewManagedCliPolicy.IsHomebrewManagedPath(
+                "/opt/homebrew/sbin/uloop",
+                directoryPath =>
+                {
+                    probedDirectories.Add(directoryPath);
+                    return true;
+                });
+
+            Assert.That(result, Is.False);
+            Assert.That(probedDirectories, Is.Empty);
+        }
+
+        /// <summary>
         /// Verifies that a Windows backslash path is normalized instead of being read as a single segment.
         /// </summary>
         [Test]

@@ -29,12 +29,23 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             return canUninstallCli && isCliInstalled && !needsUpdate;
         }
 
+        /// <remarks>
+        /// Why the Homebrew branch lives here and not only in the button state: the primary action is
+        /// resolved again after a forced refresh, so a Homebrew install that appears between click and
+        /// action would otherwise still run an install and leave a second binary beside brew's own.
+        /// </remarks>
         public static CliSetupPrimaryAction ResolveSettingsPrimaryAction(
             bool needsCliPathSetup,
             bool needsUpdate,
             bool isCliInstalled,
-            bool canUninstallCli)
+            bool canUninstallCli,
+            bool shouldDeferToHomebrew)
         {
+            if (shouldDeferToHomebrew)
+            {
+                return CliSetupPrimaryAction.None;
+            }
+
             if (ShouldRepairCliPath(needsCliPathSetup, needsUpdate))
             {
                 return CliSetupPrimaryAction.RepairPath;

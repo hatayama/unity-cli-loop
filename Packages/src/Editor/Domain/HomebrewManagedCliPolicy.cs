@@ -10,6 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     {
         private const char PATH_SEPARATOR = '/';
         private const char WINDOWS_PATH_SEPARATOR = '\\';
+        private const string HOMEBREW_LINK_DIR_NAME = "bin";
 
         /// <summary>
         /// Reports whether the executable at the given path is installed and owned by Homebrew.
@@ -59,9 +60,18 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         /// <summary>
         /// Builds the Cellar formula directory that a prefix/bin executable would be linked from.
         /// </summary>
+        /// <remarks>
+        /// Why the bin check: brew links formulae only into prefix/bin, so any other parent directory
+        /// cannot be a Homebrew link and must not be classified by the sibling-Cellar probe.
+        /// </remarks>
         private static string BuildCellarFormulaDirectory(string[] segments)
         {
-            if (segments.Length < 2)
+            if (segments.Length < 3)
+            {
+                return null;
+            }
+
+            if (!string.Equals(segments[segments.Length - 2], HOMEBREW_LINK_DIR_NAME, StringComparison.Ordinal))
             {
                 return null;
             }

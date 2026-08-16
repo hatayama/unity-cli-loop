@@ -57,24 +57,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(text, Is.EqualTo(expectedText));
         }
 
-        [TestCase(false, false, false, true, true)]
-        [TestCase(true, false, false, true, false)]
-        [TestCase(false, true, false, true, false)]
-        [TestCase(false, false, true, true, false)]
-        [TestCase(false, false, true, false, true)]
+        [TestCase(false, false, false, "3.0.0", true)]
+        [TestCase(true, false, false, "3.0.0", false)]
+        [TestCase(false, true, false, "3.0.0", false)]
+        [TestCase(false, false, true, "3.0.0", false)]
+        [TestCase(false, false, true, null, true)]
+        [TestCase(false, false, true, "", true)]
         public void IsInstallCliButtonEnabled_ReturnsExpectedValue(
             bool isInstallingCli,
             bool isChecking,
             bool isHomebrewManagedCli,
-            bool isCliInstalled,
+            string cliVersion,
             bool expectedEnabled)
         {
-            // Verifies a Homebrew path with no usable CLI keeps the install action reachable.
+            // Verifies a Homebrew path whose binary reports no version keeps the install action reachable.
             bool enabled = CliSetupSection.IsInstallCliButtonEnabled(
                 isInstallingCli,
                 isChecking,
                 isHomebrewManagedCli,
-                isCliInstalled);
+                cliVersion);
 
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
         }
@@ -114,6 +115,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Button installCliButton = root.Q<Button>("install-cli-button");
             Assert.That(installCliButton.text, Is.EqualTo("Managed by Homebrew"));
             Assert.That(installCliButton.enabledSelf, Is.False);
+        }
+
+        [Test]
+        public void Update_WhenHomebrewPathReportsNoVersion_KeepsPathRepairReachable()
+        {
+            // Verifies a Homebrew path whose binary answers no version probe still offers PATH repair.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Installed,
+                isHomebrewManagedCli: true,
+                cliVersion: null,
+                needsCliPathSetup: true);
+
+            section.Update(data);
+
+            Button installCliButton = root.Q<Button>("install-cli-button");
+            Assert.That(installCliButton.text, Is.EqualTo("Fix PATH"));
+            Assert.That(installCliButton.enabledSelf, Is.True);
         }
 
         [Test]
@@ -490,7 +512,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool? isSkillStateChecking = null,
             bool isHomebrewManagedCli = false,
             bool needsUpdate = false,
-            string cliVersion = "3.0.0")
+            string cliVersion = "3.0.0",
+            bool needsCliPathSetup = false)
         {
             return new CliSetupData(
                 isCliInstalled,
@@ -498,7 +521,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 requiredCliVersion: "3.0.0",
                 needsUpdate,
                 canUninstallCli: true,
-                needsCliPathSetup: false,
+                needsCliPathSetup,
                 isHomebrewManagedCli,
                 isInstallingCli: false,
                 isChecking,
