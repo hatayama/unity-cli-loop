@@ -120,6 +120,36 @@ entry as well (handled added members and reported removed members are excluded
 from this generic warning); without a baseline it stays silent. Either way, use
 `uloop compile` for such edits.
 
+### Signature changes: return type, rename, parameters
+
+Changing a compiled method's return type is applied as a remove-plus-add: the old
+method stays in the compiled assembly (like any removed member), the new signature
+becomes an added method with its own `Added` row, and the edited methods that call
+it report `Patched`. Every added-member rule applies — same-file visibility, the
+Editor-session illusion, and the `virtual`/generic/interface exclusions.
+
+A gate protects compiled callers: the change applies only when every live compiled
+call site of the old signature is itself patched in the same run. A caller in
+another file — or an *unedited* method in the same file (an implicit `int`→`long`
+widening can leave a caller's source untouched) — would keep calling the old
+method silently, so the run reports the changed method and its edited callers as
+`Skipped` instead; land the change with `uloop compile`. Call sites inside methods
+that the same edit removes or re-signatures do not gate: those compiled bodies are
+already stale, and anything still reaching them stays on the consistent old
+behavior.
+
+Renaming a method or changing its parameter list follows the delete rules rather
+than the gate: the new signature is an ordinary added method, the old one is
+reported removed, and when compiled call sites of the old signature remain outside
+the run, a `Warnings` entry names each caller — those call sites keep the previous
+behavior until `uloop compile`. Deleting a method emits the same warning when
+compiled callers remain.
+
+Field declarations are stricter: when a compiled field's type — or its `static`/
+`const` modifier — differs from the edited source, every edited method that reads
+or writes that field is `Skipped` with a per-method reason. Retyped storage has no
+session illusion; run `uloop compile`.
+
 ### Explore with hot reload, land structure with compile
 
 Treat hot reload as the exploration phase and `uloop compile` as the landing phase. While
@@ -210,10 +240,11 @@ below) — raising is only expressible inside the declaring type, which a shim i
 | File does not belong to any compiled assembly | Per-file entry with `Method` = `(file)`; only `Assets/` and `Packages/` sources resolve |
 | Loaded assembly differs from the one on disk (pending compile) | Run `uloop compile` first, then retry |
 | Source file fails to parse | Per-file entry carrying the parse errors |
-| Method signature not found in the loaded assembly | New, renamed, or re-signatured members need `uloop compile` |
+| Method signature not found in the loaded assembly | Usually a stale assembly; run `uloop compile`. In-file renames and signature changes are classified as added members before reaching this point |
 | Shim compile error (e.g. the body calls a member that does not exist yet) | Failing methods are isolated: each reports `Failed` with its own compiler errors (plus the `uloop compile` hint when they indicate a missing member) while the remaining methods still patch. When errors cannot be attributed per method, the whole file reports one `(shim-compile)` entry; if only one method was edited, the failure is attributed to that method's name instead |
 | Patch rejected or crashed at apply time (e.g. `[BurstCompile]`, a patch-engine emit failure) | The entry carries the rejection reason or the underlying engine error; other methods in the run still apply |
 | Accessor binding failed for a shim type | The source references a member the compiled assembly does not have yet; every delegation-patched method in that shim type reports the binder error — run `uloop compile` and retry |
+| The signature-change gate could not finish the run safely — the retry that skips a gated change failed, or shim-compile isolation dropped an edited caller that had covered a change | Per-file entry with `Method` = `(signature-change-gate)` carrying the specific cause; nothing from the file is applied — fix the failing edit or run `uloop compile` |
 
 ## When a patch reports `Patched` but behavior does not change
 
@@ -243,10 +274,13 @@ a pause is not evidence either way.
   default), not just `uloop compile`. `uloop control-play-mode --action Play` warns with
   the counts when it is about to drop patches or pause points. There is no persistence
   and no automatic re-apply.
-- Never reflected by hot reload: initializer changes on compiled fields, new types,
-  and signature changes. Those always need `uloop compile`. (Added methods and
-  fields are reflected per the rules above, but only for the current Editor
-  session and only within their own file.)
+- Never reflected by hot reload: initializer changes on compiled fields and new
+  types. Those always need `uloop compile`. Signature changes — return type,
+  rename, parameter list — are handled through the added-member rules and the
+  return-type gate above: same file, same Editor session, compiled callers
+  protected by skip or warning.
+  (Added methods and fields are reflected per the rules above, but only for the
+  current Editor session and only within their own file.)
 - A run with `Failed` outcomes still applies every other patch — outcomes are
   per-method and there is no run-level rollback. `Methods` is the authoritative
   record of which bodies changed.
