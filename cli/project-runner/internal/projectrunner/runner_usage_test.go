@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Verifies the project runner refuses dispatcher-owned bootstrap and completion
+// Verifies the project runner refuses dispatcher-owned bootstrap
 // commands and points the caller at the global uloop dispatcher.
 func TestRunProjectLocalRejectsDispatcherOwnedCommands(t *testing.T) {
 	t.Chdir(t.TempDir())
@@ -19,7 +19,6 @@ func TestRunProjectLocalRejectsDispatcherOwnedCommands(t *testing.T) {
 		"uninstall",
 		"version",
 		"skills",
-		"completion",
 	} {
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
