@@ -210,6 +210,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a caller in another project assembly that references the target DLL is
+        /// reported, so the scanner does not miss cross-assembly call sites.
+        /// </summary>
+        [Test]
+        public void FindCallSites_CrossAssemblyCaller_ReportsReferencedAssemblyHit()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.CalledFromCrossAssembly),
+                Array.Empty<string>(),
+                0);
+
+            Assert.That(hits.Count, Is.EqualTo(1));
+            Assert.That(
+                hits[0].CallerAssemblyName,
+                Is.EqualTo("UnityCLILoop.Tests.Editor.HotReload.CallSiteCrossAssembly"));
+            Assert.That(
+                hits[0].CallerMethodKey,
+                Is.EqualTo(
+                    "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                    + ".HotReloadCallSiteCrossAssemblyCaller::Call()"));
+        }
+
+        /// <summary>
         /// What: a generic Caller&lt;T&gt;(int) call site uses a different method key than
         /// the non-generic Caller(int), so arity collisions cannot cover the wrong caller.
         /// </summary>

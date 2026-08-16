@@ -2466,6 +2466,144 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the gate-retry FileFailed path (HotReloadOrchestrator ~267-278) reports a
+        /// single (signature-change-gate) Failed when an external caller gates a return-type
+        /// change and the isolation retry shim compile fails. This is not the coverage
+        /// recheck path (~349-370) covered by
+        /// Run_ReturnTypeChange_CallerShimCompileFailure_FailsCoverageRecheck.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_GateRetryShimCompileFailure_FailsFileWithoutApplying()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                    "        public int Unrelated(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeGateRetryFailure.cs", edited),
+                CancellationToken.None);
+
+            Assert.That(result.Methods.Count, Is.EqualTo(1), FormatOutcomes(result));
+            HotReloadMethodOutcome outcome = result.Methods[0];
+            Assert.That(outcome.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+            Assert.That(outcome.Method, Is.EqualTo("(signature-change-gate)"));
+            Assert.That(outcome.Reason, Does.Contain("Retry shim compile failed"));
+            Assert.That(
+                outcome.Reason.Contains("Isolation excluded compiled callers"),
+                Is.False,
+                "This path must not be the coverage-recheck failure.\n" + outcome.Reason);
+            foreach (HotReloadMethodOutcome methodOutcome in result.Methods)
+            {
+                Assert.That(
+                    methodOutcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Added),
+                    FormatOutcomes(result));
+                Assert.That(
+                    methodOutcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Patched),
+                    FormatOutcomes(result));
+            }
+        }
+
+        /// <summary>
+        /// What: one file can skip a gated return-type change and still apply a covered
+        /// replacement in the same run.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_MultipleReplacements_GatesOneAndAppliesTheOther()
+        {
+            string fixturePath = ResolveSignatureChangeMultiReplacementHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int TargetGated(int value)\n        {\n            return value;\n        }",
+                    "        public long TargetGated(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int TargetCovered(int value)\n        {\n            return value;\n        }",
+                    "        public long TargetCovered(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return TargetCovered(value);\n        }",
+                    "            return (int)TargetCovered(value);\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeMultiReplacement.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasSkipped(
+                result,
+                nameof(HotReloadSignatureChangeMultiReplacementHost.TargetGated),
+                "The return type of");
+            AssertHasAdded(
+                result,
+                nameof(HotReloadSignatureChangeMultiReplacementHost.TargetCovered));
+            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeMultiReplacementHost",
+                "CoveredCaller",
+                new[] { "System.Int32" },
+                genericArity: 0);
+            AssertHasPatched(result, expectedCallerLabel);
+        }
+
+        /// <summary>
+        /// What: changing ToDelete(int) to ToDelete(int, int) warns about the old compiled
+        /// signature's remaining caller and classifies the new signature as Added.
+        /// </summary>
+        [Test]
+        public async Task Run_ParameterChange_ExternalCaller_WarnsStaleSignatureAndAddsNewMethod()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int ToDelete(int value)\n        {\n            return value;\n        }",
+                    "        public int ToDelete(int value, int extra)\n        {\n            return value + extra;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                    "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            Assert.That(edited, Does.Contain("ToDelete(int value, int extra)"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeParamChange.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, nameof(HotReloadSignatureChangeExternalHost.ToDelete));
+            AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
+            string expectedCallerKey =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeExternalCaller::CallDeleted(System.Int32)";
+            string expectedSignatureKey =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeExternalHost::ToDelete(System.Int32)";
+            string expectedWarning = string.Format(
+                HotReloadConstants.StaleSignatureCallersWarningFormat,
+                expectedSignatureKey,
+                expectedCallerKey);
+            Assert.That(result.Warnings, Does.Contain(expectedWarning), FormatOutcomes(result));
+        }
+
+        /// <summary>
         /// What: after applying an added method, a later hot-reload against the on-disk baseline
         /// (all-unchanged) clears that file's added-member ledger so --status and Play warnings
         /// do not keep counting it.
@@ -2959,6 +3097,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.Exists(path),
                 Is.True,
                 "Signature-change generic-caller fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSignatureChangeMultiReplacementHostPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSignatureChangeMultiReplacementHost.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Signature-change multi-replacement host source missing: " + path);
             return Path.GetFullPath(path);
         }
 
