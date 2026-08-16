@@ -104,15 +104,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
     }
 
+    public interface IHotReloadFieldKindChangeMarker
+    {
+        int ExplicitHp { get; }
+    }
+
     /// <summary>
     /// Compiled host with an auto-property and an event so a same-name field declaration
     /// can be classified against live compiled members instead of a side-table store.
     /// </summary>
-    public class HotReloadFieldKindChangeFixture
+    public class HotReloadFieldKindChangeFixture : IHotReloadFieldKindChangeMarker
     {
         public int Hp { get; set; }
 
         public event Action ScoreChanged;
+
+        int IHotReloadFieldKindChangeMarker.ExplicitHp
+        {
+            get { return 0; }
+        }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public void ClearScoreChanged()
