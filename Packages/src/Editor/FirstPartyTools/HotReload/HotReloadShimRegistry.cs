@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         static HotReloadShimRegistry()
         {
             HotReloadPausePointCoordination.GetShimLookupForFile = LookupForFile;
+            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = LoadVerifiedSnapshotSourceForFile;
         }
 
         /// <summary>
@@ -80,6 +81,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             GenerationsByPath.Clear();
         }
 
+        private static string LoadVerifiedSnapshotSourceForFile(string requestedPath)
+        {
+            if (string.IsNullOrEmpty(requestedPath))
+            {
+                return null;
+            }
+
+            string generationKey = FindGenerationKeyForPath(requestedPath);
+            if (generationKey == null)
+            {
+                return null;
+            }
+
+            FileGeneration generation = GenerationsByPath[generationKey];
+            foreach (MethodBase originalMethod in generation.Methods.Keys)
+            {
+                Type declaringType = originalMethod.DeclaringType;
+                if (declaringType == null)
+                {
+                    continue;
+                }
+
+                string dllPath = declaringType.Assembly.Location;
+                if (string.IsNullOrEmpty(dllPath))
+                {
+                    continue;
+                }
+
+                return HotReloadSourceBaseline.LoadVerifiedSnapshotSource(generationKey, dllPath);
+            }
+
+            return null;
+        }
+
         private static HotReloadShimFileLookup LookupForFile(string requestedPath)
         {
             if (string.IsNullOrEmpty(requestedPath))
@@ -129,6 +164,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static FileGeneration FindGenerationForPath(string requestedPath)
         {
+            string generationKey = FindGenerationKeyForPath(requestedPath);
+            return generationKey == null ? null : GenerationsByPath[generationKey];
+        }
+
+        private static string FindGenerationKeyForPath(string requestedPath)
+        {
             string normalizedRequest = HotReloadSourcePathNormalizer.ToForwardSlashes(requestedPath);
             StringComparison comparison = Path.DirectorySeparatorChar == '\\'
                 ? StringComparison.OrdinalIgnoreCase
@@ -141,11 +182,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string normalizedKey = HotReloadSourcePathNormalizer.ToForwardSlashes(pair.Key);
                 if (string.Equals(normalizedRequest, normalizedKey, comparison))
                 {
-                    return pair.Value;
+                    return pair.Key;
                 }
             }
 
-            FileGeneration suffixMatch = null;
+            string suffixMatchKey = null;
             int suffixMatchCount = 0;
             foreach (KeyValuePair<string, FileGeneration> pair in GenerationsByPath)
             {
@@ -155,7 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 suffixMatchCount++;
-                suffixMatch = pair.Value;
+                suffixMatchKey = pair.Key;
                 if (suffixMatchCount > 1)
                 {
                     // Why null on ambiguity: same fail-closed rule as FindEntryForError —
@@ -164,7 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            return suffixMatchCount == 1 ? suffixMatch : null;
+            return suffixMatchCount == 1 ? suffixMatchKey : null;
         }
 
         internal sealed class MethodEntry

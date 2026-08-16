@@ -37,6 +37,12 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public static Func<string, HotReloadShimFileLookup> GetShimLookupForFile { get; set; }
 
         /// <summary>
+        /// Set by HotReload. Returns the PDB-checksum-verified compiled snapshot text for a
+        /// project-relative source file, or null when no snapshot is available.
+        /// </summary>
+        public static Func<string, string> GetVerifiedSnapshotSourceForFile { get; set; }
+
+        /// <summary>
         /// Set by HotReloadPatcher. Returns the LocalBuilder array (shim slot order) from
         /// the latest transplant rebuild of the original method, or null when none.
         /// Returned LocalBuilders are tied to the ILGenerator of that rebuild and are valid

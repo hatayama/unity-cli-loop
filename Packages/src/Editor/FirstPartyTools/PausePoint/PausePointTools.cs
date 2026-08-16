@@ -503,7 +503,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         shimResolution.ResolvedLine,
                         shimResolution.MethodDisplayName,
                         shimPatchResult,
-                        retargetedToHotReloadPatch: true);
+                        retargetedToHotReloadPatch: true,
+                        hasActiveHotReloadPatches: true);
                 }
 
                 if (shimResolution.Kind == SourcePausePointShimResolveKind.NoStatementInPatchedMethod)
@@ -553,7 +554,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolveResult.Resolution.ResolvedLine,
                 resolveResult.Resolution.MethodDisplayName,
                 patchResult,
-                retargetedToHotReloadPatch: false);
+                retargetedToHotReloadPatch: false,
+                hasActiveHotReloadPatches: shimLookup != null);
         }
 
         private static PausePointResponse FinishEnableBySourceLocation(
@@ -562,7 +564,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int resolvedLine,
             string resolvedMethod,
             SourcePausePointPatchResult patchResult,
-            bool retargetedToHotReloadPatch)
+            bool retargetedToHotReloadPatch,
+            bool hasActiveHotReloadPatches)
         {
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(
                 id,
@@ -576,7 +579,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 snapshot = UloopPausePointRegistry.GetStatus(id);
             }
 
-            string resolvedLineText = PausePointLineTextReader.ReadResolvedLineText(parameters.File, resolvedLine);
+            string resolvedLineText = ResolveEnableLineText(
+                parameters.File,
+                resolvedLine,
+                retargetedToHotReloadPatch,
+                hasActiveHotReloadPatches);
             UloopPausePointRegistry.SetResolvedLine(id, resolvedLine, resolvedLineText);
 
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
@@ -585,7 +592,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedLineText = resolvedLineText;
             response.ResolvedMethod = resolvedMethod;
             response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
-            response.Warning = MergeWarnings(CreateEnableWarning(), patchResult.Warning);
+            string enableWarning = CreateEnableWarning();
+            if (hasActiveHotReloadPatches && !retargetedToHotReloadPatch)
+            {
+                string compiledLineMapWarning = string.Format(
+                    SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat,
+                    SourcePausePointPathNormalizer.ToForwardSlashes(parameters.File));
+                enableWarning = MergeWarnings(enableWarning, compiledLineMapWarning);
+            }
+
+            response.Warning = MergeWarnings(enableWarning, patchResult.Warning);
             LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
 
             if (patchResult.HasPhysicsCallbackWarning)
@@ -645,6 +661,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     InstanceCount = instanceCount,
                     StatusBeforeClear = statusBeforeClear
                 });
+        }
+
+        // Why snapshot over disk: the editor file may already include unpatched-line drift, so
+        // reading disk at the compiled ResolvedLine shows the wrong statement (FB9 empty/mismatch).
+        private static string ResolveEnableLineText(
+            string requestedFile,
+            int resolvedLine,
+            bool retargetedToHotReloadPatch,
+            bool hasActiveHotReloadPatches)
+        {
+            if (hasActiveHotReloadPatches && !retargetedToHotReloadPatch)
+            {
+                string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
+                string snapshotSource =
+                    HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile?.Invoke(normalizedFile);
+                return SourcePausePointSourceLineReader.ReadLineTextFromSource(snapshotSource, resolvedLine);
+            }
+
+            return PausePointLineTextReader.ReadResolvedLineText(requestedFile, resolvedLine);
         }
 
         // The derived id must use the originally requested file/line (not the resolved/rounded

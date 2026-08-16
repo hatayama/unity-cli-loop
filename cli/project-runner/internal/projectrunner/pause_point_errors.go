@@ -125,7 +125,8 @@ const (
 	pausePointNonFiringPatternsHint = "If the target line never hit despite the trigger firing, check the non-firing patterns: " +
 		"(1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; " +
 		"(2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; " +
-		"(3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran." +
+		"(3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. " +
+		"(4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable." +
 		" For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too."
 
 	// pausePointHintSuppressedByHotReload short-circuits every other timeout diagnosis:

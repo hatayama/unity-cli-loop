@@ -19,5 +19,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string line = File.ReadLines(absoluteFilePath).Skip(lineNumber - 1).FirstOrDefault();
             return line != null ? line.Trim() : string.Empty;
         }
+
+        public static string ReadLineTextFromSource(string sourceText, int lineNumber)
+        {
+            if (string.IsNullOrEmpty(sourceText) || lineNumber <= 0)
+            {
+                return string.Empty;
+            }
+
+            string[] lines = sourceText.Replace("\r\n", "\n").Split('\n');
+            if (lineNumber > lines.Length)
+            {
+                return string.Empty;
+            }
+
+            return lines[lineNumber - 1].Trim();
+        }
     }
 }
