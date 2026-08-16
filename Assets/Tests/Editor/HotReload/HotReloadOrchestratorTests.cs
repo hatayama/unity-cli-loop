@@ -2399,10 +2399,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
-            AssertHasSkipped(
+            string expectedExternalLabel =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeExternalHost.Target(System.Int32)";
+            string expectedExternalReason = string.Format(
+                HotReloadConstants.SignatureChangedGateSkipReasonFormat,
+                expectedExternalLabel);
+            string actualExternalReason = FindSkippedReason(
                 result,
-                nameof(HotReloadSignatureChangeExternalHost.Target),
-                "The return type of");
+                nameof(HotReloadSignatureChangeExternalHost.Target));
+            Assert.That(actualExternalReason, Is.EqualTo(expectedExternalReason));
+            Assert.That(
+                actualExternalReason,
+                Does.Contain("Run 'uloop compile'."),
+                "Other-file uncovered callers keep the compile-only CTA.");
+            Assert.That(
+                actualExternalReason,
+                Does.Not.Contain("Editing those callers' bodies in this file"),
+                "Other-file uncovered callers must not use the same-file insert.");
             AssertHasSkipped(
                 result,
                 nameof(HotReloadSignatureChangeExternalHost.SameFileCaller),
@@ -2537,7 +2551,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an unchanged same-file caller that only needs an implicit int-to-long conversion
-        /// is not an apply entry, so the return-type change is skipped with the hot-reload wording.
+        /// is not an apply entry, so the return-type change is skipped with the same-file wording
+        /// and is not listed as a removed member.
         /// </summary>
         [Test]
         public async Task Run_ReturnTypeChange_UnchangedSameFileCaller_SkipsReplacement()
@@ -2559,12 +2574,86 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string expectedLabel =
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeUnchangedCallerFixture.Target(System.Int32)";
+            string expectedReason = string.Format(
+                HotReloadConstants.SignatureChangedGateSkipReasonSameFileCallersFormat,
+                expectedLabel);
+            string actualReason = FindSkippedReason(
+                result,
+                nameof(HotReloadSignatureChangeUnchangedCallerFixture.Target));
+            Assert.That(actualReason, Is.EqualTo(expectedReason));
+            Assert.That(
+                actualReason,
+                Does.Contain(
+                    "Editing those callers' bodies in this file and reloading again applies them together, or run 'uloop compile'."));
+            Assert.That(
+                CountWarningsContaining(result.Warnings, "Removed members stay present"),
+                Is.EqualTo(0),
+                "A gated (not applied) replacement must not appear as a removed member.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
+        /// What: an uncovered caller on the same type whose method key is absent from the
+        /// edited file (other partial file, ctor, or unhandled member) is not same-file.
+        /// </summary>
+        [Test]
+        public void AreUncoveredCallersInEditedFile_SameTypeOtherPartialMethod_ReturnsFalse()
+        {
+            TransformWorkerEntryDto replacement = CreateReplacementEntry("Host", "Target");
+            bool sameFile = HotReloadOrchestrator.AreUncoveredCallersInEditedFile(
+                new[] { "Host::OtherFileCaller(System.Int32)" },
+                new[] { replacement },
+                Array.Empty<TransformWorkerUnchangedMethodDto>());
+
+            Assert.That(sameFile, Is.False);
+        }
+
+        /// <summary>
+        /// What: a gated same-name replacement does not suppress the removed-members warning
+        /// for a deleted Target on another type in the same file.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_SameNameDeletedOnOtherType_KeepsRemovedMembersWarning()
+        {
+            string fixturePath = ResolveSignatureChangeSameNameHostsPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int Target(int value)\n        {\n            return value;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public long Store",
+                "        public long Target(int value)\n        {\n            return value + 1L;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public long Store",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "    public class HotReloadSignatureChangeSameNameDeletedHost\n    {\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int Target(int value)\n        {\n            return value;\n        }\n    }",
+                "    public class HotReloadSignatureChangeSameNameDeletedHost\n    {\n    }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            Assert.That(edited, Does.Contain("HotReloadSignatureChangeSameNameDeletedHost"));
+            Assert.That(edited, Does.Not.Contain("return value;\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSameNameDeleted.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
             AssertHasSkipped(
                 result,
-                nameof(HotReloadSignatureChangeUnchangedCallerFixture.Target),
-                string.Format(
-                    HotReloadConstants.SignatureChangedGateSkipReasonFormat,
-                    expectedLabel));
+                nameof(HotReloadSignatureChangeSameNameGatedHost.Target),
+                "The return type of");
+            Assert.That(
+                CountWarningsContaining(result.Warnings, "Removed members stay present"),
+                Is.EqualTo(1),
+                "A same-name deletion on another type must still warn.\n"
+                + string.Join("\n", result.Warnings));
+            Assert.That(
+                result.Warnings,
+                Has.Some.Contain("Target"),
+                "The deleted same-name method must remain in the removed-members warning.");
         }
 
         /// <summary>
@@ -3279,6 +3368,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        private static string FindSkippedReason(HotReloadOrchestratorResult result, string methodName)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method.Contains(methodName)
+                    && outcome.Reason != null)
+                {
+                    return outcome.Reason;
+                }
+            }
+
+            Assert.Fail("Expected a Skipped outcome for " + methodName + ".\n" + FormatOutcomes(result));
+            return null;
+        }
+
         private static void AssertHasSkipped(
             HotReloadOrchestratorResult result,
             string methodName,
@@ -3413,6 +3518,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.Exists(path),
                 Is.True,
                 "Signature-change unchanged-caller fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSignatureChangeSameNameHostsPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSignatureChangeSameNameHosts.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Signature-change same-name hosts source missing: " + path);
             return Path.GetFullPath(path);
         }
 

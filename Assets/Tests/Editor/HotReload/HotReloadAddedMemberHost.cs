@@ -316,6 +316,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Nested interface host so skip labels can pin FormatMethodKeyParts for nested + generic
+    /// + multi-parameter methods.
+    /// </summary>
+    public class HotReloadMethodLabelNestedHost
+    {
+        public interface INestedGeneric
+        {
+            int GenericPing<T>(int left, string right) => 1;
+        }
+    }
+
+    /// <summary>
     /// Partial host so worker tests can prove deleted-method signatures are omitted on partials.
     /// </summary>
     public partial class HotReloadAddedMemberPartialHost
