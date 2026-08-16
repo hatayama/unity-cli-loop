@@ -525,20 +525,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             true,
             "2.9.0",
             true,
+            true,
             "Homebrew-managed CLI v2.9.0 does not meet the required v3.0.0.\n"
             + "Run this command in your terminal:\nbrew upgrade uloop")]
         [TestCase(
             true,
             null,
             true,
+            true,
             "Homebrew-managed CLI did not report a version.\n"
             + "Run this command in your terminal:\nbrew reinstall uloop")]
-        [TestCase(true, "3.0.0", false, "")]
-        [TestCase(false, "2.9.0", false, "")]
-        [TestCase(false, null, false, "")]
+        [TestCase(
+            true,
+            "3.0.0",
+            false,
+            true,
+            "Homebrew-managed CLI v3.0.0 did not answer as the required uloop CLI.\n"
+            + "Run this command in your terminal:\nbrew reinstall uloop")]
+        [TestCase(true, "3.0.0", true, false, "")]
+        [TestCase(false, "2.9.0", true, false, "")]
+        [TestCase(false, null, true, false, "")]
         public void Update_TogglesHomebrewUpgradeWarning(
             bool isHomebrewManagedCli,
             string cliVersion,
+            bool cliIsDispatcher,
             bool expectedVisible,
             string expectedText)
         {
@@ -557,7 +567,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             presenter.Update(
                 cliInstalled: !string.IsNullOrEmpty(cliVersion),
                 cliVersion,
-                cliIsDispatcher: true,
+                cliIsDispatcher,
                 requiredCliVersion: "3.0.0",
                 isInstallingCli: false,
                 needsCliPathSetup: false,

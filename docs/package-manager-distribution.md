@@ -29,8 +29,10 @@ including beta tags. There is no separate stable-only formula yet.
   binary in `~/.local/bin` while brew keeps its own on PATH. When such an install is
   below the pin minimum, a warning block above the button names the required version
   and the selectable `brew upgrade uloop` command so the disabled button is not a
-  dead end; a Homebrew binary that answers no version probe points at
-  `brew reinstall uloop` instead. PATH repair is the one action that survives the
+  dead end. A Homebrew binary that answers no version probe, or that reports a
+  version at or above the minimum yet does not answer as the dispatcher, points at
+  `brew reinstall uloop` instead — upgrading it would report nothing to do. PATH
+  repair is the one action that survives the
   stand-down, because it writes no binary and only makes an already installed
   package-owned CLI reachable.
 

@@ -193,6 +193,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Update_WhenHomebrewCliMeetsVersionButNeedsUpdate_ShowsReinstallGuidance()
+        {
+            // Verifies a Homebrew binary that is current but does not answer as the dispatcher
+            // is not told to upgrade, because brew would report nothing to do.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Installed,
+                isHomebrewManagedCli: true,
+                needsUpdate: true,
+                cliVersion: "3.0.0");
+
+            section.Update(data);
+
+            Label warningLabel = root.Q<Label>("cli-homebrew-upgrade-message");
+            Assert.That(
+                warningLabel.text,
+                Is.EqualTo("Homebrew-managed CLI v3.0.0 did not answer as the required uloop CLI.\n"
+                    + "Run this command in your terminal:\nbrew reinstall uloop"));
+            Assert.That(warningLabel.ClassListContains("unity-cli-loop-warning-message--visible"), Is.True);
+        }
+
+        [Test]
         public void Update_WhenHomebrewManagedCliIsUpToDate_HidesUpgradeWarning()
         {
             // Verifies the upgrade warning stays hidden while the Homebrew CLI satisfies the required version.
