@@ -3153,19 +3153,33 @@ public static class TransformWorkerProgram
             && compiledMethod.ReturnsByRefReadonly == sourceMethod.ReturnsByRefReadonly;
     }
 
-    private static bool CompiledTypeHasField(INamedTypeSymbol compiledType, IFieldSymbol sourceField)
+    /// <summary>
+    /// What: matches a source field to a compiled field by name, static, and const, then
+    /// reports a type change separately so callers can skip instead of rewriting storage.
+    /// </summary>
+    private static CompiledFieldMatch MatchCompiledField(
+        INamedTypeSymbol compiledType,
+        IFieldSymbol sourceField)
     {
         foreach (ISymbol member in compiledType.GetMembers(sourceField.Name))
         {
-            if (member is IFieldSymbol compiledField
-                && compiledField.IsStatic == sourceField.IsStatic
-                && compiledField.IsConst == sourceField.IsConst)
+            if (member is not IFieldSymbol compiledField
+                || compiledField.IsStatic != sourceField.IsStatic
+                || compiledField.IsConst != sourceField.IsConst)
             {
-                return true;
+                continue;
             }
+
+            if (CecilTypeNames.ToCecilFullName(compiledField.Type)
+                == CecilTypeNames.ToCecilFullName(sourceField.Type))
+            {
+                return CompiledFieldMatch.Matched;
+            }
+
+            return CompiledFieldMatch.FieldTypeChanged;
         }
 
-        return false;
+        return CompiledFieldMatch.NotFound;
     }
 
     /// <summary>
@@ -3186,7 +3200,13 @@ public static class TransformWorkerProgram
             foreach (VariableDeclaratorSyntax variable in fieldDeclaration.Declaration.Variables)
             {
                 IFieldSymbol fieldSymbol = semanticModel.GetDeclaredSymbol(variable) as IFieldSymbol;
-                if (fieldSymbol == null || CompiledTypeHasField(compiledType, fieldSymbol))
+                if (fieldSymbol == null)
+                {
+                    continue;
+                }
+
+                CompiledFieldMatch fieldMatch = MatchCompiledField(compiledType, fieldSymbol);
+                if (fieldMatch == CompiledFieldMatch.Matched)
                 {
                     continue;
                 }
@@ -3199,7 +3219,8 @@ public static class TransformWorkerProgram
                     variable,
                     fieldSymbol,
                     addedFieldCatalog,
-                    declarationDriftWarnings);
+                    declarationDriftWarnings,
+                    fieldMatch == CompiledFieldMatch.FieldTypeChanged);
             }
         }
     }
@@ -3212,7 +3233,8 @@ public static class TransformWorkerProgram
         VariableDeclaratorSyntax variable,
         IFieldSymbol fieldSymbol,
         AddedFieldCatalog addedFieldCatalog,
-        List<string> declarationDriftWarnings)
+        List<string> declarationDriftWarnings,
+        bool fieldTypeChanged)
     {
         string syntaxKey = BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, fieldSymbol.Name);
         string fieldKey = FormatAddedFieldStoreKey(
@@ -3221,7 +3243,7 @@ public static class TransformWorkerProgram
         addedFieldCatalog.MarkClassifiedAdded(fieldKey);
         addedFieldCatalog.AddAddedSyntaxKey(syntaxKey);
 
-        if (FieldHasSerializationAttribute(fieldDeclaration))
+        if (!fieldTypeChanged && FieldHasSerializationAttribute(fieldDeclaration))
         {
             declarationDriftWarnings.Add(
                 string.Format(
@@ -3241,6 +3263,18 @@ public static class TransformWorkerProgram
             ConstantValue = fieldSymbol.HasConstantValue ? fieldSymbol.ConstantValue : null,
             Initializer = variable.Initializer != null ? variable.Initializer.Value : null
         };
+
+        if (fieldTypeChanged)
+        {
+            // Why not RegisterStore: rewriting to the side table would hide the type
+            // change and leave compiled callers on the old field.
+            binding.UnavailableReason = string.Format(
+                CultureInfo.InvariantCulture,
+                AddedFieldSkipReasons.FieldTypeChanged,
+                fieldSymbol.Name);
+            addedFieldCatalog.RegisterUnavailable(binding);
+            return;
+        }
 
         binding.UnavailableReason = EvaluateAddedFieldAvailability(
             typeState.TypeSymbol,
@@ -3415,7 +3449,9 @@ public static class TransformWorkerProgram
 
         if (symbol is IFieldSymbol fieldSymbol)
         {
-            return !CompiledTypeHasField(compiledType, fieldSymbol);
+            // Why map FieldTypeChanged to added: the compiled field still has the old type,
+            // so treating it as a direct shim reference would bind the old storage.
+            return MatchCompiledField(compiledType, fieldSymbol) != CompiledFieldMatch.Matched;
         }
 
         if (symbol is IMethodSymbol methodSymbol && methodSymbol.MethodKind == MethodKind.Ordinary)
@@ -7171,6 +7207,9 @@ internal static class AddedFieldSkipReasons
     public const string UnavailableAddedField =
         "Uses an added field that hot reload cannot emit. Run 'uloop compile'.";
 
+    public const string FieldTypeChanged =
+        "Field '{0}' has a different type in the compiled assembly. Run 'uloop compile'.";
+
     public const string SerializeWarningFormat =
         "Added field '{0}' has a serialization attribute, so it will not appear in the Inspector "
         + "or serialize until 'uloop compile'.";
@@ -7348,6 +7387,13 @@ internal enum CompiledMethodMatch
     NotFound,
     Matched,
     ReturnTypeChanged
+}
+
+internal enum CompiledFieldMatch
+{
+    NotFound,
+    Matched,
+    FieldTypeChanged
 }
 
 internal sealed class WorkerUnchangedMethod
