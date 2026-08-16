@@ -346,6 +346,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compileResult = firstCompile.CompileResult;
             }
 
+            if (gateResult.DidScan)
+            {
+                // Why after entriesToPatch is final and before Harmony: isolation or a gate
+                // retry can drop a covering caller without dropping the replacement. A third
+                // worker run is not allowed (max two); fail the file instead of applying.
+                List<string> lostReplacementKeys = FindSignatureChangeCoverageLosses(
+                    entriesToPatch,
+                    gateResult.Hits,
+                    gateResult.ScanTargetKeys);
+                if (lostReplacementKeys.Count > 0)
+                {
+                    outcomes.Add(
+                        HotReloadMethodOutcome.Failed(
+                            "(signature-change-gate)",
+                            string.Format(
+                                HotReloadConstants.SignatureChangeCoverageLostFailureFormat,
+                                string.Join(", ", lostReplacementKeys)),
+                            assemblyResolvePath));
+                    return new HotReloadFileProcessResult(
+                        outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
+                }
+            }
+
             // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
             // Why before ApplyEntry: OnHotReloadPatchStateChanged(true) runs inside Apply and
@@ -1389,7 +1412,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 uncoveredCallersByTarget);
             if (gatedReplacements.Count == 0)
             {
-                return SignatureChangeGateResult.WarningsOnly(staleWarnings);
+                return SignatureChangeGateResult.WarningsOnly(
+                    staleWarnings,
+                    hits,
+                    CollectScanTargetKeys(targets));
             }
 
             IsolationExclusions exclusions = BuildIsolationExclusions(gatedReplacements, entries);
@@ -1413,10 +1439,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ct).ConfigureAwait(false);
             if (retry.Isolation == null)
             {
-                return SignatureChangeGateResult.Failed(retry.FailureMessage, staleWarnings);
+                return SignatureChangeGateResult.Failed(retry.FailureMessage);
             }
 
-            return SignatureChangeGateResult.Retried(retry.Isolation, skippedOutcomes, staleWarnings);
+            return SignatureChangeGateResult.Retried(
+                retry.Isolation,
+                skippedOutcomes,
+                staleWarnings,
+                hits,
+                CollectScanTargetKeys(targets));
         }
 
         private static List<TransformWorkerEntryDto> CollectReplacementEntries(
@@ -1501,6 +1532,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (HotReloadCallSiteScanner.CompiledMethodIdentity target in targets)
             {
+                // Why include removed-signature targets: a deleted helper that called the
+                // replaced method is already stale (removed-members warning). Treating that
+                // corpse as uncovered would gate a same-file helper-delete + return-type
+                // change, which is still a consistent old world. Fail-closed only for live
+                // compiled callers that will keep invoking the old method.
                 coveredKeys.Add(
                     BuildMethodKeyParts(
                         target.TypeMetadataName,
@@ -1564,6 +1600,67 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return warnings;
+        }
+
+        /// <summary>
+        /// Rechecks scan hits against the final apply set. Returns replacement keys that would
+        /// still have uncovered compiled callers after isolation or a gate retry shrank entries.
+        /// </summary>
+        internal static List<string> FindSignatureChangeCoverageLosses(
+            TransformWorkerEntryDto[] entriesToPatch,
+            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            IReadOnlyList<string> scanTargetKeys)
+        {
+            Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
+            Debug.Assert(hits != null, "hits must not be null.");
+            Debug.Assert(scanTargetKeys != null, "scanTargetKeys must not be null.");
+
+            HashSet<string> coveredKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto entry in entriesToPatch)
+            {
+                coveredKeys.Add(BuildMethodKey(entry));
+            }
+
+            foreach (string targetKey in scanTargetKeys)
+            {
+                coveredKeys.Add(targetKey);
+            }
+
+            Dictionary<string, List<string>> uncoveredCallersByTarget =
+                CollectUncoveredCallersByTarget(hits, coveredKeys);
+            List<string> lostReplacementKeys = new List<string>();
+            foreach (TransformWorkerEntryDto entry in entriesToPatch)
+            {
+                if (!entry.replacesCompiledMethod)
+                {
+                    continue;
+                }
+
+                string methodKey = BuildMethodKey(entry);
+                if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> callers)
+                    && callers.Count > 0)
+                {
+                    lostReplacementKeys.Add(methodKey);
+                }
+            }
+
+            return lostReplacementKeys;
+        }
+
+        private static List<string> CollectScanTargetKeys(
+            HotReloadCallSiteScanner.CompiledMethodIdentity[] targets)
+        {
+            List<string> keys = new List<string>(targets.Length);
+            foreach (HotReloadCallSiteScanner.CompiledMethodIdentity target in targets)
+            {
+                keys.Add(
+                    BuildMethodKeyParts(
+                        target.TypeMetadataName,
+                        target.MethodName,
+                        target.ParameterTypeFullNames));
+            }
+
+            return keys;
         }
 
         private static List<TransformWorkerEntryDto> CollectGatedReplacementEntries(
@@ -1741,53 +1838,73 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public bool FileFailed { get; }
             public string FailureMessage { get; }
             public bool UsedWorkerRetry { get; }
+            public bool DidScan { get; }
             public HotReloadShimIsolationResult Isolation { get; }
             public List<HotReloadMethodOutcome> SkippedOutcomes { get; }
             public List<string> Warnings { get; }
+            public List<HotReloadCallSiteScanner.CallSiteHit> Hits { get; }
+            public List<string> ScanTargetKeys { get; }
 
             private SignatureChangeGateResult(
                 bool fileFailed,
                 string failureMessage,
                 bool usedWorkerRetry,
+                bool didScan,
                 HotReloadShimIsolationResult isolation,
                 List<HotReloadMethodOutcome> skippedOutcomes,
-                List<string> warnings)
+                List<string> warnings,
+                List<HotReloadCallSiteScanner.CallSiteHit> hits,
+                List<string> scanTargetKeys)
             {
                 FileFailed = fileFailed;
                 FailureMessage = failureMessage;
                 UsedWorkerRetry = usedWorkerRetry;
+                DidScan = didScan;
                 Isolation = isolation;
                 SkippedOutcomes = skippedOutcomes ?? new List<HotReloadMethodOutcome>();
                 Warnings = warnings ?? new List<string>();
+                Hits = hits ?? new List<HotReloadCallSiteScanner.CallSiteHit>();
+                ScanTargetKeys = scanTargetKeys ?? new List<string>();
             }
 
             public static SignatureChangeGateResult NoWork()
             {
-                return new SignatureChangeGateResult(false, null, false, null, null, null);
+                return new SignatureChangeGateResult(
+                    false, null, false, false, null, null, null, null, null);
             }
 
-            public static SignatureChangeGateResult WarningsOnly(List<string> warnings)
+            public static SignatureChangeGateResult WarningsOnly(
+                List<string> warnings,
+                List<HotReloadCallSiteScanner.CallSiteHit> hits,
+                List<string> scanTargetKeys)
             {
-                return new SignatureChangeGateResult(false, null, false, null, null, warnings);
+                return new SignatureChangeGateResult(
+                    false, null, false, true, null, null, warnings, hits, scanTargetKeys);
             }
 
-            public static SignatureChangeGateResult Failed(string failureMessage, List<string> warnings)
+            public static SignatureChangeGateResult Failed(string failureMessage)
             {
-                return new SignatureChangeGateResult(true, failureMessage, false, null, null, warnings);
+                return new SignatureChangeGateResult(
+                    true, failureMessage, false, false, null, null, null, null, null);
             }
 
             public static SignatureChangeGateResult Retried(
                 HotReloadShimIsolationResult isolation,
                 List<HotReloadMethodOutcome> skippedOutcomes,
-                List<string> warnings)
+                List<string> warnings,
+                List<HotReloadCallSiteScanner.CallSiteHit> hits,
+                List<string> scanTargetKeys)
             {
                 return new SignatureChangeGateResult(
                     false,
                     null,
                     true,
+                    true,
                     isolation,
                     skippedOutcomes,
-                    warnings);
+                    warnings,
+                    hits,
+                    scanTargetKeys);
             }
         }
 

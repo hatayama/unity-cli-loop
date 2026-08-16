@@ -821,7 +821,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Reconstructed fixture source omits compiled members once.");
             int staleSignatureCount = CountWarningsContaining(
                 result.Warnings,
-                "Compiled code outside this file still calls the removed signature");
+                "Compiled code outside this hot reload still calls the removed signature");
             Assert.That(
                 result.Warnings.Count,
                 Is.EqualTo(3 + staleSignatureCount),
@@ -938,7 +938,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Duplicate file inputs each emit a removed-members warning.");
             int staleSignatureCount = CountWarningsContaining(
                 result.Warnings,
-                "Compiled code outside this file still calls the removed signature");
+                "Compiled code outside this hot reload still calls the removed signature");
             Assert.That(
                 result.Warnings.Count,
                 Is.EqualTo(5 + staleSignatureCount),
@@ -2182,6 +2182,173 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the coverage recheck reports no loss when the covering caller stays in the
+        /// final apply set with the replacement.
+        /// </summary>
+        [Test]
+        public void FindSignatureChangeCoverageLosses_CoveredCallerRemains_ReturnsEmpty()
+        {
+            TransformWorkerEntryDto replacement = CreateReplacementEntry("Host", "Target");
+            TransformWorkerEntryDto caller = CreateOrdinaryEntry("Host", "Caller");
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = new List<HotReloadCallSiteScanner.CallSiteHit>
+            {
+                CreateCallSiteHit("Host::Caller(System.Int32)", "Host::Target(System.Int32)")
+            };
+
+            List<string> lost = HotReloadOrchestrator.FindSignatureChangeCoverageLosses(
+                new[] { replacement, caller },
+                hits,
+                new[] { "Host::Target(System.Int32)" });
+
+            Assert.That(lost, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: the coverage recheck reports the replacement when its covering caller key
+        /// dropped out of the final apply set.
+        /// </summary>
+        [Test]
+        public void FindSignatureChangeCoverageLosses_CallerKeyDropped_ReturnsReplacementKey()
+        {
+            TransformWorkerEntryDto replacement = CreateReplacementEntry("Host", "Target");
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = new List<HotReloadCallSiteScanner.CallSiteHit>
+            {
+                CreateCallSiteHit("Host::Caller(System.Int32)", "Host::Target(System.Int32)")
+            };
+
+            List<string> lost = HotReloadOrchestrator.FindSignatureChangeCoverageLosses(
+                new[] { replacement },
+                hits,
+                new[] { "Host::Target(System.Int32)" });
+
+            Assert.That(lost, Is.EqualTo(new[] { "Host::Target(System.Int32)" }));
+        }
+
+        /// <summary>
+        /// What: an unchanged same-file caller that only needs an implicit int-to-long conversion
+        /// is not an apply entry, so the return-type change is skipped with the hot-reload wording.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_UnchangedSameFileCaller_SkipsReplacement()
+        {
+            string fixturePath = ResolveSignatureChangeUnchangedCallerFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int Target(int value)\n        {\n            return value;\n        }",
+                "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeUnchangedCaller.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            string expectedLabel =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeUnchangedCallerFixture.Target(System.Int32)";
+            AssertHasSkipped(
+                result,
+                nameof(HotReloadSignatureChangeUnchangedCallerFixture.Target),
+                string.Format(
+                    HotReloadConstants.SignatureChangedGateSkipReasonFormat,
+                    expectedLabel));
+        }
+
+        /// <summary>
+        /// What: deleting a same-file helper that called Target does not gate Target's return-type
+        /// change when no other compiled caller remains.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_DeletedHelperCaller_AppliesReplacement()
+        {
+            string fixturePath = ResolveSignatureChangeHelperDeleteFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "\n\n        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                    + "        public int Helper(int value)\n        {\n            return Target(value);\n        }",
+                    string.Empty,
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            Assert.That(edited, Does.Not.Contain("public int Helper"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeHelperDelete.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, nameof(HotReloadSignatureChangeHelperDeleteFixture.Target));
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Skipped),
+                    "Helper deletion must not gate Target.\n" + FormatOutcomes(result));
+            }
+        }
+
+        /// <summary>
+        /// What: after the gate passes because the same-file caller is an entry, a shim compile
+        /// failure on only that caller drops it from the retry set and the coverage recheck
+        /// fails the file instead of applying the replacement.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_CallerShimCompileFailure_FailsCoverageRecheck()
+        {
+            string fixturePath = ResolveSignatureChangeSameFileFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value) + MissingHelperAddedByEdit(value);\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeCallerCompileFailure.cs", edited),
+                CancellationToken.None);
+
+            string expectedReplacementKey =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeSameFileFixture::Target(System.Int32)";
+            string expectedReason = string.Format(
+                HotReloadConstants.SignatureChangeCoverageLostFailureFormat,
+                expectedReplacementKey);
+            bool foundGateFailure = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method == "(signature-change-gate)"
+                    && outcome.Reason == expectedReason)
+                {
+                    foundGateFailure = true;
+                }
+
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Added),
+                    "Coverage loss must not apply the replacement.\n" + FormatOutcomes(result));
+            }
+
+            Assert.That(
+                foundGateFailure,
+                Is.True,
+                "Expected file Failed (signature-change-gate).\n" + FormatOutcomes(result));
+        }
+
+        /// <summary>
         /// What: after applying an added method, a later hot-reload against the on-disk baseline
         /// (all-unchanged) clears that file's added-member ledger so --status and Play warnings
         /// do not keep counting it.
@@ -2631,6 +2798,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Signature-change external host source missing: " + path);
             return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSignatureChangeUnchangedCallerFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSignatureChangeUnchangedCallerFixture.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Signature-change unchanged-caller fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSignatureChangeHelperDeleteFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSignatureChangeHelperDeleteFixture.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Signature-change helper-delete fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static TransformWorkerEntryDto CreateReplacementEntry(string typeName, string methodName)
+        {
+            return new TransformWorkerEntryDto
+            {
+                typeMetadataName = typeName,
+                methodName = methodName,
+                parameterTypeFullNames = new[] { "System.Int32" },
+                replacesCompiledMethod = true,
+                patchKind = HotReloadConstants.PatchKindAddedMethod
+            };
+        }
+
+        private static TransformWorkerEntryDto CreateOrdinaryEntry(string typeName, string methodName)
+        {
+            return new TransformWorkerEntryDto
+            {
+                typeMetadataName = typeName,
+                methodName = methodName,
+                parameterTypeFullNames = new[] { "System.Int32" },
+                replacesCompiledMethod = false
+            };
+        }
+
+        private static HotReloadCallSiteScanner.CallSiteHit CreateCallSiteHit(
+            string callerMethodKey,
+            string targetMethodKey)
+        {
+            return new HotReloadCallSiteScanner.CallSiteHit
+            {
+                CallerMethodKey = callerMethodKey,
+                TargetMethodKey = targetMethodKey
+            };
         }
 
         private static string WithSameFileReturnTypeChange(string onDisk)

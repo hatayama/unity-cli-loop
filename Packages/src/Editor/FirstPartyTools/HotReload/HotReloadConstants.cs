@@ -70,13 +70,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "Run 'uloop compile'.";
 
         public const string SignatureChangedGateSkipReasonFormat =
-            "The return type of '{0}' changed, but compiled code outside this file still calls the old method. Applying it would leave those callers on the old version. Run 'uloop compile'.";
+            "The return type of '{0}' changed, but compiled code outside this hot reload still calls the old method. Applying it would leave those callers on the old version. Run 'uloop compile'.";
 
         public const string SignatureChangedGatedCallerSkipReason =
-            "Calls a method whose signature change was not applied because compiled callers exist outside this file; this caller was left unpatched. Run 'uloop compile'.";
+            "Calls a method whose signature change was not applied because compiled callers exist outside this hot reload; this caller was left unpatched. Run 'uloop compile'.";
 
         public const string StaleSignatureCallersWarningFormat =
-            "Compiled code outside this file still calls the removed signature '{0}': {1}. Those call sites keep the previous behavior until 'uloop compile'.";
+            "Compiled code outside this hot reload still calls the removed signature '{0}': {1}. Those call sites keep the previous behavior until 'uloop compile'.";
+
+        public const string SignatureChangeCoverageLostFailureFormat =
+            "Isolation excluded compiled callers of '{0}'; applying the rest would leave those callers on the old version. Run 'uloop compile'.";
 
         // Wire value for TransformWorkerRemovedMemberDto.kind.
         // Keep in sync with RemovedMemberKinds in TransformWorker~/TransformWorker.cs.
