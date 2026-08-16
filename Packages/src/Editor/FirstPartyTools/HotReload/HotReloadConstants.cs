@@ -70,13 +70,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "Run 'uloop compile'.";
 
         public const string SignatureChangedGateSkipReasonFormat =
-            "The return type of '{0}' changed, but compiled code outside this hot reload still calls the old method. Applying it would leave those callers on the old version. Run 'uloop compile'.";
+            "The return type of '{0}' changed, but this hot reload does not patch every compiled call site of the old method. Applying it would leave those call sites on the old version. Run 'uloop compile'.";
 
         public const string SignatureChangedGatedCallerSkipReason =
-            "Calls a method whose signature change was not applied because compiled callers exist outside this hot reload; this caller was left unpatched. Run 'uloop compile'.";
+            "Calls a method whose signature change was not applied because unpatched compiled call sites remain; this caller was left unpatched too. Run 'uloop compile'.";
 
         public const string StaleSignatureCallersWarningFormat =
-            "Compiled code outside this hot reload still calls the removed signature '{0}': {1}. Those call sites keep the previous behavior until 'uloop compile'.";
+            "Compiled call sites of the removed signature '{0}' are not patched by this hot reload: {1}. They keep the previous behavior until 'uloop compile'.";
 
         public const string SignatureChangeCoverageLostFailureFormat =
             "Isolation excluded compiled callers of '{0}'; applying the rest would leave those callers on the old version. Run 'uloop compile'.";
