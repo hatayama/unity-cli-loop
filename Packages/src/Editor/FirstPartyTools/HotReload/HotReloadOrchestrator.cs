@@ -254,7 +254,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
             RevertUnchangedPatches(assemblyName, unchangedMethods);
 
-            if (string.IsNullOrEmpty(workerOutput.shimSource)
+            SignatureChangeGateResult gateResult = await TryApplySignatureChangeGateAsync(
+                projectRoot,
+                assemblyName,
+                workerInput,
+                workerOutput,
+                compilationAssembly,
+                targetDllPath,
+                defines,
+                assemblyResolvePath,
+                ct).ConfigureAwait(false);
+            if (gateResult.FileFailed)
+            {
+                // Why not apply first-pass entries: a gate retry null means the replacement was
+                // not isolated. Falling through would apply the unguarded return-type change.
+                outcomes.Add(
+                    HotReloadMethodOutcome.Failed(
+                        "(signature-change-gate)",
+                        gateResult.FailureMessage,
+                        assemblyResolvePath));
+                return new HotReloadFileProcessResult(
+                    outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
+            }
+
+            outcomes.AddRange(gateResult.SkippedOutcomes);
+            warnings.AddRange(gateResult.Warnings);
+
+            TransformWorkerEntryDto[] entriesToPatch;
+            HotReloadShimCompileResult compileResult;
+            if (gateResult.UsedWorkerRetry)
+            {
+                if (gateResult.Isolation.RetryEntries.Length == 0)
+                {
+                    return new HotReloadFileProcessResult(
+                        outcomes,
+                        warnings,
+                        0,
+                        suppressedPausePointIds,
+                        new List<string>(),
+                        unchangedMethodCount,
+                        retargetedPausePointIds);
+                }
+
+                entriesToPatch = gateResult.Isolation.RetryEntries;
+                compileResult = gateResult.Isolation.RetryCompileResult;
+            }
+            else if (string.IsNullOrEmpty(workerOutput.shimSource)
                 || workerOutput.entries == null
                 || workerOutput.entries.Length == 0)
             {
@@ -267,77 +312,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new HotReloadFileProcessResult(
                     outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
             }
-
-            // BuildShimReferencePaths reads Application.dataPath / platform; stay on main thread.
-            await MainThreadSwitcher.SwitchToMainThread(ct);
-            bool includeHarmonyReference = NeedsHarmonyReference(workerOutput);
-            bool includeAddedFieldStoreReference = NeedsAddedFieldStoreReference(workerOutput);
-            ShimReferencePathsResult shimReferencePaths = TryBuildShimReferencePaths(
-                compilationAssembly,
-                targetDllPath,
-                includeHarmonyReference,
-                includeAddedFieldStoreReference);
-            if (shimReferencePaths.ErrorMessage != null)
+            else
             {
-                outcomes.Add(
-                    HotReloadMethodOutcome.Failed(
-                        "(file)",
-                        shimReferencePaths.ErrorMessage,
-                        assemblyResolvePath));
-                return new HotReloadFileProcessResult(
-                    outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
-            }
-
-            List<string> shimReferences = shimReferencePaths.References;
-            HotReloadShimCompileResult compileResult = await HotReloadShimCompiler.CompileAndLoadAsync(
-                workerOutput.shimSource,
-                shimReferences,
-                defines,
-                projectRelativePath,
-                ct).ConfigureAwait(false);
-
-            TransformWorkerEntryDto[] entriesToPatch = workerOutput.entries;
-            if (!compileResult.Success)
-            {
-                HotReloadShimIsolationResult isolation = await TryIsolateShimCompileFailureAsync(
+                ShimFirstCompileResult firstCompile = await CompileShimFirstPassAsync(
                     workerInput,
                     workerOutput,
-                    compileResult,
                     compilationAssembly,
                     targetDllPath,
                     defines,
                     assemblyResolvePath,
                     ct).ConfigureAwait(false);
-                if (isolation == null)
+                if (firstCompile.FileFailed)
                 {
-                    // Why: CompileAndLoadAsync appends "(line N)" only for diagnostics whose
-                    // #line-mapped file matches projectRelativePath — scaffold-only errors stay
-                    // bare. Single-entry failures skip isolation and always take this path.
-                    // Why attribute single-entry failures: "(shim-compile)" hides which method
-                    // body failed when the agent edited only one method.
-                    string failureMethodLabel = "(shim-compile)";
-                    if (entriesToPatch.Length == 1)
-                    {
-                        TransformWorkerEntryDto soleEntry = entriesToPatch[0];
-                        failureMethodLabel = HotReloadPatcher.FormatMethodKeyParts(
-                            soleEntry.typeMetadataName,
-                            soleEntry.methodName,
-                            soleEntry.parameterTypeFullNames ?? Array.Empty<string>(),
-                            genericArity: 0);
-                    }
-
-                    outcomes.Add(
-                        HotReloadMethodOutcome.Failed(
-                            failureMethodLabel,
-                            compileResult.ErrorMessage,
-                            assemblyResolvePath));
+                    outcomes.AddRange(firstCompile.Outcomes);
                     return new HotReloadFileProcessResult(
                         outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
                 }
 
-                outcomes.AddRange(isolation.FailedMethodOutcomes);
-                outcomes.AddRange(isolation.SkippedCallerOutcomes);
-                if (isolation.RetryEntries.Length == 0)
+                outcomes.AddRange(firstCompile.Outcomes);
+                if (firstCompile.EntriesToPatch.Length == 0)
                 {
                     return new HotReloadFileProcessResult(
                         outcomes,
@@ -349,8 +342,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         retargetedPausePointIds);
                 }
 
-                entriesToPatch = isolation.RetryEntries;
-                compileResult = isolation.RetryCompileResult;
+                entriesToPatch = firstCompile.EntriesToPatch;
+                compileResult = firstCompile.CompileResult;
+            }
+
+            if (gateResult.DidScan)
+            {
+                // Why after entriesToPatch is final and before Harmony: isolation or a gate
+                // retry can drop a covering caller without dropping the replacement. A third
+                // worker run is not allowed (max two); fail the file instead of applying.
+                List<string> lostReplacementKeys = FindSignatureChangeCoverageLosses(
+                    entriesToPatch,
+                    gateResult.Hits,
+                    gateResult.ScanTargetKeys);
+                if (lostReplacementKeys.Count > 0)
+                {
+                    outcomes.Add(
+                        HotReloadMethodOutcome.Failed(
+                            "(signature-change-gate)",
+                            string.Format(
+                                HotReloadConstants.SignatureChangeCoverageLostFailureFormat,
+                                string.Join(", ", lostReplacementKeys)),
+                            assemblyResolvePath));
+                    return new HotReloadFileProcessResult(
+                        outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
+                }
             }
 
             // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
@@ -951,8 +967,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // and HotReloadCallSiteScanner.CreateHit.
         private static string BuildMethodKey(TransformWorkerEntryDto entry)
         {
-            return entry.typeMetadataName + "::" + entry.methodName + "("
-                + string.Join(",", entry.parameterTypeFullNames ?? Array.Empty<string>()) + ")";
+            return BuildMethodKeyParts(
+                entry.typeMetadataName,
+                entry.methodName,
+                entry.parameterTypeFullNames);
+        }
+
+        private static string BuildMethodKeyParts(
+            string typeMetadataName,
+            string methodName,
+            string[] parameterTypeFullNames)
+        {
+            return typeMetadataName + "::" + methodName + "("
+                + string.Join(",", parameterTypeFullNames ?? Array.Empty<string>()) + ")";
         }
 
         /// <summary>
@@ -997,9 +1024,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerOutput.entries);
             List<HotReloadMethodOutcome> skippedCallerOutcomes = BuildSkippedCallerOutcomes(
                 exclusions.CallerEntries,
-                assemblyResolvePath);
+                assemblyResolvePath,
+                HotReloadConstants.IsolatedAddedMethodCallerSkipReason);
 
-            return await RunIsolationRetryAsync(
+            IsolationRetryRunResult retry = await RunIsolationRetryAsync(
                 workerInput,
                 exclusions,
                 failedMethodOutcomes,
@@ -1008,9 +1036,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetDllPath,
                 defines,
                 ct).ConfigureAwait(false);
+            return retry.Isolation;
         }
 
-        private static async Task<HotReloadShimIsolationResult> RunIsolationRetryAsync(
+        private static async Task<IsolationRetryRunResult> RunIsolationRetryAsync(
             TransformWorkerInputDto workerInput,
             IsolationExclusions exclusions,
             List<HotReloadMethodOutcome> failedMethodOutcomes,
@@ -1039,7 +1068,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 await TransformWorkerClient.RunAsync(retryInput, ct).ConfigureAwait(false);
             if (!retryWorkerResult.Success)
             {
-                return null;
+                return IsolationRetryRunResult.Failed(
+                    "Retry worker failed: " + retryWorkerResult.ErrorMessage);
             }
 
             // The first run already surfaced parseErrors / skipped / drift warnings; consuming
@@ -1047,11 +1077,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerOutputDto retryOutput = retryWorkerResult.Output;
             if (string.IsNullOrEmpty(retryOutput.shimSource) || retryOutput.entries.Length == 0)
             {
-                return new HotReloadShimIsolationResult(
-                    failedMethodOutcomes,
-                    skippedCallerOutcomes,
-                    Array.Empty<TransformWorkerEntryDto>(),
-                    null);
+                return IsolationRetryRunResult.Succeeded(
+                    new HotReloadShimIsolationResult(
+                        failedMethodOutcomes,
+                        skippedCallerOutcomes,
+                        Array.Empty<TransformWorkerEntryDto>(),
+                        null));
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -1066,7 +1097,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 // First-pass publicize already succeeded, so a miss here is rare; abandon
                 // isolation the same way as a retry compile failure.
-                return null;
+                return IsolationRetryRunResult.Failed(
+                    "Retry could not build shim references: " + shimReferencePaths.ErrorMessage);
             }
 
             List<string> shimReferences = shimReferencePaths.References;
@@ -1078,14 +1110,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ct).ConfigureAwait(false);
             if (!retryCompileResult.Success)
             {
-                return null;
+                return IsolationRetryRunResult.Failed(
+                    "Retry shim compile failed: " + retryCompileResult.ErrorMessage);
             }
 
-            return new HotReloadShimIsolationResult(
-                failedMethodOutcomes,
-                skippedCallerOutcomes,
-                retryOutput.entries,
-                retryCompileResult);
+            return IsolationRetryRunResult.Succeeded(
+                new HotReloadShimIsolationResult(
+                    failedMethodOutcomes,
+                    skippedCallerOutcomes,
+                    retryOutput.entries,
+                    retryCompileResult));
         }
 
         private static List<HotReloadMethodOutcome> BuildFailedMethodOutcomes(
@@ -1142,45 +1176,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 failedEntryKeys.Add(BuildMethodKey(failedEntry));
             }
 
-            if (failedAddedMethodKeys.Count > 0 && allEntries != null)
+            List<TransformWorkerEntryDto> callers = CollectCallerEntriesOfAddedMethods(
+                failedAddedMethodKeys,
+                failedEntryKeys,
+                allEntries);
+            foreach (TransformWorkerEntryDto entry in callers)
             {
-                foreach (TransformWorkerEntryDto entry in allEntries)
+                excludedCallerEntries.Add(entry);
+                string callerKey = BuildMethodKey(entry);
+                if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod)
                 {
-                    if (entry.calledAddedMethodKeys == null)
-                    {
-                        continue;
-                    }
-
-                    string callerKey = BuildMethodKey(entry);
-                    if (failedEntryKeys.Contains(callerKey))
-                    {
-                        continue;
-                    }
-
-                    bool callsFailedAdded = false;
-                    foreach (string calledKey in entry.calledAddedMethodKeys)
-                    {
-                        if (failedAddedMethodKeys.Contains(calledKey))
-                        {
-                            callsFailedAdded = true;
-                            break;
-                        }
-                    }
-
-                    if (!callsFailedAdded)
-                    {
-                        continue;
-                    }
-
-                    excludedCallerEntries.Add(entry);
-                    if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod)
-                    {
-                        excludedAddedMethodKeys.Add(callerKey);
-                    }
-                    else
-                    {
-                        excludedKeys.Add(callerKey);
-                    }
+                    excludedAddedMethodKeys.Add(callerKey);
+                }
+                else
+                {
+                    excludedKeys.Add(callerKey);
                 }
             }
 
@@ -1194,9 +1204,55 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 excludedCallerEntries);
         }
 
+        private static List<TransformWorkerEntryDto> CollectCallerEntriesOfAddedMethods(
+            HashSet<string> addedMethodKeys,
+            HashSet<string> alreadyExcludedEntryKeys,
+            TransformWorkerEntryDto[] allEntries)
+        {
+            List<TransformWorkerEntryDto> callerEntries = new List<TransformWorkerEntryDto>();
+            if (addedMethodKeys.Count == 0 || allEntries == null)
+            {
+                return callerEntries;
+            }
+
+            foreach (TransformWorkerEntryDto entry in allEntries)
+            {
+                if (entry.calledAddedMethodKeys == null)
+                {
+                    continue;
+                }
+
+                string callerKey = BuildMethodKey(entry);
+                if (alreadyExcludedEntryKeys.Contains(callerKey))
+                {
+                    continue;
+                }
+
+                bool callsAdded = false;
+                foreach (string calledKey in entry.calledAddedMethodKeys)
+                {
+                    if (addedMethodKeys.Contains(calledKey))
+                    {
+                        callsAdded = true;
+                        break;
+                    }
+                }
+
+                if (!callsAdded)
+                {
+                    continue;
+                }
+
+                callerEntries.Add(entry);
+            }
+
+            return callerEntries;
+        }
+
         private static List<HotReloadMethodOutcome> BuildSkippedCallerOutcomes(
             IReadOnlyList<TransformWorkerEntryDto> callerEntries,
-            string assemblyResolvePath)
+            string assemblyResolvePath,
+            string skipReason)
         {
             List<HotReloadMethodOutcome> skippedCallerOutcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto caller in callerEntries)
@@ -1209,11 +1265,444 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 skippedCallerOutcomes.Add(
                     HotReloadMethodOutcome.Skipped(
                         methodLabel,
-                        HotReloadConstants.IsolatedAddedMethodCallerSkipReason,
+                        skipReason,
                         assemblyResolvePath));
             }
 
             return skippedCallerOutcomes;
+        }
+
+        /// <summary>
+        /// First shim compile plus optional compile-failure isolation. Signature-change gate
+        /// retries never call this — they already consumed the one worker retry.
+        /// </summary>
+        private static async Task<ShimFirstCompileResult> CompileShimFirstPassAsync(
+            TransformWorkerInputDto workerInput,
+            TransformWorkerOutputDto workerOutput,
+            UnityCompilationAssembly compilationAssembly,
+            string targetDllPath,
+            string[] defines,
+            string assemblyResolvePath,
+            CancellationToken ct)
+        {
+            // BuildShimReferencePaths reads Application.dataPath / platform; stay on main thread.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            bool includeHarmonyReference = NeedsHarmonyReference(workerOutput);
+            bool includeAddedFieldStoreReference = NeedsAddedFieldStoreReference(workerOutput);
+            ShimReferencePathsResult shimReferencePaths = TryBuildShimReferencePaths(
+                compilationAssembly,
+                targetDllPath,
+                includeHarmonyReference,
+                includeAddedFieldStoreReference);
+            if (shimReferencePaths.ErrorMessage != null)
+            {
+                return ShimFirstCompileResult.Failed(
+                    HotReloadMethodOutcome.Failed(
+                        "(file)",
+                        shimReferencePaths.ErrorMessage,
+                        assemblyResolvePath));
+            }
+
+            List<string> shimReferences = shimReferencePaths.References;
+            HotReloadShimCompileResult compileResult = await HotReloadShimCompiler.CompileAndLoadAsync(
+                workerOutput.shimSource,
+                shimReferences,
+                defines,
+                workerInput.projectRelativePath,
+                ct).ConfigureAwait(false);
+
+            TransformWorkerEntryDto[] entriesToPatch = workerOutput.entries;
+            if (compileResult.Success)
+            {
+                return ShimFirstCompileResult.Succeeded(entriesToPatch, compileResult);
+            }
+
+            // Why isolate only here: a signature-change gate retry already used
+            // RunIsolationRetryAsync (worker run #2). Calling isolation after that would be a
+            // third worker run. Gate retry compile failures return Failed from the gate and
+            // never reach this first-compile path.
+            HotReloadShimIsolationResult isolation = await TryIsolateShimCompileFailureAsync(
+                workerInput,
+                workerOutput,
+                compileResult,
+                compilationAssembly,
+                targetDllPath,
+                defines,
+                assemblyResolvePath,
+                ct).ConfigureAwait(false);
+            if (isolation == null)
+            {
+                // Why: CompileAndLoadAsync appends "(line N)" only for diagnostics whose
+                // #line-mapped file matches projectRelativePath — scaffold-only errors stay
+                // bare. Single-entry failures skip isolation and always take this path.
+                // Why attribute single-entry failures: "(shim-compile)" hides which method
+                // body failed when the agent edited only one method.
+                string failureMethodLabel = "(shim-compile)";
+                if (entriesToPatch.Length == 1)
+                {
+                    TransformWorkerEntryDto soleEntry = entriesToPatch[0];
+                    failureMethodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                        soleEntry.typeMetadataName,
+                        soleEntry.methodName,
+                        soleEntry.parameterTypeFullNames ?? Array.Empty<string>(),
+                        genericArity: 0);
+                }
+
+                return ShimFirstCompileResult.Failed(
+                    HotReloadMethodOutcome.Failed(
+                        failureMethodLabel,
+                        compileResult.ErrorMessage,
+                        assemblyResolvePath));
+            }
+
+            List<HotReloadMethodOutcome> isolationOutcomes = new List<HotReloadMethodOutcome>();
+            isolationOutcomes.AddRange(isolation.FailedMethodOutcomes);
+            isolationOutcomes.AddRange(isolation.SkippedCallerOutcomes);
+            if (isolation.RetryEntries.Length == 0)
+            {
+                return ShimFirstCompileResult.SucceededEmpty(isolationOutcomes);
+            }
+
+            return ShimFirstCompileResult.Succeeded(
+                isolation.RetryEntries,
+                isolation.RetryCompileResult,
+                isolationOutcomes);
+        }
+
+        /// <summary>
+        /// Scans compiled call sites after worker #1 and before the first shim compile. No
+        /// trigger means the scanner is not called.
+        /// </summary>
+        private static async Task<SignatureChangeGateResult> TryApplySignatureChangeGateAsync(
+            string projectRoot,
+            string assemblyName,
+            TransformWorkerInputDto workerInput,
+            TransformWorkerOutputDto workerOutput,
+            UnityCompilationAssembly compilationAssembly,
+            string targetDllPath,
+            string[] defines,
+            string assemblyResolvePath,
+            CancellationToken ct)
+        {
+            TransformWorkerEntryDto[] entries = workerOutput.entries ?? Array.Empty<TransformWorkerEntryDto>();
+            TransformWorkerRemovedMethodSignatureDto[] removedSignatures =
+                workerOutput.removedMethodSignatures
+                ?? Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
+            List<TransformWorkerEntryDto> replacementEntries = CollectReplacementEntries(entries);
+            if (replacementEntries.Count == 0 && removedSignatures.Length == 0)
+            {
+                return SignatureChangeGateResult.NoWork();
+            }
+
+            HotReloadCallSiteScanner.CompiledMethodIdentity[] targets = CollectScanTargets(
+                assemblyName,
+                replacementEntries,
+                removedSignatures);
+            List<HotReloadCallSiteScanner.CallSiteHit> hits =
+                HotReloadCallSiteScanner.FindCallSites(projectRoot, targets);
+            HashSet<string> coveredKeys = CollectCoveredMethodKeys(entries, targets);
+            Dictionary<string, List<string>> uncoveredCallersByTarget =
+                CollectUncoveredCallersByTarget(hits, coveredKeys);
+
+            List<string> staleWarnings = CollectStaleSignatureWarnings(
+                removedSignatures,
+                uncoveredCallersByTarget);
+            List<TransformWorkerEntryDto> gatedReplacements = CollectGatedReplacementEntries(
+                replacementEntries,
+                uncoveredCallersByTarget);
+            if (gatedReplacements.Count == 0)
+            {
+                return SignatureChangeGateResult.WarningsOnly(
+                    staleWarnings,
+                    hits,
+                    CollectScanTargetKeys(targets));
+            }
+
+            IsolationExclusions exclusions = BuildIsolationExclusions(gatedReplacements, entries);
+            List<HotReloadMethodOutcome> skippedOutcomes = BuildGatedReplacementSkipOutcomes(
+                gatedReplacements,
+                assemblyResolvePath);
+            skippedOutcomes.AddRange(
+                BuildSkippedCallerOutcomes(
+                    exclusions.CallerEntries,
+                    assemblyResolvePath,
+                    HotReloadConstants.SignatureChangedGatedCallerSkipReason));
+
+            IsolationRetryRunResult retry = await RunIsolationRetryAsync(
+                workerInput,
+                exclusions,
+                new List<HotReloadMethodOutcome>(),
+                new List<HotReloadMethodOutcome>(),
+                compilationAssembly,
+                targetDllPath,
+                defines,
+                ct).ConfigureAwait(false);
+            if (retry.Isolation == null)
+            {
+                return SignatureChangeGateResult.Failed(retry.FailureMessage);
+            }
+
+            return SignatureChangeGateResult.Retried(
+                retry.Isolation,
+                skippedOutcomes,
+                staleWarnings,
+                hits,
+                CollectScanTargetKeys(targets));
+        }
+
+        private static List<TransformWorkerEntryDto> CollectReplacementEntries(
+            TransformWorkerEntryDto[] entries)
+        {
+            List<TransformWorkerEntryDto> replacements = new List<TransformWorkerEntryDto>();
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                if (entry.replacesCompiledMethod)
+                {
+                    replacements.Add(entry);
+                }
+            }
+
+            return replacements;
+        }
+
+        private static HotReloadCallSiteScanner.CompiledMethodIdentity[] CollectScanTargets(
+            string assemblyName,
+            IReadOnlyList<TransformWorkerEntryDto> replacementEntries,
+            TransformWorkerRemovedMethodSignatureDto[] removedSignatures)
+        {
+            List<HotReloadCallSiteScanner.CompiledMethodIdentity> targets =
+                new List<HotReloadCallSiteScanner.CompiledMethodIdentity>();
+            HashSet<string> seenKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto entry in replacementEntries)
+            {
+                TryAddScanTarget(
+                    targets,
+                    seenKeys,
+                    assemblyName,
+                    entry.typeMetadataName,
+                    entry.methodName,
+                    entry.parameterTypeFullNames);
+            }
+
+            foreach (TransformWorkerRemovedMethodSignatureDto signature in removedSignatures)
+            {
+                TryAddScanTarget(
+                    targets,
+                    seenKeys,
+                    assemblyName,
+                    signature.typeMetadataName,
+                    signature.methodName,
+                    signature.parameterTypeFullNames);
+            }
+
+            return targets.ToArray();
+        }
+
+        private static void TryAddScanTarget(
+            List<HotReloadCallSiteScanner.CompiledMethodIdentity> targets,
+            HashSet<string> seenKeys,
+            string assemblyName,
+            string typeMetadataName,
+            string methodName,
+            string[] parameterTypeFullNames)
+        {
+            string methodKey = BuildMethodKeyParts(typeMetadataName, methodName, parameterTypeFullNames);
+            if (!seenKeys.Add(methodKey))
+            {
+                return;
+            }
+
+            targets.Add(
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    assemblyName,
+                    typeMetadataName,
+                    methodName,
+                    parameterTypeFullNames ?? Array.Empty<string>()));
+        }
+
+        private static HashSet<string> CollectCoveredMethodKeys(
+            TransformWorkerEntryDto[] entries,
+            HotReloadCallSiteScanner.CompiledMethodIdentity[] targets)
+        {
+            HashSet<string> coveredKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                coveredKeys.Add(BuildMethodKey(entry));
+            }
+
+            foreach (HotReloadCallSiteScanner.CompiledMethodIdentity target in targets)
+            {
+                // Why include removed-signature targets: a deleted helper that called the
+                // replaced method is already stale (removed-members warning). Treating that
+                // corpse as uncovered would gate a same-file helper-delete + return-type
+                // change, which is still a consistent old world. Fail-closed only for live
+                // compiled callers that will keep invoking the old method.
+                coveredKeys.Add(
+                    BuildMethodKeyParts(
+                        target.TypeMetadataName,
+                        target.MethodName,
+                        target.ParameterTypeFullNames));
+            }
+
+            return coveredKeys;
+        }
+
+        private static Dictionary<string, List<string>> CollectUncoveredCallersByTarget(
+            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            HashSet<string> coveredKeys)
+        {
+            Dictionary<string, List<string>> uncoveredCallersByTarget =
+                new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+            {
+                if (coveredKeys.Contains(hit.CallerMethodKey))
+                {
+                    continue;
+                }
+
+                if (!uncoveredCallersByTarget.TryGetValue(hit.TargetMethodKey, out List<string> callers))
+                {
+                    callers = new List<string>();
+                    uncoveredCallersByTarget.Add(hit.TargetMethodKey, callers);
+                }
+
+                if (!callers.Contains(hit.CallerMethodKey))
+                {
+                    callers.Add(hit.CallerMethodKey);
+                }
+            }
+
+            return uncoveredCallersByTarget;
+        }
+
+        private static List<string> CollectStaleSignatureWarnings(
+            TransformWorkerRemovedMethodSignatureDto[] removedSignatures,
+            Dictionary<string, List<string>> uncoveredCallersByTarget)
+        {
+            List<string> warnings = new List<string>();
+            foreach (TransformWorkerRemovedMethodSignatureDto signature in removedSignatures)
+            {
+                string methodKey = BuildMethodKeyParts(
+                    signature.typeMetadataName,
+                    signature.methodName,
+                    signature.parameterTypeFullNames);
+                if (!uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> callers)
+                    || callers.Count == 0)
+                {
+                    continue;
+                }
+
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.StaleSignatureCallersWarningFormat,
+                        methodKey,
+                        string.Join(", ", callers)));
+            }
+
+            return warnings;
+        }
+
+        /// <summary>
+        /// Rechecks scan hits against the final apply set. Returns replacement keys that would
+        /// still have uncovered compiled callers after isolation or a gate retry shrank entries.
+        /// </summary>
+        internal static List<string> FindSignatureChangeCoverageLosses(
+            TransformWorkerEntryDto[] entriesToPatch,
+            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            IReadOnlyList<string> scanTargetKeys)
+        {
+            Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
+            Debug.Assert(hits != null, "hits must not be null.");
+            Debug.Assert(scanTargetKeys != null, "scanTargetKeys must not be null.");
+
+            HashSet<string> coveredKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto entry in entriesToPatch)
+            {
+                coveredKeys.Add(BuildMethodKey(entry));
+            }
+
+            foreach (string targetKey in scanTargetKeys)
+            {
+                coveredKeys.Add(targetKey);
+            }
+
+            Dictionary<string, List<string>> uncoveredCallersByTarget =
+                CollectUncoveredCallersByTarget(hits, coveredKeys);
+            List<string> lostReplacementKeys = new List<string>();
+            foreach (TransformWorkerEntryDto entry in entriesToPatch)
+            {
+                if (!entry.replacesCompiledMethod)
+                {
+                    continue;
+                }
+
+                string methodKey = BuildMethodKey(entry);
+                if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> callers)
+                    && callers.Count > 0)
+                {
+                    lostReplacementKeys.Add(methodKey);
+                }
+            }
+
+            return lostReplacementKeys;
+        }
+
+        private static List<string> CollectScanTargetKeys(
+            HotReloadCallSiteScanner.CompiledMethodIdentity[] targets)
+        {
+            List<string> keys = new List<string>(targets.Length);
+            foreach (HotReloadCallSiteScanner.CompiledMethodIdentity target in targets)
+            {
+                keys.Add(
+                    BuildMethodKeyParts(
+                        target.TypeMetadataName,
+                        target.MethodName,
+                        target.ParameterTypeFullNames));
+            }
+
+            return keys;
+        }
+
+        private static List<TransformWorkerEntryDto> CollectGatedReplacementEntries(
+            IReadOnlyList<TransformWorkerEntryDto> replacementEntries,
+            Dictionary<string, List<string>> uncoveredCallersByTarget)
+        {
+            List<TransformWorkerEntryDto> gated = new List<TransformWorkerEntryDto>();
+            foreach (TransformWorkerEntryDto entry in replacementEntries)
+            {
+                string methodKey = BuildMethodKey(entry);
+                if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> callers)
+                    && callers.Count > 0)
+                {
+                    gated.Add(entry);
+                }
+            }
+
+            return gated;
+        }
+
+        private static List<HotReloadMethodOutcome> BuildGatedReplacementSkipOutcomes(
+            IReadOnlyList<TransformWorkerEntryDto> gatedReplacements,
+            string assemblyResolvePath)
+        {
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            foreach (TransformWorkerEntryDto entry in gatedReplacements)
+            {
+                string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                    entry.typeMetadataName,
+                    entry.methodName,
+                    entry.parameterTypeFullNames ?? Array.Empty<string>(),
+                    genericArity: 0);
+                outcomes.Add(
+                    HotReloadMethodOutcome.Skipped(
+                        methodLabel,
+                        string.Format(
+                            HotReloadConstants.SignatureChangedGateSkipReasonFormat,
+                            methodLabel),
+                        assemblyResolvePath));
+            }
+
+            return outcomes;
         }
 
         /// <summary>
@@ -1319,6 +1808,149 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ExcludedMethodKeys = excludedMethodKeys;
                 ExcludedAddedMethodKeys = excludedAddedMethodKeys;
                 CallerEntries = callerEntries;
+            }
+        }
+
+        private sealed class IsolationRetryRunResult
+        {
+            public HotReloadShimIsolationResult Isolation { get; }
+            public string FailureMessage { get; }
+
+            private IsolationRetryRunResult(HotReloadShimIsolationResult isolation, string failureMessage)
+            {
+                Isolation = isolation;
+                FailureMessage = failureMessage;
+            }
+
+            public static IsolationRetryRunResult Succeeded(HotReloadShimIsolationResult isolation)
+            {
+                return new IsolationRetryRunResult(isolation, null);
+            }
+
+            public static IsolationRetryRunResult Failed(string failureMessage)
+            {
+                return new IsolationRetryRunResult(null, failureMessage);
+            }
+        }
+
+        private sealed class SignatureChangeGateResult
+        {
+            public bool FileFailed { get; }
+            public string FailureMessage { get; }
+            public bool UsedWorkerRetry { get; }
+            public bool DidScan { get; }
+            public HotReloadShimIsolationResult Isolation { get; }
+            public List<HotReloadMethodOutcome> SkippedOutcomes { get; }
+            public List<string> Warnings { get; }
+            public List<HotReloadCallSiteScanner.CallSiteHit> Hits { get; }
+            public List<string> ScanTargetKeys { get; }
+
+            private SignatureChangeGateResult(
+                bool fileFailed,
+                string failureMessage,
+                bool usedWorkerRetry,
+                bool didScan,
+                HotReloadShimIsolationResult isolation,
+                List<HotReloadMethodOutcome> skippedOutcomes,
+                List<string> warnings,
+                List<HotReloadCallSiteScanner.CallSiteHit> hits,
+                List<string> scanTargetKeys)
+            {
+                FileFailed = fileFailed;
+                FailureMessage = failureMessage;
+                UsedWorkerRetry = usedWorkerRetry;
+                DidScan = didScan;
+                Isolation = isolation;
+                SkippedOutcomes = skippedOutcomes ?? new List<HotReloadMethodOutcome>();
+                Warnings = warnings ?? new List<string>();
+                Hits = hits ?? new List<HotReloadCallSiteScanner.CallSiteHit>();
+                ScanTargetKeys = scanTargetKeys ?? new List<string>();
+            }
+
+            public static SignatureChangeGateResult NoWork()
+            {
+                return new SignatureChangeGateResult(
+                    false, null, false, false, null, null, null, null, null);
+            }
+
+            public static SignatureChangeGateResult WarningsOnly(
+                List<string> warnings,
+                List<HotReloadCallSiteScanner.CallSiteHit> hits,
+                List<string> scanTargetKeys)
+            {
+                return new SignatureChangeGateResult(
+                    false, null, false, true, null, null, warnings, hits, scanTargetKeys);
+            }
+
+            public static SignatureChangeGateResult Failed(string failureMessage)
+            {
+                return new SignatureChangeGateResult(
+                    true, failureMessage, false, false, null, null, null, null, null);
+            }
+
+            public static SignatureChangeGateResult Retried(
+                HotReloadShimIsolationResult isolation,
+                List<HotReloadMethodOutcome> skippedOutcomes,
+                List<string> warnings,
+                List<HotReloadCallSiteScanner.CallSiteHit> hits,
+                List<string> scanTargetKeys)
+            {
+                return new SignatureChangeGateResult(
+                    false,
+                    null,
+                    true,
+                    true,
+                    isolation,
+                    skippedOutcomes,
+                    warnings,
+                    hits,
+                    scanTargetKeys);
+            }
+        }
+
+        private sealed class ShimFirstCompileResult
+        {
+            public bool FileFailed { get; }
+            public List<HotReloadMethodOutcome> Outcomes { get; }
+            public TransformWorkerEntryDto[] EntriesToPatch { get; }
+            public HotReloadShimCompileResult CompileResult { get; }
+
+            private ShimFirstCompileResult(
+                bool fileFailed,
+                List<HotReloadMethodOutcome> outcomes,
+                TransformWorkerEntryDto[] entriesToPatch,
+                HotReloadShimCompileResult compileResult)
+            {
+                FileFailed = fileFailed;
+                Outcomes = outcomes ?? new List<HotReloadMethodOutcome>();
+                EntriesToPatch = entriesToPatch ?? Array.Empty<TransformWorkerEntryDto>();
+                CompileResult = compileResult;
+            }
+
+            public static ShimFirstCompileResult Failed(HotReloadMethodOutcome outcome)
+            {
+                return new ShimFirstCompileResult(
+                    true,
+                    new List<HotReloadMethodOutcome> { outcome },
+                    Array.Empty<TransformWorkerEntryDto>(),
+                    null);
+            }
+
+            public static ShimFirstCompileResult SucceededEmpty(List<HotReloadMethodOutcome> outcomes)
+            {
+                return new ShimFirstCompileResult(
+                    false,
+                    outcomes,
+                    Array.Empty<TransformWorkerEntryDto>(),
+                    null);
+            }
+
+            public static ShimFirstCompileResult Succeeded(
+                TransformWorkerEntryDto[] entriesToPatch,
+                HotReloadShimCompileResult compileResult,
+                List<HotReloadMethodOutcome> outcomes = null)
+            {
+                return new ShimFirstCompileResult(false, outcomes, entriesToPatch, compileResult);
             }
         }
 

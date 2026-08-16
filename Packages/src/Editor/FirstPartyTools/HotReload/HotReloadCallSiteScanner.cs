@@ -55,6 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public string CallerMethodName;
             public string[] CallerParameterTypeFullNames;
             public string CallerMethodKey;
+            public string TargetMethodKey;
         }
 
         /// <summary>
@@ -250,7 +251,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                hits.Add(CreateHit(assemblyName, reportedCaller));
+                hits.Add(CreateHit(assemblyName, reportedCaller, target));
             }
         }
 
@@ -411,7 +412,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static CallSiteHit CreateHit(string assemblyName, MethodDefinition caller)
+        private static CallSiteHit CreateHit(
+            string assemblyName,
+            MethodDefinition caller,
+            CompiledMethodIdentity target)
         {
             string[] parameterTypeFullNames = new string[caller.Parameters.Count];
             for (int index = 0; index < caller.Parameters.Count; index++)
@@ -430,7 +434,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CallerMethodName = caller.Name,
                 CallerParameterTypeFullNames = parameterTypeFullNames,
                 CallerMethodKey = typeMetadataName + "::" + caller.Name + "("
-                    + string.Join(",", parameterTypeFullNames) + ")"
+                    + string.Join(",", parameterTypeFullNames) + ")",
+                TargetMethodKey = target.TypeMetadataName + "::" + target.MethodName + "("
+                    + string.Join(",", target.ParameterTypeFullNames) + ")"
             };
         }
     }

@@ -146,6 +146,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: one scan with two targets attributes each hit to the matching TargetMethodKey.
+        /// </summary>
+        [Test]
+        public void FindCallSites_TwoTargets_AttributesEachHitToMatchingTargetKey()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
+                TestScriptProjectRelativePath);
+            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
+            string ordinaryTargetKey = FixtureTypeMetadataName + "::CalledFromOrdinaryMethod()";
+            string delegateTargetKey = FixtureTypeMetadataName + "::CalledOnlyViaDelegate()";
+
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = HotReloadCallSiteScanner.FindCallSites(
+                projectRoot,
+                new[]
+                {
+                    new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                        assemblyName,
+                        FixtureTypeMetadataName,
+                        nameof(HotReloadCallSiteScannerFixture.CalledFromOrdinaryMethod),
+                        Array.Empty<string>()),
+                    new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                        assemblyName,
+                        FixtureTypeMetadataName,
+                        nameof(HotReloadCallSiteScannerFixture.CalledOnlyViaDelegate),
+                        Array.Empty<string>())
+                });
+
+            Assert.That(hits.Count, Is.EqualTo(2));
+            HotReloadCallSiteScanner.CallSiteHit ordinaryHit = null;
+            HotReloadCallSiteScanner.CallSiteHit delegateHit = null;
+            foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+            {
+                if (hit.TargetMethodKey == ordinaryTargetKey)
+                {
+                    ordinaryHit = hit;
+                }
+
+                if (hit.TargetMethodKey == delegateTargetKey)
+                {
+                    delegateHit = hit;
+                }
+            }
+
+            Assert.That(ordinaryHit, Is.Not.Null, "Ordinary target must own its hit.");
+            Assert.That(
+                ordinaryHit.CallerMethodKey,
+                Is.EqualTo(FixtureTypeMetadataName + "::OrdinaryCaller()"));
+            Assert.That(delegateHit, Is.Not.Null, "Delegate target must own its hit.");
+            Assert.That(
+                delegateHit.CallerMethodKey,
+                Is.EqualTo(FixtureTypeMetadataName + "::CaptureDelegate()"));
+        }
+
+        /// <summary>
         /// What: an async method awaiting itself is not reported after logical-owner resolution.
         /// </summary>
         [Test]
