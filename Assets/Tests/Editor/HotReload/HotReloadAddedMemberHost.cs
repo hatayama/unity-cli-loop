@@ -28,6 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private int _privateSeed = 7;
 
+        private const int PrivateConstThree = 3;
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int ExistingValue()
         {
@@ -87,6 +89,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private int PrivateSeedValue
         {
             get { return _privateSeed; }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ReadPrivateConst()
+        {
+            return PrivateConstThree;
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

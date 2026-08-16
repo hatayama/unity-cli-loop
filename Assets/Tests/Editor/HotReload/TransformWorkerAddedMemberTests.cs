@@ -244,6 +244,89 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a direct (non-lambda) private field read on an added method still keeps
+        /// patchKind addedMethod and emits accessor delegates.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_DirectPrivateFieldAccess_KeepsAddedMethodKindAndEmitsAccessors()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedReadPrivate()\n        {\n            return _privateSeed;\n        }");
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto added = FindEntry(result, "AddedReadPrivate");
+            Assert.That(added, Is.Not.Null);
+            Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(result.Output.hasAccessorDelegates, Is.True);
+            Assert.That(result.Output.shimSource, Does.Contain("__BindAccessors"));
+            Assert.That(result.Output.shimSource, Does.Contain("FieldRefAccess"));
+        }
+
+        /// <summary>
+        /// What: an added method whose private access has no accessor rewrite is Skipped
+        /// with the added-method prefix plus the eligibility reason.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_UncoveredConditionalPrivateAccess_SkipsWithAddedPrefix()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedMaybe()\n        {\n            return this?._privateSeed ?? 0;\n        }");
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(
+                result,
+                "AddedMaybe",
+                "Added methods whose bodies access private/internal members");
+            AssertHasSkip(result, "AddedMaybe", "Accessor rewrite unavailable:");
+            AssertHasSkip(result, "AddedMaybe", "Run 'uloop compile'.");
+            string skipReason = FindSkipReason(result, "AddedMaybe");
+            Assert.That(skipReason, Is.Not.Null);
+            int unavailableIndex = skipReason.IndexOf("Accessor rewrite unavailable:", StringComparison.Ordinal);
+            int compileIndex = skipReason.IndexOf("Run 'uloop compile'.", StringComparison.Ordinal);
+            Assert.That(unavailableIndex, Is.GreaterThan(-1));
+            Assert.That(compileIndex, Is.GreaterThan(unavailableIndex));
+            Assert.That(FindEntry(result, "AddedMaybe"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: an added method that reads a compiled private const does not emit
+        /// StaticFieldRefAccess (const has no runtime storage and folds at compile time).
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_PrivateConstRead_DoesNotEmitStaticFieldRefAccess()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedReadConst()\n        {\n            return PrivateConstThree;\n        }");
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto added = FindEntry(result, "AddedReadConst");
+            Assert.That(added, Is.Not.Null);
+            Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(result.Output.hasAccessorDelegates, Is.False);
+            Assert.That(result.Output.shimSource, Does.Not.Contain("StaticFieldRefAccess"));
+            Assert.That(result.Output.shimSource, Does.Contain("PrivateConstThree"));
+        }
+
+        /// <summary>
+        /// What: an added method that mixes a private const read with a private instance field
+        /// rewrites only the instance field; the const stays folded and is not StaticFieldRefAccess.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_MixedConstAndPrivateField_RewritesOnlyInstanceField()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedMixed()\n        {\n            return PrivateConstThree + _privateSeed;\n        }");
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto added = FindEntry(result, "AddedMixed");
+            Assert.That(added, Is.Not.Null);
+            Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(result.Output.hasAccessorDelegates, Is.True);
+            Assert.That(result.Output.shimSource, Does.Contain("FieldRefAccess"));
+            Assert.That(result.Output.shimSource, Does.Not.Contain("StaticFieldRefAccess"));
+            Assert.That(result.Output.shimSource, Does.Contain("PrivateConstThree"));
+        }
+
+        /// <summary>
         /// What: adding Update on a compiled MonoBehaviour-derived type keeps the entry and emits
         /// the Unity-message warning.
         /// </summary>
@@ -1329,6 +1412,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Expected skip for '" + methodNameFragment + "' with reason containing '"
                 + reasonFragment + "'. Skipped="
                 + FormatSkipped(result.Output.skipped));
+        }
+
+        private static string FindSkipReason(
+            TransformWorkerClientResult result,
+            string methodNameFragment)
+        {
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null && skipped.method.Contains(methodNameFragment))
+                {
+                    return skipped.reason;
+                }
+            }
+
+            return null;
         }
 
         private static string FormatSkipped(TransformWorkerSkippedDto[] skipped)
