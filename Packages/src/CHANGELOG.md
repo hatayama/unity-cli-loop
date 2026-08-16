@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.74](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.73...v3.0.0-beta.74) (2026-08-16)
+
+
+### Bug Fixes
+
+* Unity no longer installs a duplicate CLI over a Homebrew-managed uloop ([#2196](https://github.com/hatayama/unity-cli-loop/issues/2196)) ([0a2b5fc](https://github.com/hatayama/unity-cli-loop/commit/0a2b5fc33a02da5042d816472316376b800c8f02))
+
 ## [3.0.0-beta.73](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.71...v3.0.0-beta.73) (2026-08-11)
 
 
