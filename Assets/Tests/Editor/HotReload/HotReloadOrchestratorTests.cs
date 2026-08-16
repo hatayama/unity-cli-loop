@@ -2588,7 +2588,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
-            AssertHasAdded(result, nameof(HotReloadSignatureChangeExternalHost.ToDelete));
+            string expectedAddedLabel = HotReloadPatcher.FormatMethodKeyParts(
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeExternalHost",
+                "ToDelete",
+                new[] { "System.Int32", "System.Int32" },
+                genericArity: 0);
+            bool foundAddedNewSignature = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Added
+                    && outcome.Method == expectedAddedLabel)
+                {
+                    foundAddedNewSignature = true;
+                }
+            }
+
+            Assert.That(
+                foundAddedNewSignature,
+                Is.True,
+                "Parameter change must add ToDelete(int, int), not the old ToDelete(int).\n"
+                + FormatOutcomes(result));
             AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
             string expectedCallerKey =
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
