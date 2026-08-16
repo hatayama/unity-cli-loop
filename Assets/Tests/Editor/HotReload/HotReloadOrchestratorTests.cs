@@ -3841,8 +3841,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private int _secret = 10;
         " + tuningConst + @"
+        private int? Score { get; set; }
+        private int Value { get; set; }
 
         public int SecretForAssert => _secret;
+
+        public HotReloadE2EFixture Current
+        {
+            get { return this; }
+        }
 
         " + explicitAccessors + @"
 

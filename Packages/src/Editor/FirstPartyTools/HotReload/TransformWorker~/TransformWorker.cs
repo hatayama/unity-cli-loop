@@ -262,6 +262,13 @@ public static class TransformWorkerProgram
             root,
             semanticModel,
             targetTypesAssemblySymbol);
+        // Why here: a compiled property/event can disappear or change kind with no
+        // touched body, so the generic outside-body warning would bury the name.
+        AppendCompiledPropertyOrEventKindChangeWarnings(
+            root,
+            semanticModel,
+            targetTypesAssemblySymbol,
+            declarationDriftWarnings);
 
         // Syntax-key maps for edited-method detection. Distinct from BuildMethodKey (Cecil names):
         // same-file old/new comparison only needs syntax keys to stay consistent with each other.
@@ -753,6 +760,120 @@ public static class TransformWorkerProgram
         }
 
         return Convert.ToString(value, CultureInfo.InvariantCulture);
+    }
+
+    private const string CompiledPropertyOrEventKindChangeWarningFormat =
+        "Compiled property or event '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.";
+
+    /// <summary>
+    /// What: names compiled properties and events that the edited source deleted or
+    /// redeclared as another member kind, even when no method body changed.
+    /// </summary>
+    private static void AppendCompiledPropertyOrEventKindChangeWarnings(
+        CompilationUnitSyntax root,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetTypesAssemblySymbol,
+        List<string> warnings)
+    {
+        if (targetTypesAssemblySymbol == null)
+        {
+            return;
+        }
+
+        HashSet<string> seenTypeMetadataNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (BaseTypeDeclarationSyntax typeDeclaration
+            in root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
+        {
+            INamedTypeSymbol sourceType = semanticModel.GetDeclaredSymbol(typeDeclaration);
+            if (sourceType == null)
+            {
+                continue;
+            }
+
+            string typeMetadataName = ToReflectionMetadataName(sourceType);
+            if (!seenTypeMetadataNames.Add(typeMetadataName))
+            {
+                continue;
+            }
+
+            INamedTypeSymbol compiledType = targetTypesAssemblySymbol.GetTypeByMetadataName(
+                typeMetadataName);
+            if (compiledType == null)
+            {
+                continue;
+            }
+
+            AppendMissingCompiledPropertyOrEventWarnings(compiledType, sourceType, warnings);
+        }
+    }
+
+    private static void AppendMissingCompiledPropertyOrEventWarnings(
+        INamedTypeSymbol compiledType,
+        INamedTypeSymbol sourceType,
+        List<string> warnings)
+    {
+        foreach (ISymbol compiledMember in compiledType.GetMembers())
+        {
+            string missingName = TryGetMissingCompiledPropertyOrEventName(compiledMember, sourceType);
+            if (missingName == null)
+            {
+                continue;
+            }
+
+            warnings.Add(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    CompiledPropertyOrEventKindChangeWarningFormat,
+                    missingName));
+        }
+    }
+
+    private static string TryGetMissingCompiledPropertyOrEventName(
+        ISymbol compiledMember,
+        INamedTypeSymbol sourceType)
+    {
+        if (compiledMember is IPropertySymbol property
+            && !property.IsIndexer
+            && !property.IsImplicitlyDeclared
+            && !SourceDeclaresProperty(sourceType, property.Name))
+        {
+            return property.Name;
+        }
+
+        if (compiledMember is IEventSymbol compiledEvent
+            && !compiledEvent.IsImplicitlyDeclared
+            && !SourceDeclaresEvent(sourceType, compiledEvent.Name))
+        {
+            return compiledEvent.Name;
+        }
+
+        return null;
+    }
+
+    private static bool SourceDeclaresProperty(INamedTypeSymbol sourceType, string name)
+    {
+        foreach (ISymbol member in sourceType.GetMembers(name))
+        {
+            if (member is IPropertySymbol property && !property.IsIndexer)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool SourceDeclaresEvent(INamedTypeSymbol sourceType, string name)
+    {
+        foreach (ISymbol member in sourceType.GetMembers(name))
+        {
+            if (member is IEventSymbol)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private const string ExplicitAccessorSkipReason =
