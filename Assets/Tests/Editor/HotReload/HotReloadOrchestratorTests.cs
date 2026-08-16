@@ -1967,6 +1967,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added method that calls a compiled private instance method is Added
+        /// and the patched caller returns that method's value (MethodDelegate path).
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethod_DirectPrivateInstanceMethodCall_ReturnsCompiledValue()
+        {
+            string fixturePath = ResolveAddedPrivateAccessFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedCallPrivate();\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int AddedCallPrivate()\n        {\n            return PrivateInstanceSeven();\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedDirectPrivateMethod.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedCallPrivate");
+            AssertHasPatched(result, nameof(HotReloadAddedPrivateAccessFixture.ExistingCaller));
+
+            HotReloadAddedPrivateAccessFixture host = new HotReloadAddedPrivateAccessFixture();
+            Assert.That(host.ExistingCaller(0), Is.EqualTo(7));
+        }
+
+        /// <summary>
         /// What: a return-type change that becomes Added still reads a compiled private
         /// instance field, and the patched same-file caller returns that field's value.
         /// </summary>

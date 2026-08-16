@@ -12,6 +12,13 @@ namespace io.github.hatayama.UnityCliLoop.RegressionHarness
     // exist; Harmony then forwards those patched bodies to the side table.
     public sealed class HotReloadAddedMemberLogger : MonoBehaviour
     {
+        private int _secret = 7;
+
+        public int CompiledSecret()
+        {
+            return _secret;
+        }
+
         public int ReadAdded()
         {
             return 0;

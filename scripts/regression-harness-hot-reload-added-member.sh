@@ -6,6 +6,8 @@ set -e
 # use them, applies uloop hot-reload (no domain reload), asserts get-logs shows
 # the added-method path, writes 10 through the patched existing method, asserts
 # the store keeps 10 across re-apply, then --revert-all restores baseline.
+# A second pass adds a method that reads a compiled private field and asserts
+# the PlayMode marker shows that value (no FieldAccessException).
 # Sed/cat must keep the edit in one file — added members are only visible to
 # edited bodies in that file. A newly added Unity message would not run.
 # See docs/regression-harness.md.
@@ -74,6 +76,7 @@ fi
 
 BASELINE_MARKER="[HotReloadAddedMemberHarness] baseline"
 ADDED_MARKER="[HotReloadAddedMemberHarness] added=10"
+SECRET_MARKER="[HotReloadAddedMemberHarness] secret=7"
 PRISTINE_NEEDLE="Debug.Log(\"[HotReloadAddedMemberHarness] baseline\");"
 
 # Why fail-fast on a dirty tree: a prior kill -9 can leave the patched members on disk;
@@ -214,6 +217,45 @@ ENDPATCH
     mv "${SOURCE_ABS}.tmp" "$SOURCE_ABS"
 }
 
+write_private_field_added_method_source() {
+    cat > "${SOURCE_ABS}.tmp" <<'ENDPATCH'
+using UnityEngine;
+
+namespace io.github.hatayama.UnityCliLoop.RegressionHarness
+{
+    public sealed class HotReloadAddedMemberLogger : MonoBehaviour
+    {
+        private int _secret = 7;
+
+        public int CompiledSecret()
+        {
+            return _secret;
+        }
+
+        public int ReadSecret()
+        {
+            return _secret;
+        }
+
+        public int ReadAdded()
+        {
+            return 0;
+        }
+
+        public void WriteAdded(int value)
+        {
+        }
+
+        private void Update()
+        {
+            Debug.Log("[HotReloadAddedMemberHarness] secret=" + ReadSecret());
+        }
+    }
+}
+ENDPATCH
+    mv "${SOURCE_ABS}.tmp" "$SOURCE_ABS"
+}
+
 probe_added() {
     run_uloop execute-dynamic-code --code "
 using UnityEngine;
@@ -328,5 +370,29 @@ fi
 log "Asserting baseline after revert-all..."
 await_marker_in_logs "$BASELINE_MARKER"
 
-log "PASS: added method and field applied, store kept 10 across re-apply, revert-all restored baseline."
+log "Writing an added method that reads the compiled private field..."
+SOURCE_DIRTY="1"
+write_private_field_added_method_source
+
+log "Applying hot-reload to $SOURCE_FILE..."
+run_uloop hot-reload --files "$SOURCE_FILE" > "$RESULT_FILE"
+assert_apply_has_added_and_patched
+
+log "Asserting ${SECRET_MARKER} from Update via the added method..."
+await_marker_in_logs "$SECRET_MARKER"
+
+log "Restoring source and reverting all hot-reload patches..."
+restore_source
+run_uloop hot-reload --revert-all > "$RESULT_FILE"
+revert_success="$(jq -r '.Success' "$RESULT_FILE")"
+if [ "$revert_success" != "true" ]; then
+    log "FAIL: --revert-all did not succeed after private-field added method"
+    cat "$RESULT_FILE"
+    exit 1
+fi
+
+log "Asserting baseline after the private-field pass..."
+await_marker_in_logs "$BASELINE_MARKER"
+
+log "PASS: added method and field applied, store kept 10 across re-apply, private-field added method returned 7, revert-all restored baseline."
 exit 0

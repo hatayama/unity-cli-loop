@@ -244,6 +244,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a direct (non-lambda) private field read on an added method still keeps
+        /// patchKind addedMethod and emits accessor delegates.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_DirectPrivateFieldAccess_KeepsAddedMethodKindAndEmitsAccessors()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedReadPrivate()\n        {\n            return _privateSeed;\n        }");
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto added = FindEntry(result, "AddedReadPrivate");
+            Assert.That(added, Is.Not.Null);
+            Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(result.Output.hasAccessorDelegates, Is.True);
+            Assert.That(result.Output.shimSource, Does.Contain("__BindAccessors"));
+            Assert.That(result.Output.shimSource, Does.Contain("FieldRefAccess"));
+        }
+
+        /// <summary>
+        /// What: an added method whose private access has no accessor rewrite is Skipped
+        /// with the added-method prefix plus the eligibility reason.
+        /// </summary>
+        [Test]
+        public async Task AddedMethod_UncoveredConditionalPrivateAccess_SkipsWithAddedPrefix()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "public int AddedMaybe()\n        {\n            return this?._privateSeed ?? 0;\n        }");
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(
+                result,
+                "AddedMaybe",
+                "Added methods whose bodies access private/internal members");
+            AssertHasSkip(result, "AddedMaybe", "Accessor rewrite unavailable:");
+            Assert.That(FindEntry(result, "AddedMaybe"), Is.Null);
+        }
+
+        /// <summary>
         /// What: adding Update on a compiled MonoBehaviour-derived type keeps the entry and emits
         /// the Unity-message warning.
         /// </summary>

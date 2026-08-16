@@ -25,6 +25,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        private int PrivateInstanceSeven()
+        {
+            return _instanceSecret;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ExistingCaller(int value)
         {
             return value;
