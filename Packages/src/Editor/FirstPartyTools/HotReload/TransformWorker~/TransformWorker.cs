@@ -2389,7 +2389,12 @@ public static class TransformWorkerProgram
                     semanticModel);
             if (isAddedMethod && decision.SkipReason == null)
             {
-                decision = MethodTransformDecision.AddedMethod(decision.UsesDelegation);
+                decision = DecideAddedMethodAccessors(
+                    methodSymbol,
+                    typeState.TypeSymbol,
+                    methodBodyNode,
+                    semanticModel,
+                    decision);
             }
 
             if (decision.SkipReason != null)
@@ -4163,6 +4168,45 @@ public static class TransformWorkerProgram
         return null;
     }
 
+    // Why a second plan pass: DecideMethodTransform only sets UsesDelegation for
+    // async/iterator/closure bodies. An ordinary added method JIT-compiles in the
+    // shim assembly, so inaccessible compiled members must take the same accessor
+    // rewrite or be Skipped — Success plus a raw FieldAccessException is the FB bug.
+    private static MethodTransformDecision DecideAddedMethodAccessors(
+        IMethodSymbol methodSymbol,
+        INamedTypeSymbol typeSymbol,
+        SyntaxNode methodBodyNode,
+        SemanticModel semanticModel,
+        MethodTransformDecision current)
+    {
+        if (current.UsesDelegation)
+        {
+            return MethodTransformDecision.AddedMethod(true);
+        }
+
+        if (!SubtreeHasInaccessibleMemberAccess(semanticModel, new[] { methodBodyNode }))
+        {
+            return MethodTransformDecision.AddedMethod(false);
+        }
+
+        if (!AccessorEligibility.TryBuildPlan(
+                semanticModel,
+                methodSymbol,
+                typeSymbol,
+                methodBodyNode,
+                out AccessorPlan disposablePlan,
+                out string accessorRejectReason))
+        {
+            return MethodTransformDecision.Skip(
+                AddedMethodSkipReasons.InaccessibleAccessNoRewrite
+                + " Accessor rewrite unavailable: "
+                + accessorRejectReason);
+        }
+
+        bool usesDelegation = disposablePlan != null && disposablePlan.Entries.Count > 0;
+        return MethodTransformDecision.AddedMethod(usesDelegation);
+    }
+
     private static string EvaluateAddedMethodSkipReason(
         IMethodSymbol methodSymbol,
         MethodDeclarationSyntax methodDeclaration)
@@ -4876,6 +4920,12 @@ internal sealed class AccessorEntry
         switch (Kind)
         {
             case AccessorKind.FieldRef:
+                if (FieldSymbol.IsStatic)
+                {
+                    return "global::HarmonyLib.AccessTools.FieldRef<"
+                        + TypeDisplay(FieldSymbol.Type) + ">";
+                }
+
                 return "global::HarmonyLib.AccessTools.FieldRef<"
                     + TypeDisplay(FieldSymbol.ContainingType) + ", "
                     + TypeDisplay(FieldSymbol.Type) + ">";
@@ -4914,6 +4964,17 @@ internal sealed class AccessorEntry
 
     private string BuildFieldRefBindStatement()
     {
+        if (FieldSymbol.IsStatic)
+        {
+            // Why FieldInfo: the Type+name StaticFieldRefAccess overloads return ref F,
+            // not a FieldRef`1 that __BindAccessors can store.
+            return DelegateFieldName + " = global::HarmonyLib.AccessTools.StaticFieldRefAccess<"
+                + TypeDisplay(FieldSymbol.Type)
+                + ">(global::HarmonyLib.AccessTools.Field(typeof("
+                + TypeDisplay(FieldSymbol.ContainingType) + "), \""
+                + EscapeStringLiteral(FieldSymbol.Name) + "\"));";
+        }
+
         return DelegateFieldName + " = global::HarmonyLib.AccessTools.FieldRefAccess<"
             + TypeDisplay(FieldSymbol.ContainingType) + ", "
             + TypeDisplay(FieldSymbol.Type) + ">(\""
@@ -5357,12 +5418,6 @@ internal static class AccessorEligibility
                 return false;
             }
 
-            if (fieldSymbol.IsStatic)
-            {
-                rejectReason = "inaccessible static field access has no accessor rewrite shape (condition b).";
-                return false;
-            }
-
             plan.GetOrAddField(fieldSymbol);
             return true;
         }
@@ -5475,12 +5530,6 @@ internal static class AccessorEligibility
         {
             if (!AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
             {
-                return false;
-            }
-
-            if (fieldSymbol.IsStatic)
-            {
-                rejectReason = "inaccessible static field access has no accessor rewrite shape (condition b).";
                 return false;
             }
 
@@ -6050,14 +6099,12 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         if (leftSymbol is IFieldSymbol fieldSymbol
-            && AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol)
-            && !fieldSymbol.IsStatic)
+            && AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
         {
             AccessorEntry entry = _accessorPlan.GetOrAddField(fieldSymbol);
-            ExpressionSyntax receiver = ExtractReceiver(node.Left);
-            ExpressionSyntax fieldRefCall = CreateDelegateInvocation(
-                entry.DelegateFieldName,
-                new[] { VisitReceiver(receiver) });
+            ExpressionSyntax fieldRefCall = CreateFieldRefInvocation(
+                entry,
+                VisitReceiver(ExtractReceiver(node.Left)));
             return node
                 .WithLeft(fieldRefCall)
                 .WithRight((ExpressionSyntax)Visit(node.Right))
@@ -6466,13 +6513,10 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         SyntaxNode triviaSource)
     {
         if (symbol is IFieldSymbol fieldSymbol
-            && AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol)
-            && !fieldSymbol.IsStatic)
+            && AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
         {
             AccessorEntry entry = _accessorPlan.GetOrAddField(fieldSymbol);
-            return CreateDelegateInvocation(
-                    entry.DelegateFieldName,
-                    new[] { VisitReceiver(receiverSyntax) })
+            return CreateFieldRefInvocation(entry, VisitReceiver(receiverSyntax))
                 .WithTriviaFrom(triviaSource);
         }
 
@@ -6539,6 +6583,18 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             _ => throw new System.InvalidOperationException(
                 "Unsupported compound assignment kind reached property rewrite: " + assignmentKind)
         };
+    }
+
+    private static ExpressionSyntax CreateFieldRefInvocation(
+        AccessorEntry entry,
+        ExpressionSyntax visitedReceiver)
+    {
+        if (entry.FieldSymbol.IsStatic)
+        {
+            return CreateDelegateInvocation(entry.DelegateFieldName, Array.Empty<ExpressionSyntax>());
+        }
+
+        return CreateDelegateInvocation(entry.DelegateFieldName, new[] { visitedReceiver });
     }
 
     private static ExpressionSyntax CreateDelegateInvocation(
@@ -7357,6 +7413,11 @@ internal static class AddedMethodSkipReasons
 
     public const string InterfaceMember =
         "Interface members are not patchable. Run 'uloop compile'.";
+
+    public const string InaccessibleAccessNoRewrite =
+        "Added methods whose bodies access private/internal members are skipped when the access "
+        + "has no accessor rewrite (the added method JIT-compiles normally and fails accessibility "
+        + "checks). Run 'uloop compile'.";
 }
 
 internal static class UnityMessageNames
