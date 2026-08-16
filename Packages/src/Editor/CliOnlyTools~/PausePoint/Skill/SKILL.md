@@ -176,7 +176,8 @@ If this command times out, the patched line was not reached while the command wa
 
 `enable-pause-point` works on hot-reload patched methods: the marker resolves against
 the patched body, and `RetargetedToHotReloadPatch: true` in the response confirms it is
-armed on the edited code. `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` is returned only when the
+armed on the edited code. Methods the reload did not patch are the opposite case: --line on them resolves against the last compiled source, not the edited file, so line drift from the edit can silently arm a different method. The response carries a Warning when this applies — check ResolvedMethod and ResolvedLineText before trusting the marker, or run 'uloop compile' and re-enable.
+`PAUSE_POINT_PATCHED_BY_HOT_RELOAD` is returned only when the
 requested line cannot be mapped onto the patched body — the file's line map is stale or
 the patch belongs to a superseded hot-reload generation. Pick a line inside the edited
 method body, run `uloop hot-reload --revert-all`, or run `uloop compile`, then retry.

@@ -30,6 +30,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "the last compiled source, not the edited file. Verify ResolvedMethod and "
             + "ResolvedLineText, or run 'uloop compile' and re-enable.";
 
+        private const string CompiledSnapshotSentinel = "SENTINEL_COMPILED_LINE_TEXT";
+
+        private const string RestoreSnapshotSentinel = "SENTINEL_RESTORE_LINE_TEXT";
+
         [SetUp]
         public void SetUp()
         {
@@ -66,25 +70,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             await HotReloadFromEditedSourceAsync(edited, "LineDriftUnpatched.cs");
 
-            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            Func<string, string> previousSnapshot = HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
+            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => BuildSentinelSnapshot(
+                CompiledSnapshotSentinel,
+                80);
+            PausePointResponse enable;
+            try
             {
-                File = FixtureProjectRelativePath,
-                Line = editedUnpatchedLine,
-                TimeoutSeconds = 30,
-                Mode = UloopPausePointCaptureMode.SingleShot
-            });
+                enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = FixtureProjectRelativePath,
+                    Line = editedUnpatchedLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousSnapshot;
+            }
 
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
             Assert.That(enable.RetargetedToHotReloadPatch, Is.False);
             Assert.That(enable.ResolvedMethod, Does.Contain(nameof(HotReloadPausePointLineDriftFixture.AfterTarget)));
             Assert.That(enable.ResolvedMethod, Does.Not.Contain(nameof(HotReloadPausePointLineDriftFixture.UnpatchedTarget)));
             Assert.That(enable.Warning, Does.Contain(HotReloadCompiledLineMapWarning));
-
-            string compiledLineText = SourcePausePointSourceLineReader.ReadLineText(
-                ResolveFixtureAbsolutePath(),
-                enable.ResolvedLine);
-            Assert.That(enable.ResolvedLineText, Is.EqualTo(compiledLineText));
-            Assert.That(enable.ResolvedLineText, Is.Not.Empty);
+            Assert.That(enable.ResolvedLineText, Is.EqualTo(CompiledSnapshotSentinel));
         }
 
         /// <summary>
@@ -148,6 +159,99 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
             Assert.That(enable.RetargetedToHotReloadPatch, Is.False);
             Assert.That(enable.ResolvedLineText, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: restore-after-revert fills ResolvedLineText from the (file, dll) snapshot
+        /// Func, not from the edited file on disk.
+        /// </summary>
+        [Test]
+        public async Task RevertAll_RestoreUsesSnapshotSentinel_NotDiskText()
+        {
+            PausePointResponse enable = await EnablePatchedLineThenPrepareRestoreAsync(
+                "LineDriftRestoreSentinel.cs");
+            Func<string, string, string> previous =
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSource;
+            HotReloadPausePointCoordination.GetVerifiedSnapshotSource =
+                (string file, string dllPath) =>
+                {
+                    Assert.That(file, Does.Contain("HotReloadPausePointLineDriftFixture.cs"));
+                    Assert.That(dllPath, Is.Not.Null.And.Not.Empty);
+                    return BuildSentinelSnapshot(RestoreSnapshotSentinel, 80);
+                };
+            try
+            {
+                HotReloadPatcher.RevertAll();
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSource = previous;
+            }
+
+            UloopPausePointSnapshot afterRevert = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterRevert.RetargetedToHotReloadPatch, Is.False);
+            Assert.That(afterRevert.ResolvedLineText, Is.EqualTo(RestoreSnapshotSentinel));
+        }
+
+        /// <summary>
+        /// What: restore-after-revert leaves ResolvedLineText empty when the (file, dll)
+        /// snapshot Func is unset, and does not fall back to disk.
+        /// </summary>
+        [Test]
+        public async Task RevertAll_RestoreWithoutSnapshotFunc_LeavesResolvedLineTextEmpty()
+        {
+            PausePointResponse enable = await EnablePatchedLineThenPrepareRestoreAsync(
+                "LineDriftRestoreNoSnapshot.cs");
+            Func<string, string, string> previous =
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSource;
+            HotReloadPausePointCoordination.GetVerifiedSnapshotSource = null;
+            try
+            {
+                HotReloadPatcher.RevertAll();
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSource = previous;
+            }
+
+            UloopPausePointSnapshot afterRevert = UloopPausePointRegistry.GetStatus(enable.Id);
+            Assert.That(afterRevert.RetargetedToHotReloadPatch, Is.False);
+            Assert.That(afterRevert.ResolvedLineText, Is.Empty);
+        }
+
+        private static async Task<PausePointResponse> EnablePatchedLineThenPrepareRestoreAsync(
+            string editedFileName)
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            string edited = onDisk.Replace(
+                "            return 11;",
+                "            return 111;",
+                StringComparison.Ordinal);
+            int editedPatchLine = FindLineNumber(edited, "return 111;");
+            Assert.That(editedPatchLine, Is.GreaterThan(0));
+            await HotReloadFromEditedSourceAsync(edited, editedFileName);
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = editedPatchLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.Continuous
+            });
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            return enable;
+        }
+
+        private static string BuildSentinelSnapshot(string sentinel, int lineCount)
+        {
+            List<string> lines = new List<string>();
+            for (int index = 0; index < lineCount; index++)
+            {
+                lines.Add(sentinel);
+            }
+
+            return string.Join("\n", lines);
         }
 
         private static string BuildEditedSourceWithTopPaddingAndPatchedReturn(string onDisk)
