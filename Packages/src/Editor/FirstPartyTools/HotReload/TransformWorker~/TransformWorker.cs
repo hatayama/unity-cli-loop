@@ -3153,19 +3153,68 @@ public static class TransformWorkerProgram
             && compiledMethod.ReturnsByRefReadonly == sourceMethod.ReturnsByRefReadonly;
     }
 
-    private static bool CompiledTypeHasField(INamedTypeSymbol compiledType, IFieldSymbol sourceField)
+    /// <summary>
+    /// What: matches a source field to a compiled field by name, then reports type or
+    /// static/const drift separately so callers can skip instead of rewriting storage.
+    /// </summary>
+    private static CompiledFieldMatch MatchCompiledField(
+        INamedTypeSymbol compiledType,
+        IFieldSymbol sourceField)
     {
         foreach (ISymbol member in compiledType.GetMembers(sourceField.Name))
         {
-            if (member is IFieldSymbol compiledField
-                && compiledField.IsStatic == sourceField.IsStatic
-                && compiledField.IsConst == sourceField.IsConst)
+            if (member is not IFieldSymbol compiledField)
             {
-                return true;
+                continue;
             }
+
+            // Why return here: C# field names are unique in a type, so a modifier
+            // mismatch is the compiled field, not a miss that should become a store.
+            if (compiledField.IsStatic != sourceField.IsStatic
+                || compiledField.IsConst != sourceField.IsConst)
+            {
+                return CompiledFieldMatch.FieldModifiersChanged;
+            }
+
+            if (CecilTypeNames.ToCecilFullName(compiledField.Type)
+                == CecilTypeNames.ToCecilFullName(sourceField.Type))
+            {
+                return CompiledFieldMatch.Matched;
+            }
+
+            return CompiledFieldMatch.FieldTypeChanged;
         }
 
-        return false;
+        return CompiledFieldMatch.NotFound;
+    }
+
+    private static bool IsCompiledFieldDeclarationChange(CompiledFieldMatch fieldMatch)
+    {
+        return fieldMatch == CompiledFieldMatch.FieldTypeChanged
+            || fieldMatch == CompiledFieldMatch.FieldModifiersChanged;
+    }
+
+    private static string TryFormatCompiledFieldDeclarationChangeReason(
+        CompiledFieldMatch fieldMatch,
+        string fieldName)
+    {
+        if (fieldMatch == CompiledFieldMatch.FieldTypeChanged)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                AddedFieldSkipReasons.FieldTypeChanged,
+                fieldName);
+        }
+
+        if (fieldMatch == CompiledFieldMatch.FieldModifiersChanged)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                AddedFieldSkipReasons.FieldModifiersChanged,
+                fieldName);
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -3186,7 +3235,13 @@ public static class TransformWorkerProgram
             foreach (VariableDeclaratorSyntax variable in fieldDeclaration.Declaration.Variables)
             {
                 IFieldSymbol fieldSymbol = semanticModel.GetDeclaredSymbol(variable) as IFieldSymbol;
-                if (fieldSymbol == null || CompiledTypeHasField(compiledType, fieldSymbol))
+                if (fieldSymbol == null)
+                {
+                    continue;
+                }
+
+                CompiledFieldMatch fieldMatch = MatchCompiledField(compiledType, fieldSymbol);
+                if (fieldMatch == CompiledFieldMatch.Matched)
                 {
                     continue;
                 }
@@ -3199,7 +3254,8 @@ public static class TransformWorkerProgram
                     variable,
                     fieldSymbol,
                     addedFieldCatalog,
-                    declarationDriftWarnings);
+                    declarationDriftWarnings,
+                    fieldMatch);
             }
         }
     }
@@ -3212,7 +3268,8 @@ public static class TransformWorkerProgram
         VariableDeclaratorSyntax variable,
         IFieldSymbol fieldSymbol,
         AddedFieldCatalog addedFieldCatalog,
-        List<string> declarationDriftWarnings)
+        List<string> declarationDriftWarnings,
+        CompiledFieldMatch fieldMatch)
     {
         string syntaxKey = BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, fieldSymbol.Name);
         string fieldKey = FormatAddedFieldStoreKey(
@@ -3221,7 +3278,8 @@ public static class TransformWorkerProgram
         addedFieldCatalog.MarkClassifiedAdded(fieldKey);
         addedFieldCatalog.AddAddedSyntaxKey(syntaxKey);
 
-        if (FieldHasSerializationAttribute(fieldDeclaration))
+        if (!IsCompiledFieldDeclarationChange(fieldMatch)
+            && FieldHasSerializationAttribute(fieldDeclaration))
         {
             declarationDriftWarnings.Add(
                 string.Format(
@@ -3241,6 +3299,18 @@ public static class TransformWorkerProgram
             ConstantValue = fieldSymbol.HasConstantValue ? fieldSymbol.ConstantValue : null,
             Initializer = variable.Initializer != null ? variable.Initializer.Value : null
         };
+
+        string declarationChangeReason = TryFormatCompiledFieldDeclarationChangeReason(
+            fieldMatch,
+            fieldSymbol.Name);
+        if (declarationChangeReason != null)
+        {
+            // Why not RegisterStore: rewriting to the side table would hide the
+            // declaration change and leave compiled callers on the old field.
+            binding.UnavailableReason = declarationChangeReason;
+            addedFieldCatalog.RegisterUnavailable(binding);
+            return;
+        }
 
         binding.UnavailableReason = EvaluateAddedFieldAvailability(
             typeState.TypeSymbol,
@@ -3415,7 +3485,10 @@ public static class TransformWorkerProgram
 
         if (symbol is IFieldSymbol fieldSymbol)
         {
-            return !CompiledTypeHasField(compiledType, fieldSymbol);
+            // Why map any non-Matched result to added: FieldTypeChanged and
+            // FieldModifiersChanged still name the compiled field, so treating
+            // them as a direct shim reference would bind the old storage.
+            return MatchCompiledField(compiledType, fieldSymbol) != CompiledFieldMatch.Matched;
         }
 
         if (symbol is IMethodSymbol methodSymbol && methodSymbol.MethodKind == MethodKind.Ordinary)
@@ -3524,7 +3597,7 @@ public static class TransformWorkerProgram
                 continue;
             }
 
-            IFieldSymbol field = TryGetFieldSymbol(semanticModel, node);
+            IFieldSymbol field = TryGetFieldSymbolOrCandidate(semanticModel, node);
             if (field == null)
             {
                 continue;
@@ -3869,6 +3942,34 @@ public static class TransformWorkerProgram
 
         ISymbol symbol = semanticModel.GetSymbolInfo(node).Symbol;
         return symbol as IFieldSymbol;
+    }
+
+    private static IFieldSymbol TryGetFieldSymbolOrCandidate(
+        SemanticModel semanticModel,
+        SyntaxNode node)
+    {
+        IFieldSymbol field = TryGetFieldSymbol(semanticModel, node);
+        if (field != null)
+        {
+            return field;
+        }
+
+        if (node == null)
+        {
+            return null;
+        }
+
+        // Why candidates: assigning to a const (or other illegal field use) still
+        // names that field, but GetSymbolInfo leaves it in CandidateSymbols.
+        foreach (ISymbol candidate in semanticModel.GetSymbolInfo(node).CandidateSymbols)
+        {
+            if (candidate is IFieldSymbol candidateField)
+            {
+                return candidateField;
+            }
+        }
+
+        return null;
     }
 
     internal static string FormatAddedFieldKeyFromSymbol(IFieldSymbol fieldSymbol)
@@ -7171,6 +7272,12 @@ internal static class AddedFieldSkipReasons
     public const string UnavailableAddedField =
         "Uses an added field that hot reload cannot emit. Run 'uloop compile'.";
 
+    public const string FieldTypeChanged =
+        "Field '{0}' has a different type in the compiled assembly. Run 'uloop compile'.";
+
+    public const string FieldModifiersChanged =
+        "Field '{0}' changed its static or const modifier in the compiled assembly. Run 'uloop compile'.";
+
     public const string SerializeWarningFormat =
         "Added field '{0}' has a serialization attribute, so it will not appear in the Inspector "
         + "or serialize until 'uloop compile'.";
@@ -7348,6 +7455,14 @@ internal enum CompiledMethodMatch
     NotFound,
     Matched,
     ReturnTypeChanged
+}
+
+internal enum CompiledFieldMatch
+{
+    NotFound,
+    Matched,
+    FieldTypeChanged,
+    FieldModifiersChanged
 }
 
 internal sealed class WorkerUnchangedMethod

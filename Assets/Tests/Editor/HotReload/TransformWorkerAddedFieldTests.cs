@@ -30,6 +30,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ExistingCallerOriginal =
             "        public int ExistingCaller(int value)\n        {\n            return value;\n        }";
 
+        private const string ExistingFailOriginal =
+            "        public int ExistingFail(int value)\n        {\n            return value;\n        }";
+
+        private const string ExistingValueOriginal =
+            "        public int ExistingValue()\n        {\n            return 1;\n        }";
+
+        private const string FieldTypeChangedReason =
+            "Field 'PublicSeed' has a different type in the compiled assembly. Run 'uloop compile'.";
+
+        private const string FieldModifiersChangedReason =
+            "Field 'PublicSeed' changed its static or const modifier in the compiled assembly. Run 'uloop compile'.";
+
         /// <summary>
         /// What: a field present only in the edited source is rewritten to the store, an existing
         /// field stays a real field access, and a snapshot-only field is reported removed.
@@ -717,6 +729,110 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(foundWarning, Is.True, "SerializeField added fields must warn about Inspector visibility.");
         }
 
+        /// <summary>
+        /// What: changing a compiled field to an incompatible type skips the reader and writer
+        /// with FieldTypeChanged, while a method that does not touch the field still applies.
+        /// </summary>
+        [Test]
+        public async Task Skip_FieldTypeChangedIncompatible_SkipsReaderAndWriter_LeavesUntouchedMethod()
+        {
+            await AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
+                "public string PublicSeed = \"x\";",
+                "FieldTypeChangedIncompatible.cs",
+                FieldTypeChangedReason);
+        }
+
+        /// <summary>
+        /// What: changing a compiled int field to long also skips readers and writers, so the
+        /// implicit conversion cannot apply against the old compiled storage.
+        /// </summary>
+        [Test]
+        public async Task Skip_FieldTypeChangedIntToLong_SkipsReaderAndWriter_LeavesUntouchedMethod()
+        {
+            await AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
+                "public long PublicSeed = 3;",
+                "FieldTypeChangedIntToLong.cs",
+                FieldTypeChangedReason);
+        }
+
+        /// <summary>
+        /// What: changing a compiled instance field to static skips readers and writers with
+        /// FieldModifiersChanged and does not emit the added-field Inspector warning.
+        /// </summary>
+        [Test]
+        public async Task Skip_FieldModifiersChangedToStatic_SkipsReaderAndWriter_LeavesUntouchedMethod()
+        {
+            await AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
+                "[SerializeField] public static int PublicSeed = 3;",
+                "FieldModifiersChangedToStatic.cs",
+                FieldModifiersChangedReason);
+        }
+
+        /// <summary>
+        /// What: changing a compiled instance field to const skips readers and writers with
+        /// FieldModifiersChanged, covering the implicit static bit, without an Inspector warning.
+        /// </summary>
+        [Test]
+        public async Task Skip_FieldModifiersChangedToConst_SkipsReaderAndWriter_LeavesUntouchedMethod()
+        {
+            await AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
+                "[SerializeField] public const int PublicSeed = 3;",
+                "FieldModifiersChangedToConst.cs",
+                FieldModifiersChangedReason);
+        }
+
+        /// <summary>
+        /// What: a [SerializeField] compiled field whose type changes is skipped with
+        /// FieldTypeChanged and does not emit the added-field Inspector warning.
+        /// </summary>
+        [Test]
+        public async Task Skip_FieldTypeChangedSerializeField_SkipsWithoutInspectorWarning()
+        {
+            await AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
+                "[SerializeField] public long PublicSeed = 3;",
+                "FieldTypeChangedSerializeField.cs",
+                FieldTypeChangedReason);
+        }
+
+        private static async Task AssertCompiledFieldDeclarationChangeSkipsTouchingMethodsAsync(
+            string replacementFieldDeclaration,
+            string editedFileName,
+            string expectedSkipReason)
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PublicSeed = 3;",
+                "        " + replacementFieldDeclaration,
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return PublicSeed.GetHashCode() + value;\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                ExistingFailOriginal,
+                "        public int ExistingFail(int value)\n        {\n"
+                + "            PublicSeed = value;\n            return value;\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                ExistingValueOriginal,
+                "        public int ExistingValue()\n        {\n            return 2;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited(editedFileName, edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), expectedSkipReason);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingFail), expectedSkipReason);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue)), Is.Not.Null);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingFail)), Is.Null);
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+            AssertHasNoAddedFieldSerializeWarning(result);
+        }
+
         private static async Task<TransformWorkerClientResult> RunWorkerOnSourceAsync(
             string sourcePath,
             string projectRelativePath,
@@ -860,6 +976,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Expected skip for '" + methodNameFragment + "' with reason containing '"
                 + reasonFragment + "'. Skipped="
                 + FormatSkipped(result.Output.skipped));
+        }
+
+        private static void AssertHasNoAddedFieldSerializeWarning(TransformWorkerClientResult result)
+        {
+            foreach (string warning in result.Output.declarationDriftWarnings)
+            {
+                if (warning != null && warning.Contains("will not appear in the Inspector"))
+                {
+                    Assert.Fail(
+                        "Declaration-changed compiled fields must not emit the added-field "
+                        + "Inspector warning. Warnings="
+                        + string.Join("\n", result.Output.declarationDriftWarnings));
+                }
+            }
         }
 
         private static string FormatSkipped(TransformWorkerSkippedDto[] skipped)
