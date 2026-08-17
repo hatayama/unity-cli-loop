@@ -198,6 +198,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Source is unchanged since the last applied hot reload; the existing patch stays active "
             + "and keeps its InvocationCount. Edit and reload again to apply new changes.";
 
+        // Format: project-relative path of the source that matched a non-baseline ledger entry.
+        public const string UnchangedSourceNonBaselineWarningFormat =
+            "Source of '{0}' is unchanged since the last reload, but that run had Skipped or Failed "
+            + "outcomes, so it is not a fully applied baseline. All editable methods were processed "
+            + "again and unresolved Skipped reasons are re-reported.";
+
         // Format: number of AlreadyActive method outcomes in this run.
         public const string AlreadyActiveApplyMessageFormat =
             "Hot reload found no source changes since the last applied reload. {0} patch(es) stay "

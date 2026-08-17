@@ -1736,6 +1736,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "The second reload must not replace the patch; InvocationCount stays at the pre-reload value.");
             Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(2L));
+            AssertNoUnchangedSourceNonBaselineWarning(second);
         }
 
         /// <summary>
@@ -1807,6 +1808,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasPatched(second, nameof(HotReloadE2EFixture.ComputeWithPrivate));
             AssertHasFailed(second, nameof(HotReloadE2EFixture.CallsMissingHelper));
             AssertNoAlreadyActive(second);
+            AssertHasUnchangedSourceNonBaselineWarning(second);
         }
 
         /// <summary>
@@ -1856,6 +1858,75 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkipped(third, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
             AssertHasPatched(third, nameof(HotReloadE2EFixture.SumGrid));
             AssertNoAlreadyActive(third);
+            AssertHasUnchangedSourceNonBaselineWarning(third);
+        }
+
+        /// <summary>
+        /// What: an unchanged reload after a Skipped-only (empty-entries) run emits the
+        /// non-baseline warning, so all-Skipped files still record a hash.
+        /// </summary>
+        [Test]
+        public async Task Run_AllSkippedThenIdenticalReload_WarnsUnchangedSourceNonBaseline()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "AllSkippedThenIdenticalReload.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return base.BaseSeed() + delta;\n        }"));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasSkipped(first, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            Assert.That(first.PatchedTotal, Is.EqualTo(0));
+            AssertNoUnchangedSourceNonBaselineWarning(first);
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            AssertHasSkipped(second, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertNoAlreadyActive(second);
+            AssertHasUnchangedSourceNonBaselineWarning(second);
+        }
+
+        /// <summary>
+        /// What: changing the source after a non-baseline run does not emit the unchanged-source
+        /// warning, because the probe hash no longer matches the recorded non-baseline entry.
+        /// </summary>
+        [Test]
+        public async Task Run_NonBaselineThenChangedSource_DoesNotWarnUnchangedSourceNonBaseline()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string skippedPath = WriteEditedSource(
+                "NonBaselineThenChanged1.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return base.BaseSeed() + delta;\n        }"));
+            string changedPath = WriteEditedSource(
+                "NonBaselineThenChanged2.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                skippedPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasSkipped(first, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                changedPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            AssertHasPatched(second, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertNoUnchangedSourceNonBaselineWarning(second);
         }
 
         /// <summary>
@@ -4240,6 +4311,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     outcome.Kind,
                     Is.Not.EqualTo(HotReloadMethodOutcomeKind.AlreadyActive),
                     "Did not expect AlreadyActive.\n" + FormatOutcomes(result));
+            }
+        }
+
+        private static string FormatUnchangedSourceNonBaselineWarning()
+        {
+            return string.Format(
+                HotReloadConstants.UnchangedSourceNonBaselineWarningFormat,
+                "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs");
+        }
+
+        private static void AssertHasUnchangedSourceNonBaselineWarning(HotReloadOrchestratorResult result)
+        {
+            string expected = FormatUnchangedSourceNonBaselineWarning();
+            int matchCount = 0;
+            foreach (string warning in result.Warnings)
+            {
+                if (string.Equals(warning, expected, StringComparison.Ordinal))
+                {
+                    matchCount++;
+                }
+            }
+
+            Assert.That(
+                matchCount,
+                Is.EqualTo(1),
+                "Expected exactly one unchanged-source non-baseline warning.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
+        private static void AssertNoUnchangedSourceNonBaselineWarning(HotReloadOrchestratorResult result)
+        {
+            string expected = FormatUnchangedSourceNonBaselineWarning();
+            foreach (string warning in result.Warnings)
+            {
+                Assert.That(
+                    warning,
+                    Is.Not.EqualTo(expected),
+                    "Did not expect the unchanged-source non-baseline warning.\n"
+                    + string.Join("\n", result.Warnings));
             }
         }
 
