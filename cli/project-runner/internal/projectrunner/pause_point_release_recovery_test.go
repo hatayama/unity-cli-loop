@@ -370,6 +370,51 @@ func TestCompleteEnableWithReleaseRecovery_WhenCompileAlreadyInProgressOnce_Retr
 	}
 }
 
+// Verifies a cancelled retry wait reports the cancel error instead of the busy compile JSON.
+func TestRunFreshCompileWithBusyRetry_WhenRetryWaitCancelled_ReportsCancelNotBusyResult(t *testing.T) {
+	originalAttempt := runOneFreshCompileForPausePointRecovery
+	originalWait := waitPausePointRecoveryBusyRetry
+	t.Cleanup(func() {
+		runOneFreshCompileForPausePointRecovery = originalAttempt
+		waitPausePointRecoveryBusyRetry = originalWait
+	})
+
+	busyResult := []byte(`{"Success":false,"ErrorCode":"COMPILE_ALREADY_IN_PROGRESS"}`)
+	runOneFreshCompileForPausePointRecovery = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		params map[string]any,
+		stdout io.Writer,
+		stderr io.Writer,
+		budget time.Duration,
+	) int {
+		_, _ = stdout.Write(busyResult)
+		return 1
+	}
+	waitPausePointRecoveryBusyRetry = func(ctx context.Context, duration time.Duration) error {
+		return context.Canceled
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runFreshCompileWithBusyRetryForPausePointRecovery(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		map[string]any{},
+		&stdout,
+		&stderr,
+	)
+	if code != 1 {
+		t.Fatalf("expected cancel exit 1, got %d", code)
+	}
+	if bytes.Contains(stdout.Bytes(), []byte("COMPILE_ALREADY_IN_PROGRESS")) {
+		t.Fatalf("cancelled wait must not write busy compile JSON: %s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "context canceled") && !strings.Contains(stderr.String(), "canceled") {
+		t.Fatalf("expected classified cancel error on stderr, got %s", stderr.String())
+	}
+}
+
 // Verifies a failed recovery compile writes its stdout buffer and does not resend enable.
 func TestCompleteEnableWithReleaseRecovery_WhenCompileFails_WritesStdoutAndDoesNotResend(t *testing.T) {
 	originalSwitch := sendSetCodeOptimizationDebug

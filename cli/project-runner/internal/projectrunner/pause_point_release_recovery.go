@@ -199,8 +199,11 @@ func runFreshCompileWithBusyRetryForPausePointRecovery(
 			wait = remaining
 		}
 		if waitErr := waitPausePointRecoveryBusyRetry(ctx, wait); waitErr != nil {
-			_, _ = stdout.Write(attemptOut.Bytes())
-			return code
+			clierrors.WriteClassifiedError(stderr, waitErr, clierrors.ErrorContext{
+				ProjectRoot: connection.ProjectRoot,
+				Command:     pausePointEnableCommandName,
+			})
+			return 1
 		}
 	}
 }
