@@ -4,9 +4,9 @@ import (
 	"fmt"
 )
 
-func unityServerBusyMessage(fallback string, data map[string]any, requestedCommand string) string {
-	runningToolName := rpcStringData(data, "runningToolName")
-	requestedToolName := firstNonEmpty(rpcStringData(data, "requestedToolName"), requestedCommand)
+func unityServerBusyMessage(fallback string, data serverBusyErrorData, requestedCommand string) string {
+	runningToolName := data.RunningToolName
+	requestedToolName := firstNonEmpty(data.RequestedToolName, requestedCommand)
 	if runningToolName == "" || requestedToolName == "" {
 		return fallback
 	}
@@ -17,12 +17,4 @@ func unityServerBusyMessage(fallback string, data map[string]any, requestedComma
 		requestedToolName,
 		runningToolName,
 		runningToolName)
-}
-
-func rpcStringData(data map[string]any, key string) string {
-	value, ok := data[key].(string)
-	if !ok {
-		return ""
-	}
-	return value
 }

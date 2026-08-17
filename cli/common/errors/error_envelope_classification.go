@@ -137,35 +137,34 @@ func refusedConnectionAttemptCLIError(err *unityipc.ConnectionAttemptError, cont
 }
 
 func classifyRPCError(rpcErr *unityipc.RPCError, context ErrorContext) CLIError {
-	details, decodedData := rpcErrorDetails(rpcErr)
-	switch RPCDataType(decodedData) {
+	details := rpcErrorDetails(rpcErr)
+	switch RPCDataType(rpcErr.Data) {
 	case "cli_update_required":
-		return cliUpdateRequiredError(rpcErr, details, decodedData, context)
+		return cliUpdateRequiredError(rpcErr, details, decodeCliUpdateRequiredErrorData(rpcErr.Data), context)
 	case "server_busy":
-		return unityServerBusyError(rpcErr, details, decodedData, context)
+		return unityServerBusyError(rpcErr, details, decodeServerBusyErrorData(rpcErr.Data), context)
 	default:
 		return genericRPCError(rpcErr, details, context)
 	}
 }
 
-func rpcErrorDetails(rpcErr *unityipc.RPCError) (map[string]any, map[string]any) {
+func rpcErrorDetails(rpcErr *unityipc.RPCError) map[string]any {
 	details := map[string]any{
 		"Code":    rpcErr.Code,
 		"Message": rpcErr.Message,
 	}
 	if len(rpcErr.Data) == 0 {
-		return details, nil
+		return details
 	}
 
 	var data any
 	if json.Unmarshal(rpcErr.Data, &data) != nil {
 		details["Data"] = string(rpcErr.Data)
-		return details, nil
+		return details
 	}
 
 	details["Data"] = data
-	decodedData, _ := data.(map[string]any)
-	return details, decodedData
+	return details
 }
 
 func genericRPCError(rpcErr *unityipc.RPCError, details map[string]any, context ErrorContext) CLIError {
@@ -182,15 +181,4 @@ func genericRPCError(rpcErr *unityipc.RPCError, details map[string]any, context 
 		},
 		Details: details,
 	}
-}
-
-func RPCDataType(data map[string]any) string {
-	if data == nil {
-		return ""
-	}
-	value, ok := data["type"].(string)
-	if !ok {
-		return ""
-	}
-	return value
 }

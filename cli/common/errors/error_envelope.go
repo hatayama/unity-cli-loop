@@ -144,7 +144,7 @@ func responseTimeoutAfterAcceptError(err error, context ErrorContext) CLIError {
 func unityServerBusyError(
 	rpcErr *unityipc.RPCError,
 	details map[string]any,
-	data map[string]any,
+	data serverBusyErrorData,
 	context ErrorContext,
 ) CLIError {
 	if editorActivity := unityServerBusyEditorActivitySummary(data); editorActivity != nil {
@@ -164,7 +164,7 @@ func unityServerBusyError(
 	}
 }
 
-func cliUpdateRequiredError(rpcErr *unityipc.RPCError, details map[string]any, data map[string]any, context ErrorContext) CLIError {
+func cliUpdateRequiredError(rpcErr *unityipc.RPCError, details map[string]any, data cliUpdateRequiredErrorData, context ErrorContext) CLIError {
 	return CLIError{
 		ErrorCode:   ErrorCodeCLIUpdateRequired,
 		Phase:       errorPhaseUnityRPC,
@@ -178,11 +178,10 @@ func cliUpdateRequiredError(rpcErr *unityipc.RPCError, details map[string]any, d
 	}
 }
 
-func cliUpdateRequiredNextActions(data map[string]any) []string {
-	updateCommand, _ := data["updateCommand"].(string)
+func cliUpdateRequiredNextActions(data cliUpdateRequiredErrorData) []string {
 	actions := []string{}
-	if updateCommand != "" {
-		actions = append(actions, "Run `"+updateCommand+"`.")
+	if data.UpdateCommand != "" {
+		actions = append(actions, "Run `"+data.UpdateCommand+"`.")
 	} else if cliProtocolMismatchIsNewer(data) {
 		actions = append(actions, "Update the Unity package to a version that supports this CLI protocol, or install the CLI from the same release as the package.")
 	} else {
@@ -192,15 +191,8 @@ func cliUpdateRequiredNextActions(data map[string]any) []string {
 	return actions
 }
 
-func cliProtocolMismatchIsNewer(data map[string]any) bool {
-	currentProtocolVersion, currentOk := protocolVersionFromRPCData(data, "currentProtocolVersion")
-	requiredProtocolVersion, requiredOk := protocolVersionFromRPCData(data, "requiredProtocolVersion")
-	return currentOk && requiredOk && currentProtocolVersion > requiredProtocolVersion
-}
-
-func protocolVersionFromRPCData(data map[string]any, key string) (float64, bool) {
-	value, ok := data[key].(float64)
-	return value, ok
+func cliProtocolMismatchIsNewer(data cliUpdateRequiredErrorData) bool {
+	return data.CurrentProtocolVersion != nil && *data.CurrentProtocolVersion > data.RequiredProtocolVersion
 }
 
 func disconnectedAfterAcceptError(err error, context ErrorContext) CLIError {
