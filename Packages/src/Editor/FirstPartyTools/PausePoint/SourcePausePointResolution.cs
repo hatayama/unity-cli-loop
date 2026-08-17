@@ -17,6 +17,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int InstructionIndex { get; }
         public int IlOffset { get; }
         public int ResolvedLine { get; }
+        // Sequence-point EndLine is internal transport for joining ResolvedLineText.
+        // It is not a CLI response field.
+        public int ResolvedEndLine { get; }
         public IReadOnlyList<SourcePausePointLocalVariable> Locals { get; }
         public IReadOnlyList<SourcePausePointParameter> Parameters { get; }
 
@@ -30,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int instructionIndex,
             int ilOffset,
             int resolvedLine,
+            int resolvedEndLine,
             IReadOnlyList<SourcePausePointLocalVariable> locals,
             IReadOnlyList<SourcePausePointParameter> parameters)
         {
@@ -42,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             InstructionIndex = instructionIndex;
             IlOffset = ilOffset;
             ResolvedLine = resolvedLine;
+            ResolvedEndLine = resolvedEndLine;
             Locals = locals;
             Parameters = parameters;
         }
