@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.IO;
@@ -520,7 +521,8 @@ public static class TransformWorkerProgram
             RemovedMembers = removedMembers.ToArray(),
             RemovedMethodSignatures = removedMethodSignatures.ToArray(),
             HasAccessorDelegates = hasAccessorDelegates,
-            HasAddedFieldRewrites = addedFieldCatalog.HasStoreRewrites
+            HasAddedFieldRewrites = addedFieldCatalog.HasStoreRewrites,
+            AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames()
         };
     }
 
@@ -6841,6 +6843,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
                 return null;
             }
 
+            _addedFieldCatalog.MarkConstFold(binding.FieldKey);
             return literal.WithTriviaFrom(triviaSource);
         }
 
@@ -6938,7 +6941,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         AddedFieldBinding binding,
         ExpressionSyntax receiver)
     {
-        _addedFieldCatalog.MarkStoreRewrite();
+        _addedFieldCatalog.MarkStoreRewrite(binding.FieldKey);
         string methodName = binding.IsStatic
             ? TransformWorkerProgramMarker.AddedFieldGetOrInitStaticMethodName
             : TransformWorkerProgramMarker.AddedFieldGetOrInitMethodName;
@@ -6962,7 +6965,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         ExpressionSyntax receiver,
         ExpressionSyntax value)
     {
-        _addedFieldCatalog.MarkStoreRewrite();
+        _addedFieldCatalog.MarkStoreRewrite(binding.FieldKey);
         string methodName = binding.IsStatic
             ? TransformWorkerProgramMarker.AddedFieldSetStaticMethodName
             : TransformWorkerProgramMarker.AddedFieldSetMethodName;
@@ -7913,14 +7916,15 @@ internal sealed class AddedFieldBinding
 }
 
 /// <summary>
-/// What: file-wide catalog of added fields, syntax keys for drift strip, and whether any
-/// shim body actually emitted a HotReloadAddedFieldStore call.
+/// What: file-wide catalog of added fields, syntax keys for drift strip, store-rewrite
+/// presence, and display names of fields rewritten in emitted shim bodies.
 /// </summary>
 internal sealed class AddedFieldCatalog
 {
     private readonly Dictionary<string, AddedFieldBinding> _byKey =
         new Dictionary<string, AddedFieldBinding>(StringComparer.Ordinal);
     private readonly HashSet<string> _classifiedAddedKeys = new HashSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> _rewrittenAddedFieldKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _addedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _removedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
 
@@ -7962,6 +7966,39 @@ internal sealed class AddedFieldCatalog
         MarkClassifiedAdded(binding.FieldKey);
     }
 
+    // Why rewritten keys, not RegisterStore/RegisterConst: those fire at declaration
+    // classification, so unused fields and isolation-excluded bodies would still list.
+    // Excluded methods are dropped in QueueTypeMethods before rewrite, so a file-wide
+    // rewrite set matches emitted entries without per-entry tracking.
+    public string[] ListRewrittenAddedFieldDisplayNames()
+    {
+        List<string> names = new List<string>(_rewrittenAddedFieldKeys.Count);
+        foreach (string fieldKey in _rewrittenAddedFieldKeys)
+        {
+            names.Add(FormatAddedFieldDisplayName(fieldKey));
+        }
+
+        names.Sort(StringComparer.Ordinal);
+        return names.ToArray();
+    }
+
+    // Why this shape: method labels replace '/' with '+' then join with '.', so field
+    // names stay comparable to Methods[].Method (Ns.Type.field).
+    private static string FormatAddedFieldDisplayName(string fieldKey)
+    {
+        int separatorIndex = fieldKey.IndexOf(
+            TransformWorkerProgramMarker.AddedFieldKeySeparator,
+            StringComparison.Ordinal);
+        Debug.Assert(
+            separatorIndex >= 0,
+            "fieldKey is always built with FormatAddedFieldStoreKey / BuildSyntaxFieldKey.");
+
+        string typeMetadataName = fieldKey.Substring(0, separatorIndex).Replace('/', '+');
+        string fieldName = fieldKey.Substring(
+            separatorIndex + TransformWorkerProgramMarker.AddedFieldKeySeparator.Length);
+        return typeMetadataName + "." + fieldName;
+    }
+
     public void RegisterUnavailable(AddedFieldBinding binding)
     {
         _byKey[binding.FieldKey] = binding;
@@ -7978,9 +8015,17 @@ internal sealed class AddedFieldCatalog
         return _byKey.TryGetValue(fieldKey, out AddedFieldBinding binding) ? binding : null;
     }
 
-    public void MarkStoreRewrite()
+    public void MarkStoreRewrite(string fieldKey)
     {
+        Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be null or empty.");
         HasStoreRewrites = true;
+        _rewrittenAddedFieldKeys.Add(fieldKey);
+    }
+
+    public void MarkConstFold(string fieldKey)
+    {
+        Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be null or empty.");
+        _rewrittenAddedFieldKeys.Add(fieldKey);
     }
 }
 
@@ -8196,6 +8241,9 @@ internal sealed class WorkerOutput
     // True when shim bodies rewrite added-field accesses to HotReloadAddedFieldStore.
     // Keep in sync with TransformWorkerOutputDto.hasAddedFieldRewrites.
     public bool HasAddedFieldRewrites { get; set; }
+
+    // Keep in sync with TransformWorkerOutputDto.addedFieldNames.
+    public string[] AddedFieldNames { get; set; }
 }
 
 internal sealed class WorkerRemovedMember

@@ -97,6 +97,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return PrivateConstThree;
         }
 
+        public class NestedAddedFieldHost
+        {
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public int ExistingNested()
+            {
+                return 1;
+            }
+        }
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int ReadPrivateSeed()
         {

@@ -435,6 +435,166 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo("Hot reload finished with one or more Failed method outcomes. See Methods."));
         }
 
+        /// <summary>
+        /// What: every apply-message branch appends the warning-count suffix when Warnings is
+        /// non-empty, and the applied branch mentions Skipped before that suffix.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithWarnings_AppendsWarningCountOnEveryBranch()
+        {
+            const string warning = "const drift";
+            List<string> oneWarning = new List<string> { warning };
+
+            HotReloadResponse failed = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Failed("T.M", "reason", "file.cs")
+                    },
+                    oneWarning,
+                    patchedTotal: 0,
+                    activePatchTotal: 0));
+            Assert.That(
+                failed.Message,
+                Is.EqualTo(
+                    "Hot reload finished with one or more Failed method outcomes. See Methods. "
+                    + "1 warning(s). See Warnings."));
+
+            HotReloadResponse empty = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>(),
+                    oneWarning,
+                    patchedTotal: 0,
+                    activePatchTotal: 0));
+            Assert.That(
+                empty.Message,
+                Is.EqualTo(
+                    "Hot reload found no patchable method bodies in the given files; nothing was changed. "
+                    + "Hot reload only replaces existing ordinary method bodies; use uloop compile for other edits. "
+                    + "1 warning(s). See Warnings."));
+
+            HotReloadResponse allUnchanged = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>(),
+                    oneWarning,
+                    patchedTotal: 0,
+                    activePatchTotal: 0,
+                    unchangedTotal: 8));
+            Assert.That(
+                allUnchanged.Message,
+                Is.EqualTo(
+                    "All 8 methods are unchanged since the last compile; nothing to patch. "
+                    + "1 warning(s). See Warnings."));
+
+            HotReloadResponse skippedOnly = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Skipped("T.M", "reason", "file.cs")
+                    },
+                    oneWarning,
+                    patchedTotal: 0,
+                    activePatchTotal: 0));
+            Assert.That(
+                skippedOnly.Message,
+                Is.EqualTo(
+                    "Hot reload finished with no methods patched. See Methods for Skipped reasons. "
+                    + "1 warning(s). See Warnings."));
+
+            HotReloadResponse applied = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string> { "a", "b" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1));
+            Assert.That(
+                applied.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    + "2 warning(s). See Warnings."));
+
+            HotReloadResponse appliedWithSkipped = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs"),
+                        HotReloadMethodOutcome.Skipped("T.Skip", "reason", "file.cs")
+                    },
+                    new List<string> { "a", "b" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1));
+            Assert.That(
+                appliedWithSkipped.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    + "See Methods for Skipped reasons. 2 warning(s). See Warnings."));
+        }
+
+        /// <summary>
+        /// What: BuildApplyResponse copies orchestrator AddedFields onto the public response
+        /// and uses an empty array when the result has none.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_CopiesAddedFieldsOrEmptyArray()
+        {
+            string[] addedFields =
+            {
+                "Ns.Host.AddedCount",
+                "Ns.Host.AddedSerialized"
+            };
+            HotReloadResponse withFields = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1,
+                    addedFields: addedFields));
+            Assert.That(withFields.AddedFields, Is.EqualTo(addedFields));
+
+            HotReloadResponse withoutFields = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1));
+            Assert.That(withoutFields.AddedFields, Is.Not.Null);
+            Assert.That(withoutFields.AddedFields, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: an applied run with Skipped outcomes and no warnings still points at Methods.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AppliedWithSkipped_AppendsSkippedNoteWithoutWarningSuffix()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Skipped("T.Skip", "reason", "file.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    + "See Methods for Skipped reasons."));
+        }
+
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController
         {
             public bool IsPlaying => true;

@@ -72,6 +72,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public int ClearedCount { get; set; }
 
+        public string[] AddedFields { get; set; } = Array.Empty<string>();
+
         public string Message { get; set; } = string.Empty;
     }
 
@@ -254,7 +256,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PatchedTotal = result.PatchedTotal,
                 ActivePatchTotal = result.ActivePatchTotal,
                 UnchangedTotal = result.UnchangedTotal,
-                Message = BuildApplyMessage(result, hasFailure)
+                AddedFields = result.AddedFields ?? Array.Empty<string>(),
+                Message = BuildApplyMessage(result, hasFailure, warnings.Count)
             };
         }
 
@@ -308,18 +311,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 lineText);
         }
 
-        private static string BuildApplyMessage(HotReloadOrchestratorResult result, bool hasFailure)
+        private static string BuildApplyMessage(
+            HotReloadOrchestratorResult result,
+            bool hasFailure,
+            int warningCount)
         {
             // Why: when every method was left untouched, the empty Methods list is intentional —
             // report the unchanged count instead of the generic "no patchable bodies" message.
             if (!hasFailure && result.Methods.Count == 0 && result.UnchangedTotal > 0)
             {
-                return "All " + result.UnchangedTotal
-                    + " methods are unchanged since the last compile; nothing to patch.";
+                return AppendWarningCount(
+                    "All " + result.UnchangedTotal
+                    + " methods are unchanged since the last compile; nothing to patch.",
+                    warningCount);
             }
 
             string message;
             int addedCount = CountAddedOutcomes(result);
+            bool isAppliedBranch = false;
             if (hasFailure)
             {
                 message = "Hot reload finished with one or more Failed method outcomes. See Methods.";
@@ -335,6 +344,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             else
             {
+                isAppliedBranch = true;
                 message = "Hot reload applied. PatchedTotal=" + result.PatchedTotal
                     + ", ActivePatchTotal=" + result.ActivePatchTotal + ".";
                 if (addedCount > 0)
@@ -366,7 +376,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     lifecycleNoteCount);
             }
 
-            return message;
+            if (isAppliedBranch && HasSkippedOutcome(result))
+            {
+                message += " See Methods for Skipped reasons.";
+            }
+
+            return AppendWarningCount(message, warningCount);
+        }
+
+        private static bool HasSkippedOutcome(HotReloadOrchestratorResult result)
+        {
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                if (result.Methods[index].Kind == HotReloadMethodOutcomeKind.Skipped)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string AppendWarningCount(string message, int warningCount)
+        {
+            if (warningCount <= 0)
+            {
+                return message;
+            }
+
+            return message + " " + warningCount + " warning(s). See Warnings.";
         }
 
         private static int CountAddedOutcomes(HotReloadOrchestratorResult result)
