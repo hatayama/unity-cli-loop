@@ -51,8 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int unchangedTotal = 0;
             // Why after the file loop (not inside ProcessFileAsync): duplicate paths in one
             // run must still apply twice; recording mid-run would short-circuit the second copy.
-            Dictionary<string, string> appliedSourceHashByPath =
-                new Dictionary<string, string>(StringComparer.Ordinal);
+            Dictionary<string, (string Hash, bool IsFullyApplied)> appliedSourceHashByPath =
+                new Dictionary<string, (string Hash, bool IsFullyApplied)>(StringComparer.Ordinal);
 
             for (int index = 0; index < files.Count; index++)
             {
@@ -89,9 +89,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     fileResult.Outcomes);
             }
 
-            foreach (KeyValuePair<string, string> pair in appliedSourceHashByPath)
+            foreach (KeyValuePair<string, (string Hash, bool IsFullyApplied)> pair in appliedSourceHashByPath)
             {
-                HotReloadAppliedSourceLedger.Record(pair.Key, pair.Value);
+                HotReloadAppliedSourceLedger.Record(pair.Key, pair.Value.Hash, pair.Value.IsFullyApplied);
             }
 
             if (inlineRiskMethodLabels.Count > 0)
@@ -179,13 +179,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new HotReloadFileProcessResult(outcomes, warnings, 0);
             }
 
-            if (TryShortCircuitUnchangedAppliedSource(
-                    workerSourcePath,
-                    projectRelativePath,
-                    assemblyResolvePath,
-                    outcomes))
+            HotReloadUnchangedSourceDecision unchangedDecision = TryShortCircuitUnchangedAppliedSource(
+                workerSourcePath,
+                projectRelativePath,
+                assemblyResolvePath,
+                outcomes);
+            if (unchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
             {
                 return new HotReloadFileProcessResult(outcomes, warnings, 0);
+            }
+
+            if (unchangedDecision == HotReloadUnchangedSourceDecision.ReapplyNonBaseline)
+            {
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.UnchangedSourceNonBaselineWarningFormat,
+                        projectRelativePath));
             }
 
             // Why snapshot at this file's apply entry: multi-file runs process files
@@ -321,7 +330,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     outcomes,
                     warnings,
                     0,
-                    unchangedMethodCount: unchangedMethodCount);
+                    unchangedMethodCount: unchangedMethodCount,
+                    sourceContentSha256: workerOutput.sourceContentSha256);
             }
 
             outcomes.AddRange(gateResult.SkippedOutcomes);
@@ -341,7 +351,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         suppressedPausePointIds,
                         new List<string>(),
                         unchangedMethodCount,
-                        retargetedPausePointIds);
+                        retargetedPausePointIds,
+                        addedFieldNames: null,
+                        sourceContentSha256: workerOutput.sourceContentSha256);
                 }
 
                 entriesToPatch = gateResult.Isolation.RetryEntries;
@@ -361,7 +373,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     outcomes,
                     warnings,
                     0,
-                    unchangedMethodCount: unchangedMethodCount);
+                    unchangedMethodCount: unchangedMethodCount,
+                    sourceContentSha256: workerOutput.sourceContentSha256);
             }
             else
             {
@@ -385,7 +398,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         outcomes,
                         warnings,
                         0,
-                        unchangedMethodCount: unchangedMethodCount);
+                        unchangedMethodCount: unchangedMethodCount,
+                        sourceContentSha256: workerOutput.sourceContentSha256);
                 }
 
                 outcomes.AddRange(firstCompile.Outcomes);
@@ -398,7 +412,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         suppressedPausePointIds,
                         new List<string>(),
                         unchangedMethodCount,
-                        retargetedPausePointIds);
+                        retargetedPausePointIds,
+                        addedFieldNames: null,
+                        sourceContentSha256: workerOutput.sourceContentSha256);
                 }
 
                 entriesToPatch = firstCompile.EntriesToPatch;
@@ -427,7 +443,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         outcomes,
                         warnings,
                         0,
-                        unchangedMethodCount: unchangedMethodCount);
+                        unchangedMethodCount: unchangedMethodCount,
+                        sourceContentSha256: workerOutput.sourceContentSha256);
                 }
             }
 
@@ -2449,11 +2466,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return contentPathOverride;
         }
 
-        // What: skip worker/shim/patch when this file's source still matches the last applied
-        // run and at least one patch from that run is still active.
-        // Why Clear on the miss path: a later Failed run or revert can leave the hash pointing
-        // at a different live patch set; the next reload must not inherit that stale hash.
-        private static bool TryShortCircuitUnchangedAppliedSource(
+        // What: decide whether an unchanged source should short-circuit, re-apply with a
+        // non-baseline warning, or fall through as a normal changed/unknown source.
+        // Why Clear on the miss and non-baseline paths: a later Failed run or revert can leave
+        // the hash pointing at a different live patch set; the next reload must not inherit
+        // that stale hash. Non-baseline matches still Clear; Stage/Record writes the same
+        // hash+flag back so the next identical reload warns again.
+        private static HotReloadUnchangedSourceDecision TryShortCircuitUnchangedAppliedSource(
             string workerSourcePath,
             string projectRelativePath,
             string assemblyResolvePath,
@@ -2470,30 +2489,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string fullWorkerSourcePath = Path.GetFullPath(workerSourcePath);
             if (!File.Exists(fullWorkerSourcePath))
             {
-                return false;
+                return HotReloadUnchangedSourceDecision.NotUnchanged;
             }
 
             byte[] probeBytes = File.ReadAllBytes(fullWorkerSourcePath);
             string probeHash = HotReloadAppliedSourceLedger.ComputeContentHash(probeBytes);
             HashSet<string> activeLabels = CollectActiveLabelsForFile(projectRelativePath);
-            string recordedHash = HotReloadAppliedSourceLedger.TryGetHash(projectRelativePath);
-            if (recordedHash == null
-                || !string.Equals(probeHash, recordedHash, StringComparison.Ordinal)
-                || activeLabels.Count == 0)
+            (string Hash, bool IsFullyApplied)? recorded = HotReloadAppliedSourceLedger.TryGet(projectRelativePath);
+            if (recorded == null
+                || !string.Equals(probeHash, recorded.Value.Hash, StringComparison.Ordinal)
+                || (recorded.Value.IsFullyApplied && activeLabels.Count == 0))
             {
                 HotReloadAppliedSourceLedger.Clear(projectRelativePath);
-                return false;
+                return HotReloadUnchangedSourceDecision.NotUnchanged;
             }
 
-            List<string> sortedLabels = new List<string>(activeLabels);
-            sortedLabels.Sort(StringComparer.Ordinal);
-            for (int index = 0; index < sortedLabels.Count; index++)
+            if (recorded.Value.IsFullyApplied)
             {
-                outcomes.Add(
-                    HotReloadMethodOutcome.AlreadyActive(sortedLabels[index], assemblyResolvePath));
+                List<string> sortedLabels = new List<string>(activeLabels);
+                sortedLabels.Sort(StringComparer.Ordinal);
+                for (int index = 0; index < sortedLabels.Count; index++)
+                {
+                    outcomes.Add(
+                        HotReloadMethodOutcome.AlreadyActive(sortedLabels[index], assemblyResolvePath));
+                }
+
+                return HotReloadUnchangedSourceDecision.ShortCircuited;
             }
 
-            return true;
+            HotReloadAppliedSourceLedger.Clear(projectRelativePath);
+            return HotReloadUnchangedSourceDecision.ReapplyNonBaseline;
         }
 
         // Why worker hash (not the orchestrator probe): the worker re-reads the file in another
@@ -2501,7 +2526,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why last occurrence wins: duplicate paths in one run apply twice; only the last
         // qualifying hash is recorded so the next run short-circuits against what actually landed.
         private static void StageAppliedSourceHash(
-            Dictionary<string, string> appliedSourceHashByPath,
+            Dictionary<string, (string Hash, bool IsFullyApplied)> appliedSourceHashByPath,
             string projectRelativePath,
             string sourceContentSha256,
             IReadOnlyList<HotReloadMethodOutcome> outcomes)
@@ -2510,41 +2535,61 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
             Debug.Assert(outcomes != null, "outcomes must not be null.");
 
-            if (!ShouldRecordAppliedSource(sourceContentSha256, outcomes))
+            (string Hash, bool IsFullyApplied)? record = DecideAppliedSourceRecord(
+                sourceContentSha256,
+                outcomes);
+            if (record == null)
             {
                 appliedSourceHashByPath.Remove(projectRelativePath);
                 return;
             }
 
-            appliedSourceHashByPath[projectRelativePath] = sourceContentSha256;
+            appliedSourceHashByPath[projectRelativePath] = record.Value;
         }
 
-        private static bool ShouldRecordAppliedSource(
+        // Why not record "everything that is not fully applied": deleting an added method and
+        // converging to compiled IL yields empty outcomes on the empty-entries path. Recording
+        // that as non-baseline would make the next identical reload claim a prior Skipped/Failed
+        // that never happened.
+        private static (string Hash, bool IsFullyApplied)? DecideAppliedSourceRecord(
             string sourceContentSha256,
             IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
             if (string.IsNullOrEmpty(sourceContentSha256) || outcomes.Count == 0)
             {
-                return false;
+                return null;
             }
 
-            bool hasPatchedOrAdded = false;
+            bool hasSkippedOrFailed = false;
+            bool allPatchedOrAdded = true;
             for (int index = 0; index < outcomes.Count; index++)
             {
                 HotReloadMethodOutcomeKind kind = outcomes[index].Kind;
-                if (kind != HotReloadMethodOutcomeKind.Patched
-                    && kind != HotReloadMethodOutcomeKind.Added)
+                if (kind == HotReloadMethodOutcomeKind.Patched
+                    || kind == HotReloadMethodOutcomeKind.Added)
                 {
-                    // Why not record Skipped: that method's previous patch may still be live,
-                    // so recording would let the next identical reload report AlreadyActive and
-                    // hide the skip reason.
-                    return false;
+                    continue;
                 }
 
-                hasPatchedOrAdded = true;
+                allPatchedOrAdded = false;
+                if (kind == HotReloadMethodOutcomeKind.Skipped
+                    || kind == HotReloadMethodOutcomeKind.Failed)
+                {
+                    hasSkippedOrFailed = true;
+                }
             }
 
-            return hasPatchedOrAdded;
+            if (allPatchedOrAdded)
+            {
+                return (sourceContentSha256, true);
+            }
+
+            if (hasSkippedOrFailed)
+            {
+                return (sourceContentSha256, false);
+            }
+
+            return null;
         }
 
         private static HashSet<string> CollectActiveLabelsForFile(string projectRelativePath)
