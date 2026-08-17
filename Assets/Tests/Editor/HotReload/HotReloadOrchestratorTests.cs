@@ -1231,6 +1231,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a caller that invokes an added generic method fails shim compile, and the
+        /// Failed reason's last line is the skipped-member note for that generic add.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedCallerOfAddedGeneric_FailsWithSkippedMemberNote()
+        {
+            const string genericSkipReason =
+                "Added generic methods are skipped; hot reload cannot emit a typed shim for them. "
+                + "Run 'uloop compile'.";
+            string expectedLastLine = string.Format(
+                HotReloadConstants.SkippedMemberCompileFailureNoteFormat,
+                "DescribeValue",
+                genericSkipReason);
+            string fixturePath = ResolveE2EFixturePath();
+            // Why also edit ComputeWithPrivate: a single failing entry skips isolation and
+            // returns Compose without AppendNotes. A second healthy entry forces the
+            // BuildFailedMethodOutcomes path that this test protects.
+            string editedPath = WriteEditedSource(
+                "AddedGenericCaller.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                    callsMissingHelperMethod:
+                    "public int CallsMissingHelper(int value)\n        {\n            return DescribeValue(value);\n        }\n\n"
+                    + "        private int DescribeValue<T>(T value)\n        {\n            return 42;\n        }"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            string failedReason = null;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.CallsMissingHelper)))
+                {
+                    failedReason = outcome.Reason;
+                    break;
+                }
+            }
+
+            Assert.That(
+                failedReason,
+                Is.Not.Null,
+                "Expected CallsMissingHelper to fail shim compile.\n" + FormatOutcomes(result));
+            string[] reasonLines = failedReason.Replace("\r\n", "\n").Split('\n');
+            Assert.That(reasonLines[reasonLines.Length - 1], Is.EqualTo(expectedLastLine));
+        }
+
+        /// <summary>
         /// What: editing a const value emits a drift warning naming both values while the run
         /// itself stays successful (methods still patch).
         /// </summary>
