@@ -2395,6 +2395,128 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: RunAsync aggregates AddedFields from two files and sorts them ordinal, so a
+        /// later file whose field name sorts first still appears first in the result.
+        /// </summary>
+        [Test]
+        public async Task Run_TwoFilesAddedFields_SortsAggregatedNamesOrdinal()
+        {
+            string e2ePath = ResolveE2EFixturePath();
+            string applyPath = ResolveAddedFieldApplyFixturePath();
+            string[] expected =
+            {
+                typeof(HotReloadAddedFieldApplyFixture).FullName + ".AlphaField",
+                typeof(HotReloadE2EFixture).FullName + ".ZetaField"
+            };
+            string e2eEdited = WithE2EAddedField(
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + ZetaField + delta;\n        }"),
+                "ZetaField");
+            string applyOnDisk = File.ReadAllText(applyPath);
+            string applyEdited = applyOnDisk.Replace(
+                "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n        }",
+                "        public int AlphaField;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadAdded()\n        {\n            return AlphaField;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n            AlphaField = value;\n        }",
+                StringComparison.Ordinal);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { e2ePath, applyPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new[]
+                {
+                    WriteEditedSource("AddedFieldSortE2E.cs", e2eEdited),
+                    WriteEditedSource("AddedFieldSortApply.cs", applyEdited)
+                });
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            Assert.That(result.AddedFields, Is.EqualTo(expected));
+        }
+
+        /// <summary>
+        /// What: a single-entry shim compile failure that also adds a field reports no
+        /// AddedFields, because the field was never applied.
+        /// </summary>
+        [Test]
+        public async Task Run_SingleEntryAddedFieldShimFailure_ReportsEmptyAddedFields()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string edited = WithE2EAddedField(
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    callsMissingHelperMethod:
+                    "public int CallsMissingHelper(int value)\n        {\n            return AddedScratch + MissingHelperAddedByEdit(value);\n        }"),
+                "AddedScratch");
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldSingleEntryFailure.cs", edited),
+                CancellationToken.None);
+
+            bool foundFailure = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.CallsMissingHelper)))
+                {
+                    foundFailure = true;
+                    break;
+                }
+            }
+
+            Assert.That(foundFailure, Is.True, "Expected CallsMissingHelper to fail.\n" + FormatOutcomes(result));
+            Assert.That(result.AddedFields, Is.Not.Null);
+            Assert.That(result.AddedFields, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: when only the failing isolated method uses an added field, retry output
+        /// replaces first-pass names and AddedFields stays empty.
+        /// </summary>
+        [Test]
+        public async Task Run_IsolatedFailureUsingAddedField_ReportsEmptyAddedFields()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string edited = WithE2EAddedField(
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                    callsMissingHelperMethod:
+                    "public int CallsMissingHelper(int value)\n        {\n            return AddedScratch + MissingHelperAddedByEdit(value);\n        }"),
+                "AddedScratch");
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldIsolatedFailure.cs", edited),
+                CancellationToken.None);
+
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            bool foundFailure = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(nameof(HotReloadE2EFixture.CallsMissingHelper)))
+                {
+                    foundFailure = true;
+                    break;
+                }
+            }
+
+            Assert.That(foundFailure, Is.True, "Expected CallsMissingHelper to fail.\n" + FormatOutcomes(result));
+            Assert.That(result.AddedFields, Is.Not.Null);
+            Assert.That(result.AddedFields, Is.Empty);
+        }
+
+        /// <summary>
         /// What: re-applying without the added method clears that file's added-member ledger
         /// so --status cannot keep a method the source no longer declares.
         /// </summary>
@@ -3752,6 +3874,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReloadAddedFieldApplyFixture.cs");
             Assert.That(File.Exists(path), Is.True, "Added-field apply fixture source missing: " + path);
             return Path.GetFullPath(path);
+        }
+
+        private static string WithE2EAddedField(string source, string fieldName)
+        {
+            return source.Replace(
+                "        private int _secret = 10;",
+                "        private int _secret = 10;\n        public int " + fieldName + ";",
+                StringComparison.Ordinal);
         }
 
         private static string WithAddedFieldAccesses(string onDisk)

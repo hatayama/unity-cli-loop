@@ -144,6 +144,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added field that no emitted method body rewrites is omitted from
+        /// addedFieldNames.
+        /// </summary>
+        [Test]
+        public async Task Classify_UnusedAddedField_OmitsFromAddedFieldNames()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int UnusedAdded;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return value + 1;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("UnusedAddedFieldNotListed.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Not.Null);
+            Assert.That(result.Output.addedFieldNames, Is.Not.Null);
+            Assert.That(result.Output.addedFieldNames, Is.Empty);
+        }
+
+        /// <summary>
         /// What: changing a compiled field's type does not list that field in addedFieldNames.
         /// </summary>
         [Test]
@@ -167,6 +192,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.addedFieldNames, Is.Not.Null);
             Assert.That(result.Output.addedFieldNames, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: an added field on a nested compiled type uses '+' in the display name.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedFieldOnNestedType_UsesPlusInDisplayName()
+        {
+            string expectedName =
+                typeof(HotReloadAddedMemberHost.NestedAddedFieldHost).FullName + ".AddedNested";
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "            public int ExistingNested()\n            {\n                return 1;\n            }",
+                "            public int AddedNested;\n\n"
+                + "            public int ExistingNested()\n            {\n                return AddedNested;\n            }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedNestedFieldDisplayName.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.addedFieldNames, Is.EqualTo(new[] { expectedName }));
         }
 
         /// <summary>
@@ -197,6 +246,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(slice, Does.Not.Contain("HotReloadAddedFieldStore"));
             Assert.That(slice, Does.Not.Contain("AddedConst"));
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+            Assert.That(
+                result.Output.addedFieldNames,
+                Is.EqualTo(new[] { typeof(HotReloadAddedMemberHost).FullName + ".AddedConst" }));
         }
 
         /// <summary>

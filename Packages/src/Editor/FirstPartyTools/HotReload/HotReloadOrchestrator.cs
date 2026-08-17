@@ -30,11 +30,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <paramref name="contentPathOverride"/> is test-only: when set, the worker reads that
         /// path while assembly resolution still uses <paramref name="files"/> (so edited copies
         /// can live under <c>Library/UloopHotReload/TestSources/</c> without provoking AssetDatabase).
+        /// <paramref name="contentPathOverrides"/> is the per-file form of that hook.
         /// </summary>
         public static async Task<HotReloadOrchestratorResult> RunAsync(
             IReadOnlyList<string> files,
             string contentPathOverride,
-            CancellationToken ct)
+            CancellationToken ct,
+            IReadOnlyList<string> contentPathOverrides = null)
         {
             Debug.Assert(files != null, "files must not be null.");
             Debug.Assert(files.Count > 0, "files must not be empty.");
@@ -52,9 +54,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 ct.ThrowIfCancellationRequested();
                 string filePath = files[index];
-                string workerSourcePath = string.IsNullOrEmpty(contentPathOverride)
-                    ? filePath
-                    : contentPathOverride;
+                string workerSourcePath = ResolveWorkerSourcePath(
+                    filePath,
+                    contentPathOverride,
+                    contentPathOverrides,
+                    index);
 
                 // Why ConfigureAwait(false): UnityCliLoopTool forbids capturing Unity's
                 // SynchronizationContext across awaits — while Play Mode is paused that context
@@ -73,10 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AppendDistinct(inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
                 patchedTotal += fileResult.PatchedCount;
                 unchangedTotal += fileResult.UnchangedMethodCount;
-                if (fileResult.AddedFieldNames != null)
-                {
-                    addedFields.AddRange(fileResult.AddedFieldNames);
-                }
+                addedFields.AddRange(fileResult.AddedFieldNames);
             }
 
             if (inlineRiskMethodLabels.Count > 0)
@@ -195,7 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             TransformWorkerOutputDto workerOutput = workerResult.Output;
-            string[] addedFieldNames = workerOutput.addedFieldNames ?? Array.Empty<string>();
+            string[] addedFieldNames = workerOutput.addedFieldNames;
             // Why after the worker: const-only / empty files have no patch candidates, so the
             // missing-baseline warning was pure noise (FB E). Emit only when the worker saw at
             // least one method or accessor row.
@@ -291,8 +292,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     outcomes,
                     warnings,
                     0,
-                    unchangedMethodCount: unchangedMethodCount,
-                    addedFieldNames: addedFieldNames);
+                    unchangedMethodCount: unchangedMethodCount);
             }
 
             outcomes.AddRange(gateResult.SkippedOutcomes);
@@ -302,7 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadShimCompileResult compileResult;
             if (gateResult.UsedWorkerRetry)
             {
-                addedFieldNames = gateResult.Isolation.AddedFieldNames ?? Array.Empty<string>();
+                addedFieldNames = gateResult.Isolation.AddedFieldNames;
                 if (gateResult.Isolation.RetryEntries.Length == 0)
                 {
                     return new HotReloadFileProcessResult(
@@ -312,8 +312,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         suppressedPausePointIds,
                         new List<string>(),
                         unchangedMethodCount,
-                        retargetedPausePointIds,
-                        addedFieldNames);
+                        retargetedPausePointIds);
                 }
 
                 entriesToPatch = gateResult.Isolation.RetryEntries;
@@ -333,8 +332,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     outcomes,
                     warnings,
                     0,
-                    unchangedMethodCount: unchangedMethodCount,
-                    addedFieldNames: addedFieldNames);
+                    unchangedMethodCount: unchangedMethodCount);
             }
             else
             {
@@ -358,8 +356,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         outcomes,
                         warnings,
                         0,
-                        unchangedMethodCount: unchangedMethodCount,
-                        addedFieldNames: addedFieldNames);
+                        unchangedMethodCount: unchangedMethodCount);
                 }
 
                 outcomes.AddRange(firstCompile.Outcomes);
@@ -372,8 +369,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         suppressedPausePointIds,
                         new List<string>(),
                         unchangedMethodCount,
-                        retargetedPausePointIds,
-                        addedFieldNames);
+                        retargetedPausePointIds);
                 }
 
                 entriesToPatch = firstCompile.EntriesToPatch;
@@ -402,8 +398,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         outcomes,
                         warnings,
                         0,
-                        unchangedMethodCount: unchangedMethodCount,
-                        addedFieldNames: addedFieldNames);
+                        unchangedMethodCount: unchangedMethodCount);
                 }
             }
 
@@ -2371,6 +2366,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
             return normalizedPath.StartsWith(normalizedDirectory + "/", comparison);
+        }
+
+        // Why a list hook: one contentPathOverride cannot feed two edited copies, and
+        // AddRange+Sort across files is otherwise untestable.
+        private static string ResolveWorkerSourcePath(
+            string filePath,
+            string contentPathOverride,
+            IReadOnlyList<string> contentPathOverrides,
+            int index)
+        {
+            if (contentPathOverrides != null
+                && index < contentPathOverrides.Count
+                && !string.IsNullOrEmpty(contentPathOverrides[index]))
+            {
+                return contentPathOverrides[index];
+            }
+
+            if (string.IsNullOrEmpty(contentPathOverride))
+            {
+                return filePath;
+            }
+
+            return contentPathOverride;
         }
 
         private static string ToProjectRelativeScriptPath(string path)
