@@ -628,6 +628,95 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an AlreadyActive apply row copies the live InvocationCount for a registered
+        /// MethodKey so the response does not force testers to run --status.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AlreadyActiveRegisteredKey_CopiesLiveInvocationCount()
+        {
+            const string methodKey = "HotReloadToolTests.AlreadyActiveCounted.Method()";
+            HotReloadInvocationRegistry.Increment(methodKey);
+            HotReloadInvocationRegistry.Increment(methodKey);
+            HotReloadInvocationRegistry.Increment(methodKey);
+            try
+            {
+                HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.AlreadyActive(methodKey, "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 0,
+                    activePatchTotal: 1);
+
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+                Assert.That(response.Methods.Count, Is.EqualTo(1));
+                Assert.That(response.Methods[0].InvocationCount, Is.EqualTo(3L));
+            }
+            finally
+            {
+                HotReloadInvocationRegistry.Remove(methodKey);
+            }
+        }
+
+        /// <summary>
+        /// What: an AlreadyActive apply row for an unregistered MethodKey stays at 0, matching
+        /// GetCount's unknown-key behavior (including Added-member labels).
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AlreadyActiveUnregisteredKey_ReportsZero()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.AlreadyActive(
+                        "HotReloadToolTests.AlreadyActiveUnknown.Method()",
+                        "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Methods.Count, Is.EqualTo(1));
+            Assert.That(response.Methods[0].InvocationCount, Is.EqualTo(0L));
+        }
+
+        /// <summary>
+        /// What: a Patched apply row stays at InvocationCount 0 even when the same MethodKey
+        /// has a live registry count.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_Patched_KeepsInvocationCountZero()
+        {
+            const string methodKey = "HotReloadToolTests.PatchedCounted.Method()";
+            HotReloadInvocationRegistry.Increment(methodKey);
+            try
+            {
+                HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched(methodKey, "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1);
+
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+                Assert.That(response.Methods.Count, Is.EqualTo(1));
+                Assert.That(response.Methods[0].Kind, Is.EqualTo(nameof(HotReloadMethodOutcomeKind.Patched)));
+                Assert.That(response.Methods[0].InvocationCount, Is.EqualTo(0L));
+            }
+            finally
+            {
+                HotReloadInvocationRegistry.Remove(methodKey);
+            }
+        }
+
+        /// <summary>
         /// What: a mixed Skipped+AlreadyActive run uses the no-patch message that names both kinds.
         /// </summary>
         [Test]

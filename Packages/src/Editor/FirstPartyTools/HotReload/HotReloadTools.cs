@@ -43,7 +43,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// How many times this patched method body has run since the current patch was applied.
-        /// Populated on --status; 0 for apply/revert outcomes.
+        /// Populated on --status Active rows and AlreadyActive apply rows; 0 for other
+        /// apply/revert outcomes.
         /// </summary>
         public long InvocationCount { get; set; }
 
@@ -218,6 +219,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         Method = outcome.Method,
                         Reason = outcome.Reason ?? string.Empty,
                         FilePath = outcome.FilePath ?? string.Empty,
+                        InvocationCount = outcome.Kind == HotReloadMethodOutcomeKind.AlreadyActive
+                            ? HotReloadInvocationRegistry.GetCount(outcome.Method)
+                            : 0L,
                         LifecycleNote = outcome.LifecycleNote ?? string.Empty
                     });
             }
