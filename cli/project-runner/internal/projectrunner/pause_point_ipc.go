@@ -8,6 +8,23 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
+const setCodeOptimizationDebugCommandName = "set-code-optimization-debug"
+
+func sendSetCodeOptimizationDebugFromUnity(
+	ctx context.Context,
+	connection unityipc.Connection,
+) error {
+	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
+	defer cancel()
+
+	_, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
+		probeContext,
+		setCodeOptimizationDebugCommandName,
+		map[string]any{},
+	)
+	return err
+}
+
 func sendPausePointStatusCommand(
 	ctx context.Context,
 	connection unityipc.Connection,

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
-	"github.com/hatayama/unity-cli-loop/common/ui"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
@@ -228,7 +227,16 @@ func runEnablePausePointCommand(
 	}
 
 	if !await {
-		return runDynamicProjectTool(ctx, connection, pausePointEnableCommandName, remainingArgs, startPath, stdout, stderr)
+		return completeEnableWithReleaseRecovery(
+			ctx,
+			connection,
+			stdout,
+			stderr,
+			func(writer io.Writer) int {
+				return runDynamicProjectTool(
+					ctx, connection, pausePointEnableCommandName, remainingArgs, startPath, writer, stderr)
+			},
+		)
 	}
 
 	tool, cache, ok, err := clicore.FindToolForCommand(connection.ProjectRoot, pausePointEnableCommandName)
@@ -293,34 +301,25 @@ func runEnablePausePointAndAwait(
 	stderr io.Writer,
 ) int {
 	startedAt := time.Now()
-	spinner := clicore.NewToolSpinner(stderr, pausePointEnableCommandName)
-	applyDebugTimingParams(pausePointEnableCommandName, params)
-	outcome, err := sendWithTransientConnectionRetry(
-		ctx,
-		connection,
-		pausePointEnableCommandName,
-		params,
-		ui.NewSpinnerProgressFunc(spinner, "Executing enable-pause-point..."),
-	)
-	spinner.Stop()
+	enableResult, enableResponse, outcome, err := sendEnablePausePointAndDecode(ctx, connection, params, stderr)
 	if err != nil {
 		writeDebugTiming(stderr, pausePointEnableCommandName, time.Since(startedAt), outcome)
-		clierrors.WriteToolFailure(stderr, err, outcome, clierrors.ErrorContext{
-			ProjectRoot: connection.ProjectRoot,
-			Command:     pausePointEnableCommandName,
-		})
 		return 1
 	}
 
-	enableResult := stripDebugTimingResult(pausePointEnableCommandName, outcome.Result)
-
-	var enableResponse pausePointStatusResponse
-	if unmarshalErr := json.Unmarshal(enableResult, &enableResponse); unmarshalErr != nil {
-		clierrors.WriteClassifiedError(stderr, unmarshalErr, clierrors.ErrorContext{
-			ProjectRoot: connection.ProjectRoot,
-			Command:     pausePointEnableCommandName,
-		})
-		return 1
+	if !enableResponse.Success && enableResponse.ErrorCode == pausePointReleaseCodeOptimizationErrorCode {
+		if recoverCode := recoverReleaseCodeOptimization(ctx, connection, stdout, stderr); recoverCode != 0 {
+			writeDebugTiming(stderr, pausePointEnableCommandName, time.Since(startedAt), outcome)
+			return recoverCode
+		}
+		enableResult, enableResponse, outcome, err = sendEnablePausePointAndDecode(ctx, connection, params, stderr)
+		if err != nil {
+			writeDebugTiming(stderr, pausePointEnableCommandName, time.Since(startedAt), outcome)
+			return 1
+		}
+		if enableResponse.Success {
+			enableResponse.Warning = joinPausePointWarnings(enableResponse.Warning, pausePointAutoDebugSwitchWarning)
+		}
 	}
 
 	if !enableResponse.Success {
