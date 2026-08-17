@@ -38,4 +38,6 @@ If the file has active hot-reload patches and the marker landed on an unpatched 
 
 ## Enable Failures
 
+If enable fails with `PAUSE_POINT_RESOLVE_FAILED` while the file has active hot-reload patches, `--line` was resolved against the last compiled source (the editor shows the edited file). `ResolvedMethod` and `ResolvedLineText` stay empty on that failure — follow `RecommendedNextAction` rather than those fields. Recompute the line against the last compiled source, or run `uloop compile` and re-enable.
+
 If enable fails with a "No sequence point found" error even for clearly executable lines, that script's assembly lacks debug sequence points and no line in the file can be patched. Move the pause point to a script in an assembly that carries them, such as a script under `Assets/`.

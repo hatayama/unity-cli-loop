@@ -180,5 +180,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "'{0}' has active hot-reload patches. For methods this reload did not patch, --line "
             + "resolves against the last compiled source, not the edited file. Verify "
             + "ResolvedMethod and ResolvedLineText, or run 'uloop compile' and re-enable.";
+
+        // Why a separate failure string: resolve failure leaves ResolvedMethod and
+        // ResolvedLineText empty, so pointing at those fields is a dead end.
+        public const string HotReloadCompiledLineMapResolveFailureWarningFormat =
+            "'{0}' has active hot-reload patches. --line resolves against the last compiled source, "
+            + "not the edited file, so a line number taken from the edited file can miss or fail to "
+            + "resolve. Recompute the line against the last compiled source, or run 'uloop compile' "
+            + "and re-enable.";
+
+        public const string HotReloadCompiledLineMapResolveFailureNextAction =
+            "Pass a line number from the last compiled source (the editor shows the edited file, "
+            + "which can drift after hot reload), or run 'uloop compile' and re-enable the pause point.";
     }
 }
