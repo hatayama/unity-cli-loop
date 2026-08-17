@@ -21,16 +21,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private const int UnresolvableLine = 999999;
 
-        private const string ExpectedWarning =
-            "'Assets/Scripts/Example.cs' has active hot-reload patches. For methods this reload did not patch, --line "
-            + "resolves against the last compiled source, not the edited file. Verify "
-            + "ResolvedMethod and ResolvedLineText, or run 'uloop compile' and re-enable.";
-
-        private const string ExpectedResolveFailureWarning =
-            "'Assets/Tests/Editor/PausePointCompiledLineMapWarningTests.cs' has active hot-reload patches. For methods this reload did not patch, --line "
-            + "resolves against the last compiled source, not the edited file. Verify "
-            + "ResolvedMethod and ResolvedLineText, or run 'uloop compile' and re-enable.";
-
         [SetUp]
         public void SetUp()
         {
@@ -44,29 +34,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies an active-patch file produces the compiled-line-map warning with forward slashes.
+        /// What: an active-patch file produces the success-path compiled-line-map warning.
         /// </summary>
         [Test]
         public void BuildCompiledLineMapWarningOrEmpty_WhenPatchesAreActive_ReturnsFormattedWarning()
         {
             string warning = PausePointUseCase.BuildCompiledLineMapWarningOrEmpty(true, ForwardSlashFile);
 
-            Assert.That(warning, Is.EqualTo(ExpectedWarning));
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat,
+                        ForwardSlashFile)));
         }
 
         /// <summary>
-        /// Verifies a backslash path is normalized before it is interpolated into the warning.
+        /// What: a backslash path is normalized before it is interpolated into the success warning.
         /// </summary>
         [Test]
         public void BuildCompiledLineMapWarningOrEmpty_WhenFileUsesBackslashes_NormalizesToForwardSlashes()
         {
             string warning = PausePointUseCase.BuildCompiledLineMapWarningOrEmpty(true, "Assets\\Scripts\\Example.cs");
 
-            Assert.That(warning, Is.EqualTo(ExpectedWarning));
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat,
+                        ForwardSlashFile)));
         }
 
         /// <summary>
-        /// Verifies the helper stays silent when the file has no active hot-reload patches.
+        /// What: the success helper stays silent when the file has no active hot-reload patches.
         /// </summary>
         [Test]
         public void BuildCompiledLineMapWarningOrEmpty_WhenPatchesAreInactive_ReturnsEmpty()
@@ -77,11 +77,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a resolve-failure enable response includes the compiled-line-map warning
-        /// only when GetShimLookupForFile returns a lookup for that file.
+        /// What: resolve-failure warning names compiled-line drift without pointing at
+        /// ResolvedMethod or ResolvedLineText, which stay empty on that failure.
         /// </summary>
         [Test]
-        public void Enable_WhenResolveFailsAndFileHasActivePatches_IncludesCompiledLineMapWarning()
+        public void BuildCompiledLineMapResolveFailureWarningOrEmpty_WhenPatchesAreActive_ReturnsFormattedWarning()
+        {
+            string warning = PausePointUseCase.BuildCompiledLineMapResolveFailureWarningOrEmpty(
+                true,
+                ForwardSlashFile);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureWarningFormat,
+                        ForwardSlashFile)));
+        }
+
+        /// <summary>
+        /// What: a backslash path is normalized before it is interpolated into the
+        /// resolve-failure warning.
+        /// </summary>
+        [Test]
+        public void BuildCompiledLineMapResolveFailureWarningOrEmpty_WhenFileUsesBackslashes_NormalizesToForwardSlashes()
+        {
+            string warning = PausePointUseCase.BuildCompiledLineMapResolveFailureWarningOrEmpty(
+                true,
+                "Assets\\Scripts\\Example.cs");
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureWarningFormat,
+                        ForwardSlashFile)));
+        }
+
+        /// <summary>
+        /// What: the resolve-failure helper stays silent when the file has no active patches.
+        /// </summary>
+        [Test]
+        public void BuildCompiledLineMapResolveFailureWarningOrEmpty_WhenPatchesAreInactive_ReturnsEmpty()
+        {
+            string warning = PausePointUseCase.BuildCompiledLineMapResolveFailureWarningOrEmpty(
+                false,
+                ForwardSlashFile);
+
+            Assert.That(warning, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: a resolve-failure enable response with active hot-reload patches uses the
+        /// failure warning and next-action constants, not the success-path wording.
+        /// </summary>
+        [Test]
+        public void Enable_WhenResolveFailsAndFileHasActivePatches_UsesResolveFailureWarningAndNextAction()
         {
             Func<string, HotReloadShimFileLookup> previous =
                 HotReloadPausePointCoordination.GetShimLookupForFile;
@@ -98,7 +149,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(withPatches.Success, Is.False);
                 Assert.That(withPatches.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-                Assert.That(withPatches.Warning, Is.EqualTo(ExpectedResolveFailureWarning));
+                Assert.That(
+                    withPatches.Warning,
+                    Is.EqualTo(
+                        string.Format(
+                            SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureWarningFormat,
+                            ResolveFailureFile)));
+                Assert.That(
+                    withPatches.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction));
 
                 HotReloadPausePointCoordination.GetShimLookupForFile = _ => null;
                 PausePointResponse withoutPatches = EnableUnresolvableLine();
@@ -106,6 +165,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(withoutPatches.Success, Is.False);
                 Assert.That(withoutPatches.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
                 Assert.That(withoutPatches.Warning, Is.EqualTo(string.Empty));
+                Assert.That(
+                    withoutPatches.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));
             }
             finally
             {

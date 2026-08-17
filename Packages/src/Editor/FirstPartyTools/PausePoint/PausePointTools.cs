@@ -524,11 +524,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(parameters.File, parameters.Line);
             if (!resolveResult.Success)
             {
+                bool hasActiveHotReloadPatches = shimLookup != null;
+                // Why a different next-action: resolve failure leaves ResolvedMethod and
+                // ResolvedLineText empty, so the generic "compile then retry" text hides
+                // the more likely cause — a line number taken from the edited file.
+                string recommendedNextAction = hasActiveHotReloadPatches
+                    ? SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction
+                    : SourcePausePointConstants.ResolveFailedRecommendedNextAction;
                 PausePointResponse response = CreateValidationFailure(
                     resolveResult.ErrorMessage,
                     SourcePausePointConstants.ErrorCodeResolveFailed,
-                    SourcePausePointConstants.ResolveFailedRecommendedNextAction);
-                response.Warning = BuildCompiledLineMapWarningOrEmpty(shimLookup != null, parameters.File);
+                    recommendedNextAction);
+                response.Warning = BuildCompiledLineMapResolveFailureWarningOrEmpty(
+                    hasActiveHotReloadPatches,
+                    parameters.File);
                 return response;
             }
 
@@ -777,9 +786,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        // Why a shared helper: enable success already warned about compiled-line-map drift, but
-        // resolve failure returned an empty Warning, so agents lost the same hint when --line
-        // missed after a hot reload.
+        // Why success-only: resolve failure leaves ResolvedMethod and ResolvedLineText empty,
+        // so this wording would point at fields that are not on the response.
         internal static string BuildCompiledLineMapWarningOrEmpty(bool hasActiveHotReloadPatches, string file)
         {
             if (!hasActiveHotReloadPatches)
@@ -789,6 +797,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return string.Format(
                 SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat,
+                SourcePausePointPathNormalizer.ToForwardSlashes(file));
+        }
+
+        internal static string BuildCompiledLineMapResolveFailureWarningOrEmpty(
+            bool hasActiveHotReloadPatches,
+            string file)
+        {
+            if (!hasActiveHotReloadPatches)
+            {
+                return string.Empty;
+            }
+
+            return string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureWarningFormat,
                 SourcePausePointPathNormalizer.ToForwardSlashes(file));
         }
 
