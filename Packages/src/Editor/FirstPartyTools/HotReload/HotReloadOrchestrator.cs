@@ -49,6 +49,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> addedFields = new List<string>();
             int patchedTotal = 0;
             int unchangedTotal = 0;
+            // Why after the file loop (not inside ProcessFileAsync): duplicate paths in one
+            // run must still apply twice; recording mid-run would short-circuit the second copy.
+            Dictionary<string, string> appliedSourceHashByPath =
+                new Dictionary<string, string>(StringComparer.Ordinal);
 
             for (int index = 0; index < files.Count; index++)
             {
@@ -78,6 +82,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 patchedTotal += fileResult.PatchedCount;
                 unchangedTotal += fileResult.UnchangedMethodCount;
                 addedFields.AddRange(fileResult.AddedFieldNames);
+                StageAppliedSourceHash(
+                    appliedSourceHashByPath,
+                    ToProjectRelativeScriptPath(filePath),
+                    fileResult.SourceContentSha256,
+                    fileResult.Outcomes);
+            }
+
+            foreach (KeyValuePair<string, string> pair in appliedSourceHashByPath)
+            {
+                HotReloadAppliedSourceLedger.Record(pair.Key, pair.Value);
             }
 
             if (inlineRiskMethodLabels.Count > 0)
@@ -162,6 +176,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (mvidGuardError != null)
             {
                 outcomes.Add(HotReloadMethodOutcome.Failed("(file)", mvidGuardError, assemblyResolvePath));
+                return new HotReloadFileProcessResult(outcomes, warnings, 0);
+            }
+
+            if (TryShortCircuitUnchangedAppliedSource(
+                    workerSourcePath,
+                    projectRelativePath,
+                    assemblyResolvePath,
+                    outcomes))
+            {
                 return new HotReloadFileProcessResult(outcomes, warnings, 0);
             }
 
@@ -460,7 +483,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 inlineRiskMethodLabels,
                 unchangedMethodCount,
                 retargetedPausePointIds,
-                addedFieldNames);
+                addedFieldNames,
+                workerOutput.sourceContentSha256);
         }
 
         // Peels leftover Harmony patches when the source again matches the verified baseline.
@@ -2425,6 +2449,96 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return contentPathOverride;
         }
 
+        // What: skip worker/shim/patch when this file's source still matches the last applied
+        // run and at least one patch from that run is still active.
+        // Why Clear on the miss path: a later Failed run or revert can leave the hash pointing
+        // at a different live patch set; the next reload must not inherit that stale hash.
+        private static bool TryShortCircuitUnchangedAppliedSource(
+            string workerSourcePath,
+            string projectRelativePath,
+            string assemblyResolvePath,
+            List<HotReloadMethodOutcome> outcomes)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(workerSourcePath), "workerSourcePath must not be empty.");
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            Debug.Assert(outcomes != null, "outcomes must not be null.");
+
+            byte[] probeBytes = File.ReadAllBytes(Path.GetFullPath(workerSourcePath));
+            string probeHash = HotReloadAppliedSourceLedger.ComputeContentHash(probeBytes);
+            HashSet<string> activeLabels = CollectActiveLabelsForFile(projectRelativePath);
+            string recordedHash = HotReloadAppliedSourceLedger.TryGetHash(projectRelativePath);
+            if (recordedHash == null
+                || !string.Equals(probeHash, recordedHash, StringComparison.Ordinal)
+                || activeLabels.Count == 0)
+            {
+                HotReloadAppliedSourceLedger.Clear(projectRelativePath);
+                return false;
+            }
+
+            List<string> sortedLabels = new List<string>(activeLabels);
+            sortedLabels.Sort(StringComparer.Ordinal);
+            for (int index = 0; index < sortedLabels.Count; index++)
+            {
+                outcomes.Add(
+                    HotReloadMethodOutcome.AlreadyActive(sortedLabels[index], assemblyResolvePath));
+            }
+
+            return true;
+        }
+
+        // Why worker hash (not the orchestrator probe): the worker re-reads the file in another
+        // process, so the bytes it compiled can differ from the probe if the file changed mid-run.
+        // Why last occurrence wins: duplicate paths in one run apply twice; only the last
+        // qualifying hash is recorded so the next run short-circuits against what actually landed.
+        private static void StageAppliedSourceHash(
+            Dictionary<string, string> appliedSourceHashByPath,
+            string projectRelativePath,
+            string sourceContentSha256,
+            IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            Debug.Assert(appliedSourceHashByPath != null, "appliedSourceHashByPath must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            Debug.Assert(outcomes != null, "outcomes must not be null.");
+
+            if (!ShouldRecordAppliedSource(sourceContentSha256, outcomes))
+            {
+                appliedSourceHashByPath.Remove(projectRelativePath);
+                return;
+            }
+
+            appliedSourceHashByPath[projectRelativePath] = sourceContentSha256;
+        }
+
+        private static bool ShouldRecordAppliedSource(
+            string sourceContentSha256,
+            IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            if (string.IsNullOrEmpty(sourceContentSha256))
+            {
+                return false;
+            }
+
+            bool hasFailed = false;
+            bool hasPatchedOrAdded = false;
+            for (int index = 0; index < outcomes.Count; index++)
+            {
+                HotReloadMethodOutcomeKind kind = outcomes[index].Kind;
+                if (kind == HotReloadMethodOutcomeKind.Failed)
+                {
+                    hasFailed = true;
+                    break;
+                }
+
+                if (kind == HotReloadMethodOutcomeKind.Patched
+                    || kind == HotReloadMethodOutcomeKind.Added)
+                {
+                    hasPatchedOrAdded = true;
+                }
+            }
+
+            return !hasFailed && hasPatchedOrAdded;
+        }
+
         private static HashSet<string> CollectActiveLabelsForFile(string projectRelativePath)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
@@ -2579,6 +2693,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public List<string> InlineRiskMethodLabels { get; }
             public int UnchangedMethodCount { get; }
             public string[] AddedFieldNames { get; }
+            public string SourceContentSha256 { get; }
 
             public HotReloadFileProcessResult(
                 List<HotReloadMethodOutcome> outcomes,
@@ -2588,7 +2703,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 List<string> inlineRiskMethodLabels = null,
                 int unchangedMethodCount = 0,
                 List<string> retargetedPausePointIds = null,
-                string[] addedFieldNames = null)
+                string[] addedFieldNames = null,
+                string sourceContentSha256 = null)
             {
                 Outcomes = outcomes;
                 Warnings = warnings;
@@ -2598,6 +2714,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnchangedMethodCount = unchangedMethodCount;
                 RetargetedPausePointIds = retargetedPausePointIds ?? new List<string>();
                 AddedFieldNames = addedFieldNames ?? Array.Empty<string>();
+                SourceContentSha256 = sourceContentSha256;
             }
         }
     }

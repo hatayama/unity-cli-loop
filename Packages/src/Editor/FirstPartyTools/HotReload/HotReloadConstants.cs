@@ -193,5 +193,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: count of Methods entries that carry a LifecycleNote.
         public const string LifecycleNotesAggregatedMessageFormat =
             "{0} patched method(s) have one-shot lifecycle notes; see Methods[].LifecycleNote.";
+
+        public const string AlreadyActiveReason =
+            "Source is unchanged since the last applied hot reload; the existing patch stays active "
+            + "and keeps its InvocationCount. Edit and reload again to apply new changes.";
+
+        // Format: number of AlreadyActive method outcomes in this run.
+        public const string AlreadyActiveApplyMessageFormat =
+            "Hot reload found no source changes since the last applied reload. {0} patches stay "
+            + "active with their InvocationCount preserved. Edit and reload again to apply new changes.";
+
+        public const string NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage =
+            "Hot reload finished with no methods patched. See Methods for Skipped and AlreadyActive reasons.";
     }
 }

@@ -302,7 +302,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an expired armed marker is reported once on the next hot-reload of its owner
-        /// and does not re-warn on a later apply of the same method (pending-drain + detach).
+        /// and does not re-warn on a later identical apply (AlreadyActive no-op; pending-drain
+        /// already detached the expire event).
         /// </summary>
         [Test]
         public async Task HotReload_AfterExpire_WarnsOnceAndDoesNotRepeat()
@@ -939,7 +940,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.False,
                 FormatHotReloadOutcomes(result));
             Assert.That(
-                result.Methods.Any(m => m.Kind == HotReloadMethodOutcomeKind.Patched),
+                result.Methods.Any(m =>
+                    m.Kind == HotReloadMethodOutcomeKind.Patched
+                    || m.Kind == HotReloadMethodOutcomeKind.AlreadyActive),
                 Is.True,
                 FormatHotReloadOutcomes(result));
             return HotReloadTool.BuildApplyResponse(result);

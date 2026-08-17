@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Per-method outcome: Patched, Skipped, Failed, or Added.
+    /// Per-method outcome: Patched, Skipped, Failed, Added, or AlreadyActive.
     /// </summary>
     internal sealed class HotReloadMethodOutcome
     {
@@ -108,6 +108,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 filePath,
                 lifecycleNote);
         }
+
+        public static HotReloadMethodOutcome AlreadyActive(string method, string filePath)
+        {
+            return new HotReloadMethodOutcome(
+                HotReloadMethodOutcomeKind.AlreadyActive,
+                method,
+                HotReloadConstants.AlreadyActiveReason,
+                filePath,
+                string.Empty);
+        }
     }
 
     internal enum HotReloadMethodOutcomeKind
@@ -115,6 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         Patched = 0,
         Skipped = 1,
         Failed = 2,
-        Added = 3
+        Added = 3,
+        AlreadyActive = 4
     }
 }

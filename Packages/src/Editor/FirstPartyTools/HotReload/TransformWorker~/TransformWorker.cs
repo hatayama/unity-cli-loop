@@ -12,6 +12,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.Loader;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -159,9 +160,17 @@ public static class TransformWorkerProgram
         }
 
         string sourceText;
+        string sourceContentSha256;
         try
         {
-            sourceText = File.ReadAllText(input.SourcePath, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            byte[] sourceBytes = File.ReadAllBytes(input.SourcePath);
+            sourceContentSha256 = ComputeSourceContentSha256(sourceBytes);
+            using MemoryStream memoryStream = new MemoryStream(sourceBytes, writable: false);
+            using StreamReader reader = new StreamReader(
+                memoryStream,
+                Encoding.UTF8,
+                detectEncodingFromByteOrderMarks: true);
+            sourceText = reader.ReadToEnd();
         }
         catch (Exception exception)
         {
@@ -522,8 +531,23 @@ public static class TransformWorkerProgram
             RemovedMethodSignatures = removedMethodSignatures.ToArray(),
             HasAccessorDelegates = hasAccessorDelegates,
             HasAddedFieldRewrites = addedFieldCatalog.HasStoreRewrites,
-            AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames()
+            AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(),
+            SourceContentSha256 = sourceContentSha256
         };
+    }
+
+    // Keep in sync with HotReloadAppliedSourceLedger.ComputeContentHash (lowercase hex SHA-256).
+    private static string ComputeSourceContentSha256(byte[] bytes)
+    {
+        using SHA256 sha256 = SHA256.Create();
+        byte[] hash = sha256.ComputeHash(bytes);
+        StringBuilder builder = new StringBuilder(hash.Length * 2);
+        for (int index = 0; index < hash.Length; index++)
+        {
+            builder.Append(hash[index].ToString("x2"));
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>
@@ -8244,6 +8268,9 @@ internal sealed class WorkerOutput
 
     // Keep in sync with TransformWorkerOutputDto.addedFieldNames.
     public string[] AddedFieldNames { get; set; }
+
+    // Keep in sync with TransformWorkerOutputDto.sourceContentSha256.
+    public string SourceContentSha256 { get; set; }
 }
 
 internal sealed class WorkerRemovedMember

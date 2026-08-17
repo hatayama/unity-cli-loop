@@ -75,6 +75,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Compiled identities of methods that left the edited file (or whose return type changed).
         // Null/omitted deserializes as empty after client coalesce.
         public TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures;
+
+        // SHA-256 (lowercase hex) of the raw source bytes the worker actually read.
+        // Null/omitted when the worker returned before reading the file.
+        public string sourceContentSha256;
     }
 
     [Serializable]
