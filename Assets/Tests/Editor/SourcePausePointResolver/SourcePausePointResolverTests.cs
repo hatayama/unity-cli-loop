@@ -141,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a Debug.Assert call spanning several physical lines records EndLine past StartLine.
+        /// Verifies a Debug.Assert call spanning several physical lines pins EndLine to the closing parenthesis line.
         /// </summary>
         [Test]
         public void Resolve_MultiLineAssert_ReportsResolvedEndLineAfterResolvedLine()
@@ -151,7 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result.Success, Is.True);
             Assert.That(result.Resolution.ResolvedLine, Is.EqualTo(11));
-            Assert.That(result.Resolution.ResolvedEndLine, Is.GreaterThan(result.Resolution.ResolvedLine));
+            Assert.That(result.Resolution.ResolvedEndLine, Is.EqualTo(13));
         }
 
         [Test]
