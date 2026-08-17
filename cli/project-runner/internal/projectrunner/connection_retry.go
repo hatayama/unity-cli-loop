@@ -2,7 +2,6 @@ package projectrunner
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -362,11 +361,7 @@ func isUnityServerBusyRPCError(err error) bool {
 	if !errors.As(err, &rpcErr) {
 		return false
 	}
-	decodedData := map[string]any{}
-	if len(rpcErr.Data) > 0 {
-		_ = json.Unmarshal(rpcErr.Data, &decodedData)
-	}
-	return clierrors.RPCDataType(decodedData) == "server_busy"
+	return clierrors.RPCDataType(rpcErr.Data) == "server_busy"
 }
 
 func connectionRetryFocusReasonForError(

@@ -108,15 +108,7 @@ func IsReadinessCLIUpdateRequiredError(err error) bool {
 		return false
 	}
 
-	var data any
-	if json.Unmarshal(rpcErr.Data, &data) != nil {
-		return false
-	}
-	typedData, ok := data.(map[string]any)
-	if !ok {
-		return false
-	}
-	return clierrors.RPCDataType(typedData) == "cli_update_required"
+	return clierrors.RPCDataType(rpcErr.Data) == "cli_update_required"
 }
 
 func ProbeToolReadinessSequence(ctx context.Context, projectRoot string) error {

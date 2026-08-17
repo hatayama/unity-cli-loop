@@ -1,12 +1,14 @@
 package clierrors
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 // Verifies compiling busy payloads surface script-compile guidance in NextActions.
 func TestUnityServerBusyNextActions_WhenCompiling_IncludesCompileGuidance(t *testing.T) {
-	data := map[string]any{
-		"isCompiling": true,
-	}
+	isCompiling := true
+	data := serverBusyErrorData{IsCompiling: &isCompiling}
 
 	actions := unityServerBusyNextActions(data)
 	if len(actions) < 3 {
@@ -20,9 +22,7 @@ func TestUnityServerBusyNextActions_WhenCompiling_IncludesCompileGuidance(t *tes
 // Verifies a busy compile tool adds reattach guidance that only applies after the
 // caller's own COMPILE_WAIT_TIMEOUT (not for unrelated clients or unity-compile).
 func TestUnityServerBusyNextActions_WhenRunningCompileTool_IncludesReattachGuidance(t *testing.T) {
-	data := map[string]any{
-		"runningToolName": "compile",
-	}
+	data := serverBusyErrorData{RunningToolName: "compile"}
 
 	actions := unityServerBusyNextActions(data)
 	expected := "A compile can take several minutes on large projects. Wait for it to finish, then retry. If your own `uloop compile` previously failed with COMPILE_WAIT_TIMEOUT, re-running `uloop compile` reattaches to that compile instead of starting a new one."
@@ -40,9 +40,10 @@ func TestUnityServerBusyNextActions_WhenRunningCompileTool_IncludesReattachGuida
 
 // Verifies editor-state unity-compile busy does not promise uloop compile reattach.
 func TestUnityServerBusyNextActions_WhenRunningUnityCompile_OmitsReattachGuidance(t *testing.T) {
-	data := map[string]any{
-		"runningToolName": "unity-compile",
-		"isCompiling":     true,
+	isCompiling := true
+	data := serverBusyErrorData{
+		RunningToolName: "unity-compile",
+		IsCompiling:     &isCompiling,
 	}
 
 	actions := unityServerBusyNextActions(data)
@@ -55,9 +56,8 @@ func TestUnityServerBusyNextActions_WhenRunningUnityCompile_OmitsReattachGuidanc
 
 // Verifies stalled main-thread ticks add a lightweight responsiveness check action.
 func TestUnityServerBusyNextActions_WhenMainThreadStalled_IncludesResponsivenessCheck(t *testing.T) {
-	data := map[string]any{
-		"secondsSinceLastMainThreadTick": 12.0,
-	}
+	stallSeconds := 12.0
+	data := serverBusyErrorData{SecondsSinceLastMainThreadTick: &stallSeconds}
 
 	actions := unityServerBusyNextActions(data)
 	found := false
@@ -74,11 +74,8 @@ func TestUnityServerBusyNextActions_WhenMainThreadStalled_IncludesResponsiveness
 
 // Verifies editor activity summaries copy only populated busy-state fields.
 func TestUnityServerBusyEditorActivitySummary_CopiesKnownFields(t *testing.T) {
-	data := map[string]any{
-		"isCompiling":                    true,
-		"isUpdating":                     false,
-		"secondsSinceLastMainThreadTick": 1.5,
-	}
+	data := decodeServerBusyErrorData(json.RawMessage(
+		`{"isCompiling":true,"isUpdating":false,"secondsSinceLastMainThreadTick":1.5}`))
 
 	summary := unityServerBusyEditorActivitySummary(data)
 	if summary["isCompiling"] != true {
