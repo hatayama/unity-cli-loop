@@ -135,9 +135,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Resolver's PDB-driven lookup cannot reliably find a patch location; rejecting up front
         // avoids patching the wrong instruction instead of failing later in a confusing way.
         public const string ReleaseCodeOptimizationRejectionMessage =
-            "Enabling a pause point by file and line requires Debug code optimization. The project "
-            + "is currently set to Release; switch the Editor's Code Optimization mode to Debug "
-            + "(the bug icon in the main toolbar) and recompile, then retry.";
+            "Enabling a pause point by file and line requires Debug code optimization. Automatic "
+            + "switch to Debug and recompile did not leave the Editor in Debug; switch Code "
+            + "Optimization to Debug (the bug icon in the main toolbar) and recompile, then retry.";
 
         // Machine-readable failure codes for enable/clear validation responses. Callers branch on
         // these instead of English Message substrings; names follow the existing PAUSE_POINT_*
@@ -150,11 +150,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why: Debug mode is lost on every Editor restart (including uloop launch -r), so the
         // recovery steps must remind callers to re-switch after restart rather than only once.
         public const string ReleaseCodeOptimizationRecommendedNextAction =
-            "Switch the Editor to Debug code optimization, recompile, then re-run the same enable "
-            + "command: (1) uloop execute-dynamic-code --code \"UnityEditor.Compilation.CompilationPipeline.codeOptimization "
-            + "= UnityEditor.Compilation.CodeOptimization.Debug; return UnityEditor.Compilation.CompilationPipeline"
-            + ".codeOptimization.ToString();\" (2) uloop compile. Note: the Debug setting reverts to the "
-            + "'Code Optimization On Startup' preference whenever the Editor restarts, including uloop launch -r.";
+            "Automatic Debug switch and recompile did not succeed. Confirm Code Optimization is Debug "
+            + "(the bug icon in the main toolbar), run uloop compile, then retry enable-pause-point. "
+            + "Note: the Debug setting reverts to the 'Code Optimization On Startup' preference "
+            + "whenever the Editor restarts, including uloop launch -r.";
 
         // Why: resolve failures have several distinct root causes (wrong path form, non-executable
         // line, stale PDBs after a Code Optimization switch); the skill troubleshooting reference

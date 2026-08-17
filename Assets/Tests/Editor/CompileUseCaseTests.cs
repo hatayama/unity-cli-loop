@@ -7,6 +7,7 @@ using UnityEditor.Compilation;
 using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -72,6 +73,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopStoredCompileResult storedResult =
                     compileResultSessionRepository.GetCompileResult("compile_test_request");
                 Assert.That(storedResult.ResultJson, Does.Contain("\"ProjectRoot\":"));
+            }
+            finally
+            {
+                originalSnapshot.Restore();
+            }
+        }
+
+        /// <summary>
+        /// Verifies a compilation-state validation failure copies ErrorCode onto CompileResponse.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_WhenValidationFailsBecauseCompiling_SetsAlreadyInProgressErrorCode()
+        {
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService =
+                new(
+                    UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository(),
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+
+            try
+            {
+                CompileUseCase useCase = new(
+                    compileSessionLifecycleService,
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+                useCase.SetCompilationStateValidationForTesting(() =>
+                    ValidationResult.FailureWithErrorCode(
+                        "Compilation is already in progress. Please wait for the current compilation to finish.",
+                        CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
+                useCase.SetCompilationExecutionForTesting((compileRequest, pausePointWarning, ct) =>
+                {
+                    throw new InvalidOperationException("validation failure must not start compilation");
+                });
+
+                CompileResponse response = await useCase.CompileAsync(
+                    new CompileSchema
+                    {
+                        WaitForDomainReload = false,
+                        RequestId = "compile_validation_error_code",
+                        ForceRecompile = false,
+                        ReloadExternalSceneChanges = true
+                    },
+                    CancellationToken.None);
+
+                Assert.That(response.Success, Is.False);
+                Assert.That(
+                    response.ErrorCode,
+                    Is.EqualTo(CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
             }
             finally
             {
