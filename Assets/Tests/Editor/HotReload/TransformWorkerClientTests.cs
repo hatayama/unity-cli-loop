@@ -1323,6 +1323,228 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.Contain("Awake is a one-shot lifecycle method"));
         }
 
+        private const string ExpectedUnsupportedMemberKindSkipReason =
+            "Constructors, operators, and event accessors are out of scope for v1; "
+            + "run 'uloop compile' to apply these edits.";
+
+        /// <summary>
+        /// What: editing one instance constructor reports that .ctor as Skipped and omits an
+        /// unedited overload in the same type.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_InstanceCtor_SkipsEditedOmitsUnedited()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindInstanceCtor.cs",
+                "Marker = 11;",
+                "Marker = 111;");
+
+            AssertSkippedContains(
+                result,
+                ".ctor()",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, ".ctor(System.Int32)");
+        }
+
+        /// <summary>
+        /// What: editing one type's static constructor reports that .cctor as Skipped and omits
+        /// an unedited static constructor on a sibling type in the same file.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_StaticCtor_SkipsEditedOmitsUnedited()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindStaticCtor.cs",
+                "Marker = 21;",
+                "Marker = 211;");
+
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindStaticCtorEdited..cctor()",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "HotReloadUnsupportedKindStaticCtorUnedited");
+        }
+
+        /// <summary>
+        /// What: editing one operator reports that operator as Skipped and omits an unedited
+        /// operator in the same type.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_Operator_SkipsEditedOmitsUnedited()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindOperator.cs",
+                "left.Marker = 31;",
+                "left.Marker = 311;");
+
+            AssertSkippedContains(
+                result,
+                "op_Addition",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "op_Subtraction");
+        }
+
+        /// <summary>
+        /// What: editing one conversion operator reports that conversion as Skipped and omits an
+        /// unedited conversion in the same type.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_ConversionOperator_SkipsEditedOmitsUnedited()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindConversion.cs",
+                "value.Marker = 41;",
+                "value.Marker = 411;");
+
+            AssertSkippedContains(
+                result,
+                "op_Implicit",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "op_Explicit");
+        }
+
+        /// <summary>
+        /// What: editing one explicit event accessor reports that event's add and remove as
+        /// Skipped (member-level equivalence, same granularity as property accessors) and omits
+        /// accessors of an unedited event in the same type.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_EventAccessor_SkipsEditedOmitsUnedited()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindEventAccessor.cs",
+                "Marker = 51;",
+                "Marker = 511;");
+
+            AssertSkippedContains(
+                result,
+                "add_Edited",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedContains(
+                result,
+                "remove_Edited",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "add_Unedited");
+            AssertSkippedDoesNotContain(result, "remove_Unedited");
+        }
+
+        /// <summary>
+        /// What: adding an instance constructor that is absent from the verified snapshot
+        /// reports that .ctor as Skipped with the unsupported-member reason (same path as an
+        /// edit) and omits unedited overloads already in the snapshot.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_AddedInstanceCtor_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindAddedInstanceCtor.cs",
+                "            Marker = value;\n        }",
+                "            Marker = value;\n        }\n\n"
+                + "        public HotReloadUnsupportedKindCtorFixture(int a, int b)\n"
+                + "        {\n"
+                + "            Marker = a + b;\n"
+                + "        }");
+
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindCtorFixture..ctor(System.Int32,System.Int32)",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, ".ctor()");
+            AssertSkippedDoesNotContain(result, ".ctor(System.Int32)");
+        }
+
+        /// <summary>
+        /// What: editing only a local function body emits the parent method as a patch entry,
+        /// not Skipped, and does not emit a separate local-function row.
+        /// </summary>
+        [Test]
+        public async Task Run_LocalFunction_EmitsParentMethodOnly()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "LocalFunctionParent.cs",
+                "return 41;",
+                "return 42;");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.entries, Is.Not.Null);
+            Assert.That(
+                result.Output.entries.Length,
+                Is.EqualTo(1),
+                "Local-function body edits must emit exactly one parent-method entry; got: "
+                + FormatEntryMethodNames(result.Output.entries)
+                + "; skipped="
+                + FormatSkippedMethodNames(result.Output.skipped));
+            Assert.That(result.Output.entries[0].methodName, Is.EqualTo("Compute"));
+            AssertSkippedDoesNotContain(result, "Compute");
+            AssertSkippedDoesNotContain(result, "Local");
+        }
+
+        private static async Task<TransformWorkerClientResult> RunWorkerOnUnsupportedKindEditAsync(
+            string fileName,
+            string originalFragment,
+            string editedFragment)
+        {
+            string fixturePath = ResolveUnsupportedKindFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string currentSource = onDisk.Replace(
+                originalFragment,
+                editedFragment,
+                StringComparison.Ordinal);
+            Assert.That(currentSource, Is.Not.EqualTo(onDisk), "Precondition: snapshot must differ.");
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, fileName);
+            File.WriteAllText(sourcePath, currentSource);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveUnsupportedKindFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            return result;
+        }
+
+        private static void AssertSkippedContains(
+            TransformWorkerClientResult result,
+            string methodFragment,
+            string expectedReason)
+        {
+            Assert.That(result.Output.skipped, Is.Not.Null, "Expected a skipped list from the worker.");
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null
+                    && skipped.method.Contains(methodFragment)
+                    && skipped.reason == expectedReason)
+                {
+                    return;
+                }
+            }
+
+            Assert.Fail(
+                "Expected skip containing '" + methodFragment + "' with the unsupported-member reason; got: "
+                + FormatSkippedMethodNames(result.Output.skipped));
+        }
+
+        private static void AssertSkippedDoesNotContain(
+            TransformWorkerClientResult result,
+            string methodFragment)
+        {
+            if (result.Output.skipped == null)
+            {
+                return;
+            }
+
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                Assert.That(
+                    skipped.method,
+                    Does.Not.Contain(methodFragment),
+                    "Unedited member '" + methodFragment + "' must not appear in skipped; got: "
+                    + FormatSkippedMethodNames(result.Output.skipped));
+            }
+        }
+
         private static async Task<TransformWorkerEntryDto> RunWorkerAndFindEntryAsync(
             string source,
             string fileName,
@@ -1523,6 +1745,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string ResolveE2EFixtureProjectRelativePath()
         {
             return "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
+        }
+
+        private static string ResolveUnsupportedKindFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadUnsupportedMemberKindFixtures.cs");
+            Assert.That(File.Exists(path), Is.True, "Unsupported-kind fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveUnsupportedKindFixtureProjectRelativePath()
+        {
+            return "Assets/Tests/Editor/HotReload/HotReloadUnsupportedMemberKindFixtures.cs";
         }
 
         private static string ResolveShapeFixturePath()

@@ -278,8 +278,14 @@ public static class TransformWorkerProgram
         Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap = null;
         Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap = null;
         Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap = null;
+        Dictionary<string, ConstructorDeclarationSyntax> snapshotConstructorMap = null;
+        Dictionary<string, MemberDeclarationSyntax> snapshotOperatorMap = null;
+        Dictionary<string, EventDeclarationSyntax> snapshotEventMap = null;
         Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap = null;
         Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap = null;
+        Dictionary<string, ConstructorDeclarationSyntax> plainCurrentConstructorMap = null;
+        Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap = null;
+        Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap = null;
         CompilationUnitSyntax baselineSnapshotRoot = null;
         // Null disables comparison; empty string is a real (empty) baseline text.
         if (input.SnapshotSource != null)
@@ -302,8 +308,14 @@ public static class TransformWorkerProgram
                 // gating for this file; method-level baseline matching still applies.
                 snapshotPropertyMap = BuildSyntaxPropertyMapOrNull(baselineSnapshotRoot);
                 snapshotIndexerMap = BuildSyntaxIndexerMapOrNull(baselineSnapshotRoot);
+                snapshotConstructorMap = BuildSyntaxConstructorMapOrNull(baselineSnapshotRoot);
+                snapshotOperatorMap = BuildSyntaxOperatorMapOrNull(baselineSnapshotRoot);
+                snapshotEventMap = BuildSyntaxEventMapOrNull(baselineSnapshotRoot);
                 plainCurrentPropertyMap = BuildSyntaxPropertyMapOrNull(plainRoot);
                 plainCurrentIndexerMap = BuildSyntaxIndexerMapOrNull(plainRoot);
+                plainCurrentConstructorMap = BuildSyntaxConstructorMapOrNull(plainRoot);
+                plainCurrentOperatorMap = BuildSyntaxOperatorMapOrNull(plainRoot);
+                plainCurrentEventMap = BuildSyntaxEventMapOrNull(plainRoot);
             }
             else
             {
@@ -347,6 +359,17 @@ public static class TransformWorkerProgram
                 hasBaseline ? snapshotIndexerMap : null,
                 hasBaseline ? plainCurrentPropertyMap : null,
                 hasBaseline ? plainCurrentIndexerMap : null);
+            AppendUnsupportedMemberKindSkips(
+                typeDeclaration,
+                typeMetadataNameFromSyntax,
+                semanticModel,
+                skipped,
+                hasBaseline ? snapshotConstructorMap : null,
+                hasBaseline ? snapshotOperatorMap : null,
+                hasBaseline ? snapshotEventMap : null,
+                hasBaseline ? plainCurrentConstructorMap : null,
+                hasBaseline ? plainCurrentOperatorMap : null,
+                hasBaseline ? plainCurrentEventMap : null);
 
             TypeEmitState typeState = new TypeEmitState
             {
@@ -898,6 +921,10 @@ public static class TransformWorkerProgram
         "Property setter, init, or indexer accessors are out of scope for v1; "
         + "run 'uloop compile' to apply accessor edits.";
 
+    private const string UnsupportedMemberKindSkipReason =
+        "Constructors, operators, and event accessors are out of scope for v1; "
+        + "run 'uloop compile' to apply these edits.";
+
     private const string OutsideMethodBodyDriftWarningFormat =
         "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
 
@@ -1049,6 +1076,76 @@ public static class TransformWorkerProgram
         return typeMetadataName + "::this(" + string.Join(",", parameterKeys) + ")";
     }
 
+    private static string BuildSyntaxConstructorKey(
+        string typeMetadataName,
+        ConstructorDeclarationSyntax constructorDeclaration)
+    {
+        List<string> parameterKeys = new List<string>();
+        if (constructorDeclaration.ParameterList != null)
+        {
+            foreach (ParameterSyntax parameter in constructorDeclaration.ParameterList.Parameters)
+            {
+                parameterKeys.Add(BuildSyntaxParameterTypeKey(parameter));
+            }
+        }
+
+        string name = constructorDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword)
+            ? ".cctor"
+            : ".ctor";
+        return typeMetadataName + "::" + name + "(" + string.Join(",", parameterKeys) + ")";
+    }
+
+    private static string BuildSyntaxOperatorKey(
+        string typeMetadataName,
+        OperatorDeclarationSyntax operatorDeclaration)
+    {
+        List<string> parameterKeys = new List<string>();
+        if (operatorDeclaration.ParameterList != null)
+        {
+            foreach (ParameterSyntax parameter in operatorDeclaration.ParameterList.Parameters)
+            {
+                parameterKeys.Add(BuildSyntaxParameterTypeKey(parameter));
+            }
+        }
+
+        return typeMetadataName + "::" + operatorDeclaration.OperatorToken.ValueText
+            + "(" + string.Join(",", parameterKeys) + ")";
+    }
+
+    private static string BuildSyntaxConversionOperatorKey(
+        string typeMetadataName,
+        ConversionOperatorDeclarationSyntax conversionDeclaration)
+    {
+        List<string> parameterKeys = new List<string>();
+        if (conversionDeclaration.ParameterList != null)
+        {
+            foreach (ParameterSyntax parameter in conversionDeclaration.ParameterList.Parameters)
+            {
+                parameterKeys.Add(BuildSyntaxParameterTypeKey(parameter));
+            }
+        }
+
+        string targetType = conversionDeclaration.Type != null
+            ? conversionDeclaration.Type.NormalizeWhitespace().ToString()
+            : string.Empty;
+        return typeMetadataName + "::" + conversionDeclaration.ImplicitOrExplicitKeyword.ValueText
+            + "->" + targetType + "(" + string.Join(",", parameterKeys) + ")";
+    }
+
+    private static string BuildSyntaxEventKey(
+        string typeMetadataName,
+        EventDeclarationSyntax eventDeclaration)
+    {
+        string name = eventDeclaration.Identifier.Text;
+        if (eventDeclaration.ExplicitInterfaceSpecifier != null)
+        {
+            name = eventDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace().ToString()
+                + "." + name;
+        }
+
+        return typeMetadataName + "::" + name;
+    }
+
     private static Dictionary<string, MethodDeclarationSyntax> BuildSyntaxMethodMapOrNull(
         CompilationUnitSyntax root)
     {
@@ -1136,6 +1233,99 @@ public static class TransformWorkerProgram
                 }
 
                 map[key] = indexerDeclaration;
+            }
+        }
+
+        return map;
+    }
+
+    private static Dictionary<string, ConstructorDeclarationSyntax> BuildSyntaxConstructorMapOrNull(
+        CompilationUnitSyntax root)
+    {
+        Dictionary<string, ConstructorDeclarationSyntax> map =
+            new Dictionary<string, ConstructorDeclarationSyntax>();
+        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
+        {
+            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
+            foreach (ConstructorDeclarationSyntax constructorDeclaration in typeDeclaration.Members
+                .OfType<ConstructorDeclarationSyntax>())
+            {
+                string key = BuildSyntaxConstructorKey(typeMetadataName, constructorDeclaration);
+                if (map.ContainsKey(key))
+                {
+                    return null;
+                }
+
+                map[key] = constructorDeclaration;
+            }
+        }
+
+        return map;
+    }
+
+    private static Dictionary<string, MemberDeclarationSyntax> BuildSyntaxOperatorMapOrNull(
+        CompilationUnitSyntax root)
+    {
+        Dictionary<string, MemberDeclarationSyntax> map =
+            new Dictionary<string, MemberDeclarationSyntax>();
+        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
+        {
+            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
+            foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
+            {
+                string key = TryBuildSyntaxOperatorMemberKey(typeMetadataName, member);
+                if (key == null)
+                {
+                    continue;
+                }
+
+                if (map.ContainsKey(key))
+                {
+                    return null;
+                }
+
+                map[key] = member;
+            }
+        }
+
+        return map;
+    }
+
+    private static string TryBuildSyntaxOperatorMemberKey(
+        string typeMetadataName,
+        MemberDeclarationSyntax member)
+    {
+        if (member is OperatorDeclarationSyntax operatorDeclaration)
+        {
+            return BuildSyntaxOperatorKey(typeMetadataName, operatorDeclaration);
+        }
+
+        if (member is ConversionOperatorDeclarationSyntax conversionDeclaration)
+        {
+            return BuildSyntaxConversionOperatorKey(typeMetadataName, conversionDeclaration);
+        }
+
+        return null;
+    }
+
+    private static Dictionary<string, EventDeclarationSyntax> BuildSyntaxEventMapOrNull(
+        CompilationUnitSyntax root)
+    {
+        Dictionary<string, EventDeclarationSyntax> map =
+            new Dictionary<string, EventDeclarationSyntax>();
+        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
+        {
+            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
+            foreach (EventDeclarationSyntax eventDeclaration in typeDeclaration.Members
+                .OfType<EventDeclarationSyntax>())
+            {
+                string key = BuildSyntaxEventKey(typeMetadataName, eventDeclaration);
+                if (map.ContainsKey(key))
+                {
+                    return null;
+                }
+
+                map[key] = eventDeclaration;
             }
         }
 
@@ -1577,6 +1767,184 @@ public static class TransformWorkerProgram
         }
 
         return null;
+    }
+
+    // What: reports instance/static constructors, operators, conversion operators, and
+    // explicit event accessors as Skipped. Unchanged members matching a verified snapshot
+    // are omitted. Field-like events and finalizers are not listed.
+    private static void AppendUnsupportedMemberKindSkips(
+        TypeDeclarationSyntax typeDeclaration,
+        string typeMetadataNameFromSyntax,
+        SemanticModel semanticModel,
+        List<WorkerSkipped> skipped,
+        Dictionary<string, ConstructorDeclarationSyntax> snapshotConstructorMap,
+        Dictionary<string, MemberDeclarationSyntax> snapshotOperatorMap,
+        Dictionary<string, EventDeclarationSyntax> snapshotEventMap,
+        Dictionary<string, ConstructorDeclarationSyntax> plainCurrentConstructorMap,
+        Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap,
+        Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap)
+    {
+        AppendConstructorSkips(
+            typeDeclaration,
+            typeMetadataNameFromSyntax,
+            semanticModel,
+            skipped,
+            snapshotConstructorMap,
+            plainCurrentConstructorMap);
+        AppendOperatorSkips(
+            typeDeclaration,
+            typeMetadataNameFromSyntax,
+            semanticModel,
+            skipped,
+            snapshotOperatorMap,
+            plainCurrentOperatorMap);
+        AppendEventAccessorSkips(
+            typeDeclaration,
+            typeMetadataNameFromSyntax,
+            semanticModel,
+            skipped,
+            snapshotEventMap,
+            plainCurrentEventMap);
+    }
+
+    private static void AppendConstructorSkips(
+        TypeDeclarationSyntax typeDeclaration,
+        string typeMetadataNameFromSyntax,
+        SemanticModel semanticModel,
+        List<WorkerSkipped> skipped,
+        Dictionary<string, ConstructorDeclarationSyntax> snapshotConstructorMap,
+        Dictionary<string, ConstructorDeclarationSyntax> plainCurrentConstructorMap)
+    {
+        foreach (ConstructorDeclarationSyntax constructorDeclaration in typeDeclaration.Members
+            .OfType<ConstructorDeclarationSyntax>())
+        {
+            string constructorKey = BuildSyntaxConstructorKey(
+                typeMetadataNameFromSyntax,
+                constructorDeclaration);
+            if (snapshotConstructorMap != null
+                && plainCurrentConstructorMap != null
+                && snapshotConstructorMap.TryGetValue(
+                    constructorKey,
+                    out ConstructorDeclarationSyntax snapshotConstructor)
+                && plainCurrentConstructorMap.TryGetValue(
+                    constructorKey,
+                    out ConstructorDeclarationSyntax plainConstructor)
+                && SyntaxFactory.AreEquivalent(snapshotConstructor, plainConstructor, topLevel: false))
+            {
+                continue;
+            }
+
+            IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(constructorDeclaration);
+            AppendUnsupportedKindSkip(skipped, methodSymbol);
+        }
+    }
+
+    private static void AppendOperatorSkips(
+        TypeDeclarationSyntax typeDeclaration,
+        string typeMetadataNameFromSyntax,
+        SemanticModel semanticModel,
+        List<WorkerSkipped> skipped,
+        Dictionary<string, MemberDeclarationSyntax> snapshotOperatorMap,
+        Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap)
+    {
+        foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
+        {
+            string operatorKey = TryBuildSyntaxOperatorMemberKey(typeMetadataNameFromSyntax, member);
+            if (operatorKey == null)
+            {
+                continue;
+            }
+
+            if (snapshotOperatorMap != null
+                && plainCurrentOperatorMap != null
+                && snapshotOperatorMap.TryGetValue(operatorKey, out MemberDeclarationSyntax snapshotOperator)
+                && plainCurrentOperatorMap.TryGetValue(operatorKey, out MemberDeclarationSyntax plainOperator)
+                && SyntaxFactory.AreEquivalent(snapshotOperator, plainOperator, topLevel: false))
+            {
+                continue;
+            }
+
+            IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(member) as IMethodSymbol;
+            AppendUnsupportedKindSkip(skipped, methodSymbol);
+        }
+    }
+
+    private static void AppendEventAccessorSkips(
+        TypeDeclarationSyntax typeDeclaration,
+        string typeMetadataNameFromSyntax,
+        SemanticModel semanticModel,
+        List<WorkerSkipped> skipped,
+        Dictionary<string, EventDeclarationSyntax> snapshotEventMap,
+        Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap)
+    {
+        foreach (EventDeclarationSyntax eventDeclaration in typeDeclaration.Members
+            .OfType<EventDeclarationSyntax>())
+        {
+            string eventKey = BuildSyntaxEventKey(typeMetadataNameFromSyntax, eventDeclaration);
+            if (snapshotEventMap != null
+                && plainCurrentEventMap != null
+                && snapshotEventMap.TryGetValue(eventKey, out EventDeclarationSyntax snapshotEvent)
+                && plainCurrentEventMap.TryGetValue(eventKey, out EventDeclarationSyntax plainEvent)
+                && SyntaxFactory.AreEquivalent(snapshotEvent, plainEvent, topLevel: false))
+            {
+                continue;
+            }
+
+            IEventSymbol eventSymbol = semanticModel.GetDeclaredSymbol(eventDeclaration);
+            if (eventSymbol == null)
+            {
+                continue;
+            }
+
+            AppendEventAccessorSkipIfExplicit(skipped, eventDeclaration, SyntaxKind.AddAccessorDeclaration, eventSymbol.AddMethod);
+            AppendEventAccessorSkipIfExplicit(
+                skipped,
+                eventDeclaration,
+                SyntaxKind.RemoveAccessorDeclaration,
+                eventSymbol.RemoveMethod);
+        }
+    }
+
+    private static void AppendEventAccessorSkipIfExplicit(
+        List<WorkerSkipped> skipped,
+        EventDeclarationSyntax eventDeclaration,
+        SyntaxKind accessorKind,
+        IMethodSymbol accessorMethod)
+    {
+        if (accessorMethod == null || eventDeclaration.AccessorList == null)
+        {
+            return;
+        }
+
+        foreach (AccessorDeclarationSyntax accessor in eventDeclaration.AccessorList.Accessors)
+        {
+            if (accessor.Kind() != accessorKind)
+            {
+                continue;
+            }
+
+            if (accessor.Body == null && accessor.ExpressionBody == null)
+            {
+                return;
+            }
+
+            AppendUnsupportedKindSkip(skipped, accessorMethod);
+            return;
+        }
+    }
+
+    private static void AppendUnsupportedKindSkip(List<WorkerSkipped> skipped, IMethodSymbol methodSymbol)
+    {
+        if (methodSymbol == null)
+        {
+            return;
+        }
+
+        skipped.Add(new WorkerSkipped
+        {
+            Method = FormatMethodLabel(methodSymbol),
+            Reason = UnsupportedMemberKindSkipReason
+        });
     }
 
     // What: emit a get_<Name> entry / unchanged row / skip for one property with a getter body.

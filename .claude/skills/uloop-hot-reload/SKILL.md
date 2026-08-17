@@ -63,11 +63,13 @@ ledger across runs.
 ## Scope and limits
 
 Only ordinary method declarations and property getters with a body are patched.
-Constructors, finalizers, operators, event accessors, and `interface` members
-(including default interface implementations) are never scanned: **edits** to them
-produce **no per-method entry at all** and are silently not applied — use
-`uloop compile` for those. (**Adding** one of these member kinds is different:
-the addition is detected and reported as `Skipped`, per the next section.)
+Constructors, operators, and explicit event accessors are reported as `Skipped`
+when edited (with a verified baseline, unchanged members of those kinds produce
+no row). Finalizers and `interface` members (including default interface
+implementations) are never scanned: **edits** to them produce **no per-method
+entry at all** and are silently not applied — use `uloop compile` for those.
+Adding a constructor, operator, or explicit event accessor is reported as
+`Skipped` as well, same as an edit to an existing one.
 
 ### Added methods and fields
 
@@ -103,14 +105,15 @@ compiled source) removes it from the ledger on that run. Deleting a *compiled*
 member is reported in `Warnings`, but its IL remains callable from unedited code
 until `uloop compile`.
 
-Adding a type (`class`, `struct`, `enum`, `record`), a property, an event, an
-indexer, a constructor, or an operator is still out of scope. Added properties
-are the one case reported per member: the property's getter appears as a
-`Skipped` row that says to use a 'const' or a plain added field for the value,
-or to run 'uloop compile'. The other additions are not reported per member —
-no `Skipped` row names them; at most they surface as outside-body drift in
-`Warnings`. Treat their silence as "not applied" and land them with
-`uloop compile`.
+Adding a constructor, operator, or explicit event accessor is still out of
+scope and is reported as `Skipped`, same as edits to them. Adding a type
+(`class`, `struct`, `enum`, `record`), a property, an event, or an indexer
+is still out of scope. Added properties are reported per member: the
+property's getter appears as a `Skipped` row that says to use a 'const' or
+a plain added field for the value, or to run 'uloop compile'. Types, events,
+and indexers are not reported per member — no `Skipped` row names them; at
+most they surface as outside-body drift in `Warnings`. Treat their silence
+as "not applied" and land them with `uloop compile`.
 
 Outside method bodies, only member additions (previous section) take effect.
 Every other declaration edit — changing a `const` value, a compiled field's
@@ -239,6 +242,7 @@ below) — raising is only expressible inside the declaring type, which a shim i
 | Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 | Property setter, init, or indexer accessor with an explicit body | Accessor patching covers getters only; `uloop compile` applies setter/init/indexer edits |
+| Constructor (instance or static), operator, conversion operator, or explicit event accessor (add/remove) | Out of scope for v1; `uloop compile` applies these edits |
 | Method raises, invokes, or reads a field-like event (anything beyond `+=`/`-=`) | C# only allows `+=`/`-=` on an event outside its declaring type, so the raising body cannot compile from the shim assembly |
 
 ### Failed — flips `Success` to `false`
