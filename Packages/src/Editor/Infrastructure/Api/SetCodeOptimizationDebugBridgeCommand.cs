@@ -24,13 +24,14 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             CodeOptimization previous = CompilationPipeline.codeOptimization;
             CompilationPipeline.codeOptimization = CodeOptimization.Debug;
-            SetCodeOptimizationDebugResponse response = new SetCodeOptimizationDebugResponse
+            Debug.Assert(
+                CompilationPipeline.codeOptimization == CodeOptimization.Debug,
+                "Code Optimization must be Debug after the switch.");
+            return new SetCodeOptimizationDebugResponse
             {
                 Previous = previous.ToString(),
-                Current = CodeOptimization.Debug.ToString()
+                Current = CompilationPipeline.codeOptimization.ToString()
             };
-            Debug.Assert(response.Current == nameof(CodeOptimization.Debug), "Code Optimization must be Debug after the switch.");
-            return response;
         }
     }
 }
