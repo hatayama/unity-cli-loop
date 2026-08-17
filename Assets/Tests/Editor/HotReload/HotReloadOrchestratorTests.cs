@@ -2712,6 +2712,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: generic arity and extra parameter types reach the registry label, including
+        /// nested-type '+' normalization.
+        /// </summary>
+        [Test]
+        public void FormatGatedReplacementRegistryKey_NestedGenericMultiArg_MatchesRegistryLabel()
+        {
+            TransformWorkerEntryDto entry = new TransformWorkerEntryDto
+            {
+                typeMetadataName = "Ns.Outer/Inner",
+                methodName = "Name",
+                parameterTypeFullNames = new[] { "System.Int32", "System.String" },
+                genericArity = 1
+            };
+
+            Assert.That(
+                HotReloadOrchestrator.FormatGatedReplacementRegistryKey(entry),
+                Is.EqualTo("Ns.Outer+Inner.Name`1(System.Int32,System.String)"));
+        }
+
+        /// <summary>
         /// What: a return-type change with a compiled caller in another class is skipped together
         /// with the same-file caller, while an unrelated body edit in the same file still patches.
         /// </summary>

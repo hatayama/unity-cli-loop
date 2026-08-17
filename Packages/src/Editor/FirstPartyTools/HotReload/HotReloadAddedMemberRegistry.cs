@@ -47,6 +47,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             GenerationsByPath.Clear();
         }
 
+        // Why path + key, not Describe(): identity is per file generation. A same
+        // MethodKey on another projectRelativePath is a different member.
+        public static bool IsActiveMember(string projectRelativePath, string methodKey)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be empty.");
+            if (!GenerationsByPath.TryGetValue(projectRelativePath, out FileGeneration generation))
+            {
+                return false;
+            }
+
+            return generation.Members.ContainsKey(methodKey);
+        }
+
         public static int Count
         {
             get

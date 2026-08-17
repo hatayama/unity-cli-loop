@@ -267,6 +267,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetDllPath,
                 defines,
                 assemblyResolvePath,
+                projectRelativePath,
                 ct).ConfigureAwait(false);
             // Why after the gate: a gated replacement is not applied, so listing it under
             // "Removed members stay present... edited bodies no longer call them" is false.
@@ -1506,6 +1507,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string targetDllPath,
             string[] defines,
             string assemblyResolvePath,
+            string projectRelativePath,
             CancellationToken ct)
         {
             TransformWorkerEntryDto[] entries = workerOutput.entries ?? Array.Empty<TransformWorkerEntryDto>();
@@ -1550,7 +1552,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 gatedReplacements,
                 uncoveredCallersByTarget,
                 editedFileMethodKeys,
-                assemblyResolvePath);
+                assemblyResolvePath,
+                projectRelativePath);
             skippedOutcomes.AddRange(
                 BuildSkippedCallerOutcomes(
                     exclusions.CallerEntries,
@@ -1915,25 +1918,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 entry.genericArity);
         }
 
-        private static bool IsAddedMemberAlreadyActive(string methodLabel)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(methodLabel), "methodLabel must not be null or empty.");
-            foreach (HotReloadAddedMemberInfo added in HotReloadAddedMemberRegistry.Describe())
-            {
-                if (string.Equals(added.MethodKey, methodLabel, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         private static List<HotReloadMethodOutcome> BuildGatedReplacementSkipOutcomes(
             IReadOnlyList<TransformWorkerEntryDto> gatedReplacements,
             Dictionary<string, List<string>> uncoveredCallersByTarget,
             HashSet<string> editedFileMethodKeys,
-            string assemblyResolvePath)
+            string assemblyResolvePath,
+            string projectRelativePath)
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto entry in gatedReplacements)
@@ -1941,9 +1931,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string methodLabel = FormatGatedReplacementRegistryKey(entry);
                 string methodKey = BuildMethodKey(entry);
                 string reasonFormat = HotReloadConstants.SignatureChangedGateSkipReasonFormat;
-                // Why live Describe, not a run-start snapshot: BeginFileGeneration runs after
+                // Why live registry, not a run-start snapshot: BeginFileGeneration runs after
                 // this gate, so the previous apply's added members are still listed here.
-                if (IsAddedMemberAlreadyActive(methodLabel))
+                if (HotReloadAddedMemberRegistry.IsActiveMember(projectRelativePath, methodLabel))
                 {
                     reasonFormat = HotReloadConstants.SignatureChangedGateSkipReasonAlreadyActiveFormat;
                 }
