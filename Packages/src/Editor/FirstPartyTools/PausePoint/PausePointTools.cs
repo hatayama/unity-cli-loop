@@ -525,11 +525,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     resolveResult.ErrorMessage,
                     SourcePausePointConstants.ErrorCodeResolveFailed,
                     SourcePausePointConstants.ResolveFailedRecommendedNextAction);
-                if (shimLookup != null)
-                {
-                    response.Warning = BuildCompiledLineMapWarningOrEmpty(true, parameters.File);
-                }
-
+                response.Warning = BuildCompiledLineMapWarningOrEmpty(shimLookup != null, parameters.File);
                 return response;
             }
 
@@ -599,11 +595,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedMethod = resolvedMethod;
             response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
             string enableWarning = CreateEnableWarning();
-            if (hasActiveHotReloadPatches && !retargetedToHotReloadPatch)
-            {
-                string compiledLineMapWarning = BuildCompiledLineMapWarningOrEmpty(true, parameters.File);
-                enableWarning = MergeWarnings(enableWarning, compiledLineMapWarning);
-            }
+            string compiledLineMapWarning = BuildCompiledLineMapWarningOrEmpty(
+                hasActiveHotReloadPatches && !retargetedToHotReloadPatch,
+                parameters.File);
+            enableWarning = MergeWarnings(enableWarning, compiledLineMapWarning);
 
             response.Warning = MergeWarnings(enableWarning, patchResult.Warning);
             LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
