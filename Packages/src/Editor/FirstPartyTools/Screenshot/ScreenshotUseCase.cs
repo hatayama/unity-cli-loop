@@ -68,7 +68,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<UIElementInfo> annotatedElements = new();
             List<UIElementInfo> physicsColliderElements = new();
-            Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
             List<RaycastLayerSummaryInfo> raycastLayerSummaries = new();
             List<string> raycastLayerNamesChecked = new();
             GameRenderingImageInfo? raycastGridRenderingInfo = null;
@@ -97,7 +96,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
 
                 raycastGridRenderingInfo = renderingImageInfo;
-                gameViewSize = renderingImageInfo.GameViewSize;
                 RaycastLayerMaskResolution raycastLayerMaskResolution = ScreenshotParameterValidator.ResolveRaycastLayerMask(request);
                 List<RaycastLayerDefinition> availableLayerDefinitions = ScreenshotParameterValidator.GetAvailableLayerDefinitions();
                 int effectiveLayerMask = raycastLayerMaskResolution.HasLayerNames
@@ -121,19 +119,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (request.ElementsOnly)
             {
-                UIElementAnnotator.ConvertToSimCoordinates(annotatedElements, Mathf.RoundToInt(gameViewSize.y));
-                List<UIElementInfo> elementsOnlyAnnotatedElements =
-                    CreateResponseAnnotatedElements(annotatedElements, physicsColliderElements);
-                ScreenshotInfo elementsOnlyInfo = new() { ResolutionScale = request.ResolutionScale };
-                int elementsOnlyImageToInputOffsetY = raycastGridRenderingInfo?.ImageToInputOffsetY ?? 0;
-                ApplyRenderingCoordinateMetadata(elementsOnlyInfo, gameViewSize, elementsOnlyImageToInputOffsetY);
-                elementsOnlyInfo.AnnotatedElements = elementsOnlyAnnotatedElements;
-                elementsOnlyInfo.RaycastLayerSummaries = raycastLayerSummaries;
-                elementsOnlyInfo.RaycastLayerNamesChecked = raycastLayerNamesChecked;
-                return new ScreenshotResponse
+                GameRenderingImageInfo elementsOnlyRenderingInfo;
+                if (raycastGridRenderingInfo.HasValue)
                 {
-                    Screenshots = new List<ScreenshotInfo> { elementsOnlyInfo }
-                };
+                    elementsOnlyRenderingInfo = raycastGridRenderingInfo.Value;
+                }
+                else
+                {
+                    GameRenderingImageInfo measuredRenderingInfo;
+                    bool elementsOnlyInfoTimedOut;
+                    (measuredRenderingInfo, elementsOnlyInfoTimedOut) =
+                        await EditorWindowCaptureUtility.GetGameRenderingImageInfoAsync(
+                            UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                            ct).ConfigureAwait(false);
+                    if (elementsOnlyInfoTimedOut)
+                    {
+                        return CreateTimedOutResult(
+                            "elements-only rendering info capture",
+                            correlationId,
+                            new List<ScreenshotInfo>());
+                    }
+
+                    await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+                    elementsOnlyRenderingInfo = measuredRenderingInfo;
+                }
+
+                return BuildElementsOnlyScreenshotInfo(
+                    annotatedElements,
+                    physicsColliderElements,
+                    raycastLayerSummaries,
+                    raycastLayerNamesChecked,
+                    request.ResolutionScale,
+                    elementsOnlyRenderingInfo);
             }
 
             GameObject annotationOverlay = null;
@@ -608,6 +625,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<UIElementInfo> physicsColliderElements)
         {
             return ScreenshotResponseFactory.CreateResponseAnnotatedElements(uiElements, physicsColliderElements);
+        }
+
+        // why: ElementsOnly must use the capture-time measured GameViewSize, not the flow-start sample,
+        // so SimY and GameViewHeight stay consistent with the full rendering capture path.
+        internal static ScreenshotResponse BuildElementsOnlyScreenshotInfo(
+            List<UIElementInfo> annotatedElements,
+            List<UIElementInfo> physicsColliderElements,
+            List<RaycastLayerSummaryInfo> raycastLayerSummaries,
+            List<string> raycastLayerNamesChecked,
+            float resolutionScale,
+            GameRenderingImageInfo renderingInfo)
+        {
+            UIElementAnnotator.ConvertToSimCoordinates(
+                annotatedElements,
+                Mathf.RoundToInt(renderingInfo.GameViewSize.y));
+            List<UIElementInfo> elementsOnlyAnnotatedElements =
+                CreateResponseAnnotatedElements(annotatedElements, physicsColliderElements);
+            ScreenshotInfo elementsOnlyInfo = new() { ResolutionScale = resolutionScale };
+            ApplyRenderingCoordinateMetadata(
+                elementsOnlyInfo,
+                renderingInfo.GameViewSize,
+                renderingInfo.ImageToInputOffsetY);
+            elementsOnlyInfo.AnnotatedElements = elementsOnlyAnnotatedElements;
+            elementsOnlyInfo.RaycastLayerSummaries = raycastLayerSummaries;
+            elementsOnlyInfo.RaycastLayerNamesChecked = raycastLayerNamesChecked;
+            return new ScreenshotResponse
+            {
+                Screenshots = new List<ScreenshotInfo> { elementsOnlyInfo }
+            };
         }
 
         internal static string CreateInvalidRaycastLayerMaskMessage(
