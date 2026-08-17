@@ -1434,6 +1434,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 resolution.InstructionIndex,
                 resolution.IlOffset,
                 resolution.ResolvedLine,
+                resolution.ResolvedEndLine,
                 resolution.Locals,
                 resolution.Parameters);
         }

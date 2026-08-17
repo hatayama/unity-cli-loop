@@ -488,7 +488,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxPreviewElements);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.ResolvedLine = resolveResult.Resolution.ResolvedLine;
-            response.ResolvedLineText = ReadResolvedLineText(parameters.File, resolveResult.Resolution.ResolvedLine);
+            response.ResolvedLineText = ReadResolvedLineText(
+                parameters.File,
+                resolveResult.Resolution.ResolvedLine,
+                resolveResult.Resolution.ResolvedEndLine);
             response.ResolvedMethod = resolveResult.Resolution.MethodDisplayName;
             response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
             response.Warning = MergeWarnings(CreateEnableWarning(), patchResult.Warning);
@@ -556,11 +559,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The resolved line can be rounded forward from the requested line (the Resolver picks
         // the closest sequence point on or after it), so returning the actual source text lets
         // the caller notice a mismatch immediately instead of assuming the requested line hit.
-        private static string ReadResolvedLineText(string requestedFile, int resolvedLine)
+        private static string ReadResolvedLineText(string requestedFile, int resolvedLine, int resolvedEndLine)
         {
             string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
             string absoluteFilePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), normalizedFile);
-            return SourcePausePointSourceLineReader.ReadLineText(absoluteFilePath, resolvedLine);
+            return SourcePausePointSourceLineReader.ReadLineText(absoluteFilePath, resolvedLine, resolvedEndLine);
         }
 
         // The derived id must use the originally requested file/line (not the resolved/rounded

@@ -140,6 +140,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Resolution.Parameters.Select(p => p.Name), Is.EqualTo(new[] { "value" }));
         }
 
+        /// <summary>
+        /// Verifies a Debug.Assert call spanning several physical lines pins EndLine to the closing parenthesis line.
+        /// </summary>
+        [Test]
+        public void Resolve_MultiLineAssert_ReportsResolvedEndLineAfterResolvedLine()
+        {
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "MultiLineAssertFixture.cs", 11);
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Resolution.ResolvedLine, Is.EqualTo(11));
+            Assert.That(result.Resolution.ResolvedEndLine, Is.EqualTo(13));
+        }
+
         [Test]
         public void Resolve_WhenPathIsOutsideAnyScriptFolder_ReturnsScriptNotInAnyAssemblyFailure()
         {
