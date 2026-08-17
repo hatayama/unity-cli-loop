@@ -44,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> suppressedPausePointIds = new List<string>();
             List<string> retargetedPausePointIds = new List<string>();
             List<string> inlineRiskMethodLabels = new List<string>();
+            List<string> addedFields = new List<string>();
             int patchedTotal = 0;
             int unchangedTotal = 0;
 
@@ -72,6 +73,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AppendDistinct(inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
                 patchedTotal += fileResult.PatchedCount;
                 unchangedTotal += fileResult.UnchangedMethodCount;
+                if (fileResult.AddedFieldNames != null)
+                {
+                    addedFields.AddRange(fileResult.AddedFieldNames);
+                }
             }
 
             if (inlineRiskMethodLabels.Count > 0)
@@ -84,6 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            addedFields.Sort(StringComparer.Ordinal);
             return new HotReloadOrchestratorResult(
                 outcomes,
                 warnings,
@@ -91,7 +97,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadPatcher.ActiveChangeCount,
                 suppressedPausePointIds,
                 unchangedTotal,
-                retargetedPausePointIds);
+                retargetedPausePointIds,
+                addedFields.ToArray());
         }
 
         private static async Task<HotReloadFileProcessResult> ProcessFileAsync(
@@ -188,6 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             TransformWorkerOutputDto workerOutput = workerResult.Output;
+            string[] addedFieldNames = workerOutput.addedFieldNames ?? Array.Empty<string>();
             // Why after the worker: const-only / empty files have no patch candidates, so the
             // missing-baseline warning was pure noise (FB E). Emit only when the worker saw at
             // least one method or accessor row.
@@ -280,7 +288,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         gateResult.FailureMessage,
                         assemblyResolvePath));
                 return new HotReloadFileProcessResult(
-                    outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
+                    outcomes,
+                    warnings,
+                    0,
+                    unchangedMethodCount: unchangedMethodCount,
+                    addedFieldNames: addedFieldNames);
             }
 
             outcomes.AddRange(gateResult.SkippedOutcomes);
@@ -290,6 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadShimCompileResult compileResult;
             if (gateResult.UsedWorkerRetry)
             {
+                addedFieldNames = gateResult.Isolation.AddedFieldNames ?? Array.Empty<string>();
                 if (gateResult.Isolation.RetryEntries.Length == 0)
                 {
                     return new HotReloadFileProcessResult(
@@ -299,7 +312,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         suppressedPausePointIds,
                         new List<string>(),
                         unchangedMethodCount,
-                        retargetedPausePointIds);
+                        retargetedPausePointIds,
+                        addedFieldNames);
                 }
 
                 entriesToPatch = gateResult.Isolation.RetryEntries;
@@ -316,7 +330,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // not succeed.
                 HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
                 return new HotReloadFileProcessResult(
-                    outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
+                    outcomes,
+                    warnings,
+                    0,
+                    unchangedMethodCount: unchangedMethodCount,
+                    addedFieldNames: addedFieldNames);
             }
             else
             {
@@ -328,11 +346,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     defines,
                     assemblyResolvePath,
                     ct).ConfigureAwait(false);
+                if (firstCompile.AddedFieldNames != null)
+                {
+                    addedFieldNames = firstCompile.AddedFieldNames;
+                }
+
                 if (firstCompile.FileFailed)
                 {
                     outcomes.AddRange(firstCompile.Outcomes);
                     return new HotReloadFileProcessResult(
-                        outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
+                        outcomes,
+                        warnings,
+                        0,
+                        unchangedMethodCount: unchangedMethodCount,
+                        addedFieldNames: addedFieldNames);
                 }
 
                 outcomes.AddRange(firstCompile.Outcomes);
@@ -345,7 +372,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         suppressedPausePointIds,
                         new List<string>(),
                         unchangedMethodCount,
-                        retargetedPausePointIds);
+                        retargetedPausePointIds,
+                        addedFieldNames);
                 }
 
                 entriesToPatch = firstCompile.EntriesToPatch;
@@ -371,7 +399,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                                 string.Join(", ", lostReplacementKeys)),
                             assemblyResolvePath));
                     return new HotReloadFileProcessResult(
-                        outcomes, warnings, 0, unchangedMethodCount: unchangedMethodCount);
+                        outcomes,
+                        warnings,
+                        0,
+                        unchangedMethodCount: unchangedMethodCount,
+                        addedFieldNames: addedFieldNames);
                 }
             }
 
@@ -416,7 +448,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 suppressedPausePointIds,
                 inlineRiskMethodLabels,
                 unchangedMethodCount,
-                retargetedPausePointIds);
+                retargetedPausePointIds,
+                addedFieldNames);
         }
 
         // Peels leftover Harmony patches when the source again matches the verified baseline.
@@ -1162,7 +1195,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         failedMethodOutcomes,
                         skippedCallerOutcomes,
                         Array.Empty<TransformWorkerEntryDto>(),
-                        null));
+                        null,
+                        retryOutput.addedFieldNames));
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -1199,7 +1233,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     failedMethodOutcomes,
                     skippedCallerOutcomes,
                     retryOutput.entries,
-                    retryCompileResult));
+                    retryCompileResult,
+                    retryOutput.addedFieldNames));
         }
 
         private static List<HotReloadMethodOutcome> BuildFailedMethodOutcomes(
@@ -1453,13 +1488,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             isolationOutcomes.AddRange(isolation.SkippedCallerOutcomes);
             if (isolation.RetryEntries.Length == 0)
             {
-                return ShimFirstCompileResult.SucceededEmpty(isolationOutcomes);
+                return ShimFirstCompileResult.SucceededEmpty(isolationOutcomes, isolation.AddedFieldNames);
             }
 
             return ShimFirstCompileResult.Succeeded(
                 isolation.RetryEntries,
                 isolation.RetryCompileResult,
-                isolationOutcomes);
+                isolationOutcomes,
+                isolation.AddedFieldNames);
         }
 
         /// <summary>
@@ -2128,17 +2164,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public List<HotReloadMethodOutcome> Outcomes { get; }
             public TransformWorkerEntryDto[] EntriesToPatch { get; }
             public HotReloadShimCompileResult CompileResult { get; }
+            public string[] AddedFieldNames { get; }
 
             private ShimFirstCompileResult(
                 bool fileFailed,
                 List<HotReloadMethodOutcome> outcomes,
                 TransformWorkerEntryDto[] entriesToPatch,
-                HotReloadShimCompileResult compileResult)
+                HotReloadShimCompileResult compileResult,
+                string[] addedFieldNames = null)
             {
                 FileFailed = fileFailed;
                 Outcomes = outcomes ?? new List<HotReloadMethodOutcome>();
                 EntriesToPatch = entriesToPatch ?? Array.Empty<TransformWorkerEntryDto>();
                 CompileResult = compileResult;
+                AddedFieldNames = addedFieldNames;
             }
 
             public static ShimFirstCompileResult Failed(HotReloadMethodOutcome outcome)
@@ -2150,21 +2189,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     null);
             }
 
-            public static ShimFirstCompileResult SucceededEmpty(List<HotReloadMethodOutcome> outcomes)
+            public static ShimFirstCompileResult SucceededEmpty(
+                List<HotReloadMethodOutcome> outcomes,
+                string[] addedFieldNames = null)
             {
                 return new ShimFirstCompileResult(
                     false,
                     outcomes,
                     Array.Empty<TransformWorkerEntryDto>(),
-                    null);
+                    null,
+                    addedFieldNames);
             }
 
             public static ShimFirstCompileResult Succeeded(
                 TransformWorkerEntryDto[] entriesToPatch,
                 HotReloadShimCompileResult compileResult,
-                List<HotReloadMethodOutcome> outcomes = null)
+                List<HotReloadMethodOutcome> outcomes = null,
+                string[] addedFieldNames = null)
             {
-                return new ShimFirstCompileResult(false, outcomes, entriesToPatch, compileResult);
+                return new ShimFirstCompileResult(
+                    false,
+                    outcomes,
+                    entriesToPatch,
+                    compileResult,
+                    addedFieldNames);
             }
         }
 
@@ -2179,18 +2227,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public List<HotReloadMethodOutcome> SkippedCallerOutcomes { get; }
             public TransformWorkerEntryDto[] RetryEntries { get; }
             public HotReloadShimCompileResult RetryCompileResult { get; }
+            public string[] AddedFieldNames { get; }
 
             public HotReloadShimIsolationResult(
                 List<HotReloadMethodOutcome> failedMethodOutcomes,
                 List<HotReloadMethodOutcome> skippedCallerOutcomes,
                 TransformWorkerEntryDto[] retryEntries,
-                HotReloadShimCompileResult retryCompileResult)
+                HotReloadShimCompileResult retryCompileResult,
+                string[] addedFieldNames = null)
             {
                 Debug.Assert(skippedCallerOutcomes != null, "skippedCallerOutcomes must not be null.");
                 FailedMethodOutcomes = failedMethodOutcomes;
                 SkippedCallerOutcomes = skippedCallerOutcomes;
                 RetryEntries = retryEntries;
                 RetryCompileResult = retryCompileResult;
+                AddedFieldNames = addedFieldNames ?? Array.Empty<string>();
             }
         }
 
@@ -2354,6 +2405,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public List<string> RetargetedPausePointIds { get; }
             public List<string> InlineRiskMethodLabels { get; }
             public int UnchangedMethodCount { get; }
+            public string[] AddedFieldNames { get; }
 
             public HotReloadFileProcessResult(
                 List<HotReloadMethodOutcome> outcomes,
@@ -2362,7 +2414,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 List<string> suppressedPausePointIds = null,
                 List<string> inlineRiskMethodLabels = null,
                 int unchangedMethodCount = 0,
-                List<string> retargetedPausePointIds = null)
+                List<string> retargetedPausePointIds = null,
+                string[] addedFieldNames = null)
             {
                 Outcomes = outcomes;
                 Warnings = warnings;
@@ -2371,6 +2424,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 InlineRiskMethodLabels = inlineRiskMethodLabels ?? new List<string>();
                 UnchangedMethodCount = unchangedMethodCount;
                 RetargetedPausePointIds = retargetedPausePointIds ?? new List<string>();
+                AddedFieldNames = addedFieldNames ?? Array.Empty<string>();
             }
         }
     }

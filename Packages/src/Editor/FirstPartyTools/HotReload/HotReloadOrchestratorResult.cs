@@ -15,6 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public IReadOnlyList<string> SuppressedPausePointIds { get; }
         public IReadOnlyList<string> RetargetedPausePointIds { get; }
         public int UnchangedTotal { get; }
+        public string[] AddedFields { get; }
 
         public HotReloadOrchestratorResult(
             IReadOnlyList<HotReloadMethodOutcome> methods,
@@ -23,7 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int activePatchTotal,
             IReadOnlyList<string> suppressedPausePointIds = null,
             int unchangedTotal = 0,
-            IReadOnlyList<string> retargetedPausePointIds = null)
+            IReadOnlyList<string> retargetedPausePointIds = null,
+            string[] addedFields = null)
         {
             Methods = methods;
             Warnings = warnings;
@@ -32,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SuppressedPausePointIds = suppressedPausePointIds ?? Array.Empty<string>();
             UnchangedTotal = unchangedTotal;
             RetargetedPausePointIds = retargetedPausePointIds ?? Array.Empty<string>();
+            AddedFields = addedFields ?? Array.Empty<string>();
         }
     }
 

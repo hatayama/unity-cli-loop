@@ -112,6 +112,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a plain added field and a [SerializeField] added field appear in
+        /// addedFieldNames as Type.field, sorted ordinal, and a compiled-field type change
+        /// does not.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedFields_ListsStoreAndSerializeNamesInOrdinalOrder()
+        {
+            string hostTypeName = typeof(HotReloadAddedMemberHost).FullName;
+            string[] expectedNames =
+            {
+                hostTypeName + ".AddedCount",
+                hostTypeName + ".AddedSerialized"
+            };
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedCount;\n        [SerializeField] public int AddedSerialized;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedCount + AddedSerialized + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldNamesListed.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.addedFieldNames, Is.EqualTo(expectedNames));
+        }
+
+        /// <summary>
+        /// What: changing a compiled field's type does not list that field in addedFieldNames.
+        /// </summary>
+        [Test]
+        public async Task Classify_CompiledFieldTypeChange_OmitsFieldFromAddedFieldNames()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PublicSeed = 3;",
+                "        public long PublicSeed = 3;",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return PublicSeed.GetHashCode() + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("CompiledFieldTypeChangeNotAdded.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.addedFieldNames, Is.Not.Null);
+            Assert.That(result.Output.addedFieldNames, Is.Empty);
+        }
+
+        /// <summary>
         /// What: uses of an added const fold to a value literal so the shim does not need the
         /// missing const member, and the store flag stays false.
         /// </summary>

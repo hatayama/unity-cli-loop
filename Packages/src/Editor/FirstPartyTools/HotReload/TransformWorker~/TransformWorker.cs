@@ -497,7 +497,8 @@ public static class TransformWorkerProgram
             RemovedMembers = removedMembers.ToArray(),
             RemovedMethodSignatures = removedMethodSignatures.ToArray(),
             HasAccessorDelegates = hasAccessorDelegates,
-            HasAddedFieldRewrites = addedFieldCatalog.HasStoreRewrites
+            HasAddedFieldRewrites = addedFieldCatalog.HasStoreRewrites,
+            AddedFieldNames = addedFieldCatalog.ListRegisteredAddedFieldDisplayNames()
         };
     }
 
@@ -7553,6 +7554,7 @@ internal sealed class AddedFieldCatalog
     private readonly Dictionary<string, AddedFieldBinding> _byKey =
         new Dictionary<string, AddedFieldBinding>(StringComparer.Ordinal);
     private readonly HashSet<string> _classifiedAddedKeys = new HashSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> _registeredAddedFieldKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _addedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _removedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
 
@@ -7586,12 +7588,46 @@ internal sealed class AddedFieldCatalog
     {
         _byKey[binding.FieldKey] = binding;
         MarkClassifiedAdded(binding.FieldKey);
+        _registeredAddedFieldKeys.Add(binding.FieldKey);
     }
 
     public void RegisterConst(AddedFieldBinding binding)
     {
         _byKey[binding.FieldKey] = binding;
         MarkClassifiedAdded(binding.FieldKey);
+        _registeredAddedFieldKeys.Add(binding.FieldKey);
+    }
+
+    // Why not _classifiedAddedKeys: declaration changes call MarkClassifiedAdded then
+    // RegisterUnavailable, so that set includes compiled fields that were not added.
+    public string[] ListRegisteredAddedFieldDisplayNames()
+    {
+        List<string> names = new List<string>(_registeredAddedFieldKeys.Count);
+        foreach (string fieldKey in _registeredAddedFieldKeys)
+        {
+            names.Add(FormatAddedFieldDisplayName(fieldKey));
+        }
+
+        names.Sort(StringComparer.Ordinal);
+        return names.ToArray();
+    }
+
+    // Why this shape: method labels replace '/' with '+' then join with '.', so field
+    // names stay comparable to Methods[].Method (Ns.Type.field).
+    private static string FormatAddedFieldDisplayName(string fieldKey)
+    {
+        int separatorIndex = fieldKey.IndexOf(
+            TransformWorkerProgramMarker.AddedFieldKeySeparator,
+            StringComparison.Ordinal);
+        if (separatorIndex < 0)
+        {
+            return fieldKey.Replace('/', '+');
+        }
+
+        string typeMetadataName = fieldKey.Substring(0, separatorIndex).Replace('/', '+');
+        string fieldName = fieldKey.Substring(
+            separatorIndex + TransformWorkerProgramMarker.AddedFieldKeySeparator.Length);
+        return typeMetadataName + "." + fieldName;
     }
 
     public void RegisterUnavailable(AddedFieldBinding binding)
@@ -7828,6 +7864,9 @@ internal sealed class WorkerOutput
     // True when shim bodies rewrite added-field accesses to HotReloadAddedFieldStore.
     // Keep in sync with TransformWorkerOutputDto.hasAddedFieldRewrites.
     public bool HasAddedFieldRewrites { get; set; }
+
+    // Keep in sync with TransformWorkerOutputDto.addedFieldNames.
+    public string[] AddedFieldNames { get; set; }
 }
 
 internal sealed class WorkerRemovedMember
