@@ -19,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                    methodName == UnityCliLoopConstants.COMMAND_NAME_GET_PAUSE_POINT_STATUS ||
                    methodName == UnityCliLoopConstants.COMMAND_NAME_CLEAR_PAUSE_POINT_STATUS ||
                    methodName == UnityCliLoopConstants.COMMAND_NAME_EXTEND_PAUSE_POINT_STATUS ||
+                   methodName == UnityCliLoopConstants.COMMAND_NAME_SET_CODE_OPTIMIZATION_DEBUG ||
                    methodName == UnityCliLoopConstants.COMMAND_NAME_GET_TOOL_DETAILS;
         }
 
@@ -58,6 +59,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (methodName == UnityCliLoopConstants.COMMAND_NAME_EXTEND_PAUSE_POINT_STATUS)
             {
                 return PausePointStatusBridgeCommand.Extend(paramsToken);
+            }
+
+            if (methodName == UnityCliLoopConstants.COMMAND_NAME_SET_CODE_OPTIMIZATION_DEBUG)
+            {
+                return SetCodeOptimizationDebugBridgeCommand.Execute();
             }
 
             throw new ArgumentException($"Unknown internal bridge command: {methodName}", nameof(methodName));

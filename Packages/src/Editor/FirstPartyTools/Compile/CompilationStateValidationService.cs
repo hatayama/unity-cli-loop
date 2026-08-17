@@ -15,18 +15,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Validate state before compilation execution
         /// </summary>
         /// <returns>Validation result</returns>
+        protected virtual bool IsCompiling => EditorApplication.isCompiling;
+
+        protected virtual bool IsUpdating => EditorApplication.isUpdating;
+
         public ValidationResult ValidateCompilationState()
         {
-            if (EditorApplication.isCompiling)
+            if (IsCompiling)
             {
-                return ValidationResult.Failure(
-                    "Compilation is already in progress. Please wait for the current compilation to finish."
+                return ValidationResult.FailureWithErrorCode(
+                    "Compilation is already in progress. Please wait for the current compilation to finish.",
+                    CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText
                 );
             }
-            if (EditorApplication.isUpdating)
+            if (IsUpdating)
             {
-                return ValidationResult.Failure(
-                    "Cannot compile while editor is updating. Please wait for the update to complete."
+                return ValidationResult.FailureWithErrorCode(
+                    "Cannot compile while editor is updating. Please wait for the update to complete.",
+                    CompileStateValidationErrorCodes.EditorUpdatingErrorCodeText
                 );
             }
 

@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly ICompileResultSessionRepository _compileResultSessionRepository;
         private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
         private Func<CompileSchema, string, CancellationToken, Task<CompileResult>> _executeCompilationAsync;
+        private Func<ValidationResult> _validateCompilationState;
 
         public CompileUseCase(
             UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService,
@@ -40,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _pendingCompileSessionRepository = pendingCompileSessionRepository ??
                 throw new ArgumentNullException(nameof(pendingCompileSessionRepository));
             _executeCompilationAsync = ExecuteCompilationWithDefaultServiceAsync;
+            _validateCompilationState = () => new CompilationStateValidationService().ValidateCompilationState();
         }
 
         /// <summary>
@@ -50,6 +52,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(executeCompilationAsync != null, "executeCompilationAsync must not be null");
             _executeCompilationAsync = executeCompilationAsync ??
                 throw new ArgumentNullException(nameof(executeCompilationAsync));
+        }
+
+        /// <summary>
+        /// Replaces compilation-state validation for tests that must not depend on the live Editor.
+        /// </summary>
+        internal void SetCompilationStateValidationForTesting(Func<ValidationResult> validateCompilationState)
+        {
+            Debug.Assert(validateCompilationState != null, "validateCompilationState must not be null");
+            _validateCompilationState = validateCompilationState ??
+                throw new ArgumentNullException(nameof(validateCompilationState));
         }
 
         /// <summary>
@@ -137,8 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // 2. Compilation state validation
-            CompilationStateValidationService validationService = new();
-            ValidationResult validation = validationService.ValidateCompilationState();
+            ValidationResult validation = _validateCompilationState();
 
             if (!validation.IsValid)
             {
@@ -153,6 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     warningCount: 0,
                     errors: new[] { new CompileIssue(validation.ErrorMessage, "", 0) },
                     warnings: Array.Empty<CompileIssue>());
+                response.ErrorCode = validation.ErrorCode;
                 CompileResponse persistedResponse =
                     StorePreControllerResponseIfNeeded(request, response, correlationId);
                 return persistedResponse;
