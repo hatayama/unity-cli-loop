@@ -77,6 +77,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string SignatureChangedGateSkipReasonSameFileCallersFormat =
             "The return type of '{0}' changed, but this hot reload does not patch every compiled call site of the old method. Applying it would leave those call sites on the old version. Editing those callers' bodies in this file and reloading again applies them together, or run 'uloop compile'.";
 
+        public const string SignatureChangedGateSkipReasonAlreadyActiveFormat =
+            "The return type of '{0}' changed against the last compile, and the replacement applied by an "
+            + "earlier hot reload is still active; this run left it unchanged. Run 'uloop compile' to make it permanent.";
+
         public const string SignatureChangedGatedCallerSkipReason =
             "Calls a method whose signature change was not applied because unpatched compiled call sites remain; this caller was left unpatched too. Run 'uloop compile'.";
 

@@ -2638,6 +2638,80 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: after a same-file return-type change applies, a later run that skips the
+        /// covering caller still reports the replacement as already-active instead of a fresh
+        /// gate skip.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_LaterCallerSkip_ReportsAlreadyActiveReason()
+        {
+            string fixturePath = ResolveSignatureChangeAlreadyActiveFixturePath();
+            string applied = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeAlreadyActive1.cs", applied),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasAdded(first, nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target));
+            AssertHasPatched(first, nameof(HotReloadSignatureChangeAlreadyActiveFixture.ExistingCaller));
+            Assert.That(
+                CountAddedMembersContaining(nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target)),
+                Is.EqualTo(1));
+
+            string later = applied
+                .Replace(
+                    "        public int MarkerHp { get; set; }",
+                    "        public int MarkerHp;",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return (int)Target(value);\n        }",
+                    "            MarkerHp = value;\n            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(later, Is.Not.EqualTo(applied));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeAlreadyActive2.cs", later),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeof(HotReloadSignatureChangeAlreadyActiveFixture).FullName,
+                nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target),
+                new[] { "System.Int32" },
+                0);
+            string expectedReason = string.Format(
+                HotReloadConstants.SignatureChangedGateSkipReasonAlreadyActiveFormat,
+                expectedLabel);
+            Assert.That(FindSkippedReason(second, expectedLabel), Is.EqualTo(expectedReason));
+            Assert.That(
+                CountAddedMembersContaining(nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target)),
+                Is.EqualTo(1),
+                "The earlier replacement must stay in the added-member registry.");
+            Assert.That(second.ActivePatchTotal, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: a gated replacement's wire key keeps Cecil '/' and '::', so it cannot match
+        /// a registry MethodKey until FormatMethodKeyParts normalizes it.
+        /// </summary>
+        [Test]
+        public void FormatGatedReplacementRegistryKey_NestedType_DiffersFromWireKey()
+        {
+            TransformWorkerEntryDto entry = new TransformWorkerEntryDto
+            {
+                typeMetadataName = "Ns.Outer/Inner",
+                methodName = "Name",
+                parameterTypeFullNames = new[] { "System.Int32" },
+                genericArity = 0
+            };
+            string wireKey = "Ns.Outer/Inner::Name(System.Int32)";
+            string registryKey = HotReloadOrchestrator.FormatGatedReplacementRegistryKey(entry);
+
+            Assert.That(wireKey, Is.Not.EqualTo(registryKey));
+            Assert.That(registryKey, Is.EqualTo("Ns.Outer+Inner.Name(System.Int32)"));
+        }
+
+        /// <summary>
         /// What: a return-type change with a compiled caller in another class is skipped together
         /// with the same-file caller, while an unrelated body edit in the same file still patches.
         /// </summary>
@@ -3756,6 +3830,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.Exists(path),
                 Is.True,
                 "Signature-change same-file fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSignatureChangeAlreadyActiveFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSignatureChangeAlreadyActiveFixture.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Signature-change already-active fixture source missing: " + path);
             return Path.GetFullPath(path);
         }
 

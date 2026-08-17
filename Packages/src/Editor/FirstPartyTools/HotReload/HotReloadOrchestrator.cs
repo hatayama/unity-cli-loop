@@ -1902,6 +1902,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        // Why FormatMethodKeyParts, not BuildMethodKey: registry MethodKey uses the display
+        // label ('+' nested separators, '.' before the name). The wire key keeps '/' and '::'
+        // and never matches Describe().
+        internal static string FormatGatedReplacementRegistryKey(TransformWorkerEntryDto entry)
+        {
+            Debug.Assert(entry != null, "entry must not be null.");
+            return HotReloadPatcher.FormatMethodKeyParts(
+                entry.typeMetadataName,
+                entry.methodName,
+                entry.parameterTypeFullNames ?? Array.Empty<string>(),
+                entry.genericArity);
+        }
+
+        private static bool IsAddedMemberAlreadyActive(string methodLabel)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(methodLabel), "methodLabel must not be null or empty.");
+            foreach (HotReloadAddedMemberInfo added in HotReloadAddedMemberRegistry.Describe())
+            {
+                if (string.Equals(added.MethodKey, methodLabel, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static List<HotReloadMethodOutcome> BuildGatedReplacementSkipOutcomes(
             IReadOnlyList<TransformWorkerEntryDto> gatedReplacements,
             Dictionary<string, List<string>> uncoveredCallersByTarget,
@@ -1911,14 +1938,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto entry in gatedReplacements)
             {
-                string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
-                    entry.typeMetadataName,
-                    entry.methodName,
-                    entry.parameterTypeFullNames ?? Array.Empty<string>(),
-                    entry.genericArity);
+                string methodLabel = FormatGatedReplacementRegistryKey(entry);
                 string methodKey = BuildMethodKey(entry);
                 string reasonFormat = HotReloadConstants.SignatureChangedGateSkipReasonFormat;
-                if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> uncoveredCallers)
+                // Why live Describe, not a run-start snapshot: BeginFileGeneration runs after
+                // this gate, so the previous apply's added members are still listed here.
+                if (IsAddedMemberAlreadyActive(methodLabel))
+                {
+                    reasonFormat = HotReloadConstants.SignatureChangedGateSkipReasonAlreadyActiveFormat;
+                }
+                else if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> uncoveredCallers)
                     && AreAllUncoveredCallersInEditedFile(uncoveredCallers, editedFileMethodKeys))
                 {
                     reasonFormat = HotReloadConstants.SignatureChangedGateSkipReasonSameFileCallersFormat;
