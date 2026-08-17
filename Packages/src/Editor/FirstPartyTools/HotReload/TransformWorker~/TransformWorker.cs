@@ -5912,8 +5912,7 @@ internal static class AccessorEligibility
         if (assignment.IsKind(SyntaxKind.CoalesceAssignmentExpression))
         {
             rejectReason =
-                "null-coalescing assignment writes conditionally and has no accessor rewrite shape "
-                + "(condition b).";
+                "null-coalescing assignment writes conditionally and has no accessor rewrite shape.";
             return false;
         }
 
