@@ -521,10 +521,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(parameters.File, parameters.Line);
             if (!resolveResult.Success)
             {
-                return CreateValidationFailure(
+                PausePointResponse response = CreateValidationFailure(
                     resolveResult.ErrorMessage,
                     SourcePausePointConstants.ErrorCodeResolveFailed,
                     SourcePausePointConstants.ResolveFailedRecommendedNextAction);
+                response.Warning = BuildCompiledLineMapWarningOrEmpty(shimLookup != null, parameters.File);
+                return response;
             }
 
             SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(
@@ -593,13 +595,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedMethod = resolvedMethod;
             response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
             string enableWarning = CreateEnableWarning();
-            if (hasActiveHotReloadPatches && !retargetedToHotReloadPatch)
-            {
-                string compiledLineMapWarning = string.Format(
-                    SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat,
-                    SourcePausePointPathNormalizer.ToForwardSlashes(parameters.File));
-                enableWarning = MergeWarnings(enableWarning, compiledLineMapWarning);
-            }
+            string compiledLineMapWarning = BuildCompiledLineMapWarningOrEmpty(
+                hasActiveHotReloadPatches && !retargetedToHotReloadPatch,
+                parameters.File);
+            enableWarning = MergeWarnings(enableWarning, compiledLineMapWarning);
 
             response.Warning = MergeWarnings(enableWarning, patchResult.Warning);
             LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
@@ -766,6 +765,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return null;
+        }
+
+        // Why a shared helper: enable success already warned about compiled-line-map drift, but
+        // resolve failure returned an empty Warning, so agents lost the same hint when --line
+        // missed after a hot reload.
+        internal static string BuildCompiledLineMapWarningOrEmpty(bool hasActiveHotReloadPatches, string file)
+        {
+            if (!hasActiveHotReloadPatches)
+            {
+                return string.Empty;
+            }
+
+            return string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat,
+                SourcePausePointPathNormalizer.ToForwardSlashes(file));
         }
 
         private static PausePointResponse CreateValidationFailure(
