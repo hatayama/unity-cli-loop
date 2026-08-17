@@ -1429,6 +1429,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: adding an instance constructor that is absent from the verified snapshot
+        /// reports that .ctor as Skipped with the unsupported-member reason (same path as an
+        /// edit) and omits unedited overloads already in the snapshot.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_AddedInstanceCtor_IsSkipped()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindAddedInstanceCtor.cs",
+                "            Marker = value;\n        }",
+                "            Marker = value;\n        }\n\n"
+                + "        public HotReloadUnsupportedKindCtorFixture(int a, int b)\n"
+                + "        {\n"
+                + "            Marker = a + b;\n"
+                + "        }");
+
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindCtorFixture..ctor(System.Int32,System.Int32)",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, ".ctor()");
+            AssertSkippedDoesNotContain(result, ".ctor(System.Int32)");
+        }
+
+        /// <summary>
         /// What: editing only a local function body emits the parent method as a patch entry,
         /// not Skipped, and does not emit a separate local-function row.
         /// </summary>

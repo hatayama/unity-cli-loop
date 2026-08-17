@@ -68,8 +68,8 @@ when edited (with a verified baseline, unchanged members of those kinds produce
 no row). Finalizers and `interface` members (including default interface
 implementations) are never scanned: **edits** to them produce **no per-method
 entry at all** and are silently not applied — use `uloop compile` for those.
-(**Adding** one of these member kinds is different: the addition is detected and
-reported as `Skipped`, per the next section.)
+Adding a constructor, operator, or explicit event accessor is reported as
+`Skipped` as well, same as an edit to an existing one.
 
 ### Added methods and fields
 
@@ -105,11 +105,12 @@ compiled source) removes it from the ledger on that run. Deleting a *compiled*
 member is reported in `Warnings`, but its IL remains callable from unedited code
 until `uloop compile`.
 
-Adding a type (`class`, `struct`, `enum`, `record`), a property, an event, an
-indexer, a constructor, or an operator is still out of scope. These additions
-are not reported per member — no `Skipped` row names them; at most they
-surface as outside-body drift in `Warnings`. Treat silence as "not applied"
-and land them with `uloop compile`.
+Adding a constructor, operator, or explicit event accessor is still out of
+scope and is reported as `Skipped`, same as edits to them. Adding a type
+(`class`, `struct`, `enum`, `record`), a property, or an indexer is still out
+of scope. These additions are not reported per member — no `Skipped` row
+names them; at most they surface as outside-body drift in `Warnings`. Treat
+silence as "not applied" and land them with `uloop compile`.
 
 Outside method bodies, only member additions (previous section) take effect.
 Every other declaration edit — changing a `const` value, a compiled field's
