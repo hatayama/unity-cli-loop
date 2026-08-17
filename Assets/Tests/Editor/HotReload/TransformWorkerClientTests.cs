@@ -1404,7 +1404,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: editing one explicit event accessor reports that accessor as Skipped and omits
+        /// What: editing one explicit event accessor reports that event's add and remove as
+        /// Skipped (member-level equivalence, same granularity as property accessors) and omits
         /// accessors of an unedited event in the same type.
         /// </summary>
         [Test]
@@ -1418,6 +1419,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertSkippedContains(
                 result,
                 "add_Edited",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedContains(
+                result,
+                "remove_Edited",
                 ExpectedUnsupportedMemberKindSkipReason);
             AssertSkippedDoesNotContain(result, "add_Unedited");
             AssertSkippedDoesNotContain(result, "remove_Unedited");
