@@ -100,6 +100,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string MissingUsingCompileHint =
             "This can mean a missing using or global using (hot reload collects global usings from the edited file's assembly).";
 
+        // Why a separate line after Compose: CS1061/CS0117/CS0103 name the missing member, but
+        // not that this same run skipped it (generic add, etc.). Agents otherwise treat the
+        // compile error as the root cause.
+        public const string SkippedMemberCompileFailureNoteFormat =
+            "'{0}' was skipped by this hot reload run, which is why this compile failed: {1}";
+
         // Wire value for TransformWorkerEntryDto.patchKind when the worker rewrote inaccessible
         // accesses into accessor delegates.
         public const string PatchKindDelegation = "delegation";
