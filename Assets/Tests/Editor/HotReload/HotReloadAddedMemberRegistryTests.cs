@@ -62,6 +62,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: IsActiveMember is true only for the registered path, not for the same
+        /// MethodKey on another file.
+        /// </summary>
+        [Test]
+        public void IsActiveMember_SameKeyDifferentPath_ReturnsFalse()
+        {
+            MethodInfo shim = RequireExistingCaller();
+            const string methodKey = "Host.AddedPing(System.Int32)";
+            HotReloadAddedMemberRegistry.BeginFileGeneration(FileOne);
+            HotReloadAddedMemberRegistry.Register(FileOne, methodKey, shim, FileOne);
+
+            Assert.That(HotReloadAddedMemberRegistry.IsActiveMember(FileOne, methodKey), Is.True);
+            Assert.That(HotReloadAddedMemberRegistry.IsActiveMember(FileTwo, methodKey), Is.False);
+        }
+
+        /// <summary>
         /// What: Clear removes every file's added members.
         /// </summary>
         [Test]
