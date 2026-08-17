@@ -1432,10 +1432,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         soleEntry.genericArity);
                 }
 
+                List<string> fallbackErrorMessages = new List<string>(compileResult.Errors.Count);
+                for (int errorIndex = 0; errorIndex < compileResult.Errors.Count; errorIndex++)
+                {
+                    fallbackErrorMessages.Add(compileResult.Errors[errorIndex].Message);
+                }
+
                 return ShimFirstCompileResult.Failed(
                     HotReloadMethodOutcome.Failed(
                         failureMethodLabel,
-                        compileResult.ErrorMessage,
+                        HotReloadSkippedMemberCompileNote.AppendNotes(
+                            compileResult.ErrorMessage,
+                            fallbackErrorMessages,
+                            workerOutput.skipped),
                         assemblyResolvePath));
             }
 
