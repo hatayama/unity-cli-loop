@@ -1098,7 +1098,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             List<HotReloadMethodOutcome> failedMethodOutcomes =
-                BuildFailedMethodOutcomes(attribution, assemblyResolvePath);
+                BuildFailedMethodOutcomes(attribution, assemblyResolvePath, workerOutput.skipped);
             IsolationExclusions exclusions = BuildIsolationExclusions(
                 attribution.FailedEntries,
                 workerOutput.entries);
@@ -1204,7 +1204,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static List<HotReloadMethodOutcome> BuildFailedMethodOutcomes(
             ShimCompileErrorAttribution attribution,
-            string assemblyResolvePath)
+            string assemblyResolvePath,
+            TransformWorkerSkippedDto[] skipped)
         {
             List<HotReloadMethodOutcome> failedMethodOutcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto failedEntry in attribution.FailedEntries)
@@ -1215,10 +1216,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     failedEntry.parameterTypeFullNames ?? Array.Empty<string>(),
                     failedEntry.genericArity);
                 List<string> entryErrorMessages = attribution.ErrorMessagesByEntry[failedEntry];
+                string composedMessage = HotReloadShimCompiler.ComposeShimCompileFailureMessage(entryErrorMessages);
                 failedMethodOutcomes.Add(
                     HotReloadMethodOutcome.Failed(
                         methodLabel,
-                        HotReloadShimCompiler.ComposeShimCompileFailureMessage(entryErrorMessages),
+                        HotReloadSkippedMemberCompileNote.AppendNotes(
+                            composedMessage,
+                            entryErrorMessages,
+                            skipped),
                         assemblyResolvePath));
             }
 
