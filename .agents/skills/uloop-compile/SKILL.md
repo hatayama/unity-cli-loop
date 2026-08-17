@@ -48,6 +48,7 @@ Returns JSON:
 - `ErrorCount`: number or null
 - `WarningCount`: number or null
 - `Message`: string
+- `ErrorCode`: string or null. `COMPILE_ALREADY_IN_PROGRESS` when Unity is already compiling, `COMPILE_EDITOR_UPDATING` when the editor is updating, `COMPILE_RESULT_UNKNOWN` after a forced recompile that did not return a definitive result.
 
 ## Troubleshooting
 
