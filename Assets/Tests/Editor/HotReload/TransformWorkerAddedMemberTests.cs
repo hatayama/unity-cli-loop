@@ -73,6 +73,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an expression-bodied property present only in the edited source is skipped with
+        /// the added-property reason and does not become a getter entry.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedExpressionBodiedProperty_SkipsGetterWithAddedPropertyReason()
+        {
+            const string expectedReason =
+                "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
+                + "Use a 'const' or a plain added field for the value, or run 'uloop compile'.";
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public static int AddedAmplitude => 9;");
+            string sourcePath = WriteEdited("ClassifyAddedProperty.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            Assert.That(
+                FindEntry(result, "get_AddedAmplitude"),
+                Is.Null,
+                "Added property getter must not be an entry.");
+            Assert.That(FindSkipReason(result, "get_AddedAmplitude"), Is.EqualTo(expectedReason));
+        }
+
+        /// <summary>
         /// What: an added method entry is emitted as a public static shim method in shimSource.
         /// </summary>
         [Test]
