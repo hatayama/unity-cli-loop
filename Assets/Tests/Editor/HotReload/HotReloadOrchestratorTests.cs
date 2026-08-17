@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -1692,6 +1693,208 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: reloading the same edited source a second time reports AlreadyActive and
+        /// leaves the existing Harmony patch in place so InvocationCount is preserved.
+        /// </summary>
+        [Test]
+        public async Task Run_IdenticalSourceSecondReload_ReportsAlreadyActiveAndKeepsInvocationCount()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "IdenticalSourceSecondReload.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+
+            MethodInfo computeMethod = typeof(HotReloadE2EFixture).GetMethod(
+                nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            Assert.That(computeMethod, Is.Not.Null);
+            string methodKey = HotReloadPatcher.FormatMethodKey(computeMethod);
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(second);
+            AssertHasAlreadyActive(second, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            Assert.That(second.PatchedTotal, Is.EqualTo(0));
+            Assert.That(
+                HotReloadInvocationRegistry.GetCount(methodKey),
+                Is.EqualTo(1L),
+                "The second reload must not replace the patch; InvocationCount stays at the pre-reload value.");
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+            Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(2L));
+        }
+
+        /// <summary>
+        /// What: after a patch, reloading the compiled on-disk baseline still peels that patch
+        /// (the revert-to-compiled path is not swallowed by the identical-source short-circuit).
+        /// </summary>
+        [Test]
+        public async Task Run_RevertToCompiledBaseline_PeelsPatchAndDoesNotReportAlreadyActive()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "RevertBaselineNotAlreadyActive.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+
+            HotReloadOrchestratorResult reverted = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: null,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(reverted);
+            Assert.That(reverted.Methods, Is.Empty, FormatOutcomes(reverted));
+            AssertNoAlreadyActive(reverted);
+            Assert.That(reverted.UnchangedTotal, Is.GreaterThan(0));
+            Assert.That(reverted.ActivePatchTotal, Is.EqualTo(0));
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(15));
+        }
+
+        /// <summary>
+        /// What: a run that reports Failed does not short-circuit a later identical reload, so
+        /// the same Failed outcome is reported again instead of AlreadyActive.
+        /// </summary>
+        [Test]
+        public async Task Run_FailedMixThenIdenticalReload_DoesNotShortCircuitAndRereportsFailed()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "FailedMixThenIdenticalReload.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                    callsMissingHelperMethod:
+                    "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }"));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasFailed(first, nameof(HotReloadE2EFixture.CallsMissingHelper));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertHasPatched(second, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasFailed(second, nameof(HotReloadE2EFixture.CallsMissingHelper));
+            AssertNoAlreadyActive(second);
+        }
+
+        /// <summary>
+        /// What: a later run that Skips a previously patched method while still Patching a
+        /// sibling is not recorded, so an identical third reload re-reports the Skip instead of
+        /// AlreadyActive.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedMixThenIdenticalReload_DoesNotShortCircuitAndRereportsSkipped()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string firstSource = BuildFixtureSource(
+                computeWithPrivateMethod:
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                sumGridMethod:
+                "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }");
+            string skippedMixSource = BuildFixtureSource(
+                computeWithPrivateMethod:
+                "public int ComputeWithPrivate(int delta)\n        {\n            return base.BaseSeed() + delta;\n        }",
+                sumGridMethod:
+                "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }");
+            string firstPath = WriteEditedSource("SkippedMixThenIdentical1.cs", firstSource);
+            string skippedMixPath = WriteEditedSource("SkippedMixThenIdentical2.cs", skippedMixSource);
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                firstPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasPatched(first, nameof(HotReloadE2EFixture.SumGrid));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                skippedMixPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            AssertHasSkipped(second, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasPatched(second, nameof(HotReloadE2EFixture.SumGrid));
+            AssertNoAlreadyActive(second);
+
+            HotReloadOrchestratorResult third = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                skippedMixPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(third);
+            AssertHasSkipped(third, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasPatched(third, nameof(HotReloadE2EFixture.SumGrid));
+            AssertNoAlreadyActive(third);
+        }
+
+        /// <summary>
+        /// What: --revert-all clears the applied-source ledger, so reloading the same edited
+        /// source afterwards patches again instead of reporting AlreadyActive.
+        /// </summary>
+        [Test]
+        public async Task Run_RevertAllThenIdenticalSource_DoesNotShortCircuit()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "RevertAllThenIdenticalSource.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            HotReloadPatcher.RevertAll();
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(second);
+            AssertHasPatched(second, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertNoAlreadyActive(second);
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+        }
+
+        /// <summary>
         /// What: a const-only source with no verified snapshot does not emit the
         /// "No verified source snapshot" warning (no patch candidates → no noise).
         /// </summary>
@@ -2407,7 +2610,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: adding a field and reading/writing it from edited bodies stores values per
-        /// instance, and a second apply keeps the stored values.
+        /// instance, and a second identical apply reports AlreadyActive while keeping the values.
         /// </summary>
         [Test]
         public async Task Run_AddedField_AppliesThroughStoreAndKeepsValuesOnReapply()
@@ -2437,7 +2640,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("AddedFieldApplyE2EReapply.cs", edited),
                 CancellationToken.None);
             AssertNoFileLevelFailure(second);
-            AssertHasPatched(second, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            AssertHasAlreadyActive(second, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            AssertHasAlreadyActive(second, nameof(HotReloadAddedFieldApplyFixture.WriteAdded));
             Assert.That(firstHost.ReadAdded(), Is.EqualTo(10));
             Assert.That(secondHost.ReadAdded(), Is.EqualTo(20));
         }
@@ -2685,8 +2889,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a successful re-apply of the same added method re-registers it, so the
-        /// deactivated-patches warning is not emitted.
+        /// What: a successful identical re-apply of an added method reports AlreadyActive and
+        /// does not emit the deactivated-patches warning.
         /// </summary>
         [Test]
         public async Task Run_ReapplyWorkingAddedMethod_DoesNotWarnDeactivatedPatches()
@@ -2704,7 +2908,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { fixturePath },
                 WriteEditedSource("ReapplyWorkingAdded2.cs", edited),
                 CancellationToken.None);
-            AssertHasAdded(second, "AddedPing");
+            AssertHasAlreadyActive(second, "AddedPing");
             AssertNoDeactivatedPatchesWarning(second);
         }
 
@@ -3033,8 +3237,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: re-applying the same same-file return-type change does not double the added-member
-        /// registry or ActivePatchTotal.
+        /// What: re-applying the same same-file return-type change reports AlreadyActive and
+        /// does not double the added-member registry or ActivePatchTotal.
         /// </summary>
         [Test]
         public async Task Run_ReturnTypeChange_Reapply_DoesNotDoubleRegistry()
@@ -3058,7 +3262,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("SignatureChangeReapply2.cs", edited),
                 CancellationToken.None);
             AssertNoFileLevelFailure(second);
-            AssertHasAdded(second, nameof(HotReloadSignatureChangeSameFileFixture.Target));
+            AssertHasAlreadyActive(second, nameof(HotReloadSignatureChangeSameFileFixture.Target));
             Assert.That(second.ActivePatchTotal, Is.EqualTo(2));
             Assert.That(
                 CountAddedMembersContaining(nameof(HotReloadSignatureChangeSameFileFixture.Target)),
@@ -3994,6 +4198,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.Fail("Expected Patched outcome for " + methodName + ".\n" + FormatOutcomes(result));
+        }
+
+        private static void AssertHasAlreadyActive(HotReloadOrchestratorResult result, string methodName)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.AlreadyActive
+                    && outcome.Method.Contains(methodName))
+                {
+                    Assert.That(
+                        outcome.Reason,
+                        Is.EqualTo(HotReloadConstants.AlreadyActiveReason));
+                    return;
+                }
+            }
+
+            Assert.Fail(
+                "Expected AlreadyActive outcome for " + methodName + ".\n" + FormatOutcomes(result));
+        }
+
+        private static void AssertHasFailed(HotReloadOrchestratorResult result, string methodName)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(methodName))
+                {
+                    return;
+                }
+            }
+
+            Assert.Fail("Expected Failed outcome for " + methodName + ".\n" + FormatOutcomes(result));
+        }
+
+        private static void AssertNoAlreadyActive(HotReloadOrchestratorResult result)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.AlreadyActive),
+                    "Did not expect AlreadyActive.\n" + FormatOutcomes(result));
+            }
         }
 
         private static int CountOccurrences(string text, string token)

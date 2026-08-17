@@ -392,7 +392,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a skipped-only run keeps the existing "See Methods for Skipped reasons." message.
+        /// What: a skipped-only run uses the no-patch message that also names AlreadyActive.
         /// </summary>
         [Test]
         public void BuildApplyResponse_SkippedOnly_KeepsExistingSkippedMessage()
@@ -410,7 +410,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(
                 response.Message,
-                Is.EqualTo("Hot reload finished with no methods patched. See Methods for Skipped reasons."));
+                Is.EqualTo(HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage));
         }
 
         /// <summary>
@@ -498,8 +498,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 skippedOnly.Message,
                 Is.EqualTo(
-                    "Hot reload finished with no methods patched. See Methods for Skipped reasons. "
-                    + "1 warning(s). See Warnings."));
+                    HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage
+                    + " 1 warning(s). See Warnings."));
 
             HotReloadResponse applied = HotReloadTool.BuildApplyResponse(
                 new HotReloadOrchestratorResult(
@@ -593,6 +593,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
                     + "See Methods for Skipped reasons."));
+        }
+
+        /// <summary>
+        /// What: an all-AlreadyActive run serializes Kind as AlreadyActive and uses the dedicated
+        /// no-change message, without counting those rows in PatchedTotal.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AllAlreadyActive_SetsKindAndDedicatedMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.AlreadyActive("Type.MethodA", "Assets/A.cs"),
+                    HotReloadMethodOutcome.AlreadyActive("Type.MethodB", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 2);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.PatchedTotal, Is.EqualTo(0));
+            Assert.That(response.Methods.Count, Is.EqualTo(2));
+            Assert.That(response.Methods[0].Kind, Is.EqualTo(nameof(HotReloadMethodOutcomeKind.AlreadyActive)));
+            Assert.That(response.Methods[1].Kind, Is.EqualTo(nameof(HotReloadMethodOutcomeKind.AlreadyActive)));
+            Assert.That(
+                response.Methods[0].Reason,
+                Is.EqualTo(HotReloadConstants.AlreadyActiveReason));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(string.Format(HotReloadConstants.AlreadyActiveApplyMessageFormat, 2)));
+        }
+
+        /// <summary>
+        /// What: a mixed Skipped+AlreadyActive run uses the no-patch message that names both kinds.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_SkippedAndAlreadyActive_UsesSharedNoPatchMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Skipped("T.Skip", "reason", "file.cs"),
+                    HotReloadMethodOutcome.AlreadyActive("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage));
         }
 
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController

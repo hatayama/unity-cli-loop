@@ -338,9 +338,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message = "Hot reload found no patchable method bodies in the given files; nothing was changed. "
                     + "Hot reload only replaces existing ordinary method bodies; use uloop compile for other edits.";
             }
+            else if (AreAllOutcomesAlreadyActive(result))
+            {
+                message = string.Format(
+                    HotReloadConstants.AlreadyActiveApplyMessageFormat,
+                    result.Methods.Count);
+            }
             else if (result.PatchedTotal == 0 && addedCount == 0)
             {
-                message = "Hot reload finished with no methods patched. See Methods for Skipped reasons.";
+                message = HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage;
             }
             else
             {
@@ -382,6 +388,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return AppendWarningCount(message, warningCount);
+        }
+
+        private static bool AreAllOutcomesAlreadyActive(HotReloadOrchestratorResult result)
+        {
+            if (result.Methods.Count == 0)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                if (result.Methods[index].Kind != HotReloadMethodOutcomeKind.AlreadyActive)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool HasSkippedOutcome(HotReloadOrchestratorResult result)

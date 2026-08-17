@@ -225,7 +225,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Removes every hot-reload patch owned by this patcher and clears the ledger.
+        /// Removes every hot-reload patch owned by this patcher and clears the patch,
+        /// added-member, and applied-source ledgers.
         /// </summary>
         public static void RevertAll()
         {
@@ -243,6 +244,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransplantLocalsByMethod.Clear();
             TransplantPreambleLengthByMethod.Clear();
             HotReloadInvocationRegistry.Clear();
+            HotReloadAppliedSourceLedger.ClearAll();
             _pendingShimMethod = null;
             _pendingOriginalMethod = null;
             HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);

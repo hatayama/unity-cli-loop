@@ -41,7 +41,9 @@ a domain reload it reports zero patched methods, which is exactly when an
 `ActivePatchTotal` remembered from an earlier response has gone stale.
 
 Each `Active` row's `InvocationCount` counts calls into the patched body since that patch
-was applied; re-running hot reload on the same method resets it to zero. While Unity is
+was applied. Reloading the same source with no edits after a fully applied reload (a run
+with no Skipped or Failed outcomes) reports `AlreadyActive` and keeps
+the count; re-running after a real edit replaces the patch and resets it to zero. While Unity is
 paused — including while a pause-point hit holds the game — the player loop does not
 advance, so game-driven calls stop and the count freezes; calls you make yourself (for
 example through `uloop execute-dynamic-code`) still increment it. A frozen count during a
@@ -57,8 +59,12 @@ game, and only then read `InvocationCount` as a reachability signal.
 3. Compiles the shims against publicized reference copies, loads the result into the Editor domain, and binds every shim type's accessor delegates (`__BindAccessors`) before any patch is applied.
 4. Patches each original method with a Harmony transpiler (ID `io.github.hatayama.uloop.hot-reload`) in one of two shapes: transplant copies the shim's IL into the original method, while delegation rewrites the original to forward its arguments to the shim, which runs as normally compiled code.
 
-Re-running on the same method replaces its previous patch; `ActivePatchTotal` tracks the
-ledger across runs.
+Re-running on the same method after a real edit replaces its previous patch;
+`ActivePatchTotal` tracks the ledger across runs. Reloading a file whose source is
+unchanged since the last fully applied reload (a run with no Skipped or Failed
+outcomes) is a no-op: each still-active method is reported
+as `AlreadyActive`, the existing patch stays in place, and `InvocationCount` is preserved.
+Edit the file and reload again to apply new changes.
 
 ## Scope and limits
 
@@ -348,7 +354,7 @@ cached dispatch can bypass a hot-reload patch too.
 Returns JSON with:
 
 - `Success` (boolean): `false` on parameter validation failure or when any method outcome is `Failed`. `Skipped` outcomes alone never force `false`
-- `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath, InvocationCount, LifecycleNote }` where `Kind` is `Patched`, `Skipped`, `Failed`, or `Added` on apply runs, and `Active` or `Added` on `--status` runs; empty on `--revert-all` runs. `InvocationCount` is meaningful on `Active` rows (calls since the current patch was applied); it is `0` on apply/revert outcomes. `LifecycleNote` is set when a patched method is a Unity one-shot lifecycle message (`private void Awake`/`Start`/`OnEnable`/`OnDisable`/`OnDestroy` on a `MonoBehaviour`); empty otherwise — it does not change `Kind`. `Added` rows carry the added member's signature and file; their `InvocationCount` is always `0` (added-member calls are not instrumented). Example `--status` row: `{ "Kind": "Added", "Method": "Ns.Host.NewHelper(System.Int32)", "Reason": "", "FilePath": "Assets/Scripts/Host.cs", "InvocationCount": 0, "LifecycleNote": "" }`
+- `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath, InvocationCount, LifecycleNote }` where `Kind` is `Patched`, `Skipped`, `Failed`, `Added`, or `AlreadyActive` on apply runs, and `Active` or `Added` on `--status` runs; empty on `--revert-all` runs. `AlreadyActive` means this file's source matched the last fully applied reload (a run with no Skipped or Failed outcomes), so the existing patch was left in place and `InvocationCount` was preserved. `InvocationCount` is meaningful on `Active` rows (calls since the current patch was applied); it is `0` on apply/revert outcomes. `LifecycleNote` is set when a patched method is a Unity one-shot lifecycle message (`private void Awake`/`Start`/`OnEnable`/`OnDisable`/`OnDestroy` on a `MonoBehaviour`); empty otherwise — it does not change `Kind`. `Added` rows carry the added member's signature and file; their `InvocationCount` is always `0` (added-member calls are not instrumented). Example `--status` row: `{ "Kind": "Added", "Method": "Ns.Host.NewHelper(System.Int32)", "Reason": "", "FilePath": "Assets/Scripts/Host.cs", "InvocationCount": 0, "LifecycleNote": "" }`
 - `Warnings` (array): Non-fatal notes — one aggregated line listing the patched methods at risk of being already JIT-inlined into existing callers — those marked `[AggressiveInlining]`, plus (only when Code Optimization is Release) those with tiny pre-patch bodies — meaning the change may not show at those call sites, the pause-point interaction above, and the const drift, outside-body drift, and missing-baseline entries described in "Scope and limits"
 - `PatchedTotal` (number): Methods patched in this run
 - `AddedFields` (array): source-level names ("Type.field") of fields this reload added; their values live outside the compiled type until 'uloop compile'.
