@@ -201,8 +201,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: project-relative path of the source that matched a non-baseline ledger entry.
         public const string UnchangedSourceNonBaselineWarningFormat =
             "Source of '{0}' is unchanged since the last reload, but that run had Skipped or Failed "
-            + "outcomes, so it is not a fully applied baseline. All editable methods were processed "
-            + "again and unresolved Skipped reasons are re-reported.";
+            + "outcomes, so it is not a fully applied baseline. Hot reload processes all editable "
+            + "methods again instead of reporting AlreadyActive, and unresolved Skipped reasons are "
+            + "re-reported.";
 
         // Format: number of AlreadyActive method outcomes in this run.
         public const string AlreadyActiveApplyMessageFormat =
