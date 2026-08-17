@@ -78,6 +78,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: ListActiveMethodKeys returns registered keys for that path only.
+        /// </summary>
+        [Test]
+        public void ListActiveMethodKeys_ReturnsKeysForThatPathOnly()
+        {
+            MethodInfo shim = RequireExistingCaller();
+            const string methodKey = "Host.AddedPing(System.Int32)";
+            HotReloadAddedMemberRegistry.BeginFileGeneration(FileOne);
+            HotReloadAddedMemberRegistry.Register(FileOne, methodKey, shim, FileOne);
+
+            IReadOnlyList<string> listedOne = HotReloadAddedMemberRegistry.ListActiveMethodKeys(FileOne);
+            IReadOnlyList<string> listedTwo = HotReloadAddedMemberRegistry.ListActiveMethodKeys(FileTwo);
+            Assert.That(listedOne, Is.EqualTo(new[] { methodKey }));
+            Assert.That(listedTwo, Is.Empty);
+        }
+
+        /// <summary>
         /// What: Clear removes every file's added members.
         /// </summary>
         [Test]

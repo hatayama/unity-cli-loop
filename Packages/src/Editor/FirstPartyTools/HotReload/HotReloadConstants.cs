@@ -90,6 +90,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string SignatureChangeCoverageLostFailureFormat =
             "Isolation excluded compiled callers of '{0}'; applying the rest would leave those callers on the old version. Run 'uloop compile'.";
 
+        public const string DeactivatedPatchesWarningFormat =
+            "This run deactivated previously active patches: {0}. They reverted to the compiled behavior; "
+            + "edit and reload again to re-apply them, or run 'uloop compile'.";
+
         // Wire value for TransformWorkerRemovedMemberDto.kind.
         // Keep in sync with RemovedMemberKinds in TransformWorker~/TransformWorker.cs.
         public const string RemovedMemberKindMethod = "method";

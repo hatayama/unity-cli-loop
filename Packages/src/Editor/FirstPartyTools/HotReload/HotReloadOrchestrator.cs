@@ -165,6 +165,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new HotReloadFileProcessResult(outcomes, warnings, 0);
             }
 
+            // Why snapshot at this file's apply entry: multi-file runs process files
+            // sequentially, and RevertUnchangedPatches / BeginFileGeneration mutate ledgers
+            // after the worker. The worker itself does not.
+            HashSet<string> snapshotLabels = CollectActiveLabelsForFile(projectRelativePath);
+
             string[] defines = compilationAssembly.defines ?? Array.Empty<string>();
             string[] referencePaths = BuildWorkerReferencePaths(compilationAssembly, targetDllPath);
 
@@ -437,6 +442,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            // Why only this return: a still-declared added method is a first-pass entry, so
+            // empty-entries BeginFileGeneration only clears members the source no longer
+            // declares. The warning is only meaningful on the apply path that can drop a
+            // still-declared added member by not re-Registering it.
+            AppendDeactivatedPatchesWarning(
+                warnings,
+                snapshotLabels,
+                projectRelativePath,
+                workerOutput,
+                outcomes);
             return new HotReloadFileProcessResult(
                 outcomes,
                 warnings,
@@ -2408,6 +2423,127 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return contentPathOverride;
+        }
+
+        private static HashSet<string> CollectActiveLabelsForFile(string projectRelativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
+            IReadOnlyList<string> addedKeys =
+                HotReloadAddedMemberRegistry.ListActiveMethodKeys(projectRelativePath);
+            for (int index = 0; index < addedKeys.Count; index++)
+            {
+                labels.Add(addedKeys[index]);
+            }
+
+            IReadOnlyList<string> patchedKeys = HotReloadPatcher.ListActiveMethodKeys(projectRelativePath);
+            for (int index = 0; index < patchedKeys.Count; index++)
+            {
+                labels.Add(patchedKeys[index]);
+            }
+
+            return labels;
+        }
+
+        // Why first-pass added entries: a return-type replacement is both an added entry and
+        // a removed signature with the same label, so subtracting removals would swallow the
+        // warning. Convergence is quiet because dropping the declaration also drops the entry.
+        private static HashSet<string> CollectAddedEntryLabels(TransformWorkerOutputDto workerOutput)
+        {
+            HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
+            if (workerOutput == null || workerOutput.entries == null)
+            {
+                return labels;
+            }
+
+            foreach (TransformWorkerEntryDto entry in workerOutput.entries)
+            {
+                if (entry == null || entry.patchKind != HotReloadConstants.PatchKindAddedMethod)
+                {
+                    continue;
+                }
+
+                labels.Add(
+                    HotReloadPatcher.FormatMethodKeyParts(
+                        entry.typeMetadataName,
+                        entry.methodName,
+                        entry.parameterTypeFullNames ?? Array.Empty<string>(),
+                        entry.genericArity));
+            }
+
+            return labels;
+        }
+
+        // Why union Skipped labels: a still-declared added method can leave the first-pass
+        // entries when the worker skips it (virtual, generic, interface). Why not Failed:
+        // a Failed added method is always a first-pass added entry.
+        private static HashSet<string> CollectStillDeclaredAddedLabels(
+            TransformWorkerOutputDto workerOutput,
+            IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            HashSet<string> labels = CollectAddedEntryLabels(workerOutput);
+            if (outcomes == null)
+            {
+                return labels;
+            }
+
+            foreach (HotReloadMethodOutcome outcome in outcomes)
+            {
+                if (outcome == null
+                    || outcome.Kind != HotReloadMethodOutcomeKind.Skipped
+                    || string.IsNullOrEmpty(outcome.Method))
+                {
+                    continue;
+                }
+
+                labels.Add(outcome.Method);
+            }
+
+            return labels;
+        }
+
+        private static bool IsUnexpectedDeactivation(
+            string label,
+            HashSet<string> currentLabels,
+            HashSet<string> stillDeclaredAddedLabels)
+        {
+            return !currentLabels.Contains(label) && stillDeclaredAddedLabels.Contains(label);
+        }
+
+        private static void AppendDeactivatedPatchesWarning(
+            List<string> warnings,
+            HashSet<string> snapshotLabels,
+            string projectRelativePath,
+            TransformWorkerOutputDto workerOutput,
+            IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            Debug.Assert(warnings != null, "warnings must not be null.");
+            Debug.Assert(snapshotLabels != null, "snapshotLabels must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+
+            HashSet<string> currentLabels = CollectActiveLabelsForFile(projectRelativePath);
+            HashSet<string> stillDeclaredAdded = CollectStillDeclaredAddedLabels(workerOutput, outcomes);
+            List<string> deactivated = new List<string>();
+            foreach (string label in snapshotLabels)
+            {
+                if (!IsUnexpectedDeactivation(label, currentLabels, stillDeclaredAdded))
+                {
+                    continue;
+                }
+
+                deactivated.Add(label);
+            }
+
+            if (deactivated.Count == 0)
+            {
+                return;
+            }
+
+            deactivated.Sort(string.CompareOrdinal);
+            warnings.Add(
+                string.Format(
+                    HotReloadConstants.DeactivatedPatchesWarningFormat,
+                    string.Join(", ", deactivated)));
         }
 
         private static string ToProjectRelativeScriptPath(string path)

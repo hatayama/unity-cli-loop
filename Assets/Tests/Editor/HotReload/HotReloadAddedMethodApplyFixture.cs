@@ -9,6 +9,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadAddedMethodApplyFixture
     {
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int Unrelated(int value)
+        {
+            return value;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int ExistingCaller(int value)
         {
             return value;

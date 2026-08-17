@@ -11,6 +11,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int MarkerHp { get; set; }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
+        public int Unrelated(int value)
+        {
+            return value;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
         public int Target(int value)
         {
             return value;
