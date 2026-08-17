@@ -450,7 +450,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings,
                 snapshotLabels,
                 projectRelativePath,
-                workerOutput);
+                workerOutput,
+                outcomes);
             return new HotReloadFileProcessResult(
                 outcomes,
                 warnings,
@@ -2473,6 +2474,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return labels;
         }
 
+        // Why union Skipped labels: a still-declared added method can leave the first-pass
+        // entries when the worker skips it (virtual, generic, interface). Why not Failed:
+        // a Failed added method is always a first-pass added entry.
+        private static HashSet<string> CollectStillDeclaredAddedLabels(
+            TransformWorkerOutputDto workerOutput,
+            IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            HashSet<string> labels = CollectAddedEntryLabels(workerOutput);
+            if (outcomes == null)
+            {
+                return labels;
+            }
+
+            foreach (HotReloadMethodOutcome outcome in outcomes)
+            {
+                if (outcome == null
+                    || outcome.Kind != HotReloadMethodOutcomeKind.Skipped
+                    || string.IsNullOrEmpty(outcome.Method))
+                {
+                    continue;
+                }
+
+                labels.Add(outcome.Method);
+            }
+
+            return labels;
+        }
+
         private static bool IsUnexpectedDeactivation(
             string label,
             HashSet<string> currentLabels,
@@ -2485,14 +2514,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> warnings,
             HashSet<string> snapshotLabels,
             string projectRelativePath,
-            TransformWorkerOutputDto workerOutput)
+            TransformWorkerOutputDto workerOutput,
+            IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
             Debug.Assert(warnings != null, "warnings must not be null.");
             Debug.Assert(snapshotLabels != null, "snapshotLabels must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
 
             HashSet<string> currentLabels = CollectActiveLabelsForFile(projectRelativePath);
-            HashSet<string> stillDeclaredAdded = CollectAddedEntryLabels(workerOutput);
+            HashSet<string> stillDeclaredAdded = CollectStillDeclaredAddedLabels(workerOutput, outcomes);
             List<string> deactivated = new List<string>();
             foreach (string label in snapshotLabels)
             {

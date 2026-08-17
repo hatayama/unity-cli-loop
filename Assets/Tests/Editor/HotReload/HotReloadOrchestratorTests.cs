@@ -2740,6 +2740,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: after an added method applies, a later run that skips it as virtual while
+        /// still patching an unrelated method warns with the added method's label.
+        /// </summary>
+        [Test]
+        public async Task Run_VirtualAddedMethodAfterSuccess_WarnsDeactivatedPatches()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("VirtualAddedAfterSuccess1.cs", WithWorkingAddedPing(onDisk)),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+
+            string later = WithVirtualAddedPing(onDisk).Replace(
+                "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("VirtualAddedAfterSuccess2.cs", later),
+                CancellationToken.None);
+
+            AssertDeactivatedPatchesWarningsEqual(
+                second,
+                ExpectedDeactivatedPatchesWarning(AddedPingMethodLabel()));
+        }
+
+        /// <summary>
         /// What: a return-type change whose compiled callers all live in the edited file applies
         /// as Added plus a Patched caller, and the caller returns the new method's value.
         /// </summary>
@@ -4179,6 +4208,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
                 "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }\n\n"
                 + "        public int AddedPing(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
+                StringComparison.Ordinal);
+        }
+
+        private static string WithVirtualAddedPing(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }\n\n"
+                + "        public virtual int AddedPing(int value)\n        {\n            return value + 1;\n        }",
                 StringComparison.Ordinal);
         }
 
