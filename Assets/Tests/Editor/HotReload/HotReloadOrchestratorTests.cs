@@ -1810,6 +1810,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a later run that Skips a previously patched method while still Patching a
+        /// sibling is not recorded, so an identical third reload re-reports the Skip instead of
+        /// AlreadyActive.
+        /// </summary>
+        [Test]
+        public async Task Run_SkippedMixThenIdenticalReload_DoesNotShortCircuitAndRereportsSkipped()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string firstSource = BuildFixtureSource(
+                computeWithPrivateMethod:
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                sumGridMethod:
+                "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }");
+            string skippedMixSource = BuildFixtureSource(
+                computeWithPrivateMethod:
+                "public int ComputeWithPrivate(int delta)\n        {\n            return base.BaseSeed() + delta;\n        }",
+                sumGridMethod:
+                "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }");
+            string firstPath = WriteEditedSource("SkippedMixThenIdentical1.cs", firstSource);
+            string skippedMixPath = WriteEditedSource("SkippedMixThenIdentical2.cs", skippedMixSource);
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                firstPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasPatched(first, nameof(HotReloadE2EFixture.SumGrid));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                skippedMixPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(second);
+            AssertHasSkipped(second, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasPatched(second, nameof(HotReloadE2EFixture.SumGrid));
+            AssertNoAlreadyActive(second);
+
+            HotReloadOrchestratorResult third = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                skippedMixPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(third);
+            AssertHasSkipped(third, nameof(HotReloadE2EFixture.ComputeWithPrivate), "base");
+            AssertHasPatched(third, nameof(HotReloadE2EFixture.SumGrid));
+            AssertNoAlreadyActive(third);
+        }
+
+        /// <summary>
         /// What: --revert-all clears the applied-source ledger, so reloading the same edited
         /// source afterwards patches again instead of reporting AlreadyActive.
         /// </summary>

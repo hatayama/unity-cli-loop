@@ -200,7 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Format: number of AlreadyActive method outcomes in this run.
         public const string AlreadyActiveApplyMessageFormat =
-            "Hot reload found no source changes since the last applied reload. {0} patches stay "
+            "Hot reload found no source changes since the last applied reload. {0} patch(es) stay "
             + "active with their InvocationCount preserved. Edit and reload again to apply new changes.";
 
         public const string NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage =

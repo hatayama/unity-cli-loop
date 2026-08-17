@@ -2463,7 +2463,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
             Debug.Assert(outcomes != null, "outcomes must not be null.");
 
-            byte[] probeBytes = File.ReadAllBytes(Path.GetFullPath(workerSourcePath));
+            // Why Exists (not ReadAllBytes first): a missing file after a successful apply
+            // used to surface as a file-level Failed from the worker. Reading unconditionally
+            // would throw and abort the whole RunAsync. Why not Clear: this path does not
+            // mutate patches, so the ledger still describes the live patch set.
+            string fullWorkerSourcePath = Path.GetFullPath(workerSourcePath);
+            if (!File.Exists(fullWorkerSourcePath))
+            {
+                return false;
+            }
+
+            byte[] probeBytes = File.ReadAllBytes(fullWorkerSourcePath);
             string probeHash = HotReloadAppliedSourceLedger.ComputeContentHash(probeBytes);
             HashSet<string> activeLabels = CollectActiveLabelsForFile(projectRelativePath);
             string recordedHash = HotReloadAppliedSourceLedger.TryGetHash(projectRelativePath);
@@ -2513,30 +2523,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string sourceContentSha256,
             IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
-            if (string.IsNullOrEmpty(sourceContentSha256))
+            if (string.IsNullOrEmpty(sourceContentSha256) || outcomes.Count == 0)
             {
                 return false;
             }
 
-            bool hasFailed = false;
             bool hasPatchedOrAdded = false;
             for (int index = 0; index < outcomes.Count; index++)
             {
                 HotReloadMethodOutcomeKind kind = outcomes[index].Kind;
-                if (kind == HotReloadMethodOutcomeKind.Failed)
+                if (kind != HotReloadMethodOutcomeKind.Patched
+                    && kind != HotReloadMethodOutcomeKind.Added)
                 {
-                    hasFailed = true;
-                    break;
+                    // Why not record Skipped: that method's previous patch may still be live,
+                    // so recording would let the next identical reload report AlreadyActive and
+                    // hide the skip reason.
+                    return false;
                 }
 
-                if (kind == HotReloadMethodOutcomeKind.Patched
-                    || kind == HotReloadMethodOutcomeKind.Added)
-                {
-                    hasPatchedOrAdded = true;
-                }
+                hasPatchedOrAdded = true;
             }
 
-            return !hasFailed && hasPatchedOrAdded;
+            return hasPatchedOrAdded;
         }
 
         private static HashSet<string> CollectActiveLabelsForFile(string projectRelativePath)
