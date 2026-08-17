@@ -140,6 +140,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a skipped label whose parameter type contains dots still matches the simple name.
+        /// </summary>
+        [Test]
+        public void FindSkippedMemberNote_WhenParameterTypeIsQualified_UsesMethodSimpleName()
+        {
+            TransformWorkerSkippedDto[] skipped =
+            {
+                new TransformWorkerSkippedDto
+                {
+                    method = "Ns.Type.DescribeValue(System.Int32)",
+                    reason = Surface11SkippedReason
+                }
+            };
+
+            string note = HotReloadSkippedMemberCompileNote.FindSkippedMemberNote("DescribeValue", skipped);
+
+            Assert.That(note, Is.EqualTo(Surface11SkippedReason));
+        }
+
+        /// <summary>
         /// What: the skipped-member note format plus the surface-11 reason is an exact full line.
         /// </summary>
         [Test]
@@ -160,6 +180,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 reason);
 
             Assert.That(note, Is.EqualTo(ExpectedSkippedMemberNote));
+        }
+
+        /// <summary>
+        /// What: AppendNotes appends the skipped-member note after the composed shim-compile hints.
+        /// </summary>
+        [Test]
+        public void AppendNotes_Surface11Cs1061_AppendsFullNoteAfterComposeHints()
+        {
+            TransformWorkerSkippedDto[] skipped =
+            {
+                new TransformWorkerSkippedDto
+                {
+                    method = Surface11SkippedMethod,
+                    reason = Surface11SkippedReason
+                }
+            };
+            string composed = HotReloadShimCompiler.ComposeShimCompileFailureMessage(
+                new[] { Surface11Cs1061 });
+            string expected = composed + "\n" + ExpectedSkippedMemberNote;
+
+            string message = HotReloadSkippedMemberCompileNote.AppendNotes(
+                composed,
+                new[] { Surface11Cs1061 },
+                skipped);
+
+            Assert.That(message, Is.EqualTo(expected));
         }
     }
 }

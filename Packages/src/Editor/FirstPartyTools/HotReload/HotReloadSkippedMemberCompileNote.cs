@@ -132,22 +132,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string ExtractSimpleMethodName(string methodLabel)
         {
-            int lastDot = methodLabel.LastIndexOf('.');
-            int start = lastDot >= 0 ? lastDot + 1 : 0;
-            int end = methodLabel.Length;
-            int backtick = methodLabel.IndexOf('`', start);
+            // Why clip before ` or (: a qualified parameter type such as System.String
+            // contains dots that must not become the simple-name start.
+            int nameEnd = methodLabel.Length;
+            int backtick = methodLabel.IndexOf('`');
             if (backtick >= 0)
             {
-                end = backtick;
+                nameEnd = backtick;
             }
 
-            int paren = methodLabel.IndexOf('(', start);
-            if (paren >= 0 && paren < end)
+            int paren = methodLabel.IndexOf('(');
+            if (paren >= 0 && paren < nameEnd)
             {
-                end = paren;
+                nameEnd = paren;
             }
 
-            return methodLabel.Substring(start, end - start);
+            int lastDot = nameEnd > 0 ? methodLabel.LastIndexOf('.', nameEnd - 1) : -1;
+            int start = lastDot >= 0 ? lastDot + 1 : 0;
+            return methodLabel.Substring(start, nameEnd - start);
         }
     }
 }
