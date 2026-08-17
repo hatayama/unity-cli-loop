@@ -2679,10 +2679,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Observation: AddedPing remaining=" + remaining
                 + " ActivePatchTotal=" + second.ActivePatchTotal
                 + "\n" + FormatOutcomes(second));
-            Assert.That(
-                second.Warnings,
-                Does.Contain(ExpectedDeactivatedPatchesWarning(AddedPingMethodLabel())),
-                FormatOutcomes(second) + "\n" + string.Join("\n", second.Warnings));
+            AssertDeactivatedPatchesWarningsEqual(
+                second,
+                ExpectedDeactivatedPatchesWarning(AddedPingMethodLabel()));
         }
 
         /// <summary>
@@ -2734,12 +2733,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("BrokenAddedMulti2.cs", later),
                 CancellationToken.None);
 
-            string expected = ExpectedDeactivatedPatchesWarning(
-                AddedPingMethodLabel() + ", " + AddedPongMethodLabel());
-            Assert.That(
-                second.Warnings,
-                Does.Contain(expected),
-                FormatOutcomes(second) + "\n" + string.Join("\n", second.Warnings));
+            AssertDeactivatedPatchesWarningsEqual(
+                second,
+                ExpectedDeactivatedPatchesWarning(
+                    AddedPingMethodLabel() + ", " + AddedPongMethodLabel()));
         }
 
         /// <summary>
@@ -2816,6 +2813,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(1),
                 "The earlier replacement must stay in the added-member registry.");
             Assert.That(second.ActivePatchTotal, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: after a return-type replacement applies, a later run that gates it and
+        /// applies an unrelated method warns with the replacement label.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_GatedReplacementDeactivatedByUnrelatedApply_Warns()
+        {
+            string fixturePath = ResolveSignatureChangeAlreadyActiveFixturePath();
+            string applied = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeGatedDeactivate1.cs", applied),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasAdded(first, nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target));
+
+            string later = applied
+                .Replace(
+                    "        public int MarkerHp { get; set; }",
+                    "        public int MarkerHp;",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return (int)Target(value);\n        }",
+                    "            MarkerHp = value;\n            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                    "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(later, Is.Not.EqualTo(applied));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeGatedDeactivate2.cs", later),
+                CancellationToken.None);
+
+            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeof(HotReloadSignatureChangeAlreadyActiveFixture).FullName,
+                nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target),
+                new[] { "System.Int32" },
+                0);
+            AssertDeactivatedPatchesWarningsEqual(
+                second,
+                ExpectedDeactivatedPatchesWarning(expectedLabel));
         }
 
         /// <summary>
@@ -4143,9 +4186,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return onDisk.Replace(
                 "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
-                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value) + AddedPong(value);\n        }\n\n"
-                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }\n\n"
-                + "        public int AddedPong(int value)\n        {\n            return value + 2;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPong(value) + AddedPing(value);\n        }\n\n"
+                + "        public int AddedPong(int value)\n        {\n            return value + 2;\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }",
                 StringComparison.Ordinal);
         }
 
@@ -4153,9 +4196,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return onDisk.Replace(
                 "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
-                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value) + AddedPong(value);\n        }\n\n"
-                + "        public int AddedPing(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }\n\n"
-                + "        public int AddedPong(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPong(value) + AddedPing(value);\n        }\n\n"
+                + "        public int AddedPong(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
                 StringComparison.Ordinal);
         }
 
@@ -4182,16 +4225,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return string.Format(HotReloadConstants.DeactivatedPatchesWarningFormat, joinedLabels);
         }
 
+        private static string DeactivatedPatchesWarningPrefix()
+        {
+            string format = HotReloadConstants.DeactivatedPatchesWarningFormat;
+            int placeholderIndex = format.IndexOf("{0}", StringComparison.Ordinal);
+            Assert.That(placeholderIndex, Is.GreaterThanOrEqualTo(0));
+            return format.Substring(0, placeholderIndex);
+        }
+
+        private static List<string> FilterDeactivatedPatchesWarnings(IReadOnlyList<string> warnings)
+        {
+            string prefix = DeactivatedPatchesWarningPrefix();
+            List<string> filtered = new List<string>();
+            foreach (string warning in warnings)
+            {
+                if (warning.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    filtered.Add(warning);
+                }
+            }
+
+            return filtered;
+        }
+
+        private static void AssertDeactivatedPatchesWarningsEqual(
+            HotReloadOrchestratorResult result,
+            params string[] expectedWarnings)
+        {
+            Assert.That(
+                FilterDeactivatedPatchesWarnings(result.Warnings),
+                Is.EqualTo(expectedWarnings),
+                FormatOutcomes(result) + "\n" + string.Join("\n", result.Warnings));
+        }
+
         private static void AssertNoDeactivatedPatchesWarning(HotReloadOrchestratorResult result)
         {
-            string prefix = "This run deactivated previously active patches:";
-            foreach (string warning in result.Warnings)
-            {
-                Assert.That(
-                    warning,
-                    Does.Not.StartWith(prefix),
-                    FormatOutcomes(result) + "\n" + string.Join("\n", result.Warnings));
-            }
+            AssertDeactivatedPatchesWarningsEqual(result);
         }
 
         private static string WithSameFileReturnTypeChange(string onDisk)

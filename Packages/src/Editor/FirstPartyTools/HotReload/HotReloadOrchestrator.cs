@@ -169,10 +169,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // sequentially, and RevertUnchangedPatches / BeginFileGeneration mutate ledgers
             // after the worker. The worker itself does not.
             HashSet<string> snapshotLabels = CollectActiveLabelsForFile(projectRelativePath);
-            List<string> unchangedRevertedLabels = new List<string>();
-            TransformWorkerOutputDto workerOutputForDeactivation = null;
-            try
-            {
 
             string[] defines = compilationAssembly.defines ?? Array.Empty<string>();
             string[] referencePaths = BuildWorkerReferencePaths(compilationAssembly, targetDllPath);
@@ -205,7 +201,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             TransformWorkerOutputDto workerOutput = workerResult.Output;
-            workerOutputForDeactivation = workerOutput;
             string[] addedFieldNames = workerOutput.addedFieldNames;
             // Why after the worker: const-only / empty files have no patch candidates, so the
             // missing-baseline warning was pure noise (FB E). Emit only when the worker saw at
@@ -266,7 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why before the empty-entries return: all-unchanged runs exit there, and those are
             // exactly the runs that must peel leftover patches so behavior converges to compiled IL.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            unchangedRevertedLabels = RevertUnchangedPatches(assemblyName, unchangedMethods);
+            RevertUnchangedPatches(assemblyName, unchangedMethods);
 
             SignatureChangeGateResult gateResult = await TryApplySignatureChangeGateAsync(
                 projectRoot,
@@ -447,6 +442,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            // Why only this return: a still-declared added method is a first-pass entry, so
+            // empty-entries BeginFileGeneration only clears members the source no longer
+            // declares. The warning is only meaningful on the apply path that can drop a
+            // still-declared added member by not re-Registering it.
+            AppendDeactivatedPatchesWarning(
+                warnings,
+                snapshotLabels,
+                projectRelativePath,
+                workerOutput);
             return new HotReloadFileProcessResult(
                 outcomes,
                 warnings,
@@ -456,28 +460,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unchangedMethodCount,
                 retargetedPausePointIds,
                 addedFieldNames);
-            }
-            finally
-            {
-                AppendDeactivatedPatchesWarning(
-                    warnings,
-                    snapshotLabels,
-                    projectRelativePath,
-                    unchangedRevertedLabels,
-                    workerOutputForDeactivation);
-            }
         }
 
         // Peels leftover Harmony patches when the source again matches the verified baseline.
         // Resolve failures are silent: unchanged identities already matched compile-time IL.
-        private static List<string> RevertUnchangedPatches(
+        private static void RevertUnchangedPatches(
             string assemblyName,
             TransformWorkerUnchangedMethodDto[] unchangedMethods)
         {
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
             Debug.Assert(unchangedMethods != null, "unchangedMethods must not be null.");
 
-            List<string> revertedLabels = new List<string>();
             for (int index = 0; index < unchangedMethods.Length; index++)
             {
                 TransformWorkerUnchangedMethodDto unchanged = unchangedMethods[index];
@@ -503,13 +496,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                if (HotReloadPatcher.Revert(matchResult.Method))
-                {
-                    revertedLabels.Add(HotReloadPatcher.FormatMethodKey(matchResult.Method));
-                }
+                HotReloadPatcher.Revert(matchResult.Method);
             }
-
-            return revertedLabels;
         }
 
         private static HotReloadMethodOutcome ApplyEntry(
@@ -2456,6 +2444,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return labels;
         }
 
+        // Why first-pass added entries: a return-type replacement is both an added entry and
+        // a removed signature with the same label, so subtracting removals would swallow the
+        // warning. Convergence is quiet because dropping the declaration also drops the entry.
         private static HashSet<string> CollectAddedEntryLabels(TransformWorkerOutputDto workerOutput)
         {
             HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
@@ -2482,119 +2473,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return labels;
         }
 
-        private static HashSet<string> CollectRemovedSignatureLabels(TransformWorkerOutputDto workerOutput)
-        {
-            HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
-            if (workerOutput == null || workerOutput.removedMethodSignatures == null)
-            {
-                return labels;
-            }
-
-            foreach (TransformWorkerRemovedMethodSignatureDto signature in workerOutput.removedMethodSignatures)
-            {
-                if (signature == null
-                    || string.IsNullOrEmpty(signature.typeMetadataName)
-                    || string.IsNullOrEmpty(signature.methodName))
-                {
-                    continue;
-                }
-
-                labels.Add(
-                    HotReloadPatcher.FormatMethodKeyParts(
-                        signature.typeMetadataName,
-                        signature.methodName,
-                        signature.parameterTypeFullNames ?? Array.Empty<string>(),
-                        signature.genericArity));
-            }
-
-            return labels;
-        }
-
-        private static bool LabelMatchesRemovedMemberName(
-            string label,
-            TransformWorkerOutputDto workerOutput)
-        {
-            if (workerOutput == null || workerOutput.removedMembers == null)
-            {
-                return false;
-            }
-
-            foreach (TransformWorkerRemovedMemberDto removed in workerOutput.removedMembers)
-            {
-                if (removed == null || string.IsNullOrEmpty(removed.name))
-                {
-                    continue;
-                }
-
-                if (label.IndexOf("." + removed.name + "(", StringComparison.Ordinal) >= 0
-                    || label.IndexOf("." + removed.name + "`", StringComparison.Ordinal) >= 0)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         private static bool IsUnexpectedDeactivation(
             string label,
             HashSet<string> currentLabels,
-            HashSet<string> unchangedRevertedLabels,
-            HashSet<string> removedSignatureLabels,
-            HashSet<string> stillDeclaredAddedLabels,
-            TransformWorkerOutputDto workerOutput)
+            HashSet<string> stillDeclaredAddedLabels)
         {
-            if (currentLabels.Contains(label))
-            {
-                return false;
-            }
-
-            if (unchangedRevertedLabels.Contains(label))
-            {
-                return false;
-            }
-
-            if (removedSignatureLabels.Contains(label))
-            {
-                return false;
-            }
-
-            if (LabelMatchesRemovedMemberName(label, workerOutput))
-            {
-                return false;
-            }
-
-            return stillDeclaredAddedLabels.Contains(label);
+            return !currentLabels.Contains(label) && stillDeclaredAddedLabels.Contains(label);
         }
 
         private static void AppendDeactivatedPatchesWarning(
             List<string> warnings,
             HashSet<string> snapshotLabels,
             string projectRelativePath,
-            IReadOnlyList<string> unchangedRevertedLabels,
             TransformWorkerOutputDto workerOutput)
         {
             Debug.Assert(warnings != null, "warnings must not be null.");
             Debug.Assert(snapshotLabels != null, "snapshotLabels must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
-            Debug.Assert(unchangedRevertedLabels != null, "unchangedRevertedLabels must not be null.");
 
             HashSet<string> currentLabels = CollectActiveLabelsForFile(projectRelativePath);
             HashSet<string> stillDeclaredAdded = CollectAddedEntryLabels(workerOutput);
-            HashSet<string> unchangedReverted = new HashSet<string>(
-                unchangedRevertedLabels,
-                StringComparer.Ordinal);
-            HashSet<string> removedSignatures = CollectRemovedSignatureLabels(workerOutput);
             List<string> deactivated = new List<string>();
             foreach (string label in snapshotLabels)
             {
-                if (!IsUnexpectedDeactivation(
-                    label,
-                    currentLabels,
-                    unchangedReverted,
-                    removedSignatures,
-                    stillDeclaredAdded,
-                    workerOutput))
+                if (!IsUnexpectedDeactivation(label, currentLabels, stillDeclaredAdded))
                 {
                     continue;
                 }
