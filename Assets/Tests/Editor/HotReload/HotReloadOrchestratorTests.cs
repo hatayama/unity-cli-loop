@@ -550,6 +550,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: editing an instance constructor reports it as Skipped with the unsupported-member
+        /// reason and leaves Success true.
+        /// </summary>
+        [Test]
+        public async Task Run_EditedInstanceConstructor_IsSkippedAndSuccessStaysTrue()
+        {
+            string fixturePath = ResolveUnsupportedKindFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string editedSource = onDisk.Replace(
+                "Marker = 11;",
+                "Marker = 111;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: constructor body must differ.");
+
+            string editedPath = WriteEditedSource("UnsupportedKindCtor.cs", editedSource);
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                contentPathOverride: editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+
+            const string expectedReason =
+                "Constructors, operators, and event accessors are out of scope for v1; "
+                + "run 'uloop compile' to apply these edits.";
+            AssertHasSkipped(result, ".ctor()", expectedReason);
+
+            bool foundUneditedOverload = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Reason == expectedReason
+                    && outcome.Method.Contains(".ctor(System.Int32)"))
+                {
+                    foundUneditedOverload = true;
+                }
+            }
+
+            Assert.That(
+                foundUneditedOverload,
+                Is.False,
+                "Unedited constructor overload must not be Skipped; got: " + FormatOutcomes(result));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+            Assert.That(response.Success, Is.True, "Skipped constructors must not flip Success.");
+        }
+
+        /// <summary>
         /// What: editing a static expression-bodied property getter patches runtime reads,
         /// --status lists the Active get_ row, and RevertAll restores the compiled literal.
         /// </summary>
@@ -3777,6 +3825,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReload",
                 "HotReloadAddedMemberHost.cs");
             Assert.That(File.Exists(path), Is.True, "Added-member host source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveUnsupportedKindFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadUnsupportedMemberKindFixtures.cs");
+            Assert.That(File.Exists(path), Is.True, "Unsupported-kind fixture source missing: " + path);
             return Path.GetFullPath(path);
         }
 
