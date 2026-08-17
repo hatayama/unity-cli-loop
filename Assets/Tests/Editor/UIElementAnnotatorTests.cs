@@ -290,6 +290,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(displayLabel, Is.EqualTo("B / DRAG"));
         }
 
+        /// <summary>
+        /// Verifies that reachability probes are the center followed by the four interior quarter points.
+        /// </summary>
+        [Test]
+        public void GenerateReachabilityProbePoints_WhenBoundsAreProvided_ShouldReturnCenterThenQuarterPoints()
+        {
+            Vector2[] points = UIElementAnnotator.GenerateReachabilityProbePoints(10f, 20f, 50f, 100f);
+
+            Assert.That(points.Length, Is.EqualTo(5));
+            Assert.That(points[0], Is.EqualTo(new Vector2(30f, 60f)));
+            Assert.That(points[1], Is.EqualTo(new Vector2(20f, 40f)));
+            Assert.That(points[2], Is.EqualTo(new Vector2(40f, 40f)));
+            Assert.That(points[3], Is.EqualTo(new Vector2(20f, 80f)));
+            Assert.That(points[4], Is.EqualTo(new Vector2(40f, 80f)));
+        }
+
+        /// <summary>
+        /// Verifies that the first reachability probe is the bounding-box center.
+        /// </summary>
+        [Test]
+        public void GenerateReachabilityProbePoints_WhenBoundsAreProvided_ShouldPutCenterFirst()
+        {
+            Vector2[] points = UIElementAnnotator.GenerateReachabilityProbePoints(0f, 0f, 8f, 4f);
+
+            Assert.That(points.Length, Is.GreaterThan(0));
+            Assert.That(points[0], Is.EqualTo(new Vector2(4f, 2f)));
+        }
+
+        /// <summary>
+        /// Verifies that a zero-size bounds still returns five points, all collapsed inside the bounds.
+        /// </summary>
+        [Test]
+        public void GenerateReachabilityProbePoints_WhenBoundsHaveZeroSize_ShouldKeepAllPointsInsideBounds()
+        {
+            Vector2[] points = UIElementAnnotator.GenerateReachabilityProbePoints(7f, 9f, 7f, 9f);
+
+            Assert.That(points.Length, Is.EqualTo(5));
+            for (int i = 0; i < points.Length; i++)
+            {
+                Assert.That(points[i], Is.EqualTo(new Vector2(7f, 9f)));
+            }
+        }
+
         private static string CreateColorKey(Color color)
         {
             return $"{color.r:F3}:{color.g:F3}:{color.b:F3}:{color.a:F3}";
