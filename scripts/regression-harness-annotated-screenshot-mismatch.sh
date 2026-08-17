@@ -46,6 +46,7 @@ log() {
 
 cleanup() {
     rm -f "$CAPTURE_FILE" "$ELEMENTS_ONLY_FILE" "$CLICK_FILE"
+    run_uloop control-play-mode --action Stop >/dev/null 2>&1 || true
 }
 
 trap cleanup EXIT

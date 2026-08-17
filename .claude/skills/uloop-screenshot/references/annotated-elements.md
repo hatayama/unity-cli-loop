@@ -47,7 +47,7 @@ Entries are sorted by `HitCount` descending, then `LayerIndex` ascending.
 
 ## RaycastLayerNamesChecked Fields
 
-`RaycastLayerNamesChecked` is populated when `--annotate-raycast-grid true` is used. It lists the physics layer names that were actually eligible to produce `AnnotatedElements` `PhysicsCollider` entries in this response: the clustering mask (`--raycast-layer-mask` if set, otherwise `Physics.DefaultRaycastLayers`) intersected with `Camera.main.cullingMask`. Use it to diagnose why an expected layer produced no `PhysicsCollider` entries — if the layer name is missing here, the active camera cannot see it this frame regardless of `--raycast-layer-mask`.
+`RaycastLayerNamesChecked` is populated when `--annotate-raycast-grid` is used. It lists the physics layer names that were actually eligible to produce `AnnotatedElements` `PhysicsCollider` entries in this response: the clustering mask (`--raycast-layer-mask` if set, otherwise `Physics.DefaultRaycastLayers`) intersected with `Camera.main.cullingMask`. Use it to diagnose why an expected layer produced no `PhysicsCollider` entries — if the layer name is missing here, the active camera cannot see it this frame regardless of `--raycast-layer-mask`.
 
 This is a different mask than `RaycastLayerSummaries`, which always reports against the fixed `Physics.DefaultRaycastLayers` set. `RaycastLayerNamesChecked` tracks what was actually clustered; `RaycastLayerSummaries` is a constant discovery aid for "what else could I filter to next."
 
