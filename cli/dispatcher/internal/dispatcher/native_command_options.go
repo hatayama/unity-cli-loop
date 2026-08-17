@@ -6,10 +6,9 @@ import (
 )
 
 // nativeCommandOptions lists the static --help options for native commands
-// whose help the dispatcher answers itself. Shell completion used to read
-// this table too, but that feature has been removed; only dispatcher-owned
-// commands remain here, since runner-owned commands forward --help to the
-// pinned runner instead (see command_help.go).
+// whose help the dispatcher answers itself. Only dispatcher-owned commands
+// remain here, since runner-owned commands forward --help to the pinned
+// runner instead (see command_help.go).
 var nativeCommandOptions = map[string][]string{
 	clicore.LaunchCommandName: {
 		"--" + tooldocs.ProjectPathFlagName,

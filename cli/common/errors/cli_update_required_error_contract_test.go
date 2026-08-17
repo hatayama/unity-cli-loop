@@ -34,6 +34,34 @@ func TestClassifyError_WhenCliUpdateRequiredContractFixture_ClassifiesAsCLIUpdat
 	}
 }
 
+// Verifies the shared cli_update_required error.data fixture decodes into every typed struct field.
+func TestDecodeCliUpdateRequiredErrorData_WhenContractFixture_ReadsEveryField(t *testing.T) {
+	contract := readCliUpdateRequiredErrorContract(t)
+
+	decoded := decodeCliUpdateRequiredErrorData(contract.ErrorData)
+	if decoded.Type != "cli_update_required" {
+		t.Fatalf("type mismatch: %#v", decoded)
+	}
+	if decoded.Message != "Install matching uloop CLI and Unity package versions, then retry the original command." {
+		t.Fatalf("message mismatch: %#v", decoded)
+	}
+	if decoded.CurrentCliVersion != "3.0.0-beta.5" {
+		t.Fatalf("currentCliVersion mismatch: %#v", decoded)
+	}
+	if decoded.CurrentProtocolVersion == nil || *decoded.CurrentProtocolVersion != 1 {
+		t.Fatalf("currentProtocolVersion mismatch: %#v", decoded)
+	}
+	if decoded.RequiredProtocolVersion != 3 {
+		t.Fatalf("requiredProtocolVersion mismatch: %#v", decoded)
+	}
+	if decoded.UpdateCommand != "uloop update" {
+		t.Fatalf("updateCommand mismatch: %#v", decoded)
+	}
+	if !decoded.RetryableAfterUpdate {
+		t.Fatalf("retryableAfterUpdate mismatch: %#v", decoded)
+	}
+}
+
 func readCliUpdateRequiredErrorContract(t *testing.T) cliUpdateRequiredErrorContractFile {
 	t.Helper()
 

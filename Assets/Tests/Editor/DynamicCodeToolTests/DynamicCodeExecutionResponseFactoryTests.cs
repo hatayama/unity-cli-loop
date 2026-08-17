@@ -88,6 +88,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Verifies the diagnostics summary reports the pre-deduplication error count as the total.
+        /// </summary>
+        [Test]
+        public void ConvertExecutionResultToResponse_WhenDuplicateErrorsCollapse_SummaryKeepsPreDeduplicationTotal()
+        {
+            DynamicCodeExecutionResponseFactory factory = new();
+            ExecutionResult result = new()
+            {
+                Success = false,
+                ErrorMessage = "Compilation error occurred",
+                UpdatedCode = "return MissingType.Value;",
+                CompilationErrors = new List<CompilationError>
+                {
+                    new CompilationError
+                    {
+                        ErrorCode = "CS0246",
+                        Message = "The type or namespace name 'MissingType' could not be found",
+                        Line = 1,
+                        Column = 8
+                    },
+                    new CompilationError
+                    {
+                        ErrorCode = "CS0246",
+                        Message = "The type or namespace name 'MissingType' could not be found",
+                        Line = 1,
+                        Column = 8
+                    }
+                }
+            };
+
+            ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result);
+
+            Assert.That(response.Diagnostics, Has.Count.EqualTo(1));
+            Assert.That(response.DiagnosticsSummary, Does.StartWith("Errors: 1 unique (2 total)."));
+        }
+
+        /// <summary>
         /// Verifies wrapped UpdatedCode diagnostics render context from the user snippet region.
         /// </summary>
         [Test]

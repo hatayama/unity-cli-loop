@@ -11,6 +11,7 @@
                             <ui:Label name="cli-status-label" text="CLI: Checking..." />
                             <ui:Button name="refresh-cli-version-button" text="↻" class="unity-cli-loop-button--refresh" />
                         </ui:VisualElement>
+                        <ui:Label name="cli-homebrew-upgrade-message" text="" class="unity-cli-loop-warning-message" />
                         <ui:Button name="install-cli-button" text="Install CLI" class="unity-cli-loop-button unity-cli-loop-button--configure" />
                         <ui:VisualElement name="cli-install-progress" class="unity-cli-loop-install-progress" style="display: none;">
                             <ui:Label name="cli-install-progress-label" text="" class="unity-cli-loop-install-progress__detail" />

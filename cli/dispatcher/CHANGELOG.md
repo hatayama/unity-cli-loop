@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.0.0-beta.32](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.31...dispatcher-v3.0.0-beta.32) (2026-08-12)
+
+
+### Features
+
+* distribute uloop via a Homebrew tap ([#2157](https://github.com/hatayama/unity-cli-loop/issues/2157)) ([f882ea0](https://github.com/hatayama/unity-cli-loop/commit/f882ea0a9bc79cad97ae48dd4ea0ddc6e1a98dce))
+
+## [3.0.0-beta.31] (2026-08-11)
+
+
 ## [3.0.0-beta.30](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.29...dispatcher-v3.0.0-beta.30) (2026-07-30)
 
 

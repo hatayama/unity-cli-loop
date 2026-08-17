@@ -623,6 +623,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 0,
                 0,
                 1,
+                1,
                 Array.Empty<SourcePausePointLocalVariable>(),
                 Array.Empty<SourcePausePointParameter>());
         }

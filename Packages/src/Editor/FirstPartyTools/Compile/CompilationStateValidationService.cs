@@ -19,14 +19,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (EditorApplication.isCompiling)
             {
-                return ValidationResult.Failure(
-                    "Compilation is already in progress. Please wait for the current compilation to finish."
+                return ValidationResult.FailureWithErrorCode(
+                    "Compilation is already in progress. Please wait for the current compilation to finish.",
+                    CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText
                 );
             }
             if (EditorApplication.isUpdating)
             {
-                return ValidationResult.Failure(
-                    "Cannot compile while editor is updating. Please wait for the update to complete."
+                return ValidationResult.FailureWithErrorCode(
+                    "Cannot compile while editor is updating. Please wait for the update to complete.",
+                    CompileStateValidationErrorCodes.EditorUpdatingErrorCodeText
                 );
             }
 

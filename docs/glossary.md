@@ -18,9 +18,9 @@ match the current glossary:
 - `UnityCliLoopConstants.COMMAND_NAME_AWAIT_PAUSE_POINT` and
   `UnityCliLoopConstants.COMMAND_NAME_PAUSE_POINT_STATUS` are used as tool catalog names,
   not internal bridge commands.
-- The skill target types `SkillsTarget`, `SkillSetupTargetInfo`,
-  `ToolSkillSynchronizer.SkillTargetDefinition`, and `ToolSkillSynchronizer.SkillTargetInfo`
-  describe related concepts at different layers, but they remain public package identifiers.
+- The skill target types `SkillsTarget`, `SkillSetupTargetInfo`, and
+  `ToolSkillSynchronizer.SkillTargetInfo` describe related concepts at different layers,
+  but they remain public package identifiers.
 - Several first-party tool UseCases implement `IUnityCliLoop*Service` interfaces. The names
   are preserved because renaming public identifiers is outside terminology cleanup; removing
   the pass-through interfaces would be a separate structural refactor.
@@ -100,7 +100,7 @@ else.
 ### Skill target
 
 A destination agent environment into which skills are installed (for example Claude Code,
-Cursor). Each target defines where its skill copies live and which folder layout it uses.
+Codex CLI). Each target defines where its skill copies live and which folder layout it uses.
 
 ### UseCase
 

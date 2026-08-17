@@ -146,18 +146,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 originalUserSnippet,
                 result.AmbiguousTypeCandidates);
             response.CompilationErrors = response.Diagnostics;
-            response.DiagnosticsSummary = CreateDiagnosticsSummary(response.Diagnostics);
+            response.DiagnosticsSummary = CreateDiagnosticsSummary(
+                response.Diagnostics,
+                result.CompilationErrors.Count);
             response.Logs.Add(response.DiagnosticsSummary);
         }
 
-        private static string CreateDiagnosticsSummary(List<CompilationErrorDto> diagnostics)
+        // Why totalBeforeDeduplication is a parameter: BuildDiagnostics already deduplicated the
+        // list, so counting it here can only ever reproduce the unique count — the raw total must
+        // come from the pre-deduplication source.
+        private static string CreateDiagnosticsSummary(
+            List<CompilationErrorDto> diagnostics,
+            int totalBeforeDeduplication)
         {
-            int total = diagnostics.Count;
-            int unique = diagnostics
-                .GroupBy(error => new { error.Line, error.Column, error.ErrorCode, error.Message })
-                .Count();
+            int unique = diagnostics.Count;
             CompilationErrorDto first = diagnostics.First();
-            return $"Errors: {unique} unique ({total} total). First at L{first.Line}: {first.ErrorCode} {first.Message}";
+            return $"Errors: {unique} unique ({totalBeforeDeduplication} total). First at L{first.Line}: {first.ErrorCode} {first.Message}";
         }
 
         private static void ApplyExceptionResponseDetails(

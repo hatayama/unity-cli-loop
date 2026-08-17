@@ -163,6 +163,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return false;
             }
 
+            public bool IsHomebrewManagedInstallPath(string cliExecutablePath)
+            {
+                return false;
+            }
+
             public bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform)
             {
                 return false;

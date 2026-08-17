@@ -13,21 +13,30 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private readonly VisualElement _statusIcon;
         private readonly Label _statusLabel;
+        private readonly Label _homebrewUpgradeMessage;
         private readonly Button _installButton;
 
         internal SetupWizardCliStepPresenter(
             VisualElement statusIcon,
             Label statusLabel,
+            Label homebrewUpgradeMessage,
             Button installButton,
             System.Action onInstallClicked)
         {
             Debug.Assert(statusIcon != null, "statusIcon must not be null");
             Debug.Assert(statusLabel != null, "statusLabel must not be null");
+            Debug.Assert(homebrewUpgradeMessage != null, "homebrewUpgradeMessage must not be null");
             Debug.Assert(installButton != null, "installButton must not be null");
             Debug.Assert(onInstallClicked != null, "onInstallClicked must not be null");
 
             _statusIcon = statusIcon ?? throw new System.ArgumentNullException(nameof(statusIcon));
             _statusLabel = statusLabel ?? throw new System.ArgumentNullException(nameof(statusLabel));
+            _homebrewUpgradeMessage = homebrewUpgradeMessage
+                ?? throw new System.ArgumentNullException(nameof(homebrewUpgradeMessage));
+            // Why: the warning carries a command to run, so it must be copyable.
+            // UI Toolkit only starts a selection on a focusable text element.
+            _homebrewUpgradeMessage.focusable = true;
+            _homebrewUpgradeMessage.selection.isSelectable = true;
             _installButton = installButton ?? throw new System.ArgumentNullException(nameof(installButton));
             _installButton.clicked += onInstallClicked
                 ?? throw new System.ArgumentNullException(nameof(onInstallClicked));
@@ -38,6 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--success", false);
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--pending", true);
             _statusLabel.text = "Checking...";
+            UpdateHomebrewUpgradeMessage(isVisible: false, cliVersion: null, requiredCliVersion: null);
             _installButton.SetEnabled(false);
             _installButton.text = "Checking...";
         }
@@ -54,7 +64,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool cliIsDispatcher,
             string requiredCliVersion,
             bool isInstallingCli,
-            bool needsCliPathSetup)
+            bool needsCliPathSetup,
+            bool isHomebrewManagedCli)
         {
             CliSetupCompatibilityState state = CliSetupCompatibility.Evaluate(
                 cliVersion,
@@ -66,6 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 false,
                 state.NeedsUpdate,
                 needsCliPathSetup,
+                isHomebrewManagedCli,
                 cliVersion,
                 requiredCliVersion);
             bool cliVersionMatched = state.IsCompatible && cliInstalled;
@@ -74,7 +86,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliVersionMatched,
                 needsCliPathSetup,
                 isInstallingCli,
-                isChecking: false);
+                isChecking: false,
+                isHomebrewManagedCli);
 
             bool cliCompatible = cliInstalled && cliVersionMatched;
             _statusLabel.text = GetCliStatusTextForSetupWizard(
@@ -82,10 +95,22 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliCompatible,
                 cliVersion,
                 requiredCliVersion);
+            UpdateHomebrewUpgradeMessage(
+                HomebrewManagedCliPolicy.ShouldShowUpgradeGuidance(isHomebrewManagedCli, cliCompatible),
+                cliVersion,
+                requiredCliVersion);
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--success", cliCompatible);
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--pending", !cliCompatible);
             _installButton.SetEnabled(buttonEnabled);
             _installButton.text = buttonText;
+        }
+
+        private void UpdateHomebrewUpgradeMessage(bool isVisible, string cliVersion, string requiredCliVersion)
+        {
+            _homebrewUpgradeMessage.text = isVisible
+                ? CliSetupLabelFormatter.GetHomebrewUpgradeGuidanceText(cliVersion, requiredCliVersion)
+                : string.Empty;
+            ViewDataBinder.ToggleClass(_homebrewUpgradeMessage, "setup-warning-message--visible", isVisible);
         }
 
         internal static string GetCliStatusTextForSetupWizard(
@@ -118,12 +143,25 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isChecking,
             bool needsUpdate,
             bool needsCliPathSetup,
+            bool isHomebrewManagedCli,
             string cliVersion,
             string requiredCliVersion)
         {
             if (isChecking)
             {
                 return "Checking...";
+            }
+
+            if (isHomebrewManagedCli)
+            {
+                if (isInstallingCli)
+                {
+                    return "Fixing PATH...";
+                }
+
+                return needsCliPathSetup
+                    ? "Fix PATH"
+                    : CliSetupLabelFormatter.HOMEBREW_MANAGED_BUTTON_TEXT;
             }
 
             if (isInstallingCli)
@@ -159,9 +197,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool cliVersionMatched,
             bool needsCliPathSetup,
             bool isInstallingCli,
-            bool isChecking)
+            bool isChecking,
+            bool isHomebrewManagedCli)
         {
-            return !isInstallingCli && !isChecking && (!cliInstalled || !cliVersionMatched || needsCliPathSetup);
+            if (isInstallingCli || isChecking)
+            {
+                return false;
+            }
+
+            if (isHomebrewManagedCli)
+            {
+                return needsCliPathSetup;
+            }
+
+            return !cliInstalled || !cliVersionMatched || needsCliPathSetup;
         }
     }
 }

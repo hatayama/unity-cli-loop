@@ -107,6 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 instructionIndex,
                 sequencePoint.Offset,
                 sequencePoint.StartLine,
+                sequencePoint.EndLine,
                 locals,
                 parameters);
 

@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private readonly VisualElement _cliStatusIcon;
         private readonly Label _cliStatusLabel;
+        private readonly Label _cliHomebrewUpgradeMessage;
         private readonly Button _refreshCliVersionButton;
         private readonly Button _installCliButton;
         private readonly CliInstallProgressView _installProgressView;
@@ -36,6 +37,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _cliStatusIcon = root.Q<VisualElement>("cli-status-icon");
             _cliStatusLabel = root.Q<Label>("cli-status-label");
+            _cliHomebrewUpgradeMessage = root.Q<Label>("cli-homebrew-upgrade-message");
+            // Why: the warning carries a command to run, so it must be copyable.
+            // UI Toolkit only starts a selection on a focusable text element.
+            _cliHomebrewUpgradeMessage.focusable = true;
+            _cliHomebrewUpgradeMessage.selection.isSelectable = true;
             _refreshCliVersionButton = root.Q<Button>("refresh-cli-version-button");
             _installCliButton = root.Q<Button>("install-cli-button");
             _installProgressView = new CliInstallProgressView(
@@ -88,24 +94,36 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private void UpdateCliStatus(CliSetupData data)
         {
-            if (data.IsChecking)
-            {
-                ViewDataBinder.ToggleClass(_cliStatusIcon, "unity-cli-loop-cli-status-icon--installed", false);
-                ViewDataBinder.ToggleClass(_cliStatusIcon, "unity-cli-loop-cli-status-icon--not-installed", false);
-                _cliStatusLabel.text = "CLI: Checking...";
-                return;
-            }
+            bool isInstalledIconVisible = !data.IsChecking && data.IsCliInstalled;
+            bool isNotInstalledIconVisible = !data.IsChecking && !data.IsCliInstalled;
+            ViewDataBinder.ToggleClass(
+                _cliStatusIcon,
+                "unity-cli-loop-cli-status-icon--installed",
+                isInstalledIconVisible);
+            ViewDataBinder.ToggleClass(
+                _cliStatusIcon,
+                "unity-cli-loop-cli-status-icon--not-installed",
+                isNotInstalledIconVisible);
 
-            ViewDataBinder.ToggleClass(_cliStatusIcon, "unity-cli-loop-cli-status-icon--installed", data.IsCliInstalled);
-            ViewDataBinder.ToggleClass(_cliStatusIcon, "unity-cli-loop-cli-status-icon--not-installed", !data.IsCliInstalled);
+            _cliStatusLabel.text = GetCliStatusText(
+                data.IsChecking,
+                data.IsCliInstalled,
+                data.CliVersion);
+            UpdateHomebrewUpgradeMessage(data);
+        }
 
-            if (data.IsCliInstalled && data.CliVersion != null)
-            {
-                _cliStatusLabel.text = $"CLI: v{data.CliVersion}";
-                return;
-            }
-
-            _cliStatusLabel.text = "CLI: Not installed";
+        private void UpdateHomebrewUpgradeMessage(CliSetupData data)
+        {
+            bool isCliUsable = !string.IsNullOrEmpty(data.CliVersion) && !data.NeedsUpdate;
+            bool isVisible = !data.IsChecking
+                && HomebrewManagedCliPolicy.ShouldShowUpgradeGuidance(data.IsHomebrewManagedCli, isCliUsable);
+            _cliHomebrewUpgradeMessage.text = isVisible
+                ? CliSetupLabelFormatter.GetHomebrewUpgradeGuidanceText(data.CliVersion, data.RequiredCliVersion)
+                : string.Empty;
+            ViewDataBinder.ToggleClass(
+                _cliHomebrewUpgradeMessage,
+                "unity-cli-loop-warning-message--visible",
+                isVisible);
         }
 
         private void UpdateRefreshButton(CliSetupData data)
@@ -122,11 +140,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 data.NeedsUpdate,
                 data.CanUninstallCli,
                 data.NeedsCliPathSetup,
+                data.IsHomebrewManagedCli,
                 data.CliVersion,
                 data.RequiredCliVersion);
             bool enabled = IsInstallCliButtonEnabled(
                 data.IsInstallingCli,
-                data.IsChecking);
+                data.IsChecking,
+                data.IsHomebrewManagedCli,
+                data.NeedsCliPathSetup);
             bool isUninstallStyle = !data.NeedsCliPathSetup && IsUninstallCliAction(
                 data.IsCliInstalled,
                 data.NeedsUpdate,
@@ -181,12 +202,25 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsUpdate,
             bool canUninstallCli,
             bool needsCliPathSetup,
+            bool isHomebrewManagedCli,
             string cliVersion,
             string requiredCliVersion)
         {
             if (isChecking)
             {
                 return "Checking...";
+            }
+
+            if (isHomebrewManagedCli)
+            {
+                if (isInstallingCli)
+                {
+                    return "Fixing PATH...";
+                }
+
+                return needsCliPathSetup
+                    ? "Fix PATH"
+                    : CliSetupLabelFormatter.HOMEBREW_MANAGED_BUTTON_TEXT;
             }
 
             bool isUninstallAction = IsUninstallCliAction(isCliInstalled, needsUpdate, canUninstallCli);
@@ -220,9 +254,34 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static bool IsInstallCliButtonEnabled(
             bool isInstallingCli,
-            bool isChecking)
+            bool isChecking,
+            bool isHomebrewManagedCli,
+            bool needsCliPathSetup)
         {
-            return !isInstallingCli && !isChecking;
+            if (isInstallingCli || isChecking)
+            {
+                return false;
+            }
+
+            return !isHomebrewManagedCli || needsCliPathSetup;
+        }
+
+        internal static string GetCliStatusText(
+            bool isChecking,
+            bool isCliInstalled,
+            string cliVersion)
+        {
+            if (isChecking)
+            {
+                return "CLI: Checking...";
+            }
+
+            if (!isCliInstalled || cliVersion == null)
+            {
+                return "CLI: Not installed";
+            }
+
+            return $"CLI: v{cliVersion}";
         }
 
         internal static bool IsUninstallCliAction(

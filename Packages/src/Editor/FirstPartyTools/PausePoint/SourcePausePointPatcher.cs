@@ -262,8 +262,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     if (committed)
                     {
                         string previousLineText = UloopPausePointRegistry.GetStatus(id).ResolvedLineText;
+                        // Shim resolutions carry no end line, so the span degenerates to the
+                        // single resolved line.
                         string newLineText = PausePointLineTextReader.ReadResolvedLineText(
                             request.NormalizedFile,
+                            shimResolution.ResolvedLine,
                             shimResolution.ResolvedLine);
                         UloopPausePointRegistry.SetResolvedLine(
                             id,

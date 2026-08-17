@@ -10,7 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class PausePointLineTextReader
     {
-        public static string ReadResolvedLineText(string requestedFile, int resolvedLine)
+        public static string ReadResolvedLineText(string requestedFile, int resolvedLine, int resolvedEndLine)
         {
             if (string.IsNullOrEmpty(requestedFile) || resolvedLine <= 0)
             {
@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
             string absoluteFilePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), normalizedFile);
-            return SourcePausePointSourceLineReader.ReadLineText(absoluteFilePath, resolvedLine);
+            return SourcePausePointSourceLineReader.ReadLineText(absoluteFilePath, resolvedLine, resolvedEndLine);
         }
 
         // Why snapshot only: compiled ResolvedLine against the edited disk file is the FB9 lie.

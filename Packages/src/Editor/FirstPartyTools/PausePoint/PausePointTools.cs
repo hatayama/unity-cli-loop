@@ -497,9 +497,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         };
                     }
 
+                    // Shim resolutions carry no end line, so the span degenerates to the single
+                    // resolved line.
                     return FinishEnableBySourceLocation(
                         id,
                         parameters,
+                        shimResolution.ResolvedLine,
                         shimResolution.ResolvedLine,
                         shimResolution.MethodDisplayName,
                         shimPatchResult,
@@ -554,6 +557,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 id,
                 parameters,
                 resolveResult.Resolution.ResolvedLine,
+                resolveResult.Resolution.ResolvedEndLine,
                 resolveResult.Resolution.MethodDisplayName,
                 patchResult,
                 retargetedToHotReloadPatch: false,
@@ -564,6 +568,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string id,
             EnablePausePointSchema parameters,
             int resolvedLine,
+            int resolvedEndLine,
             string resolvedMethod,
             SourcePausePointPatchResult patchResult,
             bool retargetedToHotReloadPatch,
@@ -584,6 +589,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string resolvedLineText = ResolveEnableLineText(
                 parameters.File,
                 resolvedLine,
+                resolvedEndLine,
                 retargetedToHotReloadPatch,
                 hasActiveHotReloadPatches);
             UloopPausePointRegistry.SetResolvedLine(id, resolvedLine, resolvedLineText);
@@ -664,9 +670,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why snapshot over disk: the editor file may already include unpatched-line drift, so
         // reading disk at the compiled ResolvedLine shows the wrong statement (FB9 empty/mismatch).
+        // The snapshot read stays single-line because the verified snapshot has no end-line data;
+        // the disk read spans resolvedLine..resolvedEndLine so a rounded-forward multi-line
+        // statement returns its full text.
         private static string ResolveEnableLineText(
             string requestedFile,
             int resolvedLine,
+            int resolvedEndLine,
             bool retargetedToHotReloadPatch,
             bool hasActiveHotReloadPatches)
         {
@@ -678,7 +688,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return SourcePausePointSourceLineReader.ReadLineTextFromSource(snapshotSource, resolvedLine);
             }
 
-            return PausePointLineTextReader.ReadResolvedLineText(requestedFile, resolvedLine);
+            return PausePointLineTextReader.ReadResolvedLineText(requestedFile, resolvedLine, resolvedEndLine);
         }
 
         // The derived id must use the originally requested file/line (not the resolved/rounded

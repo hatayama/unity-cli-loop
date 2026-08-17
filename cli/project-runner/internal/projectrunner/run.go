@@ -184,6 +184,26 @@ func runCompileWithDomainReloadWaitWithDeps(
 		return code
 	}
 
+	return runFreshCompileWithDomainReloadWaitWithDeps(ctx, connection, params, stdout, stderr, compileWait)
+}
+
+func runFreshCompileWithDomainReloadWaitWithDeps(
+	ctx context.Context,
+	connection unityipc.Connection,
+	params map[string]any,
+	stdout io.Writer,
+	stderr io.Writer,
+	compileWait compileWaitDeps,
+) int {
+	waitTimeout, timeoutErr := compileWaitTimeoutFromParams(params)
+	if timeoutErr != nil {
+		clierrors.WriteClassifiedError(stderr, timeoutErr, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     clicore.CompileCommandName,
+		})
+		return 1
+	}
+
 	requestID, err := prepareCompileWaitParams(params)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
@@ -198,7 +218,7 @@ func runCompileWithDomainReloadWaitWithDeps(
 
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, clicore.CompileCommandName)
-	outcome, err := sendWithTransientConnectionRetryAndResponseTimeout(
+	outcome, err := compileSendOrDefault(compileWait)(
 		ctx,
 		connection,
 		clicore.CompileCommandName,

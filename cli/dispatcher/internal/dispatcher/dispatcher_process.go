@@ -47,9 +47,6 @@ func tryHandlePreConnectionRequestWithDeps(
 	stderr io.Writer,
 	deps dispatcherRunDeps,
 ) (bool, int) {
-	if handled, code := tryHandleCompletionRequest(remainingArgs); handled {
-		return true, code
-	}
 	if clicore.IsUnknownLeadingOption(command) {
 		clierrors.WriteClassifiedError(stderr, &clierrors.ArgumentError{
 			Message:     "Unknown global option: " + command,
