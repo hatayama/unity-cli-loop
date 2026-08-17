@@ -316,6 +316,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return patches;
         }
 
+        // Why projectRelativePath, not DescribeActivePatches FilePath filtering by callers:
+        // FilePathByMethod is written with the orchestrator's project-relative path.
+        public static IReadOnlyList<string> ListActiveMethodKeys(string projectRelativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            List<string> keys = new List<string>();
+            foreach (KeyValuePair<MethodBase, string> pair in FilePathByMethod)
+            {
+                if (!string.Equals(pair.Value, projectRelativePath, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                keys.Add(FormatMethodKey(pair.Key));
+            }
+
+            return keys;
+        }
+
         // What: status / counter key from a resolved MethodBase (apply outcomes use the same
         // helper after Resolve so --status rows match Patched Methods[].Method).
         // Why parameter ToString (+ generic arity): MethodBase ledger entries distinguish

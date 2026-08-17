@@ -2610,8 +2610,136 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "Per-file clear must drop AddedPing on re-apply.");
             }
 
+            AssertNoDeactivatedPatchesWarning(second);
             HotReloadAddedMethodApplyFixture host = new HotReloadAddedMethodApplyFixture();
             Assert.That(host.ExistingCaller(3), Is.EqualTo(13));
+        }
+
+        /// <summary>
+        /// What: after an added method applies, a later run that only breaks that added body
+        /// leaves the registry entry in place when nothing else is applied.
+        /// </summary>
+        [Test]
+        public async Task Run_BrokenAddedMethodAfterSuccess_ObservesRegistryWhenNothingElseApplies()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("BrokenAddedAfterSuccess1.cs", WithWorkingAddedPing(onDisk)),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+            Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(1));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("BrokenAddedAfterSuccess2.cs", WithBrokenAddedPing(onDisk)),
+                CancellationToken.None);
+
+            int remaining = CountAddedMembersContaining("AddedPing");
+            Assert.That(
+                remaining,
+                Is.EqualTo(1),
+                "Observation: AddedPing remaining=" + remaining
+                + " ActivePatchTotal=" + second.ActivePatchTotal
+                + "\n" + FormatOutcomes(second));
+            Assert.That(second.ActivePatchTotal, Is.EqualTo(2));
+            AssertNoDeactivatedPatchesWarning(second);
+        }
+
+        /// <summary>
+        /// What: after an added method applies, a later run that breaks that added body while
+        /// still patching an unrelated method drops the added member and warns with its label.
+        /// </summary>
+        [Test]
+        public async Task Run_BrokenAddedMethodAfterSuccess_ObservesRegistryWhenUnrelatedStillPatches()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("BrokenAddedUnrelated1.cs", WithWorkingAddedPing(onDisk)),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+            Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(1));
+
+            string later = WithBrokenAddedPing(onDisk).Replace(
+                "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("BrokenAddedUnrelated2.cs", later),
+                CancellationToken.None);
+
+            int remaining = CountAddedMembersContaining("AddedPing");
+            Assert.That(
+                remaining,
+                Is.EqualTo(0),
+                "Observation: AddedPing remaining=" + remaining
+                + " ActivePatchTotal=" + second.ActivePatchTotal
+                + "\n" + FormatOutcomes(second));
+            Assert.That(
+                second.Warnings,
+                Does.Contain(ExpectedDeactivatedPatchesWarning(AddedPingMethodLabel())),
+                FormatOutcomes(second) + "\n" + string.Join("\n", second.Warnings));
+        }
+
+        /// <summary>
+        /// What: a successful re-apply of the same added method re-registers it, so the
+        /// deactivated-patches warning is not emitted.
+        /// </summary>
+        [Test]
+        public async Task Run_ReapplyWorkingAddedMethod_DoesNotWarnDeactivatedPatches()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithWorkingAddedPing(onDisk);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("ReapplyWorkingAdded1.cs", edited),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("ReapplyWorkingAdded2.cs", edited),
+                CancellationToken.None);
+            AssertHasAdded(second, "AddedPing");
+            AssertNoDeactivatedPatchesWarning(second);
+        }
+
+        /// <summary>
+        /// What: two added methods deactivated in one run are listed in ordinal order,
+        /// comma-space separated, in the deactivated-patches warning.
+        /// </summary>
+        [Test]
+        public async Task Run_BrokenAddedMethodsAfterSuccess_WarnsOrdinalJoinedLabels()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("BrokenAddedMulti1.cs", WithWorkingAddedPingAndPong(onDisk)),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+            AssertHasAdded(first, "AddedPong");
+
+            string later = WithBrokenAddedPingAndPong(onDisk).Replace(
+                "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("BrokenAddedMulti2.cs", later),
+                CancellationToken.None);
+
+            string expected = ExpectedDeactivatedPatchesWarning(
+                AddedPingMethodLabel() + ", " + AddedPongMethodLabel());
+            Assert.That(
+                second.Warnings,
+                Does.Contain(expected),
+                FormatOutcomes(second) + "\n" + string.Join("\n", second.Warnings));
         }
 
         /// <summary>
@@ -3425,6 +3553,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "All-unchanged re-apply must drop AddedPing from the added-member ledger.");
             }
 
+            AssertNoDeactivatedPatchesWarning(second);
             Assert.That(host.ExistingCaller(3), Is.EqualTo(3));
         }
 
@@ -3990,6 +4119,79 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CallerMethodKey = callerMethodKey,
                 TargetMethodKey = targetMethodKey
             };
+        }
+
+        private static string WithWorkingAddedPing(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
+        }
+
+        private static string WithBrokenAddedPing(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value);\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
+                StringComparison.Ordinal);
+        }
+
+        private static string WithWorkingAddedPingAndPong(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value) + AddedPong(value);\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }\n\n"
+                + "        public int AddedPong(int value)\n        {\n            return value + 2;\n        }",
+                StringComparison.Ordinal);
+        }
+
+        private static string WithBrokenAddedPingAndPong(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedPing(value) + AddedPong(value);\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }\n\n"
+                + "        public int AddedPong(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
+                StringComparison.Ordinal);
+        }
+
+        private static string AddedPingMethodLabel()
+        {
+            return HotReloadPatcher.FormatMethodKeyParts(
+                typeof(HotReloadAddedMethodApplyFixture).FullName,
+                "AddedPing",
+                new[] { "System.Int32" },
+                0);
+        }
+
+        private static string AddedPongMethodLabel()
+        {
+            return HotReloadPatcher.FormatMethodKeyParts(
+                typeof(HotReloadAddedMethodApplyFixture).FullName,
+                "AddedPong",
+                new[] { "System.Int32" },
+                0);
+        }
+
+        private static string ExpectedDeactivatedPatchesWarning(string joinedLabels)
+        {
+            return string.Format(HotReloadConstants.DeactivatedPatchesWarningFormat, joinedLabels);
+        }
+
+        private static void AssertNoDeactivatedPatchesWarning(HotReloadOrchestratorResult result)
+        {
+            string prefix = "This run deactivated previously active patches:";
+            foreach (string warning in result.Warnings)
+            {
+                Assert.That(
+                    warning,
+                    Does.Not.StartWith(prefix),
+                    FormatOutcomes(result) + "\n" + string.Join("\n", result.Warnings));
+            }
         }
 
         private static string WithSameFileReturnTypeChange(string onDisk)

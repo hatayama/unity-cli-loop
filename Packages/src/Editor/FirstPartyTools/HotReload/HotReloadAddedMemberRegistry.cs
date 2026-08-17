@@ -61,6 +61,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return generation.Members.ContainsKey(methodKey);
         }
 
+        public static IReadOnlyList<string> ListActiveMethodKeys(string projectRelativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            if (!GenerationsByPath.TryGetValue(projectRelativePath, out FileGeneration generation))
+            {
+                return Array.Empty<string>();
+            }
+
+            List<string> keys = new List<string>(generation.Members.Count);
+            foreach (string methodKey in generation.Members.Keys)
+            {
+                keys.Add(methodKey);
+            }
+
+            return keys;
+        }
+
         public static int Count
         {
             get
