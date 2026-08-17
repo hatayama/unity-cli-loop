@@ -662,7 +662,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an AlreadyActive apply row for an unregistered MethodKey stays at 0, matching
-        /// GetCount's unknown-key behavior (including Added-member labels).
+        /// GetCount's unknown-key behavior.
         /// </summary>
         [Test]
         public void BuildApplyResponse_AlreadyActiveUnregisteredKey_ReportsZero()
