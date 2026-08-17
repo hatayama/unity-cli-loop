@@ -107,10 +107,13 @@ until `uloop compile`.
 
 Adding a constructor, operator, or explicit event accessor is still out of
 scope and is reported as `Skipped`, same as edits to them. Adding a type
-(`class`, `struct`, `enum`, `record`), a property, or an indexer is still out
-of scope. These additions are not reported per member — no `Skipped` row
-names them; at most they surface as outside-body drift in `Warnings`. Treat
-silence as "not applied" and land them with `uloop compile`.
+(`class`, `struct`, `enum`, `record`), a property, an event, or an indexer
+is still out of scope. Added properties are reported per member: the
+property's getter appears as a `Skipped` row that says to use a 'const' or
+a plain added field for the value, or to run 'uloop compile'. Types, events,
+and indexers are not reported per member — no `Skipped` row names them; at
+most they surface as outside-body drift in `Warnings`. Treat their silence
+as "not applied" and land them with `uloop compile`.
 
 Outside method bodies, only member additions (previous section) take effect.
 Every other declaration edit — changing a `const` value, a compiled field's

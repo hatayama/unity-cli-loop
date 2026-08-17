@@ -205,7 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return _secret + VisibleSibling();
         }
 
-        // ?. over an inaccessible member — worker must skip (condition b).
+        // ?. over an inaccessible member — worker must skip.
         public async Task<int> AsyncConditionalPrivateField()
         {
             await Task.Yield();
