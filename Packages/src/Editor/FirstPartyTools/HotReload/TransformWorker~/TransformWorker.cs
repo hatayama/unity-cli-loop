@@ -1649,6 +1649,24 @@ public static class TransformWorkerProgram
             }
         }
 
+        // Why skip newly added properties: Harmony looks up get_<Name> on the compiled type
+        // and fails with "No method 'get_X' ... was found" when the member does not exist.
+        if (hasBaseline
+            && snapshotPropertyMap != null
+            && plainCurrentPropertyMap != null)
+        {
+            string addedPropertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
+            if (!snapshotPropertyMap.ContainsKey(addedPropertyKey))
+            {
+                skipped.Add(new WorkerSkipped
+                {
+                    Method = FormatMethodLabel(getterSymbol),
+                    Reason = AddedMethodSkipReasons.AddedProperty
+                });
+                return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+            }
+        }
+
         if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
         {
             skipped.Add(new WorkerSkipped
@@ -5361,7 +5379,7 @@ internal static class AccessorEligibility
         if (NeedsPropertyIncrementRewrite(semanticModel, bodyNode))
         {
             rejectReason =
-                "inaccessible property increment/decrement has no accessor rewrite shape (condition b).";
+                "inaccessible property increment/decrement has no accessor rewrite shape.";
             return false;
         }
 
@@ -5480,7 +5498,7 @@ internal static class AccessorEligibility
 
     /// <summary>
     /// Returns false with null rejectReason when the node is not an inaccessible access site.
-    /// Returns false with a reason when the site is inaccessible but not rewriteable (condition b).
+    /// Returns false with a reason when the site is inaccessible but not rewriteable.
     /// Returns true when the site was registered (or was already present).
     /// </summary>
     private static bool TryRegisterInaccessibleAccess(
@@ -5497,7 +5515,7 @@ internal static class AccessorEligibility
             if (ctorSymbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol))
             {
                 rejectReason =
-                    "inaccessible constructor call has no accessor rewrite shape (condition b).";
+                    "inaccessible constructor call has no accessor rewrite shape.";
                 return false;
             }
 
@@ -5517,7 +5535,7 @@ internal static class AccessorEligibility
             {
                 rejectReason =
                     "inaccessible member assignment in an object/collection initializer has no "
-                    + "accessor rewrite shape (condition b).";
+                    + "accessor rewrite shape.";
                 return false;
             }
 
@@ -5545,13 +5563,13 @@ internal static class AccessorEligibility
                 if (AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod))
                 {
                     rejectReason =
-                        "inaccessible indexer access has no accessor rewrite shape (condition b).";
+                        "inaccessible indexer access has no accessor rewrite shape.";
                     return false;
                 }
             }
             else if (symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol))
             {
-                rejectReason = "inaccessible indexer access has no accessor rewrite shape (condition b).";
+                rejectReason = "inaccessible indexer access has no accessor rewrite shape.";
                 return false;
             }
 
@@ -5567,7 +5585,7 @@ internal static class AccessorEligibility
                 && IsInaccessibleBindingTarget(bound))
             {
                 rejectReason =
-                    "inaccessible member access via conditional access has no rewrite shape (condition b).";
+                    "inaccessible member access via conditional access has no rewrite shape.";
                 return false;
             }
 
@@ -5693,7 +5711,7 @@ internal static class AccessorEligibility
 
         if (leftSymbol is IEventSymbol)
         {
-            rejectReason = "inaccessible event add/remove is out of scope for accessor rewrite (condition b).";
+            rejectReason = "inaccessible event add/remove is out of scope for accessor rewrite.";
             return false;
         }
 
@@ -5730,20 +5748,20 @@ internal static class AccessorEligibility
 
         if (methodSymbol.IsExtensionMethod)
         {
-            rejectReason = "inaccessible extension method calls are not rewritten (condition b).";
+            rejectReason = "inaccessible extension method calls are not rewritten.";
             return false;
         }
 
         if (methodSymbol.IsGenericMethod)
         {
-            rejectReason = "inaccessible generic method calls are not rewritten (condition b).";
+            rejectReason = "inaccessible generic method calls are not rewritten.";
             return false;
         }
 
         if (methodSymbol.ReturnsByRef || methodSymbol.ReturnsByRefReadonly)
         {
             rejectReason =
-                "inaccessible methods that return by ref have no accessor rewrite shape (condition b).";
+                "inaccessible methods that return by ref have no accessor rewrite shape.";
             return false;
         }
 
@@ -5752,7 +5770,7 @@ internal static class AccessorEligibility
             if (parameter.RefKind != RefKind.None)
             {
                 rejectReason =
-                    "inaccessible method calls with ref/out/in parameters are not rewritten (condition b).";
+                    "inaccessible method calls with ref/out/in parameters are not rewritten.";
                 return false;
             }
         }
@@ -5762,7 +5780,7 @@ internal static class AccessorEligibility
             if (argument.NameColon != null)
             {
                 rejectReason =
-                    "inaccessible method calls with named arguments are not rewritten (condition b).";
+                    "inaccessible method calls with named arguments are not rewritten.";
                 return false;
             }
         }
@@ -5771,7 +5789,7 @@ internal static class AccessorEligibility
         {
             rejectReason =
                 "inaccessible method calls with omitted optional or expanded params arguments "
-                + "are not rewritten (condition b).";
+                + "are not rewritten.";
             return false;
         }
 
@@ -5813,7 +5831,7 @@ internal static class AccessorEligibility
 
         if (symbol is IEventSymbol)
         {
-            rejectReason = "inaccessible event add/remove is out of scope for accessor rewrite (condition b).";
+            rejectReason = "inaccessible event add/remove is out of scope for accessor rewrite.";
             return false;
         }
 
@@ -5821,7 +5839,7 @@ internal static class AccessorEligibility
             && AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol))
         {
             rejectReason =
-                "inaccessible method group (non-invocation) has no accessor rewrite shape (condition b).";
+                "inaccessible method group (non-invocation) has no accessor rewrite shape.";
             return false;
         }
 
@@ -5832,7 +5850,7 @@ internal static class AccessorEligibility
             && symbol is not ILocalSymbol
             && symbol is not IParameterSymbol)
         {
-            rejectReason = "inaccessible member kind is not field/method/property access (condition b).";
+            rejectReason = "inaccessible member kind is not field/method/property access.";
             return false;
         }
 
@@ -5847,21 +5865,21 @@ internal static class AccessorEligibility
         rejectReason = null;
         if (propertySymbol.IsIndexer)
         {
-            rejectReason = "inaccessible indexer access has no accessor rewrite shape (condition b).";
+            rejectReason = "inaccessible indexer access has no accessor rewrite shape.";
             return false;
         }
 
         if (propertySymbol.IsStatic)
         {
             rejectReason =
-                "inaccessible static property access has no accessor rewrite shape (condition b).";
+                "inaccessible static property access has no accessor rewrite shape.";
             return false;
         }
 
         if (propertySymbol.ReturnsByRef || propertySymbol.ReturnsByRefReadonly)
         {
             rejectReason =
-                "inaccessible ref-returning properties have no accessor rewrite shape (condition b).";
+                "inaccessible ref-returning properties have no accessor rewrite shape.";
             return false;
         }
 
@@ -5894,15 +5912,14 @@ internal static class AccessorEligibility
         if (assignment.IsKind(SyntaxKind.CoalesceAssignmentExpression))
         {
             rejectReason =
-                "null-coalescing assignment writes conditionally and has no accessor rewrite shape "
-                + "(condition b).";
+                "null-coalescing assignment writes conditionally and has no accessor rewrite shape.";
             return false;
         }
 
         if (needsGetter && !IsSupportedCompoundAssignmentKind(assignment.Kind()))
         {
             rejectReason =
-                "unsupported compound assignment kind has no accessor rewrite shape (condition b).";
+                "unsupported compound assignment kind has no accessor rewrite shape.";
             return false;
         }
 
@@ -5912,7 +5929,7 @@ internal static class AccessorEligibility
         {
             rejectReason =
                 "compound assignment reading an inaccessible getter with an accessible setter "
-                + "has no accessor rewrite shape (condition b).";
+                + "has no accessor rewrite shape.";
             return false;
         }
 
@@ -5920,7 +5937,7 @@ internal static class AccessorEligibility
         if (assignment.Parent is not ExpressionStatementSyntax)
         {
             rejectReason =
-                "assignment value is consumed; the setter delegate returns void (condition b).";
+                "assignment value is consumed; the setter delegate returns void.";
             return false;
         }
 
@@ -5928,27 +5945,27 @@ internal static class AccessorEligibility
         if (needsGetter && !IsSideEffectFreeAssignmentReceiver(semanticModel, assignment.Left))
         {
             rejectReason =
-                "receiver with possible side effects would be evaluated twice (condition b).";
+                "receiver with possible side effects would be evaluated twice.";
             return false;
         }
 
         if (propertySymbol.IsIndexer)
         {
-            rejectReason = "inaccessible indexer access has no accessor rewrite shape (condition b).";
+            rejectReason = "inaccessible indexer access has no accessor rewrite shape.";
             return false;
         }
 
         if (propertySymbol.IsStatic)
         {
             rejectReason =
-                "inaccessible static property access has no accessor rewrite shape (condition b).";
+                "inaccessible static property access has no accessor rewrite shape.";
             return false;
         }
 
         if (propertySymbol.ReturnsByRef || propertySymbol.ReturnsByRefReadonly)
         {
             rejectReason =
-                "inaccessible ref-returning properties have no accessor rewrite shape (condition b).";
+                "inaccessible ref-returning properties have no accessor rewrite shape.";
             return false;
         }
 
@@ -5956,7 +5973,7 @@ internal static class AccessorEligibility
         {
             if (propertySymbol.SetMethod == null)
             {
-                rejectReason = "inaccessible property has no setter to bind (condition b).";
+                rejectReason = "inaccessible property has no setter to bind.";
                 return false;
             }
 
@@ -5967,7 +5984,7 @@ internal static class AccessorEligibility
         {
             if (propertySymbol.GetMethod == null)
             {
-                rejectReason = "inaccessible property has no getter to bind (condition b).";
+                rejectReason = "inaccessible property has no getter to bind.";
                 return false;
             }
 
@@ -7658,6 +7675,10 @@ internal static class AddedMethodSkipReasons
     public const string VirtualOrAbstract =
         "Added virtual, override, or abstract methods are skipped; the compiled type has no vtable slot. "
         + "Run 'uloop compile' to add them.";
+
+    public const string AddedProperty =
+        "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
+        + "Use a 'const' or a plain added field for the value, or run 'uloop compile'.";
 
     public const string Generic =
         "Added generic methods are skipped; hot reload cannot emit a typed shim for them. "
