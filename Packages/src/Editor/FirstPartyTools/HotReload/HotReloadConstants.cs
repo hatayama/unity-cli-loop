@@ -222,5 +222,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage =
             "Hot reload finished with no methods patched. See Methods for Skipped and AlreadyActive reasons.";
+
+        public const string VibeLogFileStart = "hot_reload_file_start";
+        public const string VibeLogWorkerResult = "hot_reload_worker_result";
+        public const string VibeLogShimCompileFailed = "hot_reload_shim_compile_failed";
+        public const string VibeLogIsolationRetry = "hot_reload_isolation_retry";
+        public const string VibeLogEmptyEntriesClear = "hot_reload_empty_entries_clear";
+        public const string VibeLogApplySummary = "hot_reload_apply_summary";
     }
 }
