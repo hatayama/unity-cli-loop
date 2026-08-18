@@ -170,6 +170,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "or a Code Optimization switch, run uloop compile and retry. See the pause-point skill's "
             + "troubleshooting reference for specific failure patterns.";
 
+        // Format: method filter, requested line.
+        public const string NoMethodNamedWithSequencePointMessageFormat =
+            "No method named '{0}' with a sequence point on or after line {1} was found.";
+
         // Auto-retarget failure reasons surfaced on status Warning / SuppressedByHotReloadReason.
         public const string RetargetOntoHotReloadFailedReason =
             "The marker's line no longer resolves inside the hot-reload patched body; it will not fire "

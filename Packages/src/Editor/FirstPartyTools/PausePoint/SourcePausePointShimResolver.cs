@@ -19,13 +19,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static SourcePausePointShimResolution Resolve(
             HotReloadShimFileLookup lookup,
             string normalizedFilePath,
-            int line)
+            int line,
+            string methodFilter = null)
         {
             Debug.Assert(lookup != null, "lookup must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(normalizedFilePath), "normalizedFilePath must not be empty.");
             Debug.Assert(line > 0, "line must be a positive 1-based line number.");
 
-            HotReloadShimMethodLookup methodEntry = FindMethodEntryForLine(lookup, line);
+            HotReloadShimMethodLookup methodEntry = FindMethodEntryForLine(lookup, line, methodFilter);
             if (methodEntry == null)
             {
                 return SourcePausePointShimResolution.NotInPatchedMethod();
@@ -137,14 +138,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static HotReloadShimMethodLookup FindMethodEntryForLine(
             HotReloadShimFileLookup lookup,
-            int line)
+            int line,
+            string methodFilter)
         {
             foreach (HotReloadShimMethodLookup method in lookup.Methods)
             {
-                if (line >= method.SourceStartLine && line <= method.SourceEndLine)
+                if (line < method.SourceStartLine || line > method.SourceEndLine)
                 {
-                    return method;
+                    continue;
                 }
+
+                string declaringTypeName =
+                    method.OriginalMethod.DeclaringType != null
+                        ? method.OriginalMethod.DeclaringType.Name
+                        : "?";
+                if (!SourcePausePointResolver.MethodMatchesFilter(
+                    methodFilter,
+                    method.OriginalMethod.Name,
+                    declaringTypeName))
+                {
+                    continue;
+                }
+
+                return method;
             }
 
             return null;

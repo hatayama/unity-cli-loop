@@ -142,6 +142,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: --method that names a compiled neighbor skips the patched shim entry and
+        /// falls through to the compiled line map instead of retargeting onto the patch.
+        /// </summary>
+        [Test]
+        public async Task Enable_PatchedLineWithUnpatchedMethodFilter_FallsThroughToCompiledResolver()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            string edited = BuildEditedSourceWithTopPaddingAndPatchedReturn(onDisk);
+            int editedPatchLine = FindLineNumber(edited, "return 111;");
+            Assert.That(editedPatchLine, Is.GreaterThan(0));
+
+            await HotReloadFromEditedSourceAsync(edited, "LineDriftMethodFilter.cs");
+
+            PausePointResponse enable = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = editedPatchLine,
+                Method = nameof(HotReloadPausePointLineDriftFixture.AfterTarget),
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+
+            Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
+            Assert.That(enable.RetargetedToHotReloadPatch, Is.False);
+            Assert.That(enable.ResolvedMethod, Does.Contain(nameof(HotReloadPausePointLineDriftFixture.AfterTarget)));
+            Assert.That(enable.ResolvedMethod, Does.Not.Contain(nameof(HotReloadPausePointLineDriftFixture.PatchTarget)));
+        }
+
+        /// <summary>
         /// What: compiled-side enable with an active hot-reload file but no verified snapshot
         /// leaves ResolvedLineText empty instead of reading the edited file on disk.
         /// </summary>

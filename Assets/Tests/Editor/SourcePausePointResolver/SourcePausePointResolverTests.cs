@@ -245,5 +245,94 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(nearby[1].StartLine, Is.LessThanOrEqualTo(line));
             Assert.That(nearby[1].EndLine, Is.GreaterThanOrEqualTo(line));
         }
+
+        /// <summary>
+        /// What: a simple --method name keeps resolve inside that compiled method.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenMethodFilterMatchesSimpleName_ResolvesThatMethod()
+        {
+            string file = FixturesDirectory + "CompiledMethodSpanFixture.cs";
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(file, 9, "Target");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Resolution.MethodDisplayName, Does.Contain("Target"));
+            Assert.That(result.Resolution.MethodDisplayName, Does.Not.Contain("OtherMethod"));
+        }
+
+        /// <summary>
+        /// What: a Type.Method filter matches the declaring-type short name plus method name.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenMethodFilterMatchesQualifiedName_ResolvesThatMethod()
+        {
+            string file = FixturesDirectory + "CompiledMethodSpanFixture.cs";
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(
+                file, 9, "CompiledMethodSpanFixture.Target");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Resolution.MethodDisplayName, Does.Contain("Target"));
+        }
+
+        /// <summary>
+        /// What: a --method name that has no sequence point on or after the line fails instead
+        /// of silently arming a neighbor, and still lists nearby compiled spans.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenMethodFilterHasNoSequencePointOnOrAfterLine_FailsWithNamedMessage()
+        {
+            string file = FixturesDirectory + "CompiledMethodSpanFixture.cs";
+            SourcePausePointResolveResult otherMethod = SourcePausePointResolver.Resolve(file, 16);
+            Assert.That(otherMethod.Success, Is.True, otherMethod.ErrorMessage);
+
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(file, 16, "Target");
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.FailureReason,
+                Is.EqualTo(SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine));
+            string expectedMessage =
+                string.Format(
+                    SourcePausePointConstants.NoMethodNamedWithSequencePointMessageFormat,
+                    "Target",
+                    16);
+            Assert.That(result.ErrorMessage, Is.EqualTo(expectedMessage));
+            Assert.That(result.NearbyCompiledMethods.Count, Is.EqualTo(1));
+            Assert.That(
+                result.NearbyCompiledMethods[0].DisplayName,
+                Is.EqualTo("CompiledMethodSpanFixture.OtherMethod"));
+            Assert.That(
+                result.NearbyCompiledMethods[0].StartLine,
+                Is.EqualTo(otherMethod.Resolution.CompiledMethodStartLine));
+            Assert.That(
+                result.NearbyCompiledMethods[0].EndLine,
+                Is.EqualTo(otherMethod.Resolution.CompiledMethodEndLine));
+        }
+
+        /// <summary>
+        /// What: an empty method filter accepts every compiled method name.
+        /// </summary>
+        [Test]
+        public void MethodMatchesFilter_WhenFilterIsEmpty_ReturnsTrue()
+        {
+            Assert.That(SourcePausePointResolver.MethodMatchesFilter(null, "Target", "Host"), Is.True);
+            Assert.That(SourcePausePointResolver.MethodMatchesFilter(string.Empty, "Target", "Host"), Is.True);
+        }
+
+        /// <summary>
+        /// What: a simple name matches method.Name only, and a dotted name matches Type.Method.
+        /// </summary>
+        [Test]
+        public void MethodMatchesFilter_WhenSimpleOrQualified_UsesDeclaringTypeShortName()
+        {
+            Assert.That(SourcePausePointResolver.MethodMatchesFilter("Target", "Target", "Host"), Is.True);
+            Assert.That(SourcePausePointResolver.MethodMatchesFilter("Other", "Target", "Host"), Is.False);
+            Assert.That(
+                SourcePausePointResolver.MethodMatchesFilter("Host.Target", "Target", "Host"),
+                Is.True);
+            Assert.That(
+                SourcePausePointResolver.MethodMatchesFilter("Other.Target", "Target", "Host"),
+                Is.False);
+        }
     }
 }

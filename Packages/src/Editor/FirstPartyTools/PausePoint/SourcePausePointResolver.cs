@@ -20,7 +20,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class SourcePausePointResolver
     {
-        public static SourcePausePointResolveResult Resolve(string projectRelativeFilePath, int line)
+        public static SourcePausePointResolveResult Resolve(
+            string projectRelativeFilePath,
+            int line,
+            string methodFilter = null)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
             Debug.Assert(line > 0, "line must be a positive 1-based line number.");
@@ -57,7 +60,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"Debug symbols not found at '{pdbPath}'. Ensure the project uses Debug code optimization.");
             }
 
-            return ResolveFromCompiledAssembly(assemblyName, dllPath, pdbPath, normalizedInputPath, projectRelativeFilePath, line);
+            return ResolveFromCompiledAssembly(
+                assemblyName,
+                dllPath,
+                pdbPath,
+                normalizedInputPath,
+                projectRelativeFilePath,
+                line,
+                methodFilter);
         }
 
         private static SourcePausePointResolveResult ResolveFromCompiledAssembly(
@@ -66,7 +76,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string pdbPath,
             string normalizedInputPath,
             string originalInputPath,
-            int line)
+            int line,
+            string methodFilter)
         {
             using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using FileStream pdbStream = File.Open(pdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -82,15 +93,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(dllStream, readerParameters);
 
             (MethodDefinition method, SequencePoint sequencePoint) = FindClosestSequencePointOnOrAfterLine(
-                assemblyDefinition.MainModule, normalizedInputPath, line);
+                assemblyDefinition.MainModule, normalizedInputPath, line, methodFilter);
 
             if (method == null)
             {
                 IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods =
                     FindNearbyCompiledMethods(assemblyDefinition.MainModule, normalizedInputPath, line);
+                string errorMessage = string.IsNullOrEmpty(methodFilter)
+                    ? $"No sequence point found on or after line {line} in '{originalInputPath}'."
+                    : string.Format(
+                        SourcePausePointConstants.NoMethodNamedWithSequencePointMessageFormat,
+                        methodFilter,
+                        line);
                 return SourcePausePointResolveResult.Failure(
                     SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine,
-                    $"No sequence point found on or after line {line} in '{originalInputPath}'.",
+                    errorMessage,
                     nearbyCompiledMethods);
             }
 
@@ -123,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static (MethodDefinition method, SequencePoint sequencePoint) FindClosestSequencePointOnOrAfterLine(
-            ModuleDefinition module, string normalizedInputPath, int line)
+            ModuleDefinition module, string normalizedInputPath, int line, string methodFilter)
         {
             MethodDefinition bestMethod = null;
             SequencePoint bestSequencePoint = null;
@@ -131,6 +148,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (MethodDefinition method in EnumerateMethodsInModule(module))
             {
                 if (!method.HasBody)
+                {
+                    continue;
+                }
+
+                string declaringTypeName = method.DeclaringType != null ? method.DeclaringType.Name : "?";
+                if (!MethodMatchesFilter(methodFilter, method.Name, declaringTypeName))
                 {
                     continue;
                 }
@@ -162,6 +185,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return (bestMethod, bestSequencePoint);
+        }
+
+        // Why Type.Name only: PR-2 short names keep the last type segment, so `Type.Method`
+        // matches the same label agents already see in skip reasons.
+        internal static bool MethodMatchesFilter(string methodFilter, string methodName, string declaringTypeName)
+        {
+            if (string.IsNullOrEmpty(methodFilter))
+            {
+                return true;
+            }
+
+            Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be empty.");
+            string typeName = string.IsNullOrEmpty(declaringTypeName) ? "?" : declaringTypeName;
+            if (methodFilter.IndexOf('.') >= 0)
+            {
+                return string.Equals(typeName + "." + methodName, methodFilter, StringComparison.Ordinal);
+            }
+
+            return string.Equals(methodName, methodFilter, StringComparison.Ordinal);
         }
 
         // Why after bestMethod is chosen: the candidate loop walks every method in the
