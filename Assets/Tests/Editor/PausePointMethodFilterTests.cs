@@ -35,6 +35,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Enable_WhenMethodFilterMatches_ResolvesIntendedMethod()
         {
+            SourcePausePointResolveResult expected = SourcePausePointResolver.Resolve(SpanFixtureFile, 9, "Target");
+            Assert.That(expected.Success, Is.True, expected.ErrorMessage);
+
             PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
             {
                 File = SpanFixtureFile,
@@ -45,8 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             });
 
             Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
-            Assert.That(response.ResolvedMethod, Does.Contain("Target"));
-            Assert.That(response.ResolvedMethod, Does.Not.Contain("OtherMethod"));
+            Assert.That(response.ResolvedMethod, Is.EqualTo(expected.Resolution.MethodDisplayName));
         }
 
         /// <summary>
@@ -70,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-            Assert.That(string.IsNullOrEmpty(response.ResolvedMethod), Is.True);
+            Assert.That(response.ResolvedMethod, Is.EqualTo(string.Empty));
             string expectedMessage =
                 string.Format(
                     SourcePausePointConstants.NoMethodNamedWithSequencePointMessageFormat,

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -152,8 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string declaringTypeName = method.DeclaringType != null ? method.DeclaringType.Name : "?";
-                if (!MethodMatchesFilter(methodFilter, method.Name, declaringTypeName))
+                if (!CompiledMethodMatchesFilter(methodFilter, method))
                 {
                     continue;
                 }
@@ -187,9 +187,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (bestMethod, bestSequencePoint);
         }
 
+        private static bool CompiledMethodMatchesFilter(string methodFilter, MethodDefinition method)
+        {
+            string declaringTypeName = method.DeclaringType != null ? method.DeclaringType.Name : "?";
+            string nestedOuterTypeName =
+                method.DeclaringType != null && method.DeclaringType.DeclaringType != null
+                    ? method.DeclaringType.DeclaringType.Name
+                    : null;
+            return MethodMatchesFilter(methodFilter, method.Name, declaringTypeName, nestedOuterTypeName);
+        }
+
         // Why Type.Name only: PR-2 short names keep the last type segment, so `Type.Method`
         // matches the same label agents already see in skip reasons.
-        internal static bool MethodMatchesFilter(string methodFilter, string methodName, string declaringTypeName)
+        internal static bool MethodMatchesFilter(
+            string methodFilter,
+            string methodName,
+            string declaringTypeName,
+            string nestedOuterTypeName = null)
         {
             if (string.IsNullOrEmpty(methodFilter))
             {
@@ -197,13 +211,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be empty.");
-            string typeName = string.IsNullOrEmpty(declaringTypeName) ? "?" : declaringTypeName;
+            (string logicalMethodName, string logicalTypeName) = ToLogicalFilterNames(
+                methodName,
+                declaringTypeName,
+                nestedOuterTypeName);
             if (methodFilter.IndexOf('.') >= 0)
             {
-                return string.Equals(typeName + "." + methodName, methodFilter, StringComparison.Ordinal);
+                return string.Equals(
+                    logicalTypeName + "." + logicalMethodName,
+                    methodFilter,
+                    StringComparison.Ordinal);
             }
 
-            return string.Equals(methodName, methodFilter, StringComparison.Ordinal);
+            return string.Equals(logicalMethodName, methodFilter, StringComparison.Ordinal);
+        }
+
+        internal static (string MethodName, string DeclaringTypeName) ToLogicalFilterNames(
+            string methodName,
+            string declaringTypeName,
+            string nestedOuterTypeName)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be empty.");
+            string typeName = string.IsNullOrEmpty(declaringTypeName) ? "?" : declaringTypeName;
+            Match stateMachine = SourcePausePointConstants.StateMachineTypeNamePattern.Match(typeName);
+            if (stateMachine.Success)
+            {
+                string outerTypeName = string.IsNullOrEmpty(nestedOuterTypeName) ? "?" : nestedOuterTypeName;
+                return (stateMachine.Groups[1].Value, outerTypeName);
+            }
+
+            Match localFunction = SourcePausePointConstants.LocalFunctionMethodNamePattern.Match(methodName);
+            if (localFunction.Success)
+            {
+                return (localFunction.Groups[1].Value, typeName);
+            }
+
+            return (methodName, typeName);
         }
 
         // Why after bestMethod is chosen: the candidate loop walks every method in the

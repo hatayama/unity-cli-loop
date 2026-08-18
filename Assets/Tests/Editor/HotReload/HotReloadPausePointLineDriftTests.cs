@@ -166,8 +166,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
             Assert.That(enable.RetargetedToHotReloadPatch, Is.False);
-            Assert.That(enable.ResolvedMethod, Does.Contain(nameof(HotReloadPausePointLineDriftFixture.AfterTarget)));
-            Assert.That(enable.ResolvedMethod, Does.Not.Contain(nameof(HotReloadPausePointLineDriftFixture.PatchTarget)));
+            SourcePausePointResolveResult expected = SourcePausePointResolver.Resolve(
+                FixtureProjectRelativePath,
+                editedPatchLine,
+                nameof(HotReloadPausePointLineDriftFixture.AfterTarget));
+            Assert.That(expected.Success, Is.True, expected.ErrorMessage);
+            Assert.That(enable.ResolvedMethod, Is.EqualTo(expected.Resolution.MethodDisplayName));
+        }
+
+        /// <summary>
+        /// What: --method that names the patched method keeps enable on the shim path for
+        /// both a simple name and Type.Method.
+        /// </summary>
+        [Test]
+        public async Task Enable_PatchedLineWithMatchingMethodFilter_StaysOnShim()
+        {
+            string onDisk = File.ReadAllText(ResolveFixtureAbsolutePath());
+            string edited = BuildEditedSourceWithTopPaddingAndPatchedReturn(onDisk);
+            int editedPatchLine = FindLineNumber(edited, "return 111;");
+            Assert.That(editedPatchLine, Is.GreaterThan(0));
+
+            await HotReloadFromEditedSourceAsync(edited, "LineDriftMethodFilterMatch.cs");
+            HotReloadShimMethodLookup patchedEntry = FindPatchedShimEntry();
+            string expectedResolvedMethod = patchedEntry.OriginalMethod.ToString();
+
+            PausePointResponse simple = EnablePatchedLineWithMethodFilter(
+                editedPatchLine,
+                nameof(HotReloadPausePointLineDriftFixture.PatchTarget));
+            Assert.That(simple.Success, Is.True, simple.Message + " / " + simple.RecommendedNextAction);
+            Assert.That(simple.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(simple.ResolvedMethod, Is.EqualTo(expectedResolvedMethod));
+
+            SourcePausePointPatcher.UnpatchAll();
+            UloopPausePointRegistry.ResetForTests();
+            UloopPausePointRegistry.ConfigureForTests(new FakePausePointPauseController(), () => DateTime.UtcNow);
+
+            PausePointResponse qualified = EnablePatchedLineWithMethodFilter(
+                editedPatchLine,
+                nameof(HotReloadPausePointLineDriftFixture) + "."
+                + nameof(HotReloadPausePointLineDriftFixture.PatchTarget));
+            Assert.That(qualified.Success, Is.True, qualified.Message + " / " + qualified.RecommendedNextAction);
+            Assert.That(qualified.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(qualified.ResolvedMethod, Is.EqualTo(expectedResolvedMethod));
         }
 
         /// <summary>
@@ -261,6 +301,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             UloopPausePointSnapshot afterRevert = UloopPausePointRegistry.GetStatus(enable.Id);
             Assert.That(afterRevert.RetargetedToHotReloadPatch, Is.False);
             Assert.That(afterRevert.ResolvedLineText, Is.Empty);
+        }
+
+        private static PausePointResponse EnablePatchedLineWithMethodFilter(int line, string methodFilter)
+        {
+            return new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureProjectRelativePath,
+                Line = line,
+                Method = methodFilter,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
         }
 
         private static async Task<PausePointResponse> EnablePatchedLineThenPrepareRestoreAsync(

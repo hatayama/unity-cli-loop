@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -148,14 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string declaringTypeName =
-                    method.OriginalMethod.DeclaringType != null
-                        ? method.OriginalMethod.DeclaringType.Name
-                        : "?";
-                if (!SourcePausePointResolver.MethodMatchesFilter(
-                    methodFilter,
-                    method.OriginalMethod.Name,
-                    declaringTypeName))
+                if (!OriginalMethodMatchesFilter(methodFilter, method.OriginalMethod))
                 {
                     continue;
                 }
@@ -164,6 +158,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return null;
+        }
+
+        private static bool OriginalMethodMatchesFilter(string methodFilter, MethodBase originalMethod)
+        {
+            Debug.Assert(originalMethod != null, "originalMethod must not be null.");
+            Type declaringType = originalMethod.DeclaringType;
+            string declaringTypeName = declaringType != null ? declaringType.Name : "?";
+            string nestedOuterTypeName =
+                declaringType != null && declaringType.DeclaringType != null
+                    ? declaringType.DeclaringType.Name
+                    : null;
+            return SourcePausePointResolver.MethodMatchesFilter(
+                methodFilter,
+                originalMethod.Name,
+                declaringTypeName,
+                nestedOuterTypeName);
         }
 
         private static (MethodDefinition method, SequencePoint sequencePoint)

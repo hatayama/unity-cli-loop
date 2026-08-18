@@ -256,8 +256,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(file, 9, "Target");
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Resolution.MethodDisplayName, Does.Contain("Target"));
-            Assert.That(result.Resolution.MethodDisplayName, Does.Not.Contain("OtherMethod"));
+            SourcePausePointResolveResult expected = SourcePausePointResolver.Resolve(file, 9);
+            Assert.That(expected.Success, Is.True, expected.ErrorMessage);
+            Assert.That(
+                result.Resolution.MethodDisplayName,
+                Is.EqualTo(expected.Resolution.MethodDisplayName));
         }
 
         /// <summary>
@@ -271,7 +274,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 file, 9, "CompiledMethodSpanFixture.Target");
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Resolution.MethodDisplayName, Does.Contain("Target"));
+            SourcePausePointResolveResult expected = SourcePausePointResolver.Resolve(file, 9);
+            Assert.That(expected.Success, Is.True, expected.ErrorMessage);
+            Assert.That(
+                result.Resolution.MethodDisplayName,
+                Is.EqualTo(expected.Resolution.MethodDisplayName));
         }
 
         /// <summary>
@@ -332,6 +339,194 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.True);
             Assert.That(
                 SourcePausePointResolver.MethodMatchesFilter("Other.Target", "Target", "Host"),
+                Is.False);
+        }
+
+        /// <summary>
+        /// What: --method ComputeAsync matches the async state-machine MoveNext body.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenMethodFilterMatchesAsyncSimpleName_ResolvesStateMachine()
+        {
+            string file = FixturesDirectory + "AsyncMethodFixture.cs";
+            SourcePausePointResolveResult expected = SourcePausePointResolver.Resolve(file, 13);
+            Assert.That(expected.Success, Is.True, expected.ErrorMessage);
+
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(file, 13, "ComputeAsync");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Resolution.MethodDisplayName,
+                Is.EqualTo(expected.Resolution.MethodDisplayName));
+        }
+
+        /// <summary>
+        /// What: --method Type.ComputeAsync matches the async state-machine MoveNext body.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenMethodFilterMatchesAsyncQualifiedName_ResolvesStateMachine()
+        {
+            string file = FixturesDirectory + "AsyncMethodFixture.cs";
+            SourcePausePointResolveResult expected = SourcePausePointResolver.Resolve(file, 13);
+            Assert.That(expected.Success, Is.True, expected.ErrorMessage);
+
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(
+                file, 13, "AsyncMethodFixture.ComputeAsync");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Resolution.MethodDisplayName,
+                Is.EqualTo(expected.Resolution.MethodDisplayName));
+        }
+
+        /// <summary>
+        /// What: an unrelated --method on an async body fails instead of matching MoveNext.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenMethodFilterDoesNotMatchAsync_Fails()
+        {
+            string file = FixturesDirectory + "AsyncMethodFixture.cs";
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(file, 13, "CountUp");
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.NoMethodNamedWithSequencePointMessageFormat,
+                        "CountUp",
+                        13)));
+        }
+
+        /// <summary>
+        /// What: --method CountUp matches the iterator state-machine MoveNext body.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenMethodFilterMatchesCoroutineSimpleName_ResolvesStateMachine()
+        {
+            string file = FixturesDirectory + "CoroutineMethodFixture.cs";
+            SourcePausePointResolveResult expected = SourcePausePointResolver.Resolve(file, 13);
+            Assert.That(expected.Success, Is.True, expected.ErrorMessage);
+
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(file, 13, "CountUp");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Resolution.MethodDisplayName,
+                Is.EqualTo(expected.Resolution.MethodDisplayName));
+        }
+
+        /// <summary>
+        /// What: --method Type.CountUp matches the iterator state-machine MoveNext body.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenMethodFilterMatchesCoroutineQualifiedName_ResolvesStateMachine()
+        {
+            string file = FixturesDirectory + "CoroutineMethodFixture.cs";
+            SourcePausePointResolveResult expected = SourcePausePointResolver.Resolve(file, 13);
+            Assert.That(expected.Success, Is.True, expected.ErrorMessage);
+
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(
+                file, 13, "CoroutineMethodFixture.CountUp");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Resolution.MethodDisplayName,
+                Is.EqualTo(expected.Resolution.MethodDisplayName));
+        }
+
+        /// <summary>
+        /// What: an unrelated --method on a coroutine body fails instead of matching MoveNext.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenMethodFilterDoesNotMatchCoroutine_Fails()
+        {
+            string file = FixturesDirectory + "CoroutineMethodFixture.cs";
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(
+                file, 13, "ComputeAsync");
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.NoMethodNamedWithSequencePointMessageFormat,
+                        "ComputeAsync",
+                        13)));
+        }
+
+        /// <summary>
+        /// What: a state-machine type name is compared as the logical method and outer type.
+        /// </summary>
+        [Test]
+        public void MethodMatchesFilter_WhenStateMachineType_UsesLogicalOwnerNames()
+        {
+            Assert.That(
+                SourcePausePointResolver.MethodMatchesFilter(
+                    "ComputeAsync",
+                    "MoveNext",
+                    "<ComputeAsync>d__0",
+                    "AsyncMethodFixture"),
+                Is.True);
+            Assert.That(
+                SourcePausePointResolver.MethodMatchesFilter(
+                    "AsyncMethodFixture.ComputeAsync",
+                    "MoveNext",
+                    "<ComputeAsync>d__0",
+                    "AsyncMethodFixture"),
+                Is.True);
+            Assert.That(
+                SourcePausePointResolver.MethodMatchesFilter(
+                    "CountUp",
+                    "MoveNext",
+                    "<ComputeAsync>d__0",
+                    "AsyncMethodFixture"),
+                Is.False);
+        }
+
+        /// <summary>
+        /// What: a local-function mangled name is compared as the logical local name.
+        /// </summary>
+        [Test]
+        public void MethodMatchesFilter_WhenLocalFunction_UsesLogicalLocalName()
+        {
+            Assert.That(
+                SourcePausePointResolver.MethodMatchesFilter(
+                    "Compute",
+                    "<Square>g__Compute|8_0",
+                    "LocalFunctionMethodFixture"),
+                Is.True);
+            Assert.That(
+                SourcePausePointResolver.MethodMatchesFilter(
+                    "LocalFunctionMethodFixture.Compute",
+                    "<Square>g__Compute|8_0",
+                    "LocalFunctionMethodFixture"),
+                Is.True);
+            Assert.That(
+                SourcePausePointResolver.MethodMatchesFilter(
+                    "Square",
+                    "<Square>g__Compute|8_0",
+                    "LocalFunctionMethodFixture"),
+                Is.False);
+        }
+
+        /// <summary>
+        /// What: an anonymous lambda keeps no source name, so --method does not match it.
+        /// </summary>
+        [Test]
+        public void MethodMatchesFilter_WhenLambda_DoesNotMatchOuterMethodName()
+        {
+            Assert.That(
+                SourcePausePointResolver.MethodMatchesFilter(
+                    "CountUp",
+                    "<CountUp>b__0",
+                    "CoroutineMethodFixture"),
+                Is.False);
+            Assert.That(
+                SourcePausePointResolver.MethodMatchesFilter(
+                    "CoroutineMethodFixture.CountUp",
+                    "<CountUp>b__0",
+                    "CoroutineMethodFixture"),
                 Is.False);
         }
     }
