@@ -331,6 +331,7 @@ enforcing exclusivity, every patch transition re-targets them:
 - Enabling a new pause point on a currently patched method resolves against the patched
   body directly. `PAUSE_POINT_PATCHED_BY_HOT_RELOAD` is returned only when the line
   cannot be mapped onto it (a stale line map or a superseded generation).
+  When the compiled line range of the patched method is known, the failure message also reports it, so you can see how far the edited file's line numbers have shifted from the compiled source.
 - `uloop hot-reload --revert-all` (or reverting a method's patch) re-targets armed
   markers back onto the compiled body; a marker whose line no longer resolves there
   stays suppressed with a reason until `uloop compile` and a re-enable.

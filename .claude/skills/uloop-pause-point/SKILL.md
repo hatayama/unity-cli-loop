@@ -190,6 +190,7 @@ armed on the edited code. Methods the reload did not patch are the opposite case
 requested line cannot be mapped onto the patched body — the file's line map is stale or
 the patch belongs to a superseded hot-reload generation. Pick a line inside the edited
 method body, run `uloop hot-reload --revert-all`, or run `uloop compile`, then retry.
+When the compiled line range of the patched method is known, the failure message also reports it, so you can see how far the edited file's line numbers have shifted from the compiled source.
 `SuppressedByHotReload: true` on a status response means a later hot-reload transition
 (apply, a newer generation, or revert) could not re-target the armed marker; the reason
 is in `SuppressedByHotReloadReason` and surfaced as the status `Warning`. The marker is

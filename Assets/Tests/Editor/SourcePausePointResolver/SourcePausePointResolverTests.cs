@@ -154,6 +154,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Resolution.ResolvedEndLine, Is.EqualTo(13));
         }
 
+        /// <summary>
+        /// What: the compiled span covers only the resolved method, not a sibling method
+        /// in the same file.
+        /// </summary>
+        [Test]
+        public void Resolve_CompiledMethodSpan_PinsStartAndEndOfResolvedMethodOnly()
+        {
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "CompiledMethodSpanFixture.cs", 9);
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Resolution.ResolvedLine, Is.EqualTo(9));
+            Assert.That(result.Resolution.CompiledMethodStartLine, Is.EqualTo(8));
+            Assert.That(result.Resolution.CompiledMethodEndLine, Is.EqualTo(11));
+        }
+
         [Test]
         public void Resolve_WhenPathIsOutsideAnyScriptFolder_ReturnsScriptNotInAnyAssemblyFailure()
         {

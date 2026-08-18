@@ -96,6 +96,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<SourcePausePointLocalVariable> locals = CollectCapturableLocals(method, sequencePoint.Offset);
             List<SourcePausePointParameter> parameters = CollectParameters(method);
+            (int compiledMethodStartLine, int compiledMethodEndLine) = CollectCompiledMethodSpan(
+                method,
+                normalizedInputPath);
 
             SourcePausePointResolution resolution = new SourcePausePointResolution(
                 assemblyName,
@@ -108,6 +111,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sequencePoint.Offset,
                 sequencePoint.StartLine,
                 sequencePoint.EndLine,
+                compiledMethodStartLine,
+                compiledMethodEndLine,
                 locals,
                 parameters);
 
@@ -154,6 +159,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return (bestMethod, bestSequencePoint);
+        }
+
+        // Why after bestMethod is chosen: the candidate loop walks every method in the
+        // document and also skips StartLine < requested line, so min/max there would be
+        // the whole file or a truncated body. Hidden points are 0xFEEFEE (16707566).
+        private static (int startLine, int endLine) CollectCompiledMethodSpan(
+            MethodDefinition method,
+            string normalizedInputPath)
+        {
+            Debug.Assert(method != null, "method must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(normalizedInputPath), "normalizedInputPath must not be empty.");
+
+            MethodDebugInformation debugInformation = method.DebugInformation;
+            if (debugInformation == null || !debugInformation.HasSequencePoints)
+            {
+                return (0, 0);
+            }
+
+            int startLine = 0;
+            int endLine = 0;
+            foreach (SequencePoint sequencePoint in debugInformation.SequencePoints)
+            {
+                if (sequencePoint.IsHidden)
+                {
+                    continue;
+                }
+
+                if (!SourcePausePointPathNormalizer.PathsReferToSameFile(
+                    sequencePoint.Document.Url,
+                    normalizedInputPath))
+                {
+                    continue;
+                }
+
+                if (startLine == 0 || sequencePoint.StartLine < startLine)
+                {
+                    startLine = sequencePoint.StartLine;
+                }
+
+                if (sequencePoint.EndLine > endLine)
+                {
+                    endLine = sequencePoint.EndLine;
+                }
+            }
+
+            return (startLine, endLine);
         }
 
         // Shared with SourcePausePointShimResolver so shim-assembly sequence-point walks use the

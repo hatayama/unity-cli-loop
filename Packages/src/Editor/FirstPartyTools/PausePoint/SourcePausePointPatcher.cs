@@ -442,13 +442,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (patchedByHotReload)
             {
                 string typeName = method.DeclaringType != null ? method.DeclaringType.Name : "?";
-                return SourcePausePointPatchResult.Failure(
-                    SourcePausePointPatchFailureReason.MethodPatchedByHotReload,
-                    string.Format(
-                        SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
+                string errorMessage = string.Format(
+                    SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
+                    typeName,
+                    method.Name,
+                    requestedLine);
+                if (resolution.CompiledMethodStartLine > 0 && resolution.CompiledMethodEndLine > 0)
+                {
+                    errorMessage += string.Format(
+                        SourcePausePointConstants.HotReloadPatchedCompiledMethodSpanFormat,
                         typeName,
                         method.Name,
-                        requestedLine),
+                        resolution.CompiledMethodStartLine,
+                        resolution.CompiledMethodEndLine);
+                }
+
+                return SourcePausePointPatchResult.Failure(
+                    SourcePausePointPatchFailureReason.MethodPatchedByHotReload,
+                    errorMessage,
                     SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyNextAction);
             }
 

@@ -664,6 +664,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a synthetic resolution with a compiled method span appends that span to the
+        /// patched-by-hot-reload failure message.
+        /// </summary>
+        [Test]
+        public void Patch_OnHotReloadedMethod_WithCompiledSpan_AppendsSpanSentence()
+        {
+            MethodInfo original = AccessTools.Method(
+                typeof(HotReloadPausePointContractFixture),
+                nameof(HotReloadPausePointContractFixture.ReplaceableCompute));
+            MethodInfo shim = AccessTools.Method(
+                typeof(HotReloadPausePointContractShims),
+                nameof(HotReloadPausePointContractShims.ReplaceableCompute__shim0));
+
+            Assert.That(
+                HotReloadPatcher.Apply(original, shim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                Is.True);
+
+            const int requestedLine = 42;
+            const int compiledStart = 10;
+            const int compiledEnd = 20;
+            SourcePausePointPatchResult result = SourcePausePointPatcher.Patch(
+                "contract-reject-on-patched-span",
+                BuildSyntheticResolution(
+                    original,
+                    instructionIndex: 5000,
+                    compiledMethodStartLine: compiledStart,
+                    compiledMethodEndLine: compiledEnd),
+                normalizedFile: "Assets/Tests/Editor/HotReload/HotReloadPausePointContractFixture.cs",
+                requestedLine: requestedLine);
+
+            string expectedMessage =
+                string.Format(
+                    SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
+                    nameof(HotReloadPausePointContractFixture),
+                    nameof(HotReloadPausePointContractFixture.ReplaceableCompute),
+                    requestedLine)
+                + string.Format(
+                    SourcePausePointConstants.HotReloadPatchedCompiledMethodSpanFormat,
+                    nameof(HotReloadPausePointContractFixture),
+                    nameof(HotReloadPausePointContractFixture.ReplaceableCompute),
+                    compiledStart,
+                    compiledEnd);
+            Assert.That(result.Success, Is.False);
+            Assert.That(
+                result.FailureReason,
+                Is.EqualTo(SourcePausePointPatchFailureReason.MethodPatchedByHotReload));
+            Assert.That(result.ErrorMessage, Is.EqualTo(expectedMessage));
+            Assert.That(
+                result.Hint,
+                Is.EqualTo(SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyNextAction));
+        }
+
+        /// <summary>
         /// What: enable on an unedited method in a hot-reloaded file still uses the compiled
         /// resolver (NotInPatchedMethod fallthrough) and hits.
         /// </summary>
@@ -832,7 +885,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static SourcePausePointResolution BuildSyntheticResolution(
             MethodBase method,
-            int instructionIndex)
+            int instructionIndex,
+            int compiledMethodStartLine = 0,
+            int compiledMethodEndLine = 0)
         {
             return new SourcePausePointResolution(
                 method.Module.Assembly.GetName().Name,
@@ -845,6 +900,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 0,
                 1,
                 1,
+                compiledMethodStartLine,
+                compiledMethodEndLine,
                 Array.Empty<SourcePausePointLocalVariable>(),
                 Array.Empty<SourcePausePointParameter>());
         }
