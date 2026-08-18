@@ -2591,8 +2591,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sortedLabels.Sort(StringComparer.Ordinal);
                 for (int index = 0; index < sortedLabels.Count; index++)
                 {
+                    string label = sortedLabels[index];
+                    string reason = HotReloadAddedMemberRegistry.IsActiveMember(
+                        projectRelativePath,
+                        label)
+                        ? HotReloadConstants.AlreadyActiveAddedMemberReason
+                        : HotReloadConstants.AlreadyActiveReason;
                     outcomes.Add(
-                        HotReloadMethodOutcome.AlreadyActive(sortedLabels[index], assemblyResolvePath));
+                        HotReloadMethodOutcome.AlreadyActive(label, assemblyResolvePath, reason));
                 }
 
                 return HotReloadUnchangedSourceDecision.ShortCircuited;

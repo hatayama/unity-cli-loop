@@ -39,6 +39,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string UnavailableAddedCallSkipReason =
             "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
 
+        // Keep in sync with AddedFieldSkipReasons.AddedFieldsLifetimeWarningFormat in
+        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
+        private const string AddedFieldsLifetimeWarningFormat =
+            "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
+
+        // Keep in sync with EvaluateHardSkipReason in
+        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
+        private const string ExpectedGenericMethodSkipReason =
+            "Generic methods and methods inside generic types cannot be safely patched with Harmony. Run 'uloop compile'.";
+
         /// <summary>
         /// What: the added-field store assembly is injected only when the store flag is set,
         /// matching the Harmony optional-reference pattern.
@@ -2985,8 +2995,126 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { fixturePath },
                 WriteEditedSource("ReapplyWorkingAdded2.cs", edited),
                 CancellationToken.None);
-            AssertHasAlreadyActive(second, "AddedPing");
+            AssertHasAlreadyActive(
+                second,
+                "AddedPing",
+                HotReloadConstants.AlreadyActiveAddedMemberReason);
             AssertNoDeactivatedPatchesWarning(second);
+        }
+
+        /// <summary>
+        /// What: an unchanged reload after a fully applied added-method run reports the added
+        /// member as AlreadyActive with the added-member Reason and InvocationCount 0, while
+        /// the patched caller keeps the ordinary AlreadyActive Reason.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedReload_AlreadyActiveAddedMember_UsesAddedReasonAndZeroCount()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithWorkingAddedPing(onDisk);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AlreadyActiveAddedReason1.cs", edited),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+            AssertHasPatched(first, nameof(HotReloadAddedMethodApplyFixture.ExistingCaller));
+
+            HotReloadAddedMethodApplyFixture host = new HotReloadAddedMethodApplyFixture();
+            Assert.That(host.ExistingCaller(3), Is.EqualTo(4));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AlreadyActiveAddedReason2.cs", edited),
+                CancellationToken.None);
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(second);
+
+            HotReloadMethodResult addedRow = FindResponseMethod(response, "AddedPing");
+            Assert.That(addedRow.Kind, Is.EqualTo(nameof(HotReloadMethodOutcomeKind.AlreadyActive)));
+            Assert.That(
+                addedRow.Reason,
+                Is.EqualTo(HotReloadConstants.AlreadyActiveAddedMemberReason));
+            Assert.That(addedRow.InvocationCount, Is.EqualTo(0L));
+
+            HotReloadMethodResult patchedRow = FindResponseMethod(
+                response,
+                nameof(HotReloadAddedMethodApplyFixture.ExistingCaller));
+            Assert.That(patchedRow.Kind, Is.EqualTo(nameof(HotReloadMethodOutcomeKind.AlreadyActive)));
+            Assert.That(patchedRow.Reason, Is.EqualTo(HotReloadConstants.AlreadyActiveReason));
+        }
+
+        /// <summary>
+        /// What: adding plain private fields emits one lifetime warning listing every added
+        /// field's fully-qualified name in ordinal order, and a body-only run without added
+        /// fields does not emit that warning.
+        /// </summary>
+        [Test]
+        public async Task Run_PrivateAddedFields_EmitsLifetimeWarning_BodyOnlyDoesNot()
+        {
+            string applyPath = ResolveAddedFieldApplyFixturePath();
+            string applyOnDisk = File.ReadAllText(applyPath);
+            string applyEdited = WithPrivateAddedFields(applyOnDisk);
+            HotReloadOrchestratorResult withFields = await HotReloadOrchestrator.RunAsync(
+                new[] { applyPath },
+                WriteEditedSource("PrivateAddedFieldsLifetime.cs", applyEdited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(withFields);
+            string[] expectedNames =
+            {
+                typeof(HotReloadAddedFieldApplyFixture).FullName + ".AlphaScratch",
+                typeof(HotReloadAddedFieldApplyFixture).FullName + ".BetaScratch"
+            };
+            string expectedLifetimeWarning = string.Format(
+                AddedFieldsLifetimeWarningFormat,
+                string.Join(", ", expectedNames));
+            Assert.That(withFields.Warnings, Does.Contain(expectedLifetimeWarning));
+
+            string e2ePath = ResolveE2EFixturePath();
+            HotReloadOrchestratorResult bodyOnly = await HotReloadOrchestrator.RunAsync(
+                new[] { e2ePath },
+                WriteEditedSource(
+                    "BodyOnlyNoAddedFieldsLifetime.cs",
+                    BuildFixtureSource(
+                        computeWithPrivateMethod:
+                        "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }")),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(bodyOnly);
+            string lifetimePrefix = AddedFieldsLifetimeWarningFormat.Substring(
+                0,
+                AddedFieldsLifetimeWarningFormat.IndexOf("{0}", StringComparison.Ordinal));
+            foreach (string warning in bodyOnly.Warnings)
+            {
+                Assert.That(
+                    warning,
+                    Does.Not.StartWith(lifetimePrefix),
+                    "Body-only edits must not emit the added-fields lifetime warning.\n"
+                    + string.Join("\n", bodyOnly.Warnings));
+            }
+        }
+
+        /// <summary>
+        /// What: editing a compiled generic method reports Skipped with the compile-guided
+        /// generic reason (exact match).
+        /// </summary>
+        [Test]
+        public async Task Run_GenericMethodEdit_SkipsWithCompileGuidedReason()
+        {
+            string fixturePath = ResolveGenericMethodSkipFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "            return value;",
+                "            return value + 1;",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("GenericMethodSkip.cs", edited),
+                CancellationToken.None);
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+            HotReloadMethodResult skipped = FindResponseMethod(response, "Identity");
+            Assert.That(skipped.Kind, Is.EqualTo(nameof(HotReloadMethodOutcomeKind.Skipped)));
+            Assert.That(skipped.Reason, Is.EqualTo(ExpectedGenericMethodSkipReason));
         }
 
         /// <summary>
@@ -3387,7 +3515,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("SignatureChangeReapply2.cs", edited),
                 CancellationToken.None);
             AssertNoFileLevelFailure(second);
-            AssertHasAlreadyActive(second, nameof(HotReloadSignatureChangeSameFileFixture.Target));
+            AssertHasAlreadyActive(
+                second,
+                nameof(HotReloadSignatureChangeSameFileFixture.Target),
+                HotReloadConstants.AlreadyActiveAddedMemberReason);
             Assert.That(second.ActivePatchTotal, Is.EqualTo(2));
             Assert.That(
                 CountAddedMembersContaining(nameof(HotReloadSignatureChangeSameFileFixture.Target)),
@@ -4409,16 +4540,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.Fail("Expected Patched outcome for " + methodName + ".\n" + FormatOutcomes(result));
         }
 
-        private static void AssertHasAlreadyActive(HotReloadOrchestratorResult result, string methodName)
+        private static void AssertHasAlreadyActive(
+            HotReloadOrchestratorResult result,
+            string methodName,
+            string expectedReason = null)
         {
+            string reason = expectedReason ?? HotReloadConstants.AlreadyActiveReason;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
                 if (outcome.Kind == HotReloadMethodOutcomeKind.AlreadyActive
                     && outcome.Method.Contains(methodName))
                 {
-                    Assert.That(
-                        outcome.Reason,
-                        Is.EqualTo(HotReloadConstants.AlreadyActiveReason));
+                    Assert.That(outcome.Reason, Is.EqualTo(reason));
                     return;
                 }
             }
@@ -4831,6 +4964,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return count;
+        }
+
+        private static string ResolveGenericMethodSkipFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadGenericMethodSkipFixture.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Generic-method skip fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static HotReloadMethodResult FindResponseMethod(
+            HotReloadResponse response,
+            string methodName)
+        {
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response.Methods, Is.Not.Null);
+            foreach (HotReloadMethodResult method in response.Methods)
+            {
+                if (method.Method != null && method.Method.Contains(methodName))
+                {
+                    return method;
+                }
+            }
+
+            List<string> rows = new List<string>();
+            foreach (HotReloadMethodResult method in response.Methods)
+            {
+                rows.Add(method.Kind + " " + method.Method + " :: " + method.Reason);
+            }
+
+            Assert.Fail("Expected response method containing '" + methodName + "'.\n" + string.Join("\n", rows));
+            return null;
+        }
+
+        private static string WithPrivateAddedFields(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n        }",
+                "        private int AlphaScratch;\n"
+                + "        private int BetaScratch;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadAdded()\n        {\n            return AlphaScratch + BetaScratch;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n            AlphaScratch = value;\n            BetaScratch = value;\n        }",
+                StringComparison.Ordinal);
         }
 
         private static string ResolveAddedFieldApplyFixturePath()

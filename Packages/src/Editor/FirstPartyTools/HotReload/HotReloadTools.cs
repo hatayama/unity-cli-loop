@@ -44,7 +44,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// How many times this patched method body has run since the current patch was applied.
         /// Populated on --status Active rows and AlreadyActive apply rows; 0 for other
-        /// apply/revert outcomes.
+        /// apply/revert outcomes. Added-member AlreadyActive rows are always 0 because
+        /// added-member calls are not instrumented.
         /// </summary>
         public long InvocationCount { get; set; }
 
@@ -227,6 +228,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             List<string> warnings = new List<string>(result.Warnings);
+            int orchestratorWarningCount = warnings.Count;
             AppendRetargetLineDriftWarnings(warnings);
             AppendExpiredNotRetargetedWarnings(warnings);
 
@@ -261,7 +263,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ActivePatchTotal = result.ActivePatchTotal,
                 UnchangedTotal = result.UnchangedTotal,
                 AddedFields = result.AddedFields ?? Array.Empty<string>(),
-                Message = BuildApplyMessage(result, hasFailure, warnings.Count)
+                Message = BuildApplyMessage(
+                    result,
+                    hasFailure,
+                    warnings.Count,
+                    appendCompileResolution: orchestratorWarningCount >= 2
+                        && orchestratorWarningCount == warnings.Count)
             };
         }
 
@@ -318,7 +325,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string BuildApplyMessage(
             HotReloadOrchestratorResult result,
             bool hasFailure,
-            int warningCount)
+            int warningCount,
+            bool appendCompileResolution)
         {
             // Why: when every method was left untouched, the empty Methods list is intentional —
             // report the unchanged count instead of the generic "no patchable bodies" message.
@@ -327,7 +335,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return AppendWarningCount(
                     "All " + result.UnchangedTotal
                     + " methods are unchanged since the last compile; nothing to patch.",
-                    warningCount);
+                    warningCount,
+                    appendCompileResolution);
             }
 
             string message;
@@ -391,7 +400,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message += " See Methods for Skipped reasons.";
             }
 
-            return AppendWarningCount(message, warningCount);
+            return AppendWarningCount(message, warningCount, appendCompileResolution);
         }
 
         private static bool AreAllOutcomesAlreadyActive(HotReloadOrchestratorResult result)
@@ -425,14 +434,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static string AppendWarningCount(string message, int warningCount)
+        private static string AppendWarningCount(
+            string message,
+            int warningCount,
+            bool appendCompileResolution)
         {
             if (warningCount <= 0)
             {
                 return message;
             }
 
-            return message + " " + warningCount + " warning(s). See Warnings.";
+            string withCount = message + " " + warningCount + " warning(s). See Warnings.";
+            if (!appendCompileResolution)
+            {
+                return withCount;
+            }
+
+            return withCount + " " + HotReloadConstants.MultiWarningSingleCompileResolutionMessage;
         }
 
         private static int CountAddedOutcomes(HotReloadOrchestratorResult result)

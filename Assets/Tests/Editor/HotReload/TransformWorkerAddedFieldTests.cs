@@ -51,6 +51,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CompiledEventWarningFormat =
             "Compiled event '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.";
 
+        // Keep in sync with AddedFieldSkipReasons.AddedFieldsLifetimeWarningFormat in
+        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
+        private const string AddedFieldsLifetimeWarningFormat =
+            "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
+
+        // Keep in sync with OutsideMethodBodyDriftWarningFormat in
+        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
+        // That constant lives in the Unity-ignored worker process and is not visible here.
+        private const string OutsideMethodBodyDriftWarningFormat =
+            "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
+
         private const string FieldKindChangeProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
 
@@ -390,7 +401,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.declarationDriftWarnings, Is.Empty);
+            string expectedLifetimeWarning = string.Format(
+                AddedFieldsLifetimeWarningFormat,
+                typeof(HotReloadAddedMemberHost).FullName + ".AddedCount");
+            Assert.That(result.Output.declarationDriftWarnings, Does.Contain(expectedLifetimeWarning));
+            string expectedOutsideBodyWarning = string.Format(
+                OutsideMethodBodyDriftWarningFormat,
+                "AddedFieldNoDrift.cs");
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Does.Not.Contain(expectedOutsideBodyWarning),
+                "Handled added-field declarations must not fire the outside-body warning.\n"
+                + string.Join("\n", result.Output.declarationDriftWarnings));
+
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
         }
 
