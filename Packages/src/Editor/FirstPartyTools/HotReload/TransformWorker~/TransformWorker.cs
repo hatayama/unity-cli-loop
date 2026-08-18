@@ -2232,7 +2232,9 @@ public static class TransformWorkerProgram
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
 
-        string addedCallSiteSkip = EvaluateAddedCallSiteSkipReason(
+        string addedCallSiteSkip;
+        string calledAddedMethodKey;
+        (addedCallSiteSkip, calledAddedMethodKey) = EvaluateAddedCallSiteSkipReason(
             getterBodyNode,
             semanticModel,
             addedMethodCatalog,
@@ -2242,7 +2244,11 @@ public static class TransformWorkerProgram
             skipped.Add(new WorkerSkipped
             {
                 Method = FormatMethodLabel(getterSymbol),
-                Reason = addedCallSiteSkip
+                Reason = addedCallSiteSkip,
+                CalledAddedMethodKey = calledAddedMethodKey,
+                MethodKey = calledAddedMethodKey == null
+                    ? null
+                    : BuildMethodKeyFromSymbol(getterSymbol)
             });
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
@@ -3627,7 +3633,9 @@ public static class TransformWorkerProgram
                 {
                     SyntaxNode bodyNode =
                         (SyntaxNode)queued.MethodDeclaration.Body ?? queued.MethodDeclaration.ExpressionBody;
-                    string skipReason = EvaluateAddedCallSiteSkipReason(
+                    string skipReason;
+                    string calledAddedMethodKey;
+                    (skipReason, calledAddedMethodKey) = EvaluateAddedCallSiteSkipReason(
                         bodyNode,
                         semanticModel,
                         addedMethodCatalog,
@@ -3637,7 +3645,9 @@ public static class TransformWorkerProgram
                         skipped.Add(new WorkerSkipped
                         {
                             Method = FormatMethodLabel(queued.MethodSymbol),
-                            Reason = skipReason
+                            Reason = skipReason,
+                            CalledAddedMethodKey = calledAddedMethodKey,
+                            MethodKey = calledAddedMethodKey == null ? null : queued.MethodKey
                         });
                         if (queued.IsAddedMethod)
                         {
@@ -3658,7 +3668,7 @@ public static class TransformWorkerProgram
         while (progressed);
     }
 
-    private static string EvaluateAddedCallSiteSkipReason(
+    private static (string Reason, string CalledAddedMethodKey) EvaluateAddedCallSiteSkipReason(
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
@@ -3666,7 +3676,7 @@ public static class TransformWorkerProgram
     {
         if (bodyNode == null)
         {
-            return null;
+            return (null, null);
         }
 
         foreach (InvocationExpressionSyntax invocation in bodyNode.DescendantNodesAndSelf()
@@ -3690,21 +3700,21 @@ public static class TransformWorkerProgram
             if (IsConditionalAccessReceiverSpine(invocation)
                 && addedMethodCatalog.IsClassifiedAdded(calledKey))
             {
-                return AddedMethodSkipReasons.ConditionalAccess;
+                return (AddedMethodSkipReasons.ConditionalAccess, null);
             }
 
             if (addedMethodCatalog.IsUnavailableAdded(calledKey))
             {
-                return AddedMethodSkipReasons.UnavailableAddedCall;
+                return (AddedMethodSkipReasons.UnavailableAddedCall, calledKey);
             }
         }
 
         if (BodyReferencesAddedMethodGroup(bodyNode, semanticModel, addedMethodCatalog))
         {
-            return AddedMethodSkipReasons.MethodGroupReference;
+            return (AddedMethodSkipReasons.MethodGroupReference, null);
         }
 
-        return EvaluateAddedFieldSkipReason(bodyNode, semanticModel, addedFieldCatalog);
+        return (EvaluateAddedFieldSkipReason(bodyNode, semanticModel, addedFieldCatalog), null);
     }
 
     private static bool BodyReferencesAddedMethodGroup(
@@ -8574,4 +8584,8 @@ internal sealed class WorkerSkipped
     public string Method { get; set; }
 
     public string Reason { get; set; }
+
+    public string MethodKey { get; set; }
+
+    public string CalledAddedMethodKey { get; set; }
 }

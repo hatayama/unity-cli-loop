@@ -1466,7 +1466,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodOutcome> retryOnlySkipped = CollectRetryOnlySkippedOutcomes(
                 firstPassSkipped,
                 retryOutput.skipped,
-                assemblyResolvePath);
+                assemblyResolvePath,
+                trigger,
+                exclusions.ExcludedAddedMethodKeys);
             skippedCallerOutcomes.AddRange(retryOnlySkipped);
             LogHotReloadIsolationRetry(
                 exclusions.ExcludedMethodKeys.Length,
@@ -1533,12 +1535,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Converts retry-worker skips that are not already in the first-pass skipped list into
         /// outcomes. Match is (Method, Reason) Ordinal equality so a method skipped for a new
-        /// reason on retry still surfaces.
+        /// reason on retry still surfaces. Why rewrite only on shim-compile-failure isolation:
+        /// signature-change-gate retry must keep UnavailableAddedCall for indirect callers.
         /// </summary>
-        private static List<HotReloadMethodOutcome> CollectRetryOnlySkippedOutcomes(
+        internal static List<HotReloadMethodOutcome> CollectRetryOnlySkippedOutcomes(
             TransformWorkerSkippedDto[] firstPassSkipped,
             TransformWorkerSkippedDto[] retrySkipped,
-            string assemblyResolvePath)
+            string assemblyResolvePath,
+            string trigger,
+            IReadOnlyCollection<string> excludedAddedMethodKeys)
         {
             List<HotReloadMethodOutcome> retryOnly = new List<HotReloadMethodOutcome>();
             if (retrySkipped == null)
@@ -1548,6 +1553,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             TransformWorkerSkippedDto[] baseline =
                 firstPassSkipped ?? Array.Empty<TransformWorkerSkippedDto>();
+            List<TransformWorkerSkippedDto> retryOnlyRows = new List<TransformWorkerSkippedDto>();
             foreach (TransformWorkerSkippedDto retryRow in retrySkipped)
             {
                 if (FirstPassContainsSkippedPair(baseline, retryRow))
@@ -1555,6 +1561,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                retryOnlyRows.Add(retryRow);
+            }
+
+            if (string.Equals(
+                trigger,
+                HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
+                StringComparison.Ordinal))
+            {
+                RewriteShimCompileFailureIndirectCallerReasons(retryOnlyRows, excludedAddedMethodKeys);
+            }
+
+            foreach (TransformWorkerSkippedDto retryRow in retryOnlyRows)
+            {
                 retryOnly.Add(
                     HotReloadMethodOutcome.Skipped(
                         retryRow.method ?? "(unknown)",
@@ -1563,6 +1582,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return retryOnly;
+        }
+
+        private static void RewriteShimCompileFailureIndirectCallerReasons(
+            List<TransformWorkerSkippedDto> retryOnlyRows,
+            IReadOnlyCollection<string> excludedAddedMethodKeys)
+        {
+            HashSet<string> reachable = new HashSet<string>(StringComparer.Ordinal);
+            if (excludedAddedMethodKeys != null)
+            {
+                foreach (string key in excludedAddedMethodKeys)
+                {
+                    if (!string.IsNullOrEmpty(key))
+                    {
+                        reachable.Add(key);
+                    }
+                }
+            }
+
+            bool progressed = true;
+            while (progressed)
+            {
+                progressed = false;
+                foreach (TransformWorkerSkippedDto row in retryOnlyRows)
+                {
+                    if (!string.Equals(
+                        row.reason,
+                        HotReloadConstants.UnavailableAddedCallSkipReason,
+                        StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    if (string.IsNullOrEmpty(row.calledAddedMethodKey)
+                        || !reachable.Contains(row.calledAddedMethodKey))
+                    {
+                        continue;
+                    }
+
+                    row.reason = HotReloadConstants.IsolatedAddedMethodCallerSkipReason;
+                    progressed = true;
+                    if (!string.IsNullOrEmpty(row.methodKey))
+                    {
+                        reachable.Add(row.methodKey);
+                    }
+                }
+            }
         }
 
         private static bool FirstPassContainsSkippedPair(
@@ -2400,27 +2465,82 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 string methodLabel = FormatGatedReplacementRegistryKey(entry);
                 string methodKey = BuildMethodKey(entry);
-                string reasonFormat = HotReloadConstants.SignatureChangedGateSkipReasonFormat;
+                string reason;
                 // Why live registry, not a run-start snapshot: BeginFileGeneration runs after
                 // this gate, so the previous apply's added members are still listed here.
                 if (HotReloadAddedMemberRegistry.IsActiveMember(projectRelativePath, methodLabel))
                 {
-                    reasonFormat = HotReloadConstants.SignatureChangedGateSkipReasonAlreadyActiveFormat;
+                    reason = string.Format(
+                        HotReloadConstants.SignatureChangedGateSkipReasonAlreadyActiveFormat,
+                        methodLabel);
                 }
                 else if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> uncoveredCallers)
                     && AreAllUncoveredCallersInEditedFile(uncoveredCallers, editedFileMethodKeys))
                 {
-                    reasonFormat = HotReloadConstants.SignatureChangedGateSkipReasonSameFileCallersFormat;
+                    reason = string.Format(
+                        HotReloadConstants.SignatureChangedGateSkipReasonSameFileCallersFormat,
+                        methodLabel,
+                        FormatUncoveredCallerShortNames(uncoveredCallers));
+                }
+                else
+                {
+                    reason = string.Format(
+                        HotReloadConstants.SignatureChangedGateSkipReasonFormat,
+                        methodLabel);
                 }
 
                 outcomes.Add(
                     HotReloadMethodOutcome.Skipped(
                         methodLabel,
-                        string.Format(reasonFormat, methodLabel),
+                        reason,
                         assemblyResolvePath));
             }
 
             return outcomes;
+        }
+
+        /// <summary>
+        /// Derives Type.Caller short names from wire keys (Ns.Type::Caller(params)), in list
+        /// order, de-duplicated. Nested type '/' is normalized to '.' and only the last type
+        /// segment is kept.
+        /// </summary>
+        internal static string FormatUncoveredCallerShortNames(IReadOnlyList<string> uncoveredCallers)
+        {
+            if (uncoveredCallers == null || uncoveredCallers.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            List<string> names = new List<string>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string wireKey in uncoveredCallers)
+            {
+                string shortName = FormatCallerShortName(wireKey);
+                if (string.IsNullOrEmpty(shortName) || !seen.Add(shortName))
+                {
+                    continue;
+                }
+
+                names.Add(shortName);
+            }
+
+            return string.Join(", ", names);
+        }
+
+        internal static string FormatCallerShortName(string wireKey)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(wireKey), "wireKey must not be empty.");
+            int separatorIndex = wireKey.IndexOf("::", StringComparison.Ordinal);
+            Debug.Assert(separatorIndex >= 0, "wireKey must contain '::'.");
+            string typePart = wireKey.Substring(0, separatorIndex).Replace('/', '.');
+            int lastDot = typePart.LastIndexOf('.');
+            string typeName = lastDot >= 0 ? typePart.Substring(lastDot + 1) : typePart;
+            string methodAndParams = wireKey.Substring(separatorIndex + 2);
+            int parenIndex = methodAndParams.IndexOf('(');
+            string methodName = parenIndex >= 0
+                ? methodAndParams.Substring(0, parenIndex)
+                : methodAndParams;
+            return typeName + "." + methodName;
         }
 
         /// <summary>

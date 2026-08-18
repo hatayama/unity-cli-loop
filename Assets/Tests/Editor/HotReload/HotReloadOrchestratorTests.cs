@@ -3475,7 +3475,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Other-file uncovered callers keep the compile-only CTA.");
             Assert.That(
                 actualExternalReason,
-                Does.Not.Contain("Editing those callers' bodies in this file"),
+                Does.Not.Contain("Editing the bodies of"),
                 "Other-file uncovered callers must not use the same-file insert.");
             AssertHasSkipped(
                 result,
@@ -3613,6 +3613,126 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: shim-compile-failure isolation rewrites a two-hop UnavailableAddedCall chain
+        /// to IsolatedAddedMethodCallerSkipReason.
+        /// </summary>
+        [Test]
+        public void CollectRetryOnlySkippedOutcomes_ShimCompileFailure_RewritesTwoHopIndirectCallers()
+        {
+            TransformWorkerSkippedDto[] retrySkipped =
+            {
+                new TransformWorkerSkippedDto
+                {
+                    method = "Host.Mid()",
+                    methodKey = "Host::Mid()",
+                    reason = HotReloadConstants.UnavailableAddedCallSkipReason,
+                    calledAddedMethodKey = "Host::Broken()"
+                },
+                new TransformWorkerSkippedDto
+                {
+                    method = "Host.Outer()",
+                    methodKey = "Host::Outer()",
+                    reason = HotReloadConstants.UnavailableAddedCallSkipReason,
+                    calledAddedMethodKey = "Host::Mid()"
+                }
+            };
+
+            List<HotReloadMethodOutcome> outcomes = HotReloadOrchestrator.CollectRetryOnlySkippedOutcomes(
+                Array.Empty<TransformWorkerSkippedDto>(),
+                retrySkipped,
+                "test.dll",
+                HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
+                new[] { "Host::Broken()" });
+
+            Assert.That(outcomes.Count, Is.EqualTo(2));
+            Assert.That(outcomes[0].Reason, Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
+            Assert.That(outcomes[1].Reason, Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
+        }
+
+        /// <summary>
+        /// What: signature-change-gate isolation leaves UnavailableAddedCall on the same two-hop
+        /// chain instead of rewriting it.
+        /// </summary>
+        [Test]
+        public void CollectRetryOnlySkippedOutcomes_SignatureChangeGate_LeavesUnavailableAddedCall()
+        {
+            TransformWorkerSkippedDto[] retrySkipped =
+            {
+                new TransformWorkerSkippedDto
+                {
+                    method = "Host.Mid()",
+                    methodKey = "Host::Mid()",
+                    reason = HotReloadConstants.UnavailableAddedCallSkipReason,
+                    calledAddedMethodKey = "Host::Broken()"
+                },
+                new TransformWorkerSkippedDto
+                {
+                    method = "Host.Outer()",
+                    methodKey = "Host::Outer()",
+                    reason = HotReloadConstants.UnavailableAddedCallSkipReason,
+                    calledAddedMethodKey = "Host::Mid()"
+                }
+            };
+
+            List<HotReloadMethodOutcome> outcomes = HotReloadOrchestrator.CollectRetryOnlySkippedOutcomes(
+                Array.Empty<TransformWorkerSkippedDto>(),
+                retrySkipped,
+                "test.dll",
+                HotReloadConstants.VibeLogIsolationTriggerSignatureChangeGate,
+                new[] { "Host::Broken()" });
+
+            Assert.That(outcomes.Count, Is.EqualTo(2));
+            Assert.That(outcomes[0].Reason, Is.EqualTo(HotReloadConstants.UnavailableAddedCallSkipReason));
+            Assert.That(outcomes[1].Reason, Is.EqualTo(HotReloadConstants.UnavailableAddedCallSkipReason));
+        }
+
+        /// <summary>
+        /// What: a retry skip whose calledAddedMethodKey is outside the excluded set stays
+        /// UnavailableAddedCall even on shim-compile-failure isolation.
+        /// </summary>
+        [Test]
+        public void CollectRetryOnlySkippedOutcomes_UnrelatedCalledKey_LeavesUnavailableAddedCall()
+        {
+            TransformWorkerSkippedDto[] retrySkipped =
+            {
+                new TransformWorkerSkippedDto
+                {
+                    method = "Host.Caller()",
+                    methodKey = "Host::Caller()",
+                    reason = HotReloadConstants.UnavailableAddedCallSkipReason,
+                    calledAddedMethodKey = "Host::Unrelated()"
+                }
+            };
+
+            List<HotReloadMethodOutcome> outcomes = HotReloadOrchestrator.CollectRetryOnlySkippedOutcomes(
+                Array.Empty<TransformWorkerSkippedDto>(),
+                retrySkipped,
+                "test.dll",
+                HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
+                new[] { "Host::Broken()" });
+
+            Assert.That(outcomes.Count, Is.EqualTo(1));
+            Assert.That(outcomes[0].Reason, Is.EqualTo(HotReloadConstants.UnavailableAddedCallSkipReason));
+        }
+
+        /// <summary>
+        /// What: uncovered caller short names use Type.Caller order, last type segment only, and
+        /// replace nested '/' with '.'.
+        /// </summary>
+        [Test]
+        public void FormatUncoveredCallerShortNames_TwoCallers_JoinsLastTypeSegmentAndMethodInListOrder()
+        {
+            string names = HotReloadOrchestrator.FormatUncoveredCallerShortNames(
+                new[]
+                {
+                    "Ns.Host::AlphaCaller(System.Int32)",
+                    "Ns.Outer/Inner::BetaCaller(System.Int32)"
+                });
+
+            Assert.That(names, Is.EqualTo("Host.AlphaCaller, Inner.BetaCaller"));
+        }
+
+        /// <summary>
         /// What: an unchanged same-file caller that only needs an implicit int-to-long conversion
         /// is not an apply entry, so the return-type change is skipped with the same-file wording
         /// and is not listed as a removed member.
@@ -3639,7 +3759,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + ".HotReloadSignatureChangeUnchangedCallerFixture.Target(System.Int32)";
             string expectedReason = string.Format(
                 HotReloadConstants.SignatureChangedGateSkipReasonSameFileCallersFormat,
-                expectedLabel);
+                expectedLabel,
+                "HotReloadSignatureChangeUnchangedCallerFixture.StoreTarget");
             string actualReason = FindSkippedReason(
                 result,
                 nameof(HotReloadSignatureChangeUnchangedCallerFixture.Target));
@@ -3647,7 +3768,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 actualReason,
                 Does.Contain(
-                    "Editing those callers' bodies in this file and reloading again applies them together, or run 'uloop compile'."));
+                    "Editing the bodies of HotReloadSignatureChangeUnchangedCallerFixture.StoreTarget in this file and reloading again applies them together, or run 'uloop compile'."));
             Assert.That(
                 CountWarningsContaining(result.Warnings, "Removed members stay present"),
                 Is.EqualTo(0),
@@ -3660,6 +3781,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(0),
                 "A never-patched caller must keep the gate skip and must not emit the re-patched notice.\n"
                 + string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
+        /// What: a return-type change with two unchanged same-file callers names both short
+        /// caller names in the same-file skip reason, in scanner list order.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_TwoUnchangedSameFileCallers_NamesBothCallersInSkipReason()
+        {
+            string fixturePath = ResolveSignatureChangeTwoCallerFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int Target(int value)\n        {\n            return value;\n        }",
+                "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeTwoUnchangedCallers.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            string expectedLabel =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeTwoCallerFixture.Target(System.Int32)";
+            string expectedCallerNames =
+                "HotReloadSignatureChangeTwoCallerFixture.CallerAlpha, "
+                + "HotReloadSignatureChangeTwoCallerFixture.CallerBeta";
+            string expectedReason = string.Format(
+                HotReloadConstants.SignatureChangedGateSkipReasonSameFileCallersFormat,
+                expectedLabel,
+                expectedCallerNames);
+            string actualReason = FindSkippedReason(
+                result,
+                nameof(HotReloadSignatureChangeTwoCallerFixture.Target));
+            Assert.That(actualReason, Is.EqualTo(expectedReason));
         }
 
         /// <summary>
@@ -4641,8 +4799,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: when isolation excludes a failed added method A and its direct added caller B,
         /// the retry worker skip for transitive caller C (C calls B, not A) appears in the
-        /// response as Skipped with UnavailableAddedCall, while independent edited method D
-        /// still patches.
+        /// response as Skipped with IsolatedAddedMethodCallerSkipReason, while independent
+        /// edited method D still patches.
         /// </summary>
         [Test]
         public async Task Run_IsolationRetry_ReportsTransitiveCallerOfExcludedAddedMethodAsSkipped()
@@ -4674,7 +4832,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
             Assert.That(
                 FindSkippedReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
-                Is.EqualTo(UnavailableAddedCallSkipReason));
+                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+        }
+
+        /// <summary>
+        /// What: a two-hop indirect caller chain of a failed added method is rewritten to
+        /// IsolatedAddedMethodCallerSkipReason on both hops.
+        /// </summary>
+        [Test]
+        public async Task Run_IsolationRetry_TwoHopIndirectCallers_UseIsolatedAddedMethodCallerSkipReason()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public int ExistingValue()\n        {\n            return 10;\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedOuter(value);\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }",
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n\n"
+                + "        public int AddedBroken(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }\n\n"
+                + "        public int AddedMid(int value)\n        {\n            return AddedBroken(value);\n        }\n\n"
+                + "        public int AddedOuter(int value)\n        {\n            return AddedMid(value);\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("IsolationRetryTwoHopIndirectCallers.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            Assert.That(
+                FindSkippedReason(result, "AddedOuter"),
+                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
+            Assert.That(
+                FindSkippedReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
             AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingValue));
         }
 

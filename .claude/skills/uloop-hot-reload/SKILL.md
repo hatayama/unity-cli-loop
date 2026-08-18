@@ -149,7 +149,7 @@ same file (an implicit `int`→`long` widening can leave a caller's source
 untouched) would keep calling the old method silently, so the run reports the
 changed method and its edited callers as `Skipped` instead; land the change with
 `uloop compile`. When every uncovered caller is in the edited file itself, the
-`Skipped` reason says so: editing those callers' bodies and reloading again
+`Skipped` reason names those callers: editing their bodies and reloading again
 applies them together without `uloop compile`.
 Call sites inside methods that the same edit removes or
 re-signatures do not gate: those compiled bodies are already stale, and anything

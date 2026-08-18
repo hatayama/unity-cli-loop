@@ -67,7 +67,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // are not Failed (the compile error was in the added body) and must not stay silent.
         public const string IsolatedAddedMethodCallerSkipReason =
             "Calls an added method whose shim failed to compile; the caller was left unpatched. "
-            + "Run 'uloop compile'.";
+            + "Fix the compile error in the added method (see the Failed row in this response) and reload again, or run 'uloop compile'.";
+
+        // Keep in sync with AddedMethodSkipReasons.UnavailableAddedCall in TransformWorker.
+        public const string UnavailableAddedCallSkipReason =
+            "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
 
         public const string SignatureChangedGateSkipReasonFormat =
             "The return type of '{0}' changed, but this hot reload does not patch every compiled call site of the old method. Applying it would leave those call sites on the old version. Run 'uloop compile'.";
@@ -75,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why drop the original trailing "Run 'uloop compile'.": the inserted sentence already
         // ends with that CTA, and keeping both would duplicate it.
         public const string SignatureChangedGateSkipReasonSameFileCallersFormat =
-            "The return type of '{0}' changed, but this hot reload does not patch every compiled call site of the old method. Applying it would leave those call sites on the old version. Editing those callers' bodies in this file and reloading again applies them together, or run 'uloop compile'.";
+            "The return type of '{0}' changed, but this hot reload does not patch every compiled call site of the old method. Applying it would leave those call sites on the old version. Editing the bodies of {1} in this file and reloading again applies them together, or run 'uloop compile'.";
 
         public const string SignatureChangedGateSkipReasonAlreadyActiveFormat =
             "The return type of '{0}' changed against the last compile, and the replacement applied by an "
