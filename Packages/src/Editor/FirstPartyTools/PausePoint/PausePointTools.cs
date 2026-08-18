@@ -648,6 +648,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             response.Warning = MergeWarnings(enableWarning, patchResult.Warning);
+            response.Warning = MergeWarnings(
+                response.Warning,
+                BuildAddedFieldsNotCapturedWarningOrEmpty(patchResult.DeclaringType));
             LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
 
             if (patchResult.HasPhysicsCallbackWarning)
@@ -737,6 +740,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string BuildSourcePausePointId(string file, int line)
         {
             return SourcePausePointPathNormalizer.ToForwardSlashes(file) + ":" + line;
+        }
+
+        // Why after patch warnings: existing enable pins compose CreateEnableWarning + patch
+        // warnings; appending here keeps those strings unchanged when the type has no added fields.
+        internal static string BuildAddedFieldsNotCapturedWarningOrEmpty(Type declaringType)
+        {
+            if (declaringType == null)
+            {
+                return string.Empty;
+            }
+
+            Func<string, IReadOnlyList<string>> getter =
+                HotReloadPausePointCoordination.GetAddedFieldsForType;
+            if (getter == null)
+            {
+                return string.Empty;
+            }
+
+            string typeName = declaringType.FullName;
+            if (string.IsNullOrEmpty(typeName))
+            {
+                return string.Empty;
+            }
+
+            IReadOnlyList<string> addedFields = getter(typeName);
+            if (addedFields == null || addedFields.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return string.Format(
+                SourcePausePointConstants.HotReloadAddedFieldsNotCapturedWarningFormat,
+                typeName,
+                addedFields.Count,
+                string.Join(", ", addedFields));
         }
 
         internal static string MergeWarnings(string first, string second)

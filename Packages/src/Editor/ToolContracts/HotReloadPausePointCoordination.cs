@@ -66,6 +66,13 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// </summary>
         public static Func<MethodBase, int> GetTransplantPreambleLength { get; set; }
 
+        /// <summary>
+        /// Set by HotReloadAddedFieldRegistry. Argument is a type full name (reflection
+        /// <c>Outer+Inner</c> or Cecil <c>Outer/Inner</c>); returns the simple names of fields
+        /// hot reload added to that type across every file, or empty when none.
+        /// </summary>
+        public static Func<string, IReadOnlyList<string>> GetAddedFieldsForType { get; set; }
+
         // Set by SourcePausePointPatcher. Returns the marker ids currently injected
         // into the method (empty when none).
         public static Func<MethodBase, IReadOnlyList<string>> GetArmedMarkerIdsOnMethod { get; set; }

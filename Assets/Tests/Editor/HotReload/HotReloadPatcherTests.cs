@@ -109,8 +109,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: RevertAll clears the added-field side table so instance and static values
-        /// reinitialize on the next read.
+        /// What: RevertAll clears the added-field side table and the added-field name ledger
+        /// so instance/static values reinitialize and pause-point lookups return empty.
         /// </summary>
         [Test]
         public void RevertAll_ClearsAddedFieldStore()
@@ -120,11 +120,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string staticKey = HotReloadAddedFieldStore.FormatFieldKey("Host", "seed");
             HotReloadAddedFieldStore.Set(host, instanceKey, 1);
             HotReloadAddedFieldStore.SetStatic(staticKey, 2);
+            HotReloadAddedFieldRegistry.ReplaceForFile(
+                "Assets/Tests/Editor/HotReload/Host.cs",
+                new[] { "Host.count" });
 
             HotReloadPatcher.RevertAll();
 
             Assert.That(HotReloadAddedFieldStore.GetOrInit(host, instanceKey, () => 10), Is.EqualTo(10));
             Assert.That(HotReloadAddedFieldStore.GetOrInitStatic(staticKey, () => 20), Is.EqualTo(20));
+            Assert.That(HotReloadAddedFieldRegistry.GetFieldsForType("Host"), Is.Empty);
         }
 
         /// <summary>

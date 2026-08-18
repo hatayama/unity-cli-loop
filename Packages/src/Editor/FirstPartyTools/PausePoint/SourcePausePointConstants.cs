@@ -223,5 +223,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string HotReloadPatchedCompiledMethodSpanFormat =
             " In the last compiled source, '{0}.{1}' spans lines {2}-{3}.";
+
+        // Format: declaring type name, added-field count, comma-separated simple field names.
+        public const string HotReloadAddedFieldsNotCapturedWarningFormat =
+            "Hot reload added {1} field(s) to '{0}' ({2}); their values live outside the compiled "
+            + "assembly and never appear in CapturedVariables. Read them via a patched method body "
+            + "or 'uloop execute-dynamic-code' instead.";
     }
 }

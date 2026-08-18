@@ -2730,6 +2730,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a shim-compile failure after a successful added-field apply leaves the added-field
+        /// ledger intact, even though the failed run reports empty AddedFields.
+        /// </summary>
+        [Test]
+        public async Task Run_ShimCompileFailureAfterSuccessfulAddedField_KeepsAddedFieldLedger()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string applied = WithAddedFieldAccesses(onDisk);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldLedgerSuccess.cs", applied),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+
+            string typeName = typeof(HotReloadAddedFieldApplyFixture).FullName;
+            Assert.That(
+                HotReloadAddedFieldRegistry.GetFieldsForType(typeName),
+                Is.EqualTo(new[] { "AddedCount" }));
+
+            string failed = WithAddedFieldAccessesCallingMissingHelper(onDisk);
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedFieldLedgerShimFailure.cs", failed),
+                CancellationToken.None);
+
+            bool foundFailure = false;
+            foreach (HotReloadMethodOutcome outcome in second.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
+                {
+                    foundFailure = true;
+                    break;
+                }
+            }
+
+            Assert.That(foundFailure, Is.True, "Expected a Failed outcome.\n" + FormatOutcomes(second));
+            Assert.That(second.AddedFields, Is.Empty);
+            Assert.That(
+                HotReloadAddedFieldRegistry.GetFieldsForType(typeName),
+                Is.EqualTo(new[] { "AddedCount" }));
+        }
+
+        /// <summary>
         /// What: RunAsync aggregates AddedFields from two files and sorts them ordinal, so a
         /// later file whose field name sorts first still appears first in the result.
         /// </summary>
@@ -5731,6 +5776,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "        public int ReadAdded()\n        {\n            return AddedCount;\n        }\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public void WriteAdded(int value)\n        {\n            AddedCount = value;\n        }",
+                StringComparison.Ordinal);
+        }
+
+        private static string WithAddedFieldAccessesCallingMissingHelper(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n        }",
+                "        public int AddedCount;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadAdded()\n        {\n            return AddedCount + MissingHelperAddedByEdit(0);\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n            AddedCount = value + MissingHelperAddedByEdit(0);\n        }",
                 StringComparison.Ordinal);
         }
 
