@@ -513,8 +513,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         };
                     }
 
-                    // Shim resolutions carry no end line, so the span degenerates to the single
-                    // resolved line.
+                    // Why the same resolved line twice: shim sequence points do not expose an
+                    // end line distinct from the hit line. Edited method span is passed separately.
                     return FinishEnableBySourceLocation(
                         id,
                         parameters,
@@ -523,7 +523,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         shimResolution.MethodDisplayName,
                         shimPatchResult,
                         retargetedToHotReloadPatch: true,
-                        hasActiveHotReloadPatches: true);
+                        hasActiveHotReloadPatches: true,
+                        editedMethodStartLine: shimResolution.SourceStartLine,
+                        editedMethodEndLine: shimResolution.SourceEndLine);
                 }
 
                 if (shimResolution.Kind == SourcePausePointShimResolveKind.NoStatementInPatchedMethod)
@@ -548,7 +550,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ? SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction
                     : SourcePausePointConstants.ResolveFailedRecommendedNextAction;
                 PausePointResponse response = CreateValidationFailure(
-                    resolveResult.ErrorMessage,
+                    AppendNearbyCompiledMethodsSuffix(
+                        resolveResult.ErrorMessage,
+                        resolveResult.NearbyCompiledMethods),
                     SourcePausePointConstants.ErrorCodeResolveFailed,
                     recommendedNextAction);
                 response.Warning = BuildCompiledLineMapResolveFailureWarningOrEmpty(
@@ -586,7 +590,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolveResult.Resolution.MethodDisplayName,
                 patchResult,
                 retargetedToHotReloadPatch: false,
-                hasActiveHotReloadPatches: shimLookup != null);
+                hasActiveHotReloadPatches: shimLookup != null,
+                compiledMethodStartLine: resolveResult.Resolution.CompiledMethodStartLine,
+                compiledMethodEndLine: resolveResult.Resolution.CompiledMethodEndLine);
         }
 
         private static PausePointResponse FinishEnableBySourceLocation(
@@ -597,7 +603,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string resolvedMethod,
             SourcePausePointPatchResult patchResult,
             bool retargetedToHotReloadPatch,
-            bool hasActiveHotReloadPatches)
+            bool hasActiveHotReloadPatches,
+            int editedMethodStartLine = 0,
+            int editedMethodEndLine = 0,
+            int compiledMethodStartLine = 0,
+            int compiledMethodEndLine = 0)
         {
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(
                 id,
@@ -626,6 +636,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedMethod = resolvedMethod;
             response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
             string enableWarning = CreateEnableWarning();
+            enableWarning = MergeWarnings(
+                enableWarning,
+                BuildRetargetedToHotReloadPatchWarningOrEmpty(
+                    retargetedToHotReloadPatch,
+                    resolvedMethod,
+                    parameters.Line,
+                    editedMethodStartLine,
+                    editedMethodEndLine));
             bool compareCompiledLineDrift = hasActiveHotReloadPatches && !retargetedToHotReloadPatch;
             string compiledLineMapWarning = BuildCompiledLineMapWarningOrEmpty(
                 compareCompiledLineDrift,
@@ -639,6 +657,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     editedLineText,
                     parameters.File,
                     resolvedLine);
+                driftWarning = AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+                    driftWarning,
+                    resolvedMethod,
+                    compiledMethodStartLine,
+                    compiledMethodEndLine);
                 enableWarning = MergeWarnings(enableWarning, driftWarning);
                 if (driftWarning.Length > 0)
                 {
@@ -884,6 +907,72 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedLine,
                 compiledTrimmed,
                 editedTrimmed);
+        }
+
+        internal static string AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+            string driftWarning,
+            string resolvedMethod,
+            int compiledMethodStartLine,
+            int compiledMethodEndLine)
+        {
+            if (string.IsNullOrEmpty(driftWarning)
+                || compiledMethodStartLine <= 0
+                || compiledMethodEndLine <= 0)
+            {
+                return driftWarning ?? string.Empty;
+            }
+
+            return driftWarning + string.Format(
+                SourcePausePointConstants.HotReloadCompiledMethodSpanInLastCompiledSourceFormat,
+                resolvedMethod,
+                compiledMethodStartLine,
+                compiledMethodEndLine);
+        }
+
+        internal static string BuildRetargetedToHotReloadPatchWarningOrEmpty(
+            bool retargetedToHotReloadPatch,
+            string resolvedMethod,
+            int requestedLine,
+            int editedMethodStartLine,
+            int editedMethodEndLine)
+        {
+            if (!retargetedToHotReloadPatch)
+            {
+                return string.Empty;
+            }
+
+            return string.Format(
+                SourcePausePointConstants.HotReloadRetargetedToEditedFileWarningFormat,
+                resolvedMethod,
+                requestedLine,
+                editedMethodStartLine,
+                editedMethodEndLine);
+        }
+
+        internal static string AppendNearbyCompiledMethodsSuffix(
+            string errorMessage,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods)
+        {
+            if (nearbyCompiledMethods == null || nearbyCompiledMethods.Count == 0)
+            {
+                return errorMessage;
+            }
+
+            List<string> parts = new List<string>();
+            foreach (SourcePausePointNearbyCompiledMethod nearby in nearbyCompiledMethods)
+            {
+                parts.Add(
+                    string.Format(
+                        SourcePausePointConstants.NearbyCompiledMethodSpanFormat,
+                        nearby.DisplayName,
+                        nearby.StartLine,
+                        nearby.EndLine));
+            }
+
+            return errorMessage
+                + SourcePausePointConstants.NearbyCompiledMethodsPrefix
+                + string.Join("; ", parts)
+                + ".";
         }
 
         private static string ReadEditedLineTextOrEmpty(string requestedFile, int resolvedLine)

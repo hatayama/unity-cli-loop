@@ -86,9 +86,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (method == null)
             {
+                IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods =
+                    FindNearbyCompiledMethods(assemblyDefinition.MainModule, normalizedInputPath, line);
                 return SourcePausePointResolveResult.Failure(
                     SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine,
-                    $"No sequence point found on or after line {line} in '{originalInputPath}'.");
+                    $"No sequence point found on or after line {line} in '{originalInputPath}'.",
+                    nearbyCompiledMethods);
             }
 
             int instructionIndex = FindInstructionIndex(method.Body.Instructions, sequencePoint.Offset);
@@ -205,6 +208,102 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return (startLine, endLine);
+        }
+
+        // Why a separate walk from FindClosestSequencePointOnOrAfterLine: that search only
+        // looks forward, so a miss past the last statement would otherwise leave the caller
+        // with no compiled span to retarget against.
+        internal static IReadOnlyList<SourcePausePointNearbyCompiledMethod> FindNearbyCompiledMethods(
+            ModuleDefinition module,
+            string normalizedInputPath,
+            int line)
+        {
+            Debug.Assert(module != null, "module must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(normalizedInputPath), "normalizedInputPath must not be empty.");
+            Debug.Assert(line > 0, "line must be a positive 1-based line number.");
+
+            List<SourcePausePointNearbyCompiledMethod> containing = new List<SourcePausePointNearbyCompiledMethod>();
+            SourcePausePointNearbyCompiledMethod nearestBefore = null;
+            SourcePausePointNearbyCompiledMethod nearestAfter = null;
+
+            foreach (MethodDefinition method in EnumerateMethodsInModule(module))
+            {
+                SourcePausePointNearbyCompiledMethod candidate =
+                    TryCreateNearbyCompiledMethod(method, normalizedInputPath);
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                if (candidate.StartLine <= line && line <= candidate.EndLine)
+                {
+                    containing.Add(candidate);
+                    continue;
+                }
+
+                if (candidate.EndLine < line
+                    && (nearestBefore == null || candidate.EndLine > nearestBefore.EndLine))
+                {
+                    nearestBefore = candidate;
+                }
+
+                if (candidate.StartLine > line
+                    && (nearestAfter == null || candidate.StartLine < nearestAfter.StartLine))
+                {
+                    nearestAfter = candidate;
+                }
+            }
+
+            if (containing.Count > 0)
+            {
+                return TakeAtMostTwo(containing);
+            }
+
+            List<SourcePausePointNearbyCompiledMethod> nearby = new List<SourcePausePointNearbyCompiledMethod>();
+            if (nearestBefore != null)
+            {
+                nearby.Add(nearestBefore);
+            }
+
+            if (nearestAfter != null)
+            {
+                nearby.Add(nearestAfter);
+            }
+
+            return nearby;
+        }
+
+        private static SourcePausePointNearbyCompiledMethod TryCreateNearbyCompiledMethod(
+            MethodDefinition method,
+            string normalizedInputPath)
+        {
+            if (!method.HasBody)
+            {
+                return null;
+            }
+
+            (int startLine, int endLine) = CollectCompiledMethodSpan(method, normalizedInputPath);
+            if (startLine <= 0 || endLine <= 0)
+            {
+                return null;
+            }
+
+            string typeName = method.DeclaringType != null ? method.DeclaringType.Name : "?";
+            return new SourcePausePointNearbyCompiledMethod(
+                typeName + "." + method.Name,
+                startLine,
+                endLine);
+        }
+
+        private static IReadOnlyList<SourcePausePointNearbyCompiledMethod> TakeAtMostTwo(
+            List<SourcePausePointNearbyCompiledMethod> methods)
+        {
+            if (methods.Count <= 2)
+            {
+                return methods;
+            }
+
+            return new[] { methods[0], methods[1] };
         }
 
         // Shared with SourcePausePointShimResolver so shim-assembly sequence-point walks use the

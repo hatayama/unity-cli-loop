@@ -19,6 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool InstanceFromFirstArgument { get; }
         public string MethodDisplayName { get; }
         public string ErrorMessage { get; }
+        public int SourceStartLine { get; }
+        public int SourceEndLine { get; }
 
         private SourcePausePointShimResolution(
             SourcePausePointShimResolveKind kind,
@@ -31,7 +33,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<SourcePausePointParameter> parameters,
             bool instanceFromFirstArgument,
             string methodDisplayName,
-            string errorMessage)
+            string errorMessage,
+            int sourceStartLine,
+            int sourceEndLine)
         {
             Kind = kind;
             TargetMethod = targetMethod;
@@ -44,6 +48,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             InstanceFromFirstArgument = instanceFromFirstArgument;
             MethodDisplayName = methodDisplayName;
             ErrorMessage = errorMessage;
+            SourceStartLine = sourceStartLine;
+            SourceEndLine = sourceEndLine;
         }
 
         public static SourcePausePointShimResolution TransplantChainJoin(
@@ -52,7 +58,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int instructionIndex,
             int resolvedLine,
             IReadOnlyList<SourcePausePointLocalVariable> locals,
-            IReadOnlyList<SourcePausePointParameter> parameters)
+            IReadOnlyList<SourcePausePointParameter> parameters,
+            int sourceStartLine,
+            int sourceEndLine)
         {
             return new SourcePausePointShimResolution(
                 SourcePausePointShimResolveKind.TransplantChainJoin,
@@ -65,7 +73,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters,
                 instanceFromFirstArgument: false,
                 originalMethod.ToString(),
-                errorMessage: null);
+                errorMessage: null,
+                sourceStartLine,
+                sourceEndLine);
         }
 
         public static SourcePausePointShimResolution ShimDirect(
@@ -75,7 +85,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int resolvedLine,
             IReadOnlyList<SourcePausePointLocalVariable> locals,
             IReadOnlyList<SourcePausePointParameter> parameters,
-            bool instanceFromFirstArgument)
+            bool instanceFromFirstArgument,
+            int sourceStartLine,
+            int sourceEndLine)
         {
             return new SourcePausePointShimResolution(
                 SourcePausePointShimResolveKind.ShimDirect,
@@ -88,7 +100,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters,
                 instanceFromFirstArgument,
                 logicalOwner.ToString(),
-                errorMessage: null);
+                errorMessage: null,
+                sourceStartLine,
+                sourceEndLine);
         }
 
         public static SourcePausePointShimResolution NotInPatchedMethod()
@@ -104,7 +118,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters: null,
                 instanceFromFirstArgument: false,
                 methodDisplayName: null,
-                errorMessage: null);
+                errorMessage: null,
+                sourceStartLine: 0,
+                sourceEndLine: 0);
         }
 
         public static SourcePausePointShimResolution NoStatementInPatchedMethod(
@@ -122,7 +138,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters: null,
                 instanceFromFirstArgument: false,
                 logicalOwner.ToString(),
-                errorMessage);
+                errorMessage,
+                sourceStartLine: 0,
+                sourceEndLine: 0);
         }
     }
 }

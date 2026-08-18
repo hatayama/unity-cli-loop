@@ -194,5 +194,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.Success, Is.False);
             Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine));
         }
+
+        /// <summary>
+        /// What: a line past every sequence point in the file lists the last compiled method
+        /// span in that document as nearby recovery material.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenLineIsBeyondAllSequencePoints_IncludesNearbyCompiledMethodSpans()
+        {
+            string file = FixturesDirectory + "CompiledMethodSpanFixture.cs";
+            SourcePausePointResolveResult otherMethod = SourcePausePointResolver.Resolve(file, 16);
+            Assert.That(otherMethod.Success, Is.True, otherMethod.ErrorMessage);
+
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(file, 9999);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine));
+            Assert.That(result.NearbyCompiledMethods.Count, Is.EqualTo(1));
+            Assert.That(
+                result.NearbyCompiledMethods[0].DisplayName,
+                Is.EqualTo("CompiledMethodSpanFixture.OtherMethod"));
+            Assert.That(
+                result.NearbyCompiledMethods[0].StartLine,
+                Is.EqualTo(otherMethod.Resolution.CompiledMethodStartLine));
+            Assert.That(
+                result.NearbyCompiledMethods[0].EndLine,
+                Is.EqualTo(otherMethod.Resolution.CompiledMethodEndLine));
+        }
     }
 }

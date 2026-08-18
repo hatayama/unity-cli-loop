@@ -106,7 +106,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     instructionIndex,
                     sequencePoint.StartLine,
                     locals,
-                    parameters);
+                    parameters,
+                    methodEntry.SourceStartLine,
+                    methodEntry.SourceEndLine);
             }
 
             MethodBase targetMethod =
@@ -127,7 +129,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sequencePoint.StartLine,
                 locals,
                 shimParameters,
-                instanceFromFirstArgument);
+                instanceFromFirstArgument,
+                methodEntry.SourceStartLine,
+                methodEntry.SourceEndLine);
         }
 
         private static HotReloadShimMethodLookup FindMethodEntryForLine(

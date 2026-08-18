@@ -183,7 +183,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // file. Agents otherwise arm a different method with no signal (FB9).
         public const string HotReloadCompiledLineMapWarningFormat =
             "'{0}' has active hot-reload patches. For methods this reload did not patch, --line "
-            + "resolves against the last compiled source, not the edited file. Verify "
+            + "resolves against the last compiled source, not the edited file. Methods currently "
+            + "patched by hot reload resolve against the edited file instead. Verify "
             + "ResolvedMethod and ResolvedLineText, or run 'uloop compile' and re-enable.";
 
         // Why a separate failure string: resolve failure leaves ResolvedMethod and
@@ -191,7 +192,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HotReloadCompiledLineMapResolveFailureWarningFormat =
             "'{0}' has active hot-reload patches. --line resolves against the last compiled source, "
             + "not the edited file, so a line number taken from the edited file can miss or fail to "
-            + "resolve. Recompute the line against the last compiled source, or run 'uloop compile' "
+            + "resolve. Methods currently patched by hot reload resolve against the edited file instead. "
+            + "Recompute the line against the last compiled source, or run 'uloop compile' "
             + "and re-enable.";
 
         public const string HotReloadCompiledLineMapResolveFailureNextAction =
@@ -212,8 +214,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HotReloadPatchedLineOutsidePatchedBodyMessageFormat =
             "'{0}.{1}' is currently hot-reload patched and line {2} does not fall inside any "
             + "hot-reload patched method's current body, so the marker cannot be placed reliably. "
-            + "Line numbers are resolved against the last compiled source, so a line number taken "
-            + "from the edited file can land inside a different method after edits shift lines. "
+            + "Patched methods resolve against the edited file; methods this reload did not patch "
+            + "resolve against the last compiled source. "
             + "Either the compiled line map for this file is stale, or the method's active patch "
             + "belongs to a superseded hot-reload generation.";
 
@@ -223,6 +225,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string HotReloadPatchedCompiledMethodSpanFormat =
             " In the last compiled source, '{0}.{1}' spans lines {2}-{3}.";
+
+        // Format: resolved method display name, compiled start line, compiled end line.
+        public const string HotReloadCompiledMethodSpanInLastCompiledSourceFormat =
+            " In the last compiled source, '{0}' spans lines {1}-{2}.";
+
+        public const string NearbyCompiledMethodsPrefix =
+            " Nearby methods in the last compiled source: ";
+
+        public const string NearbyCompiledMethodSpanFormat = "'{0}' spans lines {1}-{2}";
+
+        // Format: resolved method display name, requested line, edited start line, edited end line.
+        public const string HotReloadRetargetedToEditedFileWarningFormat =
+            "--line {1} was resolved against the edited file because it falls inside hot-reload "
+            + "patched method '{0}' (edited lines {2}-{3}). Methods not patched by hot reload "
+            + "resolve against the last compiled source instead. If you meant a different method, "
+            + "verify ResolvedMethod, or pass a line outside patched methods' edited spans.";
 
         // Format: declaring type name, added-field count, comma-separated simple field names.
         public const string HotReloadAddedFieldsNotCapturedWarningFormat =

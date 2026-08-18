@@ -238,12 +238,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     response.Success,
                     Is.True,
                     response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
+                SourcePausePointResolveResult spanResult = SourcePausePointResolver.Resolve(
+                    ResolveFailureFile,
+                    response.ResolvedLine);
+                Assert.That(spanResult.Success, Is.True, spanResult.ErrorMessage);
+                Assert.That(spanResult.Resolution.CompiledMethodStartLine, Is.GreaterThan(0));
+                Assert.That(spanResult.Resolution.CompiledMethodEndLine, Is.GreaterThan(0));
                 string expectedDrift = string.Format(
                     SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
                     ResolveFailureFile,
                     response.ResolvedLine,
                     "return 0;",
                     "return 424242;");
+                expectedDrift = PausePointUseCase.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+                    expectedDrift,
+                    response.ResolvedMethod,
+                    spanResult.Resolution.CompiledMethodStartLine,
+                    spanResult.Resolution.CompiledMethodEndLine);
                 string expectedWarning = PausePointUseCase.MergeWarnings(
                     PausePointUseCase.MergeWarnings(
                         PausePointUseCase.MergeWarnings(
@@ -261,6 +272,189 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 HotReloadPausePointCoordination.GetShimLookupForFile = previousLookup;
                 HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousSnapshot;
             }
+        }
+
+        /// <summary>
+        /// What: a known compiled span is appended to a non-empty drift warning.
+        /// </summary>
+        [Test]
+        public void AppendCompiledMethodSpanToDriftWarningOrUnchanged_WhenSpanIsKnown_AppendsSpanSentence()
+        {
+            string drift = string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                ForwardSlashFile,
+                17,
+                "return 1;",
+                "return 2;");
+
+            string warning = PausePointUseCase.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+                drift,
+                "Example.Run",
+                8,
+                11);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift + string.Format(
+                        SourcePausePointConstants.HotReloadCompiledMethodSpanInLastCompiledSourceFormat,
+                        "Example.Run",
+                        8,
+                        11)));
+        }
+
+        /// <summary>
+        /// What: an unknown (0,0) compiled span leaves the drift warning unchanged.
+        /// </summary>
+        [Test]
+        public void AppendCompiledMethodSpanToDriftWarningOrUnchanged_WhenSpanIsUnknown_LeavesWarningUnchanged()
+        {
+            string drift = string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                ForwardSlashFile,
+                17,
+                "return 1;",
+                "return 2;");
+
+            string warning = PausePointUseCase.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+                drift,
+                "Example.Run",
+                0,
+                0);
+
+            Assert.That(warning, Is.EqualTo(drift));
+        }
+
+        /// <summary>
+        /// What: an empty drift warning stays empty even when a compiled span is known.
+        /// </summary>
+        [Test]
+        public void AppendCompiledMethodSpanToDriftWarningOrUnchanged_WhenDriftIsEmpty_ReturnsEmpty()
+        {
+            string warning = PausePointUseCase.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+                string.Empty,
+                "Example.Run",
+                8,
+                11);
+
+            Assert.That(warning, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: retarget warning interpolates resolved method, requested line, and edited span.
+        /// </summary>
+        [Test]
+        public void BuildRetargetedToHotReloadPatchWarningOrEmpty_WhenRetargeted_ReturnsFormattedWarning()
+        {
+            string warning = PausePointUseCase.BuildRetargetedToHotReloadPatchWarningOrEmpty(
+                true,
+                "Example.Run",
+                42,
+                10,
+                20);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadRetargetedToEditedFileWarningFormat,
+                        "Example.Run",
+                        42,
+                        10,
+                        20)));
+        }
+
+        /// <summary>
+        /// What: the retarget helper stays silent when the marker did not retarget.
+        /// </summary>
+        [Test]
+        public void BuildRetargetedToHotReloadPatchWarningOrEmpty_WhenNotRetargeted_ReturnsEmpty()
+        {
+            string warning = PausePointUseCase.BuildRetargetedToHotReloadPatchWarningOrEmpty(
+                false,
+                "Example.Run",
+                42,
+                10,
+                20);
+
+            Assert.That(warning, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: nearby compiled spans are formatted as a suffix on a resolve-failure message.
+        /// </summary>
+        [Test]
+        public void AppendNearbyCompiledMethodsSuffix_WhenNearbyMethodsExist_AppendsFormattedSpans()
+        {
+            string errorMessage = "No sequence point found on or after line 9999 in 'file'.";
+            SourcePausePointNearbyCompiledMethod[] nearby =
+            {
+                new SourcePausePointNearbyCompiledMethod("CompiledMethodSpanFixture.Target", 8, 11),
+                new SourcePausePointNearbyCompiledMethod("CompiledMethodSpanFixture.OtherMethod", 15, 18)
+            };
+
+            string message = PausePointUseCase.AppendNearbyCompiledMethodsSuffix(errorMessage, nearby);
+
+            Assert.That(
+                message,
+                Is.EqualTo(
+                    errorMessage
+                    + SourcePausePointConstants.NearbyCompiledMethodsPrefix
+                    + "'CompiledMethodSpanFixture.Target' spans lines 8-11"
+                    + "; "
+                    + "'CompiledMethodSpanFixture.OtherMethod' spans lines 15-18"
+                    + "."));
+        }
+
+        /// <summary>
+        /// What: an empty nearby list leaves the resolve-failure message unchanged.
+        /// </summary>
+        [Test]
+        public void AppendNearbyCompiledMethodsSuffix_WhenNearbyListIsEmpty_LeavesMessageUnchanged()
+        {
+            string errorMessage = "No sequence point found on or after line 9999 in 'file'.";
+
+            string message = PausePointUseCase.AppendNearbyCompiledMethodsSuffix(
+                errorMessage,
+                Array.Empty<SourcePausePointNearbyCompiledMethod>());
+
+            Assert.That(message, Is.EqualTo(errorMessage));
+        }
+
+        /// <summary>
+        /// What: enable resolve-failure on a real PDB fixture appends the nearest compiled
+        /// method span from that file.
+        /// </summary>
+        [Test]
+        public void Enable_WhenResolveFails_AppendsNearbyCompiledMethodSpans()
+        {
+            const string file =
+                "Assets/Tests/Editor/SourcePausePointResolver/Fixtures/CompiledMethodSpanFixture.cs";
+            SourcePausePointResolveResult otherMethod = SourcePausePointResolver.Resolve(file, 16);
+            Assert.That(otherMethod.Success, Is.True, otherMethod.ErrorMessage);
+            Assert.That(otherMethod.Resolution.CompiledMethodStartLine, Is.GreaterThan(0));
+            Assert.That(otherMethod.Resolution.CompiledMethodEndLine, Is.GreaterThan(0));
+
+            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = file,
+                Line = 9999,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+            string expectedMessage =
+                "No sequence point found on or after line 9999 in '" + file + "'."
+                + SourcePausePointConstants.NearbyCompiledMethodsPrefix
+                + string.Format(
+                    SourcePausePointConstants.NearbyCompiledMethodSpanFormat,
+                    "CompiledMethodSpanFixture.OtherMethod",
+                    otherMethod.Resolution.CompiledMethodStartLine,
+                    otherMethod.Resolution.CompiledMethodEndLine)
+                + ".";
+            Assert.That(response.Message, Is.EqualTo(expectedMessage));
         }
 
         /// <summary>
