@@ -1428,8 +1428,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!retryWorkerResult.Success)
             {
                 LogHotReloadIsolationRetry(
-                    0,
-                    0,
+                    exclusions.ExcludedMethodKeys.Length,
+                    exclusions.ExcludedAddedMethodKeys.Length,
                     0,
                     0,
                     0,
