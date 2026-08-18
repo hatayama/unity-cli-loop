@@ -97,6 +97,8 @@ Choose the capture mode when enabling a pause point:
 - `continuous` pauses Unity on every hit and remains armed.
 - `trace` remains armed and records each hit without pausing Unity.
 - In every mode, `CapturedVariables` holds the latest hit and `CapturedVariableHistory` holds only strictly older frames, so with a single hit the history is empty (for `single-shot` it always is). When the latest-hit frame is excluded, `CapturedVariableHistoryNote` explains that the latest hit's variables are in `CapturedVariables`.
+- In trace mode, Status "Hit" does not mean Play Mode paused; the response carries a StatusNote saying the marker fired while the game kept running.
+- An Expired response carries a RecommendedNextAction: re-enable the pause point and raise --timeout-seconds (default 30) when setup takes longer than the timeout.
 - For an already-hit `continuous` or `trace` marker, `await-pause-point` waits for a **new** hit after the wait starts (`LastHitSequence` advancing). It does not return the stale hit that is already present. Read the current hit with `pause-point-status` instead. If await times out while waiting for that new hit, the error stays `PAUSE_POINT_WAIT_TIMEOUT` and `Details.Hint` tells you to pass `--resume-play` (or resume Play Mode) so another hit can occur. A freshly enabled marker (including `enable-pause-point --await`) has no prior hit, so the first hit satisfies the wait as before.
 
 `--max-history` defaults to 20 and accepts values from 1 through 100. When the limit is exceeded, the oldest frames are dropped and `HistoryDroppedCount` reports how many were removed. `pause-point-status` returns the current `Mode`, `MaxHistory`, history frames, and dropped count.

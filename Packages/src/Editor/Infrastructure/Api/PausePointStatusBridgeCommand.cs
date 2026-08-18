@@ -187,7 +187,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 FirstHitSequence = snapshot.FirstHitSequence,
                 LastHitSequence = snapshot.LastHitSequence,
                 Message = snapshot.Message,
-                RecommendedNextAction = snapshot.RecommendedNextAction,
+                RecommendedNextAction = ResolveExpiredRecommendedNextAction(
+                    snapshot.Status,
+                    snapshot.RecommendedNextAction),
                 CapturedVariables = snapshot.CapturedVariables
                     .Select(PausePointStatusCapturedVariable.FromCapturedVariable)
                     .ToList(),
@@ -207,6 +209,22 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     ? null
                     : snapshot.ResolvedLineText
             };
+        }
+
+        // Why duplicate: this bridge must not reference the Editor-only PausePoint assembly.
+        // Keep in sync with SourcePausePointConstants.ExpiredRecommendedNextAction.
+        private const string ExpiredRecommendedNextAction =
+            "The pause point expired before it was hit. Re-enable it, and pass --timeout-seconds with a value larger than the default 30 if you need more setup time before triggering.";
+
+        private static string ResolveExpiredRecommendedNextAction(string status, string recommendedNextAction)
+        {
+            if (status == UloopPausePointStatus.Expired
+                && string.IsNullOrEmpty(recommendedNextAction))
+            {
+                return ExpiredRecommendedNextAction;
+            }
+
+            return recommendedNextAction ?? string.Empty;
         }
     }
 

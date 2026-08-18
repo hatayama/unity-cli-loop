@@ -123,7 +123,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 FirstHitSequence = snapshot.FirstHitSequence,
                 LastHitSequence = snapshot.LastHitSequence,
                 Message = snapshot.Message,
-                RecommendedNextAction = snapshot.RecommendedNextAction,
+                RecommendedNextAction = ResolveExpiredRecommendedNextAction(
+                    snapshot.Status,
+                    snapshot.RecommendedNextAction),
                 ClearedReason = snapshot.ClearedReason,
                 StatusBeforeClear = snapshot.StatusBeforeClear,
                 LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear,
@@ -150,10 +152,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Message = result.ClearedCount == 0
                     ? "No active pause points to clear."
                     : "Pause points cleared.",
-                Warning = result.ResumedFromPause
-                    ? SourcePausePointConstants.ClearResumedPlayModeWarning
-                    : string.Empty
-            };
+                    Warning = result.ResumedFromPause
+                        ? SourcePausePointConstants.ClearResumedPlayModeWarning
+                        : string.Empty
+                };
+        }
+
+        private static string ResolveExpiredRecommendedNextAction(string status, string recommendedNextAction)
+        {
+            if (status == UloopPausePointStatus.Expired
+                && string.IsNullOrEmpty(recommendedNextAction))
+            {
+                return SourcePausePointConstants.ExpiredRecommendedNextAction;
+            }
+
+            return recommendedNextAction ?? string.Empty;
         }
     }
 
