@@ -152,10 +152,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Message = result.ClearedCount == 0
                     ? "No active pause points to clear."
                     : "Pause points cleared.",
-                    Warning = result.ResumedFromPause
-                        ? SourcePausePointConstants.ClearResumedPlayModeWarning
-                        : string.Empty
-                };
+                Warning = result.ResumedFromPause
+                    ? SourcePausePointConstants.ClearResumedPlayModeWarning
+                    : string.Empty
+            };
         }
 
         private static string ResolveExpiredRecommendedNextAction(string status, string recommendedNextAction)

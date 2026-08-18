@@ -1535,24 +1535,7 @@ func TestRunPausePointStatusIncludesStatusNoteOnTraceHit(t *testing.T) {
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
 
-	var decoded map[string]json.RawMessage
-	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
-		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
-	}
-
-	rawNote, ok := decoded["StatusNote"]
-	if !ok {
-		t.Fatalf("StatusNote missing from status JSON: %s", stdout.String())
-	}
-
-	var note string
-	if err := json.Unmarshal(rawNote, &note); err != nil {
-		t.Fatalf("unmarshal note failed: %v", err)
-	}
-	if note != pausePointTraceStatusNote {
-		t.Fatalf("StatusNote mismatch: got %#v, want %#v",
-			note, pausePointTraceStatusNote)
-	}
+	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
 }
 
 // Verifies pause-point-status stdout omits StatusNote on a non-trace Hit.
@@ -1592,6 +1575,90 @@ func TestRunPausePointStatusOmitsStatusNoteOnContinuousHit(t *testing.T) {
 
 	if strings.Contains(stdout.String(), "StatusNote") {
 		t.Fatalf("continuous Hit status JSON must omit StatusNote: %s", stdout.String())
+	}
+}
+
+// Verifies await-pause-point stdout includes StatusNote on a trace-mode Hit.
+// Removing applyPausePointTraceStatusNote from the wait hit path makes this test Red.
+func TestRunWaitForPausePointCommandIncludesStatusNoteOnTraceHit(t *testing.T) {
+	originalExtend := extendPausePointExpiry
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		extendPausePointExpiry = originalExtend
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+	})
+
+	extendPausePointExpiry = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+		minimumRemainingSeconds int,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusEnabled}, nil
+	}
+
+	statusResponses := []pausePointStatusResponse{
+		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
+		{
+			Id:        "jump",
+			Status:    pausePointStatusHit,
+			Mode:      pausePointModeTrace,
+			IsEnabled: true,
+			IsHit:     true,
+			HitCount:  1,
+		},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePointCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump", "--timeout-seconds", "1"},
+		"",
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
+}
+
+func assertStdoutHasPausePointTraceStatusNote(t *testing.T, stdout []byte) {
+	t.Helper()
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(stdout, &decoded); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout)
+	}
+
+	rawNote, ok := decoded["StatusNote"]
+	if !ok {
+		t.Fatalf("StatusNote missing from JSON: %s", stdout)
+	}
+
+	var note string
+	if err := json.Unmarshal(rawNote, &note); err != nil {
+		t.Fatalf("unmarshal note failed: %v", err)
+	}
+	if note != pausePointTraceStatusNote {
+		t.Fatalf("StatusNote mismatch: got %#v, want %#v",
+			note, pausePointTraceStatusNote)
 	}
 }
 
