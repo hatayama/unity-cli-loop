@@ -411,6 +411,7 @@ func runPausePointWaitAfterEnable(
 		response.ResolvedMethod = enableFields.ResolvedMethod
 		response.SnapshotTiming = enableFields.SnapshotTiming
 		response = filterPausePointCapturedVariableHistory(response)
+		response = applyPausePointTraceStatusNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 

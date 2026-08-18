@@ -981,6 +981,99 @@ func TestPausePointStatusResponseOmitsEmptyCapturedVariableHistoryNote(t *testin
 	}
 }
 
+// Verifies StatusNote is set only for a trace-mode Hit: other modes and statuses stay empty
+// so omitempty keeps the historical JSON shape.
+func TestApplyPausePointTraceStatusNote(t *testing.T) {
+	cases := []struct {
+		name     string
+		mode     string
+		status   string
+		wantNote string
+	}{
+		{
+			name:     "trace hit sets note",
+			mode:     pausePointModeTrace,
+			status:   pausePointStatusHit,
+			wantNote: pausePointTraceStatusNote,
+		},
+		{
+			name:     "continuous hit omits note",
+			mode:     pausePointModeContinuous,
+			status:   pausePointStatusHit,
+			wantNote: "",
+		},
+		{
+			name:     "trace enabled omits note",
+			mode:     pausePointModeTrace,
+			status:   pausePointStatusEnabled,
+			wantNote: "",
+		},
+		{
+			name:     "trace expired omits note",
+			mode:     pausePointModeTrace,
+			status:   pausePointStatusExpired,
+			wantNote: "",
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			response := applyPausePointTraceStatusNote(pausePointStatusResponse{
+				Mode:   testCase.mode,
+				Status: testCase.status,
+			})
+			if response.StatusNote != testCase.wantNote {
+				t.Fatalf("StatusNote mismatch: got %#v, want %#v",
+					response.StatusNote, testCase.wantNote)
+			}
+		})
+	}
+}
+
+// Verifies a set StatusNote survives json.Marshal under that exact key.
+func TestPausePointStatusResponseIncludesStatusNote(t *testing.T) {
+	marshaled, err := json.Marshal(pausePointStatusResponse{
+		StatusNote: pausePointTraceStatusNote,
+	})
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(marshaled, &decoded); err != nil {
+		t.Fatalf("unmarshal envelope failed: %v", err)
+	}
+
+	rawNote, ok := decoded["StatusNote"]
+	if !ok {
+		t.Fatalf("StatusNote missing from JSON: %s", marshaled)
+	}
+
+	var note string
+	if err := json.Unmarshal(rawNote, &note); err != nil {
+		t.Fatalf("unmarshal note failed: %v", err)
+	}
+	if note != pausePointTraceStatusNote {
+		t.Fatalf("StatusNote mismatch: got %#v, want %#v", note, pausePointTraceStatusNote)
+	}
+}
+
+// Verifies an empty StatusNote is omitted from JSON so non-trace and non-Hit
+// responses keep the historical shape.
+func TestPausePointStatusResponseOmitsEmptyStatusNote(t *testing.T) {
+	marshaled, err := json.Marshal(pausePointStatusResponse{
+		Mode:   pausePointModeTrace,
+		Status: pausePointStatusHit,
+	})
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	if strings.Contains(string(marshaled), "StatusNote") {
+		t.Fatalf("empty StatusNote must be omitted from JSON: %s", marshaled)
+	}
+}
+
 // Verifies timeout errors include a deterministic diagnosis hint for common stuck states.
 func TestPausePointTimeoutErrorIncludesDiagnosisHint(t *testing.T) {
 	cases := []struct {
@@ -1402,6 +1495,170 @@ func TestRunPausePointStatusOmitsCapturedVariableHistoryNoteOnZeroHit(t *testing
 
 	if strings.Contains(stdout.String(), "CapturedVariableHistoryNote") {
 		t.Fatalf("0-hit status JSON must omit CapturedVariableHistoryNote: %s", stdout.String())
+	}
+}
+
+// Verifies pause-point-status stdout includes StatusNote when Unity reports a
+// trace-mode Hit. Removing applyPausePointTraceStatusNote from the status
+// command path makes this test Red.
+func TestRunPausePointStatusIncludesStatusNoteOnTraceHit(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:        id,
+			Status:    pausePointStatusHit,
+			Mode:      pausePointModeTrace,
+			IsEnabled: true,
+			IsHit:     true,
+			HitCount:  1,
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
+}
+
+// Verifies pause-point-status stdout omits StatusNote on a non-trace Hit.
+func TestRunPausePointStatusOmitsStatusNoteOnContinuousHit(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:        id,
+			Status:    pausePointStatusHit,
+			Mode:      pausePointModeContinuous,
+			IsEnabled: true,
+			IsHit:     true,
+			HitCount:  1,
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	if strings.Contains(stdout.String(), "StatusNote") {
+		t.Fatalf("continuous Hit status JSON must omit StatusNote: %s", stdout.String())
+	}
+}
+
+// Verifies await-pause-point stdout includes StatusNote on a trace-mode Hit.
+// Removing applyPausePointTraceStatusNote from the wait hit path makes this test Red.
+func TestRunWaitForPausePointCommandIncludesStatusNoteOnTraceHit(t *testing.T) {
+	originalExtend := extendPausePointExpiry
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		extendPausePointExpiry = originalExtend
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+	})
+
+	extendPausePointExpiry = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+		minimumRemainingSeconds int,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusEnabled}, nil
+	}
+
+	statusResponses := []pausePointStatusResponse{
+		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
+		{
+			Id:        "jump",
+			Status:    pausePointStatusHit,
+			Mode:      pausePointModeTrace,
+			IsEnabled: true,
+			IsHit:     true,
+			HitCount:  1,
+		},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePointCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump", "--timeout-seconds", "1"},
+		"",
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
+}
+
+func assertStdoutHasPausePointTraceStatusNote(t *testing.T, stdout []byte) {
+	t.Helper()
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(stdout, &decoded); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout)
+	}
+
+	rawNote, ok := decoded["StatusNote"]
+	if !ok {
+		t.Fatalf("StatusNote missing from JSON: %s", stdout)
+	}
+
+	var note string
+	if err := json.Unmarshal(rawNote, &note); err != nil {
+		t.Fatalf("unmarshal note failed: %v", err)
+	}
+	if note != pausePointTraceStatusNote {
+		t.Fatalf("StatusNote mismatch: got %#v, want %#v",
+			note, pausePointTraceStatusNote)
 	}
 }
 

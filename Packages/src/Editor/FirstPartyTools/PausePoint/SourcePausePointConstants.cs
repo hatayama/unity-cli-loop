@@ -156,6 +156,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "Note: the Debug setting reverts to the 'Code Optimization On Startup' preference "
             + "whenever the Editor restarts, including uloop launch -r.";
 
+        // Why fill when empty: some Expired snapshots reach the response with no next
+        // action, and agents then have no recovery for a timeout that fired during setup.
+        public const string ExpiredRecommendedNextAction =
+            "The pause point expired before it was hit. Re-enable it, and pass --timeout-seconds with a value larger than the default 30 if you need more setup time before triggering.";
+
         // Why: resolve failures have several distinct root causes (wrong path form, non-executable
         // line, stale PDBs after a Code Optimization switch); the skill troubleshooting reference
         // covers the patterns so this next-action stays short and stable.
