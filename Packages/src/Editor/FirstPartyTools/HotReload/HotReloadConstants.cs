@@ -87,6 +87,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string StaleSignatureCallersWarningFormat =
             "Compiled call sites of the removed signature '{0}' are not patched by this hot reload: {1}. They keep the previous behavior until 'uloop compile'.";
 
+        public const string SignatureChangeCallersRepatchedNoticeFormat =
+            "Signature change '{0}' applied because its compiled call sites were already hot-reload patched; this run re-applied them on the new signature: {1}.";
+
         public const string SignatureChangeCoverageLostFailureFormat =
             "Isolation excluded compiled callers of '{0}'; applying the rest would leave those callers on the old version. Run 'uloop compile'.";
 

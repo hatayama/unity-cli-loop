@@ -491,6 +491,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         unchangedMethodCount: unchangedMethodCount,
                         sourceContentSha256: workerOutput.sourceContentSha256);
                 }
+
+                AppendSignatureChangeCallersRepatchedWarnings(
+                    warnings,
+                    entriesToPatch,
+                    gateResult.Hits,
+                    snapshotLabels);
             }
 
             // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
@@ -2108,6 +2114,99 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return warnings;
+        }
+
+        // Why only already-patched callers: a caller the user edited this run is obvious in
+        // Methods. The non-obvious case is a caller that was already patched at run start and
+        // was re-entered only to satisfy the signature-change gate. Known limits: an
+        // already-patched caller that is also edited this run is over-reported (the text is
+        // still true); a caller that stayed Skipped and drifted is missed; constructed
+        // generics can miss when the label space differs from the wire key (same constraint
+        // as IsActiveMember).
+        private static void AppendSignatureChangeCallersRepatchedWarnings(
+            List<string> warnings,
+            TransformWorkerEntryDto[] entriesToPatch,
+            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
+            HashSet<string> snapshotLabels)
+        {
+            Debug.Assert(warnings != null, "warnings must not be null.");
+            Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
+            Debug.Assert(hits != null, "hits must not be null.");
+            Debug.Assert(snapshotLabels != null, "snapshotLabels must not be null.");
+
+            HashSet<string> entryKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto entry in entriesToPatch)
+            {
+                entryKeys.Add(BuildMethodKey(entry));
+            }
+
+            Dictionary<string, List<string>> callerLabelsByOldSignature =
+                new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+            {
+                if (hit == null || !entryKeys.Contains(hit.CallerMethodKey))
+                {
+                    continue;
+                }
+
+                string callerLabel = FormatCallSiteCallerLabel(hit);
+                if (!snapshotLabels.Contains(callerLabel))
+                {
+                    continue;
+                }
+
+                if (!callerLabelsByOldSignature.TryGetValue(
+                    hit.TargetMethodKey,
+                    out List<string> callerLabels))
+                {
+                    callerLabels = new List<string>();
+                    callerLabelsByOldSignature.Add(hit.TargetMethodKey, callerLabels);
+                }
+
+                if (!callerLabels.Contains(callerLabel))
+                {
+                    callerLabels.Add(callerLabel);
+                }
+            }
+
+            foreach (KeyValuePair<string, List<string>> pair in callerLabelsByOldSignature)
+            {
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.SignatureChangeCallersRepatchedNoticeFormat,
+                        pair.Key,
+                        string.Join(", ", pair.Value)));
+            }
+        }
+
+        private static string FormatCallSiteCallerLabel(HotReloadCallSiteScanner.CallSiteHit hit)
+        {
+            Debug.Assert(hit != null, "hit must not be null.");
+            return HotReloadPatcher.FormatMethodKeyParts(
+                hit.CallerTypeMetadataName,
+                hit.CallerMethodName,
+                hit.CallerParameterTypeFullNames ?? Array.Empty<string>(),
+                ReadGenericArityFromWireMethodKey(hit.CallerMethodKey, hit.CallerMethodName));
+        }
+
+        private static int ReadGenericArityFromWireMethodKey(string methodKey, string methodName)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be null or empty.");
+            Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be null or empty.");
+
+            string arityPrefix = "::" + methodName + "`";
+            int arityPrefixIndex = methodKey.IndexOf(arityPrefix, StringComparison.Ordinal);
+            if (arityPrefixIndex < 0)
+            {
+                return 0;
+            }
+
+            int arityStart = arityPrefixIndex + arityPrefix.Length;
+            int arityEnd = methodKey.IndexOf('(', arityStart);
+            Debug.Assert(arityEnd > arityStart, "wire method key arity must precede '('.");
+            return int.Parse(
+                methodKey.Substring(arityStart, arityEnd - arityStart),
+                CultureInfo.InvariantCulture);
         }
 
         /// <summary>

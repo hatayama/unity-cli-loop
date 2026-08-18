@@ -3646,6 +3646,78 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(0),
                 "A gated (not applied) replacement must not appear as a removed member.\n"
                 + string.Join("\n", result.Warnings));
+            Assert.That(
+                CountWarningsContaining(
+                    result.Warnings,
+                    "applied because its compiled call sites were already hot-reload patched"),
+                Is.EqualTo(0),
+                "A never-patched caller must keep the gate skip and must not emit the re-patched notice.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
+        /// What: after a caller body patch, a later signature-only change applies and names
+        /// that already-patched caller in the re-patched notice.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_AlreadyPatchedCaller_EmitsRepatchedNotice()
+        {
+            string fixturePath = ResolveSignatureChangeUnchangedCallerFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string callerEdited = onDisk.Replace(
+                "        public long StoreTarget(int value)\n        {\n            return Target(value);\n        }",
+                "        public long StoreTarget(int value)\n        {\n            return Target(value) + 1L;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(callerEdited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeAlreadyPatchedCaller1.cs", callerEdited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadSignatureChangeUnchangedCallerFixture.StoreTarget));
+
+            string signatureEdited = callerEdited.Replace(
+                "        public int Target(int value)\n        {\n            return value;\n        }",
+                "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(signatureEdited, Is.Not.EqualTo(callerEdited));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeAlreadyPatchedCaller2.cs", signatureEdited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(second);
+            AssertHasAdded(second, nameof(HotReloadSignatureChangeUnchangedCallerFixture.Target));
+            AssertHasPatched(second, nameof(HotReloadSignatureChangeUnchangedCallerFixture.StoreTarget));
+
+            string expectedOldSignature =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeUnchangedCallerFixture::Target(System.Int32)";
+            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeof(HotReloadSignatureChangeUnchangedCallerFixture).FullName,
+                nameof(HotReloadSignatureChangeUnchangedCallerFixture.StoreTarget),
+                new[] { "System.Int32" },
+                0);
+            string expectedWarning = string.Format(
+                HotReloadConstants.SignatureChangeCallersRepatchedNoticeFormat,
+                expectedOldSignature,
+                expectedCallerLabel);
+            int matchingWarningCount = 0;
+            foreach (string warning in second.Warnings)
+            {
+                if (string.Equals(warning, expectedWarning, StringComparison.Ordinal))
+                {
+                    matchingWarningCount++;
+                }
+            }
+
+            Assert.That(
+                matchingWarningCount,
+                Is.EqualTo(1),
+                "Expected exactly one re-patched notice.\n" + string.Join("\n", second.Warnings));
         }
 
         /// <summary>
