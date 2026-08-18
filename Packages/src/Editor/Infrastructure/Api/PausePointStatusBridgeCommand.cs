@@ -43,7 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             // after the marker itself reports Cleared.
             // The CLI polling bridge only reports marker status; the resumed-from-pause side
             // effect is surfaced through the clear-pause-point tool response, not this path.
-            (UloopPausePointSnapshot snapshot, bool _) = UloopPausePointRegistry.Clear(id);
+            (UloopPausePointSnapshot snapshot, bool _, int _) = UloopPausePointRegistry.Clear(id);
             LogCleared(id, snapshot.StatusBeforeClear);
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {
