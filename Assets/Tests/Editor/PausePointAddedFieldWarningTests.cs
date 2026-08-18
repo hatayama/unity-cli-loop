@@ -70,8 +70,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: enabling a pause point on a type with no added fields does not include the
-        /// CapturedVariables added-field sentence.
+        /// What: enabling a pause point on a type with no added fields yields only the usual
+        /// enable warnings, with an exact full-string match and no added-field sentence.
         /// </summary>
         [Test]
         public void Enable_WhenDeclaringTypeHasNoAddedFields_OmitsCapturedVariablesWarning()
@@ -88,9 +88,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 response.Success,
                 Is.True,
                 response.ErrorCode + " / " + response.Message);
-            Assert.That(
-                response.Warning ?? string.Empty,
-                Does.Not.Contain("never appear in CapturedVariables"));
+            string expectedWarning = PausePointUseCase.MergeWarnings(
+                PausePointUseCase.CreateEnableWarning(),
+                SourcePausePointConstants.SmallMethodInliningRiskWarning);
+            Assert.That(response.Warning, Is.EqualTo(expectedWarning));
         }
 
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController
