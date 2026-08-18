@@ -404,6 +404,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadAddedMemberRegistry.ListActiveMethodKeys(projectRelativePath);
                 LogHotReloadEmptyEntriesClear(addedLabelsAtClear, correlationId);
                 HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
+                CommitAddedFieldsForFile(projectRelativePath, workerOutput.addedFieldNames);
                 // Why after the clear: a still-declared added method can be worker-skipped
                 // (virtual/generic), leaving entries empty while the registry drop is real.
                 AppendDeactivatedPatchesWarning(
@@ -510,6 +511,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compileResult.PdbBytes,
                 compileResult.Assembly);
             HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
+            CommitAddedFieldsForFile(projectRelativePath, addedFieldNames);
             Dictionary<string, string> bindFailureReasonByShimTypeName =
                 BindShimAccessors(compileResult.Assembly);
             List<string> inlineRiskMethodLabels = new List<string>();
@@ -552,6 +554,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 retargetedPausePointIds,
                 addedFieldNames,
                 workerOutput.sourceContentSha256);
+        }
+
+        // Why only here and the empty-entries deactivation: a failed worker or shim compile
+        // returns empty AddedFieldNames while leaving existing patches, so writing the ledger
+        // from the run response would wipe added fields that are still live.
+        private static void CommitAddedFieldsForFile(string projectRelativePath, string[] addedFieldNames)
+        {
+            HotReloadAddedFieldRegistry.ReplaceForFile(
+                projectRelativePath,
+                addedFieldNames ?? Array.Empty<string>());
         }
 
         // Peels leftover Harmony patches when the source again matches the verified baseline.

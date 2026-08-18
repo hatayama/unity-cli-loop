@@ -97,6 +97,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TransplantPreambleLengthByMethod.TryGetValue(method, out int length)
                     ? length
                     : 0;
+            HotReloadPausePointCoordination.GetAddedFieldsForType =
+                HotReloadAddedFieldRegistry.GetFieldsForType;
         }
 
         /// <summary>
@@ -241,6 +243,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadShimRegistry.Clear();
             HotReloadAddedMemberRegistry.Clear();
             HotReloadAddedFieldStore.Clear();
+            HotReloadAddedFieldRegistry.ClearAll();
             TransplantLocalsByMethod.Clear();
             TransplantPreambleLengthByMethod.Clear();
             HotReloadInvocationRegistry.Clear();
