@@ -1307,6 +1307,104 @@ func TestRunPausePointStatusReturnsCurrentStatus(t *testing.T) {
 	}
 }
 
+// Verifies pause-point-status stdout includes CapturedVariableHistoryNote when the
+// command path filters the latest-hit frame out of history.
+func TestRunPausePointStatusIncludesCapturedVariableHistoryNoteWhenLatestHitIsFiltered(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:              id,
+			Status:          pausePointStatusHit,
+			IsEnabled:       true,
+			IsHit:           true,
+			HitCount:        1,
+			LastHitSequence: 1,
+			CapturedVariableHistory: []pausePointCapturedHistoryFrame{
+				{HitSequence: 1, FrameCount: 10},
+			},
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+
+	rawNote, ok := decoded["CapturedVariableHistoryNote"]
+	if !ok {
+		t.Fatalf("CapturedVariableHistoryNote missing from status JSON: %s", stdout.String())
+	}
+
+	var note string
+	if err := json.Unmarshal(rawNote, &note); err != nil {
+		t.Fatalf("unmarshal note failed: %v", err)
+	}
+	if note != pausePointCapturedVariableHistoryNote {
+		t.Fatalf("CapturedVariableHistoryNote mismatch: got %#v, want %#v",
+			note, pausePointCapturedVariableHistoryNote)
+	}
+}
+
+// Verifies pause-point-status stdout omits CapturedVariableHistoryNote on a 0-hit response.
+func TestRunPausePointStatusOmitsCapturedVariableHistoryNoteOnZeroHit(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:              id,
+			Status:          pausePointStatusEnabled,
+			IsEnabled:       true,
+			HitCount:        0,
+			LastHitSequence: 0,
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	if strings.Contains(stdout.String(), "CapturedVariableHistoryNote") {
+		t.Fatalf("0-hit status JSON must omit CapturedVariableHistoryNote: %s", stdout.String())
+	}
+}
+
 // Verifies pause-point-status passes captured variables and the truncated flag through to stdout.
 func TestRunPausePointStatusReturnsCapturedVariables(t *testing.T) {
 	originalQuery := queryPausePointStatus
