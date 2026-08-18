@@ -1008,6 +1008,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: editing only the getter of an existing getter+setter property still emits the
+        /// setter skip row and does not emit outside-body drift. Pins the snapshot ContainsKey
+        /// guard so an existing property is not stripped from the current tree alone.
+        /// </summary>
+        [Test]
+        public async Task Run_ExistingGetterAndSetterProperty_GetterBodyEdit_SkipsSetterWithoutOutsideBodyWarning()
+        {
+            const string fileName = "ExistingGetterAndSetterPropertyGetterEdit.cs";
+            string onDisk = File.ReadAllText(ResolveShapeFixturePath());
+            string editedSource = onDisk.Replace(
+                "get { return _value; }",
+                "get { return _value + 1; }",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: getter body must differ.");
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, fileName);
+            File.WriteAllText(sourcePath, editedSource);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveShapeFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertSkippedContains(result, "set_Value", ExpectedExplicitAccessorSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
         /// What: a snapshot that duplicates a method key falls back to no-baseline behavior
         /// (same entries as a null snapshot, empty unchangedMethods) and sets
         /// baselineDisabledByDuplicateKeys so the orchestrator can warn.
