@@ -201,6 +201,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // sequentially, and RevertUnchangedPatches / BeginFileGeneration mutate ledgers
             // after the worker. The worker itself does not.
             HashSet<string> snapshotLabels = CollectActiveLabelsForFile(projectRelativePath);
+            HashSet<string> snapshotAddedLabels = new HashSet<string>(
+                HotReloadAddedMemberRegistry.ListActiveMethodKeys(projectRelativePath),
+                StringComparer.Ordinal);
 
             string[] defines = compilationAssembly.defines ?? Array.Empty<string>();
             string[] referencePaths = BuildWorkerReferencePaths(compilationAssembly, targetDllPath);
@@ -369,6 +372,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // clearing — same as leaving existing Harmony patches in place when apply does
                 // not succeed.
                 HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
+                // Why after the clear: a still-declared added method can be worker-skipped
+                // (virtual/generic), leaving entries empty while the registry drop is real.
+                AppendDeactivatedPatchesWarning(
+                    warnings,
+                    snapshotLabels,
+                    snapshotAddedLabels,
+                    projectRelativePath,
+                    workerOutput,
+                    outcomes);
                 return new HotReloadFileProcessResult(
                     outcomes,
                     warnings,
@@ -482,13 +494,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            // Why only this return: a still-declared added method is a first-pass entry, so
-            // empty-entries BeginFileGeneration only clears members the source no longer
-            // declares. The warning is only meaningful on the apply path that can drop a
-            // still-declared added member by not re-Registering it.
+            // Why here as well as the empty-entries return: apply can drop a still-declared
+            // added member by not re-Registering it after BeginFileGeneration.
             AppendDeactivatedPatchesWarning(
                 warnings,
                 snapshotLabels,
+                snapshotAddedLabels,
                 projectRelativePath,
                 workerOutput,
                 outcomes);
@@ -2750,17 +2761,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void AppendDeactivatedPatchesWarning(
             List<string> warnings,
             HashSet<string> snapshotLabels,
+            HashSet<string> snapshotAddedLabels,
             string projectRelativePath,
             TransformWorkerOutputDto workerOutput,
             IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
             Debug.Assert(warnings != null, "warnings must not be null.");
             Debug.Assert(snapshotLabels != null, "snapshotLabels must not be null.");
+            Debug.Assert(snapshotAddedLabels != null, "snapshotAddedLabels must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
 
             HashSet<string> currentLabels = CollectActiveLabelsForFile(projectRelativePath);
             HashSet<string> stillDeclaredAdded = CollectStillDeclaredAddedLabels(workerOutput, outcomes);
-            List<string> deactivated = new List<string>();
+            List<string> deactivatedAdded = new List<string>();
+            List<string> deactivatedPatches = new List<string>();
             foreach (string label in snapshotLabels)
             {
                 if (!IsUnexpectedDeactivation(label, currentLabels, stillDeclaredAdded))
@@ -2768,19 +2782,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                deactivated.Add(label);
+                if (snapshotAddedLabels.Contains(label))
+                {
+                    deactivatedAdded.Add(label);
+                }
+                else
+                {
+                    deactivatedPatches.Add(label);
+                }
             }
 
-            if (deactivated.Count == 0)
+            AppendDeactivatedWarningLine(
+                warnings,
+                deactivatedAdded,
+                HotReloadConstants.DeactivatedAddedMembersWarningFormat);
+            AppendDeactivatedWarningLine(
+                warnings,
+                deactivatedPatches,
+                HotReloadConstants.DeactivatedPatchesWarningFormat);
+        }
+
+        private static void AppendDeactivatedWarningLine(
+            List<string> warnings,
+            List<string> labels,
+            string format)
+        {
+            if (labels.Count == 0)
             {
                 return;
             }
 
-            deactivated.Sort(string.CompareOrdinal);
-            warnings.Add(
-                string.Format(
-                    HotReloadConstants.DeactivatedPatchesWarningFormat,
-                    string.Join(", ", deactivated)));
+            labels.Sort(string.CompareOrdinal);
+            warnings.Add(string.Format(format, string.Join(", ", labels)));
         }
 
         private static string ToProjectRelativeScriptPath(string path)

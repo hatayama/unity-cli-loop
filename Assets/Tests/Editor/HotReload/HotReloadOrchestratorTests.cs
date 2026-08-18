@@ -2962,7 +2962,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "\n" + FormatOutcomes(second));
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedPatchesWarning(AddedPingMethodLabel()));
+                ExpectedDeactivatedAddedMembersWarning(AddedPingMethodLabel()));
         }
 
         /// <summary>
@@ -3016,7 +3016,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedPatchesWarning(
+                ExpectedDeactivatedAddedMembersWarning(
                     AddedPingMethodLabel() + ", " + AddedPongMethodLabel()));
         }
 
@@ -3046,7 +3046,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedPatchesWarning(AddedPingMethodLabel()));
+                ExpectedDeactivatedAddedMembersWarning(AddedPingMethodLabel()));
+        }
+
+        /// <summary>
+        /// What: after an added method applies, a later run that skips every method as virtual
+        /// (empty entries) still warns with the added-member deactivation wording.
+        /// </summary>
+        [Test]
+        public async Task Run_VirtualAddedMethodAfterSuccess_EmptyEntries_WarnsDeactivatedAddedMembers()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("VirtualAddedEmptyEntries1.cs", WithWorkingAddedPing(onDisk)),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("VirtualAddedEmptyEntries2.cs", WithVirtualAddedPing(onDisk)),
+                CancellationToken.None);
+
+            AssertDeactivatedPatchesWarningsEqual(
+                second,
+                ExpectedDeactivatedAddedMembersWarning(AddedPingMethodLabel()));
+        }
+
+        /// <summary>
+        /// What: deleting a previously added method and restoring its caller does not emit
+        /// the added-member deactivation warning (intentional convergence).
+        /// </summary>
+        [Test]
+        public async Task Run_DeleteAddedMethodAndRestoreCaller_DoesNotWarnDeactivatedAddedMembers()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("DeleteAddedRestoreCaller1.cs", WithWorkingAddedPing(onDisk)),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("DeleteAddedRestoreCaller2.cs", onDisk),
+                CancellationToken.None);
+
+            AssertNoDeactivatedPatchesWarning(second);
         }
 
         /// <summary>
@@ -3168,7 +3216,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 0);
             AssertDeactivatedPatchesWarningsEqual(
                 second,
-                ExpectedDeactivatedPatchesWarning(expectedLabel));
+                ExpectedDeactivatedAddedMembersWarning(expectedLabel));
         }
 
         /// <summary>
@@ -4705,14 +4753,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 0);
         }
 
-        private static string ExpectedDeactivatedPatchesWarning(string joinedLabels)
+        private static string ExpectedDeactivatedAddedMembersWarning(string joinedLabels)
         {
-            return string.Format(HotReloadConstants.DeactivatedPatchesWarningFormat, joinedLabels);
+            return string.Format(HotReloadConstants.DeactivatedAddedMembersWarningFormat, joinedLabels);
         }
 
-        private static string DeactivatedPatchesWarningPrefix()
+        private static bool IsDeactivatedPatchesWarning(string warning)
         {
-            string format = HotReloadConstants.DeactivatedPatchesWarningFormat;
+            return warning.StartsWith(
+                    DeactivatedWarningPrefix(HotReloadConstants.DeactivatedPatchesWarningFormat),
+                    StringComparison.Ordinal)
+                || warning.StartsWith(
+                    DeactivatedWarningPrefix(HotReloadConstants.DeactivatedAddedMembersWarningFormat),
+                    StringComparison.Ordinal);
+        }
+
+        private static string DeactivatedWarningPrefix(string format)
+        {
             int placeholderIndex = format.IndexOf("{0}", StringComparison.Ordinal);
             Assert.That(placeholderIndex, Is.GreaterThanOrEqualTo(0));
             return format.Substring(0, placeholderIndex);
@@ -4720,11 +4777,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static List<string> FilterDeactivatedPatchesWarnings(IReadOnlyList<string> warnings)
         {
-            string prefix = DeactivatedPatchesWarningPrefix();
             List<string> filtered = new List<string>();
             foreach (string warning in warnings)
             {
-                if (warning.StartsWith(prefix, StringComparison.Ordinal))
+                if (IsDeactivatedPatchesWarning(warning))
                 {
                     filtered.Add(warning);
                 }
