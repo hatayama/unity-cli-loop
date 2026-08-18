@@ -651,6 +651,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies the status-bridge Clear path stores AwaitTimeoutAutoClear when Reason is supplied.
+        /// </summary>
+        [Test]
+        public void PausePointStatusBridgeCommand_Clear_WithAwaitTimeoutAutoClearReason_ReportsThatReason()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            JObject parameters = new()
+            {
+                ["Id"] = "jump",
+                ["Reason"] = UloopPausePointClearedReason.AwaitTimeoutAutoClear
+            };
+            PausePointStatusResponse response = PausePointStatusBridgeCommand.Clear(parameters);
+
+            Assert.That(response.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(response.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.AwaitTimeoutAutoClear));
+        }
+
+        /// <summary>
+        /// Verifies the status-bridge Clear path still records ExplicitClear when Reason is omitted.
+        /// </summary>
+        [Test]
+        public void PausePointStatusBridgeCommand_Clear_WithoutReason_ReportsExplicitClear()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            JObject parameters = new() { ["Id"] = "jump" };
+            PausePointStatusResponse response = PausePointStatusBridgeCommand.Clear(parameters);
+
+            Assert.That(response.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(response.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.ExplicitClear));
+        }
+
+        /// <summary>
         /// Verifies Clear(id) reports 0 for an id that was never enabled.
         /// </summary>
         [Test]

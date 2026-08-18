@@ -81,25 +81,30 @@ func extendPausePointExpiryFromUnity(
 	})
 }
 
-func clearPausePointAfterWaitTimeout(ctx context.Context, connection unityipc.Connection, id string) {
+func clearPausePointAfterWaitTimeout(ctx context.Context, connection unityipc.Connection, id string) bool {
 	clearContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
 	defer cancel()
-	_, _ = clearPausePointStatus(clearContext, connection, id)
+	_, err := clearPausePointStatus(clearContext, connection, id)
+	return err == nil
 }
 
 // refreshPausePointStatusAfterWaitTimeoutAutoClear clears the marker then re-reads status so the
 // timeout envelope can report Cleared. A re-read failure keeps previous so the command still
-// returns a timeout error.
+// returns a timeout error. The bool is whether the clear IPC itself succeeded: a failed clear
+// must not claim this command disarmed the marker.
 func refreshPausePointStatusAfterWaitTimeoutAutoClear(
 	ctx context.Context,
 	connection unityipc.Connection,
 	id string,
 	previous pausePointStatusResponse,
-) pausePointStatusResponse {
-	clearPausePointAfterWaitTimeout(ctx, connection, id)
+) (pausePointStatusResponse, bool) {
+	cleared := clearPausePointAfterWaitTimeout(ctx, connection, id)
+	if !cleared {
+		return previous, false
+	}
 	refreshed, err := queryPausePointStatus(ctx, connection, id)
 	if err != nil {
-		return previous
+		return previous, true
 	}
-	return refreshed
+	return refreshed, true
 }

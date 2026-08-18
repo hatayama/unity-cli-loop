@@ -348,6 +348,67 @@ func TestRunWaitForPausePointTimeoutAutoClearKeepsPreviousSnapshotWhenRereadFail
 	}
 }
 
+// Verifies a failed timeout auto-clear does not claim this command disarmed the marker, because
+// the marker is still armed and the conventional wait-again hint is the truthful recovery.
+func TestRunWaitForPausePointTimeoutDoesNotClaimClearWhenClearIpcFails(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalClear := clearPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		clearPausePointStatus = originalClear
+		pausePointStatusPoll = originalPoll
+	}()
+
+	enabledResponse := pausePointStatusResponse{
+		Id:                              "jump",
+		Status:                          pausePointStatusEnabled,
+		IsEnabled:                       true,
+		TimeoutSeconds:                  1,
+		ElapsedSinceEnabledMilliseconds: 100,
+		EditorState:                     pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		Message:                         "Pause point enabled.",
+	}
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return enabledResponse, nil
+	}
+	clearPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{}, errors.New("pause point clear failed")
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+		timeout:        5 * time.Millisecond,
+	}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected failure, got %d with stdout %s", code, stdout.String())
+	}
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	if envelope.Error.Details["Status"] != pausePointStatusEnabled {
+		t.Fatalf("status detail mismatch: %#v", envelope.Error.Details)
+	}
+	if _, exists := envelope.Error.Details["MarkerClearedByThisCommand"]; exists {
+		t.Fatalf("failed clear must not claim this command cleared the marker: %#v", envelope.Error.Details)
+	}
+	wantHint := pausePointTimeoutHint(enabledResponse, false, false)
+	if envelope.Error.Details["Hint"] != wantHint {
+		t.Fatalf("hint mismatch:\n got: %#v\nwant: %#v", envelope.Error.Details["Hint"], wantHint)
+	}
+}
+
 // Verifies pause point wait errors expose recovery and generation details from Unity.
 func TestPausePointExpiredErrorReportsRecoveryFields(t *testing.T) {
 	response := pausePointStatusResponse{

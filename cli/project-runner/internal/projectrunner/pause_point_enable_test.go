@@ -850,6 +850,45 @@ func TestRunEnablePausePointCommandAwaitTimeoutIncludesNonFiringHint(t *testing.
 	}
 }
 
+// Verifies the Unity clear IPC payload carries Id and Reason=AwaitTimeoutAutoClear, so a key
+// rename or a stub-only test cannot hide a broken timeout auto-clear contract.
+func TestClearPausePointStatusFromUnitySendsAwaitTimeoutAutoClearReason(t *testing.T) {
+	listener := newLoopbackIpcListener(t)
+	requests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointClearStatusCommandName,
+		requests,
+		serverErr,
+		`{"Success":true,"Id":"jump","Status":"Cleared","ClearedReason":"AwaitTimeoutAutoClear"}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	response, err := clearPausePointStatusFromUnity(context.Background(), connection, "jump")
+	if err != nil {
+		t.Fatalf("clearPausePointStatusFromUnity failed: %v", err)
+	}
+	if response.Id != "jump" || response.Status != pausePointStatusCleared {
+		t.Fatalf("response mismatch: %#v", response)
+	}
+
+	params := readIPCRequest(t, requests)
+	if params["Id"] != "jump" {
+		t.Fatalf("Id mismatch: %#v", params)
+	}
+	if params["Reason"] != pausePointAwaitTimeoutAutoClearReason {
+		t.Fatalf("Reason mismatch: %#v", params)
+	}
+}
+
 func serveSingleIPCResponse(
 	listener net.Listener,
 	expectedMethod string,

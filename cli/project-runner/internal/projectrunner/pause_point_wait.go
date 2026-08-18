@@ -290,8 +290,10 @@ func runWaitForPausePoint(
 	// Why skip clear when hasNewHitBaseline: the continuous/trace marker is still armed, and the
 	// timeout hint tells the caller to await again (with --resume-play). Clearing here would disarm
 	// it and discard the raw capture holder, making that recovery path impossible.
+	markerClearedByThisCommand := false
 	if state == pausePointWaitStateTimeout && !hasNewHitBaseline {
-		response = refreshPausePointStatusAfterWaitTimeoutAutoClear(ctx, connection, options.id, response)
+		response, markerClearedByThisCommand = refreshPausePointStatusAfterWaitTimeoutAutoClear(
+			ctx, connection, options.id, response)
 	}
 
 	waitErr := pausePointWaitError(
@@ -300,7 +302,7 @@ func runWaitForPausePoint(
 		response,
 		state,
 		hasNewHitBaseline,
-		state == pausePointWaitStateTimeout && !hasNewHitBaseline,
+		markerClearedByThisCommand,
 	)
 	if triggerResult != nil {
 		waitErr.Details["TriggerResult"] = triggerResult
