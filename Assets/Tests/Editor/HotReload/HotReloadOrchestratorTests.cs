@@ -33,6 +33,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadPatcher.RevertAll();
         }
 
+        // Keep in sync with AddedMethodSkipReasons.UnavailableAddedCall in
+        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
+        // That type lives in the Unity-ignored worker process and is not visible here.
+        private const string UnavailableAddedCallSkipReason =
+            "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
+
         /// <summary>
         /// What: the added-field store assembly is injected only when the store flag is set,
         /// matching the Harmony optional-reference pattern.
@@ -4178,6 +4184,90 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
             Assert.That(host.ExistingValue(), Is.EqualTo(10));
+        }
+
+        /// <summary>
+        /// What: when isolation excludes a failed added method A and its direct added caller B,
+        /// the retry worker skip for transitive caller C (C calls B, not A) appears in the
+        /// response as Skipped with UnavailableAddedCall, while independent edited method D
+        /// still patches.
+        /// </summary>
+        [Test]
+        public async Task Run_IsolationRetry_ReportsTransitiveCallerOfExcludedAddedMethodAsSkipped()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string edited = onDisk.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public int ExistingValue()\n        {\n            return 10;\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return AddedHealthy(value);\n        }",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }",
+                "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n\n"
+                + "        public int AddedBroken(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }\n\n"
+                + "        public int AddedHealthy(int value)\n        {\n            return AddedBroken(value);\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            string editedPath = WriteEditedSource("IsolationRetryTransitiveCaller.cs", edited);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            Assert.That(
+                FindSkippedReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(UnavailableAddedCallSkipReason));
+            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+        }
+
+        /// <summary>
+        /// What: a signature-change gate retry that excludes an added replacement and its
+        /// direct added caller still reports the transitive caller as Skipped with
+        /// UnavailableAddedCall, while an independent edited method still patches.
+        /// </summary>
+        [Test]
+        public async Task Run_SignatureChangeGateRetry_ReportsTransitiveCallerOfExcludedAddedMethodAsSkipped()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return AddedBridge(value);\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                    "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int ToDelete(int value)\n        {\n            return value;\n        }",
+                    "        public int ToDelete(int value)\n        {\n            return value;\n        }\n\n"
+                    + "        public int AddedBridge(int value)\n        {\n            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeGateTransitiveCaller.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            Assert.That(
+                FindSkippedReason(
+                    result,
+                    nameof(HotReloadSignatureChangeExternalHost.SameFileCaller)),
+                Is.EqualTo(UnavailableAddedCallSkipReason));
+            AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
         }
 
         private static int FindLineNumberContaining(string source, string fragment)
