@@ -107,13 +107,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             addedFields.Sort(StringComparer.Ordinal);
-            (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount) =
+            (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount) =
                 CountMethodOutcomeKinds(outcomes);
             LogHotReloadApplySummary(
                 patchedCount,
                 failedCount,
                 skippedCount,
                 alreadyActiveCount,
+                addedCount,
                 failedCount == 0,
                 correlationId);
             return new HotReloadOrchestratorResult(
@@ -1177,13 +1178,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 + string.Join(",", parameterTypeFullNames ?? Array.Empty<string>()) + ")";
         }
 
-        private static (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount)
+        private static (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount)
             CountMethodOutcomeKinds(IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
             int patchedCount = 0;
             int failedCount = 0;
             int skippedCount = 0;
             int alreadyActiveCount = 0;
+            int addedCount = 0;
             for (int index = 0; index < outcomes.Count; index++)
             {
                 HotReloadMethodOutcomeKind kind = outcomes[index].Kind;
@@ -1203,9 +1205,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     alreadyActiveCount++;
                 }
+                else if (kind == HotReloadMethodOutcomeKind.Added)
+                {
+                    addedCount++;
+                }
             }
 
-            return (patchedCount, failedCount, skippedCount, alreadyActiveCount);
+            return (patchedCount, failedCount, skippedCount, alreadyActiveCount, addedCount);
         }
 
         private static void LogHotReloadFileStart(
@@ -1244,6 +1250,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void LogHotReloadShimCompileFailed(
             HotReloadShimCompileResult compileResult,
+            string stage,
             string correlationId)
         {
             string firstError = compileResult.Errors.Count > 0
@@ -1254,6 +1261,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "Hot reload shim compile failed.",
                 new
                 {
+                    stage,
                     errorCount = compileResult.Errors.Count,
                     firstError
                 },
@@ -1261,9 +1269,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static void LogHotReloadIsolationRetry(
-            IsolationExclusions exclusions,
-            TransformWorkerOutputDto retryOutput,
+            int excludedMethodKeyCount,
+            int excludedAddedMethodKeyCount,
+            int retryEntryCount,
+            int retrySkippedCount,
             int retryOnlySkippedCount,
+            bool retryWorkerSuccess,
+            string trigger,
             string correlationId)
         {
             VibeLogger.LogInfo(
@@ -1271,10 +1283,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "Hot reload isolation retry.",
                 new
                 {
-                    excludedMethodKeyCount = exclusions.ExcludedMethodKeys.Length,
-                    excludedAddedMethodKeyCount = exclusions.ExcludedAddedMethodKeys.Length,
-                    retryEntryCount = retryOutput.entries?.Length ?? 0,
-                    retrySkippedCount = retryOutput.skipped?.Length ?? 0,
+                    trigger,
+                    retryWorkerSuccess,
+                    excludedMethodKeyCount,
+                    excludedAddedMethodKeyCount,
+                    retryEntryCount,
+                    retrySkippedCount,
                     retryOnlySkippedCount
                 },
                 correlationId);
@@ -1299,6 +1313,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int failedCount,
             int skippedCount,
             int alreadyActiveCount,
+            int addedCount,
             bool success,
             string correlationId)
         {
@@ -1311,6 +1326,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     failedCount,
                     skippedCount,
                     alreadyActiveCount,
+                    addedCount,
                     success
                 },
                 correlationId);
@@ -1372,6 +1388,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines,
                 workerOutput.skipped,
                 assemblyResolvePath,
+                HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
                 correlationId,
                 ct).ConfigureAwait(false);
             return retry.Isolation;
@@ -1387,6 +1404,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] defines,
             TransformWorkerSkippedDto[] firstPassSkipped,
             string assemblyResolvePath,
+            string trigger,
             string correlationId,
             CancellationToken ct)
         {
@@ -1409,6 +1427,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 await TransformWorkerClient.RunAsync(retryInput, ct).ConfigureAwait(false);
             if (!retryWorkerResult.Success)
             {
+                LogHotReloadIsolationRetry(
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    false,
+                    trigger,
+                    correlationId);
                 return IsolationRetryRunResult.Failed(
                     "Retry worker failed: " + retryWorkerResult.ErrorMessage);
             }
@@ -1423,9 +1450,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblyResolvePath);
             skippedCallerOutcomes.AddRange(retryOnlySkipped);
             LogHotReloadIsolationRetry(
-                exclusions,
-                retryOutput,
+                exclusions.ExcludedMethodKeys.Length,
+                exclusions.ExcludedAddedMethodKeys.Length,
+                retryOutput.entries?.Length ?? 0,
+                retryOutput.skipped?.Length ?? 0,
                 retryOnlySkipped.Count,
+                true,
+                trigger,
                 correlationId);
             if (string.IsNullOrEmpty(retryOutput.shimSource) || retryOutput.entries.Length == 0)
             {
@@ -1463,6 +1494,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ct).ConfigureAwait(false);
             if (!retryCompileResult.Success)
             {
+                LogHotReloadShimCompileFailed(
+                    retryCompileResult,
+                    HotReloadConstants.VibeLogShimCompileStageRetry,
+                    correlationId);
                 return IsolationRetryRunResult.Failed(
                     "Retry shim compile failed: " + retryCompileResult.ErrorMessage);
             }
@@ -1731,7 +1766,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return ShimFirstCompileResult.Succeeded(entriesToPatch, compileResult);
             }
 
-            LogHotReloadShimCompileFailed(compileResult, correlationId);
+            LogHotReloadShimCompileFailed(
+                compileResult,
+                HotReloadConstants.VibeLogShimCompileStageFirstPass,
+                correlationId);
 
             // Why isolate only here: a signature-change gate retry already used
             // RunIsolationRetryAsync (worker run #2). Calling isolation after that would be a
@@ -1873,6 +1911,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines,
                 workerOutput.skipped,
                 assemblyResolvePath,
+                HotReloadConstants.VibeLogIsolationTriggerSignatureChangeGate,
                 correlationId,
                 ct).ConfigureAwait(false);
             List<string> gatedReplacementMethodKeys =
