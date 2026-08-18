@@ -464,11 +464,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: after cleanup resumes off-thread, no-tests diagnostics still run on the main thread.
+        /// What: after cleanup is proven off-thread, no-tests diagnostics still run on the main thread.
         /// </summary>
         [Test]
         public async Task ExecuteAsync_WhenCleanupResumesOffThread_RunsNoTestsDiagnosticsOnMainThread()
         {
+            OffThreadCleanupResume cleanupResume = new OffThreadCleanupResume();
             RecordingNoTestsDiagnosticCapture diagnosticCapture = new RecordingNoTestsDiagnosticCapture();
             StubTestExecutionService executionService = new StubTestExecutionService
             {
@@ -494,7 +495,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new TestFilterCreationService(),
                 executionService,
                 validationService,
-                waitForTestRunnerCleanupAsync: ResumeCleanupOnThreadPoolAsync,
+                waitForTestRunnerCleanupAsync: cleanupResume.ResumeAsync,
                 appendNoTestsDiagnostics: diagnosticCapture.Append);
             RunTestsSchema parameters = new RunTestsSchema
             {
@@ -505,16 +506,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.NoTestsFound, Is.True);
+            Assert.That(cleanupResume.ObservedIsMainThread, Is.False);
             Assert.That(diagnosticCapture.AppendCalled, Is.True);
             Assert.That(diagnosticCapture.ObservedIsMainThread, Is.True);
-        }
-
-        private static async Task ResumeCleanupOnThreadPoolAsync(CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-            // Why TimerDelay instead of Task.Run: EditMode guardrails forbid thread-pool tests
-            // that can stall the runner; this is the same timer resume production cleanup uses.
-            await TimerDelay.Wait(1, ct).ConfigureAwait(false);
         }
 
         private static Task NoCleanupWait(CancellationToken ct)
@@ -576,6 +570,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ct.ThrowIfCancellationRequested();
                 WasCalled = true;
                 return Task.FromResult(NextResult);
+            }
+        }
+
+        /// <summary>
+        /// Test support type that resumes cleanup off-thread without Task.Run.
+        /// </summary>
+        private sealed class OffThreadCleanupResume
+        {
+            public bool ObservedIsMainThread { get; private set; }
+
+            public async Task ResumeAsync(CancellationToken ct)
+            {
+                ct.ThrowIfCancellationRequested();
+                // Why loop TimerDelay instead of Task.Run: EditMode guardrails
+                // forbid thread-pool tests that can stall the runner. A single
+                // Wait(1).ConfigureAwait(false) can complete before await and
+                // continue inline on the main thread; retry until a suspend
+                // actually resumes off-thread.
+                while (MainThreadSwitcher.IsMainThread)
+                {
+                    await TimerDelay.Wait(1, ct).ConfigureAwait(false);
+                }
+
+                ObservedIsMainThread = MainThreadSwitcher.IsMainThread;
             }
         }
 
