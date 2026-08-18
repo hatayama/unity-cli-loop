@@ -445,10 +445,17 @@ func runPausePointWaitAfterEnable(
 	// timeout hint tells the caller to await again (with --resume-play). Clearing here would disarm
 	// it and discard the raw capture holder, making that recovery path impossible.
 	if state == pausePointWaitStateTimeout && !hasNewHitBaseline {
-		clearPausePointAfterWaitTimeout(ctx, connection, options.id)
+		response = refreshPausePointStatusAfterWaitTimeoutAutoClear(ctx, connection, options.id, response)
 	}
 
-	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state, hasNewHitBaseline)
+	waitErr := pausePointWaitError(
+		connection.ProjectRoot,
+		options,
+		response,
+		state,
+		hasNewHitBaseline,
+		state == pausePointWaitStateTimeout && !hasNewHitBaseline,
+	)
 	waitErr.Command = pausePointEnableCommandName
 	if enableFields.Warning != "" {
 		waitErr.Details["EnableWarning"] = enableFields.Warning

@@ -15,7 +15,7 @@ func TestPausePointTimeoutHint_SuppressedByHotReload_WinsOverOtherBranches(t *te
 		},
 	}
 
-	hint := pausePointTimeoutHint(response, true)
+	hint := pausePointTimeoutHint(response, true, false)
 	if hint != pausePointHintSuppressedByHotReload {
 		t.Fatalf("expected suppressed hint, got %q", hint)
 	}
@@ -35,7 +35,7 @@ func TestPausePointTimeoutHint_SuppressedByHotReload_ReturnsReasonOnly(t *testin
 		},
 	}
 
-	hint := pausePointTimeoutHint(response, false)
+	hint := pausePointTimeoutHint(response, false, false)
 	if hint != reason {
 		t.Fatalf("expected reason-only hint %q, got %q", reason, hint)
 	}
@@ -54,7 +54,7 @@ func TestPausePointTimeoutHint_SuppressedByHotReload_EmptyReasonUsesFallback(t *
 		},
 	}
 
-	hint := pausePointTimeoutHint(response, false)
+	hint := pausePointTimeoutHint(response, false, false)
 	if hint != pausePointHintSuppressedByHotReload {
 		t.Fatalf("expected fallback suppressed hint, got %q", hint)
 	}
@@ -73,7 +73,7 @@ func TestPausePointTimeoutHint_NotSuppressed_ReturnsEnabledNeverHitHint(t *testi
 		},
 	}
 
-	hint := pausePointTimeoutHint(response, false)
+	hint := pausePointTimeoutHint(response, false, false)
 	if hint == pausePointHintSuppressedByHotReload {
 		t.Fatalf("did not expect suppressed hint when SuppressedByHotReload is false")
 	}
@@ -128,5 +128,65 @@ func TestPausePointStateError_DetailsIncludeSuppressedByHotReload(t *testing.T) 
 	}
 	if !suppressed {
 		t.Fatalf("expected SuppressedByHotReload Details to be true")
+	}
+}
+
+// Verifies timeout auto-clear diagnosis is the re-enable hint, not the old "wait again" path.
+func TestPausePointTimeoutHint_AutoCleared_ReturnsReEnableHint(t *testing.T) {
+	response := pausePointStatusResponse{
+		Status:        pausePointStatusCleared,
+		ClearedReason: pausePointAwaitTimeoutAutoClearReason,
+		EditorState: pausePointEditorState{
+			IsPlaying: true,
+			IsPaused:  false,
+		},
+	}
+
+	hint := pausePointTimeoutHint(response, false, true)
+	wantHint := pausePointHintTimeoutAutoCleared + pausePointNonFiringPatternsHint
+	if hint != wantHint {
+		t.Fatalf("hint mismatch:\n got: %q\nwant: %q", hint, wantHint)
+	}
+}
+
+// Verifies a new-hit-baseline timeout keeps the already-hit hint even when Status is still Enabled.
+func TestPausePointTimeoutHint_NewHitBaseline_KeepsAlreadyHitHint(t *testing.T) {
+	response := pausePointStatusResponse{
+		Status:   pausePointStatusEnabled,
+		HitCount: 1,
+		EditorState: pausePointEditorState{
+			IsPlaying: true,
+			IsPaused:  true,
+		},
+	}
+
+	hint := pausePointTimeoutHint(response, true, false)
+	if hint != pausePointHintAlreadyHitWaitingForNew {
+		t.Fatalf("hint mismatch: got %q, want %q", hint, pausePointHintAlreadyHitWaitingForNew)
+	}
+}
+
+// Verifies pausePointStateError exposes ClearedReason and StatusBeforeClear when Unity populated them.
+func TestPausePointStateError_DetailsIncludeClearedReasonAndStatusBeforeClear(t *testing.T) {
+	response := pausePointStatusResponse{
+		Status:            pausePointStatusCleared,
+		ClearedReason:     pausePointAwaitTimeoutAutoClearReason,
+		StatusBeforeClear: pausePointStatusEnabled,
+	}
+	options := waitForPausePointOptions{id: "marker", timeoutSeconds: 30}
+
+	err := pausePointStateError(
+		"PAUSE_POINT_WAIT_TIMEOUT",
+		"Pause point was not hit within 30s.",
+		"/tmp/project",
+		options,
+		response,
+		true)
+
+	if err.Details["ClearedReason"] != pausePointAwaitTimeoutAutoClearReason {
+		t.Fatalf("ClearedReason mismatch: %#v", err.Details)
+	}
+	if err.Details["StatusBeforeClear"] != pausePointStatusEnabled {
+		t.Fatalf("StatusBeforeClear mismatch: %#v", err.Details)
 	}
 }

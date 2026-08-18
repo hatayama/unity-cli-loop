@@ -634,6 +634,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies Clear(id, AwaitTimeoutAutoClear) stores that reason on the cleared snapshot.
+        /// </summary>
+        [Test]
+        public void Clear_WithAwaitTimeoutAutoClearReason_ReportsThatReasonOnSnapshot()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            (UloopPausePointSnapshot snapshot, bool _, int clearedCount) =
+                UloopPausePointRegistry.Clear("jump", UloopPausePointClearedReason.AwaitTimeoutAutoClear);
+
+            Assert.That(clearedCount, Is.EqualTo(1));
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(snapshot.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.AwaitTimeoutAutoClear));
+            Assert.That(snapshot.StatusBeforeClear, Is.EqualTo(UloopPausePointStatus.Enabled));
+        }
+
+        /// <summary>
         /// Verifies Clear(id) reports 0 for an id that was never enabled.
         /// </summary>
         [Test]

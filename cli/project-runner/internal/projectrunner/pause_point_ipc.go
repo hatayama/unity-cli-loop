@@ -63,7 +63,10 @@ func clearPausePointStatusFromUnity(
 	connection unityipc.Connection,
 	id string,
 ) (pausePointStatusResponse, error) {
-	return sendPausePointStatusCommand(ctx, connection, pausePointClearStatusCommandName, map[string]any{"Id": id})
+	return sendPausePointStatusCommand(ctx, connection, pausePointClearStatusCommandName, map[string]any{
+		"Id":     id,
+		"Reason": pausePointAwaitTimeoutAutoClearReason,
+	})
 }
 
 func extendPausePointExpiryFromUnity(
@@ -82,4 +85,21 @@ func clearPausePointAfterWaitTimeout(ctx context.Context, connection unityipc.Co
 	clearContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
 	defer cancel()
 	_, _ = clearPausePointStatus(clearContext, connection, id)
+}
+
+// refreshPausePointStatusAfterWaitTimeoutAutoClear clears the marker then re-reads status so the
+// timeout envelope can report Cleared. A re-read failure keeps previous so the command still
+// returns a timeout error.
+func refreshPausePointStatusAfterWaitTimeoutAutoClear(
+	ctx context.Context,
+	connection unityipc.Connection,
+	id string,
+	previous pausePointStatusResponse,
+) pausePointStatusResponse {
+	clearPausePointAfterWaitTimeout(ctx, connection, id)
+	refreshed, err := queryPausePointStatus(ctx, connection, id)
+	if err != nil {
+		return previous
+	}
+	return refreshed
 }
