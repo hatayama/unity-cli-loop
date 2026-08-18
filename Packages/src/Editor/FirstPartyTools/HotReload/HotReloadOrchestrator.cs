@@ -41,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(files != null, "files must not be null.");
             Debug.Assert(files.Count > 0, "files must not be empty.");
 
+            string correlationId = VibeLogger.GenerateCorrelationId();
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
             List<string> suppressedPausePointIds = new List<string>();
@@ -72,6 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadFileProcessResult fileResult = await ProcessFileAsync(
                     filePath,
                     workerSourcePath,
+                    correlationId,
                     ct).ConfigureAwait(false);
 
                 outcomes.AddRange(fileResult.Outcomes);
@@ -105,6 +107,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             addedFields.Sort(StringComparer.Ordinal);
+            (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount) =
+                CountMethodOutcomeKinds(outcomes);
+            LogHotReloadApplySummary(
+                patchedCount,
+                failedCount,
+                skippedCount,
+                alreadyActiveCount,
+                addedCount,
+                failedCount == 0,
+                correlationId);
             return new HotReloadOrchestratorResult(
                 outcomes,
                 warnings,
@@ -119,6 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static async Task<HotReloadFileProcessResult> ProcessFileAsync(
             string assemblyResolvePath,
             string workerSourcePath,
+            string correlationId,
             CancellationToken ct)
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
@@ -184,6 +197,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 assemblyResolvePath,
                 outcomes);
+            LogHotReloadFileStart(projectRelativePath, unchangedDecision, correlationId);
             if (unchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
             {
                 return new HotReloadFileProcessResult(outcomes, warnings, 0);
@@ -228,6 +242,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             TransformWorkerClientResult workerResult =
                 await TransformWorkerClient.RunAsync(workerInput, ct).ConfigureAwait(false);
+            LogHotReloadWorkerResult(workerResult, correlationId);
             if (!workerResult.Success)
             {
                 outcomes.Add(
@@ -308,6 +323,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines,
                 assemblyResolvePath,
                 projectRelativePath,
+                correlationId,
                 ct).ConfigureAwait(false);
             // Why after the gate: a gated replacement is not applied, so listing it under
             // "Removed members stay present... edited bodies no longer call them" is false.
@@ -371,6 +387,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Worker failure and shim-compile failure return earlier or later without
                 // clearing — same as leaving existing Harmony patches in place when apply does
                 // not succeed.
+                IReadOnlyList<string> addedLabelsAtClear =
+                    HotReloadAddedMemberRegistry.ListActiveMethodKeys(projectRelativePath);
+                LogHotReloadEmptyEntriesClear(addedLabelsAtClear, correlationId);
                 HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
                 // Why after the clear: a still-declared added method can be worker-skipped
                 // (virtual/generic), leaving entries empty while the registry drop is real.
@@ -397,6 +416,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     targetDllPath,
                     defines,
                     assemblyResolvePath,
+                    correlationId,
                     ct).ConfigureAwait(false);
                 if (firstCompile.AddedFieldNames != null)
                 {
@@ -1158,6 +1178,160 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 + string.Join(",", parameterTypeFullNames ?? Array.Empty<string>()) + ")";
         }
 
+        private static (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount)
+            CountMethodOutcomeKinds(IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            int patchedCount = 0;
+            int failedCount = 0;
+            int skippedCount = 0;
+            int alreadyActiveCount = 0;
+            int addedCount = 0;
+            for (int index = 0; index < outcomes.Count; index++)
+            {
+                HotReloadMethodOutcomeKind kind = outcomes[index].Kind;
+                if (kind == HotReloadMethodOutcomeKind.Patched)
+                {
+                    patchedCount++;
+                }
+                else if (kind == HotReloadMethodOutcomeKind.Failed)
+                {
+                    failedCount++;
+                }
+                else if (kind == HotReloadMethodOutcomeKind.Skipped)
+                {
+                    skippedCount++;
+                }
+                else if (kind == HotReloadMethodOutcomeKind.AlreadyActive)
+                {
+                    alreadyActiveCount++;
+                }
+                else if (kind == HotReloadMethodOutcomeKind.Added)
+                {
+                    addedCount++;
+                }
+            }
+
+            return (patchedCount, failedCount, skippedCount, alreadyActiveCount, addedCount);
+        }
+
+        private static void LogHotReloadFileStart(
+            string projectRelativePath,
+            HotReloadUnchangedSourceDecision unchangedDecision,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogFileStart,
+                "Hot reload file start.",
+                new
+                {
+                    projectRelativePath,
+                    unchangedDecision = unchangedDecision.ToString()
+                },
+                correlationId);
+        }
+
+        private static void LogHotReloadWorkerResult(
+            TransformWorkerClientResult workerResult,
+            string correlationId)
+        {
+            TransformWorkerOutputDto output = workerResult.Output;
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogWorkerResult,
+                "Hot reload worker result.",
+                new
+                {
+                    entryCount = output?.entries?.Length ?? 0,
+                    skippedCount = output?.skipped?.Length ?? 0,
+                    unchangedCount = output?.unchangedMethods?.Length ?? 0,
+                    workerSuccess = workerResult.Success
+                },
+                correlationId);
+        }
+
+        private static void LogHotReloadShimCompileFailed(
+            HotReloadShimCompileResult compileResult,
+            string stage,
+            string correlationId)
+        {
+            string firstError = compileResult.Errors.Count > 0
+                ? compileResult.Errors[0].Message
+                : compileResult.ErrorMessage;
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogShimCompileFailed,
+                "Hot reload shim compile failed.",
+                new
+                {
+                    stage,
+                    errorCount = compileResult.Errors.Count,
+                    firstError
+                },
+                correlationId);
+        }
+
+        private static void LogHotReloadIsolationRetry(
+            int excludedMethodKeyCount,
+            int excludedAddedMethodKeyCount,
+            int retryEntryCount,
+            int retrySkippedCount,
+            int retryOnlySkippedCount,
+            bool retryWorkerSuccess,
+            string trigger,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogIsolationRetry,
+                "Hot reload isolation retry.",
+                new
+                {
+                    trigger,
+                    retryWorkerSuccess,
+                    excludedMethodKeyCount,
+                    excludedAddedMethodKeyCount,
+                    retryEntryCount,
+                    retrySkippedCount,
+                    retryOnlySkippedCount
+                },
+                correlationId);
+        }
+
+        private static void LogHotReloadEmptyEntriesClear(
+            IReadOnlyList<string> addedLabelsAtClear,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogEmptyEntriesClear,
+                "Hot reload empty-entries registry clear.",
+                new
+                {
+                    addedLabels = addedLabelsAtClear
+                },
+                correlationId);
+        }
+
+        private static void LogHotReloadApplySummary(
+            int patchedCount,
+            int failedCount,
+            int skippedCount,
+            int alreadyActiveCount,
+            int addedCount,
+            bool success,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                HotReloadConstants.VibeLogApplySummary,
+                "Hot reload apply summary.",
+                new
+                {
+                    patchedCount,
+                    failedCount,
+                    skippedCount,
+                    alreadyActiveCount,
+                    addedCount,
+                    success
+                },
+                correlationId);
+        }
+
         /// <summary>
         /// Retries the failed shim compile once, excluding the method(s) whose compiler errors can
         /// be attributed to them, so the rest of the file's methods can still patch. Returns null
@@ -1173,6 +1347,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string targetDllPath,
             string[] defines,
             string assemblyResolvePath,
+            string correlationId,
             CancellationToken ct)
         {
             if (compileResult.Errors.Count == 0)
@@ -1213,6 +1388,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines,
                 workerOutput.skipped,
                 assemblyResolvePath,
+                HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
+                correlationId,
                 ct).ConfigureAwait(false);
             return retry.Isolation;
         }
@@ -1227,6 +1404,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] defines,
             TransformWorkerSkippedDto[] firstPassSkipped,
             string assemblyResolvePath,
+            string trigger,
+            string correlationId,
             CancellationToken ct)
         {
             TransformWorkerInputDto retryInput = new TransformWorkerInputDto
@@ -1248,6 +1427,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 await TransformWorkerClient.RunAsync(retryInput, ct).ConfigureAwait(false);
             if (!retryWorkerResult.Success)
             {
+                LogHotReloadIsolationRetry(
+                    exclusions.ExcludedMethodKeys.Length,
+                    exclusions.ExcludedAddedMethodKeys.Length,
+                    0,
+                    0,
+                    0,
+                    false,
+                    trigger,
+                    correlationId);
                 return IsolationRetryRunResult.Failed(
                     "Retry worker failed: " + retryWorkerResult.ErrorMessage);
             }
@@ -1256,11 +1444,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why drop first-pass (Method, Reason) pairs: consuming them again would duplicate
             // every per-file skip. Retry-only pairs are new — typically transitive callers of
             // excluded added methods — and must surface or the edit is applied nowhere.
-            skippedCallerOutcomes.AddRange(
-                CollectRetryOnlySkippedOutcomes(
-                    firstPassSkipped,
-                    retryOutput.skipped,
-                    assemblyResolvePath));
+            List<HotReloadMethodOutcome> retryOnlySkipped = CollectRetryOnlySkippedOutcomes(
+                firstPassSkipped,
+                retryOutput.skipped,
+                assemblyResolvePath);
+            skippedCallerOutcomes.AddRange(retryOnlySkipped);
+            LogHotReloadIsolationRetry(
+                exclusions.ExcludedMethodKeys.Length,
+                exclusions.ExcludedAddedMethodKeys.Length,
+                retryOutput.entries?.Length ?? 0,
+                retryOutput.skipped?.Length ?? 0,
+                retryOnlySkipped.Count,
+                true,
+                trigger,
+                correlationId);
             if (string.IsNullOrEmpty(retryOutput.shimSource) || retryOutput.entries.Length == 0)
             {
                 return IsolationRetryRunResult.Succeeded(
@@ -1297,6 +1494,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ct).ConfigureAwait(false);
             if (!retryCompileResult.Success)
             {
+                LogHotReloadShimCompileFailed(
+                    retryCompileResult,
+                    HotReloadConstants.VibeLogShimCompileStageRetry,
+                    correlationId);
                 return IsolationRetryRunResult.Failed(
                     "Retry shim compile failed: " + retryCompileResult.ErrorMessage);
             }
@@ -1530,6 +1731,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string targetDllPath,
             string[] defines,
             string assemblyResolvePath,
+            string correlationId,
             CancellationToken ct)
         {
             // BuildShimReferencePaths reads Application.dataPath / platform; stay on main thread.
@@ -1564,6 +1766,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return ShimFirstCompileResult.Succeeded(entriesToPatch, compileResult);
             }
 
+            LogHotReloadShimCompileFailed(
+                compileResult,
+                HotReloadConstants.VibeLogShimCompileStageFirstPass,
+                correlationId);
+
             // Why isolate only here: a signature-change gate retry already used
             // RunIsolationRetryAsync (worker run #2). Calling isolation after that would be a
             // third worker run. Gate retry compile failures return Failed from the gate and
@@ -1576,6 +1783,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetDllPath,
                 defines,
                 assemblyResolvePath,
+                correlationId,
                 ct).ConfigureAwait(false);
             if (isolation == null)
             {
@@ -1640,6 +1848,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] defines,
             string assemblyResolvePath,
             string projectRelativePath,
+            string correlationId,
             CancellationToken ct)
         {
             TransformWorkerEntryDto[] entries = workerOutput.entries ?? Array.Empty<TransformWorkerEntryDto>();
@@ -1702,6 +1911,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines,
                 workerOutput.skipped,
                 assemblyResolvePath,
+                HotReloadConstants.VibeLogIsolationTriggerSignatureChangeGate,
+                correlationId,
                 ct).ConfigureAwait(false);
             List<string> gatedReplacementMethodKeys =
                 CollectGatedReplacementMethodKeys(gatedReplacements);

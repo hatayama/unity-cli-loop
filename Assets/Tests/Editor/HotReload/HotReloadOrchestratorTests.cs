@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void TearDown()
         {
             HotReloadPatcher.RevertAll();
+            VibeLogger.ClearMemoryLogs();
         }
 
         // Keep in sync with AddedMethodSkipReasons.UnavailableAddedCall in
@@ -3909,11 +3910,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "        public int Unrelated(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }",
                     StringComparison.Ordinal);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
+            VibeLogger.ClearMemoryLogs();
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("SignatureChangeGateRetryFailure.cs", edited),
                 CancellationToken.None);
+
+            List<JObject> gateLogs = ReadHotReloadVibeLogs();
+            JObject gateFileStart = FindVibeLog(gateLogs, HotReloadConstants.VibeLogFileStart);
+            JObject gateIsolationRetry = FindVibeLog(gateLogs, HotReloadConstants.VibeLogIsolationRetry);
+            JObject gateShimCompileFailed = FindVibeLog(gateLogs, HotReloadConstants.VibeLogShimCompileFailed);
+            AssertSameHotReloadCorrelation(gateFileStart, gateIsolationRetry, gateShimCompileFailed);
+            Assert.That(
+                (string)gateIsolationRetry["context"]["trigger"],
+                Is.EqualTo(HotReloadConstants.VibeLogIsolationTriggerSignatureChangeGate));
+            Assert.That(
+                (string)gateShimCompileFailed["context"]["stage"],
+                Is.EqualTo(HotReloadConstants.VibeLogShimCompileStageRetry));
 
             Assert.That(result.Methods.Count, Is.EqualTo(1), FormatOutcomes(result));
             HotReloadMethodOutcome outcome = result.Methods[0];
@@ -4447,6 +4461,160 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     nameof(HotReloadSignatureChangeExternalHost.SameFileCaller)),
                 Is.EqualTo(UnavailableAddedCallSkipReason));
             AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
+        }
+
+        /// <summary>
+        /// What: a successful apply records file-start, worker-result, and apply-summary
+        /// VibeLogger operations that share one non-empty correlation id.
+        /// </summary>
+        [Test]
+        public async Task Run_SuccessfulApply_RecordsFileStartWorkerResultAndApplySummary()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "VibeLogSuccess.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    sumGridMethod:
+                    "public int SumGrid(int[,] grid)\n        {\n            return 42;\n        }"));
+            VibeLogger.ClearMemoryLogs();
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.SumGrid));
+            List<JObject> logs = ReadHotReloadVibeLogs();
+            JObject fileStart = FindVibeLog(logs, HotReloadConstants.VibeLogFileStart);
+            JObject workerResult = FindVibeLog(logs, HotReloadConstants.VibeLogWorkerResult);
+            JObject applySummary = FindVibeLog(logs, HotReloadConstants.VibeLogApplySummary);
+            AssertSameHotReloadCorrelation(fileStart, workerResult, applySummary);
+            Assert.That(
+                (int)applySummary["context"]["addedCount"],
+                Is.EqualTo(CountOutcomeKind(result, HotReloadMethodOutcomeKind.Added)));
+        }
+
+        /// <summary>
+        /// What: an empty-entries run that clears added members records the empty-entries
+        /// VibeLogger operation with the same correlation id as file-start.
+        /// </summary>
+        [Test]
+        public async Task Run_EmptyEntriesClear_RecordsEmptyEntriesClearVibeLog()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("VibeLogEmptyEntries1.cs", WithWorkingAddedPing(onDisk)),
+                CancellationToken.None);
+            VibeLogger.ClearMemoryLogs();
+
+            await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("VibeLogEmptyEntries2.cs", WithVirtualAddedPing(onDisk)),
+                CancellationToken.None);
+
+            List<JObject> logs = ReadHotReloadVibeLogs();
+            JObject fileStart = FindVibeLog(logs, HotReloadConstants.VibeLogFileStart);
+            JObject emptyEntriesClear = FindVibeLog(logs, HotReloadConstants.VibeLogEmptyEntriesClear);
+            AssertSameHotReloadCorrelation(fileStart, emptyEntriesClear);
+        }
+
+        /// <summary>
+        /// What: a shim compile failure that isolates one method records compile-failed and
+        /// isolation-retry VibeLogger operations that share the file-start correlation id.
+        /// </summary>
+        [Test]
+        public async Task Run_ShimCompileFailureWithIsolation_RecordsCompileFailedAndIsolationRetry()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedSource = BuildFixtureSource(
+                computeWithPrivateMethod:
+                "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }",
+                callsMissingHelperMethod:
+                "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }");
+            VibeLogger.ClearMemoryLogs();
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("VibeLogIsolation.cs", editedSource),
+                CancellationToken.None);
+
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            List<JObject> logs = ReadHotReloadVibeLogs();
+            JObject fileStart = FindVibeLog(logs, HotReloadConstants.VibeLogFileStart);
+            JObject shimCompileFailed = FindVibeLog(logs, HotReloadConstants.VibeLogShimCompileFailed);
+            JObject isolationRetry = FindVibeLog(logs, HotReloadConstants.VibeLogIsolationRetry);
+            AssertSameHotReloadCorrelation(fileStart, shimCompileFailed, isolationRetry);
+            Assert.That(
+                (string)shimCompileFailed["context"]["stage"],
+                Is.EqualTo(HotReloadConstants.VibeLogShimCompileStageFirstPass));
+            Assert.That(
+                (string)isolationRetry["context"]["trigger"],
+                Is.EqualTo(HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure));
+            Assert.That((bool)isolationRetry["context"]["retryWorkerSuccess"], Is.True);
+        }
+
+        private static List<JObject> ReadHotReloadVibeLogs()
+        {
+            JArray entries = JArray.Parse(VibeLogger.GetLogsForAi());
+            List<JObject> hotReloadLogs = new List<JObject>();
+            foreach (JToken token in entries)
+            {
+                JObject entry = (JObject)token;
+                string operation = (string)entry["operation"];
+                if (operation != null
+                    && operation.StartsWith("hot_reload_", StringComparison.Ordinal))
+                {
+                    hotReloadLogs.Add(entry);
+                }
+            }
+
+            return hotReloadLogs;
+        }
+
+        private static JObject FindVibeLog(IReadOnlyList<JObject> logs, string operation)
+        {
+            foreach (JObject entry in logs)
+            {
+                if ((string)entry["operation"] == operation)
+                {
+                    return entry;
+                }
+            }
+
+            Assert.Fail("Missing VibeLogger operation " + operation);
+            return null;
+        }
+
+        private static void AssertSameHotReloadCorrelation(JObject fileStart, params JObject[] others)
+        {
+            string correlationId = (string)fileStart["correlation_id"];
+            Assert.That(correlationId, Is.Not.Null.And.Not.Empty);
+            for (int index = 0; index < others.Length; index++)
+            {
+                Assert.That(
+                    (string)others[index]["correlation_id"],
+                    Is.EqualTo(correlationId));
+            }
+        }
+
+        private static int CountOutcomeKind(
+            HotReloadOrchestratorResult result,
+            HotReloadMethodOutcomeKind kind)
+        {
+            int count = 0;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == kind)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static int FindLineNumberContaining(string source, string fragment)
