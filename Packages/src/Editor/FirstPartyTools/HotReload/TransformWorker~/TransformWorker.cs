@@ -1573,6 +1573,81 @@ public static class TransformWorkerProgram
                 SyntaxFactory.AccessorList(SyntaxFactory.List(accessors)));
         }
 
+        // Why strip ctor/operator/event-accessor bodies: those members are reported as
+        // per-member Skipped, so a body-only edit must not also look like outside-body drift.
+        // Signature, attributes, and constructor initializers stay so those edits still warn.
+        public override SyntaxNode VisitConstructorDeclaration(ConstructorDeclarationSyntax node)
+        {
+            ConstructorDeclarationSyntax visited =
+                (ConstructorDeclarationSyntax)base.VisitConstructorDeclaration(node);
+            if (visited.Body == null && visited.ExpressionBody == null)
+            {
+                return visited;
+            }
+
+            return visited
+                .WithExpressionBody(null)
+                .WithSemicolonToken(default(SyntaxToken))
+                .WithBody(SyntaxFactory.Block());
+        }
+
+        public override SyntaxNode VisitOperatorDeclaration(OperatorDeclarationSyntax node)
+        {
+            OperatorDeclarationSyntax visited = (OperatorDeclarationSyntax)base.VisitOperatorDeclaration(node);
+            if (visited.Body == null && visited.ExpressionBody == null)
+            {
+                return visited;
+            }
+
+            return visited
+                .WithExpressionBody(null)
+                .WithSemicolonToken(default(SyntaxToken))
+                .WithBody(SyntaxFactory.Block());
+        }
+
+        public override SyntaxNode VisitConversionOperatorDeclaration(ConversionOperatorDeclarationSyntax node)
+        {
+            ConversionOperatorDeclarationSyntax visited =
+                (ConversionOperatorDeclarationSyntax)base.VisitConversionOperatorDeclaration(node);
+            if (visited.Body == null && visited.ExpressionBody == null)
+            {
+                return visited;
+            }
+
+            return visited
+                .WithExpressionBody(null)
+                .WithSemicolonToken(default(SyntaxToken))
+                .WithBody(SyntaxFactory.Block());
+        }
+
+        public override SyntaxNode VisitEventDeclaration(EventDeclarationSyntax node)
+        {
+            EventDeclarationSyntax visited = (EventDeclarationSyntax)base.VisitEventDeclaration(node);
+            if (visited.AccessorList == null)
+            {
+                return visited;
+            }
+
+            List<AccessorDeclarationSyntax> accessors = new List<AccessorDeclarationSyntax>();
+            foreach (AccessorDeclarationSyntax accessor in visited.AccessorList.Accessors)
+            {
+                if (accessor.Body == null && accessor.ExpressionBody == null)
+                {
+                    accessors.Add(accessor);
+                    continue;
+                }
+
+                accessors.Add(
+                    accessor
+                        .WithExpressionBody(null)
+                        .WithSemicolonToken(default(SyntaxToken))
+                        .WithBody(SyntaxFactory.Block()));
+            }
+
+            return visited.WithAccessorList(
+                SyntaxFactory.AccessorList(SyntaxFactory.List(accessors)));
+        }
+
         // Why strip const initializers: const drift has its own warning with both values;
         // leaving EqualsValueClause here would also trip the generic outside-body warning.
         public override SyntaxNode VisitFieldDeclaration(FieldDeclarationSyntax node)
