@@ -34,6 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int MaxHistory { get; set; } = UloopPausePointRegistry.DefaultMaxHistory;
 
         public int MaxPreviewElements { get; set; } = UloopPausePointRegistry.DefaultMaxPreviewElements;
+
+        public string Method { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -492,7 +494,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (shimLookup != null)
             {
                 SourcePausePointShimResolution shimResolution =
-                    SourcePausePointShimResolver.Resolve(shimLookup, normalizedFile, parameters.Line);
+                    SourcePausePointShimResolver.Resolve(
+                        shimLookup, normalizedFile, parameters.Line, parameters.Method);
                 if (shimResolution.Kind == SourcePausePointShimResolveKind.TransplantChainJoin
                     || shimResolution.Kind == SourcePausePointShimResolveKind.ShimDirect)
                 {
@@ -546,7 +549,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // map; only the warning text differs.
             }
 
-            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(parameters.File, parameters.Line);
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                parameters.File, parameters.Line, parameters.Method);
             if (!resolveResult.Success)
             {
                 bool hasActiveHotReloadPatches = shimLookup != null;

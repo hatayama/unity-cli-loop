@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -19,13 +20,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static SourcePausePointShimResolution Resolve(
             HotReloadShimFileLookup lookup,
             string normalizedFilePath,
-            int line)
+            int line,
+            string methodFilter = null)
         {
             Debug.Assert(lookup != null, "lookup must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(normalizedFilePath), "normalizedFilePath must not be empty.");
             Debug.Assert(line > 0, "line must be a positive 1-based line number.");
 
-            HotReloadShimMethodLookup methodEntry = FindMethodEntryForLine(lookup, line);
+            HotReloadShimMethodLookup methodEntry = FindMethodEntryForLine(lookup, line, methodFilter);
             if (methodEntry == null)
             {
                 return SourcePausePointShimResolution.NotInPatchedMethod();
@@ -137,17 +139,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static HotReloadShimMethodLookup FindMethodEntryForLine(
             HotReloadShimFileLookup lookup,
-            int line)
+            int line,
+            string methodFilter)
         {
             foreach (HotReloadShimMethodLookup method in lookup.Methods)
             {
-                if (line >= method.SourceStartLine && line <= method.SourceEndLine)
+                if (line < method.SourceStartLine || line > method.SourceEndLine)
                 {
-                    return method;
+                    continue;
                 }
+
+                if (!OriginalMethodMatchesFilter(methodFilter, method.OriginalMethod))
+                {
+                    continue;
+                }
+
+                return method;
             }
 
             return null;
+        }
+
+        private static bool OriginalMethodMatchesFilter(string methodFilter, MethodBase originalMethod)
+        {
+            Debug.Assert(originalMethod != null, "originalMethod must not be null.");
+            Type declaringType = originalMethod.DeclaringType;
+            string declaringTypeName = declaringType != null ? declaringType.Name : "?";
+            string nestedOuterTypeName =
+                declaringType != null && declaringType.DeclaringType != null
+                    ? declaringType.DeclaringType.Name
+                    : null;
+            return SourcePausePointResolver.MethodMatchesFilter(
+                methodFilter,
+                originalMethod.Name,
+                declaringTypeName,
+                nestedOuterTypeName);
         }
 
         private static (MethodDefinition method, SequencePoint sequencePoint)

@@ -14,6 +14,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static readonly Regex AutoPropertyBackingFieldPattern =
             new(@"^<([^>]+)>k__BackingField$", RegexOptions.Compiled);
 
+        // Why name patterns instead of HotReloadCallSiteScanner's attribute index: PausePoint
+        // cannot reference that assembly, and --method is a source name. Roslyn still encodes
+        // async/iterator owners as nested `<Name>d__N` types and local functions as
+        // `<Outer>g__Name|x_y`; lambdas (`<Outer>b__…`) have no source name and stay unmatched.
+        public static readonly Regex StateMachineTypeNamePattern =
+            new(@"^<([^>]+)>d__\d+$", RegexOptions.Compiled);
+        public static readonly Regex LocalFunctionMethodNamePattern =
+            new(@"^<[^>]+>g__([^|]+)\|\d+(?:_\d+)?$", RegexOptions.Compiled);
+
         public const string ScriptAssembliesRelativeDirectory = "Library/ScriptAssemblies";
         public const string CompiledAssemblyExtension = ".dll";
         public const string DebugSymbolsExtension = ".pdb";
@@ -169,6 +178,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "and that --line is on or after an executable statement inside a method body. After a code edit "
             + "or a Code Optimization switch, run uloop compile and retry. See the pause-point skill's "
             + "troubleshooting reference for specific failure patterns.";
+
+        // Format: method filter, requested line.
+        public const string NoMethodNamedWithSequencePointMessageFormat =
+            "No method named '{0}' with a sequence point on or after line {1} was found.";
 
         // Auto-retarget failure reasons surfaced on status Warning / SuppressedByHotReloadReason.
         public const string RetargetOntoHotReloadFailedReason =
