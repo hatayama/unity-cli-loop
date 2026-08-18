@@ -31,6 +31,9 @@ const (
 	// CapturedVariableHistory: repeating it would duplicate CapturedVariables.
 	pausePointCapturedVariableHistoryNote = "CapturedVariableHistory lists hits before the latest one; the latest hit's variables are in CapturedVariables."
 
+	// pausePointTraceStatusNote explains that a trace-mode Hit did not pause Play Mode.
+	pausePointTraceStatusNote = "Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running."
+
 	// Mode strings mirror UloopPausePointCaptureMode on the Unity side. Await uses an allowlist
 	// (continuous/trace) for the new-hit baseline — never `Mode != "single-shot"` — so an empty
 	// Mode from an older package keeps the historical immediate-Hit success path.
@@ -124,6 +127,14 @@ func filterPausePointCapturedVariableHistory(response pausePointStatusResponse) 
 	return response
 }
 
+// applyPausePointTraceStatusNote records that a trace-mode Hit did not pause Play Mode.
+func applyPausePointTraceStatusNote(response pausePointStatusResponse) pausePointStatusResponse {
+	if response.Mode == pausePointModeTrace && response.Status == pausePointStatusHit {
+		response.StatusNote = pausePointTraceStatusNote
+	}
+	return response
+}
+
 func runWaitForPausePointCommand(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -192,6 +203,7 @@ func runPausePointStatusCommand(
 	}
 	response = normalizePausePointStatusResponse(response)
 	response = filterPausePointCapturedVariableHistory(response)
+	response = applyPausePointTraceStatusNote(response)
 	// Evaluated against the raw CapturedVariables, before the filters below can narrow or strip
 	// values, for the same reason as on the await path (runWaitForPausePoint): otherwise an --expect
 	// target not also requested via --captured-variable-names, or whose value names mode stripped,
@@ -247,6 +259,7 @@ func runWaitForPausePoint(
 		response.TriggerResult = triggerResult
 		response.ResumePlayResult = resumeResult
 		response = filterPausePointCapturedVariableHistory(response)
+		response = applyPausePointTraceStatusNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 		// Best-effort: a hit must stay a success even if Unity is busy while paused.

@@ -71,6 +71,11 @@ type pausePointStatusResponse struct {
 	// carries that hit. omitempty keeps the field off 0-hit and unfiltered responses.
 	CapturedVariableHistoryNote string `json:"CapturedVariableHistoryNote,omitempty"`
 
+	// StatusNote is set by the CLI, not Unity, when Mode is trace and Status is Hit.
+	// omitempty keeps the field off every other mode and status so the shared status
+	// contract fixture stays unchanged.
+	StatusNote string `json:"StatusNote,omitempty"`
+
 	// TriggerResult is set by the CLI, not Unity, only when --trigger was passed. It is omitted
 	// entirely otherwise, so callers that never use --trigger see no schema change at all.
 	TriggerResult *pausePointTriggerResult `json:"TriggerResult,omitempty"`
