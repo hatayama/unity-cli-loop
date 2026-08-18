@@ -94,6 +94,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "This run deactivated previously active patches: {0}. They reverted to the compiled behavior; "
             + "edit and reload again to re-apply them, or run 'uloop compile'.";
 
+        public const string DeactivatedAddedMembersWarningFormat =
+            "This run deactivated previously active added members: {0}. They are no longer registered, but patches this run left active may still reach their previous shim bodies. Edit and reload again to re-apply them, or run 'uloop compile'.";
+
         // Wire value for TransformWorkerRemovedMemberDto.kind.
         // Keep in sync with RemovedMemberKinds in TransformWorker~/TransformWorker.cs.
         public const string RemovedMemberKindMethod = "method";
