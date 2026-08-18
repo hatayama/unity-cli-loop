@@ -840,6 +840,171 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result.Output.declarationDriftWarnings,
                 Has.Some.Contain("Edits outside method bodies"),
                 "Non-const field initializer edits must still emit the outside-body warning.");
+            AssertContainsOutsideMethodBodyDriftWarning(result, "NonConstFieldInitializerDrift.cs");
+        }
+
+        /// <summary>
+        /// What: adding a using directive plus a method-body edit does not emit the
+        /// outside-method-body drift warning, and the body edit is still Patched.
+        /// </summary>
+        [Test]
+        public async Task Run_UsingDirectiveOnlyPlusBodyEdit_DoesNotEmitOutsideBodyWarning()
+        {
+            const string fileName = "UsingDirectiveOnlyPlusBodyEdit.cs";
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string editedSource = onDisk.Replace(
+                "using UnityEngine;\n",
+                "using UnityEngine;\nusing System.Text;\n",
+                StringComparison.Ordinal);
+            editedSource = editedSource.Replace(
+                "return _secret + delta;",
+                "return _secret + delta + 1;",
+                StringComparison.Ordinal);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: using and body must differ.");
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, fileName);
+            File.WriteAllText(sourcePath, editedSource);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveE2EFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+
+            bool foundCompute = false;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == nameof(HotReloadE2EFixture.ComputeWithPrivate))
+                {
+                    foundCompute = true;
+                    break;
+                }
+            }
+
+            Assert.That(foundCompute, Is.True, "Body edit must still emit a Patched ComputeWithPrivate entry.");
+        }
+
+        private const string ExpectedAddedPropertySkipReason =
+            "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
+            + "Use a 'const' or a plain added field for the value, or run 'uloop compile'.";
+
+        private const string ExpectedExplicitAccessorSkipReason =
+            "Property setter, init, or indexer accessors are out of scope for v1; "
+            + "run 'uloop compile' to apply accessor edits.";
+
+        /// <summary>
+        /// What: adding a get-accessor property plus a method-body edit skips the getter with
+        /// the added-property reason and does not emit the outside-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedExpressionBodiedPropertyPlusBodyEdit_SkipsGetterWithoutOutsideBodyWarning()
+        {
+            const string fileName = "AddedExpressionBodiedPropertyDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource =>
+                {
+                    string next = editedSource.Replace(
+                        "        public int Counter;",
+                        "        public int AddedProbe => 7;\n\n        public int Counter;",
+                        StringComparison.Ordinal);
+                    return next.Replace(
+                        "return _secret + delta;",
+                        "return _secret + delta + 1;",
+                        StringComparison.Ordinal);
+                });
+
+            AssertSkippedContains(result, "get_AddedProbe", ExpectedAddedPropertySkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            AssertPatchedComputeWithPrivate(result);
+        }
+
+        /// <summary>
+        /// What: adding a setter-only property plus a method-body edit skips the setter with
+        /// the explicit-accessor reason and does not emit the outside-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedSetterOnlyPropertyPlusBodyEdit_SkipsSetterWithoutOutsideBodyWarning()
+        {
+            const string fileName = "AddedSetterOnlyPropertyDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource =>
+                {
+                    string next = editedSource.Replace(
+                        "        public int Counter;",
+                        "        public int AddedSetterOnly { set { } }\n\n        public int Counter;",
+                        StringComparison.Ordinal);
+                    return next.Replace(
+                        "return _secret + delta;",
+                        "return _secret + delta + 1;",
+                        StringComparison.Ordinal);
+                });
+
+            AssertSkippedContains(result, "set_AddedSetterOnly", ExpectedExplicitAccessorSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+            AssertPatchedComputeWithPrivate(result);
+        }
+
+        /// <summary>
+        /// What: adding an auto-property emits no skip row, so the outside-body drift warning
+        /// remains the only signal that the new member was not applied.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedAutoPropertyPlusBodyEdit_EmitsOutsideBodyWarningWithoutSkipRow()
+        {
+            const string fileName = "AddedAutoPropertyDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource =>
+                {
+                    string next = editedSource.Replace(
+                        "        public int Counter;",
+                        "        public int AddedAuto { get; set; }\n\n        public int Counter;",
+                        StringComparison.Ordinal);
+                    return next.Replace(
+                        "return _secret + delta;",
+                        "return _secret + delta + 1;",
+                        StringComparison.Ordinal);
+                });
+
+            AssertSkippedDoesNotContain(result, "AddedAuto");
+            AssertContainsOutsideMethodBodyDriftWarning(result, fileName);
+            AssertPatchedComputeWithPrivate(result);
+        }
+
+        /// <summary>
+        /// What: rewriting an existing property getter body still emits that getter as Patched
+        /// and does not emit the outside-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_ExistingPropertyGetterBodyEdit_KeepsPatchedGetterWithoutOutsideBodyWarning()
+        {
+            const string fileName = "ExistingPropertyGetterBodyEdit.cs";
+            TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
+                fileName,
+                editedSource => editedSource.Replace(
+                    "get { return _secret; }",
+                    "get { return _secret + 1; }",
+                    StringComparison.Ordinal));
+
+            bool foundGetter = false;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == "get_ExplicitBodyGetter")
+                {
+                    foundGetter = true;
+                    break;
+                }
+            }
+
+            Assert.That(foundGetter, Is.True, "Existing getter body edit must stay Patched.");
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
         }
 
         /// <summary>
@@ -1737,6 +1902,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result;
+        }
+
+        private static async Task<TransformWorkerClientResult> RunWorkerOnEditedE2ECopyAsync(
+            string fileName,
+            Func<string, string> edit)
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string editedSource = edit(onDisk);
+            Assert.That(editedSource, Is.Not.EqualTo(onDisk), "Precondition: snapshot must differ.");
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string sourcePath = Path.Combine(directory, fileName);
+            File.WriteAllText(sourcePath, editedSource);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                ResolveE2EFixtureProjectRelativePath(),
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            return result;
+        }
+
+        private static void AssertPatchedComputeWithPrivate(TransformWorkerClientResult result)
+        {
+            bool foundCompute = false;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == nameof(HotReloadE2EFixture.ComputeWithPrivate))
+                {
+                    foundCompute = true;
+                    break;
+                }
+            }
+
+            Assert.That(
+                foundCompute,
+                Is.True,
+                "Body edit must still emit a Patched ComputeWithPrivate entry.");
         }
 
         private static void AssertDoesNotContainOutsideMethodBodyDriftWarning(

@@ -368,7 +368,8 @@ public static class TransformWorkerProgram
                 hasBaseline ? snapshotPropertyMap : null,
                 hasBaseline ? snapshotIndexerMap : null,
                 hasBaseline ? plainCurrentPropertyMap : null,
-                hasBaseline ? plainCurrentIndexerMap : null);
+                hasBaseline ? plainCurrentIndexerMap : null,
+                addedMethodCatalog);
             AppendUnsupportedMemberKindSkips(
                 typeDeclaration,
                 typeMetadataNameFromSyntax,
@@ -446,19 +447,6 @@ public static class TransformWorkerProgram
             addedFieldCatalog,
             skipped);
 
-        if (hasBaseline && baselineSnapshotRoot != null)
-        {
-            // Why after classification: added/removed method and field declarations must be
-            // stripped before AreEquivalent, or every addition would fire "not applied".
-            AppendOutsideMethodBodyDriftWarningIfNeeded(
-                baselineSnapshotRoot,
-                plainRoot,
-                Path.GetFileName(input.SourcePath),
-                declarationDriftWarnings,
-                addedMethodCatalog,
-                addedFieldCatalog);
-        }
-
         foreach (TypeEmitState typeState in typeEmitStates)
         {
             EmitQueuedMethods(
@@ -505,6 +493,20 @@ public static class TransformWorkerProgram
                 shimTypeCounter = nextShimTypeCounter;
                 globalShimMethodCounter = nextGlobalShimMethodCounter;
             }
+        }
+
+        if (hasBaseline && baselineSnapshotRoot != null)
+        {
+            // Why after property emit: added-property syntax keys are registered when a skip
+            // row is written. Running the drift check first would miss those keys and keep
+            // the false outside-body warning for added properties that already have a row.
+            AppendOutsideMethodBodyDriftWarningIfNeeded(
+                baselineSnapshotRoot,
+                plainRoot,
+                Path.GetFileName(input.SourcePath),
+                declarationDriftWarnings,
+                addedMethodCatalog,
+                addedFieldCatalog);
         }
 
         bool hasAccessorDelegates = false;
@@ -1403,11 +1405,13 @@ public static class TransformWorkerProgram
         StripHandledMemberDeclarationsRewriter stripSnapshot =
             new StripHandledMemberDeclarationsRewriter(
                 snapshotKeys,
+                Array.Empty<string>(),
                 Array.Empty<string>());
         StripHandledMemberDeclarationsRewriter stripCurrent =
             new StripHandledMemberDeclarationsRewriter(
                 currentKeys,
-                addedMethodCatalog.AddedTypeSyntaxKeys);
+                addedMethodCatalog.AddedTypeSyntaxKeys,
+                addedMethodCatalog.AddedPropertySyntaxKeys);
         StripMethodBodiesRewriter bodyStripper = new StripMethodBodiesRewriter();
         SyntaxNode strippedSnapshot = bodyStripper.Visit(stripSnapshot.Visit(snapshotRoot));
         SyntaxNode strippedCurrent = bodyStripper.Visit(stripCurrent.Visit(currentRoot));
@@ -1422,14 +1426,19 @@ public static class TransformWorkerProgram
     {
         private readonly HashSet<string> _syntaxKeysToStrip;
         private readonly HashSet<string> _typeSyntaxKeysToStrip;
+        private readonly HashSet<string> _propertySyntaxKeysToStrip;
 
         public StripHandledMemberDeclarationsRewriter(
             IReadOnlyCollection<string> syntaxKeysToStrip,
-            IReadOnlyCollection<string> typeSyntaxKeysToStrip)
+            IReadOnlyCollection<string> typeSyntaxKeysToStrip,
+            IReadOnlyCollection<string> propertySyntaxKeysToStrip)
         {
             _syntaxKeysToStrip = new HashSet<string>(syntaxKeysToStrip, StringComparer.Ordinal);
             _typeSyntaxKeysToStrip = new HashSet<string>(
                 typeSyntaxKeysToStrip ?? Array.Empty<string>(),
+                StringComparer.Ordinal);
+            _propertySyntaxKeysToStrip = new HashSet<string>(
+                propertySyntaxKeysToStrip ?? Array.Empty<string>(),
                 StringComparer.Ordinal);
         }
 
@@ -1497,6 +1506,25 @@ public static class TransformWorkerProgram
             return base.VisitMethodDeclaration(node);
         }
 
+        public override SyntaxNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
+        {
+            TypeDeclarationSyntax typeDeclaration = node.Parent as TypeDeclarationSyntax;
+            if (typeDeclaration == null)
+            {
+                return base.VisitPropertyDeclaration(node);
+            }
+
+            string syntaxKey = BuildSyntaxPropertyKey(
+                BuildTypeMetadataNameFromSyntax(typeDeclaration),
+                node);
+            if (_propertySyntaxKeysToStrip.Contains(syntaxKey))
+            {
+                return null;
+            }
+
+            return base.VisitPropertyDeclaration(node);
+        }
+
         public override SyntaxNode VisitFieldDeclaration(FieldDeclarationSyntax node)
         {
             TypeDeclarationSyntax typeDeclaration = node.Parent as TypeDeclarationSyntax;
@@ -1533,6 +1561,14 @@ public static class TransformWorkerProgram
 
     private sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
     {
+        // Using directives never change patched behavior: CollectUsingsForType copies the edited
+        // file's usings into every shim, so comparing them here only produces false drift warnings
+        // for using-only edits. extern alias declarations stay compared (not copied into shims).
+        public override SyntaxNode VisitUsingDirective(UsingDirectiveSyntax node)
+        {
+            return null;
+        }
+
         public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
             MethodDeclarationSyntax visited = (MethodDeclarationSyntax)base.VisitMethodDeclaration(node);
@@ -1722,7 +1758,8 @@ public static class TransformWorkerProgram
         Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
         Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap,
         Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
-        Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap)
+        Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap,
+        AddedMethodCatalog addedMethodCatalog)
     {
         foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
         {
@@ -1747,7 +1784,10 @@ public static class TransformWorkerProgram
                 AppendExplicitAccessorSkipsForProperty(
                     propertyDeclaration,
                     semanticModel.GetDeclaredSymbol(propertyDeclaration),
-                    skipped);
+                    skipped,
+                    typeMetadataNameFromSyntax,
+                    snapshotPropertyMap,
+                    addedMethodCatalog);
                 continue;
             }
 
@@ -1770,7 +1810,10 @@ public static class TransformWorkerProgram
                 AppendExplicitAccessorSkipsForProperty(
                     indexerDeclaration,
                     semanticModel.GetDeclaredSymbol(indexerDeclaration),
-                    skipped);
+                    skipped,
+                    typeMetadataNameFromSyntax,
+                    snapshotPropertyMap,
+                    addedMethodCatalog);
             }
         }
     }
@@ -1778,7 +1821,10 @@ public static class TransformWorkerProgram
     private static void AppendExplicitAccessorSkipsForProperty(
         BasePropertyDeclarationSyntax propertyDeclaration,
         IPropertySymbol propertySymbol,
-        List<WorkerSkipped> skipped)
+        List<WorkerSkipped> skipped,
+        string typeMetadataNameFromSyntax,
+        Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
+        AddedMethodCatalog addedMethodCatalog)
     {
         if (propertySymbol == null)
         {
@@ -1798,6 +1844,7 @@ public static class TransformWorkerProgram
             return;
         }
 
+        bool emittedSkip = false;
         foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
         {
             if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration))
@@ -1822,6 +1869,22 @@ public static class TransformWorkerProgram
                 Method = FormatMethodLabel(accessorMethod),
                 Reason = ExplicitAccessorSkipReason
             });
+            emittedSkip = true;
+        }
+
+        PropertyDeclarationSyntax namedProperty = propertyDeclaration as PropertyDeclarationSyntax;
+        if (!emittedSkip
+            || namedProperty == null
+            || snapshotPropertyMap == null
+            || addedMethodCatalog == null)
+        {
+            return;
+        }
+
+        string propertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, namedProperty);
+        if (!snapshotPropertyMap.ContainsKey(propertyKey))
+        {
+            addedMethodCatalog.AddAddedPropertySyntaxKey(propertyKey);
         }
     }
 
@@ -2150,6 +2213,7 @@ public static class TransformWorkerProgram
                     Method = FormatMethodLabel(getterSymbol),
                     Reason = AddedMethodSkipReasons.AddedProperty
                 });
+                addedMethodCatalog.AddAddedPropertySyntaxKey(addedPropertyKey);
                 return (currentShimType, shimTypeCounter, globalShimMethodCounter);
             }
         }
@@ -7932,11 +7996,14 @@ internal sealed class AddedMethodCatalog
     private readonly HashSet<string> _classifiedAddedKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _addedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _addedTypeSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> _addedPropertySyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _removedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
 
     public IReadOnlyCollection<string> AddedSyntaxKeys => _addedSyntaxKeys;
 
     public IReadOnlyCollection<string> AddedTypeSyntaxKeys => _addedTypeSyntaxKeys;
+
+    public IReadOnlyCollection<string> AddedPropertySyntaxKeys => _addedPropertySyntaxKeys;
 
     public IReadOnlyCollection<string> RemovedSyntaxKeys => _removedSyntaxKeys;
 
@@ -7974,6 +8041,14 @@ internal sealed class AddedMethodCatalog
         if (typeSyntaxKey != null)
         {
             _addedTypeSyntaxKeys.Add(typeSyntaxKey);
+        }
+    }
+
+    public void AddAddedPropertySyntaxKey(string propertySyntaxKey)
+    {
+        if (propertySyntaxKey != null)
+        {
+            _addedPropertySyntaxKeys.Add(propertySyntaxKey);
         }
     }
 
