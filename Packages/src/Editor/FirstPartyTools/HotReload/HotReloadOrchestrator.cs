@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Threading;
@@ -107,6 +108,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             addedFields.Sort(StringComparer.Ordinal);
+            if (addedFields.Count > 0)
+            {
+                // Why from this list: AddedFields and the lifetime warning must name the same
+                // applied fields. Worker-side classified sets include unused and unavailable
+                // declarations, and retry overwrites names without replacing first-pass warnings.
+                warnings.Add(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        HotReloadConstants.AddedFieldsLifetimeWarningFormat,
+                        string.Join(", ", addedFields)));
+            }
+
             (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount) =
                 CountMethodOutcomeKinds(outcomes);
             LogHotReloadApplySummary(

@@ -108,6 +108,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Removed members stay present in the compiled assembly until 'uloop compile'; "
             + "edited bodies no longer call them: {0}.";
 
+        public const string AddedFieldsLifetimeWarningFormat =
+            "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
+
         public const string MissingUsingCompileHint =
             "This can mean a missing using or global using (hot reload collects global usings from the edited file's assembly).";
 
