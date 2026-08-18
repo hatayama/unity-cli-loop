@@ -867,19 +867,22 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 }
 
 // Verifies CapturedVariableHistory never repeats the latest hit: CapturedVariables already
-// carries it, so the history must contain only strictly older frames.
+// carries it, so the history must contain only strictly older frames. The note is set only
+// when at least one latest-hit frame was dropped.
 func TestFilterPausePointCapturedVariableHistoryExcludesLatestFrame(t *testing.T) {
 	cases := []struct {
 		name            string
 		lastHitSequence int
 		history         []pausePointCapturedHistoryFrame
 		wantSequences   []int
+		wantNote        string
 	}{
 		{
 			name:            "single-shot leaves history empty",
 			lastHitSequence: 1,
 			history:         []pausePointCapturedHistoryFrame{{HitSequence: 1, FrameCount: 10}},
 			wantSequences:   []int{},
+			wantNote:        pausePointCapturedVariableHistoryNote,
 		},
 		{
 			name:            "continuous with three hits keeps only older frames",
@@ -890,12 +893,24 @@ func TestFilterPausePointCapturedVariableHistoryExcludesLatestFrame(t *testing.T
 				{HitSequence: 3, FrameCount: 30},
 			},
 			wantSequences: []int{1, 2},
+			wantNote:      pausePointCapturedVariableHistoryNote,
 		},
 		{
 			name:            "no history stays empty",
 			lastHitSequence: 0,
 			history:         nil,
 			wantSequences:   []int{},
+			wantNote:        "",
+		},
+		{
+			name:            "older frames only leave note empty",
+			lastHitSequence: 5,
+			history: []pausePointCapturedHistoryFrame{
+				{HitSequence: 1, FrameCount: 10},
+				{HitSequence: 2, FrameCount: 20},
+			},
+			wantSequences: []int{1, 2},
+			wantNote:      "",
 		},
 	}
 
@@ -916,7 +931,53 @@ func TestFilterPausePointCapturedVariableHistoryExcludesLatestFrame(t *testing.T
 			if response.CapturedVariableHistory == nil {
 				t.Fatalf("CapturedVariableHistory must never be nil so the JSON shape stays constant")
 			}
+			if response.CapturedVariableHistoryNote != testCase.wantNote {
+				t.Fatalf("CapturedVariableHistoryNote mismatch: got %#v, want %#v",
+					response.CapturedVariableHistoryNote, testCase.wantNote)
+			}
 		})
+	}
+}
+
+// Verifies a set CapturedVariableHistoryNote survives json.Marshal under that exact key.
+func TestPausePointStatusResponseIncludesCapturedVariableHistoryNote(t *testing.T) {
+	marshaled, err := json.Marshal(pausePointStatusResponse{
+		CapturedVariableHistoryNote: pausePointCapturedVariableHistoryNote,
+	})
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(marshaled, &decoded); err != nil {
+		t.Fatalf("unmarshal envelope failed: %v", err)
+	}
+
+	rawNote, ok := decoded["CapturedVariableHistoryNote"]
+	if !ok {
+		t.Fatalf("CapturedVariableHistoryNote missing from JSON: %s", marshaled)
+	}
+
+	var note string
+	if err := json.Unmarshal(rawNote, &note); err != nil {
+		t.Fatalf("unmarshal note failed: %v", err)
+	}
+	if note != pausePointCapturedVariableHistoryNote {
+		t.Fatalf("CapturedVariableHistoryNote mismatch: got %#v, want %#v",
+			note, pausePointCapturedVariableHistoryNote)
+	}
+}
+
+// Verifies an empty CapturedVariableHistoryNote is omitted from JSON so 0-hit
+// responses keep the historical shape.
+func TestPausePointStatusResponseOmitsEmptyCapturedVariableHistoryNote(t *testing.T) {
+	marshaled, err := json.Marshal(pausePointStatusResponse{})
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	if strings.Contains(string(marshaled), "CapturedVariableHistoryNote") {
+		t.Fatalf("empty CapturedVariableHistoryNote must be omitted from JSON: %s", marshaled)
 	}
 }
 
