@@ -724,7 +724,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return SourcePausePointPathNormalizer.ToForwardSlashes(file) + ":" + line;
         }
 
-        private static string MergeWarnings(string first, string second)
+        internal static string MergeWarnings(string first, string second)
         {
             if (string.IsNullOrEmpty(first))
             {
@@ -893,7 +893,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static string CreateEnableWarning()
+        internal static string CreateEnableWarning()
         {
             if (EditorApplication.isPlaying)
             {

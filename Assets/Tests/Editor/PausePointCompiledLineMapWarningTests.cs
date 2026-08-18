@@ -244,7 +244,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     response.ResolvedLine,
                     "return 0;",
                     "return 424242;");
-                Assert.That(response.Warning, Does.Contain(expectedDrift));
+                string expectedWarning = PausePointUseCase.MergeWarnings(
+                    PausePointUseCase.MergeWarnings(
+                        PausePointUseCase.MergeWarnings(
+                            PausePointUseCase.CreateEnableWarning(),
+                            PausePointUseCase.BuildCompiledLineMapWarningOrEmpty(true, ResolveFailureFile)),
+                        expectedDrift),
+                    SourcePausePointConstants.SmallMethodInliningRiskWarning);
+                Assert.That(response.Warning, Is.EqualTo(expectedWarning));
                 Assert.That(
                     response.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction));
