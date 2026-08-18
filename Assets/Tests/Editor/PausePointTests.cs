@@ -659,6 +659,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(secondClearedCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// Verifies Clear(id) reports 1 when the first clear happens after the capture window expired.
+        /// </summary>
+        [Test]
+        public void Clear_WhenExpiredMarkerIsCleared_ReportsClearedCountOne()
+        {
+            UloopPausePointRegistry.Enable("jump", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            (UloopPausePointSnapshot _, bool _, int clearedCount) = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(clearedCount, Is.EqualTo(1));
+        }
+
         [Test]
         public async Task ClearAll_WhenNothingActive_ReportsNoActiveMessage()
         {
@@ -719,6 +733,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.ClearedCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies clear-pause-point --id reports ClearedCount 0 on a no-op second clear through the public tool path.
+        /// </summary>
+        [Test]
+        public async Task ClearPausePointTool_WhenClearingSameIdTwice_ReportsClearedCountZeroOnSecondCall()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "jump" };
+            await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.ClearedCount, Is.EqualTo(0));
         }
 
         [Test]
