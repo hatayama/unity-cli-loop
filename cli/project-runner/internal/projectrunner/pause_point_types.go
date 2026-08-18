@@ -66,6 +66,11 @@ type pausePointStatusResponse struct {
 	// the all-or-nothing case. Both are emitted when nothing matched at all.
 	CapturedVariableNamesNotFound []string `json:"CapturedVariableNamesNotFound,omitempty"`
 
+	// CapturedVariableHistoryNote is set by the CLI, not Unity, when the latest-hit
+	// frame was dropped from CapturedVariableHistory because CapturedVariables already
+	// carries that hit. omitempty keeps the field off 0-hit and unfiltered responses.
+	CapturedVariableHistoryNote string `json:"CapturedVariableHistoryNote,omitempty"`
+
 	// TriggerResult is set by the CLI, not Unity, only when --trigger was passed. It is omitted
 	// entirely otherwise, so callers that never use --trigger see no schema change at all.
 	TriggerResult *pausePointTriggerResult `json:"TriggerResult,omitempty"`

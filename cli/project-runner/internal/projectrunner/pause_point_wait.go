@@ -27,6 +27,10 @@ const (
 	pausePointStatusExpired           = "Expired"
 	pausePointStatusCleared           = "Cleared"
 
+	// pausePointCapturedVariableHistoryNote explains why the latest hit is absent from
+	// CapturedVariableHistory: repeating it would duplicate CapturedVariables.
+	pausePointCapturedVariableHistoryNote = "CapturedVariableHistory lists hits before the latest one; the latest hit's variables are in CapturedVariables."
+
 	// Mode strings mirror UloopPausePointCaptureMode on the Unity side. Await uses an allowlist
 	// (continuous/trace) for the new-hit baseline — never `Mode != "single-shot"` — so an empty
 	// Mode from an older package keeps the historical immediate-Hit success path.
@@ -105,13 +109,18 @@ func normalizePausePointStatusResponse(response pausePointStatusResponse) pauseP
 // (one hit) always yields an empty history and continuous mode never repeats it.
 func filterPausePointCapturedVariableHistory(response pausePointStatusResponse) pausePointStatusResponse {
 	filtered := make([]pausePointCapturedHistoryFrame, 0, len(response.CapturedVariableHistory))
+	excludedCount := 0
 	for _, frame := range response.CapturedVariableHistory {
 		if frame.HitSequence == response.LastHitSequence {
+			excludedCount++
 			continue
 		}
 		filtered = append(filtered, frame)
 	}
 	response.CapturedVariableHistory = filtered
+	if excludedCount > 0 {
+		response.CapturedVariableHistoryNote = pausePointCapturedVariableHistoryNote
+	}
 	return response
 }
 

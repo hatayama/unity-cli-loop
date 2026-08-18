@@ -867,19 +867,22 @@ func TestRunWaitForPausePointEmbedsMatchingLogsOnTimeout(t *testing.T) {
 }
 
 // Verifies CapturedVariableHistory never repeats the latest hit: CapturedVariables already
-// carries it, so the history must contain only strictly older frames.
+// carries it, so the history must contain only strictly older frames. The note is set only
+// when at least one latest-hit frame was dropped.
 func TestFilterPausePointCapturedVariableHistoryExcludesLatestFrame(t *testing.T) {
 	cases := []struct {
 		name            string
 		lastHitSequence int
 		history         []pausePointCapturedHistoryFrame
 		wantSequences   []int
+		wantNote        string
 	}{
 		{
 			name:            "single-shot leaves history empty",
 			lastHitSequence: 1,
 			history:         []pausePointCapturedHistoryFrame{{HitSequence: 1, FrameCount: 10}},
 			wantSequences:   []int{},
+			wantNote:        pausePointCapturedVariableHistoryNote,
 		},
 		{
 			name:            "continuous with three hits keeps only older frames",
@@ -890,12 +893,24 @@ func TestFilterPausePointCapturedVariableHistoryExcludesLatestFrame(t *testing.T
 				{HitSequence: 3, FrameCount: 30},
 			},
 			wantSequences: []int{1, 2},
+			wantNote:      pausePointCapturedVariableHistoryNote,
 		},
 		{
 			name:            "no history stays empty",
 			lastHitSequence: 0,
 			history:         nil,
 			wantSequences:   []int{},
+			wantNote:        "",
+		},
+		{
+			name:            "older frames only leave note empty",
+			lastHitSequence: 5,
+			history: []pausePointCapturedHistoryFrame{
+				{HitSequence: 1, FrameCount: 10},
+				{HitSequence: 2, FrameCount: 20},
+			},
+			wantSequences: []int{1, 2},
+			wantNote:      "",
 		},
 	}
 
@@ -916,7 +931,53 @@ func TestFilterPausePointCapturedVariableHistoryExcludesLatestFrame(t *testing.T
 			if response.CapturedVariableHistory == nil {
 				t.Fatalf("CapturedVariableHistory must never be nil so the JSON shape stays constant")
 			}
+			if response.CapturedVariableHistoryNote != testCase.wantNote {
+				t.Fatalf("CapturedVariableHistoryNote mismatch: got %#v, want %#v",
+					response.CapturedVariableHistoryNote, testCase.wantNote)
+			}
 		})
+	}
+}
+
+// Verifies a set CapturedVariableHistoryNote survives json.Marshal under that exact key.
+func TestPausePointStatusResponseIncludesCapturedVariableHistoryNote(t *testing.T) {
+	marshaled, err := json.Marshal(pausePointStatusResponse{
+		CapturedVariableHistoryNote: pausePointCapturedVariableHistoryNote,
+	})
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(marshaled, &decoded); err != nil {
+		t.Fatalf("unmarshal envelope failed: %v", err)
+	}
+
+	rawNote, ok := decoded["CapturedVariableHistoryNote"]
+	if !ok {
+		t.Fatalf("CapturedVariableHistoryNote missing from JSON: %s", marshaled)
+	}
+
+	var note string
+	if err := json.Unmarshal(rawNote, &note); err != nil {
+		t.Fatalf("unmarshal note failed: %v", err)
+	}
+	if note != pausePointCapturedVariableHistoryNote {
+		t.Fatalf("CapturedVariableHistoryNote mismatch: got %#v, want %#v",
+			note, pausePointCapturedVariableHistoryNote)
+	}
+}
+
+// Verifies an empty CapturedVariableHistoryNote is omitted from JSON so 0-hit
+// responses keep the historical shape.
+func TestPausePointStatusResponseOmitsEmptyCapturedVariableHistoryNote(t *testing.T) {
+	marshaled, err := json.Marshal(pausePointStatusResponse{})
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	if strings.Contains(string(marshaled), "CapturedVariableHistoryNote") {
+		t.Fatalf("empty CapturedVariableHistoryNote must be omitted from JSON: %s", marshaled)
 	}
 }
 
@@ -1243,6 +1304,104 @@ func TestRunPausePointStatusReturnsCurrentStatus(t *testing.T) {
 	}
 	if response.RecommendedNextAction != "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values." {
 		t.Fatalf("recommendedNextAction mismatch: %#v", response)
+	}
+}
+
+// Verifies pause-point-status stdout includes CapturedVariableHistoryNote when the
+// command path filters the latest-hit frame out of history.
+func TestRunPausePointStatusIncludesCapturedVariableHistoryNoteWhenLatestHitIsFiltered(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:              id,
+			Status:          pausePointStatusHit,
+			IsEnabled:       true,
+			IsHit:           true,
+			HitCount:        1,
+			LastHitSequence: 1,
+			CapturedVariableHistory: []pausePointCapturedHistoryFrame{
+				{HitSequence: 1, FrameCount: 10},
+			},
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout.String())
+	}
+
+	rawNote, ok := decoded["CapturedVariableHistoryNote"]
+	if !ok {
+		t.Fatalf("CapturedVariableHistoryNote missing from status JSON: %s", stdout.String())
+	}
+
+	var note string
+	if err := json.Unmarshal(rawNote, &note); err != nil {
+		t.Fatalf("unmarshal note failed: %v", err)
+	}
+	if note != pausePointCapturedVariableHistoryNote {
+		t.Fatalf("CapturedVariableHistoryNote mismatch: got %#v, want %#v",
+			note, pausePointCapturedVariableHistoryNote)
+	}
+}
+
+// Verifies pause-point-status stdout omits CapturedVariableHistoryNote on a 0-hit response.
+func TestRunPausePointStatusOmitsCapturedVariableHistoryNoteOnZeroHit(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:              id,
+			Status:          pausePointStatusEnabled,
+			IsEnabled:       true,
+			HitCount:        0,
+			LastHitSequence: 0,
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	if strings.Contains(stdout.String(), "CapturedVariableHistoryNote") {
+		t.Fatalf("0-hit status JSON must omit CapturedVariableHistoryNote: %s", stdout.String())
 	}
 }
 
