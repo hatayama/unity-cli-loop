@@ -44,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string AddedFieldsLifetimeWarningFormat =
             "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
 
-        // Keep in sync with EvaluatePatchabilitySkipReason in
+        // Keep in sync with EvaluateHardSkipReason in
         // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
         private const string ExpectedGenericMethodSkipReason =
             "Generic methods and methods inside generic types cannot be safely patched with Harmony. Run 'uloop compile'.";

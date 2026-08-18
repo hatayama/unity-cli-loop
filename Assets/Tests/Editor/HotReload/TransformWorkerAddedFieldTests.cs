@@ -56,6 +56,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string AddedFieldsLifetimeWarningFormat =
             "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
 
+        // Keep in sync with OutsideMethodBodyDriftWarningFormat in
+        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
+        // That constant lives in the Unity-ignored worker process and is not visible here.
+        private const string OutsideMethodBodyDriftWarningFormat =
+            "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
+
         private const string FieldKindChangeProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
 
@@ -399,14 +405,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 AddedFieldsLifetimeWarningFormat,
                 typeof(HotReloadAddedMemberHost).FullName + ".AddedCount");
             Assert.That(result.Output.declarationDriftWarnings, Does.Contain(expectedLifetimeWarning));
-            foreach (string warning in result.Output.declarationDriftWarnings)
-            {
-                Assert.That(
-                    warning,
-                    Does.Not.Contain("Edits outside method bodies"),
-                    "Handled added-field declarations must not fire the outside-body warning.\n"
-                    + string.Join("\n", result.Output.declarationDriftWarnings));
-            }
+            string expectedOutsideBodyWarning = string.Format(
+                OutsideMethodBodyDriftWarningFormat,
+                "AddedFieldNoDrift.cs");
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Does.Not.Contain(expectedOutsideBodyWarning),
+                "Handled added-field declarations must not fire the outside-body warning.\n"
+                + string.Join("\n", result.Output.declarationDriftWarnings));
 
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
         }
