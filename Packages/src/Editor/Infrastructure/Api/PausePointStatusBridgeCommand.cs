@@ -15,6 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     internal static class PausePointStatusBridgeCommand
     {
         private const string IdParamName = "Id";
+        private const string ReasonParamName = "Reason";
         private const string MinimumRemainingSecondsParamName = "MinimumRemainingSeconds";
 
         public static PausePointStatusResponse Execute(JToken paramsToken)
@@ -37,13 +38,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public static PausePointStatusResponse Clear(JToken paramsToken)
         {
             string id = ReadId(paramsToken);
+            string reason = ReadReason(paramsToken);
+            if (string.IsNullOrEmpty(reason))
+            {
+                reason = UloopPausePointClearedReason.ExplicitClear;
+            }
+
             // Registry.Clear unpatches any source pause point via the hook
             // SourcePausePointPatcher wires into it, so this bridge - which must not reference
             // that Editor-only tool assembly directly - never leaves a Harmony injection attached
             // after the marker itself reports Cleared.
             // The CLI polling bridge only reports marker status; the resumed-from-pause side
             // effect is surfaced through the clear-pause-point tool response, not this path.
-            (UloopPausePointSnapshot snapshot, bool _, int _) = UloopPausePointRegistry.Clear(id);
+            (UloopPausePointSnapshot snapshot, bool _, int _) = UloopPausePointRegistry.Clear(id, reason);
             LogCleared(id, snapshot.StatusBeforeClear);
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {
@@ -87,6 +94,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             JToken idToken = paramsObject.GetValue(IdParamName, StringComparison.OrdinalIgnoreCase);
             return idToken?.ToString() ?? string.Empty;
+        }
+
+        private static string ReadReason(JToken paramsToken)
+        {
+            if (paramsToken is not JObject paramsObject)
+            {
+                return string.Empty;
+            }
+
+            JToken reasonToken = paramsObject.GetValue(ReasonParamName, StringComparison.OrdinalIgnoreCase);
+            return reasonToken?.ToString() ?? string.Empty;
         }
 
         private static int ReadMinimumRemainingSeconds(JToken paramsToken)

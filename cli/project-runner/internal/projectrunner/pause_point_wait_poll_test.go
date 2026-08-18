@@ -812,3 +812,87 @@ func TestPausePointTriggerRejectedBeforeExecution(t *testing.T) {
 		})
 	}
 }
+
+// Verifies a successful arm-status query appends the observed status and ClearedReason, while an
+// IPC error leaves the unarmed-at-wait-start message unchanged.
+func TestPausePointUnarmedAtWaitStartSuffix(t *testing.T) {
+	clearedSuffix := pausePointUnarmedAtWaitStartSuffix(
+		pausePointStatusResponse{
+			Status:        pausePointStatusCleared,
+			ClearedReason: pausePointAwaitTimeoutAutoClearReason,
+		},
+		nil,
+	)
+	wantCleared := " marker status was 'Cleared' (ClearedReason: AwaitTimeoutAutoClear)"
+	if clearedSuffix != wantCleared {
+		t.Fatalf("cleared suffix mismatch: got %q, want %q", clearedSuffix, wantCleared)
+	}
+
+	notEnabledSuffix := pausePointUnarmedAtWaitStartSuffix(
+		pausePointStatusResponse{Status: pausePointStatusNotEnabled},
+		nil,
+	)
+	wantNotEnabled := " marker status was 'NotEnabled' (ClearedReason: )"
+	if notEnabledSuffix != wantNotEnabled {
+		t.Fatalf("not-enabled suffix mismatch: got %q, want %q", notEnabledSuffix, wantNotEnabled)
+	}
+
+	errorSuffix := pausePointUnarmedAtWaitStartSuffix(
+		pausePointStatusResponse{},
+		errors.New("pause point status query failed"),
+	)
+	if errorSuffix != "" {
+		t.Fatalf("IPC error must keep the original unarmed message, got %q", errorSuffix)
+	}
+}
+
+// Verifies --resume-play skip text stays the original unarmed-at-wait-start message when the
+// arm-status query itself failed, rather than appending a fabricated marker status.
+func TestWaitForPausePointUnarmedErrorOmitsStatusSuffixWhenArmQueryFails(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalResume := resumePlayModeForPausePoint
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		resumePlayModeForPausePoint = originalResume
+		pausePointStatusPoll = originalPoll
+	}()
+
+	refusedConnect := &unityipc.ConnectionAttemptError{
+		Endpoint: "/tmp/uloop-501/UnityCliLoop-sample.sock",
+		Cause: &net.OpError{
+			Op:   "dial",
+			Net:  "unix",
+			Addr: &net.UnixAddr{Name: "/tmp/uloop-501/UnityCliLoop-sample.sock", Net: "unix"},
+			Err:  os.NewSyscallError("connect", syscall.EPERM),
+		},
+	}
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{}, fmt.Errorf("pause point status query failed: %w", refusedConnect)
+	}
+	resumePlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+	) pausePointResumePlayResult {
+		t.Fatal("expected resumePlayModeForPausePoint not to be called when arm query failed")
+		return pausePointResumePlayResult{}
+	}
+
+	_, _, _, resumeResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 60,
+		timeout:        10 * time.Second,
+		resumePlay:     true,
+	})
+	if !errors.Is(err, refusedConnect) {
+		t.Fatalf("expected the refused connect error, got %v", err)
+	}
+	if resumeResult == nil || resumeResult.Error != pausePointResumeNotArmedAtWaitStartError {
+		t.Fatalf("ResumePlayResult.Error mismatch: got %#v, want %q", resumeResult, pausePointResumeNotArmedAtWaitStartError)
+	}
+}

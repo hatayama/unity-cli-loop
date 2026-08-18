@@ -206,11 +206,24 @@ func TestRunWaitForPausePointClearsEnabledMarkerAfterTimeout(t *testing.T) {
 		pausePointStatusPoll = originalPoll
 	}()
 
+	cleared := false
 	queryPausePointStatus = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		id string,
 	) (pausePointStatusResponse, error) {
+		if cleared {
+			return pausePointStatusResponse{
+				Id:                              id,
+				Status:                          pausePointStatusCleared,
+				ClearedReason:                   pausePointAwaitTimeoutAutoClearReason,
+				StatusBeforeClear:               pausePointStatusEnabled,
+				TimeoutSeconds:                  1,
+				ElapsedSinceEnabledMilliseconds: 100,
+				EditorState:                     pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+				Message:                         "Pause point cleared.",
+			}, nil
+		}
 		return pausePointStatusResponse{
 			Id:                              id,
 			Status:                          pausePointStatusEnabled,
@@ -228,6 +241,7 @@ func TestRunWaitForPausePointClearsEnabledMarkerAfterTimeout(t *testing.T) {
 		connection unityipc.Connection,
 		id string,
 	) (pausePointStatusResponse, error) {
+		cleared = true
 		clearedID = id
 		return pausePointStatusResponse{Id: id, Status: pausePointStatusCleared}, nil
 	}
@@ -250,18 +264,148 @@ func TestRunWaitForPausePointClearsEnabledMarkerAfterTimeout(t *testing.T) {
 		t.Fatalf("timeout error missing from stderr: %s", stderr.String())
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
-	editorState, ok := envelope.Error.Details["EditorState"].(map[string]any)
-	if !ok || editorState["IsPlaying"] != true || editorState["IsPaused"] != false || editorState["CapturedAt"] != "Current" {
-		t.Fatalf("editorState detail mismatch: %#v", envelope.Error.Details)
+	if envelope.Error.Details["Status"] != pausePointStatusCleared {
+		t.Fatalf("status detail mismatch: %#v", envelope.Error.Details)
 	}
-	if envelope.Error.Details["MarkerMessage"] != "Pause point enabled." {
-		t.Fatalf("markerMessage detail mismatch: %#v", envelope.Error.Details)
+	if envelope.Error.Details["MarkerClearedByThisCommand"] != true {
+		t.Fatalf("MarkerClearedByThisCommand mismatch: %#v", envelope.Error.Details)
 	}
-	if envelope.Error.Details["ElapsedSinceEnabledMilliseconds"] != float64(100) {
-		t.Fatalf("elapsedSinceEnabledMilliseconds detail mismatch: %#v", envelope.Error.Details)
+	if envelope.Error.Details["ClearedReason"] != pausePointAwaitTimeoutAutoClearReason {
+		t.Fatalf("ClearedReason mismatch: %#v", envelope.Error.Details)
 	}
-	if envelope.Error.Details["RemainingMilliseconds"] != float64(900) {
-		t.Fatalf("remainingMilliseconds detail mismatch: %#v", envelope.Error.Details)
+	if envelope.Error.Details["StatusBeforeClear"] != pausePointStatusEnabled {
+		t.Fatalf("StatusBeforeClear mismatch: %#v", envelope.Error.Details)
+	}
+	wantHint := pausePointHintTimeoutAutoCleared + pausePointNonFiringPatternsHint
+	if envelope.Error.Details["Hint"] != wantHint {
+		t.Fatalf("hint mismatch: %#v", envelope.Error.Details["Hint"])
+	}
+}
+
+// Verifies a failed post-clear status re-read keeps the pre-clear snapshot but still reports
+// MarkerClearedByThisCommand so the timeout envelope does not hide that this command disarmed it.
+func TestRunWaitForPausePointTimeoutAutoClearKeepsPreviousSnapshotWhenRereadFails(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalClear := clearPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		clearPausePointStatus = originalClear
+		pausePointStatusPoll = originalPoll
+	}()
+
+	cleared := false
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		if cleared {
+			return pausePointStatusResponse{}, errors.New("pause point status query failed after clear")
+		}
+		return pausePointStatusResponse{
+			Id:                              id,
+			Status:                          pausePointStatusEnabled,
+			IsEnabled:                       true,
+			TimeoutSeconds:                  1,
+			ElapsedSinceEnabledMilliseconds: 100,
+			EditorState:                     pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+			Message:                         "Pause point enabled.",
+		}, nil
+	}
+
+	clearPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		cleared = true
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusCleared}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+		timeout:        5 * time.Millisecond,
+	}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected failure, got %d with stdout %s", code, stdout.String())
+	}
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	if envelope.Error.Details["Status"] != pausePointStatusEnabled {
+		t.Fatalf("fallback status mismatch: %#v", envelope.Error.Details)
+	}
+	if envelope.Error.Details["MarkerClearedByThisCommand"] != true {
+		t.Fatalf("MarkerClearedByThisCommand mismatch: %#v", envelope.Error.Details)
+	}
+	wantHint := pausePointHintTimeoutAutoCleared + pausePointNonFiringPatternsHint
+	if envelope.Error.Details["Hint"] != wantHint {
+		t.Fatalf("hint mismatch: %#v", envelope.Error.Details["Hint"])
+	}
+}
+
+// Verifies a failed timeout auto-clear does not claim this command disarmed the marker, because
+// the marker is still armed and the conventional wait-again hint is the truthful recovery.
+func TestRunWaitForPausePointTimeoutDoesNotClaimClearWhenClearIpcFails(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalClear := clearPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		clearPausePointStatus = originalClear
+		pausePointStatusPoll = originalPoll
+	}()
+
+	enabledResponse := pausePointStatusResponse{
+		Id:                              "jump",
+		Status:                          pausePointStatusEnabled,
+		IsEnabled:                       true,
+		TimeoutSeconds:                  1,
+		ElapsedSinceEnabledMilliseconds: 100,
+		EditorState:                     pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		Message:                         "Pause point enabled.",
+	}
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return enabledResponse, nil
+	}
+	clearPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{}, errors.New("pause point clear failed")
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+		timeout:        5 * time.Millisecond,
+	}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected failure, got %d with stdout %s", code, stdout.String())
+	}
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	if envelope.Error.Details["Status"] != pausePointStatusEnabled {
+		t.Fatalf("status detail mismatch: %#v", envelope.Error.Details)
+	}
+	if _, exists := envelope.Error.Details["MarkerClearedByThisCommand"]; exists {
+		t.Fatalf("failed clear must not claim this command cleared the marker: %#v", envelope.Error.Details)
+	}
+	wantHint := pausePointTimeoutHint(enabledResponse, false, false)
+	if envelope.Error.Details["Hint"] != wantHint {
+		t.Fatalf("hint mismatch:\n got: %#v\nwant: %#v", envelope.Error.Details["Hint"], wantHint)
 	}
 }
 
@@ -284,7 +428,7 @@ func TestPausePointExpiredErrorReportsRecoveryFields(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired, false)
+	}, response, pausePointWaitStateExpired, false, false)
 
 	if cliErr.Details["Expired"] != true {
 		t.Fatalf("expired detail mismatch: %#v", cliErr.Details)
@@ -313,7 +457,7 @@ func TestPausePointExpiredErrorReportsMarkerTimeoutSeconds(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 5,
-	}, response, pausePointWaitStateExpired, false)
+	}, response, pausePointWaitStateExpired, false, false)
 
 	if cliErr.Details["TimeoutSeconds"] != 30 {
 		t.Fatalf("timeoutSeconds detail mismatch: %#v", cliErr.Details)
@@ -332,7 +476,7 @@ func TestPausePointExpiredErrorDerivesExpiredFromStatus(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired, false)
+	}, response, pausePointWaitStateExpired, false, false)
 
 	if cliErr.Details["Expired"] != true {
 		t.Fatalf("expired detail mismatch: %#v", cliErr.Details)
@@ -1116,7 +1260,7 @@ func TestPausePointTimeoutErrorIncludesDiagnosisHint(t *testing.T) {
 			cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 				id:             "jump",
 				timeoutSeconds: 1,
-			}, testCase.response, pausePointWaitStateTimeout, false)
+			}, testCase.response, pausePointWaitStateTimeout, false, false)
 
 			if cliErr.Details["Hint"] != testCase.wantHint {
 				t.Fatalf("hint mismatch: %#v", cliErr.Details)
@@ -1165,7 +1309,7 @@ func TestPausePointExpiredErrorIncludesDiagnosisHint(t *testing.T) {
 			cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 				id:             "jump",
 				timeoutSeconds: 1,
-			}, testCase.response, pausePointWaitStateExpired, false)
+			}, testCase.response, pausePointWaitStateExpired, false, false)
 
 			if cliErr.Details["Hint"] != testCase.wantHint {
 				t.Fatalf("hint mismatch: %#v", cliErr.Details)
@@ -1184,7 +1328,7 @@ func TestPausePointExpiredHintIncludesHotReloadLineDriftCandidate(t *testing.T) 
 		Status:      pausePointStatusExpired,
 		EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
 		HitCount:    0,
-	}, pausePointWaitStateExpired, false)
+	}, pausePointWaitStateExpired, false, false)
 
 	hint, _ := cliErr.Details["Hint"].(string)
 	const candidateFour = "(4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable."
@@ -1209,7 +1353,7 @@ func TestPausePointHintIsOmittedOutsideDiagnosableStates(t *testing.T) {
 	timeoutErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, hitResponse, pausePointWaitStateTimeout, false)
+	}, hitResponse, pausePointWaitStateTimeout, false, false)
 	if _, exists := timeoutErr.Details["Hint"]; exists {
 		t.Fatalf("hint should be omitted when no diagnosis applies: %#v", timeoutErr.Details)
 	}
@@ -1222,7 +1366,7 @@ func TestPausePointHintIsOmittedOutsideDiagnosableStates(t *testing.T) {
 	clearedErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, clearedResponse, pausePointWaitStateCleared, false)
+	}, clearedResponse, pausePointWaitStateCleared, false, false)
 	if _, exists := clearedErr.Details["Hint"]; exists {
 		t.Fatalf("hint should be omitted for cleared markers: %#v", clearedErr.Details)
 	}
@@ -1242,7 +1386,7 @@ func TestPausePointExpiredErrorReportsNoRemainingTime(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired, false)
+	}, response, pausePointWaitStateExpired, false, false)
 
 	if cliErr.ErrorCode != clierrors.ErrorCodePausePointExpired {
 		t.Fatalf("error code mismatch: %#v", cliErr)

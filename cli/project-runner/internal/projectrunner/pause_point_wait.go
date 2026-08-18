@@ -16,16 +16,17 @@ import (
 )
 
 const (
-	pausePointStatusCommandName       = "get-pause-point-status"
-	pausePointClearStatusCommandName  = "clear-pause-point-status"
-	pausePointExtendStatusCommandName = "extend-pause-point-status"
-	pausePointDefaultTimeoutSeconds   = 30
-	pausePointStatusProbeTimeout      = 5 * time.Second
-	pausePointStatusEnabled           = "Enabled"
-	pausePointStatusHit               = "Hit"
-	pausePointStatusNotEnabled        = "NotEnabled"
-	pausePointStatusExpired           = "Expired"
-	pausePointStatusCleared           = "Cleared"
+	pausePointStatusCommandName           = "get-pause-point-status"
+	pausePointClearStatusCommandName      = "clear-pause-point-status"
+	pausePointExtendStatusCommandName     = "extend-pause-point-status"
+	pausePointDefaultTimeoutSeconds       = 30
+	pausePointStatusProbeTimeout          = 5 * time.Second
+	pausePointStatusEnabled               = "Enabled"
+	pausePointStatusHit                   = "Hit"
+	pausePointStatusNotEnabled            = "NotEnabled"
+	pausePointStatusExpired               = "Expired"
+	pausePointStatusCleared               = "Cleared"
+	pausePointAwaitTimeoutAutoClearReason = "AwaitTimeoutAutoClear"
 
 	// pausePointCapturedVariableHistoryNote explains why the latest hit is absent from
 	// CapturedVariableHistory: repeating it would duplicate CapturedVariables.
@@ -289,11 +290,20 @@ func runWaitForPausePoint(
 	// Why skip clear when hasNewHitBaseline: the continuous/trace marker is still armed, and the
 	// timeout hint tells the caller to await again (with --resume-play). Clearing here would disarm
 	// it and discard the raw capture holder, making that recovery path impossible.
+	markerClearedByThisCommand := false
 	if state == pausePointWaitStateTimeout && !hasNewHitBaseline {
-		clearPausePointAfterWaitTimeout(ctx, connection, options.id)
+		response, markerClearedByThisCommand = refreshPausePointStatusAfterWaitTimeoutAutoClear(
+			ctx, connection, options.id, response)
 	}
 
-	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state, hasNewHitBaseline)
+	waitErr := pausePointWaitError(
+		connection.ProjectRoot,
+		options,
+		response,
+		state,
+		hasNewHitBaseline,
+		markerClearedByThisCommand,
+	)
 	if triggerResult != nil {
 		waitErr.Details["TriggerResult"] = triggerResult
 	}

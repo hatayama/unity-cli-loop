@@ -777,7 +777,18 @@ func TestRunEnablePausePointCommandAwaitTimeoutIncludesNonFiringHint(t *testing.
 		clearPausePointStatus = originalClear
 	})
 
+	cleared := false
 	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		if cleared {
+			return pausePointStatusResponse{
+				Id:                id,
+				Status:            pausePointStatusCleared,
+				ClearedReason:     pausePointAwaitTimeoutAutoClearReason,
+				StatusBeforeClear: pausePointStatusEnabled,
+				HitCount:          0,
+				EditorState:       pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+			}, nil
+		}
 		return pausePointStatusResponse{
 			Id:          id,
 			Status:      pausePointStatusEnabled,
@@ -787,6 +798,7 @@ func TestRunEnablePausePointCommandAwaitTimeoutIncludesNonFiringHint(t *testing.
 		}, nil
 	}
 	clearPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		cleared = true
 		return pausePointStatusResponse{Id: id, Status: pausePointStatusCleared}, nil
 	}
 
@@ -823,9 +835,57 @@ func TestRunEnablePausePointCommandAwaitTimeoutIncludesNonFiringHint(t *testing.
 		t.Fatalf("expected timeout failure, got %d with stdout %s", code, stdout.String())
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
-	hint, _ := envelope.Error.Details["Hint"].(string)
-	if !strings.Contains(hint, "non-firing patterns") {
-		t.Fatalf("expected non-firing pattern hint in composite await path, got: %q", hint)
+	if envelope.Error.Details["Status"] != pausePointStatusCleared {
+		t.Fatalf("status detail mismatch: %#v", envelope.Error.Details)
+	}
+	if envelope.Error.Details["MarkerClearedByThisCommand"] != true {
+		t.Fatalf("MarkerClearedByThisCommand mismatch: %#v", envelope.Error.Details)
+	}
+	if envelope.Error.Details["ClearedReason"] != pausePointAwaitTimeoutAutoClearReason {
+		t.Fatalf("ClearedReason mismatch: %#v", envelope.Error.Details)
+	}
+	wantHint := pausePointHintTimeoutAutoCleared + pausePointNonFiringPatternsHint
+	if envelope.Error.Details["Hint"] != wantHint {
+		t.Fatalf("hint mismatch: %#v", envelope.Error.Details["Hint"])
+	}
+}
+
+// Verifies the Unity clear IPC payload carries Id and Reason=AwaitTimeoutAutoClear, so a key
+// rename or a stub-only test cannot hide a broken timeout auto-clear contract.
+func TestClearPausePointStatusFromUnitySendsAwaitTimeoutAutoClearReason(t *testing.T) {
+	listener := newLoopbackIpcListener(t)
+	requests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointClearStatusCommandName,
+		requests,
+		serverErr,
+		`{"Success":true,"Id":"jump","Status":"Cleared","ClearedReason":"AwaitTimeoutAutoClear"}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	response, err := clearPausePointStatusFromUnity(context.Background(), connection, "jump")
+	if err != nil {
+		t.Fatalf("clearPausePointStatusFromUnity failed: %v", err)
+	}
+	if response.Id != "jump" || response.Status != pausePointStatusCleared {
+		t.Fatalf("response mismatch: %#v", response)
+	}
+
+	params := readIPCRequest(t, requests)
+	if params["Id"] != "jump" {
+		t.Fatalf("Id mismatch: %#v", params)
+	}
+	if params["Reason"] != pausePointAwaitTimeoutAutoClearReason {
+		t.Fatalf("Reason mismatch: %#v", params)
 	}
 }
 

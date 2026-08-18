@@ -15,6 +15,7 @@ func pausePointWaitError(
 	response pausePointStatusResponse,
 	state pausePointWaitState,
 	hasNewHitBaseline bool,
+	markerClearedByThisCommand bool,
 ) clierrors.CLIError {
 	response = normalizePausePointStatusResponse(response)
 
@@ -74,9 +75,12 @@ func pausePointWaitError(
 			options,
 			response,
 			true)
-		hint := pausePointTimeoutHint(response, hasNewHitBaseline)
+		hint := pausePointTimeoutHint(response, hasNewHitBaseline, markerClearedByThisCommand)
 		if hint != "" {
 			timeoutError.Details["Hint"] = hint
+		}
+		if markerClearedByThisCommand {
+			timeoutError.Details["MarkerClearedByThisCommand"] = true
 		}
 		return timeoutError
 	}
@@ -117,6 +121,8 @@ const (
 	// sequence can occur.
 	pausePointHintAlreadyHitWaitingForNew = "The marker had already hit and Unity may still be paused by that hit; pass --resume-play or resume Play Mode so a new hit can occur."
 
+	pausePointHintTimeoutAutoCleared = "This command disarmed the marker on timeout; re-enable the pause point (enable-pause-point) before waiting again. "
+
 	// Shared by both pausePointTimeoutHint and pausePointExpiredHint: reasons a wait saw no hit —
 	// a physics/message callback missing a pre-existing GameObject, a pre-bound delegate
 	// bypassing the patch, control flow exiting on an earlier branch, or --line resolving
@@ -149,7 +155,11 @@ func pausePointSuppressedByHotReloadHint(response pausePointStatusResponse) stri
 
 // pausePointTimeoutHint maps the final probed status to a deterministic diagnosis,
 // because timeouts are where agents struggle to tell a missed code path from Editor state.
-func pausePointTimeoutHint(response pausePointStatusResponse, hasNewHitBaseline bool) string {
+func pausePointTimeoutHint(
+	response pausePointStatusResponse,
+	hasNewHitBaseline bool,
+	markerClearedByThisCommand bool,
+) string {
 	if response.SuppressedByHotReload {
 		return pausePointSuppressedByHotReloadHint(response)
 	}
@@ -161,6 +171,9 @@ func pausePointTimeoutHint(response pausePointStatusResponse, hasNewHitBaseline 
 	}
 	if response.EditorState.IsPaused {
 		return pausePointHintEditorAlreadyPaused
+	}
+	if markerClearedByThisCommand {
+		return pausePointHintTimeoutAutoCleared + pausePointNonFiringPatternsHint
 	}
 	if response.HitCount == 0 && response.Status == pausePointStatusEnabled {
 		return "Marker was enabled but never hit. Confirm the id matches UloopPausePoint.Pause(\"<id>\") and that the code path was executed. In fast-progressing games the state may have already moved past the marker (for example back to Ready or GameOver), so re-trigger the code path and wait again. " +
@@ -214,22 +227,39 @@ func pausePointStateError(
 			"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
 			"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
 		},
-		Details: map[string]any{
-			"Id":                              options.id,
-			"Status":                          response.Status,
-			"Expired":                         response.Expired,
-			"HitCount":                        response.HitCount,
-			"TimeoutSeconds":                  pausePointMarkerTimeoutSeconds(options, response),
-			"EnabledAtUtc":                    response.EnabledAtUtc,
-			"ElapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,
-			"Generation":                      response.Generation,
-			"EditorState":                     response.EditorState,
-			"RemainingMilliseconds":           pausePointRemainingMilliseconds(options, response),
-			"MarkerMessage":                   response.Message,
-			"RecommendedNextAction":           response.RecommendedNextAction,
-			"SuppressedByHotReload":           response.SuppressedByHotReload,
-		},
+		Details: pausePointStateErrorDetails(options, response),
 	}
+}
+
+func pausePointStateErrorDetails(
+	options waitForPausePointOptions,
+	response pausePointStatusResponse,
+) map[string]any {
+	details := map[string]any{
+		"Id":                              options.id,
+		"Status":                          response.Status,
+		"Expired":                         response.Expired,
+		"HitCount":                        response.HitCount,
+		"TimeoutSeconds":                  pausePointMarkerTimeoutSeconds(options, response),
+		"EnabledAtUtc":                    response.EnabledAtUtc,
+		"ElapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,
+		"Generation":                      response.Generation,
+		"EditorState":                     response.EditorState,
+		"RemainingMilliseconds":           pausePointRemainingMilliseconds(options, response),
+		"MarkerMessage":                   response.Message,
+		"RecommendedNextAction":           response.RecommendedNextAction,
+		"SuppressedByHotReload":           response.SuppressedByHotReload,
+	}
+	if response.ClearedReason != "" {
+		details["ClearedReason"] = response.ClearedReason
+	}
+	if response.StatusBeforeClear != "" {
+		details["StatusBeforeClear"] = response.StatusBeforeClear
+	}
+	if response.LateHitDiscardedAfterClear {
+		details["LateHitDiscardedAfterClear"] = true
+	}
+	return details
 }
 
 func pausePointMarkerTimeoutSeconds(options waitForPausePointOptions, response pausePointStatusResponse) int {

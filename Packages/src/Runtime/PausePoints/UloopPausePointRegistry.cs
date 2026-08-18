@@ -105,7 +105,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         /// entries. Why not derive it from the snapshot: StatusBeforeClear survives a no-op
         /// second clear, so snapshot-based counting would treat a no-op as 1.
         /// </summary>
-        public static (UloopPausePointSnapshot Snapshot, bool ResumedFromPause, int ClearedCount) Clear(string id)
+        public static (UloopPausePointSnapshot Snapshot, bool ResumedFromPause, int ClearedCount) Clear(
+            string id,
+            string clearedReason = UloopPausePointClearedReason.ExplicitClear)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
 
@@ -134,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 UloopPausePointStatus.Cleared => "Pause point was already cleared.",
                 _ => "Pause point cleared."
             };
-            entry.MarkCleared(UloopPausePointClearedReason.ExplicitClear, message);
+            entry.MarkCleared(clearedReason, message);
             OnClearResolved?.Invoke(id, entry.HitCount, entry.StatusBeforeClear);
             ClearHitSnapshotAndRawCaptureForId(id);
             // Why only when pause-point-owned: a clear must not steal ownership of a manual pause

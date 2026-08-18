@@ -86,8 +86,9 @@ func startPausePointWaitSideEffects(
 		return nil, nil, nil, -1, false, false
 	}
 
-	armResponse, armed := queryPausePointArmStatus(ctx, connection, options.id)
+	armResponse, armed, armQueryErr := queryPausePointArmStatus(ctx, connection, options.id)
 	if !armed {
+		unarmedSuffix := pausePointUnarmedAtWaitStartSuffix(armResponse, armQueryErr)
 		var resumeResult *pausePointResumePlayResult
 		var skippedTriggerResult *pausePointTriggerResult
 		if options.resumePlay {
@@ -95,7 +96,7 @@ func startPausePointWaitSideEffects(
 			// silently omitted result would hide "arm was never confirmed" behind a plain
 			// timeout/not-enabled error with no clue why Play was never resumed.
 			resumeResult = &pausePointResumePlayResult{
-				Error: "resume was not dispatched: the marker could not be confirmed armed at wait start",
+				Error: pausePointResumeNotArmedAtWaitStartError + unarmedSuffix,
 			}
 		}
 		if options.triggerCommand != "" {
@@ -105,7 +106,7 @@ func startPausePointWaitSideEffects(
 			// armed) behind a plain timeout/not-enabled error with no clue why the trigger never fired.
 			skippedTriggerResult = &pausePointTriggerResult{
 				Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
-				Error:   "trigger was not dispatched: the marker could not be confirmed armed at wait start",
+				Error:   pausePointTriggerNotArmedAtWaitStartError + unarmedSuffix,
 			}
 		}
 		// Why baselineDecided=false: a transient arm-query failure is also reported as not armed.
@@ -146,13 +147,29 @@ func queryPausePointArmStatus(
 	ctx context.Context,
 	connection unityipc.Connection,
 	id string,
-) (pausePointStatusResponse, bool) {
+) (pausePointStatusResponse, bool, error) {
 	response, err := queryPausePointStatus(ctx, connection, id)
 	if err != nil {
-		return pausePointStatusResponse{}, false
+		return pausePointStatusResponse{}, false, err
 	}
 	state := pausePointWaitStateForStatus(response.Status)
-	return response, state == "" || state == pausePointWaitStateHit
+	return response, state == "" || state == pausePointWaitStateHit, nil
+}
+
+const (
+	pausePointResumeNotArmedAtWaitStartError  = "resume was not dispatched: the marker could not be confirmed armed at wait start"
+	pausePointTriggerNotArmedAtWaitStartError = "trigger was not dispatched: the marker could not be confirmed armed at wait start"
+)
+
+func pausePointUnarmedAtWaitStartSuffix(response pausePointStatusResponse, queryErr error) string {
+	if queryErr != nil {
+		return ""
+	}
+	return fmt.Sprintf(
+		" marker status was '%s' (ClearedReason: %s)",
+		response.Status,
+		response.ClearedReason,
+	)
 }
 
 func waitForPausePointStatus(
