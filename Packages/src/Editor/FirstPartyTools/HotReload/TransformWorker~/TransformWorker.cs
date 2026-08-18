@@ -520,7 +520,6 @@ public static class TransformWorkerProgram
         }
 
         string shimSource = ShimSourceEmitter.Emit(root, shimTypes, input.ProjectRelativePath);
-        AppendAddedFieldsLifetimeWarning(addedFieldCatalog, declarationDriftWarnings);
         return new WorkerOutput
         {
             ShimSource = shimSource,
@@ -551,23 +550,6 @@ public static class TransformWorkerProgram
         }
 
         return builder.ToString();
-    }
-
-    private static void AppendAddedFieldsLifetimeWarning(
-        AddedFieldCatalog addedFieldCatalog,
-        List<string> declarationDriftWarnings)
-    {
-        string[] names = addedFieldCatalog.ListClassifiedAddedFieldDisplayNames();
-        if (names.Length == 0)
-        {
-            return;
-        }
-
-        declarationDriftWarnings.Add(
-            string.Format(
-                CultureInfo.InvariantCulture,
-                AddedFieldSkipReasons.AddedFieldsLifetimeWarningFormat,
-                string.Join(", ", names)));
     }
 
     /// <summary>
@@ -8174,18 +8156,6 @@ internal sealed class AddedFieldCatalog
         return names.ToArray();
     }
 
-    public string[] ListClassifiedAddedFieldDisplayNames()
-    {
-        List<string> names = new List<string>(_classifiedAddedKeys.Count);
-        foreach (string fieldKey in _classifiedAddedKeys)
-        {
-            names.Add(FormatAddedFieldDisplayName(fieldKey));
-        }
-
-        names.Sort(StringComparer.Ordinal);
-        return names.ToArray();
-    }
-
     // Why this shape: method labels replace '/' with '+' then join with '.', so field
     // names stay comparable to Methods[].Method (Ns.Type.field).
     private static string FormatAddedFieldDisplayName(string fieldKey)
@@ -8285,9 +8255,6 @@ internal static class AddedFieldSkipReasons
     public const string SerializeWarningFormat =
         "Added field '{0}' has a serialization attribute, so it will not appear in the Inspector "
         + "or serialize until 'uloop compile'.";
-
-    public const string AddedFieldsLifetimeWarningFormat =
-        "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
 }
 
 internal static class AddedMethodSkipReasons

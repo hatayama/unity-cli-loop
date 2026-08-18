@@ -51,11 +51,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CompiledEventWarningFormat =
             "Compiled event '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.";
 
-        // Keep in sync with AddedFieldSkipReasons.AddedFieldsLifetimeWarningFormat in
-        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
-        private const string AddedFieldsLifetimeWarningFormat =
-            "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
-
         // Keep in sync with OutsideMethodBodyDriftWarningFormat in
         // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
         // That constant lives in the Unity-ignored worker process and is not visible here.
@@ -401,10 +396,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            string expectedLifetimeWarning = string.Format(
-                AddedFieldsLifetimeWarningFormat,
+            string unexpectedLifetimeWarning = string.Format(
+                HotReloadConstants.AddedFieldsLifetimeWarningFormat,
                 typeof(HotReloadAddedMemberHost).FullName + ".AddedCount");
-            Assert.That(result.Output.declarationDriftWarnings, Does.Contain(expectedLifetimeWarning));
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Does.Not.Contain(unexpectedLifetimeWarning),
+                "Worker must not emit the added-fields lifetime warning; the orchestrator owns it.");
             string expectedOutsideBodyWarning = string.Format(
                 OutsideMethodBodyDriftWarningFormat,
                 "AddedFieldNoDrift.cs");

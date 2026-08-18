@@ -40,11 +40,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string UnavailableAddedCallSkipReason =
             "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
 
-        // Keep in sync with AddedFieldSkipReasons.AddedFieldsLifetimeWarningFormat in
-        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
-        private const string AddedFieldsLifetimeWarningFormat =
-            "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
-
         // Keep in sync with EvaluateHardSkipReason in
         // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
         private const string ExpectedGenericMethodSkipReason =
@@ -2779,6 +2774,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
             AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
             Assert.That(result.AddedFields, Is.EqualTo(expected));
+            AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
         }
 
         /// <summary>
@@ -2816,6 +2812,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(foundFailure, Is.True, "Expected CallsMissingHelper to fail.\n" + FormatOutcomes(result));
             Assert.That(result.AddedFields, Is.Not.Null);
             Assert.That(result.AddedFields, Is.Empty);
+            AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
         }
 
         /// <summary>
@@ -2854,6 +2851,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(foundFailure, Is.True, "Expected CallsMissingHelper to fail.\n" + FormatOutcomes(result));
             Assert.That(result.AddedFields, Is.Not.Null);
             Assert.That(result.AddedFields, Is.Empty);
+            AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
+        }
+
+        /// <summary>
+        /// What: a declared added field that is never rewritten into a patched body is omitted
+        /// from AddedFields, and the lifetime warning lists exactly that same set.
+        /// </summary>
+        [Test]
+        public async Task Run_DeclaredButUnrewrittenAddedField_LifetimeWarningMatchesAddedFields()
+        {
+            string applyPath = ResolveAddedFieldApplyFixturePath();
+            string applyOnDisk = File.ReadAllText(applyPath);
+            string applyEdited = applyOnDisk.Replace(
+                "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n        }",
+                "        private int UsedScratch;\n"
+                + "        private int UnusedScratch;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadAdded()\n        {\n            return UsedScratch;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n            UsedScratch = value;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(applyEdited, Is.Not.EqualTo(applyOnDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { applyPath },
+                WriteEditedSource("DeclaredButUnrewrittenAddedField.cs", applyEdited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            Assert.That(
+                result.AddedFields,
+                Is.EqualTo(new[] { typeof(HotReloadAddedFieldApplyFixture).FullName + ".UsedScratch" }));
+            AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
         }
 
         /// <summary>
@@ -3066,7 +3099,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadAddedFieldApplyFixture).FullName + ".BetaScratch"
             };
             string expectedLifetimeWarning = string.Format(
-                AddedFieldsLifetimeWarningFormat,
+                HotReloadConstants.AddedFieldsLifetimeWarningFormat,
                 string.Join(", ", expectedNames));
             Assert.That(withFields.Warnings, Does.Contain(expectedLifetimeWarning));
 
@@ -3080,9 +3113,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }")),
                 CancellationToken.None);
             AssertNoFileLevelFailure(bodyOnly);
-            string lifetimePrefix = AddedFieldsLifetimeWarningFormat.Substring(
+            string lifetimePrefix = HotReloadConstants.AddedFieldsLifetimeWarningFormat.Substring(
                 0,
-                AddedFieldsLifetimeWarningFormat.IndexOf("{0}", StringComparison.Ordinal));
+                HotReloadConstants.AddedFieldsLifetimeWarningFormat.IndexOf("{0}", StringComparison.Ordinal));
             foreach (string warning in bodyOnly.Warnings)
             {
                 Assert.That(
@@ -4629,6 +4662,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return -1;
+        }
+
+        private static void AssertAddedFieldsLifetimeWarningMatchesAddedFields(
+            HotReloadOrchestratorResult result)
+        {
+            string[] addedFields = result.AddedFields ?? Array.Empty<string>();
+            string prefix = HotReloadConstants.AddedFieldsLifetimeWarningFormat.Substring(
+                0,
+                HotReloadConstants.AddedFieldsLifetimeWarningFormat.IndexOf("{0}", StringComparison.Ordinal));
+            List<string> lifetimeWarnings = new List<string>();
+            IReadOnlyList<string> warnings = result.Warnings ?? Array.Empty<string>();
+            foreach (string warning in warnings)
+            {
+                if (warning != null && warning.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    lifetimeWarnings.Add(warning);
+                }
+            }
+
+            if (addedFields.Length == 0)
+            {
+                Assert.That(
+                    lifetimeWarnings,
+                    Is.Empty,
+                    "Empty AddedFields must not emit a lifetime warning.\n"
+                    + string.Join("\n", warnings));
+                return;
+            }
+
+            string expected = string.Format(
+                HotReloadConstants.AddedFieldsLifetimeWarningFormat,
+                string.Join(", ", addedFields));
+            Assert.That(
+                lifetimeWarnings.Count,
+                Is.EqualTo(1),
+                "A non-empty AddedFields run must emit exactly one lifetime warning.\n"
+                + string.Join("\n", warnings));
+            Assert.That(lifetimeWarnings[0], Is.EqualTo(expected));
         }
 
         private static void AssertNoFileLevelFailure(HotReloadOrchestratorResult result)
