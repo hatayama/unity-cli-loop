@@ -417,6 +417,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(warning, Is.EqualTo(string.Empty));
         }
+
+        /// <summary>
+        /// What: nearby compiled spans are formatted as a suffix on a resolve-failure message.
+        /// </summary>
         [Test]
         public void AppendNearbyCompiledMethodsSuffix_WhenNearbyMethodsExist_AppendsFormattedSpans()
         {
