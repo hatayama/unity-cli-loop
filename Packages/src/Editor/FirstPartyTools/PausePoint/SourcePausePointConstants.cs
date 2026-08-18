@@ -235,6 +235,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string NearbyCompiledMethodSpanFormat = "'{0}' spans lines {1}-{2}";
 
+        // Format: patched method display name, requested line.
+        // Why a dedicated string: a patched method with no shim PDB still falls through to the
+        // compiled line map, so the generic "patched methods use the edited file" sentence would
+        // be a lie on that path.
+        public const string HotReloadPatchedMethodPdbUnavailableWarningFormat =
+            "--line {1} falls inside hot-reload patched method '{0}', but this patch has no debug "
+            + "symbols. Line numbers are therefore resolved against the last compiled source, not "
+            + "the edited file. Run 'uloop compile' and re-enable.";
+
         // Format: resolved method display name, requested line, edited start line, edited end line.
         public const string HotReloadRetargetedToEditedFileWarningFormat =
             "--line {1} was resolved against the edited file because it falls inside hot-reload "

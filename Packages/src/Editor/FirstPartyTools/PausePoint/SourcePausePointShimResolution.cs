@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -118,6 +119,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters: null,
                 instanceFromFirstArgument: false,
                 methodDisplayName: null,
+                errorMessage: null,
+                sourceStartLine: 0,
+                sourceEndLine: 0);
+        }
+
+        public static SourcePausePointShimResolution PatchedMethodPdbUnavailable(MethodBase logicalOwner)
+        {
+            Debug.Assert(logicalOwner != null, "logicalOwner must not be null.");
+            string typeName = logicalOwner.DeclaringType != null ? logicalOwner.DeclaringType.Name : "?";
+            return new SourcePausePointShimResolution(
+                SourcePausePointShimResolveKind.PatchedMethodPdbUnavailable,
+                targetMethod: null,
+                logicalOwner,
+                donorShim: null,
+                instructionIndex: -1,
+                resolvedLine: 0,
+                locals: null,
+                parameters: null,
+                instanceFromFirstArgument: false,
+                typeName + "." + logicalOwner.Name,
                 errorMessage: null,
                 sourceStartLine: 0,
                 sourceEndLine: 0);

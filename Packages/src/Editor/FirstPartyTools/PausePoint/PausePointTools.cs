@@ -485,6 +485,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(parameters.File);
             string id = BuildSourcePausePointId(parameters.File, parameters.Line);
+            string patchedMethodPdbUnavailableWarning = string.Empty;
 
             HotReloadShimFileLookup shimLookup =
                 HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(normalizedFile);
@@ -536,7 +537,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "Pick a line with an executable statement inside the edited method body.");
                 }
 
-                // NotInPatchedMethod: fall through to the compiled ScriptAssemblies resolver.
+                patchedMethodPdbUnavailableWarning = BuildPatchedMethodPdbUnavailableWarningOrEmpty(
+                    shimResolution.Kind == SourcePausePointShimResolveKind.PatchedMethodPdbUnavailable,
+                    shimResolution.MethodDisplayName,
+                    parameters.Line);
+                // NotInPatchedMethod and PatchedMethodPdbUnavailable: fall through to the
+                // compiled ScriptAssemblies resolver. The latter still uses the compiled line
+                // map; only the warning text differs.
             }
 
             SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(parameters.File, parameters.Line);
@@ -555,9 +562,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         resolveResult.NearbyCompiledMethods),
                     SourcePausePointConstants.ErrorCodeResolveFailed,
                     recommendedNextAction);
-                response.Warning = BuildCompiledLineMapResolveFailureWarningOrEmpty(
-                    hasActiveHotReloadPatches,
-                    parameters.File);
+                response.Warning = ChooseCompiledLineMapWarning(
+                    patchedMethodPdbUnavailableWarning,
+                    BuildCompiledLineMapResolveFailureWarningOrEmpty(
+                        hasActiveHotReloadPatches,
+                        parameters.File));
                 return response;
             }
 
@@ -592,7 +601,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 retargetedToHotReloadPatch: false,
                 hasActiveHotReloadPatches: shimLookup != null,
                 compiledMethodStartLine: resolveResult.Resolution.CompiledMethodStartLine,
-                compiledMethodEndLine: resolveResult.Resolution.CompiledMethodEndLine);
+                compiledMethodEndLine: resolveResult.Resolution.CompiledMethodEndLine,
+                patchedMethodPdbUnavailableWarning: patchedMethodPdbUnavailableWarning);
         }
 
         private static PausePointResponse FinishEnableBySourceLocation(
@@ -607,7 +617,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int editedMethodStartLine = 0,
             int editedMethodEndLine = 0,
             int compiledMethodStartLine = 0,
-            int compiledMethodEndLine = 0)
+            int compiledMethodEndLine = 0,
+            string patchedMethodPdbUnavailableWarning = "")
         {
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(
                 id,
@@ -645,9 +656,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     editedMethodStartLine,
                     editedMethodEndLine));
             bool compareCompiledLineDrift = hasActiveHotReloadPatches && !retargetedToHotReloadPatch;
-            string compiledLineMapWarning = BuildCompiledLineMapWarningOrEmpty(
-                compareCompiledLineDrift,
-                parameters.File);
+            string compiledLineMapWarning = ChooseCompiledLineMapWarning(
+                patchedMethodPdbUnavailableWarning,
+                BuildCompiledLineMapWarningOrEmpty(
+                    compareCompiledLineDrift,
+                    parameters.File));
             enableWarning = MergeWarnings(enableWarning, compiledLineMapWarning);
             if (compareCompiledLineDrift)
             {
@@ -992,6 +1005,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return SourcePausePointSourceLineReader.ReadLineTextFromSource(
                 File.ReadAllText(absoluteFilePath),
                 resolvedLine);
+        }
+
+        internal static string BuildPatchedMethodPdbUnavailableWarningOrEmpty(
+            bool patchedMethodPdbUnavailable,
+            string methodDisplayName,
+            int requestedLine)
+        {
+            if (!patchedMethodPdbUnavailable)
+            {
+                return string.Empty;
+            }
+
+            Debug.Assert(!string.IsNullOrEmpty(methodDisplayName), "methodDisplayName must not be empty.");
+            Debug.Assert(requestedLine > 0, "requestedLine must be a positive 1-based line number.");
+            return string.Format(
+                SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
+                methodDisplayName,
+                requestedLine);
+        }
+
+        private static string ChooseCompiledLineMapWarning(
+            string patchedMethodPdbUnavailableWarning,
+            string genericCompiledLineMapWarning)
+        {
+            if (!string.IsNullOrEmpty(patchedMethodPdbUnavailableWarning))
+            {
+                return patchedMethodPdbUnavailableWarning;
+            }
+
+            return genericCompiledLineMapWarning;
         }
 
         internal static string BuildCompiledLineMapWarningOrEmpty(bool hasActiveHotReloadPatches, string file)

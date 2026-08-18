@@ -210,6 +210,51 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (startLine, endLine);
         }
 
+        // Why a file:line entry: the resolver test assembly cannot take a Cecil
+        // ModuleDefinition dependency, but TakeAtMostTwo only runs on this walk.
+        internal static IReadOnlyList<SourcePausePointNearbyCompiledMethod> FindNearbyCompiledMethodsInFile(
+            string projectRelativeFilePath,
+            int line)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
+            Debug.Assert(line > 0, "line must be a positive 1-based line number.");
+
+            string normalizedInputPath = SourcePausePointPathNormalizer.ToForwardSlashes(projectRelativeFilePath);
+            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(normalizedInputPath);
+            if (string.IsNullOrEmpty(rawAssemblyName))
+            {
+                return Array.Empty<SourcePausePointNearbyCompiledMethod>();
+            }
+
+            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            string dllPath = Path.Combine(
+                projectRoot,
+                SourcePausePointConstants.ScriptAssembliesRelativeDirectory,
+                assemblyName + SourcePausePointConstants.CompiledAssemblyExtension);
+            string pdbPath = Path.Combine(
+                projectRoot,
+                SourcePausePointConstants.ScriptAssembliesRelativeDirectory,
+                assemblyName + SourcePausePointConstants.DebugSymbolsExtension);
+            if (!File.Exists(dllPath) || !File.Exists(pdbPath))
+            {
+                return Array.Empty<SourcePausePointNearbyCompiledMethod>();
+            }
+
+            using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using FileStream pdbStream = File.Open(pdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            ReaderParameters readerParameters = new ReaderParameters
+            {
+                InMemory = true,
+                ReadSymbols = true,
+                SymbolReaderProvider = new PortablePdbReaderProvider(),
+                SymbolStream = pdbStream
+            };
+            using AssemblyDefinition assemblyDefinition =
+                AssemblyDefinition.ReadAssembly(dllStream, readerParameters);
+            return FindNearbyCompiledMethods(assemblyDefinition.MainModule, normalizedInputPath, line);
+        }
+
         // Why a separate walk from FindClosestSequencePointOnOrAfterLine: that search only
         // looks forward, so a miss past the last statement would otherwise leave the caller
         // with no compiled span to retarget against.

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 
 using NUnit.Framework;
@@ -220,6 +221,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 result.NearbyCompiledMethods[0].EndLine,
                 Is.EqualTo(otherMethod.Resolution.CompiledMethodEndLine));
+        }
+
+        /// <summary>
+        /// What: when three or more compiled methods contain the requested line, nearby
+        /// recovery material is capped at two.
+        /// </summary>
+        [Test]
+        public void FindNearbyCompiledMethods_WhenMoreThanTwoMethodsContainTheLine_ReturnsAtMostTwo()
+        {
+            const int line = 9;
+            string file = FixturesDirectory + "NearbyContainingMethodsFixture.cs";
+
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearby =
+                SourcePausePointResolver.FindNearbyCompiledMethodsInFile(file, line);
+
+            Assert.That(
+                nearby.Count,
+                Is.EqualTo(2),
+                string.Join(", ", nearby.Select(method => method.DisplayName)));
+            Assert.That(nearby[0].StartLine, Is.LessThanOrEqualTo(line));
+            Assert.That(nearby[0].EndLine, Is.GreaterThanOrEqualTo(line));
+            Assert.That(nearby[1].StartLine, Is.LessThanOrEqualTo(line));
+            Assert.That(nearby[1].EndLine, Is.GreaterThanOrEqualTo(line));
         }
     }
 }
