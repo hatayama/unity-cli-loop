@@ -220,5 +220,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HotReloadPatchedLineOutsidePatchedBodyNextAction =
             "Pick a line inside the edited method body, run 'uloop hot-reload --revert-all' to "
             + "restore compiled bodies, or run 'uloop compile' to realign line numbers.";
+
+        public const string HotReloadPatchedCompiledMethodSpanFormat =
+            " In the last compiled source, '{0}.{1}' spans lines {2}-{3}.";
     }
 }

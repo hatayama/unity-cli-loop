@@ -20,6 +20,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Sequence-point EndLine is internal transport for joining ResolvedLineText.
         // It is not a CLI response field.
         public int ResolvedEndLine { get; }
+        // Compiled method span is internal transport for the patched-by-hot-reload
+        // failure message. It is not a CLI response field.
+        public int CompiledMethodStartLine { get; }
+        public int CompiledMethodEndLine { get; }
         public IReadOnlyList<SourcePausePointLocalVariable> Locals { get; }
         public IReadOnlyList<SourcePausePointParameter> Parameters { get; }
 
@@ -34,6 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int ilOffset,
             int resolvedLine,
             int resolvedEndLine,
+            int compiledMethodStartLine,
+            int compiledMethodEndLine,
             IReadOnlyList<SourcePausePointLocalVariable> locals,
             IReadOnlyList<SourcePausePointParameter> parameters)
         {
@@ -47,6 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IlOffset = ilOffset;
             ResolvedLine = resolvedLine;
             ResolvedEndLine = resolvedEndLine;
+            CompiledMethodStartLine = compiledMethodStartLine;
+            CompiledMethodEndLine = compiledMethodEndLine;
             Locals = locals;
             Parameters = parameters;
         }
