@@ -201,6 +201,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Source is unchanged since the last applied hot reload; the existing patch stays active "
             + "and keeps its InvocationCount. Edit and reload again to apply new changes.";
 
+        public const string AlreadyActiveAddedMemberReason =
+            "Source is unchanged since the last applied hot reload; the existing added member stays available. "
+            + "Added-member calls are not instrumented, so InvocationCount is always 0 for this row.";
+
+        public const string MultiWarningSingleCompileResolutionMessage =
+            "A single 'uloop compile' clears all of them at once.";
+
         // Format: project-relative path of the source that matched a non-baseline ledger entry.
         public const string UnchangedSourceNonBaselineWarningFormat =
             "Source of '{0}' is unchanged since the last reload, but that run had Skipped or Failed "

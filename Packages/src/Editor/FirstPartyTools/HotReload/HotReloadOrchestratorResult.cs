@@ -109,12 +109,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 lifecycleNote);
         }
 
-        public static HotReloadMethodOutcome AlreadyActive(string method, string filePath)
+        public static HotReloadMethodOutcome AlreadyActive(
+            string method,
+            string filePath,
+            string reason = null)
         {
             return new HotReloadMethodOutcome(
                 HotReloadMethodOutcomeKind.AlreadyActive,
                 method,
-                HotReloadConstants.AlreadyActiveReason,
+                string.IsNullOrEmpty(reason)
+                    ? HotReloadConstants.AlreadyActiveReason
+                    : reason,
                 filePath,
                 string.Empty);
         }

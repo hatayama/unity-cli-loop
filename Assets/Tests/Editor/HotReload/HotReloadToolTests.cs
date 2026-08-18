@@ -514,7 +514,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 applied.Message,
                 Is.EqualTo(
                     "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
-                    + "2 warning(s). See Warnings."));
+                    + "2 warning(s). See Warnings. "
+                    + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
 
             HotReloadResponse appliedWithSkipped = HotReloadTool.BuildApplyResponse(
                 new HotReloadOrchestratorResult(
@@ -530,7 +531,90 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 appliedWithSkipped.Message,
                 Is.EqualTo(
                     "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
-                    + "See Methods for Skipped reasons. 2 warning(s). See Warnings."));
+                    + "See Methods for Skipped reasons. 2 warning(s). See Warnings. "
+                    + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+        }
+
+        /// <summary>
+        /// What: two or more orchestrator-only warnings append the single-compile resolution
+        /// sentence after the warning-count suffix.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_TwoOrchestratorWarnings_AppendsSingleCompileResolution()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string> { "warn-a", "warn-b" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1));
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    + "2 warning(s). See Warnings. "
+                    + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+        }
+
+        /// <summary>
+        /// What: a single orchestrator warning keeps the count suffix and does not add the
+        /// single-compile resolution sentence.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_OneOrchestratorWarning_OmitsSingleCompileResolution()
+        {
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string> { "warn-a" },
+                    patchedTotal: 1,
+                    activePatchTotal: 1));
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    + "1 warning(s). See Warnings."));
+            Assert.That(
+                response.Message,
+                Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+        }
+
+        /// <summary>
+        /// What: a pause-point warning merged onto two orchestrator warnings suppresses the
+        /// single-compile resolution sentence, because compile alone cannot clear pause-point
+        /// recovery steps.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_TwoOrchestratorWarningsPlusPausePoint_OmitsSingleCompileResolution()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string> { "warn-a", "warn-b" },
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                suppressedPausePointIds: new List<string> { "Assets/Scripts/A.cs:10" });
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    + "3 warning(s). See Warnings."));
+            Assert.That(
+                response.Message,
+                Does.Not.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
         }
 
         /// <summary>
