@@ -8,6 +8,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         TransplantChainJoin,
         ShimDirect,
         NotInPatchedMethod,
+        PatchedMethodPdbUnavailable,
         NoStatementInPatchedMethod
     }
 }

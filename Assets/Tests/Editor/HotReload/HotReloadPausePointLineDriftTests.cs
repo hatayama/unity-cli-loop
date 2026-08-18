@@ -27,7 +27,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HotReloadCompiledLineMapWarning =
             "'Assets/Tests/Editor/HotReload/HotReloadPausePointLineDriftFixture.cs' has active "
             + "hot-reload patches. For methods this reload did not patch, --line resolves against "
-            + "the last compiled source, not the edited file. Verify ResolvedMethod and "
+            + "the last compiled source, not the edited file. Methods currently patched by hot "
+            + "reload resolve against the edited file instead. Verify ResolvedMethod and "
             + "ResolvedLineText, or run 'uloop compile' and re-enable.";
 
         private const string CompiledSnapshotSentinel = "SENTINEL_COMPILED_LINE_TEXT";
@@ -100,7 +101,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: the same top-of-file insert still retargets a patched method onto the
-        /// hot-reload body and does not emit the compiled-line-map warning.
+        /// hot-reload body, emits the edited-file line-basis warning, and does not emit
+        /// the compiled-line-map warning.
         /// </summary>
         [Test]
         public async Task Enable_PatchedMethodAfterTopOfFileInsert_DoesNotWarnAboutCompiledLineMap()
@@ -124,6 +126,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
             Assert.That(enable.ResolvedMethod, Does.Contain(nameof(HotReloadPausePointLineDriftFixture.PatchTarget)));
             Assert.That(enable.Warning ?? string.Empty, Does.Not.Contain("has active hot-reload patches"));
+
+            HotReloadShimMethodLookup patchedEntry = FindPatchedShimEntry();
+            string expectedWarning = PausePointUseCase.MergeWarnings(
+                PausePointUseCase.MergeWarnings(
+                    PausePointUseCase.CreateEnableWarning(),
+                    PausePointUseCase.BuildRetargetedToHotReloadPatchWarningOrEmpty(
+                        true,
+                        enable.ResolvedMethod,
+                        editedPatchLine,
+                        patchedEntry.SourceStartLine,
+                        patchedEntry.SourceEndLine)),
+                SourcePausePointConstants.SmallMethodInliningRiskWarning);
+            Assert.That(enable.Warning, Is.EqualTo(expectedWarning));
         }
 
         /// <summary>
@@ -241,6 +256,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
             Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
             return enable;
+        }
+
+        private static HotReloadShimMethodLookup FindPatchedShimEntry()
+        {
+            Func<string, HotReloadShimFileLookup> getLookup =
+                HotReloadPausePointCoordination.GetShimLookupForFile;
+            Assert.That(getLookup, Is.Not.Null);
+            HotReloadShimFileLookup lookup = getLookup(FixtureProjectRelativePath);
+            Assert.That(lookup, Is.Not.Null);
+            Assert.That(lookup.Methods, Is.Not.Null);
+
+            HotReloadShimMethodLookup patchedEntry = null;
+            foreach (HotReloadShimMethodLookup method in lookup.Methods)
+            {
+                if (method.OriginalMethod != null
+                    && method.OriginalMethod.Name == nameof(HotReloadPausePointLineDriftFixture.PatchTarget))
+                {
+                    patchedEntry = method;
+                    break;
+                }
+            }
+
+            Assert.That(patchedEntry, Is.Not.Null);
+            Assert.That(patchedEntry.SourceStartLine, Is.GreaterThan(0));
+            Assert.That(patchedEntry.SourceEndLine, Is.GreaterThanOrEqualTo(patchedEntry.SourceStartLine));
+            return patchedEntry;
         }
 
         private static string BuildSentinelSnapshot(string sentinel, int lineCount)

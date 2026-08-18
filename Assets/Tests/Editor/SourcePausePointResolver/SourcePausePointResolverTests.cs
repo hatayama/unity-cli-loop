@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 
 using NUnit.Framework;
@@ -193,6 +194,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine));
+        }
+
+        /// <summary>
+        /// What: a line past every sequence point in the file lists the last compiled method
+        /// span in that document as nearby recovery material.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenLineIsBeyondAllSequencePoints_IncludesNearbyCompiledMethodSpans()
+        {
+            string file = FixturesDirectory + "CompiledMethodSpanFixture.cs";
+            SourcePausePointResolveResult otherMethod = SourcePausePointResolver.Resolve(file, 16);
+            Assert.That(otherMethod.Success, Is.True, otherMethod.ErrorMessage);
+
+            SourcePausePointResolveResult result = SourcePausePointResolver.Resolve(file, 9999);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.FailureReason, Is.EqualTo(SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine));
+            Assert.That(result.NearbyCompiledMethods.Count, Is.EqualTo(1));
+            Assert.That(
+                result.NearbyCompiledMethods[0].DisplayName,
+                Is.EqualTo("CompiledMethodSpanFixture.OtherMethod"));
+            Assert.That(
+                result.NearbyCompiledMethods[0].StartLine,
+                Is.EqualTo(otherMethod.Resolution.CompiledMethodStartLine));
+            Assert.That(
+                result.NearbyCompiledMethods[0].EndLine,
+                Is.EqualTo(otherMethod.Resolution.CompiledMethodEndLine));
+        }
+
+        /// <summary>
+        /// What: when three or more compiled methods contain the requested line, nearby
+        /// recovery material is capped at two.
+        /// </summary>
+        [Test]
+        public void FindNearbyCompiledMethods_WhenMoreThanTwoMethodsContainTheLine_ReturnsAtMostTwo()
+        {
+            const int line = 9;
+            string file = FixturesDirectory + "NearbyContainingMethodsFixture.cs";
+
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearby =
+                SourcePausePointResolver.FindNearbyCompiledMethodsInFile(file, line);
+
+            Assert.That(
+                nearby.Count,
+                Is.EqualTo(2),
+                string.Join(", ", nearby.Select(method => method.DisplayName)));
+            Assert.That(nearby[0].StartLine, Is.LessThanOrEqualTo(line));
+            Assert.That(nearby[0].EndLine, Is.GreaterThanOrEqualTo(line));
+            Assert.That(nearby[1].StartLine, Is.LessThanOrEqualTo(line));
+            Assert.That(nearby[1].EndLine, Is.GreaterThanOrEqualTo(line));
         }
     }
 }

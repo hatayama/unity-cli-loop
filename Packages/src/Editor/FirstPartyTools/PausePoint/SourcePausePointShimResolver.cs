@@ -31,11 +31,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return SourcePausePointShimResolution.NotInPatchedMethod();
             }
 
-            // Why bail before Cecil: fallback compile backends can omit PDB bytes; ReadSymbols
-            // against an empty stream throws and would abort the whole enable call.
+            // Why a distinct Kind: fallback compile backends can omit PDB bytes; ReadSymbols
+            // against an empty stream throws. Enable still falls through to the compiled
+            // resolver, but must not claim patched methods resolve against the edited file.
             if (lookup.PdbBytes == null || lookup.PdbBytes.Length == 0)
             {
-                return SourcePausePointShimResolution.NotInPatchedMethod();
+                return SourcePausePointShimResolution.PatchedMethodPdbUnavailable(methodEntry.OriginalMethod);
             }
 
             using MemoryStream assemblyStream = new MemoryStream(lookup.AssemblyBytes, writable: false);
@@ -106,7 +107,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     instructionIndex,
                     sequencePoint.StartLine,
                     locals,
-                    parameters);
+                    parameters,
+                    methodEntry.SourceStartLine,
+                    methodEntry.SourceEndLine);
             }
 
             MethodBase targetMethod =
@@ -127,7 +130,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sequencePoint.StartLine,
                 locals,
                 shimParameters,
-                instanceFromFirstArgument);
+                instanceFromFirstArgument,
+                methodEntry.SourceStartLine,
+                methodEntry.SourceEndLine);
         }
 
         private static HotReloadShimMethodLookup FindMethodEntryForLine(
