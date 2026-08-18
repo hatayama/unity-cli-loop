@@ -1200,6 +1200,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compilationAssembly,
                 targetDllPath,
                 defines,
+                workerOutput.skipped,
+                assemblyResolvePath,
                 ct).ConfigureAwait(false);
             return retry.Isolation;
         }
@@ -1212,6 +1214,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCompilationAssembly compilationAssembly,
             string targetDllPath,
             string[] defines,
+            TransformWorkerSkippedDto[] firstPassSkipped,
+            string assemblyResolvePath,
             CancellationToken ct)
         {
             TransformWorkerInputDto retryInput = new TransformWorkerInputDto
@@ -1237,9 +1241,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Retry worker failed: " + retryWorkerResult.ErrorMessage);
             }
 
-            // The first run already surfaced parseErrors / skipped / drift warnings; consuming
-            // them again would duplicate every per-file report.
             TransformWorkerOutputDto retryOutput = retryWorkerResult.Output;
+            // Why drop first-pass (Method, Reason) pairs: consuming them again would duplicate
+            // every per-file skip. Retry-only pairs are new — typically transitive callers of
+            // excluded added methods — and must surface or the edit is applied nowhere.
+            skippedCallerOutcomes.AddRange(
+                CollectRetryOnlySkippedOutcomes(
+                    firstPassSkipped,
+                    retryOutput.skipped,
+                    assemblyResolvePath));
             if (string.IsNullOrEmpty(retryOutput.shimSource) || retryOutput.entries.Length == 0)
             {
                 return IsolationRetryRunResult.Succeeded(
@@ -1287,6 +1297,61 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     retryOutput.entries,
                     retryCompileResult,
                     retryOutput.addedFieldNames));
+        }
+
+        /// <summary>
+        /// Converts retry-worker skips that are not already in the first-pass skipped list into
+        /// outcomes. Match is (Method, Reason) Ordinal equality so a method skipped for a new
+        /// reason on retry still surfaces.
+        /// </summary>
+        private static List<HotReloadMethodOutcome> CollectRetryOnlySkippedOutcomes(
+            TransformWorkerSkippedDto[] firstPassSkipped,
+            TransformWorkerSkippedDto[] retrySkipped,
+            string assemblyResolvePath)
+        {
+            List<HotReloadMethodOutcome> retryOnly = new List<HotReloadMethodOutcome>();
+            if (retrySkipped == null)
+            {
+                return retryOnly;
+            }
+
+            TransformWorkerSkippedDto[] baseline =
+                firstPassSkipped ?? Array.Empty<TransformWorkerSkippedDto>();
+            foreach (TransformWorkerSkippedDto retryRow in retrySkipped)
+            {
+                if (FirstPassContainsSkippedPair(baseline, retryRow))
+                {
+                    continue;
+                }
+
+                retryOnly.Add(
+                    HotReloadMethodOutcome.Skipped(
+                        retryRow.method ?? "(unknown)",
+                        retryRow.reason ?? string.Empty,
+                        assemblyResolvePath));
+            }
+
+            return retryOnly;
+        }
+
+        private static bool FirstPassContainsSkippedPair(
+            TransformWorkerSkippedDto[] firstPassSkipped,
+            TransformWorkerSkippedDto retryRow)
+        {
+            string retryMethod = retryRow.method ?? string.Empty;
+            string retryReason = retryRow.reason ?? string.Empty;
+            foreach (TransformWorkerSkippedDto firstPassRow in firstPassSkipped)
+            {
+                string firstMethod = firstPassRow.method ?? string.Empty;
+                string firstReason = firstPassRow.reason ?? string.Empty;
+                if (string.Equals(firstMethod, retryMethod, StringComparison.Ordinal)
+                    && string.Equals(firstReason, retryReason, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static List<HotReloadMethodOutcome> BuildFailedMethodOutcomes(
@@ -1624,6 +1689,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compilationAssembly,
                 targetDllPath,
                 defines,
+                workerOutput.skipped,
+                assemblyResolvePath,
                 ct).ConfigureAwait(false);
             List<string> gatedReplacementMethodKeys =
                 CollectGatedReplacementMethodKeys(gatedReplacements);
@@ -1634,6 +1701,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     gatedReplacementMethodKeys);
             }
 
+            // Why merge here: gate consumption adds SkippedOutcomes only. Retry-only skips live
+            // on Isolation.SkippedCallerOutcomes and would drop again without this join.
+            skippedOutcomes.AddRange(retry.Isolation.SkippedCallerOutcomes);
             return SignatureChangeGateResult.Retried(
                 retry.Isolation,
                 skippedOutcomes,
