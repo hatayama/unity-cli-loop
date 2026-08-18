@@ -650,8 +650,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.FailureReason,
                 Is.EqualTo(SourcePausePointPatchFailureReason.MethodPatchedByHotReload));
-            Assert.That(result.ErrorMessage, Does.Contain("line " + requestedLine));
-            Assert.That(result.Hint, Does.Contain("uloop hot-reload --revert-all"));
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo(
+                    string.Format(
+                        SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
+                        nameof(HotReloadPausePointContractFixture),
+                        nameof(HotReloadPausePointContractFixture.ReplaceableCompute),
+                        requestedLine)));
+            Assert.That(
+                result.Hint,
+                Is.EqualTo(SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyNextAction));
         }
 
         /// <summary>

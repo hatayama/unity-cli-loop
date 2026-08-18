@@ -192,5 +192,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HotReloadCompiledLineMapResolveFailureNextAction =
             "Pass a line number from the last compiled source (the editor shows the edited file, "
             + "which can drift after hot reload), or run 'uloop compile' and re-enable the pause point.";
+
+        // Format: file, resolved line, compiled line text, edited line text.
+        public const string HotReloadCompiledLineMapLineDriftWarningFormat =
+            "'{0}' line {1} is '{2}' in the last compiled source but '{3}' in the edited file. "
+            + "The marker is armed on the compiled statement. If that is not the statement you meant, "
+            + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable.";
+
+        public const string HotReloadCompiledLineMapLineDriftNextAction =
+            "Verify ResolvedLineText is the statement you intended. If it is not, run 'uloop compile' "
+            + "and re-enable the pause point.";
+
+        // Format: declaring type name, method name, requested line.
+        public const string HotReloadPatchedLineOutsidePatchedBodyMessageFormat =
+            "'{0}.{1}' is currently hot-reload patched and line {2} does not fall inside any "
+            + "hot-reload patched method's current body, so the marker cannot be placed reliably. "
+            + "Line numbers are resolved against the last compiled source, so a line number taken "
+            + "from the edited file can land inside a different method after edits shift lines. "
+            + "Either the compiled line map for this file is stale, or the method's active patch "
+            + "belongs to a superseded hot-reload generation.";
+
+        public const string HotReloadPatchedLineOutsidePatchedBodyNextAction =
+            "Pick a line inside the edited method body, run 'uloop hot-reload --revert-all' to "
+            + "restore compiled bodies, or run 'uloop compile' to realign line numbers.";
     }
 }
