@@ -99,7 +99,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return entry.ToSnapshot(now, _pauseController);
         }
 
-        public static (UloopPausePointSnapshot Snapshot, bool ResumedFromPause) Clear(string id)
+        /// <summary>
+        /// Clears one marker. ClearedCount is 1 when this call actually transitions the entry
+        /// to Cleared (from Enabled, Hit, or Expired), and 0 for unknown ids or already-cleared
+        /// entries. Why not derive it from the snapshot: StatusBeforeClear survives a no-op
+        /// second clear, so snapshot-based counting would treat a no-op as 1.
+        /// </summary>
+        public static (UloopPausePointSnapshot Snapshot, bool ResumedFromPause, int ClearedCount) Clear(string id)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
 
@@ -108,12 +114,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             DateTime now = NowUtc();
             if (!Entries.ContainsKey(id))
             {
-                return (UloopPausePointSnapshot.NotEnabled(id, _pauseController), false);
+                return (UloopPausePointSnapshot.NotEnabled(id, _pauseController), false, 0);
             }
 
             UloopPausePointEntry entry = Entries[id];
             // Resolve expiry first so a clear after the timeout reports "expired", not a normal clear.
             TryExpire(entry, now);
+            int clearedCount = entry.Status == UloopPausePointStatus.Cleared ? 0 : 1;
             string message = !entry.IsEnabled && entry.Status == UloopPausePointStatus.Hit
                 ? "Pause point was already hit (auto-disarmed); nothing to clear."
                 : entry.Status switch
@@ -137,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // window, so they are left untouched. (Client disconnect and expiry still resume
             // unconditionally: those paths must guarantee release even for a manual pause.)
             bool resumedFromPause = ResumeEditorPauseIfOwnedByPausePoint();
-            return (entry.ToSnapshot(now, _pauseController), resumedFromPause);
+            return (entry.ToSnapshot(now, _pauseController), resumedFromPause, clearedCount);
         }
 
         public static UloopPausePointClearAllResult ClearAll(

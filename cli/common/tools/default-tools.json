@@ -399,7 +399,7 @@
     },
     {
       "name": "clear-pause-point",
-      "description": "Clear one or all named UloopPausePoint.Pause markers",
+      "description": "Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is 0 or 1 for `--id`, and the number of markers actually cleared for `--all`.",
       "inputSchema": {
         "type": "object",
         "properties": {

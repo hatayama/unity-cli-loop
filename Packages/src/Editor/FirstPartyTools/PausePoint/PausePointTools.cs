@@ -425,7 +425,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Pass --id with the id returned by enable-pause-point, or use --all to clear every marker.");
             }
 
-            (UloopPausePointSnapshot snapshot, bool resumedFromPause) = UloopPausePointRegistry.Clear(parameters.Id);
+            (UloopPausePointSnapshot snapshot, bool resumedFromPause, int clearedCount) =
+                UloopPausePointRegistry.Clear(parameters.Id);
             LogCleared(snapshot.Id, snapshot.StatusBeforeClear);
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {
@@ -439,6 +440,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // OnRegistryClearResolved. This keeps the direct-tool-call path in sync with the
             // Infrastructure CLI bridge's Clear path without duplicating the check here.
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
+            response.ClearedCount = clearedCount;
             if (resumedFromPause)
             {
                 response.Warning = SourcePausePointConstants.ClearResumedPlayModeWarning;
