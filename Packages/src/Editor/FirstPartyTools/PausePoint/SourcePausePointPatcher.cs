@@ -444,12 +444,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string typeName = method.DeclaringType != null ? method.DeclaringType.Name : "?";
                 return SourcePausePointPatchResult.Failure(
                     SourcePausePointPatchFailureReason.MethodPatchedByHotReload,
-                    $"'{typeName}.{method.Name}' is currently hot-reload patched and line {requestedLine} "
-                    + "does not fall inside any hot-reload patched method's current body, so the marker "
-                    + "cannot be placed reliably. Either the compiled line map for this file is stale, "
-                    + "or the method's active patch belongs to a superseded hot-reload generation.",
-                    "Pick a line inside the edited method body, run 'uloop hot-reload --revert-all' to "
-                    + "restore compiled bodies, or run 'uloop compile' to realign line numbers.");
+                    string.Format(
+                        SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyMessageFormat,
+                        typeName,
+                        method.Name,
+                        requestedLine),
+                    SourcePausePointConstants.HotReloadPatchedLineOutsidePatchedBodyNextAction);
             }
 
             MethodBase logicalOwner = logicalOwnerOverride ?? method;
