@@ -3277,6 +3277,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasAdded(result, nameof(HotReloadSignatureChangeSameFileFixture.Target));
             AssertHasPatched(result, nameof(HotReloadSignatureChangeSameFileFixture.ExistingCaller));
             Assert.That(result.ActivePatchTotal, Is.EqualTo(2));
+            Assert.That(
+                CountWarningsContaining(
+                    result.Warnings,
+                    "applied because its compiled call sites were already hot-reload patched"),
+                Is.EqualTo(0),
+                "A never-active caller edited in the same run must not emit the re-patched notice.\n"
+                + string.Join("\n", result.Warnings));
 
             HotReloadSignatureChangeSameFileFixture host = new HotReloadSignatureChangeSameFileFixture();
             Assert.That(host.ExistingCaller(3), Is.EqualTo(4));
@@ -3646,6 +3653,225 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(0),
                 "A gated (not applied) replacement must not appear as a removed member.\n"
                 + string.Join("\n", result.Warnings));
+            Assert.That(
+                CountWarningsContaining(
+                    result.Warnings,
+                    "applied because its compiled call sites were already hot-reload patched"),
+                Is.EqualTo(0),
+                "A never-patched caller must keep the gate skip and must not emit the re-patched notice.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
+        /// What: after a caller body patch, a later signature-only change applies and names
+        /// that already-patched caller in the re-patched notice.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_AlreadyPatchedCaller_EmitsRepatchedNotice()
+        {
+            string fixturePath = ResolveSignatureChangeUnchangedCallerFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string callerEdited = onDisk.Replace(
+                "        public long StoreTarget(int value)\n        {\n            return Target(value);\n        }",
+                "        public long StoreTarget(int value)\n        {\n            return Target(value) + 1L;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(callerEdited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeAlreadyPatchedCaller1.cs", callerEdited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadSignatureChangeUnchangedCallerFixture.StoreTarget));
+
+            string signatureEdited = callerEdited.Replace(
+                "        public int Target(int value)\n        {\n            return value;\n        }",
+                "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(signatureEdited, Is.Not.EqualTo(callerEdited));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeAlreadyPatchedCaller2.cs", signatureEdited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(second);
+            AssertHasAdded(second, nameof(HotReloadSignatureChangeUnchangedCallerFixture.Target));
+            AssertHasPatched(second, nameof(HotReloadSignatureChangeUnchangedCallerFixture.StoreTarget));
+
+            string expectedOldSignature =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeUnchangedCallerFixture::Target(System.Int32)";
+            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeof(HotReloadSignatureChangeUnchangedCallerFixture).FullName,
+                nameof(HotReloadSignatureChangeUnchangedCallerFixture.StoreTarget),
+                new[] { "System.Int32" },
+                0);
+            string expectedWarning = string.Format(
+                HotReloadConstants.SignatureChangeCallersRepatchedNoticeFormat,
+                expectedOldSignature,
+                expectedCallerLabel);
+            int matchingWarningCount = 0;
+            foreach (string warning in second.Warnings)
+            {
+                if (string.Equals(warning, expectedWarning, StringComparison.Ordinal))
+                {
+                    matchingWarningCount++;
+                }
+            }
+
+            Assert.That(
+                matchingWarningCount,
+                Is.EqualTo(1),
+                "Expected exactly one re-patched notice.\n" + string.Join("\n", second.Warnings));
+        }
+
+        /// <summary>
+        /// What: a gated skip of Target plus an already-patched sibling that this run stops
+        /// calling Target does not emit an applied re-patched notice for the skipped change.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_GatedTargetAndSweptNonCaller_OmitsRepatchedNotice()
+        {
+            string fixturePath = ResolveSignatureChangeTwoCallerFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string callerEdited = onDisk.Replace(
+                "        public long CallerBeta(int value)\n        {\n            return Target(value);\n        }",
+                "        public long CallerBeta(int value)\n        {\n            return Target(value) + 1L;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(callerEdited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeGatedSwept1.cs", callerEdited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadSignatureChangeTwoCallerFixture.CallerBeta));
+
+            string mixed = callerEdited
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public long CallerBeta(int value)\n        {\n            return Target(value) + 1L;\n        }",
+                    "        public long CallerBeta(int value)\n        {\n            return value;\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(mixed, Is.Not.EqualTo(callerEdited));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeGatedSwept2.cs", mixed),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(second);
+            AssertHasSkipped(
+                second,
+                nameof(HotReloadSignatureChangeTwoCallerFixture.Target),
+                "The return type of");
+            Assert.That(
+                CountWarningsContaining(
+                    second.Warnings,
+                    "applied because its compiled call sites were already hot-reload patched"),
+                Is.EqualTo(0),
+                "A gated skip must not emit an applied re-patched notice.\n"
+                + string.Join("\n", second.Warnings));
+        }
+
+        /// <summary>
+        /// What: two already-patched callers of the same old signature produce one
+        /// re-patched notice that names both callers.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_TwoAlreadyPatchedCallers_EmitsOneAggregatedNotice()
+        {
+            string fixturePath = ResolveSignatureChangeTwoCallerFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string callersEdited = onDisk
+                .Replace(
+                    "        public long CallerAlpha(int value)\n        {\n            return Target(value);\n        }",
+                    "        public long CallerAlpha(int value)\n        {\n            return Target(value) + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public long CallerBeta(int value)\n        {\n            return Target(value);\n        }",
+                    "        public long CallerBeta(int value)\n        {\n            return Target(value) + 1L;\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(callersEdited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeTwoPatchedCallers1.cs", callersEdited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadSignatureChangeTwoCallerFixture.CallerAlpha));
+            AssertHasPatched(first, nameof(HotReloadSignatureChangeTwoCallerFixture.CallerBeta));
+
+            string signatureEdited = callersEdited.Replace(
+                "        public int Target(int value)\n        {\n            return value;\n        }",
+                "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(signatureEdited, Is.Not.EqualTo(callersEdited));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeTwoPatchedCallers2.cs", signatureEdited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(second);
+            AssertHasAdded(second, nameof(HotReloadSignatureChangeTwoCallerFixture.Target));
+            AssertHasPatched(second, nameof(HotReloadSignatureChangeTwoCallerFixture.CallerAlpha));
+            AssertHasPatched(second, nameof(HotReloadSignatureChangeTwoCallerFixture.CallerBeta));
+
+            string expectedOldSignature =
+                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                + ".HotReloadSignatureChangeTwoCallerFixture::Target(System.Int32)";
+            string expectedCallerLabels = string.Join(
+                ", ",
+                new[]
+                {
+                    HotReloadPatcher.FormatMethodKeyParts(
+                        typeof(HotReloadSignatureChangeTwoCallerFixture).FullName,
+                        nameof(HotReloadSignatureChangeTwoCallerFixture.CallerAlpha),
+                        new[] { "System.Int32" },
+                        0),
+                    HotReloadPatcher.FormatMethodKeyParts(
+                        typeof(HotReloadSignatureChangeTwoCallerFixture).FullName,
+                        nameof(HotReloadSignatureChangeTwoCallerFixture.CallerBeta),
+                        new[] { "System.Int32" },
+                        0)
+                });
+            string expectedWarning = string.Format(
+                HotReloadConstants.SignatureChangeCallersRepatchedNoticeFormat,
+                expectedOldSignature,
+                expectedCallerLabels);
+            int matchingWarningCount = 0;
+            int noticeCount = 0;
+            foreach (string warning in second.Warnings)
+            {
+                if (warning.Contains("applied because its compiled call sites were already hot-reload patched"))
+                {
+                    noticeCount++;
+                }
+
+                if (string.Equals(warning, expectedWarning, StringComparison.Ordinal))
+                {
+                    matchingWarningCount++;
+                }
+            }
+
+            Assert.That(
+                noticeCount,
+                Is.EqualTo(1),
+                "Expected exactly one re-patched notice for one old signature.\n"
+                + string.Join("\n", second.Warnings));
+            Assert.That(
+                matchingWarningCount,
+                Is.EqualTo(1),
+                "Expected the aggregated notice to name both callers.\n"
+                + string.Join("\n", second.Warnings));
         }
 
         /// <summary>
@@ -4918,6 +5144,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.Exists(path),
                 Is.True,
                 "Signature-change same-file fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSignatureChangeTwoCallerFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSignatureChangeTwoCallerFixture.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Signature-change two-caller fixture source missing: " + path);
             return Path.GetFullPath(path);
         }
 
