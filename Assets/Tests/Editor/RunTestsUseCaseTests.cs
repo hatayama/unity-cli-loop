@@ -463,6 +463,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.ClearedPausePointIds, Is.Null);
         }
 
+        /// <summary>
+        /// What: after cleanup is proven off-thread, no-tests diagnostics still run on the main thread.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenCleanupResumesOffThread_RunsNoTestsDiagnosticsOnMainThread()
+        {
+            OffThreadCleanupResume cleanupResume = new OffThreadCleanupResume();
+            RecordingNoTestsDiagnosticCapture diagnosticCapture = new RecordingNoTestsDiagnosticCapture();
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = new SerializableTestResult
+                {
+                    success = false,
+                    status = RunTestsExecutionStatus.NoTestsFound,
+                    hasFailures = false,
+                    noTestsFound = true,
+                    noTestsFoundExplanation = RunTestsResponse.NoTestsFoundExplanationText,
+                    message = RunTestsResponse.NoTestsFoundMessage,
+                    completedAt = "2026-01-01T00:00:00.0000000Z",
+                    testCount = 0,
+                    passedCount = 0,
+                    failedCount = 0,
+                    skippedCount = 0,
+                    xmlPath = null
+                }
+            };
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(ValidationResult.Success());
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: cleanupResume.ResumeAsync,
+                appendNoTestsDiagnostics: diagnosticCapture.Append);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.NoTestsFound, Is.True);
+            Assert.That(cleanupResume.ObservedIsMainThread, Is.False);
+            Assert.That(diagnosticCapture.AppendCalled, Is.True);
+            Assert.That(diagnosticCapture.ObservedIsMainThread, Is.True);
+        }
+
         private static Task NoCleanupWait(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -522,6 +570,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ct.ThrowIfCancellationRequested();
                 WasCalled = true;
                 return Task.FromResult(NextResult);
+            }
+        }
+
+        /// <summary>
+        /// Test support type that resumes cleanup off-thread without Task.Run.
+        /// </summary>
+        private sealed class OffThreadCleanupResume
+        {
+            public bool ObservedIsMainThread { get; private set; }
+
+            public async Task ResumeAsync(CancellationToken ct)
+            {
+                ct.ThrowIfCancellationRequested();
+                // Why loop TimerDelay instead of Task.Run: EditMode guardrails
+                // forbid thread-pool tests that can stall the runner. A single
+                // Wait(1).ConfigureAwait(false) can complete before await and
+                // continue inline on the main thread; retry until a suspend
+                // actually resumes off-thread.
+                while (MainThreadSwitcher.IsMainThread)
+                {
+                    await TimerDelay.Wait(1, ct).ConfigureAwait(false);
+                }
+
+                ObservedIsMainThread = MainThreadSwitcher.IsMainThread;
+            }
+        }
+
+        private sealed class RecordingNoTestsDiagnosticCapture
+        {
+            public bool AppendCalled { get; private set; }
+            public bool ObservedIsMainThread { get; private set; }
+
+            public string Append(
+                string message,
+                bool noTestsFound,
+                UnityCliLoopTestMode testMode,
+                TestFilterType filterType)
+            {
+                AppendCalled = true;
+                ObservedIsMainThread = MainThreadSwitcher.IsMainThread;
+                return message;
             }
         }
     }
