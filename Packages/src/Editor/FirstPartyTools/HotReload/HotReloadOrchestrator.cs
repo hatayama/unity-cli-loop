@@ -2116,13 +2116,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return warnings;
         }
 
-        // Why only already-patched callers: a caller the user edited this run is obvious in
-        // Methods. The non-obvious case is a caller that was already patched at run start and
-        // was re-entered only to satisfy the signature-change gate. Known limits: an
-        // already-patched caller that is also edited this run is over-reported (the text is
-        // still true); a caller that stayed Skipped and drifted is missed; constructed
-        // generics can miss when the label space differs from the wire key (same constraint
-        // as IsActiveMember).
+        // Why only already-patched callers of applied replacements: a caller the user
+        // edited this run is obvious in Methods. The non-obvious case is a caller that
+        // was already patched at run start and was re-entered only to satisfy the
+        // signature-change gate. Hits still list gated replacements and rename/param
+        // removals, so restrict to replacements that remain in the apply set. Known
+        // limits: an already-patched caller that is also edited this run is
+        // over-reported (the text is still true); a caller that stayed Skipped and
+        // drifted is missed; constructed generics can miss when the label space differs
+        // from the wire key (same constraint as IsActiveMember).
         private static void AppendSignatureChangeCallersRepatchedWarnings(
             List<string> warnings,
             TransformWorkerEntryDto[] entriesToPatch,
@@ -2135,16 +2137,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(snapshotLabels != null, "snapshotLabels must not be null.");
 
             HashSet<string> entryKeys = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<string> appliedReplacementKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerEntryDto entry in entriesToPatch)
             {
-                entryKeys.Add(BuildMethodKey(entry));
+                string methodKey = BuildMethodKey(entry);
+                entryKeys.Add(methodKey);
+                if (entry.replacesCompiledMethod)
+                {
+                    appliedReplacementKeys.Add(methodKey);
+                }
             }
 
             Dictionary<string, List<string>> callerLabelsByOldSignature =
                 new Dictionary<string, List<string>>(StringComparer.Ordinal);
             foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
             {
-                if (hit == null || !entryKeys.Contains(hit.CallerMethodKey))
+                if (hit == null
+                    || !appliedReplacementKeys.Contains(hit.TargetMethodKey)
+                    || !entryKeys.Contains(hit.CallerMethodKey))
                 {
                     continue;
                 }
