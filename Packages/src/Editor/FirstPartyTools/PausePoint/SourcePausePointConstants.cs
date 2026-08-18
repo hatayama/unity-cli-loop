@@ -159,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why fill when empty: some Expired snapshots reach the response with no next
         // action, and agents then have no recovery for a timeout that fired during setup.
         public const string ExpiredRecommendedNextAction =
-            "The pause point expired before it was hit. Re-enable it, and pass --timeout-seconds with a value larger than the default 30 if you need more setup time before triggering.";
+            "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
 
         // Why: resolve failures have several distinct root causes (wrong path form, non-executable
         // line, stale PDBs after a Code Optimization switch); the skill troubleshooting reference

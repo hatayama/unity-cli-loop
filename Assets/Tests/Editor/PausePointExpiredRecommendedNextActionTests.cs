@@ -51,8 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void FromSnapshot_WhenExpiredAndActionPresent_KeepsSnapshotAction()
         {
-            const string existingAction =
-                "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.";
+            const string existingAction = "Custom action preserved by test.";
             UloopPausePointSnapshot snapshot = CreateExpiredSnapshot(existingAction);
 
             PausePointResponse toolResponse = PausePointResponse.FromSnapshot(snapshot);

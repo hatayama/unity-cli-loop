@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 FirstHitSequence = 1,
                 LastHitSequence = 1,
                 Message = "Pause point hit.",
-                RecommendedNextAction = "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.",
+                RecommendedNextAction = "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.",
                 CapturedVariables = new List<PausePointStatusCapturedVariable>
                 {
                     new()

@@ -278,7 +278,7 @@ func TestPausePointExpiredErrorReportsRecoveryFields(t *testing.T) {
 		Generation:                      7,
 		EditorState:                     pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
 		Message:                         "Pause point expired before it was hit.",
-		RecommendedNextAction:           "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.",
+		RecommendedNextAction:           "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.",
 	}
 
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
@@ -1360,7 +1360,7 @@ func TestRunPausePointStatusReturnsCurrentStatus(t *testing.T) {
 			RemainingMilliseconds: 30000,
 			Generation:            3,
 			EditorState:           pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
-			RecommendedNextAction: "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.",
+			RecommendedNextAction: "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.",
 		}, nil
 	}
 
@@ -1395,7 +1395,7 @@ func TestRunPausePointStatusReturnsCurrentStatus(t *testing.T) {
 	if response.EditorState.CapturedAt != "Current" || !response.EditorState.IsPlaying {
 		t.Fatalf("editor state mismatch: %#v", response)
 	}
-	if response.RecommendedNextAction != "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values." {
+	if response.RecommendedNextAction != "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required." {
 		t.Fatalf("recommendedNextAction mismatch: %#v", response)
 	}
 }
