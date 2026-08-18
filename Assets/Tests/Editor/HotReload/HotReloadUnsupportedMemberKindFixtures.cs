@@ -127,6 +127,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
     }
 
+    /// <summary>
+    /// Expression-bodied constructor host. Token 61 is unique in this file.
+    /// </summary>
+    public sealed class HotReloadUnsupportedKindExpressionCtorFixture
+    {
+        public int Marker;
+
+        public HotReloadUnsupportedKindExpressionCtorFixture() => Marker = 61;
+
+        public int Read()
+        {
+            return Marker;
+        }
+    }
+
+    /// <summary>
+    /// Expression-bodied operator host. Token 71 is unique in this file.
+    /// </summary>
+    public sealed class HotReloadUnsupportedKindExpressionOperatorFixture
+    {
+        public int Marker;
+
+        public static int operator *(
+            HotReloadUnsupportedKindExpressionOperatorFixture left,
+            HotReloadUnsupportedKindExpressionOperatorFixture right) => left.Marker = 71;
+
+        public int Read()
+        {
+            return Marker;
+        }
+    }
+
+    /// <summary>
+    /// Expression-bodied conversion host. Token 81 is unique in this file.
+    /// </summary>
+    public sealed class HotReloadUnsupportedKindExpressionConversionFixture
+    {
+        public int Marker;
+
+        public static implicit operator bool(HotReloadUnsupportedKindExpressionConversionFixture value) =>
+            (value.Marker = 81) != 0;
+
+        public int Read()
+        {
+            return Marker;
+        }
+    }
+
+    /// <summary>
+    /// Expression-bodied event-accessor host. Tokens 91 / 92 are unique in this file.
+    /// </summary>
+    public sealed class HotReloadUnsupportedKindExpressionEventFixture
+    {
+        public int Marker;
+
+        public event Action ArrowEdited
+        {
+            add => Marker = 91;
+            remove => Marker = 92;
+        }
+
+        public int Read()
+        {
+            return Marker;
+        }
+    }
+
     public sealed class HotReloadLocalFunctionParentFixture
     {
         public int Compute(int x)

@@ -1327,6 +1327,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Constructors, operators, and event accessors are out of scope for v1; "
             + "run 'uloop compile' to apply these edits.";
 
+        // Keep in sync with OutsideMethodBodyDriftWarningFormat in
+        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
+        // That constant lives in the Unity-ignored worker process and is not visible here.
+        private const string OutsideMethodBodyDriftWarningFormat =
+            "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
+
         /// <summary>
         /// What: editing one instance constructor reports that .ctor as Skipped and omits an
         /// unedited overload in the same type.
@@ -1429,6 +1435,234 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a constructor body-only edit reports the ctor as Skipped and does not emit
+        /// the outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_InstanceCtorBodyOnly_DoesNotEmitOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindInstanceCtorBodyOnly.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "Marker = 11;",
+                "Marker = 111;");
+
+            AssertSkippedContains(
+                result,
+                ".ctor()",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: an operator body-only edit reports the operator as Skipped and does not emit
+        /// the outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_OperatorBodyOnly_DoesNotEmitOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindOperatorBodyOnly.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "left.Marker = 31;",
+                "left.Marker = 311;");
+
+            AssertSkippedContains(
+                result,
+                "op_Addition",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: a conversion-operator body-only edit reports the conversion as Skipped and
+        /// does not emit the outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_ConversionOperatorBodyOnly_DoesNotEmitOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindConversionBodyOnly.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "value.Marker = 41;",
+                "value.Marker = 411;");
+
+            AssertSkippedContains(
+                result,
+                "op_Implicit",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: an event-accessor body-only edit reports the edited accessors as Skipped and
+        /// does not emit the outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_EventAccessorBodyOnly_DoesNotEmitOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindEventAccessorBodyOnly.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "Marker = 51;",
+                "Marker = 511;");
+
+            AssertSkippedContains(
+                result,
+                "add_Edited",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedContains(
+                result,
+                "remove_Edited",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: an expression-bodied constructor body-only edit reports the ctor as Skipped
+        /// and does not emit the outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_ExpressionCtorBodyOnly_DoesNotEmitOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindExpressionCtorBodyOnly.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "Marker = 61;",
+                "Marker = 611;");
+
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindExpressionCtorFixture..ctor()",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: an expression-bodied operator body-only edit reports the operator as Skipped
+        /// and does not emit the outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_ExpressionOperatorBodyOnly_DoesNotEmitOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindExpressionOperatorBodyOnly.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "left.Marker = 71;",
+                "left.Marker = 711;");
+
+            AssertSkippedContains(
+                result,
+                "op_Multiply",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: an expression-bodied conversion body-only edit reports the conversion as
+        /// Skipped and does not emit the outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_ExpressionConversionBodyOnly_DoesNotEmitOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindExpressionConversionBodyOnly.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "(value.Marker = 81)",
+                "(value.Marker = 811)");
+
+            AssertSkippedContains(
+                result,
+                "HotReloadUnsupportedKindExpressionConversionFixture.op_Implicit",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: an expression-bodied event-accessor body-only edit reports the accessors as
+        /// Skipped and does not emit the outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_ExpressionEventAccessorBodyOnly_DoesNotEmitOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindExpressionEventAccessorBodyOnly.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "Marker = 91;",
+                "Marker = 911;");
+
+            AssertSkippedContains(
+                result,
+                "add_ArrowEdited",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: adding a constructor initializer (declaration-only) still emits the
+        /// outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_CtorInitializerEdit_EmitsOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindCtorInitializerDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "        public HotReloadUnsupportedKindCtorFixture()\n        {",
+                "        public HotReloadUnsupportedKindCtorFixture() : this(0)\n        {");
+
+            AssertContainsOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: adding an attribute to an operator (declaration-only) still emits the
+        /// outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_OperatorAttributeEdit_EmitsOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindOperatorAttributeDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "        public static HotReloadUnsupportedKindOperatorFixture operator +(",
+                "        [Obsolete]\n        public static HotReloadUnsupportedKindOperatorFixture operator +(");
+
+            AssertContainsOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: adding an attribute to a conversion operator (declaration-only) still emits
+        /// the outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_ConversionAttributeEdit_EmitsOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindConversionAttributeDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "        public static implicit operator int(HotReloadUnsupportedKindConversionFixture value)",
+                "        [Obsolete]\n        public static implicit operator int(HotReloadUnsupportedKindConversionFixture value)");
+
+            AssertContainsOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
+        /// What: adding an attribute to an event (declaration-only) still emits the
+        /// outside-method-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_EventAttributeEdit_EmitsOutsideBodyWarning()
+        {
+            const string fileName = "UnsupportedKindEventAttributeDrift.cs";
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                fileName,
+                "        public event Action Edited",
+                "        [Obsolete]\n        public event Action Edited");
+
+            AssertContainsOutsideMethodBodyDriftWarning(result, fileName);
+        }
+
+        /// <summary>
         /// What: adding an instance constructor that is absent from the verified snapshot
         /// reports that .ctor as Skipped with the unsupported-member reason (same path as an
         /// edit) and omits unedited overloads already in the snapshot.
@@ -1503,6 +1737,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             return result;
+        }
+
+        private static void AssertDoesNotContainOutsideMethodBodyDriftWarning(
+            TransformWorkerClientResult result,
+            string fileName)
+        {
+            string expectedWarning = string.Format(OutsideMethodBodyDriftWarningFormat, fileName);
+            string[] warnings = result.Output.declarationDriftWarnings ?? Array.Empty<string>();
+            Assert.That(
+                warnings,
+                Does.Not.Contain(expectedWarning),
+                "Body-only unsupported-kind edits must not emit the outside-body warning.\n"
+                + string.Join("\n", warnings));
+        }
+
+        private static void AssertContainsOutsideMethodBodyDriftWarning(
+            TransformWorkerClientResult result,
+            string fileName)
+        {
+            string expectedWarning = string.Format(OutsideMethodBodyDriftWarningFormat, fileName);
+            string[] warnings = result.Output.declarationDriftWarnings ?? Array.Empty<string>();
+            Assert.That(
+                warnings,
+                Does.Contain(expectedWarning),
+                "Declaration-only unsupported-kind edits must emit the outside-body warning.\n"
+                + string.Join("\n", warnings));
         }
 
         private static void AssertSkippedContains(
