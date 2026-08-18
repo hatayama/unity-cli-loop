@@ -214,7 +214,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // Why duplicate: this bridge must not reference the Editor-only PausePoint assembly.
         // Keep in sync with SourcePausePointConstants.ExpiredRecommendedNextAction.
         private const string ExpiredRecommendedNextAction =
-            "The pause point expired before it was hit. Re-enable it, and pass --timeout-seconds with a value larger than the default 30 if you need more setup time before triggering.";
+            "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
 
         private static string ResolveExpiredRecommendedNextAction(string status, string recommendedNextAction)
         {

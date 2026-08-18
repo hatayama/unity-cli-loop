@@ -294,7 +294,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         private string CreateExpiredRecommendedNextAction()
         {
-            return "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.";
+            return "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
         }
 
         private static string FormatUtc(DateTime value)
