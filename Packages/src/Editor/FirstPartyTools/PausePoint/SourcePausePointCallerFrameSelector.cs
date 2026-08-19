@@ -102,8 +102,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return typeFullName + "." + (string.IsNullOrEmpty(methodName) ? "(unknown)" : methodName);
         }
 
-        // Mono reports script-assembly sources as "./Packages/..." on macOS and may use
-        // backslashes on Windows; normalize so the payload is stable across platforms.
+        // Mono reports script-assembly sources as "./Packages/..." on macOS, as an absolute
+        // project path on some Editors, and may use backslashes on Windows; normalize so the
+        // payload is a stable project-relative forward-slash path.
         internal static string NormalizeFilePath(string fileName)
         {
             if (string.IsNullOrEmpty(fileName))
@@ -115,6 +116,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (normalized.StartsWith("./", StringComparison.Ordinal))
             {
                 normalized = normalized.Substring(2);
+            }
+
+            return StripToUnityProjectRelative(normalized);
+        }
+
+        private static string StripToUnityProjectRelative(string normalized)
+        {
+            const string assetsSegment = "/Assets/";
+            const string packagesSegment = "/Packages/";
+            int assetsIndex = normalized.IndexOf(assetsSegment, StringComparison.Ordinal);
+            int packagesIndex = normalized.IndexOf(packagesSegment, StringComparison.Ordinal);
+            if (assetsIndex >= 0 && (packagesIndex < 0 || assetsIndex < packagesIndex))
+            {
+                return normalized.Substring(assetsIndex + 1);
+            }
+
+            if (packagesIndex >= 0)
+            {
+                return normalized.Substring(packagesIndex + 1);
             }
 
             return normalized;

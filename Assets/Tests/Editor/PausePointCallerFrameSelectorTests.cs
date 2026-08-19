@@ -195,6 +195,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: an absolute macOS path under Assets/ is stripped to a project-relative path.
+        /// </summary>
+        [Test]
+        public void NormalizeFilePath_WhenAbsoluteAssetsPath_ReturnsProjectRelative()
+        {
+            string normalized = SourcePausePointCallerFrameSelector.NormalizeFilePath(
+                "/Users/<USER_NAME>/project/Assets/Scripts/Input.cs");
+
+            Assert.That(normalized, Is.EqualTo("Assets/Scripts/Input.cs"));
+        }
+
+        /// <summary>
+        /// What: an absolute path under Packages/ is stripped to a project-relative path.
+        /// </summary>
+        [Test]
+        public void NormalizeFilePath_WhenAbsolutePackagesPath_ReturnsProjectRelative()
+        {
+            string normalized = SourcePausePointCallerFrameSelector.NormalizeFilePath(
+                "C:/Users/<USER_NAME>/project/Packages/src/Foo.cs");
+
+            Assert.That(normalized, Is.EqualTo("Packages/src/Foo.cs"));
+        }
+
+        /// <summary>
         /// What: a missing file name normalizes to null rather than empty.
         /// </summary>
         [Test]
@@ -286,6 +310,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
                 CreateRawFrame(UserType, UserMethod, ".\\Assets\\Scripts\\Input.cs", 10),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Has.Count.EqualTo(1));
+            Assert.That(selected[0].File, Is.EqualTo("Assets/Scripts/Input.cs"));
+            Assert.That(selected[0].Line, Is.EqualTo(10));
+        }
+
+        /// <summary>
+        /// What: Select strips an absolute Assets/ path to project-relative form, so deleting
+        /// that step from Select fails this case even if the helper still has its own tests.
+        /// </summary>
+        [Test]
+        public void Select_WhenFileIsAbsoluteAssetsPath_NormalizesThroughSelect()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame(
+                    UserType,
+                    UserMethod,
+                    "/Users/<USER_NAME>/project/Assets/Scripts/Input.cs",
+                    10),
             };
 
             List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
