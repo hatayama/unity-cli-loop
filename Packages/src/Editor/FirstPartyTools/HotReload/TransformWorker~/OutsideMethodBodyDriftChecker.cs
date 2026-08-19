@@ -44,17 +44,17 @@ internal static class OutsideMethodBodyDriftChecker
             currentKeys.Add(key);
         }
 
-        TransformWorkerProgram.StripHandledMemberDeclarationsRewriter stripSnapshot =
-            new TransformWorkerProgram.StripHandledMemberDeclarationsRewriter(
+        StripHandledMemberDeclarationsRewriter stripSnapshot =
+            new StripHandledMemberDeclarationsRewriter(
                 snapshotKeys,
                 Array.Empty<string>(),
                 Array.Empty<string>());
-        TransformWorkerProgram.StripHandledMemberDeclarationsRewriter stripCurrent =
-            new TransformWorkerProgram.StripHandledMemberDeclarationsRewriter(
+        StripHandledMemberDeclarationsRewriter stripCurrent =
+            new StripHandledMemberDeclarationsRewriter(
                 currentKeys,
                 addedMethodCatalog.AddedTypeSyntaxKeys,
                 addedMethodCatalog.AddedPropertySyntaxKeys);
-        TransformWorkerProgram.StripMethodBodiesRewriter bodyStripper = new TransformWorkerProgram.StripMethodBodiesRewriter();
+        StripMethodBodiesRewriter bodyStripper = new StripMethodBodiesRewriter();
         SyntaxNode strippedSnapshot = bodyStripper.Visit(stripSnapshot.Visit(snapshotRoot));
         SyntaxNode strippedCurrent = bodyStripper.Visit(stripCurrent.Visit(currentRoot));
         if (!SyntaxFactory.AreEquivalent(strippedSnapshot, strippedCurrent, topLevel: false))

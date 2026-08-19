@@ -15,7 +15,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-private sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
+internal sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
 {
     // Using directives never change patched behavior: WorkerUsingCollector.CollectUsingsForType copies the edited
     // file's usings into every shim, so comparing them here only produces false drift warnings

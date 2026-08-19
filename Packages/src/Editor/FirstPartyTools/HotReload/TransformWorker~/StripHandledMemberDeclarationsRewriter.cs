@@ -15,7 +15,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-private sealed class StripHandledMemberDeclarationsRewriter : CSharpSyntaxRewriter
+internal sealed class StripHandledMemberDeclarationsRewriter : CSharpSyntaxRewriter
 {
     private readonly HashSet<string> _syntaxKeysToStrip;
     private readonly HashSet<string> _typeSyntaxKeysToStrip;
