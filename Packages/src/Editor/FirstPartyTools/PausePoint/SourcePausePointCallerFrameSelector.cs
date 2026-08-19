@@ -1,0 +1,123 @@
+using System;
+using System.Collections.Generic;
+
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.Runtime;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Selects the caller frames worth reporting from a raw stack captured at a pause point hit.
+    /// Pure logic over pre-extracted frame data so the selection rules stay unit-testable.
+    /// </summary>
+    internal static class SourcePausePointCallerFrameSelector
+    {
+        // Frames whose declaring type starts with one of these carry no diagnostic value for
+        // "how execution reached the marker": runtime async machinery, patching infrastructure,
+        // and uloop's own plumbing. Unity engine/editor frames are deliberately kept because an
+        // entry point such as EditorApplication.update is itself diagnostic.
+        private static readonly string[] SkippedTypePrefixes =
+        {
+            "System.",
+            "Microsoft.",
+            "Mono.",
+            "HarmonyLib.",
+            "MonoMod.",
+            "io.github.hatayama.UnityCliLoop",
+        };
+
+        // rawFrames[0] must be the marker's own frame (the patched method). It is skipped
+        // positionally instead of by identity because a hot-reload-patched marker method can
+        // appear as a Harmony dynamic method whose display name is not predictable.
+        public static List<UloopPausePointCallerFrame> Select(
+            IReadOnlyList<SourcePausePointRawStackFrame> rawFrames)
+        {
+            Debug.Assert(rawFrames != null, "rawFrames must not be null");
+
+            List<UloopPausePointCallerFrame> selected =
+                new List<UloopPausePointCallerFrame>(SourcePausePointConstants.MaxCallerFrames);
+            for (int i = 1; i < rawFrames.Count; i++)
+            {
+                if (selected.Count == SourcePausePointConstants.MaxCallerFrames)
+                {
+                    break;
+                }
+
+                SourcePausePointRawStackFrame frame = rawFrames[i];
+                if (frame.TypeFullName != null && IsSkippedInfrastructureType(frame.TypeFullName))
+                {
+                    continue;
+                }
+
+                string file = NormalizeFilePath(frame.FileName);
+                selected.Add(new UloopPausePointCallerFrame(
+                    FormatMethodDisplay(frame.TypeFullName, frame.MethodName),
+                    file,
+                    file == null ? 0 : frame.Line));
+            }
+
+            return selected;
+        }
+
+        internal static bool IsSkippedInfrastructureType(string typeFullName)
+        {
+            Debug.Assert(typeFullName != null, "typeFullName must not be null");
+
+            foreach (string prefix in SkippedTypePrefixes)
+            {
+                if (typeFullName.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Compiler-generated async state machines surface as "Ns.Type+<Method>d__N.MoveNext";
+        // report the logical "Ns.Type.Method" instead. Every other shape (including lambdas and
+        // genuine nested types) is reported verbatim as "TypeFullName.MethodName".
+        internal static string FormatMethodDisplay(string typeFullName, string methodName)
+        {
+            if (typeFullName == null)
+            {
+                return string.IsNullOrEmpty(methodName) ? "(unknown)" : methodName;
+            }
+
+            if (methodName == "MoveNext")
+            {
+                int open = typeFullName.LastIndexOf("+<", StringComparison.Ordinal);
+                if (open >= 0)
+                {
+                    int close = typeFullName.IndexOf(">d__", open, StringComparison.Ordinal);
+                    if (close > open + 2)
+                    {
+                        string logicalMethod = typeFullName.Substring(open + 2, close - (open + 2));
+                        return typeFullName.Substring(0, open) + "." + logicalMethod;
+                    }
+                }
+            }
+
+            return typeFullName + "." + (string.IsNullOrEmpty(methodName) ? "(unknown)" : methodName);
+        }
+
+        // Mono reports script-assembly sources as "./Packages/..." on macOS and may use
+        // backslashes on Windows; normalize so the payload is stable across platforms.
+        internal static string NormalizeFilePath(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName))
+            {
+                return null;
+            }
+
+            string normalized = fileName.Replace('\\', '/');
+            if (normalized.StartsWith("./", StringComparison.Ordinal))
+            {
+                normalized = normalized.Substring(2);
+            }
+
+            return normalized;
+        }
+    }
+}
