@@ -15,7 +15,22 @@
       "FrameCount": 42,
       "HitAtUtc": "2026-06-03T00:00:01.0000000Z",
       "CapturedVariables": [],
-      "Truncated": false
+      "Truncated": false,
+      "CallerFrames": [
+        {
+          "Method": "Game.AI.Tick",
+          "File": "Assets/Scripts/AI.cs",
+          "Line": 44
+        }
+      ]
+    },
+    {
+      "HitSequence": 2,
+      "FrameCount": 43,
+      "HitAtUtc": "2026-06-03T00:00:02.0000000Z",
+      "CapturedVariables": [],
+      "Truncated": false,
+      "CallerFrames": []
     }
   ],
   "HistoryDroppedCount": 0,
@@ -45,6 +60,13 @@
       "UnityObjectPath": "MainScene:/Root/Enemy",
       "UnityObjectInstanceId": -1234,
       "Truncated": false
+    }
+  ],
+  "CallerFrames": [
+    {
+      "Method": "Game.AI.Tick",
+      "File": "Assets/Scripts/AI.cs",
+      "Line": 44
     }
   ],
   "CapturedVariablesTruncated": true,

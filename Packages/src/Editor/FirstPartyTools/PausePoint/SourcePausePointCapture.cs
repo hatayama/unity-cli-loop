@@ -28,10 +28,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int maxPreviewElements = UloopPausePointRegistry.GetMaxPreviewElements(id);
             (UloopPausePointCapturedVariableFrame frame, List<UloopCapturedVariable> variables, bool truncated) =
                 CaptureFrame(instance, parameterNamesAndValues, localNamesAndValues, maxPreviewElements);
+            // The stack must be walked on the hitting thread; a deferred main-thread hit would see
+            // the scheduler's stack instead of the caller chain that reached the marker.
+            List<UloopPausePointCallerFrame> callerFrames =
+                SourcePausePointCallerFrameCapture.CaptureCallerFrames();
 
             if (MainThreadSwitcher.IsMainThread)
             {
-                UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedFrame(id, frame, variables, truncated);
+                UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedFrame(
+                    id, frame, variables, truncated, callerFrames);
                 LogHit(snapshot, truncated);
                 return;
             }
@@ -42,7 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // marker that already got disarmed by a faster hit safely no-ops there.
             MainThreadSwitcher.AddContinuation(() =>
             {
-                UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedFrame(id, frame, variables, truncated);
+                UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedFrame(
+                    id, frame, variables, truncated, callerFrames);
                 LogHit(snapshot, truncated);
             });
         }

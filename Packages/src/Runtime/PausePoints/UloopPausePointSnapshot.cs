@@ -36,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string message,
             string recommendedNextAction,
             IReadOnlyList<UloopCapturedVariable> capturedVariables,
+            IReadOnlyList<UloopPausePointCallerFrame> callerFrames,
             bool capturedVariablesTruncated,
             IReadOnlyList<string> truncatedVariableNames,
             int truncatedVariableCount,
@@ -74,6 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Message = message ?? string.Empty;
             RecommendedNextAction = recommendedNextAction ?? string.Empty;
             CapturedVariables = capturedVariables ?? Array.Empty<UloopCapturedVariable>();
+            CallerFrames = callerFrames ?? Array.Empty<UloopPausePointCallerFrame>();
             CapturedVariablesTruncated = capturedVariablesTruncated;
             TruncatedVariableNames = truncatedVariableNames ?? Array.Empty<string>();
             TruncatedVariableCount = truncatedVariableCount;
@@ -111,6 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string Message { get; }
         public string RecommendedNextAction { get; }
         public IReadOnlyList<UloopCapturedVariable> CapturedVariables { get; }
+        public IReadOnlyList<UloopPausePointCallerFrame> CallerFrames { get; }
         public bool CapturedVariablesTruncated { get; }
         public IReadOnlyList<string> TruncatedVariableNames { get; }
         public int TruncatedVariableCount { get; }
@@ -154,6 +157,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 "Pause point is not enabled.",
                 string.Empty,
                 Array.Empty<UloopCapturedVariable>(),
+                Array.Empty<UloopPausePointCallerFrame>(),
                 false,
                 Array.Empty<string>(),
                 0,

@@ -91,6 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "Pause point expired.",
                 recommendedNextAction,
                 Array.Empty<UloopCapturedVariable>(),
+                Array.Empty<UloopPausePointCallerFrame>(),
                 false,
                 Array.Empty<string>(),
                 0,

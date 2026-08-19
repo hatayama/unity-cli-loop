@@ -1151,6 +1151,151 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_pauseController.PauseCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// What: caller frames passed to HitWithCapturedFrame appear on the latest snapshot.
+        /// </summary>
+        [Test]
+        public void HitWithCapturedFrame_WhenCallerFramesAreProvided_StoresThemOnLatestSnapshot()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointCapturedVariableFrame frame = CreateEmptyCapturedFrame();
+            UloopPausePointCallerFrame[] callerFrames =
+            {
+                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10),
+                new("Game.Player.Update", "Assets/Scripts/Player.cs", 20),
+            };
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedFrame(
+                "jump", frame, Array.Empty<UloopCapturedVariable>(), false, callerFrames);
+
+            Assert.That(snapshot.CallerFrames, Is.EqualTo(callerFrames));
+        }
+
+        /// <summary>
+        /// What: each history frame stores the caller frames from that hit, not only the latest.
+        /// </summary>
+        [Test]
+        public void HitWithCapturedFrame_WhenMultipleHitsAreRecorded_StoresCallerFramesOnEachHistoryFrame()
+        {
+            UloopPausePointRegistry.Enable("jump", 30, UloopPausePointCaptureMode.Trace);
+            UloopPausePointCapturedVariableFrame frame = CreateEmptyCapturedFrame();
+            UloopPausePointCallerFrame[] firstCallerFrames =
+            {
+                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10),
+            };
+            UloopPausePointCallerFrame[] secondCallerFrames =
+            {
+                new("Game.AI.Tick", "Assets/Scripts/AI.cs", 44),
+                new("Game.World.Update", "Assets/Scripts/World.cs", 8),
+            };
+
+            UloopPausePointRegistry.HitWithCapturedFrame(
+                "jump", frame, Array.Empty<UloopCapturedVariable>(), false, firstCallerFrames);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedFrame(
+                "jump", frame, Array.Empty<UloopCapturedVariable>(), false, secondCallerFrames);
+
+            Assert.That(snapshot.CallerFrames, Is.EqualTo(secondCallerFrames));
+            Assert.That(snapshot.CapturedVariableHistory, Has.Count.EqualTo(2));
+            Assert.That(snapshot.CapturedVariableHistory[0].CallerFrames, Is.EqualTo(firstCallerFrames));
+            Assert.That(snapshot.CapturedVariableHistory[1].CallerFrames, Is.EqualTo(secondCallerFrames));
+        }
+
+        /// <summary>
+        /// What: Hit(string) records an empty caller-frame list because that path has no stack capture.
+        /// </summary>
+        [Test]
+        public void Hit_WhenCalledWithoutCallerFrames_ReportsEmptyCallerFrames()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Hit("jump");
+
+            Assert.That(snapshot.CallerFrames, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: HitWithCapturedVariables records an empty caller-frame list because that path
+        /// has no stack capture.
+        /// </summary>
+        [Test]
+        public void HitWithCapturedVariables_WhenCalledWithoutCallerFrames_ReportsEmptyCallerFrames()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopCapturedVariable[] capturedVariables =
+            {
+                new("speed", UloopCapturedVariableScope.Local, "System.Int32", "5", string.Empty, string.Empty, 0, false)
+            };
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedVariables(
+                "jump", capturedVariables, false);
+
+            Assert.That(snapshot.CallerFrames, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: PausePointStatusResponse maps caller frames onto both the latest capture and
+        /// each history frame.
+        /// </summary>
+        [Test]
+        public void StatusFromSnapshot_WhenCallerFramesArePresent_MapsTopLevelAndHistory()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointCallerFrame[] callerFrames =
+            {
+                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10),
+            };
+            UloopPausePointRegistry.HitWithCapturedFrame(
+                "jump",
+                CreateEmptyCapturedFrame(),
+                Array.Empty<UloopCapturedVariable>(),
+                false,
+                callerFrames);
+
+            PausePointStatusResponse response =
+                PausePointStatusResponse.FromSnapshot(UloopPausePointRegistry.GetStatus("jump"));
+
+            Assert.That(response.CallerFrames, Has.Count.EqualTo(1));
+            Assert.That(response.CallerFrames[0].Method, Is.EqualTo("Game.Input.HandleJump"));
+            Assert.That(response.CallerFrames[0].File, Is.EqualTo("Assets/Scripts/Input.cs"));
+            Assert.That(response.CallerFrames[0].Line, Is.EqualTo(10));
+            Assert.That(response.CapturedVariableHistory, Has.Count.EqualTo(1));
+            Assert.That(response.CapturedVariableHistory[0].CallerFrames, Has.Count.EqualTo(1));
+            Assert.That(
+                response.CapturedVariableHistory[0].CallerFrames[0].Method,
+                Is.EqualTo("Game.Input.HandleJump"));
+        }
+
+        /// <summary>
+        /// What: PausePointResponse maps caller frames onto history frames only (no top-level
+        /// CallerFrames on the enable/clear payload).
+        /// </summary>
+        [Test]
+        public void FromSnapshot_WhenCallerFramesArePresent_MapsHistoryFramesOnly()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointCallerFrame[] callerFrames =
+            {
+                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10),
+            };
+            UloopPausePointRegistry.HitWithCapturedFrame(
+                "jump",
+                CreateEmptyCapturedFrame(),
+                Array.Empty<UloopCapturedVariable>(),
+                false,
+                callerFrames);
+
+            PausePointResponse response =
+                PausePointResponse.FromSnapshot(UloopPausePointRegistry.GetStatus("jump"));
+
+            Assert.That(response.CapturedVariableHistory, Has.Count.EqualTo(1));
+            Assert.That(response.CapturedVariableHistory[0].CallerFrames, Has.Count.EqualTo(1));
+            Assert.That(
+                response.CapturedVariableHistory[0].CallerFrames[0].Method,
+                Is.EqualTo("Game.Input.HandleJump"));
+            Assert.That(response.CapturedVariableHistory[0].CallerFrames[0].File, Is.EqualTo("Assets/Scripts/Input.cs"));
+            Assert.That(response.CapturedVariableHistory[0].CallerFrames[0].Line, Is.EqualTo(10));
+        }
+
         [Test]
         public void TryGetCapturedValue_WhenLatestHitStoredRawFrame_ReturnsLiveReferences()
         {
@@ -1171,7 +1316,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new("scores", UloopCapturedVariableScope.Local, "System.Collections.Generic.List`1[System.Int32]", "[10,20,30]", string.Empty, string.Empty, 0, false)
             };
 
-            UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, capturedVariables, false);
+            UloopPausePointRegistry.HitWithCapturedFrame(
+                "jump", frame, capturedVariables, false, Array.Empty<UloopPausePointCallerFrame>());
 
             (bool foundScores, object scoresValue) = UloopPausePoint.TryGetCapturedValue("scores");
             (bool foundNull, object nullValue) = UloopPausePoint.TryGetCapturedValue("empty");
@@ -1198,7 +1344,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 System.Array.Empty<string>(),
                 0);
             UloopPausePointRegistry.HitWithCapturedFrame(
-                "jump", frame, Array.Empty<UloopCapturedVariable>(), false);
+                "jump", frame, Array.Empty<UloopCapturedVariable>(), false, Array.Empty<UloopPausePointCallerFrame>());
 
             UloopPausePointRegistry.Clear("jump");
 
@@ -1225,8 +1371,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 System.Array.Empty<string>(),
                 0);
 
-            UloopPausePointRegistry.HitWithCapturedFrame("jump", jumpFrame, Array.Empty<UloopCapturedVariable>(), false);
-            UloopPausePointRegistry.HitWithCapturedFrame("land", landFrame, Array.Empty<UloopCapturedVariable>(), false);
+            UloopPausePointRegistry.HitWithCapturedFrame("jump", jumpFrame, Array.Empty<UloopCapturedVariable>(), false, Array.Empty<UloopPausePointCallerFrame>());
+            UloopPausePointRegistry.HitWithCapturedFrame("land", landFrame, Array.Empty<UloopCapturedVariable>(), false, Array.Empty<UloopPausePointCallerFrame>());
 
             (bool found, object value) = UloopPausePoint.TryGetCapturedValue("speed");
             Assert.That(found, Is.True);
@@ -1245,7 +1391,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 false,
                 System.Array.Empty<string>(),
                 0);
-            UloopPausePointRegistry.HitWithCapturedFrame("land", landFrame, Array.Empty<UloopCapturedVariable>(), false);
+            UloopPausePointRegistry.HitWithCapturedFrame("land", landFrame, Array.Empty<UloopCapturedVariable>(), false, Array.Empty<UloopPausePointCallerFrame>());
 
             UloopPausePointRegistry.Clear("jump");
 
@@ -1266,7 +1412,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 false,
                 System.Array.Empty<string>(),
                 0);
-            UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, Array.Empty<UloopCapturedVariable>(), false);
+            UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, Array.Empty<UloopCapturedVariable>(), false, Array.Empty<UloopPausePointCallerFrame>());
 
             UloopPausePointRegistry.Enable("jump", 30);
 
@@ -1287,7 +1433,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 false,
                 System.Array.Empty<string>(),
                 0);
-            UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, Array.Empty<UloopCapturedVariable>(), false);
+            UloopPausePointRegistry.HitWithCapturedFrame("jump", frame, Array.Empty<UloopCapturedVariable>(), false, Array.Empty<UloopPausePointCallerFrame>());
 
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePointRegistry.Clear("jump");
@@ -1578,6 +1724,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const int FixtureLine = 12;
         private const string PhysicsFixtureFilePath = "Assets/Tests/Editor/PausePointToolsPhysicsFixture.cs";
         private const int PhysicsFixtureLine = 11;
+
+        private static UloopPausePointCapturedVariableFrame CreateEmptyCapturedFrame()
+        {
+            return new UloopPausePointCapturedVariableFrame(
+                Array.Empty<UloopPausePointCapturedVariableEntry>(),
+                false,
+                Array.Empty<string>(),
+                0);
+        }
 
         private static SourcePausePointResolution WithStaleMvid(SourcePausePointResolution resolution)
         {
