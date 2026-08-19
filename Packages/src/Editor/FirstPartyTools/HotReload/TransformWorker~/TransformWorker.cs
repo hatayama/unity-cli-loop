@@ -200,7 +200,7 @@ public static class TransformWorkerProgram
         AddedMethodCatalog addedMethodCatalog = new AddedMethodCatalog();
         AddedFieldCatalog addedFieldCatalog = new AddedFieldCatalog();
         (List<TypeEmitState> typeEmitStates, int nextShimTypeCounter, int nextGlobalShimMethodCounter) =
-            QueueAllTypeEmitStates(
+            TypeEmitPlanner.QueueAllTypeEmitStates(
                 root,
                 semanticModel,
                 targetTypesAssemblySymbol,
@@ -393,106 +393,6 @@ public static class TransformWorkerProgram
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
                 .WithMetadataImportOptions(MetadataImportOptions.All));
         return driftCompilation.GetAssemblyOrModuleSymbol(targetTypesReference) as IAssemblySymbol;
-    }
-
-    private static (List<TypeEmitState> TypeEmitStates, int ShimTypeCounter, int GlobalShimMethodCounter)
-        QueueAllTypeEmitStates(
-            CompilationUnitSyntax root,
-            SemanticModel semanticModel,
-            IAssemblySymbol targetTypesAssemblySymbol,
-            WorkerInput input,
-            BaselineSnapshotState baseline,
-            List<UsingDirectiveSyntax> assemblyGlobalUsings,
-            List<ShimTypeBuilder> shimTypes,
-            AddedMethodCatalog addedMethodCatalog,
-            AddedFieldCatalog addedFieldCatalog,
-            List<WorkerSkipped> skipped,
-            List<WorkerUnchangedMethod> unchangedMethods,
-            List<string> declarationDriftWarnings,
-            List<WorkerRemovedMember> removedMembers,
-            List<WorkerRemovedMethodSignature> removedMethodSignatures,
-            int shimTypeCounter,
-            int globalShimMethodCounter)
-    {
-        List<TypeEmitState> typeEmitStates = new List<TypeEmitState>();
-        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
-        {
-            INamedTypeSymbol typeSymbol = semanticModel.GetDeclaredSymbol(typeDeclaration);
-            if (typeSymbol == null)
-            {
-                continue;
-            }
-
-            string typeMetadataNameFromSyntax = WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration);
-
-            // Property setters/init and all indexer accessors with bodies stay Skipped.
-            // Property getters are patched below (not reported here).
-            (Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
-                Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap,
-                Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
-                Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap) =
-                baseline.GetAccessorBaselineMaps();
-            UnsupportedMemberSkipCollector.AppendExplicitAccessorSkips(
-                typeDeclaration,
-                typeMetadataNameFromSyntax,
-                semanticModel,
-                skipped,
-                snapshotPropertyMap,
-                snapshotIndexerMap,
-                plainCurrentPropertyMap,
-                plainCurrentIndexerMap,
-                addedMethodCatalog);
-            (Dictionary<string, ConstructorDeclarationSyntax> snapshotConstructorMap,
-                Dictionary<string, MemberDeclarationSyntax> snapshotOperatorMap,
-                Dictionary<string, EventDeclarationSyntax> snapshotEventMap,
-                Dictionary<string, ConstructorDeclarationSyntax> plainCurrentConstructorMap,
-                Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap,
-                Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap) =
-                baseline.GetUnsupportedMemberBaselineMaps();
-            UnsupportedMemberSkipCollector.AppendUnsupportedMemberKindSkips(
-                typeDeclaration,
-                typeMetadataNameFromSyntax,
-                semanticModel,
-                skipped,
-                snapshotConstructorMap,
-                snapshotOperatorMap,
-                snapshotEventMap,
-                plainCurrentConstructorMap,
-                plainCurrentOperatorMap,
-                plainCurrentEventMap);
-
-            TypeEmitState typeState = new TypeEmitState
-            {
-                TypeDeclaration = typeDeclaration,
-                TypeSymbol = typeSymbol,
-                TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax
-            };
-            (int nextShimTypeCounter, int nextGlobalShimMethodCounter) = QueueTypeMethods(
-                typeState,
-                semanticModel,
-                targetTypesAssemblySymbol,
-                input,
-                baseline.HasBaseline,
-                baseline.SnapshotMethodMap,
-                baseline.PlainCurrentMethodMap,
-                root,
-                assemblyGlobalUsings,
-                shimTypes,
-                addedMethodCatalog,
-                addedFieldCatalog,
-                skipped,
-                unchangedMethods,
-                declarationDriftWarnings,
-                removedMembers,
-                removedMethodSignatures,
-                shimTypeCounter,
-                globalShimMethodCounter);
-            shimTypeCounter = nextShimTypeCounter;
-            globalShimMethodCounter = nextGlobalShimMethodCounter;
-            typeEmitStates.Add(typeState);
-        }
-
-        return (typeEmitStates, shimTypeCounter, globalShimMethodCounter);
     }
 
     private static void CollectRemovedMembersIfBaseline(
@@ -1243,70 +1143,6 @@ public static class TransformWorkerProgram
                 || typeDeclaration is StructDeclarationSyntax
                 || typeDeclaration is RecordDeclarationSyntax
                 || typeDeclaration is InterfaceDeclarationSyntax);
-    }
-
-    private static (int ShimTypeCounter, int GlobalShimMethodCounter) QueueTypeMethods(
-        TypeEmitState typeState,
-        SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol,
-        WorkerInput input,
-        bool hasBaseline,
-        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
-        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap,
-        CompilationUnitSyntax root,
-        List<UsingDirectiveSyntax> assemblyGlobalUsings,
-        List<ShimTypeBuilder> shimTypes,
-        AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog,
-        List<WorkerSkipped> skipped,
-        List<WorkerUnchangedMethod> unchangedMethods,
-        List<string> declarationDriftWarnings,
-        List<WorkerRemovedMember> removedMembers,
-        List<WorkerRemovedMethodSignature> removedMethodSignatures,
-        int shimTypeCounter,
-        int globalShimMethodCounter)
-    {
-        INamedTypeSymbol compiledType = FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
-        if (compiledType == null)
-        {
-            SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
-            return (shimTypeCounter, globalShimMethodCounter);
-        }
-
-        ClassifyAddedFields(
-            typeState,
-            semanticModel,
-            compiledType,
-            targetTypesAssemblySymbol,
-            addedFieldCatalog,
-            declarationDriftWarnings);
-
-        foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
-            .OfType<MethodDeclarationSyntax>())
-        {
-            (shimTypeCounter, globalShimMethodCounter) = QueueOrdinaryMethod(
-                methodDeclaration,
-                typeState,
-                semanticModel,
-                compiledType,
-                input,
-                hasBaseline,
-                snapshotMethodMap,
-                plainCurrentMethodMap,
-                root,
-                assemblyGlobalUsings,
-                shimTypes,
-                addedMethodCatalog,
-                skipped,
-                unchangedMethods,
-                declarationDriftWarnings,
-                removedMembers,
-                removedMethodSignatures,
-                shimTypeCounter,
-                globalShimMethodCounter);
-        }
-
-        return (shimTypeCounter, globalShimMethodCounter);
     }
 
     private static (int ShimTypeCounter, int GlobalShimMethodCounter) QueueOrdinaryMethod(
