@@ -128,10 +128,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(enable.Warning ?? string.Empty, Does.Not.Contain("has active hot-reload patches"));
 
             HotReloadShimMethodLookup patchedEntry = FindPatchedShimEntry();
-            string expectedWarning = PausePointUseCase.MergeWarnings(
-                PausePointUseCase.MergeWarnings(
-                    PausePointUseCase.CreateEnableWarning(),
-                    PausePointUseCase.BuildRetargetedToHotReloadPatchWarningOrEmpty(
+            string expectedWarning = PausePointEnableWarnings.MergeWarnings(
+                PausePointEnableWarnings.MergeWarnings(
+                    PausePointEnableWarnings.CreateEnableWarning(),
+                    PausePointEnableWarnings.BuildRetargetedToHotReloadPatchWarningOrEmpty(
                         true,
                         enable.ResolvedMethod,
                         editedPatchLine,

@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return PausePointStatusResponse.FromSnapshot(snapshot);
         }
 
-        // Why: PausePointTools.LogCleared duplicates this instead of sharing it, since this
+        // Why: PausePointUseCase.LogCleared duplicates this instead of sharing it, since this
         // bridge must not reference that Editor-only tool assembly. Keep both in sync if the
         // log shape or wording changes.
         private static void LogCleared(string target, string statusBeforeClear)
@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 new { Target = target, StatusBeforeClear = statusBeforeClear });
         }
 
-        // Why: PausePointTools.LogExpired duplicates this instead of sharing it, since this
+        // Why: PausePointUseCase.LogExpired duplicates this instead of sharing it, since this
         // bridge must not reference that Editor-only tool assembly. Keep both in sync if the
         // log shape or wording changes. The physics-callback dispatch diagnostics
         // (pause_point_physics_dispatch_diagnostics / pause_point_cleared_without_hit_physics)

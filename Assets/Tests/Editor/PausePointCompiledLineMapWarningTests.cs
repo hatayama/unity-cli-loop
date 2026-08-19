@@ -45,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineMapWarningOrEmpty_WhenPatchesAreActive_ReturnsFormattedWarning()
         {
-            string warning = PausePointUseCase.BuildCompiledLineMapWarningOrEmpty(true, ForwardSlashFile);
+            string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(true, ForwardSlashFile);
 
             Assert.That(
                 warning,
@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineMapWarningOrEmpty_WhenFileUsesBackslashes_NormalizesToForwardSlashes()
         {
-            string warning = PausePointUseCase.BuildCompiledLineMapWarningOrEmpty(true, "Assets\\Scripts\\Example.cs");
+            string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(true, "Assets\\Scripts\\Example.cs");
 
             Assert.That(
                 warning,
@@ -77,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineMapWarningOrEmpty_WhenPatchesAreInactive_ReturnsEmpty()
         {
-            string warning = PausePointUseCase.BuildCompiledLineMapWarningOrEmpty(false, ForwardSlashFile);
+            string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(false, ForwardSlashFile);
 
             Assert.That(warning, Is.EqualTo(string.Empty));
         }
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineMapResolveFailureWarningOrEmpty_WhenPatchesAreActive_ReturnsFormattedWarning()
         {
-            string warning = PausePointUseCase.BuildCompiledLineMapResolveFailureWarningOrEmpty(
+            string warning = PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
                 true,
                 ForwardSlashFile);
 
@@ -108,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineMapResolveFailureWarningOrEmpty_WhenFileUsesBackslashes_NormalizesToForwardSlashes()
         {
-            string warning = PausePointUseCase.BuildCompiledLineMapResolveFailureWarningOrEmpty(
+            string warning = PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
                 true,
                 "Assets\\Scripts\\Example.cs");
 
@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineMapResolveFailureWarningOrEmpty_WhenPatchesAreInactive_ReturnsEmpty()
         {
-            string warning = PausePointUseCase.BuildCompiledLineMapResolveFailureWarningOrEmpty(
+            string warning = PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
                 false,
                 ForwardSlashFile);
 
@@ -140,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineDriftWarningOrEmpty_WhenTextsDiffer_ReturnsFormattedWarning()
         {
-            string warning = PausePointUseCase.BuildCompiledLineDriftWarningOrEmpty(
+            string warning = PausePointEnableWarnings.BuildCompiledLineDriftWarningOrEmpty(
                 "  return 1;  ",
                 "return 2;",
                 ForwardSlashFile,
@@ -163,7 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineDriftWarningOrEmpty_WhenTextsMatchAfterTrim_ReturnsEmpty()
         {
-            string warning = PausePointUseCase.BuildCompiledLineDriftWarningOrEmpty(
+            string warning = PausePointEnableWarnings.BuildCompiledLineDriftWarningOrEmpty(
                 "  return 1;  ",
                 "return 1;",
                 ForwardSlashFile,
@@ -179,14 +179,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void BuildCompiledLineDriftWarningOrEmpty_WhenEitherSideIsEmpty_ReturnsEmpty()
         {
             Assert.That(
-                PausePointUseCase.BuildCompiledLineDriftWarningOrEmpty(
+                PausePointEnableWarnings.BuildCompiledLineDriftWarningOrEmpty(
                     string.Empty,
                     "return 1;",
                     ForwardSlashFile,
                     17),
                 Is.EqualTo(string.Empty));
             Assert.That(
-                PausePointUseCase.BuildCompiledLineDriftWarningOrEmpty(
+                PausePointEnableWarnings.BuildCompiledLineDriftWarningOrEmpty(
                     "return 1;",
                     string.Empty,
                     ForwardSlashFile,
@@ -254,16 +254,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     response.ResolvedLine,
                     "return 0;",
                     "return 424242;");
-                expectedDrift = PausePointUseCase.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+                expectedDrift = PausePointEnableWarnings.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
                     expectedDrift,
                     response.ResolvedMethod,
                     spanResult.Resolution.CompiledMethodStartLine,
                     spanResult.Resolution.CompiledMethodEndLine);
-                string expectedWarning = PausePointUseCase.MergeWarnings(
-                    PausePointUseCase.MergeWarnings(
-                        PausePointUseCase.MergeWarnings(
-                            PausePointUseCase.CreateEnableWarning(),
-                            PausePointUseCase.BuildCompiledLineMapWarningOrEmpty(true, ResolveFailureFile)),
+                string expectedWarning = PausePointEnableWarnings.MergeWarnings(
+                    PausePointEnableWarnings.MergeWarnings(
+                        PausePointEnableWarnings.MergeWarnings(
+                            PausePointEnableWarnings.CreateEnableWarning(),
+                            PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(true, ResolveFailureFile)),
                         expectedDrift),
                     SourcePausePointConstants.SmallMethodInliningRiskWarning);
                 Assert.That(response.Warning, Is.EqualTo(expectedWarning));
@@ -291,7 +291,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "return 1;",
                 "return 2;");
 
-            string warning = PausePointUseCase.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+            string warning = PausePointEnableWarnings.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
                 drift,
                 "Example.Run",
                 8,
@@ -320,7 +320,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "return 1;",
                 "return 2;");
 
-            string warning = PausePointUseCase.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+            string warning = PausePointEnableWarnings.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
                 drift,
                 "Example.Run",
                 0,
@@ -335,7 +335,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void AppendCompiledMethodSpanToDriftWarningOrUnchanged_WhenDriftIsEmpty_ReturnsEmpty()
         {
-            string warning = PausePointUseCase.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+            string warning = PausePointEnableWarnings.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
                 string.Empty,
                 "Example.Run",
                 8,
@@ -350,7 +350,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildRetargetedToHotReloadPatchWarningOrEmpty_WhenRetargeted_ReturnsFormattedWarning()
         {
-            string warning = PausePointUseCase.BuildRetargetedToHotReloadPatchWarningOrEmpty(
+            string warning = PausePointEnableWarnings.BuildRetargetedToHotReloadPatchWarningOrEmpty(
                 true,
                 "Example.Run",
                 42,
@@ -374,7 +374,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildRetargetedToHotReloadPatchWarningOrEmpty_WhenNotRetargeted_ReturnsEmpty()
         {
-            string warning = PausePointUseCase.BuildRetargetedToHotReloadPatchWarningOrEmpty(
+            string warning = PausePointEnableWarnings.BuildRetargetedToHotReloadPatchWarningOrEmpty(
                 false,
                 "Example.Run",
                 42,
@@ -390,7 +390,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildPatchedMethodPdbUnavailableWarningOrEmpty_WhenUnavailable_ReturnsFormattedWarning()
         {
-            string warning = PausePointUseCase.BuildPatchedMethodPdbUnavailableWarningOrEmpty(
+            string warning = PausePointEnableWarnings.BuildPatchedMethodPdbUnavailableWarningOrEmpty(
                 true,
                 "Example.Run",
                 42);
@@ -410,7 +410,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildPatchedMethodPdbUnavailableWarningOrEmpty_WhenAvailable_ReturnsEmpty()
         {
-            string warning = PausePointUseCase.BuildPatchedMethodPdbUnavailableWarningOrEmpty(
+            string warning = PausePointEnableWarnings.BuildPatchedMethodPdbUnavailableWarningOrEmpty(
                 false,
                 "Example.Run",
                 42);
@@ -431,7 +431,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new SourcePausePointNearbyCompiledMethod("CompiledMethodSpanFixture.OtherMethod", 15, 18)
             };
 
-            string message = PausePointUseCase.AppendNearbyCompiledMethodsSuffix(errorMessage, nearby);
+            string message = PausePointEnableWarnings.AppendNearbyCompiledMethodsSuffix(errorMessage, nearby);
 
             Assert.That(
                 message,
@@ -452,7 +452,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string errorMessage = "No sequence point found on or after line 9999 in 'file'.";
 
-            string message = PausePointUseCase.AppendNearbyCompiledMethodsSuffix(
+            string message = PausePointEnableWarnings.AppendNearbyCompiledMethodsSuffix(
                 errorMessage,
                 Array.Empty<SourcePausePointNearbyCompiledMethod>());
 
@@ -602,9 +602,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
                     "PausePointCompiledLineMapWarningTests.CompiledLineDriftProbe",
                     requestedLine);
-                string expectedWarning = PausePointUseCase.MergeWarnings(
-                    PausePointUseCase.MergeWarnings(
-                        PausePointUseCase.CreateEnableWarning(),
+                string expectedWarning = PausePointEnableWarnings.MergeWarnings(
+                    PausePointEnableWarnings.MergeWarnings(
+                        PausePointEnableWarnings.CreateEnableWarning(),
                         dedicatedWarning),
                     SourcePausePointConstants.SmallMethodInliningRiskWarning);
                 Assert.That(response.Warning, Is.EqualTo(expectedWarning));
