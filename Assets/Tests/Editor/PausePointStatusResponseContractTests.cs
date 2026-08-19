@@ -55,6 +55,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                                 Line = 44
                             }
                         }
+                    },
+                    new()
+                    {
+                        HitSequence = 2,
+                        FrameCount = 43,
+                        HitAtUtc = "2026-06-03T00:00:02.0000000Z",
+                        CapturedVariables = new List<PausePointStatusCapturedVariable>(),
+                        Truncated = false,
+                        CallerFrames = new List<PausePointStatusCallerFrame>()
                     }
                 },
                 HistoryDroppedCount = 0,

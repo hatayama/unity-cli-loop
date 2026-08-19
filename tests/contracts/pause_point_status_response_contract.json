@@ -23,6 +23,14 @@
           "Line": 44
         }
       ]
+    },
+    {
+      "HitSequence": 2,
+      "FrameCount": 43,
+      "HitAtUtc": "2026-06-03T00:00:02.0000000Z",
+      "CapturedVariables": [],
+      "Truncated": false,
+      "CallerFrames": []
     }
   ],
   "HistoryDroppedCount": 0,

@@ -27,7 +27,7 @@ type pausePointStatusResponse struct {
 	Message                         string                           `json:"Message"`
 	RecommendedNextAction           string                           `json:"RecommendedNextAction"`
 	CapturedVariables               []pausePointCapturedVariable     `json:"CapturedVariables"`
-	CallerFrames                    []pausePointCallerFrame          `json:"CallerFrames,omitempty"`
+	CallerFrames                    []pausePointCallerFrame          `json:"CallerFrames"`
 	CapturedVariablesTruncated      bool                             `json:"CapturedVariablesTruncated"`
 	TruncatedVariableNames          []string                         `json:"TruncatedVariableNames"`
 	TruncatedVariableCount          int                              `json:"TruncatedVariableCount"`
@@ -119,7 +119,7 @@ type pausePointCapturedHistoryFrame struct {
 	HitAtUtc          string                       `json:"HitAtUtc"`
 	CapturedVariables []pausePointCapturedVariable `json:"CapturedVariables"`
 	Truncated         bool                         `json:"Truncated"`
-	CallerFrames      []pausePointCallerFrame      `json:"CallerFrames,omitempty"`
+	CallerFrames      []pausePointCallerFrame      `json:"CallerFrames"`
 }
 
 // pausePointCallerFrame mirrors the Unity-side caller-frame DTO: Method is always
