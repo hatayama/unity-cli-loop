@@ -135,7 +135,7 @@ as described in `docs/dead-code-scanner.md` (commands, and what `KeptByUnityOrRe
 The repository-wide maximum cyclomatic complexity is 15, enforced by `cyclop` for Go and CA1502
 for C#. The `Code Complexity` workflow fails the pull request when findings exceed that
 threshold. When you touch a reported function, reduce its complexity before adding behavior.
-Commands and the three places the threshold is declared: `docs/code-complexity.md`.
+Commands and the five places the threshold is declared: `docs/code-complexity.md`.
 
 ## Native Go CLI Validation
 
