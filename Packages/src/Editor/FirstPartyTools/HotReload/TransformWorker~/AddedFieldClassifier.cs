@@ -186,38 +186,38 @@ internal static class AddedFieldClassifier
             return null;
         }
 
-        string unavailable = TransformWorkerProgram.BodyReferencesUnavailableAddedField(bodyNode, semanticModel, addedFieldCatalog);
+        string unavailable = AddedFieldBodyScan.BodyReferencesUnavailableAddedField(bodyNode, semanticModel, addedFieldCatalog);
         if (unavailable != null)
         {
             return unavailable;
         }
 
-        if (TransformWorkerProgram.BodyPassesAddedFieldByRef(bodyNode, semanticModel, addedFieldCatalog))
+        if (AddedFieldBodyScan.BodyPassesAddedFieldByRef(bodyNode, semanticModel, addedFieldCatalog))
         {
             return AddedFieldSkipReasons.RefOutIn;
         }
 
-        if (TransformWorkerProgram.BodyHasUnsupportedAddedFieldCompound(bodyNode, semanticModel, addedFieldCatalog))
+        if (AddedFieldBodyScan.BodyHasUnsupportedAddedFieldCompound(bodyNode, semanticModel, addedFieldCatalog))
         {
             return AddedFieldSkipReasons.UnavailableAddedField;
         }
 
-        if (TransformWorkerProgram.BodyHasNonNumericAddedFieldIncrement(bodyNode, semanticModel, addedFieldCatalog))
+        if (AddedFieldBodyScan.BodyHasNonNumericAddedFieldIncrement(bodyNode, semanticModel, addedFieldCatalog))
         {
             return AddedFieldSkipReasons.IncrementNotNumeric;
         }
 
-        if (TransformWorkerProgram.BodyHasConsumedAddedFieldWrite(bodyNode, semanticModel, addedFieldCatalog))
+        if (AddedFieldBodyScan.BodyHasConsumedAddedFieldWrite(bodyNode, semanticModel, addedFieldCatalog))
         {
             return AddedFieldSkipReasons.ConsumedWrite;
         }
 
-        if (TransformWorkerProgram.BodyHasDoubleEvalAddedFieldReceiver(bodyNode, semanticModel, addedFieldCatalog))
+        if (AddedFieldBodyScan.BodyHasDoubleEvalAddedFieldReceiver(bodyNode, semanticModel, addedFieldCatalog))
         {
             return AddedFieldSkipReasons.DoubleEvalReceiver;
         }
 
-        if (TransformWorkerProgram.BodyHasValueTypeAddedFieldMemberWrite(bodyNode, semanticModel, addedFieldCatalog))
+        if (AddedFieldBodyScan.BodyHasValueTypeAddedFieldMemberWrite(bodyNode, semanticModel, addedFieldCatalog))
         {
             return AddedFieldSkipReasons.ValueTypeMemberWrite;
         }

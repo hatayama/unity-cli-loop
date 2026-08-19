@@ -199,7 +199,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
         if (symbol is IFieldSymbol fieldSymbol
             && _addedFieldCatalog.FindOrNull(
-                TransformWorkerProgram.FormatAddedFieldKeyFromSymbol(fieldSymbol)) != null)
+                AddedFieldBodyScan.FormatAddedFieldKeyFromSymbol(fieldSymbol)) != null)
         {
             return SyntaxFactory.LiteralExpression(
                     SyntaxKind.StringLiteralExpression,
@@ -324,7 +324,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitPrefixUnaryExpression(PrefixUnaryExpressionSyntax node)
     {
-        if (TransformWorkerProgram.IsIncrementOrDecrement(node.Kind()))
+        if (AddedFieldBodyScan.IsIncrementOrDecrement(node.Kind()))
         {
             AddedFieldBinding binding = FindStoreBinding(_semanticModel.GetSymbolInfo(node.Operand).Symbol);
             if (binding != null)
@@ -338,7 +338,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitPostfixUnaryExpression(PostfixUnaryExpressionSyntax node)
     {
-        if (TransformWorkerProgram.IsIncrementOrDecrement(node.Kind()))
+        if (AddedFieldBodyScan.IsIncrementOrDecrement(node.Kind()))
         {
             AddedFieldBinding binding = FindStoreBinding(_semanticModel.GetSymbolInfo(node.Operand).Symbol);
             if (binding != null)
@@ -358,7 +358,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         AddedFieldBinding binding = _addedFieldCatalog.FindOrNull(
-            TransformWorkerProgram.FormatAddedFieldKeyFromSymbol(fieldSymbol));
+            AddedFieldBodyScan.FormatAddedFieldKeyFromSymbol(fieldSymbol));
         if (binding == null || !binding.IsStoreRewriteable)
         {
             return null;
@@ -375,7 +375,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         return _addedFieldCatalog.FindOrNull(
-            TransformWorkerProgram.FormatAddedFieldKeyFromSymbol(fieldSymbol));
+            AddedFieldBodyScan.FormatAddedFieldKeyFromSymbol(fieldSymbol));
     }
 
     private SyntaxNode TryRewriteAddedFieldRead(
@@ -582,13 +582,13 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     private static bool IsIncrementOperand(SyntaxNode node)
     {
         if (node.Parent is PrefixUnaryExpressionSyntax prefix
-            && TransformWorkerProgram.IsIncrementOrDecrement(prefix.Kind()))
+            && AddedFieldBodyScan.IsIncrementOrDecrement(prefix.Kind()))
         {
             return true;
         }
 
         return node.Parent is PostfixUnaryExpressionSyntax postfix
-            && TransformWorkerProgram.IsIncrementOrDecrement(postfix.Kind());
+            && AddedFieldBodyScan.IsIncrementOrDecrement(postfix.Kind());
     }
 
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
