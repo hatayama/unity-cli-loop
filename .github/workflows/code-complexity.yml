@@ -48,7 +48,7 @@ jobs:
 
       - name: Report complexity
         env:
-          CODE_COMPLEXITY_FAIL_ON_EXCEEDED: 'false'
+          CODE_COMPLEXITY_FAIL_ON_EXCEEDED: 'true'
         run: scripts/check-code-complexity.sh
 
       - name: Write complexity artifacts
