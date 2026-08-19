@@ -116,7 +116,7 @@ internal static class AddedCallSiteGuard
             return (AddedMethodSkipReasons.MethodGroupReference, null);
         }
 
-        return (TransformWorkerProgram.EvaluateAddedFieldSkipReason(bodyNode, semanticModel, addedFieldCatalog), null);
+        return (AddedFieldClassifier.EvaluateAddedFieldSkipReason(bodyNode, semanticModel, addedFieldCatalog), null);
     }
 
     internal static bool BodyReferencesAddedMethodGroup(

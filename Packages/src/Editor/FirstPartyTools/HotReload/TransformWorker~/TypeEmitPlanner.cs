@@ -145,7 +145,7 @@ internal static class TypeEmitPlanner
             return (shimTypeCounter, globalShimMethodCounter);
         }
 
-        TransformWorkerProgram.ClassifyAddedFields(
+        AddedFieldClassifier.ClassifyAddedFields(
             typeState,
             semanticModel,
             compiledType,
