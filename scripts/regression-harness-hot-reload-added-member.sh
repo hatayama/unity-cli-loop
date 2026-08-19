@@ -348,7 +348,14 @@ fi
 
 log "Re-applying the same patch to prove the store keeps 10..."
 run_uloop hot-reload --files "$SOURCE_FILE" > "$RESULT_FILE"
-assert_apply_has_added_and_patched
+# Why AlreadyActive: identical source after a fully applied reload is a no-op by design;
+# the store-keep check below is the trap this step exists for.
+reapply_success="$(jq -r '.Success' "$RESULT_FILE")"
+if [ "$reapply_success" != "true" ]; then
+    log "FAIL: re-apply did not succeed"
+    cat "$RESULT_FILE"
+    exit 1
+fi
 kept="$(probe_added)"
 if [ "$kept" != "10" ]; then
     log "FAIL: re-apply reset the added field (got: ${kept}, expected 10)"
