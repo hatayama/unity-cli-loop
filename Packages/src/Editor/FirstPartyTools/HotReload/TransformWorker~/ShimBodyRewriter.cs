@@ -314,7 +314,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             && AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
         {
             AccessorEntry entry = _accessorPlan.GetOrAddField(fieldSymbol);
-            ExpressionSyntax fieldRefCall = HarmonyAccessors.CreateFieldRefInvocation(
+            ExpressionSyntax fieldRefCall = HarmonyAccessorShimRewrite.CreateFieldRefInvocation(
                 entry,
                 VisitReceiver(ExtractReceiver(node.Left)));
             return node
@@ -363,7 +363,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
         ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
             ?? _semanticModel.GetSymbolInfo(node.Name).Symbol;
-        if (!AddedFields.IsAssignmentLeft(node) && !AddedFields.IsIncrementOperand(node))
+        if (!AddedFieldShimRewrite.IsAssignmentLeft(node) && !AddedFieldShimRewrite.IsIncrementOperand(node))
         {
             SyntaxNode addedFieldRead = AddedFields.TryRewriteAddedFieldRead(symbol, node.Expression, node);
             if (addedFieldRead != null)
@@ -402,7 +402,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     private SyntaxNode VisitName(SimpleNameSyntax node, SyntaxNode original)
     {
-        if (HarmonyAccessors.IsNameSideOfLargerExpression(node))
+        if (HarmonyAccessorShimRewrite.IsNameSideOfLargerExpression(node))
         {
             return original;
         }
@@ -420,7 +420,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         // Local/anonymous functions are emitted into the shim assembly — keep bare calls.
-        if (HarmonyAccessors.IsLocalOrAnonymousFunctionSymbol(symbol))
+        if (HarmonyAccessorShimRewrite.IsLocalOrAnonymousFunctionSymbol(symbol))
         {
             return original;
         }
@@ -437,7 +437,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return original;
         }
 
-        return HarmonyAccessors.QualifyOwnedMemberAccess(node, ownership.isStatic, ownership.containingType);
+        return HarmonyAccessorShimRewrite.QualifyOwnedMemberAccess(node, ownership.isStatic, ownership.containingType);
     }
 
     internal static SyntaxKind GetCompoundAssignmentBinaryKind(SyntaxKind assignmentKind)

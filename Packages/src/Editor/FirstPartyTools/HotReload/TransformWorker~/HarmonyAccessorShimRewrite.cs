@@ -26,8 +26,8 @@ internal sealed class HarmonyAccessorShimRewrite
 
     internal SyntaxNode TryRewriteUnownedAddedFieldRead(SimpleNameSyntax node, ISymbol symbol)
     {
-        if (_rewriter.AddedFields.IsAssignmentLeft(node)
-            || _rewriter.AddedFields.IsIncrementOperand(node)
+        if (AddedFieldShimRewrite.IsAssignmentLeft(node)
+            || AddedFieldShimRewrite.IsIncrementOperand(node)
             || NameofRules.IsInsideNameofArgument(node))
         {
             return null;
