@@ -155,73 +155,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // CompilationPipeline / Application.dataPath require the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
-            // CompilationPipeline.GetAssemblyNameFromScriptPath expects a project-relative path
-            // (Assets/... or Packages/...) and returns a file name that already includes ".dll".
-            string projectRelativePath = ToProjectRelativeScriptPath(assemblyResolvePath);
-            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(projectRelativePath);
-            if (string.IsNullOrEmpty(rawAssemblyName))
-            {
-                outcomes.Add(
-                    HotReloadMethodOutcome.Failed(
-                        "(file)",
-                        "Script path is not part of any compiled assembly (Assets/Packages paths only): "
-                        + assemblyResolvePath,
-                        assemblyResolvePath));
-                return new HotReloadFileProcessResult(outcomes, warnings, 0);
-            }
-
-            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
-            UnityCompilationAssembly compilationAssembly = FindCompilationAssembly(assemblyName);
-            if (compilationAssembly == null)
-            {
-                outcomes.Add(
-                    HotReloadMethodOutcome.Failed(
-                        "(file)",
-                        "CompilationPipeline assembly not found: " + assemblyName,
-                        assemblyResolvePath));
-                return new HotReloadFileProcessResult(outcomes, warnings, 0);
-            }
-
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string targetDllPath = Path.Combine(
-                projectRoot,
-                HotReloadConstants.ScriptAssembliesRelativeDirectory,
-                assemblyName + HotReloadConstants.CompiledAssemblyExtension);
-
-            if (!File.Exists(targetDllPath))
-            {
-                outcomes.Add(
-                    HotReloadMethodOutcome.Failed(
-                        "(file)",
-                        "Compiled assembly not found at '" + targetDllPath + "'. Compile the project first.",
-                        assemblyResolvePath));
-                return new HotReloadFileProcessResult(outcomes, warnings, 0);
-            }
-
-            string mvidGuardError = CheckMvidGuard(assemblyName, targetDllPath);
-            if (mvidGuardError != null)
-            {
-                outcomes.Add(HotReloadMethodOutcome.Failed("(file)", mvidGuardError, assemblyResolvePath));
-                return new HotReloadFileProcessResult(outcomes, warnings, 0);
-            }
-
-            HotReloadUnchangedSourceDecision unchangedDecision = TryShortCircuitUnchangedAppliedSource(
-                workerSourcePath,
-                projectRelativePath,
+            (HotReloadFileProcessResult earlyResolve,
+                string projectRelativePath,
+                string assemblyName,
+                UnityCompilationAssembly compilationAssembly,
+                string targetDllPath,
+                string projectRoot) = ResolvePatchTarget(
                 assemblyResolvePath,
-                outcomes);
-            LogHotReloadFileStart(projectRelativePath, unchangedDecision, correlationId);
-            if (unchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
+                workerSourcePath,
+                outcomes,
+                warnings,
+                correlationId);
+            if (earlyResolve != null)
             {
-                return new HotReloadFileProcessResult(outcomes, warnings, 0);
-            }
-
-            if (unchangedDecision == HotReloadUnchangedSourceDecision.ReapplyNonBaseline)
-            {
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.UnchangedSourceNonBaselineWarningFormat,
-                        projectRelativePath));
+                return earlyResolve;
             }
 
             // Why snapshot at this file's apply entry: multi-file runs process files
@@ -265,57 +212,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             TransformWorkerOutputDto workerOutput = workerResult.Output;
             string[] addedFieldNames = workerOutput.addedFieldNames;
-            // Why after the worker: const-only / empty files have no patch candidates, so the
-            // missing-baseline warning was pure noise (FB E). Emit only when the worker saw at
-            // least one method or accessor row.
-            if (snapshotSource == null
-                && CountPatchCandidateRows(workerOutput) >= 1)
-            {
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
-                        Path.GetFileName(projectRelativePath),
-                        assemblyName));
-            }
-
-            if (workerOutput.baselineDisabledByDuplicateKeys)
-            {
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.BaselineDisabledByDuplicateKeysWarningFormat,
-                        Path.GetFileName(projectRelativePath),
-                        assemblyName));
-            }
-
-            if (workerOutput.parseErrors != null)
-            {
-                foreach (string parseError in workerOutput.parseErrors)
-                {
-                    warnings.Add(parseError);
-                }
-            }
-
-            if (workerOutput.skipped != null)
-            {
-                foreach (TransformWorkerSkippedDto skipped in workerOutput.skipped)
-                {
-                    outcomes.Add(
-                        HotReloadMethodOutcome.Skipped(
-                            skipped.method ?? "(unknown)",
-                            skipped.reason ?? string.Empty,
-                            assemblyResolvePath));
-                }
-            }
-
-            if (workerOutput.declarationDriftWarnings != null)
-            {
-                // Surfaced before the empty-entries early return so const drift still reaches
-                // the response when every method in the file is skipped or unchanged.
-                foreach (string driftWarning in workerOutput.declarationDriftWarnings)
-                {
-                    warnings.Add(driftWarning);
-                }
-            }
+            AppendWorkerNotices(
+                workerOutput,
+                snapshotSource,
+                projectRelativePath,
+                assemblyName,
+                assemblyResolvePath,
+                outcomes,
+                warnings);
 
             TransformWorkerUnchangedMethodDto[] unchangedMethods =
                 workerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>();
@@ -369,103 +273,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             outcomes.AddRange(gateResult.SkippedOutcomes);
             warnings.AddRange(gateResult.Warnings);
 
-            TransformWorkerEntryDto[] entriesToPatch;
-            HotReloadShimCompileResult compileResult;
-            if (gateResult.UsedWorkerRetry)
+            (HotReloadFileProcessResult earlyEntries,
+                TransformWorkerEntryDto[] entriesToPatch,
+                HotReloadShimCompileResult compileResult,
+                string[] resolvedAddedFieldNames) = await ResolveEntriesToPatchAsync(
+                gateResult,
+                workerInput,
+                workerOutput,
+                compilationAssembly,
+                targetDllPath,
+                defines,
+                assemblyResolvePath,
+                projectRelativePath,
+                correlationId,
+                addedFieldNames,
+                snapshotLabels,
+                snapshotAddedLabels,
+                outcomes,
+                warnings,
+                suppressedPausePointIds,
+                retargetedPausePointIds,
+                unchangedMethodCount,
+                ct).ConfigureAwait(false);
+            if (earlyEntries != null)
             {
-                addedFieldNames = gateResult.Isolation.AddedFieldNames;
-                if (gateResult.Isolation.RetryEntries.Length == 0)
-                {
-                    return new HotReloadFileProcessResult(
-                        outcomes,
-                        warnings,
-                        0,
-                        suppressedPausePointIds,
-                        new List<string>(),
-                        unchangedMethodCount,
-                        retargetedPausePointIds,
-                        addedFieldNames: null,
-                        sourceContentSha256: workerOutput.sourceContentSha256);
-                }
-
-                entriesToPatch = gateResult.Isolation.RetryEntries;
-                compileResult = gateResult.Isolation.RetryCompileResult;
+                return earlyEntries;
             }
-            else if (string.IsNullOrEmpty(workerOutput.shimSource)
-                || workerOutput.entries == null
-                || workerOutput.entries.Length == 0)
-            {
-                // Why only on this success path: deleting an added method and restoring callers
-                // yields empty entries, so the post-shim-compile BeginFileGeneration never runs.
-                // Worker failure and shim-compile failure return earlier or later without
-                // clearing — same as leaving existing Harmony patches in place when apply does
-                // not succeed.
-                IReadOnlyList<string> addedLabelsAtClear =
-                    HotReloadAddedMemberRegistry.ListActiveMethodKeys(projectRelativePath);
-                LogHotReloadEmptyEntriesClear(addedLabelsAtClear, correlationId);
-                HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
-                CommitAddedFieldsForFile(projectRelativePath, workerOutput.addedFieldNames);
-                // Why after the clear: a still-declared added method can be worker-skipped
-                // (virtual/generic), leaving entries empty while the registry drop is real.
-                AppendDeactivatedPatchesWarning(
-                    warnings,
-                    snapshotLabels,
-                    snapshotAddedLabels,
-                    projectRelativePath,
-                    workerOutput,
-                    outcomes);
-                return new HotReloadFileProcessResult(
-                    outcomes,
-                    warnings,
-                    0,
-                    unchangedMethodCount: unchangedMethodCount,
-                    sourceContentSha256: workerOutput.sourceContentSha256);
-            }
-            else
-            {
-                ShimFirstCompileResult firstCompile = await CompileShimFirstPassAsync(
-                    workerInput,
-                    workerOutput,
-                    compilationAssembly,
-                    targetDllPath,
-                    defines,
-                    assemblyResolvePath,
-                    correlationId,
-                    ct).ConfigureAwait(false);
-                if (firstCompile.AddedFieldNames != null)
-                {
-                    addedFieldNames = firstCompile.AddedFieldNames;
-                }
 
-                if (firstCompile.FileFailed)
-                {
-                    outcomes.AddRange(firstCompile.Outcomes);
-                    return new HotReloadFileProcessResult(
-                        outcomes,
-                        warnings,
-                        0,
-                        unchangedMethodCount: unchangedMethodCount,
-                        sourceContentSha256: workerOutput.sourceContentSha256);
-                }
-
-                outcomes.AddRange(firstCompile.Outcomes);
-                if (firstCompile.EntriesToPatch.Length == 0)
-                {
-                    return new HotReloadFileProcessResult(
-                        outcomes,
-                        warnings,
-                        0,
-                        suppressedPausePointIds,
-                        new List<string>(),
-                        unchangedMethodCount,
-                        retargetedPausePointIds,
-                        addedFieldNames: null,
-                        sourceContentSha256: workerOutput.sourceContentSha256);
-                }
-
-                entriesToPatch = firstCompile.EntriesToPatch;
-                compileResult = firstCompile.CompileResult;
-            }
+            addedFieldNames = resolvedAddedFieldNames;
 
             if (gateResult.DidScan)
             {
@@ -502,9 +337,327 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            // Why before ApplyEntry: OnHotReloadPatchStateChanged(true) runs inside Apply and
-            // pause-point retarget reads the shim registration — it must already see this
-            // generation's bytes/methods.
+            return ApplyEntriesAndBuildResult(
+                assemblyName,
+                assemblyResolvePath,
+                projectRelativePath,
+                compileResult,
+                entriesToPatch,
+                addedFieldNames,
+                workerOutput,
+                snapshotLabels,
+                snapshotAddedLabels,
+                outcomes,
+                warnings,
+                suppressedPausePointIds,
+                retargetedPausePointIds,
+                unchangedMethodCount);
+        }
+
+        // Why a helper: ProcessFileAsync's pre-worker fail chain (assembly / DLL / MVID /
+        // unchanged short-circuit) is one resolve stage and kept the method over CA1502.
+        private static (
+            HotReloadFileProcessResult EarlyResult,
+            string ProjectRelativePath,
+            string AssemblyName,
+            UnityCompilationAssembly CompilationAssembly,
+            string TargetDllPath,
+            string ProjectRoot) ResolvePatchTarget(
+            string assemblyResolvePath,
+            string workerSourcePath,
+            List<HotReloadMethodOutcome> outcomes,
+            List<string> warnings,
+            string correlationId)
+        {
+            // CompilationPipeline.GetAssemblyNameFromScriptPath expects a project-relative path
+            // (Assets/... or Packages/...) and returns a file name that already includes ".dll".
+            string projectRelativePath = ToProjectRelativeScriptPath(assemblyResolvePath);
+            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(projectRelativePath);
+            if (string.IsNullOrEmpty(rawAssemblyName))
+            {
+                outcomes.Add(
+                    HotReloadMethodOutcome.Failed(
+                        "(file)",
+                        "Script path is not part of any compiled assembly (Assets/Packages paths only): "
+                        + assemblyResolvePath,
+                        assemblyResolvePath));
+                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+            }
+
+            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
+            UnityCompilationAssembly compilationAssembly = FindCompilationAssembly(assemblyName);
+            if (compilationAssembly == null)
+            {
+                outcomes.Add(
+                    HotReloadMethodOutcome.Failed(
+                        "(file)",
+                        "CompilationPipeline assembly not found: " + assemblyName,
+                        assemblyResolvePath));
+                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+            }
+
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string targetDllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                assemblyName + HotReloadConstants.CompiledAssemblyExtension);
+
+            if (!File.Exists(targetDllPath))
+            {
+                outcomes.Add(
+                    HotReloadMethodOutcome.Failed(
+                        "(file)",
+                        "Compiled assembly not found at '" + targetDllPath + "'. Compile the project first.",
+                        assemblyResolvePath));
+                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+            }
+
+            string mvidGuardError = CheckMvidGuard(assemblyName, targetDllPath);
+            if (mvidGuardError != null)
+            {
+                outcomes.Add(HotReloadMethodOutcome.Failed("(file)", mvidGuardError, assemblyResolvePath));
+                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+            }
+
+            HotReloadUnchangedSourceDecision unchangedDecision = TryShortCircuitUnchangedAppliedSource(
+                workerSourcePath,
+                projectRelativePath,
+                assemblyResolvePath,
+                outcomes);
+            LogHotReloadFileStart(projectRelativePath, unchangedDecision, correlationId);
+            if (unchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
+            {
+                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+            }
+
+            if (unchangedDecision == HotReloadUnchangedSourceDecision.ReapplyNonBaseline)
+            {
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.UnchangedSourceNonBaselineWarningFormat,
+                        projectRelativePath));
+            }
+
+            return (null, projectRelativePath, assemblyName, compilationAssembly, targetDllPath, projectRoot);
+        }
+
+        // Why after the worker: const-only / empty files have no patch candidates, so the
+        // missing-baseline warning was pure noise (FB E). Emit only when the worker saw at
+        // least one method or accessor row.
+        private static void AppendWorkerNotices(
+            TransformWorkerOutputDto workerOutput,
+            string snapshotSource,
+            string projectRelativePath,
+            string assemblyName,
+            string assemblyResolvePath,
+            List<HotReloadMethodOutcome> outcomes,
+            List<string> warnings)
+        {
+            if (snapshotSource == null
+                && CountPatchCandidateRows(workerOutput) >= 1)
+            {
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
+                        Path.GetFileName(projectRelativePath),
+                        assemblyName));
+            }
+
+            if (workerOutput.baselineDisabledByDuplicateKeys)
+            {
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.BaselineDisabledByDuplicateKeysWarningFormat,
+                        Path.GetFileName(projectRelativePath),
+                        assemblyName));
+            }
+
+            if (workerOutput.parseErrors != null)
+            {
+                foreach (string parseError in workerOutput.parseErrors)
+                {
+                    warnings.Add(parseError);
+                }
+            }
+
+            if (workerOutput.skipped != null)
+            {
+                foreach (TransformWorkerSkippedDto skipped in workerOutput.skipped)
+                {
+                    outcomes.Add(
+                        HotReloadMethodOutcome.Skipped(
+                            skipped.method ?? "(unknown)",
+                            skipped.reason ?? string.Empty,
+                            assemblyResolvePath));
+                }
+            }
+
+            if (workerOutput.declarationDriftWarnings != null)
+            {
+                // Surfaced before the empty-entries early return so const drift still reaches
+                // the response when every method in the file is skipped or unchanged.
+                foreach (string driftWarning in workerOutput.declarationDriftWarnings)
+                {
+                    warnings.Add(driftWarning);
+                }
+            }
+        }
+
+        // Why a helper: the gate-retry / empty-entries / first-pass compile fork is one
+        // entries-to-patch stage and kept ProcessFileAsync over CA1502.
+        private static async Task<(
+            HotReloadFileProcessResult EarlyResult,
+            TransformWorkerEntryDto[] EntriesToPatch,
+            HotReloadShimCompileResult CompileResult,
+            string[] AddedFieldNames)> ResolveEntriesToPatchAsync(
+            SignatureChangeGateResult gateResult,
+            TransformWorkerInputDto workerInput,
+            TransformWorkerOutputDto workerOutput,
+            UnityCompilationAssembly compilationAssembly,
+            string targetDllPath,
+            string[] defines,
+            string assemblyResolvePath,
+            string projectRelativePath,
+            string correlationId,
+            string[] addedFieldNames,
+            HashSet<string> snapshotLabels,
+            HashSet<string> snapshotAddedLabels,
+            List<HotReloadMethodOutcome> outcomes,
+            List<string> warnings,
+            List<string> suppressedPausePointIds,
+            List<string> retargetedPausePointIds,
+            int unchangedMethodCount,
+            CancellationToken ct)
+        {
+            if (gateResult.UsedWorkerRetry)
+            {
+                addedFieldNames = gateResult.Isolation.AddedFieldNames;
+                if (gateResult.Isolation.RetryEntries.Length == 0)
+                {
+                    return (
+                        new HotReloadFileProcessResult(
+                            outcomes,
+                            warnings,
+                            0,
+                            suppressedPausePointIds,
+                            new List<string>(),
+                            unchangedMethodCount,
+                            retargetedPausePointIds,
+                            addedFieldNames: null,
+                            sourceContentSha256: workerOutput.sourceContentSha256),
+                        null,
+                        null,
+                        addedFieldNames);
+                }
+
+                return (null, gateResult.Isolation.RetryEntries, gateResult.Isolation.RetryCompileResult, addedFieldNames);
+            }
+
+            if (string.IsNullOrEmpty(workerOutput.shimSource)
+                || workerOutput.entries == null
+                || workerOutput.entries.Length == 0)
+            {
+                // Why only on this success path: deleting an added method and restoring callers
+                // yields empty entries, so the post-shim-compile BeginFileGeneration never runs.
+                // Worker failure and shim-compile failure return earlier or later without
+                // clearing — same as leaving existing Harmony patches in place when apply does
+                // not succeed.
+                IReadOnlyList<string> addedLabelsAtClear =
+                    HotReloadAddedMemberRegistry.ListActiveMethodKeys(projectRelativePath);
+                LogHotReloadEmptyEntriesClear(addedLabelsAtClear, correlationId);
+                HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
+                CommitAddedFieldsForFile(projectRelativePath, workerOutput.addedFieldNames);
+                // Why after the clear: a still-declared added method can be worker-skipped
+                // (virtual/generic), leaving entries empty while the registry drop is real.
+                AppendDeactivatedPatchesWarning(
+                    warnings,
+                    snapshotLabels,
+                    snapshotAddedLabels,
+                    projectRelativePath,
+                    workerOutput,
+                    outcomes);
+                return (
+                    new HotReloadFileProcessResult(
+                        outcomes,
+                        warnings,
+                        0,
+                        unchangedMethodCount: unchangedMethodCount,
+                        sourceContentSha256: workerOutput.sourceContentSha256),
+                    null,
+                    null,
+                    addedFieldNames);
+            }
+
+            ShimFirstCompileResult firstCompile = await CompileShimFirstPassAsync(
+                workerInput,
+                workerOutput,
+                compilationAssembly,
+                targetDllPath,
+                defines,
+                assemblyResolvePath,
+                correlationId,
+                ct).ConfigureAwait(false);
+            if (firstCompile.AddedFieldNames != null)
+            {
+                addedFieldNames = firstCompile.AddedFieldNames;
+            }
+
+            if (firstCompile.FileFailed)
+            {
+                outcomes.AddRange(firstCompile.Outcomes);
+                return (
+                    new HotReloadFileProcessResult(
+                        outcomes,
+                        warnings,
+                        0,
+                        unchangedMethodCount: unchangedMethodCount,
+                        sourceContentSha256: workerOutput.sourceContentSha256),
+                    null,
+                    null,
+                    addedFieldNames);
+            }
+
+            outcomes.AddRange(firstCompile.Outcomes);
+            if (firstCompile.EntriesToPatch.Length == 0)
+            {
+                return (
+                    new HotReloadFileProcessResult(
+                        outcomes,
+                        warnings,
+                        0,
+                        suppressedPausePointIds,
+                        new List<string>(),
+                        unchangedMethodCount,
+                        retargetedPausePointIds,
+                        addedFieldNames: null,
+                        sourceContentSha256: workerOutput.sourceContentSha256),
+                    null,
+                    null,
+                    addedFieldNames);
+            }
+
+            return (null, firstCompile.EntriesToPatch, firstCompile.CompileResult, addedFieldNames);
+        }
+
+        // Why before ApplyEntry: OnHotReloadPatchStateChanged(true) runs inside Apply and
+        // pause-point retarget reads the shim registration — it must already see this
+        // generation's bytes/methods.
+        private static HotReloadFileProcessResult ApplyEntriesAndBuildResult(
+            string assemblyName,
+            string assemblyResolvePath,
+            string projectRelativePath,
+            HotReloadShimCompileResult compileResult,
+            TransformWorkerEntryDto[] entriesToPatch,
+            string[] addedFieldNames,
+            TransformWorkerOutputDto workerOutput,
+            HashSet<string> snapshotLabels,
+            HashSet<string> snapshotAddedLabels,
+            List<HotReloadMethodOutcome> outcomes,
+            List<string> warnings,
+            List<string> suppressedPausePointIds,
+            List<string> retargetedPausePointIds,
+            int unchangedMethodCount)
+        {
             HotReloadShimRegistry.BeginFileGeneration(
                 projectRelativePath,
                 compileResult.AssemblyBytes,
