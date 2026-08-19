@@ -139,6 +139,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
+            if (ContainsParentDirectorySegment(normalized))
+            {
+                // A ".." segment can relocate the path outside the root the strip and
+                // whitelist below appear to guarantee (e.g. "../Assets/Foo.cs" or
+                // "Assets/../External/Foo.cs"), so the result would masquerade as a
+                // project path or leak non-project structure; degrade to a method-only
+                // frame instead.
+                return null;
+            }
+
             int earliest = -1;
             foreach (string segment in ProjectRelativeRootSegments)
             {
@@ -169,6 +179,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // method-only frame instead. Select already coerces Line to 0 when File is
             // null.
             return null;
+        }
+
+        // Detects a ".." path segment anywhere in a forward-slash-normalized path.
+        private static bool ContainsParentDirectorySegment(string normalized)
+        {
+            if (normalized == "..")
+            {
+                return true;
+            }
+
+            return normalized.StartsWith("../", StringComparison.Ordinal)
+                || normalized.EndsWith("/..", StringComparison.Ordinal)
+                || normalized.Contains("/../");
         }
     }
 }
