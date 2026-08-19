@@ -141,7 +141,7 @@ internal static class TypeEmitPlanner
         INamedTypeSymbol compiledType = TransformWorkerProgram.FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
         if (compiledType == null)
         {
-            TransformWorkerProgram.SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
+            OrdinaryMethodQueue.SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
             return (shimTypeCounter, globalShimMethodCounter);
         }
 
@@ -156,7 +156,7 @@ internal static class TypeEmitPlanner
         foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
             .OfType<MethodDeclarationSyntax>())
         {
-            (shimTypeCounter, globalShimMethodCounter) = TransformWorkerProgram.QueueOrdinaryMethod(
+            (shimTypeCounter, globalShimMethodCounter) = OrdinaryMethodQueue.QueueOrdinaryMethod(
                 methodDeclaration,
                 typeState,
                 semanticModel,
