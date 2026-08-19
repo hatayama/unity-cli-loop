@@ -236,7 +236,7 @@ internal static class PropertyGetterEmitter
             currentShimType = new ShimTypeBuilder(
                 shimTypeName,
                 namespaceName,
-                TransformWorkerProgram.CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings));
+                WorkerUsingCollector.CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings));
             shimTypes.Add(currentShimType);
         }
 

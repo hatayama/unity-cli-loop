@@ -17,7 +17,7 @@ using Microsoft.CodeAnalysis.Text;
 
 private sealed class StripMethodBodiesRewriter : CSharpSyntaxRewriter
 {
-    // Using directives never change patched behavior: TransformWorkerProgram.CollectUsingsForType copies the edited
+    // Using directives never change patched behavior: WorkerUsingCollector.CollectUsingsForType copies the edited
     // file's usings into every shim, so comparing them here only produces false drift warnings
     // for using-only edits. extern alias declarations stay compared (not copied into shims).
     public override SyntaxNode VisitUsingDirective(UsingDirectiveSyntax node)
