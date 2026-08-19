@@ -38,16 +38,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "External compiler paths could not be resolved for this Unity installation.");
             }
 
-            string workerSourcePath = ResolveWorkerSourcePath();
-            if (!File.Exists(workerSourcePath))
+            string workerSourceDirectory = ResolveWorkerSourceDirectory();
+            string[] workerSourcePaths = EnumerateWorkerSourceFiles(workerSourceDirectory);
+            if (workerSourcePaths.Length == 0)
             {
                 return TransformWorkerBootstrapResult.Failure(
-                    "Transform worker source not found: " + workerSourcePath);
+                    "Transform worker source not found: " + workerSourceDirectory);
             }
 
             // Include toolchain paths so a Unity Editor upgrade cannot reuse a stale sidecar that
             // points at a removed Roslyn directory under Library/.
-            string cacheKey = ComputeCacheKey(workerSourcePath, paths);
+            string cacheKey = ComputeCacheKey(workerSourcePaths, paths);
             string cacheDirectory = Path.Combine(ResolveWorkerCacheRoot(), cacheKey);
             string workerDllPath = Path.Combine(cacheDirectory, HotReloadConstants.WorkerDllFileName);
             string runtimeConfigPath = Path.Combine(cacheDirectory, HotReloadConstants.WorkerRuntimeConfigFileName);
@@ -63,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Directory.CreateDirectory(cacheDirectory);
             TransformWorkerBootstrapResult compileResult = await CompileWorkerAsync(
                 paths,
-                workerSourcePath,
+                workerSourcePaths,
                 workerDllPath,
                 cacheDirectory,
                 ct).ConfigureAwait(false);
@@ -91,22 +92,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return TransformWorkerBootstrapResult.SuccessResult(cacheDirectory);
         }
 
-        internal static string ResolveWorkerSourcePath()
+        internal static string ResolveWorkerSourceDirectory()
         {
             PackageInfo packageInfo = PackageInfo.FindForAssembly(typeof(TransformWorkerBootstrap).Assembly);
             Debug.Assert(packageInfo != null, "PackageInfo must resolve for the HotReload assembly.");
             return Path.Combine(packageInfo.resolvedPath, HotReloadConstants.WorkerSourcePackageRelativePath);
         }
 
+        // why: Directory.GetFiles order is unspecified, so ordinal file-name sort keeps the
+        // response file and cache key identical on Windows and macOS.
+        internal static string[] EnumerateWorkerSourceFiles(string workerSourceDirectory)
+        {
+            if (!Directory.Exists(workerSourceDirectory))
+            {
+                return Array.Empty<string>();
+            }
+
+            string[] sourcePaths = Directory.GetFiles(workerSourceDirectory, "*.cs");
+            Array.Sort(sourcePaths, CompareWorkerSourceFileNamesOrdinal);
+            return sourcePaths;
+        }
+
+        private static int CompareWorkerSourceFileNamesOrdinal(string left, string right)
+        {
+            return string.Compare(
+                Path.GetFileName(left),
+                Path.GetFileName(right),
+                StringComparison.Ordinal);
+        }
+
         private static async Task<TransformWorkerBootstrapResult> CompileWorkerAsync(
             ExternalCompilerPaths paths,
-            string workerSourcePath,
+            IReadOnlyList<string> workerSourcePaths,
             string workerDllPath,
             string cacheDirectory,
             CancellationToken ct)
         {
             string responseFilePath = Path.Combine(cacheDirectory, HotReloadConstants.WorkerResponseFileName);
-            WriteWorkerResponseFile(responseFilePath, workerSourcePath, workerDllPath, paths);
+            WriteWorkerResponseFile(responseFilePath, workerSourcePaths, workerDllPath, paths);
 
             (int exitCode, string standardOutput, string standardError) = await HotReloadProcessRunner.RunAsync(
                 paths.DotnetHostPath,
@@ -125,9 +148,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return TransformWorkerBootstrapResult.SuccessResult(cacheDirectory);
         }
 
-        private static void WriteWorkerResponseFile(
+        internal static void WriteWorkerResponseFile(
             string responseFilePath,
-            string workerSourcePath,
+            IReadOnlyList<string> workerSourcePaths,
             string workerDllPath,
             ExternalCompilerPaths paths)
         {
@@ -155,15 +178,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             lines.Add("-r:\"" + paths.CodeAnalysisDllPath + "\"");
             lines.Add("-r:\"" + paths.CodeAnalysisCSharpDllPath + "\"");
-            lines.Add("\"" + workerSourcePath + "\"");
+            for (int index = 0; index < workerSourcePaths.Count; index++)
+            {
+                lines.Add("\"" + workerSourcePaths[index] + "\"");
+            }
+
             File.WriteAllLines(responseFilePath, lines);
         }
 
-        private static string ComputeCacheKey(string workerSourcePath, ExternalCompilerPaths paths)
+        internal static string ComputeCacheKey(
+            IReadOnlyList<string> workerSourcePaths,
+            ExternalCompilerPaths paths)
         {
             using SHA256 sha256 = SHA256.Create();
-            using FileStream sourceStream = File.OpenRead(workerSourcePath);
-            byte[] sourceHash = sha256.ComputeHash(sourceStream);
+            byte[] sourceHash = HashWorkerSourceFiles(workerSourcePaths);
 
             string toolchainIdentity = string.Join(
                 "|",
@@ -187,6 +215,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return builder.ToString();
+        }
+
+        // why: the cache must miss when either a source file name or its bytes change, not only
+        // when a single canonical file's content changes.
+        internal static byte[] HashWorkerSourceFiles(IReadOnlyList<string> workerSourcePaths)
+        {
+            using SHA256 sha256 = SHA256.Create();
+            using MemoryStream buffer = new MemoryStream();
+            for (int index = 0; index < workerSourcePaths.Count; index++)
+            {
+                string sourcePath = workerSourcePaths[index];
+                byte[] nameBytes = Encoding.UTF8.GetBytes(Path.GetFileName(sourcePath));
+                buffer.Write(nameBytes, 0, nameBytes.Length);
+                buffer.WriteByte(0);
+                byte[] contentBytes = File.ReadAllBytes(sourcePath);
+                buffer.Write(contentBytes, 0, contentBytes.Length);
+                buffer.WriteByte(0);
+            }
+
+            return sha256.ComputeHash(buffer.ToArray());
         }
 
         private static string ResolveWorkerCacheRoot()

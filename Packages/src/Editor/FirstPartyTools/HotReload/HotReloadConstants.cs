@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // assembly happens to recompile.
         public const string PublicizedRefsRelativeDirectory = "Library/UloopHotReload/PublicizedRefs/fmt2";
 
-        // Worker binaries are keyed by SHA256 of the TransformWorker~/TransformWorker.cs source.
+        // Worker binaries are keyed by SHA256 of every TransformWorker~/*.cs file name and content.
         public const string WorkerCacheRelativeDirectory = "Library/UloopHotReload/Worker";
 
         // EditMode e2e tests place edited source copies here so AssetDatabase is never provoked.
@@ -31,9 +31,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // affect the on-disk layout. Adoption is decided at use time by PDB document checksum.
         public const string SourceSnapshotRelativeDirectory = "Library/UloopHotReload/SourceSnapshot";
 
-        // Package-relative path of the out-of-process transform worker source (tilde dir = Unity-ignored).
+        // Package-relative directory of the out-of-process transform worker sources (tilde dir = Unity-ignored).
         public const string WorkerSourcePackageRelativePath =
-            "Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs";
+            "Editor/FirstPartyTools/HotReload/TransformWorker~";
 
         public const string WorkerDllFileName = "worker.dll";
         public const string WorkerRuntimeConfigFileName = "worker.runtimeconfig.json";
