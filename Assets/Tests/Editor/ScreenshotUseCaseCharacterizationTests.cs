@@ -138,6 +138,82 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Pins ElementsOnly SimY conversion to the measured GameViewSize.y rather than a stale sample.
+        /// </summary>
+        [Test]
+        public void BuildElementsOnlyScreenshotInfo_WhenRenderingInfoIsProvided_ShouldFlipSimYWithMeasuredHeight()
+        {
+            List<UIElementInfo> annotatedElements = new()
+            {
+                new UIElementInfo
+                {
+                    Name = "Button_CenterBlocked",
+                    SimX = 100f,
+                    SimY = 100f,
+                    BoundsMinX = 50f,
+                    BoundsMinY = 80f,
+                    BoundsMaxX = 150f,
+                    BoundsMaxY = 120f
+                }
+            };
+            GameRenderingImageInfo renderingInfo = new(new Vector2(800f, 600f), new Vector2(800f, 558f), 42);
+
+            ScreenshotResponse response = ScreenshotUseCase.BuildElementsOnlyScreenshotInfo(
+                annotatedElements,
+                new List<UIElementInfo>(),
+                new List<RaycastLayerSummaryInfo>(),
+                new List<string>(),
+                1f,
+                renderingInfo);
+
+            UIElementInfo element = response.Screenshots[0].AnnotatedElements[0];
+            Assert.That(element.SimY, Is.EqualTo(500f));
+            Assert.That(element.BoundsMinY, Is.EqualTo(480f));
+            Assert.That(element.BoundsMaxY, Is.EqualTo(520f));
+        }
+
+        /// <summary>
+        /// Pins ElementsOnly GameViewWidth/Height metadata to the measured GameViewSize.
+        /// </summary>
+        [Test]
+        public void BuildElementsOnlyScreenshotInfo_WhenRenderingInfoIsProvided_ShouldCopyGameViewSizeIntoMetadata()
+        {
+            GameRenderingImageInfo renderingInfo = new(new Vector2(800f, 600f), new Vector2(800f, 558f), 42);
+
+            ScreenshotResponse response = ScreenshotUseCase.BuildElementsOnlyScreenshotInfo(
+                new List<UIElementInfo>(),
+                new List<UIElementInfo>(),
+                new List<RaycastLayerSummaryInfo>(),
+                new List<string>(),
+                1f,
+                renderingInfo);
+
+            ScreenshotInfo info = response.Screenshots[0];
+            Assert.That(info.GameViewWidth, Is.EqualTo(800f));
+            Assert.That(info.GameViewHeight, Is.EqualTo(600f));
+        }
+
+        /// <summary>
+        /// Pins ElementsOnly ImageToInputOffsetY metadata to the measured rendering info.
+        /// </summary>
+        [Test]
+        public void BuildElementsOnlyScreenshotInfo_WhenRenderingInfoIsProvided_ShouldCopyImageToInputOffsetY()
+        {
+            GameRenderingImageInfo renderingInfo = new(new Vector2(800f, 600f), new Vector2(800f, 558f), 42);
+
+            ScreenshotResponse response = ScreenshotUseCase.BuildElementsOnlyScreenshotInfo(
+                new List<UIElementInfo>(),
+                new List<UIElementInfo>(),
+                new List<RaycastLayerSummaryInfo>(),
+                new List<string>(),
+                0.5f,
+                renderingInfo);
+
+            Assert.That(response.Screenshots[0].ImageToInputOffsetY, Is.EqualTo(42));
+            Assert.That(response.Screenshots[0].ResolutionScale, Is.EqualTo(0.5f));
+        }
+
+        /// <summary>
         /// Pins file-name sanitization replacing platform-invalid path characters with underscores.
         /// </summary>
         [Test]

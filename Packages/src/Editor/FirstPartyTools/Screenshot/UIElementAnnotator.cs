@@ -17,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public static class UIElementAnnotator
     {
         private const int OVERLAY_SORT_ORDER = 32767;
+        private const float PROBE_QUARTER = 0.25f;
+        private const float PROBE_THREE_QUARTERS = 0.75f;
 
         public static List<UIElementInfo> CollectInteractiveElements()
         {
@@ -211,10 +213,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             float minY = Mathf.Min(SharedScreenCorners[0].y, SharedScreenCorners[1].y, SharedScreenCorners[2].y, SharedScreenCorners[3].y);
             float maxY = Mathf.Max(SharedScreenCorners[0].y, SharedScreenCorners[1].y, SharedScreenCorners[2].y, SharedScreenCorners[3].y);
 
-            float centerX = (minX + maxX) / 2f;
-            float centerY = (minY + maxY) / 2f;
-
-            if (!IsRaycastReachable(go, centerX, centerY, raycastContext))
+            (bool reachable, Vector2 reachablePoint) = TryFindReachablePoint(go, minX, minY, maxX, maxY, raycastContext);
+            if (!reachable)
             {
                 return;
             }
@@ -225,8 +225,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Path = GameObjectPathUtility.GetFullPath(go),
                 Type = type,
                 Interaction = GetInteractionForType(type),
-                SimX = centerX,
-                SimY = centerY,
+                SimX = reachablePoint.x,
+                SimY = reachablePoint.y,
                 BoundsMinX = minX,
                 BoundsMinY = minY,
                 BoundsMaxX = maxX,
@@ -243,19 +243,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Uses the same raycast path as simulate-mouse so annotations match UI input behavior.
-        // Skips the check when no EventSystem exists, such as annotation-only scenes without interaction.
-        private static bool IsRaycastReachable(
+        // why: a center-only check drops visible clickable elements whose center is covered by another raycast blocker
+        private static (bool reachable, Vector2 point) TryFindReachablePoint(
             GameObject go,
-            float centerX,
-            float centerY,
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
             UiRaycastHelper.RaycastContext? raycastContext)
         {
+            Vector2 center = new((minX + maxX) / 2f, (minY + maxY) / 2f);
             if (raycastContext == null)
             {
-                return true;
+                return (true, center);
             }
 
-            RaycastResult? raycastResult = raycastContext.Raycast(new Vector2(centerX, centerY));
+            Vector2[] probePoints = GenerateReachabilityProbePoints(minX, minY, maxX, maxY);
+            for (int i = 0; i < probePoints.Length; i++)
+            {
+                Vector2 probePoint = probePoints[i];
+                RaycastResult? raycastResult = raycastContext.Raycast(probePoint);
+                if (IsHitOnTarget(go, raycastResult))
+                {
+                    return (true, probePoint);
+                }
+            }
+
+            return (false, center);
+        }
+
+        private static bool IsHitOnTarget(GameObject go, RaycastResult? raycastResult)
+        {
             if (raycastResult == null)
             {
                 return false;
@@ -324,6 +342,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return true;
+        }
+
+        internal static Vector2[] GenerateReachabilityProbePoints(float minX, float minY, float maxX, float maxY)
+        {
+            float width = maxX - minX;
+            float height = maxY - minY;
+            float centerX = (minX + maxX) / 2f;
+            float centerY = (minY + maxY) / 2f;
+            return new Vector2[]
+            {
+                new(centerX, centerY),
+                new(minX + width * PROBE_QUARTER, minY + height * PROBE_QUARTER),
+                new(minX + width * PROBE_THREE_QUARTERS, minY + height * PROBE_QUARTER),
+                new(minX + width * PROBE_QUARTER, minY + height * PROBE_THREE_QUARTERS),
+                new(minX + width * PROBE_THREE_QUARTERS, minY + height * PROBE_THREE_QUARTERS)
+            };
         }
 
         internal static Color GetAnnotationColorForElement(UIElementInfo element)
