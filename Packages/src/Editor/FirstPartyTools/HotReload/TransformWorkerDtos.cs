@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] referencePaths;
         public string targetTypesAssemblyPath;
 
-        // Method keys (see HotReloadOrchestrator.BuildMethodKey) already reported Failed from a
+        // Method keys (see HotReloadWireMethodKeys.BuildMethodKey) already reported Failed from a
         // first compile round; the retry worker run drops these methods entirely.
         public string[] excludedMethodKeys;
 

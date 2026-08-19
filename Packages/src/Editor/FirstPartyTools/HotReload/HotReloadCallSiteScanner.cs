@@ -440,7 +440,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string typeMetadataName = caller.DeclaringType.FullName;
 
             // Keep in sync with TransformWorkerProgram.BuildMethodKey (out-of-process worker)
-            // and HotReloadOrchestrator.BuildMethodKey (Unity package side).
+            // and HotReloadWireMethodKeys.BuildMethodKey (Unity package side).
             // Why arity suffix: Caller(int) and Caller<T>(int) must not share a wire key.
             return new CallSiteHit
             {

@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void AppendOptionalShimAssemblyReferences_StoreFlag_AddsToolContractsAssembly()
         {
             List<string> references = new List<string>();
-            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+            HotReloadShimReferenceBuilder.AppendOptionalShimAssemblyReferences(
                 references,
                 includeHarmonyReference: false,
                 includeAddedFieldStoreReference: true);
@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void AppendOptionalShimAssemblyReferences_BothFlagsFalse_AddsNothing()
         {
             List<string> references = new List<string>();
-            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+            HotReloadShimReferenceBuilder.AppendOptionalShimAssemblyReferences(
                 references,
                 includeHarmonyReference: false,
                 includeAddedFieldStoreReference: false);
@@ -86,7 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void AppendOptionalShimAssemblyReferences_HarmonyFlagOnly_AddsHarmony()
         {
             List<string> references = new List<string>();
-            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+            HotReloadShimReferenceBuilder.AppendOptionalShimAssemblyReferences(
                 references,
                 includeHarmonyReference: true,
                 includeAddedFieldStoreReference: false);
@@ -108,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 fileName);
             List<string> references = new List<string> { publicizedPath };
 
-            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+            HotReloadShimReferenceBuilder.AppendOptionalShimAssemblyReferences(
                 references,
                 includeHarmonyReference: false,
                 includeAddedFieldStoreReference: true);
@@ -128,9 +128,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 hasAddedFieldRewrites = true
             };
-            bool includeStore = HotReloadOrchestrator.NeedsAddedFieldStoreReference(output);
+            bool includeStore = HotReloadShimReferenceBuilder.NeedsAddedFieldStoreReference(output);
             List<string> references = new List<string>();
-            HotReloadOrchestrator.AppendOptionalShimAssemblyReferences(
+            HotReloadShimReferenceBuilder.AppendOptionalShimAssemblyReferences(
                 references,
                 includeHarmonyReference: false,
                 includeAddedFieldStoreReference: includeStore);
@@ -1241,7 +1241,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             int callsBefore = HotReloadBindProbeShim.BindCalls;
 
-            Dictionary<string, string> failures = HotReloadOrchestrator.BindShimAccessors(
+            Dictionary<string, string> failures = HotReloadEntryApplier.BindShimAccessors(
                 typeof(HotReloadBindFailShim).Assembly);
 
             Assert.That(HotReloadBindProbeShim.BindCalls, Is.EqualTo(callsBefore + 1));
@@ -3448,7 +3448,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 genericArity = 0
             };
             string wireKey = "Ns.Outer/Inner::Name(System.Int32)";
-            string registryKey = HotReloadOrchestrator.FormatGatedReplacementRegistryKey(entry);
+            string registryKey = HotReloadSignatureChangeGate.FormatGatedReplacementRegistryKey(entry);
 
             Assert.That(wireKey, Is.Not.EqualTo(registryKey));
             Assert.That(registryKey, Is.EqualTo("Ns.Outer+Inner.Name(System.Int32)"));
@@ -3470,7 +3470,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
 
             Assert.That(
-                HotReloadOrchestrator.FormatGatedReplacementRegistryKey(entry),
+                HotReloadSignatureChangeGate.FormatGatedReplacementRegistryKey(entry),
                 Is.EqualTo("Ns.Outer+Inner.Name`1(System.Int32,System.String)"));
         }
 
@@ -3628,7 +3628,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateCallSiteHit("Host::Caller(System.Int32)", "Host::Target(System.Int32)")
             };
 
-            List<string> lost = HotReloadOrchestrator.FindSignatureChangeCoverageLosses(
+            List<string> lost = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
                 new[] { replacement, caller },
                 hits,
                 new[] { "Host::Target(System.Int32)" });
@@ -3649,7 +3649,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateCallSiteHit("Host::Caller(System.Int32)", "Host::Target(System.Int32)")
             };
 
-            List<string> lost = HotReloadOrchestrator.FindSignatureChangeCoverageLosses(
+            List<string> lost = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
                 new[] { replacement },
                 hits,
                 new[] { "Host::Target(System.Int32)" });
@@ -3682,7 +3682,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            List<HotReloadMethodOutcome> outcomes = HotReloadOrchestrator.CollectRetryOnlySkippedOutcomes(
+            List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
                 "test.dll",
@@ -3719,7 +3719,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            List<HotReloadMethodOutcome> outcomes = HotReloadOrchestrator.CollectRetryOnlySkippedOutcomes(
+            List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
                 "test.dll",
@@ -3749,7 +3749,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            List<HotReloadMethodOutcome> outcomes = HotReloadOrchestrator.CollectRetryOnlySkippedOutcomes(
+            List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
                 "test.dll",
@@ -3767,7 +3767,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FormatUncoveredCallerShortNames_TwoCallers_JoinsLastTypeSegmentAndMethodInListOrder()
         {
-            string names = HotReloadOrchestrator.FormatUncoveredCallerShortNames(
+            string names = HotReloadSignatureChangeCoverage.FormatUncoveredCallerShortNames(
                 new[]
                 {
                     "Ns.Host::AlphaCaller(System.Int32)",
@@ -4085,7 +4085,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void AreUncoveredCallersInEditedFile_SameTypeOtherPartialMethod_ReturnsFalse()
         {
             TransformWorkerEntryDto replacement = CreateReplacementEntry("Host", "Target");
-            bool sameFile = HotReloadOrchestrator.AreUncoveredCallersInEditedFile(
+            bool sameFile = HotReloadSignatureChangeCoverage.AreUncoveredCallersInEditedFile(
                 new[] { "Host::OtherFileCaller(System.Int32)" },
                 new[] { replacement },
                 Array.Empty<TransformWorkerUnchangedMethodDto>());

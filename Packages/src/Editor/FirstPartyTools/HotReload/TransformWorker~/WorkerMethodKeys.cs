@@ -17,7 +17,7 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class WorkerMethodKeys
 {
-    // Keep in sync with HotReloadOrchestrator.BuildMethodKey (Unity package side)
+    // Keep in sync with HotReloadWireMethodKeys.BuildMethodKey (Unity package side)
     // and HotReloadCallSiteScanner.CreateHit.
     // Why arity suffix: Caller(int) and Caller<T>(int) must not share a wire key.
     // Arity 0 keeps the bare name so existing non-generic keys stay stable.
