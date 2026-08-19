@@ -433,7 +433,7 @@ public static class TransformWorkerProgram
         return builder.ToString();
     }
 
-    private static IEnumerable<TypeDeclarationSyntax> EnumerateTypeDeclarations(CompilationUnitSyntax root)
+    internal static IEnumerable<TypeDeclarationSyntax> EnumerateTypeDeclarations(CompilationUnitSyntax root)
     {
         // Why interfaces: a new interface (including default methods) is absent from the compiled
         // assembly; enumerating it registers the type syntax key so the strip rewriter can drop
