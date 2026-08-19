@@ -136,8 +136,156 @@ public static class TransformWorkerProgram
 
     private static WorkerOutput TransformFile(WorkerInput input)
     {
-        List<string> parseErrors = new List<string>();
+        WorkerOutput invalidPath = TryCreateInvalidPathOutput(input);
+        if (invalidPath != null)
+        {
+            return invalidPath;
+        }
 
+        (WorkerOutput readFailure, string sourceText, string sourceContentSha256) = TryReadSourceText(input);
+        if (readFailure != null)
+        {
+            return readFailure;
+        }
+
+        List<string> parseErrors = new List<string>();
+        CSharpParseOptions parseOptions = new CSharpParseOptions(
+            languageVersion: LanguageVersion.Latest,
+            preprocessorSymbols: input.Defines);
+        (SyntaxTree syntaxTree, CompilationUnitSyntax plainRoot) = ParseAndAnnotateSource(
+            sourceText,
+            parseOptions,
+            input.SourcePath,
+            parseErrors);
+
+        (List<MetadataReference> references, MetadataReference targetTypesReference) =
+            CollectMetadataReferences(input, parseErrors);
+
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            assemblyName: "UloopHotReloadTransformWorkerCompilation",
+            syntaxTrees: new[] { syntaxTree },
+            references: references,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        SemanticModel semanticModel = compilation.GetSemanticModel(syntaxTree, ignoreAccessibility: true);
+        CompilationUnitSyntax root = syntaxTree.GetCompilationUnitRoot();
+
+        IAssemblySymbol targetTypesAssemblySymbol = ResolveTargetTypesAssemblySymbol(
+            compilation,
+            targetTypesReference);
+        List<string> declarationDriftWarnings = CollectConstDriftWarnings(
+            root,
+            semanticModel,
+            targetTypesAssemblySymbol);
+        // Why here: a compiled property/event can disappear or change kind with no
+        // touched body, so the generic outside-body warning would bury the name.
+        AppendCompiledPropertyOrEventKindChangeWarnings(
+            root,
+            semanticModel,
+            targetTypesAssemblySymbol,
+            declarationDriftWarnings);
+
+        BaselineSnapshotState baseline = BuildBaselineSnapshotState(input, parseOptions, plainRoot);
+
+        List<WorkerEntry> entries = new List<WorkerEntry>();
+        List<WorkerSkipped> skipped = new List<WorkerSkipped>();
+        List<WorkerUnchangedMethod> unchangedMethods = new List<WorkerUnchangedMethod>();
+        List<WorkerRemovedMember> removedMembers = new List<WorkerRemovedMember>();
+        List<WorkerRemovedMethodSignature> removedMethodSignatures = new List<WorkerRemovedMethodSignature>();
+        List<ShimTypeBuilder> shimTypes = new List<ShimTypeBuilder>();
+        int globalShimMethodCounter = 0;
+        int shimTypeCounter = 0;
+        List<UsingDirectiveSyntax> assemblyGlobalUsings =
+            CollectAssemblyGlobalUsings(input, parseOptions);
+        AddedMethodCatalog addedMethodCatalog = new AddedMethodCatalog();
+        AddedFieldCatalog addedFieldCatalog = new AddedFieldCatalog();
+        (List<TypeEmitState> typeEmitStates, int nextShimTypeCounter, int nextGlobalShimMethodCounter) =
+            QueueAllTypeEmitStates(
+                root,
+                semanticModel,
+                targetTypesAssemblySymbol,
+                input,
+                baseline,
+                assemblyGlobalUsings,
+                shimTypes,
+                addedMethodCatalog,
+                addedFieldCatalog,
+                skipped,
+                unchangedMethods,
+                declarationDriftWarnings,
+                removedMembers,
+                removedMethodSignatures,
+                shimTypeCounter,
+                globalShimMethodCounter);
+        shimTypeCounter = nextShimTypeCounter;
+        globalShimMethodCounter = nextGlobalShimMethodCounter;
+
+        CollectRemovedMembersIfBaseline(
+            baseline,
+            plainRoot,
+            typeEmitStates,
+            semanticModel,
+            targetTypesAssemblySymbol,
+            addedMethodCatalog,
+            addedFieldCatalog,
+            removedMembers,
+            removedMethodSignatures);
+
+        SkipBodiesThatCannotUseAddedMethods(
+            typeEmitStates,
+            semanticModel,
+            addedMethodCatalog,
+            addedFieldCatalog,
+            skipped);
+
+        EmitQueuedMethodsAndPropertyGetters(
+            typeEmitStates,
+            semanticModel,
+            addedMethodCatalog,
+            addedFieldCatalog,
+            root,
+            input,
+            baseline,
+            entries,
+            skipped,
+            unchangedMethods,
+            shimTypes,
+            assemblyGlobalUsings,
+            shimTypeCounter,
+            globalShimMethodCounter);
+
+        if (baseline.HasBaseline && baseline.SnapshotRoot != null)
+        {
+            // Why after property emit: added-property syntax keys are registered when a skip
+            // row is written. Running the drift check first would miss those keys and keep
+            // the false outside-body warning for added properties that already have a row.
+            AppendOutsideMethodBodyDriftWarningIfNeeded(
+                baseline.SnapshotRoot,
+                plainRoot,
+                Path.GetFileName(input.SourcePath),
+                declarationDriftWarnings,
+                addedMethodCatalog,
+                addedFieldCatalog);
+        }
+
+        return BuildWorkerOutput(
+            root,
+            input.ProjectRelativePath,
+            shimTypes,
+            entries,
+            skipped,
+            declarationDriftWarnings,
+            parseErrors,
+            unchangedMethods,
+            baseline,
+            removedMembers,
+            removedMethodSignatures,
+            addedFieldCatalog,
+            sourceContentSha256);
+    }
+
+    private static WorkerOutput TryCreateInvalidPathOutput(WorkerInput input)
+    {
         // Why ParseErrors (not Debug.Assert): ProjectRelativePath crosses a process boundary via
         // JSON, and the worker is built without a DEBUG define so Conditional Asserts are stripped.
         if (string.IsNullOrEmpty(input.ProjectRelativePath)
@@ -156,37 +304,48 @@ public static class TransformWorkerProgram
             };
         }
 
-        string sourceText;
-        string sourceContentSha256;
+        return null;
+    }
+
+    private static (WorkerOutput Failure, string SourceText, string SourceContentSha256) TryReadSourceText(
+        WorkerInput input)
+    {
         try
         {
             byte[] sourceBytes = File.ReadAllBytes(input.SourcePath);
-            sourceContentSha256 = ComputeSourceContentSha256(sourceBytes);
+            string sourceContentSha256 = ComputeSourceContentSha256(sourceBytes);
             using MemoryStream memoryStream = new MemoryStream(sourceBytes, writable: false);
             using StreamReader reader = new StreamReader(
                 memoryStream,
                 Encoding.UTF8,
                 detectEncodingFromByteOrderMarks: true);
-            sourceText = reader.ReadToEnd();
+            return (null, reader.ReadToEnd(), sourceContentSha256);
         }
         catch (Exception exception)
         {
-            return new WorkerOutput
-            {
-                ShimSource = string.Empty,
-                Entries = Array.Empty<WorkerEntry>(),
-                Skipped = Array.Empty<WorkerSkipped>(),
-                ParseErrors = new[] { "Failed to read sourcePath: " + exception.Message }
-            };
+            return (
+                new WorkerOutput
+                {
+                    ShimSource = string.Empty,
+                    Entries = Array.Empty<WorkerEntry>(),
+                    Skipped = Array.Empty<WorkerSkipped>(),
+                    ParseErrors = new[] { "Failed to read sourcePath: " + exception.Message }
+                },
+                null,
+                null);
         }
+    }
 
-        CSharpParseOptions parseOptions = new CSharpParseOptions(
-            languageVersion: LanguageVersion.Latest,
-            preprocessorSymbols: input.Defines);
+    private static (SyntaxTree SyntaxTree, CompilationUnitSyntax PlainRoot) ParseAndAnnotateSource(
+        string sourceText,
+        CSharpParseOptions parseOptions,
+        string sourcePath,
+        List<string> parseErrors)
+    {
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(
             SourceText.From(sourceText, Encoding.UTF8),
             parseOptions,
-            path: input.SourcePath);
+            path: sourcePath);
 
         ImmutableArray<Diagnostic> parseDiagnostics = syntaxTree.GetDiagnostics().ToImmutableArray();
         foreach (Diagnostic diagnostic in parseDiagnostics)
@@ -208,7 +367,12 @@ public static class TransformWorkerProgram
         CompilationUnitSyntax plainRoot = syntaxTree.GetCompilationUnitRoot();
         CompilationUnitSyntax annotatedRoot = AnnotateOriginalSourceLines(plainRoot);
         syntaxTree = syntaxTree.WithRootAndOptions(annotatedRoot, syntaxTree.Options);
+        return (syntaxTree, plainRoot);
+    }
 
+    private static (List<MetadataReference> References, MetadataReference TargetTypesReference)
+        CollectMetadataReferences(WorkerInput input, List<string> parseErrors)
+    {
         string targetTypesFullPath =
             !string.IsNullOrEmpty(input.TargetTypesAssemblyPath) && File.Exists(input.TargetTypesAssemblyPath)
                 ? Path.GetFullPath(input.TargetTypesAssemblyPath)
@@ -243,108 +407,97 @@ public static class TransformWorkerProgram
             references.Add(targetTypesReference);
         }
 
-        CSharpCompilation compilation = CSharpCompilation.Create(
-            assemblyName: "UloopHotReloadTransformWorkerCompilation",
-            syntaxTrees: new[] { syntaxTree },
-            references: references,
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        return (references, targetTypesReference);
+    }
 
-        SemanticModel semanticModel = compilation.GetSemanticModel(syntaxTree, ignoreAccessibility: true);
-        CompilationUnitSyntax root = syntaxTree.GetCompilationUnitRoot();
-
+    private static IAssemblySymbol ResolveTargetTypesAssemblySymbol(
+        CSharpCompilation compilation,
+        MetadataReference targetTypesReference)
+    {
         // The drift comparison must see private and internal consts in the compiled target
         // assembly, which the default MetadataImportOptions (Public) hides. Widening the main
         // compilation would also widen what every classification query can bind to, so the
         // wider import is confined to a throwaway compilation used only for this lookup.
-        IAssemblySymbol targetTypesAssemblySymbol = null;
-        if (targetTypesReference != null)
+        if (targetTypesReference == null)
         {
-            CSharpCompilation driftCompilation = compilation.WithOptions(
-                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-                    .WithMetadataImportOptions(MetadataImportOptions.All));
-            targetTypesAssemblySymbol =
-                driftCompilation.GetAssemblyOrModuleSymbol(targetTypesReference) as IAssemblySymbol;
+            return null;
         }
-        List<string> declarationDriftWarnings = CollectConstDriftWarnings(
-            root,
-            semanticModel,
-            targetTypesAssemblySymbol);
-        // Why here: a compiled property/event can disappear or change kind with no
-        // touched body, so the generic outside-body warning would bury the name.
-        AppendCompiledPropertyOrEventKindChangeWarnings(
-            root,
-            semanticModel,
-            targetTypesAssemblySymbol,
-            declarationDriftWarnings);
 
+        CSharpCompilation driftCompilation = compilation.WithOptions(
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+                .WithMetadataImportOptions(MetadataImportOptions.All));
+        return driftCompilation.GetAssemblyOrModuleSymbol(targetTypesReference) as IAssemblySymbol;
+    }
+
+    private static BaselineSnapshotState BuildBaselineSnapshotState(
+        WorkerInput input,
+        CSharpParseOptions parseOptions,
+        CompilationUnitSyntax plainRoot)
+    {
         // Syntax-key maps for edited-method detection. Distinct from BuildMethodKey (Cecil names):
         // same-file old/new comparison only needs syntax keys to stay consistent with each other.
-        bool hasBaseline = false;
-        bool baselineDisabledByDuplicateKeys = false;
-        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap = null;
-        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap = null;
-        Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap = null;
-        Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap = null;
-        Dictionary<string, ConstructorDeclarationSyntax> snapshotConstructorMap = null;
-        Dictionary<string, MemberDeclarationSyntax> snapshotOperatorMap = null;
-        Dictionary<string, EventDeclarationSyntax> snapshotEventMap = null;
-        Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap = null;
-        Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap = null;
-        Dictionary<string, ConstructorDeclarationSyntax> plainCurrentConstructorMap = null;
-        Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap = null;
-        Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap = null;
-        CompilationUnitSyntax baselineSnapshotRoot = null;
+        BaselineSnapshotState baseline = new BaselineSnapshotState();
         // Null disables comparison; empty string is a real (empty) baseline text.
-        if (input.SnapshotSource != null)
+        if (input.SnapshotSource == null)
         {
-            baselineSnapshotRoot = CSharpSyntaxTree.ParseText(
-                    SourceText.From(input.SnapshotSource, Encoding.UTF8),
-                    parseOptions)
-                .GetCompilationUnitRoot();
-            Dictionary<string, MethodDeclarationSyntax> snapMethods = BuildSyntaxMethodMapOrNull(baselineSnapshotRoot);
-            // Why plainRoot: annotated current nodes break AreEquivalent for some shapes (see plainRoot above).
-            Dictionary<string, MethodDeclarationSyntax> currentMethods = BuildSyntaxMethodMapOrNull(plainRoot);
-            if (snapMethods != null && currentMethods != null)
-            {
-                // Why both maps: a duplicate key on either side makes AreEquivalent matching
-                // ambiguous, so fail closed to no-baseline (patch all) instead of guessing.
-                hasBaseline = true;
-                snapshotMethodMap = snapMethods;
-                plainCurrentMethodMap = currentMethods;
-                // Why null is kept as-is: a colliding property/indexer key only disables accessor
-                // gating for this file; method-level baseline matching still applies.
-                snapshotPropertyMap = BuildSyntaxPropertyMapOrNull(baselineSnapshotRoot);
-                snapshotIndexerMap = BuildSyntaxIndexerMapOrNull(baselineSnapshotRoot);
-                snapshotConstructorMap = BuildSyntaxConstructorMapOrNull(baselineSnapshotRoot);
-                snapshotOperatorMap = BuildSyntaxOperatorMapOrNull(baselineSnapshotRoot);
-                snapshotEventMap = BuildSyntaxEventMapOrNull(baselineSnapshotRoot);
-                plainCurrentPropertyMap = BuildSyntaxPropertyMapOrNull(plainRoot);
-                plainCurrentIndexerMap = BuildSyntaxIndexerMapOrNull(plainRoot);
-                plainCurrentConstructorMap = BuildSyntaxConstructorMapOrNull(plainRoot);
-                plainCurrentOperatorMap = BuildSyntaxOperatorMapOrNull(plainRoot);
-                plainCurrentEventMap = BuildSyntaxEventMapOrNull(plainRoot);
-            }
-            else
-            {
-                // Why surface: previously a colliding key silently disabled baseline and patched all.
-                baselineDisabledByDuplicateKeys = true;
-            }
+            return baseline;
         }
 
-        List<WorkerEntry> entries = new List<WorkerEntry>();
-        List<WorkerSkipped> skipped = new List<WorkerSkipped>();
-        List<WorkerUnchangedMethod> unchangedMethods = new List<WorkerUnchangedMethod>();
-        List<WorkerRemovedMember> removedMembers = new List<WorkerRemovedMember>();
-        List<WorkerRemovedMethodSignature> removedMethodSignatures = new List<WorkerRemovedMethodSignature>();
-        List<ShimTypeBuilder> shimTypes = new List<ShimTypeBuilder>();
-        int globalShimMethodCounter = 0;
-        int shimTypeCounter = 0;
-        List<UsingDirectiveSyntax> assemblyGlobalUsings =
-            CollectAssemblyGlobalUsings(input, parseOptions);
-        AddedMethodCatalog addedMethodCatalog = new AddedMethodCatalog();
-        AddedFieldCatalog addedFieldCatalog = new AddedFieldCatalog();
-        List<TypeEmitState> typeEmitStates = new List<TypeEmitState>();
+        baseline.SnapshotRoot = CSharpSyntaxTree.ParseText(
+                SourceText.From(input.SnapshotSource, Encoding.UTF8),
+                parseOptions)
+            .GetCompilationUnitRoot();
+        Dictionary<string, MethodDeclarationSyntax> snapMethods =
+            BuildSyntaxMethodMapOrNull(baseline.SnapshotRoot);
+        // Why plainRoot: annotated current nodes break AreEquivalent for some shapes (see plainRoot above).
+        Dictionary<string, MethodDeclarationSyntax> currentMethods = BuildSyntaxMethodMapOrNull(plainRoot);
+        if (snapMethods == null || currentMethods == null)
+        {
+            // Why surface: previously a colliding key silently disabled baseline and patched all.
+            baseline.BaselineDisabledByDuplicateKeys = true;
+            return baseline;
+        }
 
+        // Why both maps: a duplicate key on either side makes AreEquivalent matching
+        // ambiguous, so fail closed to no-baseline (patch all) instead of guessing.
+        baseline.HasBaseline = true;
+        baseline.SnapshotMethodMap = snapMethods;
+        baseline.PlainCurrentMethodMap = currentMethods;
+        // Why null is kept as-is: a colliding property/indexer key only disables accessor
+        // gating for this file; method-level baseline matching still applies.
+        baseline.SnapshotPropertyMap = BuildSyntaxPropertyMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotIndexerMap = BuildSyntaxIndexerMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotConstructorMap = BuildSyntaxConstructorMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotOperatorMap = BuildSyntaxOperatorMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotEventMap = BuildSyntaxEventMapOrNull(baseline.SnapshotRoot);
+        baseline.PlainCurrentPropertyMap = BuildSyntaxPropertyMapOrNull(plainRoot);
+        baseline.PlainCurrentIndexerMap = BuildSyntaxIndexerMapOrNull(plainRoot);
+        baseline.PlainCurrentConstructorMap = BuildSyntaxConstructorMapOrNull(plainRoot);
+        baseline.PlainCurrentOperatorMap = BuildSyntaxOperatorMapOrNull(plainRoot);
+        baseline.PlainCurrentEventMap = BuildSyntaxEventMapOrNull(plainRoot);
+        return baseline;
+    }
+
+    private static (List<TypeEmitState> TypeEmitStates, int ShimTypeCounter, int GlobalShimMethodCounter)
+        QueueAllTypeEmitStates(
+            CompilationUnitSyntax root,
+            SemanticModel semanticModel,
+            IAssemblySymbol targetTypesAssemblySymbol,
+            WorkerInput input,
+            BaselineSnapshotState baseline,
+            List<UsingDirectiveSyntax> assemblyGlobalUsings,
+            List<ShimTypeBuilder> shimTypes,
+            AddedMethodCatalog addedMethodCatalog,
+            AddedFieldCatalog addedFieldCatalog,
+            List<WorkerSkipped> skipped,
+            List<WorkerUnchangedMethod> unchangedMethods,
+            List<string> declarationDriftWarnings,
+            List<WorkerRemovedMember> removedMembers,
+            List<WorkerRemovedMethodSignature> removedMethodSignatures,
+            int shimTypeCounter,
+            int globalShimMethodCounter)
+    {
+        List<TypeEmitState> typeEmitStates = new List<TypeEmitState>();
         foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
         {
             INamedTypeSymbol typeSymbol = semanticModel.GetDeclaredSymbol(typeDeclaration);
@@ -357,27 +510,39 @@ public static class TransformWorkerProgram
 
             // Property setters/init and all indexer accessors with bodies stay Skipped.
             // Property getters are patched below (not reported here).
+            (Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
+                Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap,
+                Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
+                Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap) =
+                baseline.GetAccessorBaselineMaps();
             AppendExplicitAccessorSkips(
                 typeDeclaration,
                 typeMetadataNameFromSyntax,
                 semanticModel,
                 skipped,
-                hasBaseline ? snapshotPropertyMap : null,
-                hasBaseline ? snapshotIndexerMap : null,
-                hasBaseline ? plainCurrentPropertyMap : null,
-                hasBaseline ? plainCurrentIndexerMap : null,
+                snapshotPropertyMap,
+                snapshotIndexerMap,
+                plainCurrentPropertyMap,
+                plainCurrentIndexerMap,
                 addedMethodCatalog);
+            (Dictionary<string, ConstructorDeclarationSyntax> snapshotConstructorMap,
+                Dictionary<string, MemberDeclarationSyntax> snapshotOperatorMap,
+                Dictionary<string, EventDeclarationSyntax> snapshotEventMap,
+                Dictionary<string, ConstructorDeclarationSyntax> plainCurrentConstructorMap,
+                Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap,
+                Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap) =
+                baseline.GetUnsupportedMemberBaselineMaps();
             AppendUnsupportedMemberKindSkips(
                 typeDeclaration,
                 typeMetadataNameFromSyntax,
                 semanticModel,
                 skipped,
-                hasBaseline ? snapshotConstructorMap : null,
-                hasBaseline ? snapshotOperatorMap : null,
-                hasBaseline ? snapshotEventMap : null,
-                hasBaseline ? plainCurrentConstructorMap : null,
-                hasBaseline ? plainCurrentOperatorMap : null,
-                hasBaseline ? plainCurrentEventMap : null);
+                snapshotConstructorMap,
+                snapshotOperatorMap,
+                snapshotEventMap,
+                plainCurrentConstructorMap,
+                plainCurrentOperatorMap,
+                plainCurrentEventMap);
 
             TypeEmitState typeState = new TypeEmitState
             {
@@ -390,9 +555,9 @@ public static class TransformWorkerProgram
                 semanticModel,
                 targetTypesAssemblySymbol,
                 input,
-                hasBaseline,
-                snapshotMethodMap,
-                plainCurrentMethodMap,
+                baseline.HasBaseline,
+                baseline.SnapshotMethodMap,
+                baseline.PlainCurrentMethodMap,
                 root,
                 assemblyGlobalUsings,
                 shimTypes,
@@ -410,40 +575,66 @@ public static class TransformWorkerProgram
             typeEmitStates.Add(typeState);
         }
 
-        if (hasBaseline)
+        return (typeEmitStates, shimTypeCounter, globalShimMethodCounter);
+    }
+
+    private static void CollectRemovedMembersIfBaseline(
+        BaselineSnapshotState baseline,
+        CompilationUnitSyntax plainRoot,
+        List<TypeEmitState> typeEmitStates,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetTypesAssemblySymbol,
+        AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog,
+        List<WorkerRemovedMember> removedMembers,
+        List<WorkerRemovedMethodSignature> removedMethodSignatures)
+    {
+        if (!baseline.HasBaseline)
         {
-            CollectRemovedMethods(
-                snapshotMethodMap,
-                plainCurrentMethodMap,
-                addedMethodCatalog,
-                removedMembers);
-            CollectRemovedMethodSignaturesForDeletedNames(
-                typeEmitStates,
-                semanticModel,
-                targetTypesAssemblySymbol,
-                removedMembers,
-                removedMethodSignatures);
-            Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap =
-                BuildSyntaxFieldMapOrNull(baselineSnapshotRoot);
-            Dictionary<string, VariableDeclaratorSyntax> currentFieldMap =
-                BuildSyntaxFieldMapOrNull(plainRoot);
-            if (snapshotFieldMap != null && currentFieldMap != null)
-            {
-                CollectRemovedFields(
-                    snapshotFieldMap,
-                    currentFieldMap,
-                    addedFieldCatalog,
-                    removedMembers);
-            }
+            return;
         }
 
-        SkipBodiesThatCannotUseAddedMethods(
+        CollectRemovedMethods(
+            baseline.SnapshotMethodMap,
+            baseline.PlainCurrentMethodMap,
+            addedMethodCatalog,
+            removedMembers);
+        CollectRemovedMethodSignaturesForDeletedNames(
             typeEmitStates,
             semanticModel,
-            addedMethodCatalog,
-            addedFieldCatalog,
-            skipped);
+            targetTypesAssemblySymbol,
+            removedMembers,
+            removedMethodSignatures);
+        Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap =
+            BuildSyntaxFieldMapOrNull(baseline.SnapshotRoot);
+        Dictionary<string, VariableDeclaratorSyntax> currentFieldMap =
+            BuildSyntaxFieldMapOrNull(plainRoot);
+        if (snapshotFieldMap != null && currentFieldMap != null)
+        {
+            CollectRemovedFields(
+                snapshotFieldMap,
+                currentFieldMap,
+                addedFieldCatalog,
+                removedMembers);
+        }
+    }
 
+    private static (int ShimTypeCounter, int GlobalShimMethodCounter) EmitQueuedMethodsAndPropertyGetters(
+        List<TypeEmitState> typeEmitStates,
+        SemanticModel semanticModel,
+        AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog,
+        CompilationUnitSyntax root,
+        WorkerInput input,
+        BaselineSnapshotState baseline,
+        List<WorkerEntry> entries,
+        List<WorkerSkipped> skipped,
+        List<WorkerUnchangedMethod> unchangedMethods,
+        List<ShimTypeBuilder> shimTypes,
+        List<UsingDirectiveSyntax> assemblyGlobalUsings,
+        int shimTypeCounter,
+        int globalShimMethodCounter)
+    {
         foreach (TypeEmitState typeState in typeEmitStates)
         {
             EmitQueuedMethods(
@@ -452,60 +643,99 @@ public static class TransformWorkerProgram
                 addedMethodCatalog,
                 addedFieldCatalog,
                 entries);
-            foreach (PropertyDeclarationSyntax propertyDeclaration in typeState.TypeDeclaration.Members
-                .OfType<PropertyDeclarationSyntax>())
-            {
-                if (typeState.TypeIsAbsentFromCompiledAssembly)
-                {
-                    SkipPropertyGetterOnUncompiledType(
-                        propertyDeclaration,
-                        semanticModel,
-                        skipped);
-                    continue;
-                }
-
-                (ShimTypeBuilder nextShimType, int nextShimTypeCounter, int nextGlobalShimMethodCounter) =
-                    AppendPropertyGetterEntry(
-                        propertyDeclaration,
-                        typeState.TypeDeclaration,
-                        typeState.TypeSymbol,
-                        typeState.TypeMetadataNameFromSyntax,
-                        semanticModel,
-                        root,
-                        input,
-                        hasBaseline,
-                        snapshotPropertyMap,
-                        plainCurrentPropertyMap,
-                        entries,
-                        skipped,
-                        unchangedMethods,
-                        shimTypes,
-                        shimTypeCounter,
-                        globalShimMethodCounter,
-                        typeState.CurrentShimType,
-                        assemblyGlobalUsings,
-                        addedMethodCatalog,
-                        addedFieldCatalog);
-                typeState.CurrentShimType = nextShimType;
-                shimTypeCounter = nextShimTypeCounter;
-                globalShimMethodCounter = nextGlobalShimMethodCounter;
-            }
-        }
-
-        if (hasBaseline && baselineSnapshotRoot != null)
-        {
-            // Why after property emit: added-property syntax keys are registered when a skip
-            // row is written. Running the drift check first would miss those keys and keep
-            // the false outside-body warning for added properties that already have a row.
-            AppendOutsideMethodBodyDriftWarningIfNeeded(
-                baselineSnapshotRoot,
-                plainRoot,
-                Path.GetFileName(input.SourcePath),
-                declarationDriftWarnings,
+            (shimTypeCounter, globalShimMethodCounter) = EmitPropertyGettersForType(
+                typeState,
+                semanticModel,
                 addedMethodCatalog,
-                addedFieldCatalog);
+                addedFieldCatalog,
+                root,
+                input,
+                baseline,
+                entries,
+                skipped,
+                unchangedMethods,
+                shimTypes,
+                assemblyGlobalUsings,
+                shimTypeCounter,
+                globalShimMethodCounter);
         }
 
+        return (shimTypeCounter, globalShimMethodCounter);
+    }
+
+    private static (int ShimTypeCounter, int GlobalShimMethodCounter) EmitPropertyGettersForType(
+        TypeEmitState typeState,
+        SemanticModel semanticModel,
+        AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog,
+        CompilationUnitSyntax root,
+        WorkerInput input,
+        BaselineSnapshotState baseline,
+        List<WorkerEntry> entries,
+        List<WorkerSkipped> skipped,
+        List<WorkerUnchangedMethod> unchangedMethods,
+        List<ShimTypeBuilder> shimTypes,
+        List<UsingDirectiveSyntax> assemblyGlobalUsings,
+        int shimTypeCounter,
+        int globalShimMethodCounter)
+    {
+        foreach (PropertyDeclarationSyntax propertyDeclaration in typeState.TypeDeclaration.Members
+            .OfType<PropertyDeclarationSyntax>())
+        {
+            if (typeState.TypeIsAbsentFromCompiledAssembly)
+            {
+                SkipPropertyGetterOnUncompiledType(
+                    propertyDeclaration,
+                    semanticModel,
+                    skipped);
+                continue;
+            }
+
+            (ShimTypeBuilder nextShimType, int nextShimTypeCounter, int nextGlobalShimMethodCounter) =
+                AppendPropertyGetterEntry(
+                    propertyDeclaration,
+                    typeState.TypeDeclaration,
+                    typeState.TypeSymbol,
+                    typeState.TypeMetadataNameFromSyntax,
+                    semanticModel,
+                    root,
+                    input,
+                    baseline.HasBaseline,
+                    baseline.SnapshotPropertyMap,
+                    baseline.PlainCurrentPropertyMap,
+                    entries,
+                    skipped,
+                    unchangedMethods,
+                    shimTypes,
+                    shimTypeCounter,
+                    globalShimMethodCounter,
+                    typeState.CurrentShimType,
+                    assemblyGlobalUsings,
+                    addedMethodCatalog,
+                    addedFieldCatalog);
+            typeState.CurrentShimType = nextShimType;
+            shimTypeCounter = nextShimTypeCounter;
+            globalShimMethodCounter = nextGlobalShimMethodCounter;
+        }
+
+        return (shimTypeCounter, globalShimMethodCounter);
+    }
+
+    private static WorkerOutput BuildWorkerOutput(
+        CompilationUnitSyntax root,
+        string projectRelativePath,
+        List<ShimTypeBuilder> shimTypes,
+        List<WorkerEntry> entries,
+        List<WorkerSkipped> skipped,
+        List<string> declarationDriftWarnings,
+        List<string> parseErrors,
+        List<WorkerUnchangedMethod> unchangedMethods,
+        BaselineSnapshotState baseline,
+        List<WorkerRemovedMember> removedMembers,
+        List<WorkerRemovedMethodSignature> removedMethodSignatures,
+        AddedFieldCatalog addedFieldCatalog,
+        string sourceContentSha256)
+    {
         bool hasAccessorDelegates = false;
         foreach (ShimTypeBuilder shimType in shimTypes)
         {
@@ -516,7 +746,7 @@ public static class TransformWorkerProgram
             }
         }
 
-        string shimSource = ShimSourceEmitter.Emit(root, shimTypes, input.ProjectRelativePath);
+        string shimSource = ShimSourceEmitter.Emit(root, shimTypes, projectRelativePath);
         return new WorkerOutput
         {
             ShimSource = shimSource,
@@ -525,7 +755,7 @@ public static class TransformWorkerProgram
             DeclarationDriftWarnings = declarationDriftWarnings.ToArray(),
             ParseErrors = parseErrors.ToArray(),
             UnchangedMethods = unchangedMethods.ToArray(),
-            BaselineDisabledByDuplicateKeys = baselineDisabledByDuplicateKeys,
+            BaselineDisabledByDuplicateKeys = baseline.BaselineDisabledByDuplicateKeys,
             RemovedMembers = removedMembers.ToArray(),
             RemovedMethodSignatures = removedMethodSignatures.ToArray(),
             HasAccessorDelegates = hasAccessorDelegates,
@@ -2158,43 +2388,33 @@ public static class TransformWorkerProgram
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
 
-        if (hasBaseline
-            && snapshotPropertyMap != null
-            && plainCurrentPropertyMap != null)
+        if (TryRecordUnchangedPropertyGetter(
+            hasBaseline,
+            snapshotPropertyMap,
+            plainCurrentPropertyMap,
+            typeMetadataNameFromSyntax,
+            propertyDeclaration,
+            typeSymbol,
+            getterSymbol,
+            parameterTypeFullNames,
+            unchangedMethods))
         {
-            string propertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
-            if (snapshotPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax snapshotProperty)
-                && plainCurrentPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax plainProperty)
-                && ArePropertyGettersEquivalent(snapshotProperty, plainProperty))
-            {
-                unchangedMethods.Add(new WorkerUnchangedMethod
-                {
-                    TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
-                    MethodName = getterSymbol.Name,
-                    ParameterTypeFullNames = parameterTypeFullNames,
-                    GenericArity = getterSymbol.Arity
-                });
-                return (currentShimType, shimTypeCounter, globalShimMethodCounter);
-            }
+            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
 
         // Why skip newly added properties: Harmony looks up get_<Name> on the compiled type
         // and fails with "No method 'get_X' ... was found" when the member does not exist.
-        if (hasBaseline
-            && snapshotPropertyMap != null
-            && plainCurrentPropertyMap != null)
+        if (TrySkipAddedProperty(
+            hasBaseline,
+            snapshotPropertyMap,
+            plainCurrentPropertyMap,
+            typeMetadataNameFromSyntax,
+            propertyDeclaration,
+            getterSymbol,
+            skipped,
+            addedMethodCatalog))
         {
-            string addedPropertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
-            if (!snapshotPropertyMap.ContainsKey(addedPropertyKey))
-            {
-                skipped.Add(new WorkerSkipped
-                {
-                    Method = FormatMethodLabel(getterSymbol),
-                    Reason = AddedMethodSkipReasons.AddedProperty
-                });
-                addedMethodCatalog.AddAddedPropertySyntaxKey(addedPropertyKey);
-                return (currentShimType, shimTypeCounter, globalShimMethodCounter);
-            }
+            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
 
         if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
@@ -2212,6 +2432,119 @@ public static class TransformWorkerProgram
         SyntaxNode getterBodyNode = (SyntaxNode)propertyDeclaration.ExpressionBody
             ?? (SyntaxNode)getAccessor.Body
             ?? getAccessor.ExpressionBody;
+        (bool skipGetter, MethodTransformDecision decision) = TrySkipPropertyGetterByDecision(
+            typeDeclaration,
+            typeSymbol,
+            getterSymbol,
+            getterBodyNode,
+            semanticModel,
+            addedMethodCatalog,
+            addedFieldCatalog,
+            skipped);
+        if (skipGetter)
+        {
+            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+        }
+
+        return EmitPropertyGetterShim(
+            propertyDeclaration,
+            typeDeclaration,
+            typeSymbol,
+            getterSymbol,
+            getterBodyNode,
+            decision,
+            methodKey,
+            parameterTypeFullNames,
+            semanticModel,
+            root,
+            entries,
+            shimTypes,
+            shimTypeCounter,
+            globalShimMethodCounter,
+            currentShimType,
+            assemblyGlobalUsings,
+            addedMethodCatalog,
+            addedFieldCatalog);
+    }
+
+    private static bool TryRecordUnchangedPropertyGetter(
+        bool hasBaseline,
+        Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
+        Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
+        string typeMetadataNameFromSyntax,
+        PropertyDeclarationSyntax propertyDeclaration,
+        INamedTypeSymbol typeSymbol,
+        IMethodSymbol getterSymbol,
+        string[] parameterTypeFullNames,
+        List<WorkerUnchangedMethod> unchangedMethods)
+    {
+        if (!hasBaseline
+            || snapshotPropertyMap == null
+            || plainCurrentPropertyMap == null)
+        {
+            return false;
+        }
+
+        string propertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
+        if (snapshotPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax snapshotProperty)
+            && plainCurrentPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax plainProperty)
+            && ArePropertyGettersEquivalent(snapshotProperty, plainProperty))
+        {
+            unchangedMethods.Add(new WorkerUnchangedMethod
+            {
+                TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
+                MethodName = getterSymbol.Name,
+                ParameterTypeFullNames = parameterTypeFullNames,
+                GenericArity = getterSymbol.Arity
+            });
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TrySkipAddedProperty(
+        bool hasBaseline,
+        Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
+        Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
+        string typeMetadataNameFromSyntax,
+        PropertyDeclarationSyntax propertyDeclaration,
+        IMethodSymbol getterSymbol,
+        List<WorkerSkipped> skipped,
+        AddedMethodCatalog addedMethodCatalog)
+    {
+        if (!hasBaseline
+            || snapshotPropertyMap == null
+            || plainCurrentPropertyMap == null)
+        {
+            return false;
+        }
+
+        string addedPropertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
+        if (snapshotPropertyMap.ContainsKey(addedPropertyKey))
+        {
+            return false;
+        }
+
+        skipped.Add(new WorkerSkipped
+        {
+            Method = FormatMethodLabel(getterSymbol),
+            Reason = AddedMethodSkipReasons.AddedProperty
+        });
+        addedMethodCatalog.AddAddedPropertySyntaxKey(addedPropertyKey);
+        return true;
+    }
+
+    private static (bool SkipGetter, MethodTransformDecision Decision) TrySkipPropertyGetterByDecision(
+        TypeDeclarationSyntax typeDeclaration,
+        INamedTypeSymbol typeSymbol,
+        IMethodSymbol getterSymbol,
+        SyntaxNode getterBodyNode,
+        SemanticModel semanticModel,
+        AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog,
+        List<WorkerSkipped> skipped)
+    {
         MethodTransformDecision decision = DecideMethodTransform(
             typeDeclaration,
             typeSymbol,
@@ -2226,30 +2559,52 @@ public static class TransformWorkerProgram
                 Method = FormatMethodLabel(getterSymbol),
                 Reason = decision.SkipReason
             });
-            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+            return (true, decision);
         }
 
-        string addedCallSiteSkip;
-        string calledAddedMethodKey;
-        (addedCallSiteSkip, calledAddedMethodKey) = EvaluateAddedCallSiteSkipReason(
+        (string addedCallSiteSkip, string calledAddedMethodKey) = EvaluateAddedCallSiteSkipReason(
             getterBodyNode,
             semanticModel,
             addedMethodCatalog,
             addedFieldCatalog);
-        if (addedCallSiteSkip != null)
+        if (addedCallSiteSkip == null)
         {
-            skipped.Add(new WorkerSkipped
-            {
-                Method = FormatMethodLabel(getterSymbol),
-                Reason = addedCallSiteSkip,
-                CalledAddedMethodKey = calledAddedMethodKey,
-                MethodKey = calledAddedMethodKey == null
-                    ? null
-                    : BuildMethodKeyFromSymbol(getterSymbol)
-            });
-            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+            return (false, decision);
         }
 
+        skipped.Add(new WorkerSkipped
+        {
+            Method = FormatMethodLabel(getterSymbol),
+            Reason = addedCallSiteSkip,
+            CalledAddedMethodKey = calledAddedMethodKey,
+            MethodKey = calledAddedMethodKey == null
+                ? null
+                : BuildMethodKeyFromSymbol(getterSymbol)
+        });
+        return (true, decision);
+    }
+
+    private static (ShimTypeBuilder CurrentShimType, int ShimTypeCounter, int GlobalShimMethodCounter)
+        EmitPropertyGetterShim(
+            PropertyDeclarationSyntax propertyDeclaration,
+            TypeDeclarationSyntax typeDeclaration,
+            INamedTypeSymbol typeSymbol,
+            IMethodSymbol getterSymbol,
+            SyntaxNode getterBodyNode,
+            MethodTransformDecision decision,
+            string methodKey,
+            string[] parameterTypeFullNames,
+            SemanticModel semanticModel,
+            CompilationUnitSyntax root,
+            List<WorkerEntry> entries,
+            List<ShimTypeBuilder> shimTypes,
+            int shimTypeCounter,
+            int globalShimMethodCounter,
+            ShimTypeBuilder currentShimType,
+            List<UsingDirectiveSyntax> assemblyGlobalUsings,
+            AddedMethodCatalog addedMethodCatalog,
+            AddedFieldCatalog addedFieldCatalog)
+    {
         if (currentShimType == null)
         {
             string shimTypeName = typeSymbol.Name + "_UloopHotReloadShims_" + shimTypeCounter;
@@ -2734,166 +3089,232 @@ public static class TransformWorkerProgram
     {
         if (node is AssignmentExpressionSyntax assignment)
         {
-            if (assignment.Parent is InitializerExpressionSyntax)
-            {
-                // Initializer assignments are always writes (including ImplicitElementAccess indexers).
-                ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
-                if (initializerSymbol is IPropertySymbol initializerProperty)
-                {
-                    return AccessibilityRules.IsInaccessibleAccessor(initializerProperty.SetMethod);
-                }
-
-                return IsInaccessibleNonConstSymbol(initializerSymbol);
-            }
-
-            ISymbol leftSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
-            if (leftSymbol is IPropertySymbol propertySymbol)
-            {
-                bool needsGetter = !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);
-                if (needsGetter && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
-                {
-                    return true;
-                }
-
-                return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
-            }
-
-            return IsInaccessibleNonConstSymbol(leftSymbol);
+            return IsInaccessibleAssignment(semanticModel, assignment);
         }
 
-        if (node is PostfixUnaryExpressionSyntax postfix
-            && (postfix.IsKind(SyntaxKind.PostIncrementExpression)
-                || postfix.IsKind(SyntaxKind.PostDecrementExpression)))
+        if (node is PostfixUnaryExpressionSyntax postfix)
         {
-            return IsInaccessibleIncrementOperand(semanticModel, postfix.Operand);
+            return IsInaccessiblePostfixIncrement(semanticModel, postfix);
         }
 
-        if (node is PrefixUnaryExpressionSyntax prefix
-            && (prefix.IsKind(SyntaxKind.PreIncrementExpression)
-                || prefix.IsKind(SyntaxKind.PreDecrementExpression)))
+        if (node is PrefixUnaryExpressionSyntax prefix)
         {
-            return IsInaccessibleIncrementOperand(semanticModel, prefix.Operand);
+            return IsInaccessiblePrefixIncrement(semanticModel, prefix);
         }
 
         if (node is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax)
         {
-            ISymbol ctorSymbol = semanticModel.GetSymbolInfo(node).Symbol;
-            return ctorSymbol != null
-                && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol);
+            return IsInaccessibleObjectCreation(semanticModel, node);
         }
 
         if (node is InvocationExpressionSyntax invocation)
         {
-            if (NameofRules.IsNameofInvocation(invocation))
-            {
-                return false;
-            }
-
-            ISymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol;
-            return symbol is IMethodSymbol methodSymbol
-                && methodSymbol.MethodKind == MethodKind.Ordinary
-                && AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol);
+            return IsInaccessibleInvocation(semanticModel, invocation);
         }
 
         if (node is ElementAccessExpressionSyntax elementAccess)
         {
-            // Assignment-left ElementAccess is owned by the assignment branch (write context).
-            if (elementAccess.Parent is AssignmentExpressionSyntax parentAssignment
-                && parentAssignment.Left == elementAccess)
-            {
-                return false;
-            }
-
-            ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
-            if (symbol is IPropertySymbol indexer)
-            {
-                // Standalone ElementAccess is a read.
-                return AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod);
-            }
-
-            return IsInaccessibleNonConstSymbol(symbol);
+            return IsInaccessibleElementAccess(semanticModel, elementAccess);
         }
 
         if (node is MemberBindingExpressionSyntax memberBinding)
         {
-            // ?.Member — visibility of the bound member (not the receiver).
-            ISymbol bound = semanticModel.GetSymbolInfo(memberBinding.Name).Symbol;
-            if (bound is IPropertySymbol propertySymbol)
-            {
-                return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
-            }
-
-            return bound != null
-                && bound is not INamespaceSymbol
-                && bound is not ITypeSymbol
-                && IsInaccessibleNonConstSymbol(bound);
+            return IsInaccessibleMemberBinding(semanticModel, memberBinding);
         }
 
         if (node is IdentifierNameSyntax or GenericNameSyntax)
         {
-            SimpleNameSyntax name = (SimpleNameSyntax)node;
-            if (AccessorEligibility.IsNameHandledByParent(name))
-            {
-                return false;
-            }
-
-            if (name.Parent is AssignmentExpressionSyntax parentAssignment
-                && parentAssignment.Left == name)
-            {
-                return false;
-            }
-
-            // Invocation-target exclusion applies only to method groups; delegate-typed fields
-            // invoked as `_cb()` must be detected as field reads.
-            if (name.Parent is InvocationExpressionSyntax parentInvocation
-                && parentInvocation.Expression == name)
-            {
-                ISymbol invocationTarget = semanticModel.GetSymbolInfo(name).Symbol;
-                if (invocationTarget is IMethodSymbol)
-                {
-                    return false;
-                }
-            }
-
-            ISymbol symbol = semanticModel.GetSymbolInfo(name).Symbol;
-            if (symbol is IPropertySymbol propertySymbol)
-            {
-                return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
-            }
-
-            return IsInaccessibleNonConstSymbol(symbol);
+            return IsInaccessibleSimpleName(semanticModel, (SimpleNameSyntax)node);
         }
 
         if (node is MemberAccessExpressionSyntax memberAccess)
         {
-            if (memberAccess.Parent is InvocationExpressionSyntax parentInvocation
-                && parentInvocation.Expression == memberAccess)
-            {
-                ISymbol invocationTarget = semanticModel.GetSymbolInfo(memberAccess).Symbol
-                    ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
-                if (invocationTarget is IMethodSymbol)
-                {
-                    return false;
-                }
-            }
-
-            if (memberAccess.Parent is AssignmentExpressionSyntax parentAssignment
-                && parentAssignment.Left == memberAccess)
-            {
-                return false;
-            }
-
-            ISymbol symbol = semanticModel.GetSymbolInfo(memberAccess).Symbol
-                ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
-            if (symbol is IPropertySymbol propertySymbol)
-            {
-                return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
-            }
-
-            return IsInaccessibleNonConstSymbol(symbol);
+            return IsInaccessibleMemberAccess(semanticModel, memberAccess);
         }
 
         return false;
+    }
+
+    private static bool IsInaccessibleAssignment(
+        SemanticModel semanticModel,
+        AssignmentExpressionSyntax assignment)
+    {
+        if (assignment.Parent is InitializerExpressionSyntax)
+        {
+            // Initializer assignments are always writes (including ImplicitElementAccess indexers).
+            ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+            if (initializerSymbol is IPropertySymbol initializerProperty)
+            {
+                return AccessibilityRules.IsInaccessibleAccessor(initializerProperty.SetMethod);
+            }
+
+            return IsInaccessibleNonConstSymbol(initializerSymbol);
+        }
+
+        ISymbol leftSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+        if (leftSymbol is IPropertySymbol propertySymbol)
+        {
+            bool needsGetter = !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression);
+            if (needsGetter && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
+            {
+                return true;
+            }
+
+            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod);
+        }
+
+        return IsInaccessibleNonConstSymbol(leftSymbol);
+    }
+
+    private static bool IsInaccessiblePostfixIncrement(
+        SemanticModel semanticModel,
+        PostfixUnaryExpressionSyntax postfix)
+    {
+        if (!(postfix.IsKind(SyntaxKind.PostIncrementExpression)
+            || postfix.IsKind(SyntaxKind.PostDecrementExpression)))
+        {
+            return false;
+        }
+
+        return IsInaccessibleIncrementOperand(semanticModel, postfix.Operand);
+    }
+
+    private static bool IsInaccessiblePrefixIncrement(
+        SemanticModel semanticModel,
+        PrefixUnaryExpressionSyntax prefix)
+    {
+        if (!(prefix.IsKind(SyntaxKind.PreIncrementExpression)
+            || prefix.IsKind(SyntaxKind.PreDecrementExpression)))
+        {
+            return false;
+        }
+
+        return IsInaccessibleIncrementOperand(semanticModel, prefix.Operand);
+    }
+
+    private static bool IsInaccessibleObjectCreation(SemanticModel semanticModel, SyntaxNode node)
+    {
+        ISymbol ctorSymbol = semanticModel.GetSymbolInfo(node).Symbol;
+        return ctorSymbol != null
+            && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol);
+    }
+
+    private static bool IsInaccessibleInvocation(
+        SemanticModel semanticModel,
+        InvocationExpressionSyntax invocation)
+    {
+        if (NameofRules.IsNameofInvocation(invocation))
+        {
+            return false;
+        }
+
+        ISymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol;
+        return symbol is IMethodSymbol methodSymbol
+            && methodSymbol.MethodKind == MethodKind.Ordinary
+            && AccessibilityRules.IsInaccessibleFromExternalAssembly(methodSymbol);
+    }
+
+    private static bool IsInaccessibleElementAccess(
+        SemanticModel semanticModel,
+        ElementAccessExpressionSyntax elementAccess)
+    {
+        // Assignment-left ElementAccess is owned by the assignment branch (write context).
+        if (elementAccess.Parent is AssignmentExpressionSyntax parentAssignment
+            && parentAssignment.Left == elementAccess)
+        {
+            return false;
+        }
+
+        ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
+        if (symbol is IPropertySymbol indexer)
+        {
+            // Standalone ElementAccess is a read.
+            return AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod);
+        }
+
+        return IsInaccessibleNonConstSymbol(symbol);
+    }
+
+    private static bool IsInaccessibleMemberBinding(
+        SemanticModel semanticModel,
+        MemberBindingExpressionSyntax memberBinding)
+    {
+        // ?.Member — visibility of the bound member (not the receiver).
+        ISymbol bound = semanticModel.GetSymbolInfo(memberBinding.Name).Symbol;
+        if (bound is IPropertySymbol propertySymbol)
+        {
+            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
+        }
+
+        return bound != null
+            && bound is not INamespaceSymbol
+            && bound is not ITypeSymbol
+            && IsInaccessibleNonConstSymbol(bound);
+    }
+
+    private static bool IsInaccessibleSimpleName(SemanticModel semanticModel, SimpleNameSyntax name)
+    {
+        if (AccessorEligibility.IsNameHandledByParent(name))
+        {
+            return false;
+        }
+
+        if (name.Parent is AssignmentExpressionSyntax parentAssignment
+            && parentAssignment.Left == name)
+        {
+            return false;
+        }
+
+        // Invocation-target exclusion applies only to method groups; delegate-typed fields
+        // invoked as `_cb()` must be detected as field reads.
+        if (name.Parent is InvocationExpressionSyntax parentInvocation
+            && parentInvocation.Expression == name)
+        {
+            ISymbol invocationTarget = semanticModel.GetSymbolInfo(name).Symbol;
+            if (invocationTarget is IMethodSymbol)
+            {
+                return false;
+            }
+        }
+
+        ISymbol symbol = semanticModel.GetSymbolInfo(name).Symbol;
+        if (symbol is IPropertySymbol propertySymbol)
+        {
+            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
+        }
+
+        return IsInaccessibleNonConstSymbol(symbol);
+    }
+
+    private static bool IsInaccessibleMemberAccess(
+        SemanticModel semanticModel,
+        MemberAccessExpressionSyntax memberAccess)
+    {
+        if (memberAccess.Parent is InvocationExpressionSyntax parentInvocation
+            && parentInvocation.Expression == memberAccess)
+        {
+            ISymbol invocationTarget = semanticModel.GetSymbolInfo(memberAccess).Symbol
+                ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
+            if (invocationTarget is IMethodSymbol)
+            {
+                return false;
+            }
+        }
+
+        if (memberAccess.Parent is AssignmentExpressionSyntax parentAssignment
+            && parentAssignment.Left == memberAccess)
+        {
+            return false;
+        }
+
+        ISymbol symbol = semanticModel.GetSymbolInfo(memberAccess).Symbol
+            ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
+        if (symbol is IPropertySymbol propertySymbol)
+        {
+            return AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod);
+        }
+
+        return IsInaccessibleNonConstSymbol(symbol);
     }
 
     // Why exclude const: a const field is IsStatic, but it has no runtime storage.
@@ -2989,209 +3410,412 @@ public static class TransformWorkerProgram
         foreach (MethodDeclarationSyntax methodDeclaration in typeState.TypeDeclaration.Members
             .OfType<MethodDeclarationSyntax>())
         {
-            IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(methodDeclaration);
-            if (methodSymbol == null)
-            {
-                continue;
-            }
-
-            string[] parameterTypeFullNames = methodSymbol.Parameters
-                .Select(CecilTypeNames.ToParameterTypeFullName)
-                .ToArray();
-            string methodKey = BuildMethodKey(
-                CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
-                methodSymbol.Name,
-                parameterTypeFullNames,
-                methodSymbol.Arity);
-            // Why skip explicit-interface methods: compiled GetMembers(simpleName) does not
-            // see them (metadata name is Interface.Method), so they would be misclassified as
-            // Added and skip the unchanged/baseline path.
-            bool isAddedMethod = false;
-            bool replacesCompiledMethod = false;
-            if (methodDeclaration.ExplicitInterfaceSpecifier == null)
-            {
-                CompiledMethodMatch compiledMatch = MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
-                isAddedMethod = compiledMatch != CompiledMethodMatch.Matched;
-                replacesCompiledMethod = compiledMatch == CompiledMethodMatch.ReturnTypeChanged;
-            }
-
-            if (isAddedMethod)
-            {
-                addedMethodCatalog.MarkClassifiedAdded(methodKey);
-                if (input.ExcludedAddedMethodKeys.Contains(methodKey))
-                {
-                    RecordHandledAddedMethodSyntaxKey(
-                        addedMethodCatalog,
-                        BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration),
-                        replacesCompiledMethod,
-                        snapshotMethodMap,
-                        plainCurrentMethodMap);
-                    continue;
-                }
-            }
-            else if (input.ExcludedMethodKeys.Contains(methodKey))
-            {
-                continue;
-            }
-
-            string syntaxMethodKey = BuildSyntaxMethodKey(
-                typeState.TypeMetadataNameFromSyntax,
-                methodDeclaration);
-            if (typeState.TypeSymbol.TypeKind == TypeKind.Interface)
-            {
-                if (!isAddedMethod && hasBaseline
-                    && snapshotMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax snapshotDecl)
-                    && plainCurrentMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax plainDecl)
-                    && SyntaxFactory.AreEquivalent(snapshotDecl, plainDecl, topLevel: false))
-                {
-                    // Why not unchangedMethods: RevertUnchangedPatches Resolve/ReadAssembly is
-                    // wasted for members Harmony will never patch. Stay inert.
-                    continue;
-                }
-
-                skipped.Add(new WorkerSkipped
-                {
-                    Method = FormatMethodLabel(methodSymbol),
-                    Reason = AddedMethodSkipReasons.InterfaceMember
-                });
-                if (isAddedMethod)
-                {
-                    RecordHandledAddedMethodSyntaxKey(
-                        addedMethodCatalog,
-                        syntaxMethodKey,
-                        replacesCompiledMethod,
-                        snapshotMethodMap,
-                        plainCurrentMethodMap);
-                }
-
-                continue;
-            }
-
-            if (!isAddedMethod && hasBaseline)
-            {
-                // Why plainDecl: compare unannotated nodes; annotated methodDeclaration breaks
-                // AreEquivalent for long-return / unchecked / switch shapes (see plainRoot).
-                if (snapshotMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax snapshotDecl)
-                    && plainCurrentMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax plainDecl)
-                    && SyntaxFactory.AreEquivalent(snapshotDecl, plainDecl, topLevel: false))
-                {
-                    unchangedMethods.Add(new WorkerUnchangedMethod
-                    {
-                        TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
-                        MethodName = methodSymbol.Name,
-                        ParameterTypeFullNames = parameterTypeFullNames,
-                        GenericArity = methodSymbol.Arity
-                    });
-                    continue;
-                }
-            }
-
-            SyntaxNode methodBodyNode =
-                (SyntaxNode)methodDeclaration.Body ?? methodDeclaration.ExpressionBody;
-            string addedSkip = isAddedMethod
-                ? EvaluateAddedMethodSkipReason(methodSymbol, methodDeclaration)
-                : null;
-            MethodTransformDecision decision = addedSkip != null
-                ? MethodTransformDecision.Skip(addedSkip)
-                : DecideMethodTransform(
-                    typeState.TypeDeclaration,
-                    typeState.TypeSymbol,
-                    methodDeclaration,
-                    methodSymbol,
-                    methodBodyNode,
-                    semanticModel);
-            if (isAddedMethod && decision.SkipReason == null)
-            {
-                decision = DecideAddedMethodAccessors(
-                    methodSymbol,
-                    typeState.TypeSymbol,
-                    methodBodyNode,
-                    semanticModel,
-                    decision);
-            }
-
-            if (decision.SkipReason != null)
-            {
-                skipped.Add(new WorkerSkipped
-                {
-                    Method = FormatMethodLabel(methodSymbol),
-                    Reason = decision.SkipReason
-                });
-                if (isAddedMethod)
-                {
-                    // Why strip skipped added declarations: otherwise drift warns about
-                    // fields/initializers for a method the skip reason already explained.
-                    RecordHandledAddedMethodSyntaxKey(
-                        addedMethodCatalog,
-                        syntaxMethodKey,
-                        replacesCompiledMethod,
-                        snapshotMethodMap,
-                        plainCurrentMethodMap);
-                }
-
-                continue;
-            }
-
-            ShimTypeBuilder shimType;
-            (shimType, shimTypeCounter) = EnsureShimType(
+            (shimTypeCounter, globalShimMethodCounter) = QueueOrdinaryMethod(
+                methodDeclaration,
                 typeState,
+                semanticModel,
+                compiledType,
+                input,
+                hasBaseline,
+                snapshotMethodMap,
+                plainCurrentMethodMap,
                 root,
                 assemblyGlobalUsings,
                 shimTypes,
-                shimTypeCounter);
-            string shimMethodName = methodSymbol.Name + "__shim" + globalShimMethodCounter;
-            globalShimMethodCounter++;
+                addedMethodCatalog,
+                skipped,
+                unchangedMethods,
+                declarationDriftWarnings,
+                removedMembers,
+                removedMethodSignatures,
+                shimTypeCounter,
+                globalShimMethodCounter);
+        }
 
-            FileLinePositionSpan originalSpan = methodDeclaration.GetLocation().GetLineSpan();
-            QueuedShimMethod queued = new QueuedShimMethod
+        return (shimTypeCounter, globalShimMethodCounter);
+    }
+
+    private static (int ShimTypeCounter, int GlobalShimMethodCounter) QueueOrdinaryMethod(
+        MethodDeclarationSyntax methodDeclaration,
+        TypeEmitState typeState,
+        SemanticModel semanticModel,
+        INamedTypeSymbol compiledType,
+        WorkerInput input,
+        bool hasBaseline,
+        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
+        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap,
+        CompilationUnitSyntax root,
+        List<UsingDirectiveSyntax> assemblyGlobalUsings,
+        List<ShimTypeBuilder> shimTypes,
+        AddedMethodCatalog addedMethodCatalog,
+        List<WorkerSkipped> skipped,
+        List<WorkerUnchangedMethod> unchangedMethods,
+        List<string> declarationDriftWarnings,
+        List<WorkerRemovedMember> removedMembers,
+        List<WorkerRemovedMethodSignature> removedMethodSignatures,
+        int shimTypeCounter,
+        int globalShimMethodCounter)
+    {
+        IMethodSymbol methodSymbol = semanticModel.GetDeclaredSymbol(methodDeclaration);
+        if (methodSymbol == null)
+        {
+            return (shimTypeCounter, globalShimMethodCounter);
+        }
+
+        string[] parameterTypeFullNames = methodSymbol.Parameters
+            .Select(CecilTypeNames.ToParameterTypeFullName)
+            .ToArray();
+        string methodKey = BuildMethodKey(
+            CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
+            methodSymbol.Name,
+            parameterTypeFullNames,
+            methodSymbol.Arity);
+        (bool isAddedMethod, bool replacesCompiledMethod) = ClassifyOrdinaryMethodAddedState(
+            methodDeclaration,
+            compiledType,
+            methodSymbol);
+        if (TrySkipExcludedOrdinaryMethod(
+            isAddedMethod,
+            replacesCompiledMethod,
+            methodKey,
+            methodDeclaration,
+            typeState,
+            input,
+            snapshotMethodMap,
+            plainCurrentMethodMap,
+            addedMethodCatalog))
+        {
+            return (shimTypeCounter, globalShimMethodCounter);
+        }
+
+        string syntaxMethodKey = BuildSyntaxMethodKey(
+            typeState.TypeMetadataNameFromSyntax,
+            methodDeclaration);
+        if (TrySkipInterfaceOrdinaryMethod(
+            isAddedMethod,
+            replacesCompiledMethod,
+            hasBaseline,
+            syntaxMethodKey,
+            methodSymbol,
+            typeState,
+            snapshotMethodMap,
+            plainCurrentMethodMap,
+            addedMethodCatalog,
+            skipped))
+        {
+            return (shimTypeCounter, globalShimMethodCounter);
+        }
+
+        if (TryRecordUnchangedOrdinaryMethod(
+            isAddedMethod,
+            hasBaseline,
+            syntaxMethodKey,
+            methodSymbol,
+            typeState,
+            parameterTypeFullNames,
+            snapshotMethodMap,
+            plainCurrentMethodMap,
+            unchangedMethods))
+        {
+            return (shimTypeCounter, globalShimMethodCounter);
+        }
+
+        MethodTransformDecision decision = DecideOrdinaryMethodTransform(
+            isAddedMethod,
+            methodDeclaration,
+            methodSymbol,
+            typeState,
+            semanticModel);
+        if (decision.SkipReason != null)
+        {
+            skipped.Add(new WorkerSkipped
             {
-                MethodDeclaration = methodDeclaration,
-                MethodSymbol = methodSymbol,
-                Decision = decision,
-                ShimMethodName = shimMethodName,
-                ShimType = shimType,
-                SourceStartLine = originalSpan.StartLinePosition.Line + 1,
-                SourceEndLine = originalSpan.EndLinePosition.Line + 1,
-                ParameterTypeFullNames = parameterTypeFullNames,
-                MethodKey = methodKey,
-                IsAddedMethod = isAddedMethod,
-                ReplacesCompiledMethod = replacesCompiledMethod
-            };
-            typeState.QueuedMethods.Add(queued);
-
-            if (replacesCompiledMethod)
-            {
-                AddRemovedMethodName(removedMembers, methodSymbol.Name);
-                AddRemovedMethodSignature(
-                    removedMethodSignatures,
-                    typeState.TypeSymbol,
-                    methodSymbol.Name,
-                    parameterTypeFullNames,
-                    methodSymbol.Arity);
-            }
-
+                Method = FormatMethodLabel(methodSymbol),
+                Reason = decision.SkipReason
+            });
             if (isAddedMethod)
             {
-                addedMethodCatalog.Register(
-                    new AddedMethodBinding
-                    {
-                        MethodKey = methodKey,
-                        ShimTypeName = shimType.ShimTypeName,
-                        ShimMethodName = shimMethodName,
-                        NamespaceName = shimType.NamespaceName,
-                        IsStatic = methodSymbol.IsStatic
-                    });
+                // Why strip skipped added declarations: otherwise drift warns about
+                // fields/initializers for a method the skip reason already explained.
                 RecordHandledAddedMethodSyntaxKey(
                     addedMethodCatalog,
                     syntaxMethodKey,
                     replacesCompiledMethod,
                     snapshotMethodMap,
                     plainCurrentMethodMap);
-                AppendUnityMessageWarningIfNeeded(
-                    typeState.TypeSymbol,
-                    methodSymbol,
-                    declarationDriftWarnings);
             }
+
+            return (shimTypeCounter, globalShimMethodCounter);
+        }
+
+        return QueueDecidedOrdinaryMethod(
+            methodDeclaration,
+            methodSymbol,
+            decision,
+            isAddedMethod,
+            replacesCompiledMethod,
+            methodKey,
+            syntaxMethodKey,
+            parameterTypeFullNames,
+            typeState,
+            root,
+            assemblyGlobalUsings,
+            shimTypes,
+            addedMethodCatalog,
+            snapshotMethodMap,
+            plainCurrentMethodMap,
+            declarationDriftWarnings,
+            removedMembers,
+            removedMethodSignatures,
+            shimTypeCounter,
+            globalShimMethodCounter);
+    }
+
+    private static (bool IsAddedMethod, bool ReplacesCompiledMethod) ClassifyOrdinaryMethodAddedState(
+        MethodDeclarationSyntax methodDeclaration,
+        INamedTypeSymbol compiledType,
+        IMethodSymbol methodSymbol)
+    {
+        // Why skip explicit-interface methods: compiled GetMembers(simpleName) does not
+        // see them (metadata name is Interface.Method), so they would be misclassified as
+        // Added and skip the unchanged/baseline path.
+        if (methodDeclaration.ExplicitInterfaceSpecifier != null)
+        {
+            return (false, false);
+        }
+
+        CompiledMethodMatch compiledMatch = MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
+        return (
+            compiledMatch != CompiledMethodMatch.Matched,
+            compiledMatch == CompiledMethodMatch.ReturnTypeChanged);
+    }
+
+    private static bool TrySkipExcludedOrdinaryMethod(
+        bool isAddedMethod,
+        bool replacesCompiledMethod,
+        string methodKey,
+        MethodDeclarationSyntax methodDeclaration,
+        TypeEmitState typeState,
+        WorkerInput input,
+        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
+        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap,
+        AddedMethodCatalog addedMethodCatalog)
+    {
+        if (isAddedMethod)
+        {
+            addedMethodCatalog.MarkClassifiedAdded(methodKey);
+            if (input.ExcludedAddedMethodKeys.Contains(methodKey))
+            {
+                RecordHandledAddedMethodSyntaxKey(
+                    addedMethodCatalog,
+                    BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration),
+                    replacesCompiledMethod,
+                    snapshotMethodMap,
+                    plainCurrentMethodMap);
+                return true;
+            }
+
+            return false;
+        }
+
+        return input.ExcludedMethodKeys.Contains(methodKey);
+    }
+
+    private static bool TrySkipInterfaceOrdinaryMethod(
+        bool isAddedMethod,
+        bool replacesCompiledMethod,
+        bool hasBaseline,
+        string syntaxMethodKey,
+        IMethodSymbol methodSymbol,
+        TypeEmitState typeState,
+        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
+        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap,
+        AddedMethodCatalog addedMethodCatalog,
+        List<WorkerSkipped> skipped)
+    {
+        if (typeState.TypeSymbol.TypeKind != TypeKind.Interface)
+        {
+            return false;
+        }
+
+        if (!isAddedMethod && hasBaseline
+            && snapshotMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax snapshotDecl)
+            && plainCurrentMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax plainDecl)
+            && SyntaxFactory.AreEquivalent(snapshotDecl, plainDecl, topLevel: false))
+        {
+            // Why not unchangedMethods: RevertUnchangedPatches Resolve/ReadAssembly is
+            // wasted for members Harmony will never patch. Stay inert.
+            return true;
+        }
+
+        skipped.Add(new WorkerSkipped
+        {
+            Method = FormatMethodLabel(methodSymbol),
+            Reason = AddedMethodSkipReasons.InterfaceMember
+        });
+        if (isAddedMethod)
+        {
+            RecordHandledAddedMethodSyntaxKey(
+                addedMethodCatalog,
+                syntaxMethodKey,
+                replacesCompiledMethod,
+                snapshotMethodMap,
+                plainCurrentMethodMap);
+        }
+
+        return true;
+    }
+
+    private static bool TryRecordUnchangedOrdinaryMethod(
+        bool isAddedMethod,
+        bool hasBaseline,
+        string syntaxMethodKey,
+        IMethodSymbol methodSymbol,
+        TypeEmitState typeState,
+        string[] parameterTypeFullNames,
+        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
+        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap,
+        List<WorkerUnchangedMethod> unchangedMethods)
+    {
+        if (isAddedMethod || !hasBaseline)
+        {
+            return false;
+        }
+
+        // Why plainDecl: compare unannotated nodes; annotated methodDeclaration breaks
+        // AreEquivalent for long-return / unchecked / switch shapes (see plainRoot).
+        if (snapshotMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax snapshotDecl)
+            && plainCurrentMethodMap.TryGetValue(syntaxMethodKey, out MethodDeclarationSyntax plainDecl)
+            && SyntaxFactory.AreEquivalent(snapshotDecl, plainDecl, topLevel: false))
+        {
+            unchangedMethods.Add(new WorkerUnchangedMethod
+            {
+                TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
+                MethodName = methodSymbol.Name,
+                ParameterTypeFullNames = parameterTypeFullNames,
+                GenericArity = methodSymbol.Arity
+            });
+            return true;
+        }
+
+        return false;
+    }
+
+    private static MethodTransformDecision DecideOrdinaryMethodTransform(
+        bool isAddedMethod,
+        MethodDeclarationSyntax methodDeclaration,
+        IMethodSymbol methodSymbol,
+        TypeEmitState typeState,
+        SemanticModel semanticModel)
+    {
+        SyntaxNode methodBodyNode =
+            (SyntaxNode)methodDeclaration.Body ?? methodDeclaration.ExpressionBody;
+        string addedSkip = isAddedMethod
+            ? EvaluateAddedMethodSkipReason(methodSymbol, methodDeclaration)
+            : null;
+        MethodTransformDecision decision = addedSkip != null
+            ? MethodTransformDecision.Skip(addedSkip)
+            : DecideMethodTransform(
+                typeState.TypeDeclaration,
+                typeState.TypeSymbol,
+                methodDeclaration,
+                methodSymbol,
+                methodBodyNode,
+                semanticModel);
+        if (isAddedMethod && decision.SkipReason == null)
+        {
+            decision = DecideAddedMethodAccessors(
+                methodSymbol,
+                typeState.TypeSymbol,
+                methodBodyNode,
+                semanticModel,
+                decision);
+        }
+
+        return decision;
+    }
+
+    private static (int ShimTypeCounter, int GlobalShimMethodCounter) QueueDecidedOrdinaryMethod(
+        MethodDeclarationSyntax methodDeclaration,
+        IMethodSymbol methodSymbol,
+        MethodTransformDecision decision,
+        bool isAddedMethod,
+        bool replacesCompiledMethod,
+        string methodKey,
+        string syntaxMethodKey,
+        string[] parameterTypeFullNames,
+        TypeEmitState typeState,
+        CompilationUnitSyntax root,
+        List<UsingDirectiveSyntax> assemblyGlobalUsings,
+        List<ShimTypeBuilder> shimTypes,
+        AddedMethodCatalog addedMethodCatalog,
+        Dictionary<string, MethodDeclarationSyntax> snapshotMethodMap,
+        Dictionary<string, MethodDeclarationSyntax> plainCurrentMethodMap,
+        List<string> declarationDriftWarnings,
+        List<WorkerRemovedMember> removedMembers,
+        List<WorkerRemovedMethodSignature> removedMethodSignatures,
+        int shimTypeCounter,
+        int globalShimMethodCounter)
+    {
+        ShimTypeBuilder shimType;
+        (shimType, shimTypeCounter) = EnsureShimType(
+            typeState,
+            root,
+            assemblyGlobalUsings,
+            shimTypes,
+            shimTypeCounter);
+        string shimMethodName = methodSymbol.Name + "__shim" + globalShimMethodCounter;
+        globalShimMethodCounter++;
+
+        FileLinePositionSpan originalSpan = methodDeclaration.GetLocation().GetLineSpan();
+        QueuedShimMethod queued = new QueuedShimMethod
+        {
+            MethodDeclaration = methodDeclaration,
+            MethodSymbol = methodSymbol,
+            Decision = decision,
+            ShimMethodName = shimMethodName,
+            ShimType = shimType,
+            SourceStartLine = originalSpan.StartLinePosition.Line + 1,
+            SourceEndLine = originalSpan.EndLinePosition.Line + 1,
+            ParameterTypeFullNames = parameterTypeFullNames,
+            MethodKey = methodKey,
+            IsAddedMethod = isAddedMethod,
+            ReplacesCompiledMethod = replacesCompiledMethod
+        };
+        typeState.QueuedMethods.Add(queued);
+
+        if (replacesCompiledMethod)
+        {
+            AddRemovedMethodName(removedMembers, methodSymbol.Name);
+            AddRemovedMethodSignature(
+                removedMethodSignatures,
+                typeState.TypeSymbol,
+                methodSymbol.Name,
+                parameterTypeFullNames,
+                methodSymbol.Arity);
+        }
+
+        if (isAddedMethod)
+        {
+            addedMethodCatalog.Register(
+                new AddedMethodBinding
+                {
+                    MethodKey = methodKey,
+                    ShimTypeName = shimType.ShimTypeName,
+                    ShimMethodName = shimMethodName,
+                    NamespaceName = shimType.NamespaceName,
+                    IsStatic = methodSymbol.IsStatic
+                });
+            RecordHandledAddedMethodSyntaxKey(
+                addedMethodCatalog,
+                syntaxMethodKey,
+                replacesCompiledMethod,
+                snapshotMethodMap,
+                plainCurrentMethodMap);
+            AppendUnityMessageWarningIfNeeded(
+                typeState.TypeSymbol,
+                methodSymbol,
+                declarationDriftWarnings);
         }
 
         return (shimTypeCounter, globalShimMethodCounter);
@@ -4654,7 +5278,12 @@ public static class TransformWorkerProgram
             return true;
         }
 
-        switch (typeSymbol.SpecialType)
+        return IsIncrementableSpecialType(typeSymbol.SpecialType);
+    }
+
+    private static bool IsIncrementableSpecialType(SpecialType specialType)
+    {
+        switch (specialType)
         {
             case SpecialType.System_SByte:
             case SpecialType.System_Byte:
@@ -4859,6 +5488,23 @@ public static class TransformWorkerProgram
                 flag ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression);
         }
 
+        ExpressionSyntax integerLiteral = TryCreateInt32ThroughUInt64Literal(value);
+        if (integerLiteral != null)
+        {
+            return integerLiteral;
+        }
+
+        ExpressionSyntax floatingLiteral = TryCreateFloatingLiteral(value);
+        if (floatingLiteral != null)
+        {
+            return floatingLiteral;
+        }
+
+        return TryCreateDecimalOrSmallIntegerLiteral(value);
+    }
+
+    private static ExpressionSyntax TryCreateInt32ThroughUInt64Literal(object value)
+    {
         if (value is int intValue)
         {
             return SyntaxFactory.LiteralExpression(
@@ -4887,6 +5533,11 @@ public static class TransformWorkerProgram
                 SyntaxFactory.Literal(ulongValue));
         }
 
+        return null;
+    }
+
+    private static ExpressionSyntax TryCreateFloatingLiteral(object value)
+    {
         if (value is float floatValue)
         {
             if (float.IsNaN(floatValue) || float.IsInfinity(floatValue))
@@ -4911,6 +5562,11 @@ public static class TransformWorkerProgram
                 SyntaxFactory.Literal(doubleValue));
         }
 
+        return null;
+    }
+
+    private static ExpressionSyntax TryCreateDecimalOrSmallIntegerLiteral(object value)
+    {
         if (value is decimal decimalValue)
         {
             return SyntaxFactory.LiteralExpression(
@@ -5304,22 +5960,14 @@ internal static class AccessibilityRules
 {
     public static bool IsInaccessibleFromExternalAssembly(ISymbol symbol)
     {
-        if (symbol is ILocalSymbol
-            || symbol is IParameterSymbol
-            || symbol is IRangeVariableSymbol
-            || symbol is ITypeParameterSymbol
-            || symbol is INamespaceSymbol
-            || symbol is ILabelSymbol
-            || symbol is IDiscardSymbol)
+        if (IsNonCrossAssemblySymbol(symbol))
         {
             return false;
         }
 
         // Local functions / lambdas are emitted into the shim assembly itself, so they have no
         // cross-assembly accessibility problem and must not be treated as accessor targets.
-        if (symbol is IMethodSymbol methodKindSymbol
-            && (methodKindSymbol.MethodKind == MethodKind.LocalFunction
-                || methodKindSymbol.MethodKind == MethodKind.AnonymousFunction))
+        if (IsLocalOrAnonymousFunction(symbol))
         {
             return false;
         }
@@ -5331,25 +5979,50 @@ internal static class AccessibilityRules
                     && IsInaccessibleFromExternalAssembly(typeSymbol.ContainingType));
         }
 
-        if (symbol is IFieldSymbol
-            || symbol is IPropertySymbol
-            || symbol is IMethodSymbol
-            || symbol is IEventSymbol)
+        if (IsMemberSymbol(symbol))
         {
-            if (HasInaccessibleAccessibility(symbol.DeclaredAccessibility))
-            {
-                return true;
-            }
-
-            // Recurse through nested containing types (same rule as the type-symbol branch).
-            if (symbol.ContainingType != null
-                && IsInaccessibleFromExternalAssembly(symbol.ContainingType))
-            {
-                return true;
-            }
+            return HasInaccessibleMemberAccessibility(symbol);
         }
 
         return false;
+    }
+
+    private static bool IsNonCrossAssemblySymbol(ISymbol symbol)
+    {
+        return symbol is ILocalSymbol
+            || symbol is IParameterSymbol
+            || symbol is IRangeVariableSymbol
+            || symbol is ITypeParameterSymbol
+            || symbol is INamespaceSymbol
+            || symbol is ILabelSymbol
+            || symbol is IDiscardSymbol;
+    }
+
+    private static bool IsLocalOrAnonymousFunction(ISymbol symbol)
+    {
+        return symbol is IMethodSymbol methodKindSymbol
+            && (methodKindSymbol.MethodKind == MethodKind.LocalFunction
+                || methodKindSymbol.MethodKind == MethodKind.AnonymousFunction);
+    }
+
+    private static bool IsMemberSymbol(ISymbol symbol)
+    {
+        return symbol is IFieldSymbol
+            || symbol is IPropertySymbol
+            || symbol is IMethodSymbol
+            || symbol is IEventSymbol;
+    }
+
+    private static bool HasInaccessibleMemberAccessibility(ISymbol symbol)
+    {
+        if (HasInaccessibleAccessibility(symbol.DeclaredAccessibility))
+        {
+            return true;
+        }
+
+        // Recurse through nested containing types (same rule as the type-symbol branch).
+        return symbol.ContainingType != null
+            && IsInaccessibleFromExternalAssembly(symbol.ContainingType);
     }
 
     /// <summary>
@@ -6051,35 +6724,13 @@ internal static class AccessorEligibility
 
         if (node is ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax)
         {
-            ISymbol ctorSymbol = semanticModel.GetSymbolInfo(node).Symbol;
-            if (ctorSymbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol))
-            {
-                rejectReason =
-                    "inaccessible constructor call has no accessor rewrite shape.";
-                return false;
-            }
-
-            return false;
+            return TryRegisterObjectCreation(semanticModel, node, out rejectReason);
         }
 
         if (node is AssignmentExpressionSyntax assignment
             && assignment.Parent is InitializerExpressionSyntax)
         {
-            // Initializer assignments are always writes (including ImplicitElementAccess indexers).
-            ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
-            bool inaccessibleWrite = initializerSymbol is IPropertySymbol initializerProperty
-                ? AccessibilityRules.IsInaccessibleAccessor(initializerProperty.SetMethod)
-                : initializerSymbol != null
-                    && AccessibilityRules.IsInaccessibleFromExternalAssembly(initializerSymbol);
-            if (inaccessibleWrite)
-            {
-                rejectReason =
-                    "inaccessible member assignment in an object/collection initializer has no "
-                    + "accessor rewrite shape.";
-                return false;
-            }
-
-            return false;
+            return TryRegisterInitializerAssignment(semanticModel, assignment, out rejectReason);
         }
 
         if (node is InvocationExpressionSyntax invocation)
@@ -6089,47 +6740,12 @@ internal static class AccessorEligibility
 
         if (node is ElementAccessExpressionSyntax elementAccess)
         {
-            // Assignment-left ElementAccess is owned by the assignment branch (write context).
-            if (elementAccess.Parent is AssignmentExpressionSyntax parentElementAssignment
-                && parentElementAssignment.Left == elementAccess)
-            {
-                return false;
-            }
-
-            ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
-            if (symbol is IPropertySymbol indexer && indexer.IsIndexer)
-            {
-                // Standalone ElementAccess is a read — only the getter matters.
-                if (AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod))
-                {
-                    rejectReason =
-                        "inaccessible indexer access has no accessor rewrite shape.";
-                    return false;
-                }
-            }
-            else if (symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol))
-            {
-                rejectReason = "inaccessible indexer access has no accessor rewrite shape.";
-                return false;
-            }
-
-            return false;
+            return TryRegisterElementAccess(semanticModel, elementAccess, out rejectReason);
         }
 
         if (node is MemberBindingExpressionSyntax memberBinding)
         {
-            ISymbol bound = semanticModel.GetSymbolInfo(memberBinding.Name).Symbol;
-            if (bound != null
-                && bound is not INamespaceSymbol
-                && bound is not ITypeSymbol
-                && IsInaccessibleBindingTarget(bound))
-            {
-                rejectReason =
-                    "inaccessible member access via conditional access has no rewrite shape.";
-                return false;
-            }
-
-            return false;
+            return TryRegisterMemberBinding(semanticModel, memberBinding, out rejectReason);
         }
 
         if (node is AssignmentExpressionSyntax propertyOrFieldAssignment)
@@ -6143,65 +6759,177 @@ internal static class AccessorEligibility
 
         if (node is MemberAccessExpressionSyntax memberAccess)
         {
-            // Method-group invocation targets are owned by the invocation branch; delegate-typed
-            // field invokes (`this._cb()` / `other._cb()`) register as field reads here.
-            if (memberAccess.Parent is InvocationExpressionSyntax parentInvocation
-                && parentInvocation.Expression == memberAccess)
-            {
-                ISymbol invocationTarget = semanticModel.GetSymbolInfo(memberAccess).Symbol
-                    ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
-                if (invocationTarget is IMethodSymbol)
-                {
-                    return false;
-                }
-            }
-
-            if (memberAccess.Parent is AssignmentExpressionSyntax parentAssignment
-                && parentAssignment.Left == memberAccess)
-            {
-                return false;
-            }
-
-            return TryRegisterPropertyOrFieldRead(
-                semanticModel.GetSymbolInfo(memberAccess).Symbol
-                ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
-                plan,
-                out rejectReason);
+            return TryRegisterMemberAccess(semanticModel, memberAccess, plan, out rejectReason);
         }
 
         if (node is IdentifierNameSyntax or GenericNameSyntax)
         {
-            SimpleNameSyntax name = (SimpleNameSyntax)node;
-            if (IsNameHandledByParent(name))
-            {
-                return false;
-            }
-
-            if (name.Parent is AssignmentExpressionSyntax parentAssignment
-                && parentAssignment.Left == name)
-            {
-                return false;
-            }
-
-            // Method-group invocation targets are owned by the invocation branch; delegate-typed
-            // field invokes (`_cb()`) register as field reads here.
-            if (name.Parent is InvocationExpressionSyntax parentInvocation
-                && parentInvocation.Expression == name)
-            {
-                ISymbol invocationTarget = semanticModel.GetSymbolInfo(name).Symbol;
-                if (invocationTarget is IMethodSymbol)
-                {
-                    return false;
-                }
-            }
-
-            return TryRegisterPropertyOrFieldRead(
-                semanticModel.GetSymbolInfo(name).Symbol,
-                plan,
-                out rejectReason);
+            return TryRegisterSimpleName(semanticModel, (SimpleNameSyntax)node, plan, out rejectReason);
         }
 
         return false;
+    }
+
+    private static bool TryRegisterObjectCreation(
+        SemanticModel semanticModel,
+        SyntaxNode node,
+        out string rejectReason)
+    {
+        rejectReason = null;
+        ISymbol ctorSymbol = semanticModel.GetSymbolInfo(node).Symbol;
+        if (ctorSymbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(ctorSymbol))
+        {
+            rejectReason =
+                "inaccessible constructor call has no accessor rewrite shape.";
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool TryRegisterInitializerAssignment(
+        SemanticModel semanticModel,
+        AssignmentExpressionSyntax assignment,
+        out string rejectReason)
+    {
+        rejectReason = null;
+        // Initializer assignments are always writes (including ImplicitElementAccess indexers).
+        ISymbol initializerSymbol = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+        bool inaccessibleWrite = initializerSymbol is IPropertySymbol initializerProperty
+            ? AccessibilityRules.IsInaccessibleAccessor(initializerProperty.SetMethod)
+            : initializerSymbol != null
+                && AccessibilityRules.IsInaccessibleFromExternalAssembly(initializerSymbol);
+        if (inaccessibleWrite)
+        {
+            rejectReason =
+                "inaccessible member assignment in an object/collection initializer has no "
+                + "accessor rewrite shape.";
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool TryRegisterElementAccess(
+        SemanticModel semanticModel,
+        ElementAccessExpressionSyntax elementAccess,
+        out string rejectReason)
+    {
+        rejectReason = null;
+        // Assignment-left ElementAccess is owned by the assignment branch (write context).
+        if (elementAccess.Parent is AssignmentExpressionSyntax parentElementAssignment
+            && parentElementAssignment.Left == elementAccess)
+        {
+            return false;
+        }
+
+        ISymbol symbol = semanticModel.GetSymbolInfo(elementAccess).Symbol;
+        if (symbol is IPropertySymbol indexer && indexer.IsIndexer)
+        {
+            // Standalone ElementAccess is a read — only the getter matters.
+            if (AccessibilityRules.IsInaccessibleAccessor(indexer.GetMethod))
+            {
+                rejectReason =
+                    "inaccessible indexer access has no accessor rewrite shape.";
+                return false;
+            }
+        }
+        else if (symbol != null && AccessibilityRules.IsInaccessibleFromExternalAssembly(symbol))
+        {
+            rejectReason = "inaccessible indexer access has no accessor rewrite shape.";
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool TryRegisterMemberBinding(
+        SemanticModel semanticModel,
+        MemberBindingExpressionSyntax memberBinding,
+        out string rejectReason)
+    {
+        rejectReason = null;
+        ISymbol bound = semanticModel.GetSymbolInfo(memberBinding.Name).Symbol;
+        if (bound != null
+            && bound is not INamespaceSymbol
+            && bound is not ITypeSymbol
+            && IsInaccessibleBindingTarget(bound))
+        {
+            rejectReason =
+                "inaccessible member access via conditional access has no rewrite shape.";
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool TryRegisterMemberAccess(
+        SemanticModel semanticModel,
+        MemberAccessExpressionSyntax memberAccess,
+        AccessorPlan plan,
+        out string rejectReason)
+    {
+        rejectReason = null;
+        // Method-group invocation targets are owned by the invocation branch; delegate-typed
+        // field invokes (`this._cb()` / `other._cb()`) register as field reads here.
+        if (memberAccess.Parent is InvocationExpressionSyntax parentInvocation
+            && parentInvocation.Expression == memberAccess)
+        {
+            ISymbol invocationTarget = semanticModel.GetSymbolInfo(memberAccess).Symbol
+                ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol;
+            if (invocationTarget is IMethodSymbol)
+            {
+                return false;
+            }
+        }
+
+        if (memberAccess.Parent is AssignmentExpressionSyntax parentAssignment
+            && parentAssignment.Left == memberAccess)
+        {
+            return false;
+        }
+
+        return TryRegisterPropertyOrFieldRead(
+            semanticModel.GetSymbolInfo(memberAccess).Symbol
+            ?? semanticModel.GetSymbolInfo(memberAccess.Name).Symbol,
+            plan,
+            out rejectReason);
+    }
+
+    private static bool TryRegisterSimpleName(
+        SemanticModel semanticModel,
+        SimpleNameSyntax name,
+        AccessorPlan plan,
+        out string rejectReason)
+    {
+        rejectReason = null;
+        if (IsNameHandledByParent(name))
+        {
+            return false;
+        }
+
+        if (name.Parent is AssignmentExpressionSyntax parentAssignment
+            && parentAssignment.Left == name)
+        {
+            return false;
+        }
+
+        // Method-group invocation targets are owned by the invocation branch; delegate-typed
+        // field invokes (`_cb()`) register as field reads here.
+        if (name.Parent is InvocationExpressionSyntax parentInvocation
+            && parentInvocation.Expression == name)
+        {
+            ISymbol invocationTarget = semanticModel.GetSymbolInfo(name).Symbol;
+            if (invocationTarget is IMethodSymbol)
+            {
+                return false;
+            }
+        }
+
+        return TryRegisterPropertyOrFieldRead(
+            semanticModel.GetSymbolInfo(name).Symbol,
+            plan,
+            out rejectReason);
     }
 
     private static bool IsInaccessibleBindingTarget(ISymbol bound)
@@ -6449,63 +7177,16 @@ internal static class AccessorEligibility
             return false;
         }
 
-        if (assignment.IsKind(SyntaxKind.CoalesceAssignmentExpression))
+        string shapeRejectReason = TryGetPropertyWriteShapeRejectReason(
+            semanticModel,
+            assignment,
+            propertySymbol,
+            needsGetter,
+            setterInaccessible,
+            getterInaccessible);
+        if (shapeRejectReason != null)
         {
-            rejectReason =
-                "null-coalescing assignment writes conditionally and has no accessor rewrite shape.";
-            return false;
-        }
-
-        if (needsGetter && !IsSupportedCompoundAssignmentKind(assignment.Kind()))
-        {
-            rejectReason =
-                "unsupported compound assignment kind has no accessor rewrite shape.";
-            return false;
-        }
-
-        // Compound assignment with a private getter and a public setter has no rewrite shape:
-        // RewritePropertyAssignment only fires when the setter is inaccessible.
-        if (getterInaccessible && !setterInaccessible)
-        {
-            rejectReason =
-                "compound assignment reading an inaccessible getter with an accessible setter "
-                + "has no accessor rewrite shape.";
-            return false;
-        }
-
-        // Setter delegates are void — consuming the assignment expression value cannot compile.
-        if (assignment.Parent is not ExpressionStatementSyntax)
-        {
-            rejectReason =
-                "assignment value is consumed; the setter delegate returns void.";
-            return false;
-        }
-
-        // Compound/get+set rewrite embeds the receiver twice; reject side-effecting receivers.
-        if (needsGetter && !IsSideEffectFreeAssignmentReceiver(semanticModel, assignment.Left))
-        {
-            rejectReason =
-                "receiver with possible side effects would be evaluated twice.";
-            return false;
-        }
-
-        if (propertySymbol.IsIndexer)
-        {
-            rejectReason = "inaccessible indexer access has no accessor rewrite shape.";
-            return false;
-        }
-
-        if (propertySymbol.IsStatic)
-        {
-            rejectReason =
-                "inaccessible static property access has no accessor rewrite shape.";
-            return false;
-        }
-
-        if (propertySymbol.ReturnsByRef || propertySymbol.ReturnsByRefReadonly)
-        {
-            rejectReason =
-                "inaccessible ref-returning properties have no accessor rewrite shape.";
+            rejectReason = shapeRejectReason;
             return false;
         }
 
@@ -6532,6 +7213,69 @@ internal static class AccessorEligibility
         }
 
         return true;
+    }
+
+    private static string TryGetPropertyWriteShapeRejectReason(
+        SemanticModel semanticModel,
+        AssignmentExpressionSyntax assignment,
+        IPropertySymbol propertySymbol,
+        bool needsGetter,
+        bool setterInaccessible,
+        bool getterInaccessible)
+    {
+        if (assignment.IsKind(SyntaxKind.CoalesceAssignmentExpression))
+        {
+            return
+                "null-coalescing assignment writes conditionally and has no accessor rewrite shape.";
+        }
+
+        if (needsGetter && !IsSupportedCompoundAssignmentKind(assignment.Kind()))
+        {
+            return
+                "unsupported compound assignment kind has no accessor rewrite shape.";
+        }
+
+        // Compound assignment with a private getter and a public setter has no rewrite shape:
+        // RewritePropertyAssignment only fires when the setter is inaccessible.
+        if (getterInaccessible && !setterInaccessible)
+        {
+            return
+                "compound assignment reading an inaccessible getter with an accessible setter "
+                + "has no accessor rewrite shape.";
+        }
+
+        // Setter delegates are void — consuming the assignment expression value cannot compile.
+        if (assignment.Parent is not ExpressionStatementSyntax)
+        {
+            return
+                "assignment value is consumed; the setter delegate returns void.";
+        }
+
+        // Compound/get+set rewrite embeds the receiver twice; reject side-effecting receivers.
+        if (needsGetter && !IsSideEffectFreeAssignmentReceiver(semanticModel, assignment.Left))
+        {
+            return
+                "receiver with possible side effects would be evaluated twice.";
+        }
+
+        if (propertySymbol.IsIndexer)
+        {
+            return "inaccessible indexer access has no accessor rewrite shape.";
+        }
+
+        if (propertySymbol.IsStatic)
+        {
+            return
+                "inaccessible static property access has no accessor rewrite shape.";
+        }
+
+        if (propertySymbol.ReturnsByRef || propertySymbol.ReturnsByRefReadonly)
+        {
+            return
+                "inaccessible ref-returning properties have no accessor rewrite shape.";
+        }
+
+        return null;
     }
 
     internal static bool IsSupportedCompoundAssignmentKind(SyntaxKind kind)
@@ -7253,10 +7997,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     private SyntaxNode VisitName(SimpleNameSyntax node, SyntaxNode original)
     {
-        if (IsMemberAccessNameSide(node)
-            || IsQualifiedNameRightSide(node)
-            || IsMemberBindingName(node)
-            || IsObjectOrCollectionInitializerMemberName(node))
+        if (IsNameSideOfLargerExpression(node))
         {
             return original;
         }
@@ -7267,43 +8008,22 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return original;
         }
 
-        if (!IsAssignmentLeft(node)
-            && !IsIncrementOperand(node)
-            && !TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        SyntaxNode addedFieldRead = TryRewriteUnownedAddedFieldRead(node, symbol);
+        if (addedFieldRead != null)
         {
-            SyntaxNode addedFieldRead = TryRewriteAddedFieldRead(
-                symbol,
-                SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName),
-                node);
-            if (addedFieldRead != null)
-            {
-                return addedFieldRead;
-            }
+            return addedFieldRead;
         }
 
         // Local/anonymous functions are emitted into the shim assembly — keep bare calls.
-        if (symbol is IMethodSymbol methodSymbol
-            && (methodSymbol.MethodKind == MethodKind.LocalFunction
-                || methodSymbol.MethodKind == MethodKind.AnonymousFunction))
+        if (IsLocalOrAnonymousFunctionSymbol(symbol))
         {
             return original;
         }
 
-        // nameof(...) and assignment left sides must keep a member-reference shape: qualify only,
-        // never rewrite to an accessor read (Func<> call results are not assignable).
-        bool suppressAccessorRead = TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node)
-            || (node.Parent is AssignmentExpressionSyntax assignmentLeft
-                && assignmentLeft.Left == node);
-        if (_accessorPlan != null && !suppressAccessorRead)
+        SyntaxNode accessorRead = TryRewriteNameAsAccessorRead(node, symbol);
+        if (accessorRead != null)
         {
-            ExpressionSyntax accessorRead = TryRewriteInaccessibleRead(
-                symbol,
-                SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName),
-                node);
-            if (accessorRead != null)
-            {
-                return accessorRead;
-            }
+            return accessorRead;
         }
 
         (bool owned, bool isStatic, INamedTypeSymbol containingType) ownership = ResolveOwnedMember(symbol);
@@ -7312,10 +8032,66 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return original;
         }
 
-        if (ownership.isStatic)
+        return QualifyOwnedMemberAccess(node, ownership.isStatic, ownership.containingType);
+    }
+
+    private static bool IsNameSideOfLargerExpression(SimpleNameSyntax node)
+    {
+        return IsMemberAccessNameSide(node)
+            || IsQualifiedNameRightSide(node)
+            || IsMemberBindingName(node)
+            || IsObjectOrCollectionInitializerMemberName(node);
+    }
+
+    private SyntaxNode TryRewriteUnownedAddedFieldRead(SimpleNameSyntax node, ISymbol symbol)
+    {
+        if (IsAssignmentLeft(node)
+            || IsIncrementOperand(node)
+            || TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        {
+            return null;
+        }
+
+        return TryRewriteAddedFieldRead(
+            symbol,
+            SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName),
+            node);
+    }
+
+    private static bool IsLocalOrAnonymousFunctionSymbol(ISymbol symbol)
+    {
+        return symbol is IMethodSymbol methodSymbol
+            && (methodSymbol.MethodKind == MethodKind.LocalFunction
+                || methodSymbol.MethodKind == MethodKind.AnonymousFunction);
+    }
+
+    private SyntaxNode TryRewriteNameAsAccessorRead(SimpleNameSyntax node, ISymbol symbol)
+    {
+        // nameof(...) and assignment left sides must keep a member-reference shape: qualify only,
+        // never rewrite to an accessor read (Func<> call results are not assignable).
+        bool suppressAccessorRead = TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node)
+            || (node.Parent is AssignmentExpressionSyntax assignmentLeft
+                && assignmentLeft.Left == node);
+        if (_accessorPlan == null || suppressAccessorRead)
+        {
+            return null;
+        }
+
+        return TryRewriteInaccessibleRead(
+            symbol,
+            SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName),
+            node);
+    }
+
+    private static SyntaxNode QualifyOwnedMemberAccess(
+        SimpleNameSyntax node,
+        bool isStatic,
+        INamedTypeSymbol containingType)
+    {
+        if (isStatic)
         {
             TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
-                ownership.containingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                containingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
             return SyntaxFactory.MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
                     typeSyntax,
@@ -7920,6 +8696,78 @@ internal static class CecilTypeNames
         {
             typeArguments.AddRange(namedType.TypeArguments);
         }
+    }
+}
+
+// What: syntax-key maps for one file's baseline-vs-current comparison during TransformFile.
+internal sealed class BaselineSnapshotState
+{
+    public bool HasBaseline { get; set; }
+
+    public bool BaselineDisabledByDuplicateKeys { get; set; }
+
+    public CompilationUnitSyntax SnapshotRoot { get; set; }
+
+    public Dictionary<string, MethodDeclarationSyntax> SnapshotMethodMap { get; set; }
+
+    public Dictionary<string, MethodDeclarationSyntax> PlainCurrentMethodMap { get; set; }
+
+    public Dictionary<string, PropertyDeclarationSyntax> SnapshotPropertyMap { get; set; }
+
+    public Dictionary<string, IndexerDeclarationSyntax> SnapshotIndexerMap { get; set; }
+
+    public Dictionary<string, ConstructorDeclarationSyntax> SnapshotConstructorMap { get; set; }
+
+    public Dictionary<string, MemberDeclarationSyntax> SnapshotOperatorMap { get; set; }
+
+    public Dictionary<string, EventDeclarationSyntax> SnapshotEventMap { get; set; }
+
+    public Dictionary<string, PropertyDeclarationSyntax> PlainCurrentPropertyMap { get; set; }
+
+    public Dictionary<string, IndexerDeclarationSyntax> PlainCurrentIndexerMap { get; set; }
+
+    public Dictionary<string, ConstructorDeclarationSyntax> PlainCurrentConstructorMap { get; set; }
+
+    public Dictionary<string, MemberDeclarationSyntax> PlainCurrentOperatorMap { get; set; }
+
+    public Dictionary<string, EventDeclarationSyntax> PlainCurrentEventMap { get; set; }
+
+    public (
+        Dictionary<string, PropertyDeclarationSyntax> SnapshotPropertyMap,
+        Dictionary<string, IndexerDeclarationSyntax> SnapshotIndexerMap,
+        Dictionary<string, PropertyDeclarationSyntax> PlainCurrentPropertyMap,
+        Dictionary<string, IndexerDeclarationSyntax> PlainCurrentIndexerMap)
+        GetAccessorBaselineMaps()
+    {
+        if (!HasBaseline)
+        {
+            return (null, null, null, null);
+        }
+
+        return (SnapshotPropertyMap, SnapshotIndexerMap, PlainCurrentPropertyMap, PlainCurrentIndexerMap);
+    }
+
+    public (
+        Dictionary<string, ConstructorDeclarationSyntax> SnapshotConstructorMap,
+        Dictionary<string, MemberDeclarationSyntax> SnapshotOperatorMap,
+        Dictionary<string, EventDeclarationSyntax> SnapshotEventMap,
+        Dictionary<string, ConstructorDeclarationSyntax> PlainCurrentConstructorMap,
+        Dictionary<string, MemberDeclarationSyntax> PlainCurrentOperatorMap,
+        Dictionary<string, EventDeclarationSyntax> PlainCurrentEventMap)
+        GetUnsupportedMemberBaselineMaps()
+    {
+        if (!HasBaseline)
+        {
+            return (null, null, null, null, null, null);
+        }
+
+        return (
+            SnapshotConstructorMap,
+            SnapshotOperatorMap,
+            SnapshotEventMap,
+            PlainCurrentConstructorMap,
+            PlainCurrentOperatorMap,
+            PlainCurrentEventMap);
     }
 }
 
