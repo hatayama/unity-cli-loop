@@ -179,6 +179,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public IReadOnlyList<PausePointCapturedVariable> CapturedVariables { get; set; } =
             Array.Empty<PausePointCapturedVariable>();
         public bool Truncated { get; set; }
+        public IReadOnlyList<PausePointCallerFrame> CallerFrames { get; set; } =
+            Array.Empty<PausePointCallerFrame>();
 
         internal static PausePointCapturedHistoryFrame FromSnapshot(
             UloopPausePointCapturedHistoryFrame snapshot)
@@ -196,7 +198,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CapturedVariables = snapshot.CapturedVariables
                     .Select(PausePointCapturedVariable.FromSnapshot)
                     .ToList(),
-                Truncated = snapshot.Truncated
+                Truncated = snapshot.Truncated,
+                CallerFrames = snapshot.CallerFrames
+                    .Select(PausePointCallerFrame.FromSnapshot)
+                    .ToList()
             };
         }
     }
@@ -232,6 +237,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnityObjectPath = snapshot.UnityObjectPath,
                 UnityObjectInstanceId = snapshot.UnityObjectInstanceId,
                 Truncated = snapshot.Truncated
+            };
+        }
+    }
+
+    /// <summary>
+    /// One managed caller stack frame included in a pause point capture history frame.
+    /// </summary>
+    public class PausePointCallerFrame
+    {
+        public string Method { get; set; } = string.Empty;
+
+        // Null when debug symbols are unavailable; omit to match Go omitempty.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string File { get; set; }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public int Line { get; set; }
+
+        internal static PausePointCallerFrame FromSnapshot(UloopPausePointCallerFrame snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return new PausePointCallerFrame
+            {
+                Method = snapshot.Method,
+                File = snapshot.File,
+                Line = snapshot.Line
             };
         }
     }

@@ -45,7 +45,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         FrameCount = 42,
                         HitAtUtc = "2026-06-03T00:00:01.0000000Z",
                         CapturedVariables = new List<PausePointStatusCapturedVariable>(),
-                        Truncated = false
+                        Truncated = false,
+                        CallerFrames = new List<PausePointStatusCallerFrame>
+                        {
+                            new()
+                            {
+                                Method = "Game.AI.Tick",
+                                File = "Assets/Scripts/AI.cs",
+                                Line = 44
+                            }
+                        }
                     }
                 },
                 HistoryDroppedCount = 0,
@@ -78,6 +87,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         UnityObjectPath = "MainScene:/Root/Enemy",
                         UnityObjectInstanceId = -1234,
                         Truncated = false
+                    }
+                },
+                CallerFrames = new List<PausePointStatusCallerFrame>
+                {
+                    new()
+                    {
+                        Method = "Game.AI.Tick",
+                        File = "Assets/Scripts/AI.cs",
+                        Line = 44
                     }
                 },
                 CapturedVariablesTruncated = true,
