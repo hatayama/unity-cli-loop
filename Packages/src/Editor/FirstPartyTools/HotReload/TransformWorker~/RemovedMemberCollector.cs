@@ -125,7 +125,7 @@ internal static class RemovedMemberCollector
                 continue;
             }
 
-            INamedTypeSymbol compiledType = TransformWorkerProgram.FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
+            INamedTypeSymbol compiledType = CompiledMemberMatcher.FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
             if (compiledType == null)
             {
                 continue;

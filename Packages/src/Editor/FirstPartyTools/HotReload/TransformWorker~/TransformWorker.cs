@@ -629,160 +629,6 @@ public static class TransformWorkerProgram
         }
     }
 
-    private static INamedTypeSymbol FindCompiledType(
-        INamedTypeSymbol sourceType,
-        IAssemblySymbol targetTypesAssemblySymbol)
-    {
-        if (sourceType == null || targetTypesAssemblySymbol == null)
-        {
-            return null;
-        }
-
-        return targetTypesAssemblySymbol.GetTypeByMetadataName(ConstDriftCollector.ToReflectionMetadataName(sourceType));
-    }
-
-    private static CompiledMethodMatch MatchCompiledOrdinaryMethod(
-        INamedTypeSymbol compiledType,
-        IMethodSymbol sourceMethod)
-    {
-        string[] sourceParameterTypeFullNames = sourceMethod.Parameters
-            .Select(CecilTypeNames.ToParameterTypeFullName)
-            .ToArray();
-        foreach (ISymbol member in compiledType.GetMembers(sourceMethod.Name))
-        {
-            // Why compare Arity: Caller(int) and Caller<T>(int) must not share a compiled match.
-            if (member is not IMethodSymbol compiledMethod
-                || compiledMethod.MethodKind != MethodKind.Ordinary
-                || compiledMethod.Arity != sourceMethod.Arity
-                || compiledMethod.IsStatic != sourceMethod.IsStatic
-                || compiledMethod.Parameters.Length != sourceParameterTypeFullNames.Length)
-            {
-                continue;
-            }
-
-            bool parametersMatch = true;
-            for (int index = 0; index < sourceParameterTypeFullNames.Length; index++)
-            {
-                if (CecilTypeNames.ToParameterTypeFullName(compiledMethod.Parameters[index])
-                    != sourceParameterTypeFullNames[index])
-                {
-                    parametersMatch = false;
-                    break;
-                }
-            }
-
-            if (!parametersMatch)
-            {
-                continue;
-            }
-
-            if (ReturnTypesMatch(compiledMethod, sourceMethod))
-            {
-                return CompiledMethodMatch.Matched;
-            }
-
-            return CompiledMethodMatch.ReturnTypeChanged;
-        }
-
-        return CompiledMethodMatch.NotFound;
-    }
-
-    private static bool ReturnTypesMatch(IMethodSymbol compiledMethod, IMethodSymbol sourceMethod)
-    {
-        if (CecilTypeNames.ToCecilFullName(compiledMethod.ReturnType)
-            != CecilTypeNames.ToCecilFullName(sourceMethod.ReturnType))
-        {
-            return false;
-        }
-
-        // Why compare byref flags separately: ToCecilFullName sees only ITypeSymbol, so
-        // int F() and ref int F() both become System.Int32. Missing this would transplant
-        // the new body onto the old non-byref signature.
-        return compiledMethod.ReturnsByRef == sourceMethod.ReturnsByRef
-            && compiledMethod.ReturnsByRefReadonly == sourceMethod.ReturnsByRefReadonly;
-    }
-
-    /// <summary>
-    /// What: matches a source field to a compiled member by name, then reports type,
-    /// static/const, or property/event kind drift so callers can skip instead of
-    /// rewriting storage.
-    /// </summary>
-    private static CompiledFieldMatch MatchCompiledField(
-        INamedTypeSymbol compiledType,
-        IFieldSymbol sourceField)
-    {
-        foreach (ISymbol member in compiledType.GetMembers(sourceField.Name))
-        {
-            if (member is not IFieldSymbol compiledField)
-            {
-                // Why: a compiled property or event still owns this name. Treating the
-                // source field as added would duplicate storage in the side table.
-                if (member.Kind == SymbolKind.Property || member.Kind == SymbolKind.Event)
-                {
-                    return CompiledFieldMatch.MemberKindChanged;
-                }
-
-                continue;
-            }
-
-            // Why return here: C# field names are unique in a type, so a modifier
-            // mismatch is the compiled field, not a miss that should become a store.
-            if (compiledField.IsStatic != sourceField.IsStatic
-                || compiledField.IsConst != sourceField.IsConst)
-            {
-                return CompiledFieldMatch.FieldModifiersChanged;
-            }
-
-            if (CecilTypeNames.ToCecilFullName(compiledField.Type)
-                == CecilTypeNames.ToCecilFullName(sourceField.Type))
-            {
-                return CompiledFieldMatch.Matched;
-            }
-
-            return CompiledFieldMatch.FieldTypeChanged;
-        }
-
-        return CompiledFieldMatch.NotFound;
-    }
-
-    private static bool IsCompiledFieldDeclarationChange(CompiledFieldMatch fieldMatch)
-    {
-        return fieldMatch == CompiledFieldMatch.FieldTypeChanged
-            || fieldMatch == CompiledFieldMatch.FieldModifiersChanged
-            || fieldMatch == CompiledFieldMatch.MemberKindChanged;
-    }
-
-    private static string TryFormatCompiledFieldDeclarationChangeReason(
-        CompiledFieldMatch fieldMatch,
-        string fieldName)
-    {
-        if (fieldMatch == CompiledFieldMatch.FieldTypeChanged)
-        {
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                AddedFieldSkipReasons.FieldTypeChanged,
-                fieldName);
-        }
-
-        if (fieldMatch == CompiledFieldMatch.FieldModifiersChanged)
-        {
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                AddedFieldSkipReasons.FieldModifiersChanged,
-                fieldName);
-        }
-
-        if (fieldMatch == CompiledFieldMatch.MemberKindChanged)
-        {
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                AddedFieldSkipReasons.MemberKindChanged,
-                fieldName);
-        }
-
-        return null;
-    }
-
     /// <summary>
     /// What: classifies source fields missing from the compiled type as added, and records
     /// store/const/unavailable bindings used by skip evaluation and body rewrite.
@@ -806,7 +652,7 @@ public static class TransformWorkerProgram
                     continue;
                 }
 
-                CompiledFieldMatch fieldMatch = MatchCompiledField(compiledType, fieldSymbol);
+                CompiledFieldMatch fieldMatch = CompiledMemberMatcher.MatchCompiledField(compiledType, fieldSymbol);
                 if (fieldMatch == CompiledFieldMatch.Matched)
                 {
                     continue;
@@ -844,7 +690,7 @@ public static class TransformWorkerProgram
         addedFieldCatalog.MarkClassifiedAdded(fieldKey);
         addedFieldCatalog.AddAddedSyntaxKey(syntaxKey);
 
-        if (!IsCompiledFieldDeclarationChange(fieldMatch)
+        if (!CompiledMemberMatcher.IsCompiledFieldDeclarationChange(fieldMatch)
             && FieldHasSerializationAttribute(fieldDeclaration))
         {
             declarationDriftWarnings.Add(
@@ -866,7 +712,7 @@ public static class TransformWorkerProgram
             Initializer = variable.Initializer != null ? variable.Initializer.Value : null
         };
 
-        string declarationChangeReason = TryFormatCompiledFieldDeclarationChangeReason(
+        string declarationChangeReason = CompiledMemberMatcher.TryFormatCompiledFieldDeclarationChangeReason(
             fieldMatch,
             fieldSymbol.Name);
         if (declarationChangeReason != null)
@@ -1043,7 +889,7 @@ public static class TransformWorkerProgram
             return false;
         }
 
-        INamedTypeSymbol compiledType = FindCompiledType(symbol.ContainingType, targetTypesAssemblySymbol);
+        INamedTypeSymbol compiledType = CompiledMemberMatcher.FindCompiledType(symbol.ContainingType, targetTypesAssemblySymbol);
         if (compiledType == null)
         {
             return true;
@@ -1054,12 +900,12 @@ public static class TransformWorkerProgram
             // Why map any non-Matched result to added: FieldTypeChanged,
             // FieldModifiersChanged, and MemberKindChanged still name compiled
             // storage, so treating them as a direct shim reference would bind it.
-            return MatchCompiledField(compiledType, fieldSymbol) != CompiledFieldMatch.Matched;
+            return CompiledMemberMatcher.MatchCompiledField(compiledType, fieldSymbol) != CompiledFieldMatch.Matched;
         }
 
         if (symbol is IMethodSymbol methodSymbol && methodSymbol.MethodKind == MethodKind.Ordinary)
         {
-            CompiledMethodMatch match = MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
+            CompiledMethodMatch match = CompiledMemberMatcher.MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
             // Why map ReturnTypeChanged to added: the compiled method still has the old
             // signature, so treating it as a direct shim reference would bind the old body.
             return match != CompiledMethodMatch.Matched;

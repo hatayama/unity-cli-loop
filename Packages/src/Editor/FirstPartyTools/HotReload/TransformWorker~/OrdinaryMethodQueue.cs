@@ -166,7 +166,7 @@ internal static class OrdinaryMethodQueue
             return (false, false);
         }
 
-        CompiledMethodMatch compiledMatch = TransformWorkerProgram.MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
+        CompiledMethodMatch compiledMatch = CompiledMemberMatcher.MatchCompiledOrdinaryMethod(compiledType, methodSymbol);
         return (
             compiledMatch != CompiledMethodMatch.Matched,
             compiledMatch == CompiledMethodMatch.ReturnTypeChanged);

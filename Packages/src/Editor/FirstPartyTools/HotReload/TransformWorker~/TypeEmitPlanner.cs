@@ -138,7 +138,7 @@ internal static class TypeEmitPlanner
         int shimTypeCounter,
         int globalShimMethodCounter)
     {
-        INamedTypeSymbol compiledType = TransformWorkerProgram.FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
+        INamedTypeSymbol compiledType = CompiledMemberMatcher.FindCompiledType(typeState.TypeSymbol, targetTypesAssemblySymbol);
         if (compiledType == null)
         {
             OrdinaryMethodQueue.SkipAllMethodsOnUncompiledType(typeState, semanticModel, skipped, addedMethodCatalog);
