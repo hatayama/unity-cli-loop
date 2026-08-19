@@ -146,10 +146,19 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 			wantErrContains: "BundleData required",
 		},
 		{
-			name: "non hex commit",
+			name: "wrong length commit",
 			opts: SubjectsOptions{
 				BundleData:        f.bundle,
 				ExpectedCommitSHA: "not-a-40-char-hex-commit-sha",
+				Identity:          f.identity,
+			},
+			wantErrContains: "ExpectedCommitSHA must be 40-char hex",
+		},
+		{
+			name: "non hex commit",
+			opts: SubjectsOptions{
+				BundleData:        f.bundle,
+				ExpectedCommitSHA: strings.Repeat("g", 40),
 				Identity:          f.identity,
 			},
 			wantErrContains: "ExpectedCommitSHA must be 40-char hex",
