@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEditor;
 
-using io.github.hatayama.UnityCliLoop.InternalAPIBridge;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -75,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (request.AnnotateRaycastGrid)
             {
-                ScreenshotResponse timedOutGrid = await CollectRaycastGridAnnotationsAsync(
+                ScreenshotResponse timedOutGrid = await ScreenshotRaycastGridCollector.CollectRaycastGridAnnotationsAsync(
                     request, annotationCapture, editorContext, correlationId, ct).ConfigureAwait(false);
                 if (timedOutGrid != null)
                 {
@@ -106,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // element coordinates stay consistent with the GameViewWidth/Height this response reports.
             UIElementAnnotator.ConvertToSimCoordinates(annotationCapture.AnnotatedElements, Mathf.RoundToInt(captureRenderingInfo.GameViewSize.y));
             List<UIElementInfo> responseAnnotatedElements =
-                CreateResponseAnnotatedElements(annotationCapture.AnnotatedElements, annotationCapture.PhysicsColliderElements);
+                ScreenshotCaptureResults.CreateResponseAnnotatedElements(annotationCapture.AnnotatedElements, annotationCapture.PhysicsColliderElements);
 
             if (texture == null)
             {
@@ -149,7 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Height = height,
                     ResolutionScale = request.ResolutionScale,
                 };
-                ApplyRenderingCoordinateMetadata(info, captureRenderingInfo.GameViewSize, captureRenderingInfo.ImageToInputOffsetY);
+                ScreenshotCaptureResults.ApplyRenderingCoordinateMetadata(info, captureRenderingInfo.GameViewSize, captureRenderingInfo.ImageToInputOffsetY);
                 info.AnnotatedElements = responseAnnotatedElements;
                 info.RaycastLayerSummaries = annotationCapture.RaycastLayerSummaries;
                 info.RaycastLayerNamesChecked = annotationCapture.RaycastLayerNamesChecked;
@@ -182,58 +181,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new ScreenshotResponse { Screenshots = screenshots };
         }
 
-        private sealed class RenderingAnnotationCapture
+        internal sealed class RenderingAnnotationCapture
         {
             public List<UIElementInfo> AnnotatedElements = new();
             public List<UIElementInfo> PhysicsColliderElements = new();
             public List<RaycastLayerSummaryInfo> RaycastLayerSummaries = new();
             public List<string> RaycastLayerNamesChecked = new();
             public GameRenderingImageInfo? RaycastGridRenderingInfo;
-        }
-
-        private async Task<ScreenshotResponse> CollectRaycastGridAnnotationsAsync(
-            ScreenshotSchema request,
-            RenderingAnnotationCapture annotationCapture,
-            SynchronizationContext editorContext,
-            string correlationId,
-            CancellationToken ct)
-        {
-            GameRenderingImageInfo renderingImageInfo;
-            bool gridInfoTimedOut;
-            (renderingImageInfo, gridInfoTimedOut) = await EditorWindowCaptureUtility.GetGameRenderingImageInfoAsync(
-                UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
-                ct).ConfigureAwait(false);
-            if (gridInfoTimedOut)
-            {
-                return CreateTimedOutResult(
-                    "raycast grid rendering info capture",
-                    correlationId,
-                    new List<ScreenshotInfo>());
-            }
-
-            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
-
-            annotationCapture.RaycastGridRenderingInfo = renderingImageInfo;
-            RaycastLayerMaskResolution raycastLayerMaskResolution = ScreenshotParameterValidator.ResolveRaycastLayerMask(request);
-            List<RaycastLayerDefinition> availableLayerDefinitions = ScreenshotParameterValidator.GetAvailableLayerDefinitions();
-            int effectiveLayerMask = raycastLayerMaskResolution.HasLayerNames
-                ? raycastLayerMaskResolution.Mask
-                : Physics.DefaultRaycastLayers;
-
-            annotationCapture.PhysicsColliderElements = RaycastGridAnnotator.CollectPhysicsColliderElements(
-                renderingImageInfo.RenderingImageSize,
-                renderingImageInfo.ImageToInputOffsetY,
-                effectiveLayerMask);
-            annotationCapture.RaycastLayerSummaries = RaycastGridAnnotator.CollectRaycastLayerSummaries(
-                renderingImageInfo.RenderingImageSize,
-                renderingImageInfo.ImageToInputOffsetY);
-
-            Camera mainCamera = Camera.main;
-            int checkedLayerMask = mainCamera != null ? effectiveLayerMask & mainCamera.cullingMask : 0;
-            annotationCapture.RaycastLayerNamesChecked = RaycastLayerMaskResolver.CreateLayerNamesFromMask(
-                checkedLayerMask,
-                availableLayerDefinitions);
-            return null;
         }
 
         private async Task<ScreenshotResponse> CaptureElementsOnlyRenderingAsync(
@@ -258,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ct).ConfigureAwait(false);
                 if (elementsOnlyInfoTimedOut)
                 {
-                    return CreateTimedOutResult(
+                    return ScreenshotCaptureResults.CreateTimedOutResult(
                         "elements-only rendering info capture",
                         correlationId,
                         new List<ScreenshotInfo>());
@@ -268,7 +222,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 elementsOnlyRenderingInfo = measuredRenderingInfo;
             }
 
-            return BuildElementsOnlyScreenshotInfo(
+            return ScreenshotCaptureResults.BuildElementsOnlyScreenshotInfo(
                 annotationCapture.AnnotatedElements,
                 annotationCapture.PhysicsColliderElements,
                 annotationCapture.RaycastLayerSummaries,
@@ -293,7 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // await outside try — nothing is hidden yet if cancellation throws here.
             await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
             (GameObject inputVisualizationOverlay, bool inputVisualizationWasActive) =
-                HideInputVisualizationOverlay();
+                ScreenshotOverlayControl.HideInputVisualizationOverlay();
 
             try
             {
@@ -313,7 +267,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     // Assign before any await so the inner finally still destroys the overlay
                     // if WaitForRenderedFrameAsync throws after CreateAnnotationOverlay.
-                    annotationOverlay = CreateAnnotationOverlayIfNeeded(request, annotationCapture);
+                    annotationOverlay = ScreenshotOverlayControl.CreateAnnotationOverlayIfNeeded(request, annotationCapture);
                     ScreenshotResponse overlayTimeout = await WaitAfterShowingAnnotationOverlayAsync(
                         annotationOverlay, editorContext, correlationId, ct).ConfigureAwait(false);
                     if (overlayTimeout != null)
@@ -333,7 +287,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ct).ConfigureAwait(false);
                     if (captureTimedOut)
                     {
-                        return (null, default, CreateTimedOutResult(
+                        return (null, default, ScreenshotCaptureResults.CreateTimedOutResult(
                             "Play Mode view rendering capture",
                             correlationId,
                             new List<ScreenshotInfo>()));
@@ -343,12 +297,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
                 finally
                 {
-                    DestroyAnnotationOverlay(annotationOverlay, editorContext);
+                    ScreenshotOverlayControl.DestroyAnnotationOverlay(annotationOverlay, editorContext);
                 }
             }
             finally
             {
-                RestoreInputVisualizationOverlay(inputVisualizationOverlay, inputVisualizationWasActive, editorContext);
+                ScreenshotOverlayControl.RestoreInputVisualizationOverlay(inputVisualizationOverlay, inputVisualizationWasActive, editorContext);
             }
 
             return (texture, captureRenderingInfo, null);
@@ -373,7 +327,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ct).ConfigureAwait(false);
             if (hideWaitResult == PlayModeViewRenderWaitResult.TicksStalled)
             {
-                return CreateTimedOutResult(
+                return ScreenshotCaptureResults.CreateTimedOutResult(
                     "input visualization overlay hide",
                     correlationId,
                     new List<ScreenshotInfo>());
@@ -389,24 +343,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
             return null;
-        }
-
-        private static GameObject CreateAnnotationOverlayIfNeeded(
-            ScreenshotSchema request,
-            RenderingAnnotationCapture annotationCapture)
-        {
-            if (!request.AnnotateElements && !request.AnnotateRaycastGrid)
-            {
-                return null;
-            }
-
-            List<UIElementInfo> overlayElements = new(annotationCapture.AnnotatedElements);
-            overlayElements.AddRange(annotationCapture.PhysicsColliderElements);
-            GameObject annotationOverlay = UIElementAnnotator.CreateAnnotationOverlay(
-                overlayElements,
-                request.ResolutionScale);
-            Canvas.ForceUpdateCanvases();
-            return annotationOverlay;
         }
 
         private async Task<ScreenshotResponse> WaitAfterShowingAnnotationOverlayAsync(
@@ -427,7 +363,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ct).ConfigureAwait(false);
             if (overlayWaitResult == PlayModeViewRenderWaitResult.TicksStalled)
             {
-                return CreateTimedOutResult(
+                return ScreenshotCaptureResults.CreateTimedOutResult(
                     "annotation overlay render",
                     correlationId,
                     new List<ScreenshotInfo>());
@@ -493,7 +429,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string outputDirectory = ScreenshotFileWriter.EnsureOutputDirectoryExists(request.OutputDirectory);
-            string safeWindowName = SanitizeFileName(captureWindowName);
+            string safeWindowName = ScreenshotCaptureResults.SanitizeFileName(captureWindowName);
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
             List<ScreenshotInfo> screenshots = new();
 
@@ -501,7 +437,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // await outside try — nothing is hidden yet if cancellation throws here.
             await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
             (GameObject inputVisualizationOverlay, bool inputVisualizationWasActive) =
-                HideInputVisualizationOverlay();
+                ScreenshotOverlayControl.HideInputVisualizationOverlay();
 
             try
             {
@@ -515,7 +451,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ct).ConfigureAwait(false);
                     if (!hideFramesReady)
                     {
-                        return CreateTimedOutResult(
+                        return ScreenshotCaptureResults.CreateTimedOutResult(
                             "input visualization overlay hide",
                             correlationId,
                             screenshots);
@@ -534,7 +470,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ct).ConfigureAwait(false);
                     if (timedOut)
                     {
-                        return CreateTimedOutResult("EditorWindow capture", correlationId, screenshots);
+                        return ScreenshotCaptureResults.CreateTimedOutResult("EditorWindow capture", correlationId, screenshots);
                     }
 
                     await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
@@ -568,7 +504,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             Width = width,
                             Height = height,
                         };
-                        ApplyWindowCoordinateMetadata(info);
+                        ScreenshotCaptureResults.ApplyWindowCoordinateMetadata(info);
                         screenshots.Add(info);
                     }
                     catch (Exception ex)
@@ -588,7 +524,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
-                RestoreInputVisualizationOverlay(inputVisualizationOverlay, inputVisualizationWasActive, editorContext);
+                ScreenshotOverlayControl.RestoreInputVisualizationOverlay(inputVisualizationOverlay, inputVisualizationWasActive, editorContext);
             }
 
             // why: only prune the package default Screenshots folder; never delete files in a user-specified OutputDirectory
@@ -605,179 +541,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             );
 
             return new ScreenshotResponse { Screenshots = screenshots };
-        }
-
-        // Hides the input-visualization canvas synchronously. Caller must already be on the editor
-        // main thread, and must run the 2-frame settle wait inside a try/finally that restores.
-        private static (GameObject Overlay, bool WasActive) HideInputVisualizationOverlay()
-        {
-            GameObject overlay = OverlayCanvasFactory.TryGetExisting();
-            bool wasActive = overlay != null && overlay.activeSelf;
-            if (!wasActive)
-            {
-                return (overlay, false);
-            }
-
-            overlay.SetActive(false);
-            // Also disable Canvas: Screen Space Overlay can keep compositing into the Play Mode
-            // view RT for a frame after the GameObject alone is deactivated.
-            Canvas overlayCanvas = overlay.GetComponent<Canvas>();
-            if (overlayCanvas != null)
-            {
-                overlayCanvas.enabled = false;
-            }
-
-            Canvas.ForceUpdateCanvases();
-            // Why clear only without eligible Game cameras: an eligible camera will overwrite the
-            // Play Mode RT on the next redraw, so clearing to black would destroy a valid frame.
-            // With no eligible camera (including offscreen-only setups), hide the overlay's leftover
-            // badge composite by clearing — same predicate as PlayModeViewRenderWaiter.
-            if (!PlayModeViewRenderWaiter.HasEligibleGameCamera())
-            {
-                GameViewBridge.ClearMainPlayModeViewRenderTexture();
-            }
-            GameViewBridge.RepaintMainPlayModeView();
-            return (overlay, true);
-        }
-
-        private static void RestoreInputVisualizationOverlay(
-            GameObject overlay,
-            bool wasActive,
-            SynchronizationContext editorContext)
-        {
-            if (!wasActive || overlay == null)
-            {
-                return;
-            }
-
-            if (SynchronizationContext.Current == editorContext)
-            {
-                RestoreInputVisualizationOverlayOnMainThread(overlay);
-                return;
-            }
-
-            // Why post: timeout/error paths may restore from a non-main thread.
-            editorContext.Post(_ => RestoreInputVisualizationOverlayOnMainThread(overlay), null);
-        }
-
-        private static void RestoreInputVisualizationOverlayOnMainThread(GameObject overlay)
-        {
-            // Why: Post may run after Play Mode teardown destroyed the DontDestroyOnLoad overlay.
-            if (overlay == null)
-            {
-                return;
-            }
-
-            Canvas overlayCanvas = overlay.GetComponent<Canvas>();
-            if (overlayCanvas != null)
-            {
-                overlayCanvas.enabled = true;
-            }
-
-            overlay.SetActive(true);
-        }
-
-        internal static ScreenshotResponse CreateTimedOutResult(
-            string waitName,
-            string correlationId,
-            List<ScreenshotInfo> screenshots)
-        {
-            string message =
-                $"Timed out after {UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS}ms while waiting for {waitName} frames.";
-            VibeLogger.LogWarning(
-                "screenshot_timeout",
-                message,
-                new { WaitName = waitName, TimeoutMilliseconds = UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS },
-                correlationId: correlationId
-            );
-
-            return new ScreenshotResponse
-            {
-                Success = false,
-                TimedOut = true,
-                Message = message,
-                NextActions = new[] { "Retry the screenshot after Unity finishes rendering the requested frame." },
-                Screenshots = screenshots,
-            };
-        }
-
-        private static void DestroyAnnotationOverlay(
-            GameObject annotationOverlay,
-            SynchronizationContext editorContext)
-        {
-            if (ReferenceEquals(annotationOverlay, null))
-            {
-                return;
-            }
-
-            if (SynchronizationContext.Current == editorContext)
-            {
-                UIElementAnnotator.DestroyAnnotationOverlay(annotationOverlay);
-                return;
-            }
-
-            // Why: timeout results may complete from the timer thread while Unity's main thread is stalled.
-            editorContext.Post(_ => UIElementAnnotator.DestroyAnnotationOverlay(annotationOverlay), null);
-        }
-
-        internal static void ApplyRenderingCoordinateMetadata(
-            ScreenshotInfo info,
-            Vector2 gameViewSize,
-            int imageToInputOffsetY = 0)
-        {
-            ScreenshotCoordinateMetadata.ApplyRendering(info, gameViewSize, imageToInputOffsetY);
-        }
-
-        internal static void ApplyWindowCoordinateMetadata(ScreenshotInfo info)
-        {
-            ScreenshotCoordinateMetadata.ApplyWindow(info);
-        }
-
-        internal static List<UIElementInfo> CreateResponseAnnotatedElements(
-            List<UIElementInfo> uiElements,
-            List<UIElementInfo> physicsColliderElements)
-        {
-            return ScreenshotResponseFactory.CreateResponseAnnotatedElements(uiElements, physicsColliderElements);
-        }
-
-        // why: ElementsOnly must use the capture-time measured GameViewSize, not the flow-start sample,
-        // so SimY and GameViewHeight stay consistent with the full rendering capture path.
-        internal static ScreenshotResponse BuildElementsOnlyScreenshotInfo(
-            List<UIElementInfo> annotatedElements,
-            List<UIElementInfo> physicsColliderElements,
-            List<RaycastLayerSummaryInfo> raycastLayerSummaries,
-            List<string> raycastLayerNamesChecked,
-            float resolutionScale,
-            GameRenderingImageInfo renderingInfo)
-        {
-            UIElementAnnotator.ConvertToSimCoordinates(
-                annotatedElements,
-                Mathf.RoundToInt(renderingInfo.GameViewSize.y));
-            List<UIElementInfo> elementsOnlyAnnotatedElements =
-                CreateResponseAnnotatedElements(annotatedElements, physicsColliderElements);
-            ScreenshotInfo elementsOnlyInfo = new() { ResolutionScale = resolutionScale };
-            ApplyRenderingCoordinateMetadata(
-                elementsOnlyInfo,
-                renderingInfo.GameViewSize,
-                renderingInfo.ImageToInputOffsetY);
-            elementsOnlyInfo.AnnotatedElements = elementsOnlyAnnotatedElements;
-            elementsOnlyInfo.RaycastLayerSummaries = raycastLayerSummaries;
-            elementsOnlyInfo.RaycastLayerNamesChecked = raycastLayerNamesChecked;
-            return new ScreenshotResponse
-            {
-                Screenshots = new List<ScreenshotInfo> { elementsOnlyInfo }
-            };
-        }
-
-        internal static string CreateInvalidRaycastLayerMaskMessage(
-            RaycastLayerMaskResolution raycastLayerMaskResolution)
-        {
-            return ScreenshotParameterValidator.CreateInvalidRaycastLayerMaskMessage(raycastLayerMaskResolution);
-        }
-
-        internal static string SanitizeFileName(string name)
-        {
-            return ScreenshotFileWriter.SanitizeFileName(name);
         }
     }
 }

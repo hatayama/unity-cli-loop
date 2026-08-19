@@ -108,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     ImagePath = "capture.png",
                 },
             };
-            ScreenshotResponse response = ScreenshotUseCase.CreateTimedOutResult(
+            ScreenshotResponse response = ScreenshotCaptureResults.CreateTimedOutResult(
                 "EditorWindow capture",
                 "test-correlation-id",
                 screenshots);

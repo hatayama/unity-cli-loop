@@ -281,20 +281,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ScreenshotUseCase_WhenDestroyingTimedOutAnnotationOverlay_UsesReferenceNullCheck()
         {
             // Tests that screenshot timeout cleanup does not call UnityEngine.Object null operators off-thread.
-            string source = ReadSourceFile("Packages/src/Editor/FirstPartyTools/Screenshot/ScreenshotUseCase.cs");
+            string useCaseSource = ReadSourceFile("Packages/src/Editor/FirstPartyTools/Screenshot/ScreenshotUseCase.cs");
+            string overlaySource = ReadSourceFile(
+                "Packages/src/Editor/FirstPartyTools/Screenshot/ScreenshotOverlayControl.cs");
 
-            Assert.That(source, Does.Contain("ReferenceEquals(annotationOverlay, null)"));
-            Assert.That(source, Does.Not.Contain("annotationOverlay == null"));
+            Assert.That(useCaseSource, Does.Contain("ReferenceEquals(annotationOverlay, null)"));
+            Assert.That(useCaseSource, Does.Not.Contain("annotationOverlay == null"));
+            Assert.That(overlaySource, Does.Contain("ReferenceEquals(annotationOverlay, null)"));
+            Assert.That(overlaySource, Does.Not.Contain("annotationOverlay == null"));
         }
 
         [Test]
         public void ScreenshotUseCase_WhenWindowCaptureTimesOut_PreservesPartialScreenshots()
         {
             // Tests that window capture timeout results keep screenshots already written to disk.
-            string source = ReadSourceFile("Packages/src/Editor/FirstPartyTools/Screenshot/ScreenshotUseCase.cs");
+            string useCaseSource = ReadSourceFile("Packages/src/Editor/FirstPartyTools/Screenshot/ScreenshotUseCase.cs");
+            string resultsSource = ReadSourceFile(
+                "Packages/src/Editor/FirstPartyTools/Screenshot/ScreenshotCaptureResults.cs");
 
-            Assert.That(source, Does.Contain("return CreateTimedOutResult(\"EditorWindow capture\", correlationId, screenshots);"));
-            Assert.That(source, Does.Contain("Screenshots = screenshots,"));
+            Assert.That(
+                useCaseSource,
+                Does.Contain(
+                    "return ScreenshotCaptureResults.CreateTimedOutResult(\"EditorWindow capture\", correlationId, screenshots);"));
+            Assert.That(resultsSource, Does.Contain("Screenshots = screenshots,"));
         }
 
         [Test]

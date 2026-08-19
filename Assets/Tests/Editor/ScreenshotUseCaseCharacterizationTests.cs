@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new ScreenshotInfo { ImagePath = "a.png" }
             };
 
-            ScreenshotResponse response = ScreenshotUseCase.CreateTimedOutResult(
+            ScreenshotResponse response = ScreenshotCaptureResults.CreateTimedOutResult(
                 "raycast grid rendering info capture",
                 "corr-1",
                 screenshots);
@@ -45,7 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             ScreenshotInfo info = new();
 
-            ScreenshotUseCase.ApplyRenderingCoordinateMetadata(info, new Vector2(1920f, 1080f), 24);
+            ScreenshotCaptureResults.ApplyRenderingCoordinateMetadata(info, new Vector2(1920f, 1080f), 24);
 
             Assert.That(info.ImageCoordinateSystem, Is.EqualTo(UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW));
             Assert.That(info.GameViewWidth, Is.EqualTo(1920f));
@@ -63,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             ScreenshotInfo info = new();
 
-            ScreenshotUseCase.ApplyWindowCoordinateMetadata(info);
+            ScreenshotCaptureResults.ApplyWindowCoordinateMetadata(info);
 
             Assert.That(info.ImageCoordinateSystem, Is.EqualTo(UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_WINDOW));
             Assert.That(info.ScreenshotToInputFormula, Is.EqualTo(UnityCliLoopConstants.SCREENSHOT_WINDOW_TO_INPUT_FORMULA_UNAVAILABLE));
@@ -86,7 +86,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new UIElementInfo { Label = "P2" }
             };
 
-            List<UIElementInfo> combined = ScreenshotUseCase.CreateResponseAnnotatedElements(
+            List<UIElementInfo> combined = ScreenshotCaptureResults.CreateResponseAnnotatedElements(
                 uiElements,
                 physicsElements);
 
@@ -109,7 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ValidLayerNames = new List<string> { "Default", "UI" }
             };
 
-            string message = ScreenshotUseCase.CreateInvalidRaycastLayerMaskMessage(resolution);
+            string message = ScreenshotCaptureResults.CreateInvalidRaycastLayerMaskMessage(resolution);
 
             Assert.That(
                 message,
@@ -129,7 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ValidLayerNames = new List<string>()
             };
 
-            string message = ScreenshotUseCase.CreateInvalidRaycastLayerMaskMessage(resolution);
+            string message = ScreenshotCaptureResults.CreateInvalidRaycastLayerMaskMessage(resolution);
 
             Assert.That(
                 message,
@@ -158,7 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             };
             GameRenderingImageInfo renderingInfo = new(new Vector2(800f, 600f), new Vector2(800f, 558f), 42);
 
-            ScreenshotResponse response = ScreenshotUseCase.BuildElementsOnlyScreenshotInfo(
+            ScreenshotResponse response = ScreenshotCaptureResults.BuildElementsOnlyScreenshotInfo(
                 annotatedElements,
                 new List<UIElementInfo>(),
                 new List<RaycastLayerSummaryInfo>(),
@@ -180,7 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             GameRenderingImageInfo renderingInfo = new(new Vector2(800f, 600f), new Vector2(800f, 558f), 42);
 
-            ScreenshotResponse response = ScreenshotUseCase.BuildElementsOnlyScreenshotInfo(
+            ScreenshotResponse response = ScreenshotCaptureResults.BuildElementsOnlyScreenshotInfo(
                 new List<UIElementInfo>(),
                 new List<UIElementInfo>(),
                 new List<RaycastLayerSummaryInfo>(),
@@ -201,7 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             GameRenderingImageInfo renderingInfo = new(new Vector2(800f, 600f), new Vector2(800f, 558f), 42);
 
-            ScreenshotResponse response = ScreenshotUseCase.BuildElementsOnlyScreenshotInfo(
+            ScreenshotResponse response = ScreenshotCaptureResults.BuildElementsOnlyScreenshotInfo(
                 new List<UIElementInfo>(),
                 new List<UIElementInfo>(),
                 new List<RaycastLayerSummaryInfo>(),
@@ -220,7 +220,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void SanitizeFileName_WhenNameContainsInvalidChars_ShouldReplaceWithUnderscore()
         {
             // why: on this Unity/macOS runtime Path.GetInvalidFileNameChars is only NUL and '/', so ':' stays
-            string sanitized = ScreenshotUseCase.SanitizeFileName("Game/View:Main");
+            string sanitized = ScreenshotCaptureResults.SanitizeFileName("Game/View:Main");
 
             Assert.That(sanitized, Is.EqualTo("Game_View:Main"));
         }
