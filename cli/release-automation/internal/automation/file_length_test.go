@@ -58,12 +58,25 @@ func TestCountSLOCTreatsCRLFAndLFAsTheSameCount(t *testing.T) {
 }
 
 func TestCountSLOCIgnoresUTF8BOM(t *testing.T) {
-	// Verifies a UTF-8 BOM does not add a source line or hide the first statement.
-	withoutBOM := "int x = 1;\n"
-	withBOM := append([]byte{0xEF, 0xBB, 0xBF}, []byte(withoutBOM)...)
-	if CountSLOC(withBOM, LanguageCSharp) != CountSLOC([]byte(withoutBOM), LanguageCSharp) {
-		t.Fatal("expected BOM and BOM-less sources to count the same SLOC")
+	// Verifies a UTF-8 BOM on a comment-only line is not itself SLOC.
+	// why not pair BOM with a code line: unicode.IsSpace(U+FEFF) is false, so a
+	// missing skipBOM would still pass if that line is counted for other code.
+	withBOM := append([]byte{0xEF, 0xBB, 0xBF}, []byte("// comment only\n")...)
+	if CountSLOC(withBOM, LanguageCSharp) != 0 {
+		t.Fatal("expected BOM followed by a comment-only line to count 0 SLOC")
 	}
+}
+
+func TestCountSLOCDoesNotTreatGoRuneLiteralQuoteAsStringOpener(t *testing.T) {
+	// Verifies a Go rune containing a double-quote does not swallow a later comment line.
+	source := "q := '\\\"'\n// comment only\nx := 1\n"
+	assertSLOC(t, source, LanguageGo, 2)
+}
+
+func TestCountSLOCCountsGoRuneLiteralWithEscapedApostrophe(t *testing.T) {
+	// Verifies an escaped apostrophe inside a Go rune literal still closes correctly.
+	source := "q := '\\''\n"
+	assertSLOC(t, source, LanguageGo, 1)
 }
 
 func TestCountSLOCExcludesBlankAndCommentOnlyLines(t *testing.T) {

@@ -158,6 +158,15 @@ func (s *slocScanner) tryGoString() bool {
 		s.scanGoRawString()
 		return true
 	}
+	// why: a rune such as '\"' would otherwise leave the apostrophe as code and
+	// then treat the inner double-quote as an interpreted-string opener, so later
+	// comment-only lines can be swallowed as string content.
+	if current == '\'' {
+		s.markCode()
+		s.nextRune()
+		s.scanEscapedQuotedString('\'')
+		return true
+	}
 	return false
 }
 
