@@ -96,6 +96,27 @@ func runReleasePleasePRChecksWithDeps(ctx context.Context, stdout io.Writer, std
 		return 0
 	}
 
+	if code := prepareReleasePRForChecks(ctx, stdout, stderr, config, releasePR, deps); code != 0 {
+		return code
+	}
+	checkedHeadSHA, code := dispatchAndWatchReleasePRCheckWorkflows(ctx, stdout, stderr, config, releasePR, deps)
+	if code != 0 {
+		return code
+	}
+	return finalizeReleasePRChecks(ctx, stdout, stderr, config, releasePR, checkedHeadSHA, deps)
+}
+
+// prepareReleasePRForChecks clarifies the release PR body and marks it draft
+// before workflows run. Why a helper: find/dispatch/finalize are separate
+// stages, and leaving draft setup inline kept the orchestrator over cyclop.
+func prepareReleasePRForChecks(
+	ctx context.Context,
+	stdout io.Writer,
+	stderr io.Writer,
+	config releasePRCheckConfig,
+	releasePR releasePullRequest,
+	deps releasePRCheckDeps,
+) int {
 	bodyChanged, err := clarifyReleasePRCheckBody(ctx, config, releasePR, deps)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
@@ -111,14 +132,28 @@ func runReleasePleasePRChecksWithDeps(ctx context.Context, stdout io.Writer, std
 		return 1
 	}
 	writeReleasePRCheckLine(stdout, fmt.Sprintf("Marked release PR #%d as draft while checks run.", releasePR.Number))
+	return 0
+}
 
+// dispatchAndWatchReleasePRCheckWorkflows dispatches each required workflow
+// and waits for the same head SHA. Why reject mixed heads: a release-please
+// force-push between dispatches would otherwise let a mixed set of green runs
+// mark the PR ready.
+func dispatchAndWatchReleasePRCheckWorkflows(
+	ctx context.Context,
+	stdout io.Writer,
+	stderr io.Writer,
+	config releasePRCheckConfig,
+	releasePR releasePullRequest,
+	deps releasePRCheckDeps,
+) (string, int) {
 	dispatchedAt := deps.now().UTC().Truncate(time.Second)
 	for _, workflow := range config.workflows {
 		writeReleasePRCheckLine(stdout, fmt.Sprintf("Dispatching %s for release PR #%d: %s", workflow, releasePR.Number, releasePR.URL))
-		err = dispatchReleasePRCheckWorkflow(ctx, config, workflow, releasePR, deps)
+		err := dispatchReleasePRCheckWorkflow(ctx, config, workflow, releasePR, deps)
 		if err != nil {
 			writeReleasePRCheckLine(stderr, err)
-			return 1
+			return "", 1
 		}
 	}
 
@@ -128,19 +163,16 @@ func runReleasePleasePRChecksWithDeps(ctx context.Context, stdout io.Writer, std
 		run, err := findDispatchedReleasePRCheckRun(ctx, config, workflow, releasePR, dispatchedAt, deps)
 		if err != nil {
 			writeReleasePRCheckLine(stderr, err)
-			return 1
+			return "", 1
 		}
 
 		writeReleasePRCheckLine(stdout, fmt.Sprintf("Watching %s run %d for release PR #%d.", workflow, run.DatabaseID, releasePR.Number))
 		err = watchReleasePRCheckRun(ctx, config, run.DatabaseID, deps)
 		if err != nil {
 			writeReleasePRCheckLine(stderr, err)
-			return 1
+			return "", 1
 		}
 
-		// A release-please force-push between two dispatches would let each
-		// workflow validate a different commit, so a mixed set of green runs
-		// must not mark the PR ready.
 		if checkedHeadSHA == "" {
 			checkedHeadSHA = run.HeadSHA
 			checkedHeadWorkflow = workflow
@@ -150,11 +182,22 @@ func runReleasePleasePRChecksWithDeps(ctx context.Context, stdout io.Writer, std
 			writeReleasePRCheckLine(stderr, fmt.Errorf(
 				"release PR #%d checks ran on different heads: %s checked %s but %s checked %s",
 				releasePR.Number, checkedHeadWorkflow, checkedHeadSHA, workflow, run.HeadSHA))
-			return 1
+			return "", 1
 		}
 	}
+	return checkedHeadSHA, 0
+}
 
-	err = verifyReleasePRCheckHeadMatchesRun(ctx, config, releasePR, checkedHeadSHA, deps)
+func finalizeReleasePRChecks(
+	ctx context.Context,
+	stdout io.Writer,
+	stderr io.Writer,
+	config releasePRCheckConfig,
+	releasePR releasePullRequest,
+	checkedHeadSHA string,
+	deps releasePRCheckDeps,
+) int {
+	err := verifyReleasePRCheckHeadMatchesRun(ctx, config, releasePR, checkedHeadSHA, deps)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)
 		return 1

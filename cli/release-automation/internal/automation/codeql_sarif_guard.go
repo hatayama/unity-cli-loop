@@ -122,38 +122,77 @@ func validateCodeQLSARIF(data []byte) (CodeQLSARIFValidationResult, error) {
 	return validateCodeQLSARIFQuality(run)
 }
 
+type codeQLQualityScan struct {
+	hasBuildlessCompletion bool
+	extractedFileCount     int
+	callTargets            int
+	knownTypes             int
+}
+
 func validateCodeQLSARIFQuality(run codeQLSARIFRun) (CodeQLSARIFValidationResult, error) {
-	invocation := run.Invocations[0]
-	hasBuildlessCompletion := false
-	extractedFileCount := 0
+	scan, err := scanCodeQLQualityNotifications(run.Invocations[0])
+	if err != nil {
+		return CodeQLSARIFValidationResult{}, err
+	}
+	if err := scan.rejectIfIncomplete(); err != nil {
+		return CodeQLSARIFValidationResult{}, err
+	}
+	if err := scan.rejectIfBelowApprovedFloor(); err != nil {
+		return CodeQLSARIFValidationResult{}, err
+	}
+	if err := rejectCodeQLLinesOfCodeBelowFloor(run); err != nil {
+		return CodeQLSARIFValidationResult{}, err
+	}
+	return CodeQLSARIFValidationResult{Warnings: scan.baselineDriftWarnings()}, nil
+}
+
+// scanCodeQLQualityNotifications reads the invocation diagnostics that prove
+// build-mode none completed and that extractor quality is present. Why a
+// helper: those three notification kinds are one scan, and leaving the loop
+// inline kept validateCodeQLSARIFQuality over the cyclop limit.
+func scanCodeQLQualityNotifications(invocation codeQLSARIFInvocation) (codeQLQualityScan, error) {
 	// CodeQL 2.26.0 emits the database-quality diagnostic only below its own 85% thresholds. The strict semantic-version check above freezes that behavior, so absence means both metrics are at least 85%, not that evidence was silently lost.
-	callTargets := 100
-	knownTypes := 100
+	scan := codeQLQualityScan{
+		callTargets: 100,
+		knownTypes:  100,
+	}
 	for _, notification := range invocation.ToolExecutionNotifications {
 		if notification.Descriptor.ID == codeQLBuildlessCompletionDiagnosticID && notification.Message.Text == codeQLBuildlessCompletionMessage {
-			hasBuildlessCompletion = true
+			scan.hasBuildlessCompletion = true
 		}
 		if notification.Descriptor.ID == codeQLExtractedFilesDiagnosticID {
-			extractedFileCount++
+			scan.extractedFileCount++
 		}
 		if notification.Descriptor.ID == codeQLQualityDiagnosticID {
 			parsedCallTargets, parsedKnownTypes, err := parseCodeQLQualityMetrics(notification.Message.Text)
 			if err != nil {
-				return CodeQLSARIFValidationResult{}, err
+				return codeQLQualityScan{}, err
 			}
-			callTargets = parsedCallTargets
-			knownTypes = parsedKnownTypes
+			scan.callTargets = parsedCallTargets
+			scan.knownTypes = parsedKnownTypes
 		}
 	}
-	if !hasBuildlessCompletion {
-		return CodeQLSARIFValidationResult{}, fmt.Errorf("CodeQL SARIF is missing build-mode none completion diagnostic")
+	return scan, nil
+}
+
+func (scan codeQLQualityScan) rejectIfIncomplete() error {
+	if !scan.hasBuildlessCompletion {
+		return fmt.Errorf("CodeQL SARIF is missing build-mode none completion diagnostic")
 	}
-	if extractedFileCount == 0 {
-		return CodeQLSARIFValidationResult{}, fmt.Errorf("CodeQL SARIF has no successfully extracted C# files")
+	if scan.extractedFileCount == 0 {
+		return fmt.Errorf("CodeQL SARIF has no successfully extracted C# files")
 	}
-	if callTargets < minimumCodeQLCallTargetPercentage || knownTypes < minimumCodeQLKnownTypePercentage {
-		return CodeQLSARIFValidationResult{}, fmt.Errorf("CodeQL database quality is below the approved floor: call targets %d%%, known types %d%%", callTargets, knownTypes)
+	return nil
+}
+
+func (scan codeQLQualityScan) rejectIfBelowApprovedFloor() error {
+	if scan.callTargets < minimumCodeQLCallTargetPercentage || scan.knownTypes < minimumCodeQLKnownTypePercentage {
+		return fmt.Errorf("CodeQL database quality is below the approved floor: call targets %d%%, known types %d%%", scan.callTargets, scan.knownTypes)
 	}
+	return nil
+}
+
+func rejectCodeQLLinesOfCodeBelowFloor(run codeQLSARIFRun) error {
 	linesOfCode := float64(0)
 	for _, metric := range run.Properties.MetricResults {
 		if metric.RuleID == codeQLLinesOfCodeMetricID {
@@ -161,13 +200,17 @@ func validateCodeQLSARIFQuality(run codeQLSARIFRun) (CodeQLSARIFValidationResult
 		}
 	}
 	if linesOfCode < float64(minimumCodeQLLinesOfCode) {
-		return CodeQLSARIFValidationResult{}, fmt.Errorf("CodeQL extracted lines of code %.0f is below the approved floor %d", linesOfCode, minimumCodeQLLinesOfCode)
+		return fmt.Errorf("CodeQL extracted lines of code %.0f is below the approved floor %d", linesOfCode, minimumCodeQLLinesOfCode)
 	}
+	return nil
+}
+
+func (scan codeQLQualityScan) baselineDriftWarnings() []string {
 	warnings := []string{}
-	if callTargets < baselineCodeQLCallTargetPercentage || knownTypes < baselineCodeQLKnownTypePercentage {
-		warnings = append(warnings, fmt.Sprintf("CodeQL database quality is below the 2026-07-15 PoC baseline: call targets %d%% (baseline %d%%), known types %d%% (baseline %d%%)", callTargets, baselineCodeQLCallTargetPercentage, knownTypes, baselineCodeQLKnownTypePercentage))
+	if scan.callTargets < baselineCodeQLCallTargetPercentage || scan.knownTypes < baselineCodeQLKnownTypePercentage {
+		warnings = append(warnings, fmt.Sprintf("CodeQL database quality is below the 2026-07-15 PoC baseline: call targets %d%% (baseline %d%%), known types %d%% (baseline %d%%)", scan.callTargets, baselineCodeQLCallTargetPercentage, scan.knownTypes, baselineCodeQLKnownTypePercentage))
 	}
-	return CodeQLSARIFValidationResult{Warnings: warnings}, nil
+	return warnings
 }
 
 func parseCodeQLQualityMetrics(message string) (int, int, error) {

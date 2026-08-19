@@ -172,6 +172,20 @@ func pausePointUnarmedAtWaitStartSuffix(response pausePointStatusResponse, query
 	)
 }
 
+// pausePointWaitLoopState is the mutable snapshot the await poll loop updates
+// across ticks. Why a type: the timeout and poll-success paths both rewrite
+// the same fields, and passing them as a bag of locals kept waitForPausePointStatus
+// above the cyclop limit.
+type pausePointWaitLoopState struct {
+	lastResponse     pausePointStatusResponse
+	lastErr          error
+	triggerResult    *pausePointTriggerResult
+	hasResponse      bool
+	baselineSequence int
+	hasBaseline      bool
+	baselineDecided  bool
+}
+
 func waitForPausePointStatus(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -184,80 +198,109 @@ func waitForPausePointStatus(
 	waitContext, cancel := context.WithTimeout(ctx, options.timeout)
 	defer cancel()
 
-	lastResponse := pausePointStatusResponse{Id: options.id}
-	var lastErr error
-	var triggerResult *pausePointTriggerResult
-	hasResponse := false
+	state := pausePointWaitLoopState{
+		lastResponse:     pausePointStatusResponse{Id: options.id},
+		baselineSequence: baselineSequence,
+		hasBaseline:      hasBaseline,
+		baselineDecided:  baselineDecided,
+	}
 	triggerDone := triggerHandle.doneChannel()
 	ticker := time.NewTicker(pausePointStatusPoll)
 	defer ticker.Stop()
 	for {
 		response, err := queryPausePointStatus(waitContext, connection, options.id)
-		if err == nil {
-			lastResponse = response
-			hasResponse = true
-			// Why only once: a later Enabled→Hit transition is the await success itself
-			// (enable --await). Re-baselining on that first mid-wait Hit would demand a second
-			// sequence bump and never return.
-			if !baselineDecided {
-				baselineSequence, hasBaseline, baselineDecided = decidePausePointNewHitBaseline(
-					response, options.markerJustEnabled)
-			}
-			state := pausePointWaitStateForPolledStatus(response, baselineSequence, hasBaseline)
-			if state != "" {
-				return response, state, triggerResult, hasBaseline, nil
-			}
-		} else {
-			// Why abort: every poll dials again, so a connect the operating system refused
-			// permanently keeps failing for the whole --timeout and the refusal is reported only
-			// after that wait is spent.
-			if clierrors.IsPermanentConnectError(err) {
-				return lastResponse, "", triggerResult, hasBaseline, err
-			}
-			lastErr = err
+		waitState, done, pollErr := applyPausePointWaitPoll(&state, response, err, options.markerJustEnabled)
+		if done {
+			return state.lastResponse, waitState, state.triggerResult, state.hasBaseline, pollErr
 		}
 
 		select {
 		case <-waitContext.Done():
-			if ctx.Err() != nil {
-				return lastResponse, "", triggerResult, hasBaseline, ctx.Err()
-			}
-			finalResponse, finalState, hasFinalResponse, finalErr := queryPausePointStatusAtTimeout(
-				ctx, connection, options.id, baselineSequence, hasBaseline)
-			if hasFinalResponse {
-				lastResponse = finalResponse
-				hasResponse = true
-				if !baselineDecided {
-					baselineSequence, hasBaseline, _ = decidePausePointNewHitBaseline(
-						finalResponse, options.markerJustEnabled)
-					finalState = pausePointWaitStateForPolledStatus(finalResponse, baselineSequence, hasBaseline)
-				}
-				if finalState != "" {
-					return finalResponse, finalState, triggerResult, hasBaseline, nil
-				}
-			} else if lastErr == nil {
-				lastErr = finalErr
-			}
-			if hasResponse {
-				return lastResponse, pausePointWaitStateTimeout, triggerResult, hasBaseline, nil
-			}
-			if lastErr != nil {
-				return lastResponse, "", triggerResult, hasBaseline, fmt.Errorf("timed out waiting for pause point status: %w", lastErr)
-			}
-			return lastResponse, pausePointWaitStateTimeout, triggerResult, hasBaseline, nil
+			return finishPausePointWaitOnTimeout(ctx, connection, options, &state)
 		case result := <-triggerDone:
 			// Nil the channel so this case can never fire twice: the handle's channel holds a single
 			// buffered value, and the caller reuses the result received here instead of joining.
-			triggerResult = result
+			state.triggerResult = result
 			triggerDone = nil
 			if pausePointTriggerRejectedBeforeExecution(result) {
 				abortResponse, abortState := abortPausePointWaitAfterTriggerRejection(
-					ctx, connection, options.id, lastResponse, baselineSequence, hasBaseline)
-				return abortResponse, abortState, triggerResult, hasBaseline, nil
+					ctx, connection, options.id, state.lastResponse, state.baselineSequence, state.hasBaseline)
+				return abortResponse, abortState, state.triggerResult, state.hasBaseline, nil
 			}
 		case <-ticker.C:
 		}
 	}
+}
+
+// applyPausePointWaitPoll records one status query. Why abort on a permanent
+// connect error: every poll dials again, so a refused connect would otherwise
+// burn the whole --timeout before the refusal is reported.
+func applyPausePointWaitPoll(
+	state *pausePointWaitLoopState,
+	response pausePointStatusResponse,
+	err error,
+	markerJustEnabled bool,
+) (pausePointWaitState, bool, error) {
+	if err != nil {
+		if clierrors.IsPermanentConnectError(err) {
+			return "", true, err
+		}
+		state.lastErr = err
+		return "", false, nil
+	}
+
+	state.lastResponse = response
+	state.hasResponse = true
+	// Why only once: a later Enabled→Hit transition is the await success itself
+	// (enable --await). Re-baselining on that first mid-wait Hit would demand a second
+	// sequence bump and never return.
+	if !state.baselineDecided {
+		state.baselineSequence, state.hasBaseline, state.baselineDecided = decidePausePointNewHitBaseline(
+			response, markerJustEnabled)
+	}
+	waitState := pausePointWaitStateForPolledStatus(response, state.baselineSequence, state.hasBaseline)
+	if waitState != "" {
+		return waitState, true, nil
+	}
+	return "", false, nil
+}
+
+// finishPausePointWaitOnTimeout takes one last status probe after the wait
+// deadline. Why a helper: the deadline path has its own baseline and error
+// fallbacks, and leaving them inline kept waitForPausePointStatus over the
+// cyclop limit.
+func finishPausePointWaitOnTimeout(
+	ctx context.Context,
+	connection unityipc.Connection,
+	options waitForPausePointOptions,
+	state *pausePointWaitLoopState,
+) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, bool, error) {
+	if ctx.Err() != nil {
+		return state.lastResponse, "", state.triggerResult, state.hasBaseline, ctx.Err()
+	}
+	finalResponse, finalState, hasFinalResponse, finalErr := queryPausePointStatusAtTimeout(
+		ctx, connection, options.id, state.baselineSequence, state.hasBaseline)
+	if hasFinalResponse {
+		state.lastResponse = finalResponse
+		state.hasResponse = true
+		if !state.baselineDecided {
+			state.baselineSequence, state.hasBaseline, _ = decidePausePointNewHitBaseline(
+				finalResponse, options.markerJustEnabled)
+			finalState = pausePointWaitStateForPolledStatus(finalResponse, state.baselineSequence, state.hasBaseline)
+		}
+		if finalState != "" {
+			return finalResponse, finalState, state.triggerResult, state.hasBaseline, nil
+		}
+	} else if state.lastErr == nil {
+		state.lastErr = finalErr
+	}
+	if state.hasResponse {
+		return state.lastResponse, pausePointWaitStateTimeout, state.triggerResult, state.hasBaseline, nil
+	}
+	if state.lastErr != nil {
+		return state.lastResponse, "", state.triggerResult, state.hasBaseline, fmt.Errorf("timed out waiting for pause point status: %w", state.lastErr)
+	}
+	return state.lastResponse, pausePointWaitStateTimeout, state.triggerResult, state.hasBaseline, nil
 }
 
 // abortPausePointWaitAfterTriggerRejection takes one last status reading before abandoning the

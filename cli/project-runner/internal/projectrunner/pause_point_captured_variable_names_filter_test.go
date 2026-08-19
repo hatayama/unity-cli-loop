@@ -27,77 +27,100 @@ func capturedVariableNamesFilterResponse() pausePointStatusResponse {
 // single-name selection, multi-name selection, a name with no match, and that it composes with
 // the --captured-variables mode (filter narrows first, then mode strips values).
 func TestFilterPausePointCapturedVariablesByName(t *testing.T) {
-	baseResponse := capturedVariableNamesFilterResponse
-
 	t.Run("single name keeps only the matching variable", func(t *testing.T) {
-		result := filterPausePointCapturedVariablesByName(baseResponse(), []string{"velocity"})
-		if len(result.CapturedVariables) != 1 || result.CapturedVariables[0].Name != "velocity" {
-			t.Fatalf("expected only velocity to survive: %#v", result.CapturedVariables)
-		}
-		if len(result.CapturedVariableHistory[0].CapturedVariables) != 1 {
-			t.Fatalf("expected history frame filtered to 1 entry: %#v", result.CapturedVariableHistory)
-		}
-		if result.CapturedVariableNameFilterNoMatch {
-			t.Fatal("expected CapturedVariableNameFilterNoMatch to be false when a match exists")
-		}
+		assertFilterKeepsSingleCapturedVariableName(t)
 	})
-
 	t.Run("multiple names keep all matching variables in order", func(t *testing.T) {
-		result := filterPausePointCapturedVariablesByName(baseResponse(), []string{"velocity", "this"})
-		if len(result.CapturedVariables) != 2 {
-			t.Fatalf("expected velocity and this to survive: %#v", result.CapturedVariables)
-		}
-		if result.CapturedVariables[0].Name != "velocity" || result.CapturedVariables[1].Name != "this" {
-			t.Fatalf("expected original order preserved: %#v", result.CapturedVariables)
-		}
+		assertFilterKeepsCapturedVariableNamesInOrder(t)
 	})
-
 	t.Run("no matching name empties the arrays and sets the no-match flag", func(t *testing.T) {
-		result := filterPausePointCapturedVariablesByName(baseResponse(), []string{"doesNotExist"})
-		if len(result.CapturedVariables) != 0 {
-			t.Fatalf("expected no captured variables to survive: %#v", result.CapturedVariables)
-		}
-		if len(result.CapturedVariableHistory[0].CapturedVariables) != 0 {
-			t.Fatalf("expected history frame emptied: %#v", result.CapturedVariableHistory)
-		}
-		if !result.CapturedVariableNameFilterNoMatch {
-			t.Fatal("expected CapturedVariableNameFilterNoMatch to be true when nothing matches")
-		}
-		const wantWarning = "No captured variable matched the requested names; the hit captured other variables. Check CapturedVariableNamesNotFound for the names that were absent."
-		if result.Warning != wantWarning {
-			t.Fatalf("expected human-readable Warning for no-match filter: %q", result.Warning)
-		}
+		assertFilterReportsNoMatchingCapturedVariableName(t)
 	})
-
 	t.Run("empty pre-filter snapshot keeps no-match flag but skips Warning", func(t *testing.T) {
-		// Verifies an unhit status (no variables yet) does not blame the requested names.
-		result := filterPausePointCapturedVariablesByName(pausePointStatusResponse{}, []string{"velocity"})
-		if !result.CapturedVariableNameFilterNoMatch {
-			t.Fatal("expected CapturedVariableNameFilterNoMatch to stay true on an empty snapshot")
-		}
-		if result.Warning != "" {
-			t.Fatalf("expected no Warning when the snapshot had no variables before filtering: %q", result.Warning)
-		}
+		assertFilterSkipsWarningOnEmptyPreFilterSnapshot(t)
 	})
-
 	t.Run("composes with captured-variables names mode: filter first, then strip values", func(t *testing.T) {
-		filtered := filterPausePointCapturedVariablesByName(baseResponse(), []string{"velocity"})
-		result := applyPausePointCapturedVariablesMode(filtered, pausePointCapturedVariablesModeNames)
-		if len(result.CapturedVariables) != 1 || result.CapturedVariables[0].Name != "velocity" {
-			t.Fatalf("expected only velocity to survive the filter: %#v", result.CapturedVariables)
-		}
-		if result.CapturedVariables[0].Value != nil {
-			t.Fatalf("expected Value stripped by names mode: %#v", result.CapturedVariables[0])
-		}
+		assertFilterComposesWithCapturedVariablesNamesMode(t)
 	})
-
 	t.Run("empty names list leaves the response unchanged", func(t *testing.T) {
-		original := baseResponse()
-		result := filterPausePointCapturedVariablesByName(original, nil)
-		if len(result.CapturedVariables) != len(original.CapturedVariables) {
-			t.Fatalf("expected response unchanged with no names filter: %#v", result.CapturedVariables)
-		}
+		assertFilterLeavesResponseUnchangedWhenNamesEmpty(t)
 	})
+}
+
+func assertFilterKeepsSingleCapturedVariableName(t *testing.T) {
+	t.Helper()
+	result := filterPausePointCapturedVariablesByName(capturedVariableNamesFilterResponse(), []string{"velocity"})
+	if len(result.CapturedVariables) != 1 || result.CapturedVariables[0].Name != "velocity" {
+		t.Fatalf("expected only velocity to survive: %#v", result.CapturedVariables)
+	}
+	if len(result.CapturedVariableHistory[0].CapturedVariables) != 1 {
+		t.Fatalf("expected history frame filtered to 1 entry: %#v", result.CapturedVariableHistory)
+	}
+	if result.CapturedVariableNameFilterNoMatch {
+		t.Fatal("expected CapturedVariableNameFilterNoMatch to be false when a match exists")
+	}
+}
+
+func assertFilterKeepsCapturedVariableNamesInOrder(t *testing.T) {
+	t.Helper()
+	result := filterPausePointCapturedVariablesByName(capturedVariableNamesFilterResponse(), []string{"velocity", "this"})
+	if len(result.CapturedVariables) != 2 {
+		t.Fatalf("expected velocity and this to survive: %#v", result.CapturedVariables)
+	}
+	if result.CapturedVariables[0].Name != "velocity" || result.CapturedVariables[1].Name != "this" {
+		t.Fatalf("expected original order preserved: %#v", result.CapturedVariables)
+	}
+}
+
+func assertFilterReportsNoMatchingCapturedVariableName(t *testing.T) {
+	t.Helper()
+	result := filterPausePointCapturedVariablesByName(capturedVariableNamesFilterResponse(), []string{"doesNotExist"})
+	if len(result.CapturedVariables) != 0 {
+		t.Fatalf("expected no captured variables to survive: %#v", result.CapturedVariables)
+	}
+	if len(result.CapturedVariableHistory[0].CapturedVariables) != 0 {
+		t.Fatalf("expected history frame emptied: %#v", result.CapturedVariableHistory)
+	}
+	if !result.CapturedVariableNameFilterNoMatch {
+		t.Fatal("expected CapturedVariableNameFilterNoMatch to be true when nothing matches")
+	}
+	const wantWarning = "No captured variable matched the requested names; the hit captured other variables. Check CapturedVariableNamesNotFound for the names that were absent."
+	if result.Warning != wantWarning {
+		t.Fatalf("expected human-readable Warning for no-match filter: %q", result.Warning)
+	}
+}
+
+func assertFilterSkipsWarningOnEmptyPreFilterSnapshot(t *testing.T) {
+	t.Helper()
+	// Verifies an unhit status (no variables yet) does not blame the requested names.
+	result := filterPausePointCapturedVariablesByName(pausePointStatusResponse{}, []string{"velocity"})
+	if !result.CapturedVariableNameFilterNoMatch {
+		t.Fatal("expected CapturedVariableNameFilterNoMatch to stay true on an empty snapshot")
+	}
+	if result.Warning != "" {
+		t.Fatalf("expected no Warning when the snapshot had no variables before filtering: %q", result.Warning)
+	}
+}
+
+func assertFilterComposesWithCapturedVariablesNamesMode(t *testing.T) {
+	t.Helper()
+	filtered := filterPausePointCapturedVariablesByName(capturedVariableNamesFilterResponse(), []string{"velocity"})
+	result := applyPausePointCapturedVariablesMode(filtered, pausePointCapturedVariablesModeNames)
+	if len(result.CapturedVariables) != 1 || result.CapturedVariables[0].Name != "velocity" {
+		t.Fatalf("expected only velocity to survive the filter: %#v", result.CapturedVariables)
+	}
+	if result.CapturedVariables[0].Value != nil {
+		t.Fatalf("expected Value stripped by names mode: %#v", result.CapturedVariables[0])
+	}
+}
+
+func assertFilterLeavesResponseUnchangedWhenNamesEmpty(t *testing.T) {
+	t.Helper()
+	original := capturedVariableNamesFilterResponse()
+	result := filterPausePointCapturedVariablesByName(original, nil)
+	if len(result.CapturedVariables) != len(original.CapturedVariables) {
+		t.Fatalf("expected response unchanged with no names filter: %#v", result.CapturedVariables)
+	}
 }
 
 // TestParsePausePointCapturedVariableNames verifies comma-splitting, whitespace trimming, and
