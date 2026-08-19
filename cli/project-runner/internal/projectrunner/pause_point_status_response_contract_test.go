@@ -32,6 +32,47 @@ func TestPausePointStatusResponseMatchesSharedContract(t *testing.T) {
 	}
 }
 
+// Verifies empty caller-frame lists stay visible as [] in the re-marshaled CLI payload
+// (matching the always-present C# serialization) instead of being dropped.
+func TestPausePointStatusResponseKeepsEmptyCallerFramesVisible(t *testing.T) {
+	response := pausePointStatusResponse{
+		CallerFrames: []pausePointCallerFrame{},
+		CapturedVariableHistory: []pausePointCapturedHistoryFrame{
+			{CallerFrames: []pausePointCallerFrame{}},
+		},
+	}
+
+	data, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("failed to marshal pause point status response: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("failed to unmarshal round-tripped payload: %v", err)
+	}
+
+	topLevel, ok := payload["CallerFrames"].([]any)
+	if !ok || len(topLevel) != 0 {
+		t.Fatalf("expected top-level CallerFrames to be an empty array, got %#v", payload["CallerFrames"])
+	}
+
+	history, ok := payload["CapturedVariableHistory"].([]any)
+	if !ok || len(history) != 1 {
+		t.Fatalf("expected one history frame, got %#v", payload["CapturedVariableHistory"])
+	}
+
+	historyFrame, ok := history[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected history frame object, got %#v", history[0])
+	}
+
+	historyFrames, ok := historyFrame["CallerFrames"].([]any)
+	if !ok || len(historyFrames) != 0 {
+		t.Fatalf("expected history CallerFrames to be an empty array, got %#v", historyFrame["CallerFrames"])
+	}
+}
+
 func readPausePointStatusResponseContract(t *testing.T) []byte {
 	t.Helper()
 

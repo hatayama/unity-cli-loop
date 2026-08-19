@@ -102,8 +102,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return typeFullName + "." + (string.IsNullOrEmpty(methodName) ? "(unknown)" : methodName);
         }
 
-        // Mono reports script-assembly sources as "./Packages/..." on macOS and may use
-        // backslashes on Windows; normalize so the payload is stable across platforms.
+        // Mono reports script-assembly sources as "./Packages/..." on macOS, as an absolute
+        // project path on some Editors, and may use backslashes on Windows; normalize so the
+        // payload is a stable project-relative forward-slash path. A rooted path with no
+        // recognizable project segment degrades to null so the payload never carries a
+        // machine path.
         internal static string NormalizeFilePath(string fileName)
         {
             if (string.IsNullOrEmpty(fileName))
@@ -117,7 +120,61 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 normalized = normalized.Substring(2);
             }
 
+            return StripToUnityProjectRelative(normalized);
+        }
+
+        // Known Unity project-relative roots. Earliest match wins so a duplicate segment
+        // deeper in the path cannot hijack the strip point.
+        private static readonly string[] ProjectRelativeRootSegments =
+        {
+            "/Assets/",
+            "/Packages/",
+            "/Library/PackageCache/"
+        };
+
+        private static string StripToUnityProjectRelative(string normalized)
+        {
+            if (normalized.Length == 0)
+            {
+                return null;
+            }
+
+            int earliest = -1;
+            foreach (string segment in ProjectRelativeRootSegments)
+            {
+                int index = normalized.IndexOf(segment, StringComparison.Ordinal);
+                if (index >= 0 && (earliest < 0 || index < earliest))
+                {
+                    earliest = index;
+                }
+            }
+
+            if (earliest >= 0)
+            {
+                return normalized.Substring(earliest + 1);
+            }
+
+            if (IsRootedPath(normalized))
+            {
+                // A rooted path with no recognizable project segment would leak a machine
+                // path into the payload; degrade to a method-only frame instead. Select
+                // already coerces Line to 0 when File is null.
+                return null;
+            }
+
             return normalized;
+        }
+
+        // Detects absolute paths on both platforms: POSIX (and UNC after backslash
+        // normalization) via the leading slash, Windows drive paths via "X:/".
+        private static bool IsRootedPath(string normalized)
+        {
+            if (normalized[0] == '/')
+            {
+                return true;
+            }
+
+            return normalized.Length >= 3 && normalized[1] == ':' && normalized[2] == '/';
         }
     }
 }

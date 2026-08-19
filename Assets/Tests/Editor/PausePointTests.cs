@@ -1232,6 +1232,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.CallerFrames, Is.Empty);
         }
 
+        /// <summary>
+        /// What: PausePointStatusResponse maps caller frames onto both the latest capture and
+        /// each history frame.
+        /// </summary>
+        [Test]
+        public void StatusFromSnapshot_WhenCallerFramesArePresent_MapsTopLevelAndHistory()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointCallerFrame[] callerFrames =
+            {
+                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10),
+            };
+            UloopPausePointRegistry.HitWithCapturedFrame(
+                "jump",
+                CreateEmptyCapturedFrame(),
+                Array.Empty<UloopCapturedVariable>(),
+                false,
+                callerFrames);
+
+            PausePointStatusResponse response =
+                PausePointStatusResponse.FromSnapshot(UloopPausePointRegistry.GetStatus("jump"));
+
+            Assert.That(response.CallerFrames, Has.Count.EqualTo(1));
+            Assert.That(response.CallerFrames[0].Method, Is.EqualTo("Game.Input.HandleJump"));
+            Assert.That(response.CallerFrames[0].File, Is.EqualTo("Assets/Scripts/Input.cs"));
+            Assert.That(response.CallerFrames[0].Line, Is.EqualTo(10));
+            Assert.That(response.CapturedVariableHistory, Has.Count.EqualTo(1));
+            Assert.That(response.CapturedVariableHistory[0].CallerFrames, Has.Count.EqualTo(1));
+            Assert.That(
+                response.CapturedVariableHistory[0].CallerFrames[0].Method,
+                Is.EqualTo("Game.Input.HandleJump"));
+        }
+
+        /// <summary>
+        /// What: PausePointResponse maps caller frames onto history frames only (no top-level
+        /// CallerFrames on the enable/clear payload).
+        /// </summary>
+        [Test]
+        public void FromSnapshot_WhenCallerFramesArePresent_MapsHistoryFramesOnly()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointCallerFrame[] callerFrames =
+            {
+                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10),
+            };
+            UloopPausePointRegistry.HitWithCapturedFrame(
+                "jump",
+                CreateEmptyCapturedFrame(),
+                Array.Empty<UloopCapturedVariable>(),
+                false,
+                callerFrames);
+
+            PausePointResponse response =
+                PausePointResponse.FromSnapshot(UloopPausePointRegistry.GetStatus("jump"));
+
+            Assert.That(response.CapturedVariableHistory, Has.Count.EqualTo(1));
+            Assert.That(response.CapturedVariableHistory[0].CallerFrames, Has.Count.EqualTo(1));
+            Assert.That(
+                response.CapturedVariableHistory[0].CallerFrames[0].Method,
+                Is.EqualTo("Game.Input.HandleJump"));
+            Assert.That(response.CapturedVariableHistory[0].CallerFrames[0].File, Is.EqualTo("Assets/Scripts/Input.cs"));
+            Assert.That(response.CapturedVariableHistory[0].CallerFrames[0].Line, Is.EqualTo(10));
+        }
+
         [Test]
         public void TryGetCapturedValue_WhenLatestHitStoredRawFrame_ReturnsLiveReferences()
         {

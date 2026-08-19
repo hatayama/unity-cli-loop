@@ -150,6 +150,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public string RecommendedNextAction { get; set; } = string.Empty;
         public IReadOnlyList<PausePointStatusCapturedVariable> CapturedVariables { get; set; } =
             Array.Empty<PausePointStatusCapturedVariable>();
+        public IReadOnlyList<PausePointStatusCallerFrame> CallerFrames { get; set; } =
+            Array.Empty<PausePointStatusCallerFrame>();
         public bool CapturedVariablesTruncated { get; set; }
         public IReadOnlyList<string> TruncatedVariableNames { get; set; } = Array.Empty<string>();
         public int TruncatedVariableCount { get; set; }
@@ -211,6 +213,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CapturedVariables = snapshot.CapturedVariables
                     .Select(PausePointStatusCapturedVariable.FromCapturedVariable)
                     .ToList(),
+                CallerFrames = snapshot.CallerFrames
+                    .Select(PausePointStatusCallerFrame.FromCallerFrame)
+                    .ToList(),
                 CapturedVariablesTruncated = snapshot.CapturedVariablesTruncated,
                 TruncatedVariableNames = snapshot.TruncatedVariableNames,
                 TruncatedVariableCount = snapshot.TruncatedVariableCount,
@@ -257,6 +262,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public IReadOnlyList<PausePointStatusCapturedVariable> CapturedVariables { get; set; } =
             Array.Empty<PausePointStatusCapturedVariable>();
         public bool Truncated { get; set; }
+        public IReadOnlyList<PausePointStatusCallerFrame> CallerFrames { get; set; } =
+            Array.Empty<PausePointStatusCallerFrame>();
 
         internal static PausePointStatusCapturedHistoryFrame FromSnapshot(
             UloopPausePointCapturedHistoryFrame snapshot)
@@ -274,7 +281,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CapturedVariables = snapshot.CapturedVariables
                     .Select(PausePointStatusCapturedVariable.FromCapturedVariable)
                     .ToList(),
-                Truncated = snapshot.Truncated
+                Truncated = snapshot.Truncated,
+                CallerFrames = snapshot.CallerFrames
+                    .Select(PausePointStatusCallerFrame.FromCallerFrame)
+                    .ToList()
             };
         }
     }
@@ -336,6 +346,36 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 UnityObjectPath = capturedVariable.UnityObjectPath,
                 UnityObjectInstanceId = capturedVariable.UnityObjectInstanceId,
                 Truncated = capturedVariable.Truncated
+            };
+        }
+    }
+
+    /// <summary>
+    /// One managed caller stack frame included in the CLI-only pause point status response.
+    /// </summary>
+    public class PausePointStatusCallerFrame
+    {
+        public string Method { get; set; } = string.Empty;
+
+        // Null when debug symbols are unavailable; omit to match Go omitempty.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string File { get; set; }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public int Line { get; set; }
+
+        internal static PausePointStatusCallerFrame FromCallerFrame(UloopPausePointCallerFrame callerFrame)
+        {
+            if (callerFrame == null)
+            {
+                throw new ArgumentNullException(nameof(callerFrame));
+            }
+
+            return new PausePointStatusCallerFrame
+            {
+                Method = callerFrame.Method,
+                File = callerFrame.File,
+                Line = callerFrame.Line
             };
         }
     }

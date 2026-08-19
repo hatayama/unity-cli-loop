@@ -195,6 +195,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: an absolute macOS path under Assets/ is stripped to a project-relative path.
+        /// </summary>
+        [Test]
+        public void NormalizeFilePath_WhenAbsoluteAssetsPath_ReturnsProjectRelative()
+        {
+            string normalized = SourcePausePointCallerFrameSelector.NormalizeFilePath(
+                "/Users/<USER_NAME>/project/Assets/Scripts/Input.cs");
+
+            Assert.That(normalized, Is.EqualTo("Assets/Scripts/Input.cs"));
+        }
+
+        /// <summary>
+        /// What: an absolute path under Packages/ is stripped to a project-relative path.
+        /// </summary>
+        [Test]
+        public void NormalizeFilePath_WhenAbsolutePackagesPath_ReturnsProjectRelative()
+        {
+            string normalized = SourcePausePointCallerFrameSelector.NormalizeFilePath(
+                "C:/Users/<USER_NAME>/project/Packages/src/Foo.cs");
+
+            Assert.That(normalized, Is.EqualTo("Packages/src/Foo.cs"));
+        }
+
+        /// <summary>
+        /// What: an absolute path under Library/PackageCache/ is stripped to a project-relative path.
+        /// </summary>
+        [Test]
+        public void NormalizeFilePath_WhenAbsolutePackageCachePath_ReturnsProjectRelative()
+        {
+            string normalized = SourcePausePointCallerFrameSelector.NormalizeFilePath(
+                "/Users/<USER_NAME>/project/Library/PackageCache/com.example.pkg@1.2.3/Runtime/Foo.cs");
+
+            Assert.That(normalized, Is.EqualTo("Library/PackageCache/com.example.pkg@1.2.3/Runtime/Foo.cs"));
+        }
+
+        /// <summary>
+        /// What: a rooted path with no recognizable project segment normalizes to null instead of
+        /// leaking a machine path into the payload.
+        /// </summary>
+        [Test]
+        public void NormalizeFilePath_WhenRootedPathHasNoProjectSegment_ReturnsNull()
+        {
+            string normalized = SourcePausePointCallerFrameSelector.NormalizeFilePath(
+                "/Users/<USER_NAME>/External/Src/Foo.cs");
+
+            Assert.That(normalized, Is.Null);
+        }
+
+        /// <summary>
+        /// What: a Windows drive path with no recognizable project segment normalizes to null.
+        /// </summary>
+        [Test]
+        public void NormalizeFilePath_WhenDrivePathHasNoProjectSegment_ReturnsNull()
+        {
+            string normalized = SourcePausePointCallerFrameSelector.NormalizeFilePath(
+                "C:/External/Src/Foo.cs");
+
+            Assert.That(normalized, Is.Null);
+        }
+
+        /// <summary>
         /// What: a missing file name normalizes to null rather than empty.
         /// </summary>
         [Test]
@@ -293,6 +354,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].File, Is.EqualTo("Assets/Scripts/Input.cs"));
             Assert.That(selected[0].Line, Is.EqualTo(10));
+        }
+
+        /// <summary>
+        /// What: Select strips an absolute Assets/ path to project-relative form, so deleting
+        /// that step from Select fails this case even if the helper still has its own tests.
+        /// </summary>
+        [Test]
+        public void Select_WhenFileIsAbsoluteAssetsPath_NormalizesThroughSelect()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame(
+                    UserType,
+                    UserMethod,
+                    "/Users/<USER_NAME>/project/Assets/Scripts/Input.cs",
+                    10),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Has.Count.EqualTo(1));
+            Assert.That(selected[0].File, Is.EqualTo("Assets/Scripts/Input.cs"));
+            Assert.That(selected[0].Line, Is.EqualTo(10));
+        }
+
+        /// <summary>
+        /// What: Select degrades a rooted no-project-segment path to a method-only frame with
+        /// File null and Line 0, so the payload never carries an absolute machine path.
+        /// </summary>
+        [Test]
+        public void Select_WhenFileIsRootedWithoutProjectSegment_DegradesToMethodOnlyFrame()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame(UserType, UserMethod, "/Users/<USER_NAME>/External/Src/Foo.cs", 10),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Has.Count.EqualTo(1));
+            Assert.That(selected[0].File, Is.Null);
+            Assert.That(selected[0].Line, Is.EqualTo(0));
         }
 
         /// <summary>
