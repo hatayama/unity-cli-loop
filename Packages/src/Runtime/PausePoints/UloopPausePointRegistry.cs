@@ -277,7 +277,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public static UloopPausePointSnapshot Hit(string id)
         {
-            return HitCore(id, null, Array.Empty<UloopCapturedVariable>(), false);
+            return HitCore(
+                id, null, Array.Empty<UloopCapturedVariable>(), false, Array.Empty<UloopPausePointCallerFrame>());
         }
 
         public static UloopPausePointSnapshot HitWithCapturedVariables(
@@ -285,19 +286,22 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         {
             Debug.Assert(capturedVariables != null, "capturedVariables must not be null");
 
-            return HitCore(id, null, capturedVariables, capturedVariablesTruncated);
+            return HitCore(
+                id, null, capturedVariables, capturedVariablesTruncated, Array.Empty<UloopPausePointCallerFrame>());
         }
 
         public static UloopPausePointSnapshot HitWithCapturedFrame(
             string id,
             UloopPausePointCapturedVariableFrame capturedFrame,
             IReadOnlyList<UloopCapturedVariable> capturedVariables,
-            bool capturedVariablesTruncated)
+            bool capturedVariablesTruncated,
+            IReadOnlyList<UloopPausePointCallerFrame> callerFrames)
         {
             Debug.Assert(capturedFrame != null, "capturedFrame must not be null");
             Debug.Assert(capturedVariables != null, "capturedVariables must not be null");
+            Debug.Assert(callerFrames != null, "callerFrames must not be null");
 
-            return HitCore(id, capturedFrame, capturedVariables, capturedVariablesTruncated);
+            return HitCore(id, capturedFrame, capturedVariables, capturedVariablesTruncated, callerFrames);
         }
 
         // Returns after a single dictionary lookup when the id is not armed. Harmony-injected
@@ -344,13 +348,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string id,
             UloopPausePointCapturedVariableFrame capturedFrame,
             IReadOnlyList<UloopCapturedVariable> capturedVariables,
-            bool capturedVariablesTruncated)
+            bool capturedVariablesTruncated,
+            IReadOnlyList<UloopPausePointCallerFrame> callerFrames)
         {
             if (string.IsNullOrWhiteSpace(id))
             {
                 Debug.Assert(false, "id must not be null or empty");
                 return UloopPausePointSnapshot.NotEnabled(id ?? string.Empty, _pauseController);
             }
+
+            Debug.Assert(callerFrames != null, "callerFrames must not be null");
 
             DateTime now = NowUtc();
             if (!Entries.ContainsKey(id))
@@ -398,7 +405,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             entry.RecordHitWithCapturedVariables(
                 now, _pauseController.IsPlaying, _pauseController.IsPaused, hitSequence,
                 frameCount, capturedVariables, capturedVariablesTruncated,
-                truncatedVariableNames, truncatedVariableCount);
+                truncatedVariableNames, truncatedVariableCount, callerFrames);
             UloopPausePointSnapshot snapshot = entry.ToSnapshot(now, _pauseController);
             _latestHitSnapshot = snapshot;
             _hitSnapshots.RemoveAll(hitSnapshot => hitSnapshot.Id == id);
