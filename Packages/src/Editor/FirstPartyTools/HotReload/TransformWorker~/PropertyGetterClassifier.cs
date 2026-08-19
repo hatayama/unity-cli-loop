@@ -112,7 +112,7 @@ internal static class PropertyGetterClassifier
             return (true, decision);
         }
 
-        (string addedCallSiteSkip, string calledAddedMethodKey) = TransformWorkerProgram.EvaluateAddedCallSiteSkipReason(
+        (string addedCallSiteSkip, string calledAddedMethodKey) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(
             getterBodyNode,
             semanticModel,
             addedMethodCatalog,

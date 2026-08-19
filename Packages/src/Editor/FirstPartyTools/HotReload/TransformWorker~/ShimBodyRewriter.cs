@@ -128,7 +128,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         ISymbol invokedSymbol = _semanticModel.GetSymbolInfo(node).Symbol;
-        if (TransformWorkerProgram.IsConditionalAccessReceiverSpine(node))
+        if (AddedCallSiteGuard.IsConditionalAccessReceiverSpine(node))
         {
             // Why not rewrite the spine invocation: ExtractReceiver cannot recover a
             // MemberBinding/ElementBinding receiver and would emit a parse-invalid shim.

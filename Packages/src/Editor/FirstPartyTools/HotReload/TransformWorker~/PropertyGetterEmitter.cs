@@ -270,7 +270,7 @@ internal static class PropertyGetterEmitter
             ShimTypeName = currentShimType.ShimTypeName,
             ShimMethodName = shimMethodName,
             PatchKind = decision.PatchKind,
-            CalledAddedMethodKeys = TransformWorkerProgram.CollectCalledAddedMethodKeys(
+            CalledAddedMethodKeys = AddedCallSiteGuard.CollectCalledAddedMethodKeys(
                 getterBodyNode,
                 semanticModel,
                 addedMethodCatalog,
