@@ -262,10 +262,11 @@ func TestPackageStatusReportsInstalledVersion(t *testing.T) {
 func TestInspectPackageManifestStatusCharacterizesInstalledFlags(t *testing.T) {
 	// Characterizes inspectPackageManifestStatus dependency and OpenUPM-scope detection.
 	testCases := []struct {
-		name    string
-		content string
-		want    packageManifestStatus
-		wantErr bool
+		name        string
+		content     string
+		want        packageManifestStatus
+		wantErr     bool
+		wantErrText string
 	}{
 		{
 			name: "bare dependencies",
@@ -363,6 +364,23 @@ func TestInspectPackageManifestStatusCharacterizesInstalledFlags(t *testing.T) {
 			content: `{not json`,
 			wantErr: true,
 		},
+		{
+			name: "valid openupm followed by non object",
+			content: `{
+  "dependencies": {},
+  "scopedRegistries": [
+    {
+      "name": "package.openupm.com",
+      "url": "https://package.openupm.com",
+      "scopes": ["io.github.hatayama.uloopmcp"]
+    },
+    "not-an-object"
+  ]
+}
+`,
+			wantErr:     true,
+			wantErrText: "expected JSON object",
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -371,6 +389,9 @@ func TestInspectPackageManifestStatusCharacterizesInstalledFlags(t *testing.T) {
 			if testCase.wantErr {
 				if err == nil {
 					t.Fatal("expected inspectPackageManifestStatus error")
+				}
+				if testCase.wantErrText != "" && err.Error() != testCase.wantErrText {
+					t.Fatalf("error = %q, want %q", err.Error(), testCase.wantErrText)
 				}
 				return
 			}

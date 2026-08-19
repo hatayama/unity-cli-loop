@@ -210,12 +210,12 @@ func TestParseLaunchOptionsRejectsEmptyPlatformEqualsValue(t *testing.T) {
 func TestApplyLaunchOptionCharacterizesTokenDispatch(t *testing.T) {
 	// Characterizes applyLaunchOption token families so extract-method refactors cannot change recognition or rejection.
 	testCases := []struct {
-		name             string
-		args             []string
-		seed             launchOptions
-		want             launchOptions
-		wantNext         int
-		wantErrSubstring string
+		name     string
+		args     []string
+		seed     launchOptions
+		want     launchOptions
+		wantNext int
+		wantErr  string
 	}{
 		{name: "short restart", args: []string{"-r"}, want: launchOptions{restart: true}},
 		{name: "long restart", args: []string{"--restart"}, want: launchOptions{restart: true}},
@@ -254,20 +254,20 @@ func TestApplyLaunchOptionCharacterizesTokenDispatch(t *testing.T) {
 			wantNext: 0,
 		},
 		{
-			name:             "hub option",
-			args:             []string{"--add-unity-hub"},
-			wantErrSubstring: "Unity Hub registration",
+			name:    "hub option",
+			args:    []string{"--add-unity-hub"},
+			wantErr: "Native launch does not support Unity Hub registration options.",
 		},
 		{
-			name:             "unknown option",
-			args:             []string{"--bogus"},
-			wantErrSubstring: "Unknown launch option",
+			name:    "unknown option",
+			args:    []string{"--bogus"},
+			wantErr: "Unknown launch option: --bogus",
 		},
 		{
-			name:             "extra project path",
-			args:             []string{"/tmp/other"},
-			seed:             launchOptions{projectPath: "/tmp/first"},
-			wantErrSubstring: "Unexpected extra launch argument",
+			name:    "extra project path",
+			args:    []string{"/tmp/other"},
+			seed:    launchOptions{projectPath: "/tmp/first"},
+			wantErr: "Unexpected extra launch argument: /tmp/other",
 		},
 	}
 
@@ -275,12 +275,12 @@ func TestApplyLaunchOptionCharacterizesTokenDispatch(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			options := testCase.seed
 			next, err := applyLaunchOption(&options, testCase.args, 0)
-			if testCase.wantErrSubstring != "" {
+			if testCase.wantErr != "" {
 				if err == nil {
 					t.Fatal("expected applyLaunchOption error")
 				}
-				if !strings.Contains(err.Error(), testCase.wantErrSubstring) {
-					t.Fatalf("error %q does not contain %q", err, testCase.wantErrSubstring)
+				if err.Error() != testCase.wantErr {
+					t.Fatalf("error = %q, want %q", err.Error(), testCase.wantErr)
 				}
 				return
 			}

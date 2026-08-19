@@ -133,9 +133,9 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name            string
-		opts            SubjectsOptions
-		wantErrContains string
+		name    string
+		opts    SubjectsOptions
+		wantErr string
 	}{
 		{
 			name: "empty bundle",
@@ -143,7 +143,7 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 				ExpectedCommitSHA: f.commitSHA,
 				Identity:          f.identity,
 			},
-			wantErrContains: "BundleData required",
+			wantErr: "attestation verification failed: BundleData required",
 		},
 		{
 			name: "wrong length commit",
@@ -152,7 +152,7 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 				ExpectedCommitSHA: "not-a-40-char-hex-commit-sha",
 				Identity:          f.identity,
 			},
-			wantErrContains: "ExpectedCommitSHA must be 40-char hex",
+			wantErr: "attestation verification failed: ExpectedCommitSHA must be 40-char hex",
 		},
 		{
 			name: "non hex commit",
@@ -161,7 +161,7 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 				ExpectedCommitSHA: strings.Repeat("g", 40),
 				Identity:          f.identity,
 			},
-			wantErrContains: "ExpectedCommitSHA must be 40-char hex",
+			wantErr: "attestation verification failed: ExpectedCommitSHA must be 40-char hex",
 		},
 		{
 			name: "missing repository",
@@ -173,7 +173,7 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 					Refs:         f.identity.Refs,
 				},
 			},
-			wantErrContains: "Identity.Repository, WorkflowPath, and at least one Ref required",
+			wantErr: "attestation verification failed: Identity.Repository, WorkflowPath, and at least one Ref required",
 		},
 		{
 			name: "missing workflow path",
@@ -185,7 +185,7 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 					Refs:       f.identity.Refs,
 				},
 			},
-			wantErrContains: "Identity.Repository, WorkflowPath, and at least one Ref required",
+			wantErr: "attestation verification failed: Identity.Repository, WorkflowPath, and at least one Ref required",
 		},
 		{
 			name: "missing refs",
@@ -197,7 +197,7 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 					WorkflowPath: f.identity.WorkflowPath,
 				},
 			},
-			wantErrContains: "Identity.Repository, WorkflowPath, and at least one Ref required",
+			wantErr: "attestation verification failed: Identity.Repository, WorkflowPath, and at least one Ref required",
 		},
 	}
 
@@ -210,8 +210,8 @@ func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
 			if !errors.Is(verifyErr, ErrVerificationFailed) {
 				t.Fatalf("expected ErrVerificationFailed, got %v", verifyErr)
 			}
-			if !strings.Contains(verifyErr.Error(), testCase.wantErrContains) {
-				t.Fatalf("error %q does not contain %q", verifyErr, testCase.wantErrContains)
+			if verifyErr.Error() != testCase.wantErr {
+				t.Fatalf("error = %q, want %q", verifyErr.Error(), testCase.wantErr)
 			}
 		})
 	}

@@ -297,6 +297,7 @@ func inspectPackageManifestOpenUPMRegistry(root orderedJSONObject, status *packa
 }
 
 func openUPMRegistryHasPackageScope(elements []json.RawMessage) (bool, error) {
+	found := false
 	for _, element := range elements {
 		entry, parseErr := parseOrderedJSONObjectBytes(element)
 		if parseErr != nil {
@@ -307,10 +308,13 @@ func openUPMRegistryHasPackageScope(elements []json.RawMessage) (bool, error) {
 			return false, err
 		}
 		if hasScope {
-			return true, nil
+			// Why not return here: the original scan kept walking later
+			// scopedRegistries entries so a trailing malformed object still
+			// failed status inspect. Early success would hide that parse error.
+			found = true
 		}
 	}
-	return false, nil
+	return found, nil
 }
 
 func openUPMEntryHasPackageScope(entry orderedJSONObject) (bool, error) {
