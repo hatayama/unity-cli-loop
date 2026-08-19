@@ -139,6 +139,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
+            if (ContainsParentDirectorySegment(normalized))
+            {
+                // A ".." segment can relocate the path outside the root the strip and
+                // whitelist below appear to guarantee (e.g. "../Assets/Foo.cs" or
+                // "Assets/../External/Foo.cs"), so the result would masquerade as a
+                // project path or leak non-project structure; degrade to a method-only
+                // frame instead.
+                return null;
+            }
+
             int earliest = -1;
             foreach (string segment in ProjectRelativeRootSegments)
             {
@@ -154,27 +164,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return normalized.Substring(earliest + 1);
             }
 
-            if (IsRootedPath(normalized))
+            foreach (string segment in ProjectRelativeRootSegments)
             {
-                // A rooted path with no recognizable project segment would leak a machine
-                // path into the payload; degrade to a method-only frame instead. Select
-                // already coerces Line to 0 when File is null.
-                return null;
+                // The segment minus its leading slash is the project-relative prefix
+                // form ("/Assets/" -> "Assets/").
+                if (normalized.StartsWith(segment.Substring(1), StringComparison.Ordinal))
+                {
+                    return normalized;
+                }
             }
 
-            return normalized;
+            // Anything else — rooted machine paths, ../ escapes, unrecognized relative
+            // forms — would leak non-project structure into the payload; degrade to a
+            // method-only frame instead. Select already coerces Line to 0 when File is
+            // null.
+            return null;
         }
 
-        // Detects absolute paths on both platforms: POSIX (and UNC after backslash
-        // normalization) via the leading slash, Windows drive paths via "X:/".
-        private static bool IsRootedPath(string normalized)
+        // Detects a ".." path segment anywhere in a forward-slash-normalized path.
+        private static bool ContainsParentDirectorySegment(string normalized)
         {
-            if (normalized[0] == '/')
+            if (normalized == "..")
             {
                 return true;
             }
 
-            return normalized.Length >= 3 && normalized[1] == ':' && normalized[2] == '/';
+            return normalized.StartsWith("../", StringComparison.Ordinal)
+                || normalized.EndsWith("/..", StringComparison.Ordinal)
+                || normalized.Contains("/../");
         }
     }
 }
