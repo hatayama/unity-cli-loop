@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 using NUnit.Framework;
 
@@ -252,6 +253,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(selected, Is.Empty);
         }
 
+        /// <summary>
+        /// What: Select demangles async state-machine callers, so deleting FormatMethodDisplay
+        /// from Select fails this case even if the helper still has its own tests.
+        /// </summary>
+        [Test]
+        public void Select_WhenCallerIsAsyncStateMachine_ReportsLogicalMethodName()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame("Game.Enemy+<Chase>d__7", "MoveNext", "Assets/Scripts/Enemy.cs", 55),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Has.Count.EqualTo(1));
+            Assert.That(selected[0].Method, Is.EqualTo("Game.Enemy.Chase"));
+            Assert.That(selected[0].File, Is.EqualTo("Assets/Scripts/Enemy.cs"));
+            Assert.That(selected[0].Line, Is.EqualTo(55));
+        }
+
+        /// <summary>
+        /// What: Select normalizes Windows separators and a leading ./, so deleting
+        /// NormalizeFilePath from Select fails this case even if the helper still has
+        /// its own tests.
+        /// </summary>
+        [Test]
+        public void Select_WhenFileHasDotSlashAndBackslashes_NormalizesThroughSelect()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame(UserType, UserMethod, ".\\Assets\\Scripts\\Input.cs", 10),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Has.Count.EqualTo(1));
+            Assert.That(selected[0].File, Is.EqualTo("Assets/Scripts/Input.cs"));
+            Assert.That(selected[0].Line, Is.EqualTo(10));
+        }
+
+        /// <summary>
+        /// What: a live StackTrace walk treats Level2 as the marker, skips capture
+        /// infrastructure, and returns Level1 then Level0 as the two nearest callers.
+        /// </summary>
+        [Test]
+        public void CaptureCallerFrames_OnRealStack_ReturnsTwoNearestCallersAboveMarker()
+        {
+            List<UloopPausePointCallerFrame> selected =
+                PausePointCallerFrameLiveTestSupport.StackHost.Level0();
+
+            Assert.That(selected, Has.Count.EqualTo(2));
+            Assert.That(
+                selected[0].Method,
+                Is.EqualTo("PausePointCallerFrameLiveTestSupport.StackHost.Level1"));
+            Assert.That(
+                selected[1].Method,
+                Is.EqualTo("PausePointCallerFrameLiveTestSupport.StackHost.Level0"));
+        }
+
         private static SourcePausePointRawStackFrame CreateRawFrame(
             string typeFullName,
             string methodName,
@@ -260,5 +322,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             return new SourcePausePointRawStackFrame(typeFullName, methodName, fileName, line);
         }
+    }
+}
+
+// Why a non-uloop namespace: the selector skips types that start with
+// io.github.hatayama.UnityCliLoop, so a helper in the test namespace would
+// be dropped as infrastructure and a stubbed CaptureCallerFrames would still
+// leave every other test green.
+namespace PausePointCallerFrameLiveTestSupport
+{
+    internal static class StackHost
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static List<UloopPausePointCallerFrame> Level0() { return Level1(); }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static List<UloopPausePointCallerFrame> Level1() { return Level2(); }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static List<UloopPausePointCallerFrame> Level2() { return SourcePausePointCallerFrameCapture.CaptureCallerFrames(); }
     }
 }
