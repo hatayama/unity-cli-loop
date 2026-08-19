@@ -11,28 +11,57 @@ import (
 
 func applyLaunchOption(options *launchOptions, args []string, index int) (int, error) {
 	arg := args[index]
-	switch {
-	case arg == "-r" || arg == "--restart":
-		options.restart = true
-		return index, nil
-	case arg == "-q" || arg == "--quit":
-		options.quit = true
-		return index, nil
-	case arg == "-d" || arg == "--delete-recovery":
-		options.deleteRecovery = true
-		return index, nil
-	case arg == "--editor-version" || strings.HasPrefix(arg, "--editor-version="):
-		return applyLaunchEditorVersionOption(options, args, index)
-	case isUnsupportedLaunchHubOption(arg):
+	if next, handled, err := applyLaunchBooleanFlag(options, arg, index); handled {
+		return next, err
+	}
+	if next, handled, err := applyLaunchKeyedOption(options, args, index); handled {
+		return next, err
+	}
+	if isUnsupportedLaunchHubOption(arg) {
 		return index, unsupportedLaunchHubOptionError(arg)
-	case arg == "-p" || arg == "--platform" || strings.HasPrefix(arg, "--platform="):
-		return applyLaunchPlatformOption(options, args, index)
-	case arg == "--max-depth" || strings.HasPrefix(arg, "--max-depth="):
-		return applyLaunchMaxDepthOption(options, args, index)
-	case strings.HasPrefix(arg, "-"):
+	}
+	if strings.HasPrefix(arg, "-") {
 		return index, unknownLaunchOptionError(arg)
+	}
+	return applyLaunchProjectPathArgument(options, arg, index)
+}
+
+// applyLaunchBooleanFlag handles restart/quit/delete-recovery. Why a separate
+// helper: those flags share "set a bool and keep the current index" behavior,
+// and leaving them in applyLaunchOption kept the switch above the cyclop limit.
+func applyLaunchBooleanFlag(options *launchOptions, arg string, index int) (int, bool, error) {
+	switch arg {
+	case "-r", "--restart":
+		options.restart = true
+		return index, true, nil
+	case "-q", "--quit":
+		options.quit = true
+		return index, true, nil
+	case "-d", "--delete-recovery":
+		options.deleteRecovery = true
+		return index, true, nil
 	default:
-		return applyLaunchProjectPathArgument(options, arg, index)
+		return index, false, nil
+	}
+}
+
+// applyLaunchKeyedOption handles value-taking launch flags. Why not fold these
+// into applyLaunchBooleanFlag: equals-form and next-token consumption are
+// unique to keyed options.
+func applyLaunchKeyedOption(options *launchOptions, args []string, index int) (int, bool, error) {
+	arg := args[index]
+	switch {
+	case arg == "--editor-version" || strings.HasPrefix(arg, "--editor-version="):
+		next, err := applyLaunchEditorVersionOption(options, args, index)
+		return next, true, err
+	case arg == "-p" || arg == "--platform" || strings.HasPrefix(arg, "--platform="):
+		next, err := applyLaunchPlatformOption(options, args, index)
+		return next, true, err
+	case arg == "--max-depth" || strings.HasPrefix(arg, "--max-depth="):
+		next, err := applyLaunchMaxDepthOption(options, args, index)
+		return next, true, err
+	default:
+		return index, false, nil
 	}
 }
 

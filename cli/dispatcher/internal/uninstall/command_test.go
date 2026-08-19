@@ -96,6 +96,15 @@ func TestPosixUninstallScriptRemovesShellPathBlocks(t *testing.T) {
 		t.Skip("POSIX uninstall script is not available on Windows")
 	}
 
+	home, installDir, targetPath := createPosixUninstallHome(t)
+	profilePaths := writePosixUninstallPathBlockProfiles(t, home, installDir)
+	runPosixUninstallCommand(t, home, installDir)
+	assertPosixUninstallRemovedBinary(t, targetPath)
+	assertPosixUninstallRemovedPathBlocks(t, profilePaths)
+}
+
+func createPosixUninstallHome(t *testing.T) (string, string, string) {
+	t.Helper()
 	home := t.TempDir()
 	installDir := filepath.Join(home, ".local", "bin")
 	if err := os.MkdirAll(installDir, 0o755); err != nil {
@@ -105,7 +114,11 @@ func TestPosixUninstallScriptRemovesShellPathBlocks(t *testing.T) {
 	if err := os.WriteFile(targetPath, []byte("binary"), 0o755); err != nil {
 		t.Fatalf("failed to create target binary: %v", err)
 	}
+	return home, installDir, targetPath
+}
 
+func writePosixUninstallPathBlockProfiles(t *testing.T, home string, installDir string) []string {
+	t.Helper()
 	profilePaths := []string{
 		filepath.Join(home, ".bash_profile"),
 		filepath.Join(home, ".zshrc"),
@@ -120,7 +133,11 @@ func TestPosixUninstallScriptRemovesShellPathBlocks(t *testing.T) {
 			t.Fatalf("failed to write profile: %v", err)
 		}
 	}
+	return profilePaths
+}
 
+func runPosixUninstallCommand(t *testing.T, home string, installDir string) {
+	t.Helper()
 	command, err := CommandForOS("darwin", Options{
 		InstallDir: installDir,
 		CurrentPID: 1234,
@@ -138,22 +155,31 @@ func TestPosixUninstallScriptRemovesShellPathBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POSIX uninstall failed: %v\n%s", err, output)
 	}
+}
+
+func assertPosixUninstallRemovedBinary(t *testing.T, targetPath string) {
+	t.Helper()
 	if _, err := os.Stat(targetPath); !os.IsNotExist(err) {
 		t.Fatalf("target binary should be removed, stat err=%v", err)
 	}
+}
 
+func assertPosixUninstallRemovedPathBlocks(t *testing.T, profilePaths []string) {
+	t.Helper()
 	for _, profilePath := range profilePaths {
-		profileContent, err := os.ReadFile(profilePath)
-		if err != nil {
-			t.Fatalf("failed to read profile: %v", err)
-		}
-		content := string(profileContent)
-		if strings.Contains(content, "# >>> uloop PATH >>>") || strings.Contains(content, "# <<< uloop PATH <<<") {
-			t.Fatalf("profile still contains uloop marker block:\n%s", content)
-		}
-		if !strings.Contains(content, "before\n") || !strings.Contains(content, "after\n") {
-			t.Fatalf("profile should preserve unrelated content:\n%s", content)
-		}
+		t.Run(filepath.Base(profilePath), func(t *testing.T) {
+			profileContent, err := os.ReadFile(profilePath)
+			if err != nil {
+				t.Fatalf("failed to read profile: %v", err)
+			}
+			content := string(profileContent)
+			if strings.Contains(content, "# >>> uloop PATH >>>") || strings.Contains(content, "# <<< uloop PATH <<<") {
+				t.Fatalf("profile still contains uloop marker block:\n%s", content)
+			}
+			if !strings.Contains(content, "before\n") || !strings.Contains(content, "after\n") {
+				t.Fatalf("profile should preserve unrelated content:\n%s", content)
+			}
+		})
 	}
 }
 

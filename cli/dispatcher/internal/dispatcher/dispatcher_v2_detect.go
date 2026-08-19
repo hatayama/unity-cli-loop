@@ -70,38 +70,74 @@ func detectV2DispatcherProject(projectRoot string) (dispatcherV2Project, error) 
 	if err != nil {
 		return dispatcherV2Project{}, err
 	}
-	packageVersion := lockEntry.Version
-	if found && sharedversion.IsValid(strings.TrimSpace(packageVersion)) {
-		if !isDispatcherV2PackageVersion(packageVersion) {
-			return dispatcherV2Project{}, nil
-		}
-		return dispatcherV2Project{IsV2: true, PackageVersion: packageVersion}, nil
+	if project, handled := detectV2DispatcherFromResolvedLockVersion(lockEntry, found); handled {
+		return project, nil
 	}
 
 	if isDispatcherFileDependency(manifestDependency) {
 		return detectV2DispatcherFileDependencyProject(projectRoot, manifestDependency)
 	}
 
-	if found && lockEntry.Source != dispatcherPackageLockSourceGit {
-		return dispatcherV2Project{}, nil
-	}
-	if !found && !isDispatcherGitPackageDependency(manifestDependency) {
+	if !shouldDetectV2FromPackageCache(found, lockEntry, manifestDependency) {
 		return dispatcherV2Project{}, nil
 	}
 
+	return detectV2DispatcherFromPackageCache(projectRoot, lockEntry, found)
+}
+
+// detectV2DispatcherFromResolvedLockVersion trusts packages-lock.json when Unity
+// already resolved a valid semver. Why not fall through: that lock version is
+// the entity Unity loads for registry/git packages.
+func detectV2DispatcherFromResolvedLockVersion(lockEntry dispatcherPackageLockEntry, found bool) (dispatcherV2Project, bool) {
+	packageVersion := lockEntry.Version
+	if !found || !sharedversion.IsValid(strings.TrimSpace(packageVersion)) {
+		return dispatcherV2Project{}, false
+	}
+	if !isDispatcherV2PackageVersion(packageVersion) {
+		return dispatcherV2Project{}, true
+	}
+	return dispatcherV2Project{IsV2: true, PackageVersion: packageVersion}, true
+}
+
+func shouldDetectV2FromPackageCache(found bool, lockEntry dispatcherPackageLockEntry, manifestDependency json.RawMessage) bool {
+	if found && lockEntry.Source != dispatcherPackageLockSourceGit {
+		return false
+	}
+	if !found && !isDispatcherGitPackageDependency(manifestDependency) {
+		return false
+	}
+	return true
+}
+
+func detectV2DispatcherFromPackageCache(projectRoot string, lockEntry dispatcherPackageLockEntry, found bool) (dispatcherV2Project, error) {
 	packageCacheEntries, err := dispatcherPackageCacheEntries(projectRoot)
 	if err != nil {
 		return dispatcherV2Project{}, err
 	}
-	if found && lockEntry.Source == dispatcherPackageLockSourceGit {
-		if version, ok := dispatcherPackageCacheVersionForHash(packageCacheEntries, lockEntry.Hash); ok {
-			if !isDispatcherV2PackageVersion(version) {
-				return dispatcherV2Project{}, nil
-			}
-			return dispatcherV2Project{IsV2: true, PackageVersion: version}, nil
-		}
+	if project, handled := detectV2DispatcherFromGitCacheHash(packageCacheEntries, lockEntry, found); handled {
+		return project, nil
 	}
+	return detectV2DispatcherFromDistinctCacheVersions(packageCacheEntries, projectRoot)
+}
 
+// detectV2DispatcherFromGitCacheHash binds a git lock hash to one PackageCache
+// generation. Why hash match first: multiple cached copies can coexist after
+// upgrades, and only the lock's hash identifies the loaded one.
+func detectV2DispatcherFromGitCacheHash(packageCacheEntries []dispatcherPackageCacheEntry, lockEntry dispatcherPackageLockEntry, found bool) (dispatcherV2Project, bool) {
+	if !found || lockEntry.Source != dispatcherPackageLockSourceGit {
+		return dispatcherV2Project{}, false
+	}
+	version, ok := dispatcherPackageCacheVersionForHash(packageCacheEntries, lockEntry.Hash)
+	if !ok {
+		return dispatcherV2Project{}, false
+	}
+	if !isDispatcherV2PackageVersion(version) {
+		return dispatcherV2Project{}, true
+	}
+	return dispatcherV2Project{IsV2: true, PackageVersion: version}, true
+}
+
+func detectV2DispatcherFromDistinctCacheVersions(packageCacheEntries []dispatcherPackageCacheEntry, projectRoot string) (dispatcherV2Project, error) {
 	packageVersions := dispatcherDistinctPackageCacheVersions(packageCacheEntries)
 	if len(packageVersions) == 0 {
 		return dispatcherV2Project{}, nil
@@ -117,7 +153,6 @@ func detectV2DispatcherProject(projectRoot string) (dispatcherV2Project, error) 
 			return dispatcherV2Project{}, fmt.Errorf("multiple package generations found in %s", filepath.Join(projectRoot, "Library", "PackageCache"))
 		}
 	}
-
 	return dispatcherV2Project{IsV2: true, PackageVersionCandidates: packageVersions}, nil
 }
 

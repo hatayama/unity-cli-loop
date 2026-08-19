@@ -124,6 +124,90 @@ func TestVerifySubjects_CommitMismatchFailsClosed(t *testing.T) {
 	}
 }
 
+// Characterizes VerifySubjects fail-closed input checks that run before Sigstore verification.
+func TestVerifySubjects_RejectsIncompleteOptions(t *testing.T) {
+	f := loadHappyFixture(t)
+	trusted, err := LoadEmbeddedTrustedMaterial()
+	if err != nil {
+		t.Fatalf("load trusted root: %v", err)
+	}
+
+	testCases := []struct {
+		name            string
+		opts            SubjectsOptions
+		wantErrContains string
+	}{
+		{
+			name: "empty bundle",
+			opts: SubjectsOptions{
+				ExpectedCommitSHA: f.commitSHA,
+				Identity:          f.identity,
+			},
+			wantErrContains: "BundleData required",
+		},
+		{
+			name: "non hex commit",
+			opts: SubjectsOptions{
+				BundleData:        f.bundle,
+				ExpectedCommitSHA: "not-a-40-char-hex-commit-sha",
+				Identity:          f.identity,
+			},
+			wantErrContains: "ExpectedCommitSHA must be 40-char hex",
+		},
+		{
+			name: "missing repository",
+			opts: SubjectsOptions{
+				BundleData:        f.bundle,
+				ExpectedCommitSHA: f.commitSHA,
+				Identity: Identity{
+					WorkflowPath: f.identity.WorkflowPath,
+					Refs:         f.identity.Refs,
+				},
+			},
+			wantErrContains: "Identity.Repository, WorkflowPath, and at least one Ref required",
+		},
+		{
+			name: "missing workflow path",
+			opts: SubjectsOptions{
+				BundleData:        f.bundle,
+				ExpectedCommitSHA: f.commitSHA,
+				Identity: Identity{
+					Repository: f.identity.Repository,
+					Refs:       f.identity.Refs,
+				},
+			},
+			wantErrContains: "Identity.Repository, WorkflowPath, and at least one Ref required",
+		},
+		{
+			name: "missing refs",
+			opts: SubjectsOptions{
+				BundleData:        f.bundle,
+				ExpectedCommitSHA: f.commitSHA,
+				Identity: Identity{
+					Repository:   f.identity.Repository,
+					WorkflowPath: f.identity.WorkflowPath,
+				},
+			},
+			wantErrContains: "Identity.Repository, WorkflowPath, and at least one Ref required",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, verifyErr := VerifySubjects(trusted, testCase.opts)
+			if verifyErr == nil {
+				t.Fatal("expected incomplete options to fail")
+			}
+			if !errors.Is(verifyErr, ErrVerificationFailed) {
+				t.Fatalf("expected ErrVerificationFailed, got %v", verifyErr)
+			}
+			if !strings.Contains(verifyErr.Error(), testCase.wantErrContains) {
+				t.Fatalf("error %q does not contain %q", verifyErr, testCase.wantErrContains)
+			}
+		})
+	}
+}
+
 // Verifies VerifySubjects rejects bundles it cannot parse as Sigstore JSON.
 func TestVerifySubjects_MalformedBundleFailsClosed(t *testing.T) {
 	f := loadHappyFixture(t)

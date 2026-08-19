@@ -248,59 +248,97 @@ func inspectPackageManifestStatus(content []byte) (packageManifestStatus, error)
 	}
 
 	status := packageManifestStatus{}
-	if rawDependencies, ok := root.values["dependencies"]; ok {
-		dependencies, depErr := parseOrderedJSONObjectBytes(rawDependencies)
-		if depErr != nil {
-			return packageManifestStatus{}, depErr
-		}
-		if rawVersion, found := dependencies.values[dispatcherUnityPackageName]; found {
-			var version string
-			if unmarshalErr := json.Unmarshal(rawVersion, &version); unmarshalErr != nil {
-				return packageManifestStatus{}, unmarshalErr
-			}
-			status.dependencyInstalled = true
-			status.dependencyVersion = version
-		}
+	if inspectErr := inspectPackageManifestDependency(root, &status); inspectErr != nil {
+		return packageManifestStatus{}, inspectErr
 	}
-
-	if rawRegistries, ok := root.values["scopedRegistries"]; ok {
-		elements, arrayErr := parseJSONRawArray(rawRegistries)
-		if arrayErr != nil {
-			return packageManifestStatus{}, arrayErr
-		}
-		for _, element := range elements {
-			entry, parseErr := parseOrderedJSONObjectBytes(element)
-			if parseErr != nil {
-				return packageManifestStatus{}, parseErr
-			}
-			urlRaw, hasURL := entry.values["url"]
-			if !hasURL {
-				continue
-			}
-			var url string
-			if unmarshalErr := json.Unmarshal(urlRaw, &url); unmarshalErr != nil {
-				return packageManifestStatus{}, unmarshalErr
-			}
-			if url != openUPMRegistryURL {
-				continue
-			}
-			rawScopes, hasScopes := entry.values["scopes"]
-			if !hasScopes {
-				continue
-			}
-			var scopes []string
-			if unmarshalErr := json.Unmarshal(rawScopes, &scopes); unmarshalErr != nil {
-				return packageManifestStatus{}, unmarshalErr
-			}
-			for _, scope := range scopes {
-				if scope == dispatcherUnityPackageName {
-					status.registryInstalled = true
-					break
-				}
-			}
-		}
+	if inspectErr := inspectPackageManifestOpenUPMRegistry(root, &status); inspectErr != nil {
+		return packageManifestStatus{}, inspectErr
 	}
 	return status, nil
+}
+
+func inspectPackageManifestDependency(root orderedJSONObject, status *packageManifestStatus) error {
+	rawDependencies, ok := root.values["dependencies"]
+	if !ok {
+		return nil
+	}
+	dependencies, depErr := parseOrderedJSONObjectBytes(rawDependencies)
+	if depErr != nil {
+		return depErr
+	}
+	rawVersion, found := dependencies.values[dispatcherUnityPackageName]
+	if !found {
+		return nil
+	}
+	version := ""
+	if unmarshalErr := json.Unmarshal(rawVersion, &version); unmarshalErr != nil {
+		return unmarshalErr
+	}
+	status.dependencyInstalled = true
+	status.dependencyVersion = version
+	return nil
+}
+
+func inspectPackageManifestOpenUPMRegistry(root orderedJSONObject, status *packageManifestStatus) error {
+	rawRegistries, ok := root.values["scopedRegistries"]
+	if !ok {
+		return nil
+	}
+	elements, arrayErr := parseJSONRawArray(rawRegistries)
+	if arrayErr != nil {
+		return arrayErr
+	}
+	installed, err := openUPMRegistryHasPackageScope(elements)
+	if err != nil {
+		return err
+	}
+	status.registryInstalled = installed
+	return nil
+}
+
+func openUPMRegistryHasPackageScope(elements []json.RawMessage) (bool, error) {
+	for _, element := range elements {
+		entry, parseErr := parseOrderedJSONObjectBytes(element)
+		if parseErr != nil {
+			return false, parseErr
+		}
+		hasScope, err := openUPMEntryHasPackageScope(entry)
+		if err != nil {
+			return false, err
+		}
+		if hasScope {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func openUPMEntryHasPackageScope(entry orderedJSONObject) (bool, error) {
+	urlRaw, hasURL := entry.values["url"]
+	if !hasURL {
+		return false, nil
+	}
+	url := ""
+	if unmarshalErr := json.Unmarshal(urlRaw, &url); unmarshalErr != nil {
+		return false, unmarshalErr
+	}
+	if url != openUPMRegistryURL {
+		return false, nil
+	}
+	rawScopes, hasScopes := entry.values["scopes"]
+	if !hasScopes {
+		return false, nil
+	}
+	scopes := []string{}
+	if unmarshalErr := json.Unmarshal(rawScopes, &scopes); unmarshalErr != nil {
+		return false, unmarshalErr
+	}
+	for _, scope := range scopes {
+		if scope == dispatcherUnityPackageName {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func writePackageManifestAtomically(manifestPath string, content []byte) error {

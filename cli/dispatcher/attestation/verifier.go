@@ -144,14 +144,8 @@ type SubjectsOptions struct {
 // against the specific asset they downloaded. Verify() still enforces artifact
 // binding for the installer script path.
 func VerifySubjects(trustedMaterial root.TrustedMaterial, opts SubjectsOptions) (map[string]string, error) {
-	if len(opts.BundleData) == 0 {
-		return nil, fmt.Errorf("%w: BundleData required", ErrVerificationFailed)
-	}
-	if !isHexCommitSHA(opts.ExpectedCommitSHA) {
-		return nil, fmt.Errorf("%w: ExpectedCommitSHA must be 40-char hex", ErrVerificationFailed)
-	}
-	if opts.Identity.Repository == "" || opts.Identity.WorkflowPath == "" || len(opts.Identity.Refs) == 0 {
-		return nil, fmt.Errorf("%w: Identity.Repository, WorkflowPath, and at least one Ref required", ErrVerificationFailed)
+	if err := opts.validate(); err != nil {
+		return nil, err
 	}
 
 	var b bundle.Bundle
@@ -183,6 +177,26 @@ func VerifySubjects(trustedMaterial root.TrustedMaterial, opts SubjectsOptions) 
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrVerificationFailed, err)
 	}
+	return extractVerifiedSubjects(result)
+}
+
+func (o SubjectsOptions) validate() error {
+	if len(o.BundleData) == 0 {
+		return fmt.Errorf("%w: BundleData required", ErrVerificationFailed)
+	}
+	if !isHexCommitSHA(o.ExpectedCommitSHA) {
+		return fmt.Errorf("%w: ExpectedCommitSHA must be 40-char hex", ErrVerificationFailed)
+	}
+	if o.Identity.Repository == "" || o.Identity.WorkflowPath == "" || len(o.Identity.Refs) == 0 {
+		return fmt.Errorf("%w: Identity.Repository, WorkflowPath, and at least one Ref required", ErrVerificationFailed)
+	}
+	return nil
+}
+
+// extractVerifiedSubjects maps verified in-toto subjects to lowercase sha256
+// hex digests. Why skip entries without sha256: callers compare those hashes
+// against downloaded assets, so an unhashed subject must not appear trusted.
+func extractVerifiedSubjects(result *verify.VerificationResult) (map[string]string, error) {
 	if result == nil || result.Statement == nil {
 		return nil, fmt.Errorf("%w: verified bundle had no statement", ErrVerificationFailed)
 	}

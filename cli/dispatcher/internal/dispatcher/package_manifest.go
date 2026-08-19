@@ -144,15 +144,7 @@ func insertDependencyAlphabetically(dependencies *orderedJSONObject, name string
 func updatePackageManifestScopedRegistries(root *orderedJSONObject, result *packageManifestMergeResult) error {
 	rawRegistries, hasRegistries := root.values["scopedRegistries"]
 	if !hasRegistries {
-		encoded, err := emitOpenUPMScopedRegistriesArray(1)
-		if err != nil {
-			return err
-		}
-		root.insertAfter("scopedRegistries", encoded, "dependencies")
-		result.Changed = true
-		result.RegistryAdded = true
-		result.ScopeAdded = true
-		return nil
+		return insertDefaultOpenUPMScopedRegistries(root, result)
 	}
 
 	elements, err := parseJSONRawArray(rawRegistries)
@@ -160,45 +152,84 @@ func updatePackageManifestScopedRegistries(root *orderedJSONObject, result *pack
 		return fmt.Errorf("scopedRegistries: %w", err)
 	}
 
+	openUPMIndex, parsedEntries, err := locateOpenUPMScopedRegistry(elements)
+	if err != nil {
+		return err
+	}
+	if openUPMIndex < 0 {
+		return appendOpenUPMScopedRegistry(root, elements, result)
+	}
+	return addMissingOpenUPMScopeToRegistry(root, elements, parsedEntries[openUPMIndex], openUPMIndex, result)
+}
+
+func insertDefaultOpenUPMScopedRegistries(root *orderedJSONObject, result *packageManifestMergeResult) error {
+	encoded, err := emitOpenUPMScopedRegistriesArray(1)
+	if err != nil {
+		return err
+	}
+	root.insertAfter("scopedRegistries", encoded, "dependencies")
+	result.Changed = true
+	result.RegistryAdded = true
+	result.ScopeAdded = true
+	return nil
+}
+
+func locateOpenUPMScopedRegistry(elements []json.RawMessage) (int, []orderedJSONObject, error) {
 	openUPMIndex := -1
 	parsedEntries := make([]orderedJSONObject, len(elements))
 	for index, element := range elements {
 		entry, parseErr := parseOrderedJSONObjectBytes(element)
 		if parseErr != nil {
-			return fmt.Errorf("scopedRegistries[%d]: %w", index, parseErr)
+			return -1, nil, fmt.Errorf("scopedRegistries[%d]: %w", index, parseErr)
 		}
 		parsedEntries[index] = entry
-		urlRaw, ok := entry.values["url"]
-		if !ok {
-			continue
+		matched, matchErr := isOpenUPMRegistryEntry(entry, index)
+		if matchErr != nil {
+			return -1, nil, matchErr
 		}
-		var url string
-		if err := json.Unmarshal(urlRaw, &url); err != nil {
-			return fmt.Errorf("scopedRegistries[%d].url: %w", index, err)
-		}
-		if url == openUPMRegistryURL {
+		if matched {
 			openUPMIndex = index
 		}
 	}
+	return openUPMIndex, parsedEntries, nil
+}
 
-	if openUPMIndex < 0 {
-		newEntry, err := buildOpenUPMRegistryEntry()
-		if err != nil {
-			return err
-		}
-		elements = append(elements, newEntry)
-		encoded, err := emitJSONRawArray(elements, 1)
-		if err != nil {
-			return err
-		}
-		root.values["scopedRegistries"] = encoded
-		result.Changed = true
-		result.RegistryAdded = true
-		result.ScopeAdded = true
-		return nil
+func isOpenUPMRegistryEntry(entry orderedJSONObject, index int) (bool, error) {
+	urlRaw, ok := entry.values["url"]
+	if !ok {
+		return false, nil
 	}
+	url := ""
+	if err := json.Unmarshal(urlRaw, &url); err != nil {
+		return false, fmt.Errorf("scopedRegistries[%d].url: %w", index, err)
+	}
+	return url == openUPMRegistryURL, nil
+}
 
-	entry := parsedEntries[openUPMIndex]
+func appendOpenUPMScopedRegistry(root *orderedJSONObject, elements []json.RawMessage, result *packageManifestMergeResult) error {
+	newEntry, err := buildOpenUPMRegistryEntry()
+	if err != nil {
+		return err
+	}
+	elements = append(elements, newEntry)
+	encoded, err := emitJSONRawArray(elements, 1)
+	if err != nil {
+		return err
+	}
+	root.values["scopedRegistries"] = encoded
+	result.Changed = true
+	result.RegistryAdded = true
+	result.ScopeAdded = true
+	return nil
+}
+
+func addMissingOpenUPMScopeToRegistry(
+	root *orderedJSONObject,
+	elements []json.RawMessage,
+	entry orderedJSONObject,
+	openUPMIndex int,
+	result *packageManifestMergeResult,
+) error {
 	scopesChanged, err := ensureOpenUPMScope(&entry)
 	if err != nil {
 		return err
