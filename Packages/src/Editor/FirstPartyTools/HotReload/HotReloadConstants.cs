@@ -57,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Wire value for TransformWorkerEntryDto.patchKind when the worker emits a shim for a
         // method that exists only in the edited source. Keep in sync with PatchKinds.AddedMethod
-        // in TransformWorker~/TransformWorker.cs.
+        // in TransformWorker~/PatchKinds.cs.
         public const string PatchKindAddedMethod = "addedMethod";
 
         // --status Kind for rows sourced from HotReloadAddedMemberRegistry (no compiled MethodBase).
@@ -69,7 +69,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Calls an added method whose shim failed to compile; the caller was left unpatched. "
             + "Fix the compile error in the added method (see the Failed row in this response) and reload again, or run 'uloop compile'.";
 
-        // Keep in sync with AddedMethodSkipReasons.UnavailableAddedCall in TransformWorker.
+        // Keep in sync with AddedMethodSkipReasons.UnavailableAddedCall in
+        // TransformWorker~/AddedMethodSkipReasons.cs.
         public const string UnavailableAddedCallSkipReason =
             "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
 
@@ -105,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "This run deactivated previously active added members: {0}. They are no longer registered, but patches this run left active may still reach their previous shim bodies. Edit and reload again to re-apply them, or run 'uloop compile'.";
 
         // Wire value for TransformWorkerRemovedMemberDto.kind.
-        // Keep in sync with RemovedMemberKinds in TransformWorker~/TransformWorker.cs.
+        // Keep in sync with RemovedMemberKinds in TransformWorker~/RemovedMemberKinds.cs.
         public const string RemovedMemberKindMethod = "method";
 
         public const string RemovedMemberKindField = "field";
