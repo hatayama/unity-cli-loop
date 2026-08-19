@@ -111,7 +111,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         // Why first: added-member rewrite must not depend on _accessorPlan. Transplant bodies
         // have a null plan and would skip rewrite; delegation bodies would otherwise bind
         // Harmony accessors onto members that do not exist on the compiled type (B1).
-        if (TransformWorkerProgram.NameofRules.IsNameofInvocation(node))
+        if (NameofRules.IsNameofInvocation(node))
         {
             ExpressionSyntax folded = TryFoldNameofAddedMember(node);
             if (folded != null)
@@ -122,7 +122,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitInvocationExpression(node);
         }
 
-        if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        if (NameofRules.IsInsideNameofArgument(node))
         {
             return base.VisitInvocationExpression(node);
         }
@@ -280,7 +280,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitAssignmentExpression(node);
         }
 
-        if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        if (NameofRules.IsInsideNameofArgument(node))
         {
             return base.VisitAssignmentExpression(node);
         }
@@ -593,7 +593,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
     {
-        if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        if (NameofRules.IsInsideNameofArgument(node))
         {
             return base.VisitMemberAccessExpression(node);
         }
@@ -689,7 +689,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     {
         if (IsAssignmentLeft(node)
             || IsIncrementOperand(node)
-            || TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+            || NameofRules.IsInsideNameofArgument(node))
         {
             return null;
         }
@@ -711,7 +711,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     {
         // nameof(...) and assignment left sides must keep a member-reference shape: qualify only,
         // never rewrite to an accessor read (Func<> call results are not assignable).
-        bool suppressAccessorRead = TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node)
+        bool suppressAccessorRead = NameofRules.IsInsideNameofArgument(node)
             || (node.Parent is AssignmentExpressionSyntax assignmentLeft
                 && assignmentLeft.Left == node);
         if (_accessorPlan == null || suppressAccessorRead)

@@ -3344,33 +3344,6 @@ public static class TransformWorkerProgram
         return IsInaccessibleNonConstSymbol(symbol);
     }
 
-    internal static class NameofRules
-    {
-        // Why text-only: nameof is a language keyword with a null symbol; a user-defined method
-        // literally named "nameof" would also match, but that pathological case is ignored in practice.
-        public static bool IsNameofInvocation(InvocationExpressionSyntax invocation)
-        {
-            return invocation.Expression is IdentifierNameSyntax identifier
-                && identifier.Identifier.ValueText == "nameof";
-        }
-
-        public static bool IsInsideNameofArgument(SyntaxNode node)
-        {
-            for (SyntaxNode current = node; current != null; current = current.Parent)
-            {
-                if (current is ArgumentSyntax
-                    && current.Parent is ArgumentListSyntax argumentList
-                    && argumentList.Parent is InvocationExpressionSyntax invocation
-                    && IsNameofInvocation(invocation))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-    }
-
     private static (int ShimTypeCounter, int GlobalShimMethodCounter) QueueTypeMethods(
         TypeEmitState typeState,
         SemanticModel semanticModel,

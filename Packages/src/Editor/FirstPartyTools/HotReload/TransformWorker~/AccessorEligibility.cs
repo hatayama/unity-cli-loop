@@ -51,7 +51,7 @@ internal static class AccessorEligibility
         AccessorPlan built = new AccessorPlan();
         foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
         {
-            if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+            if (NameofRules.IsInsideNameofArgument(node))
             {
                 continue;
             }
@@ -115,7 +115,7 @@ internal static class AccessorEligibility
     {
         foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
         {
-            if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+            if (NameofRules.IsInsideNameofArgument(node))
             {
                 continue;
             }
@@ -158,7 +158,7 @@ internal static class AccessorEligibility
     {
         foreach (SyntaxNode node in bodyNode.DescendantNodes())
         {
-            if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+            if (NameofRules.IsInsideNameofArgument(node))
             {
                 continue;
             }
@@ -478,7 +478,7 @@ internal static class AccessorEligibility
         out string rejectReason)
     {
         rejectReason = null;
-        if (TransformWorkerProgram.NameofRules.IsNameofInvocation(invocation))
+        if (NameofRules.IsNameofInvocation(invocation))
         {
             return false;
         }
