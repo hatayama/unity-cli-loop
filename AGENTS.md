@@ -141,7 +141,7 @@ Commands and the five places the threshold is declared: `docs/code-complexity.md
 
 The repository-wide maximum production file length is 500 SLOC, counted by the
 file-length checker after dropping comments and blank lines. The `File Length
-Report` job currently reports over-limit files without failing the pull request.
+Report` job fails the pull request when findings exceed that limit.
 When you touch a reported file, split it before adding behavior. Commands, the
 exclusion list, and the two places the threshold is declared:
 `docs/file-length.md`.

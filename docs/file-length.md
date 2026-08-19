@@ -57,9 +57,9 @@ places that must stay in step:
 1. `MAX_FILE_LENGTH` in `scripts/check-file-length.sh`
 2. `DefaultMaxFileLength` in `cli/release-automation/internal/automation/file_length.go`
 
-The `File Length Report` job on the `Code Complexity` workflow reports files
-over the limit and does not fail the pull request yet. Locally the check stays
-in warning mode unless `CODE_FILE_LENGTH_FAIL_ON_EXCEEDED=true` is set.
+The `File Length Report` job on the `Code Complexity` workflow fails the pull
+request when findings exceed the 500 SLOC limit. Locally the check stays in
+warning mode unless `CODE_FILE_LENGTH_FAIL_ON_EXCEEDED=true` is set.
 
 When touching a reported file, split it below the limit before adding behavior.
 A new over-limit file in a change under review is a required fix, not noise to

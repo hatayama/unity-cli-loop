@@ -93,5 +93,5 @@ jobs:
 
       - name: Report file length
         env:
-          CODE_FILE_LENGTH_FAIL_ON_EXCEEDED: 'false'
+          CODE_FILE_LENGTH_FAIL_ON_EXCEEDED: 'true'
         run: scripts/check-file-length.sh
