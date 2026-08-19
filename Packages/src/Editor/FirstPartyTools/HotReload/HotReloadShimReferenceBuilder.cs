@@ -95,7 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // publicized, so the list may already hold a publicized copy while Location is the raw
         // DLL. Adding both is CS1703. Harmony is a plugin outside ScriptAssemblies, so this
         // collision does not arise there, but the same skip is still correct.
-        internal static void AppendIfMissingByFileName(List<string> references, string assemblyPath)
+        private static void AppendIfMissingByFileName(List<string> references, string assemblyPath)
         {
             Debug.Assert(!string.IsNullOrEmpty(assemblyPath), "assemblyPath must not be empty.");
             string fileName = Path.GetFileName(assemblyPath);
@@ -113,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             references.Add(assemblyPath);
         }
 
-        internal static bool HasDelegationEntry(TransformWorkerEntryDto[] entries)
+        private static bool HasDelegationEntry(TransformWorkerEntryDto[] entries)
         {
             if (entries == null)
             {
@@ -185,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// emitted a delegation entry or accessor delegates (addedMethod entries can need them).
         /// The added-field store assembly is added when the worker rewrote added-field accesses.
         /// </summary>
-        internal static List<string> BuildShimReferencePaths(
+        private static List<string> BuildShimReferencePaths(
             UnityCompilationAssembly compilationAssembly,
             string targetDllPath,
             bool includeHarmonyReference,
@@ -249,7 +249,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return references;
         }
 
-        internal static bool IsUnderDirectory(string fullPath, string directoryPath)
+        private static bool IsUnderDirectory(string fullPath, string directoryPath)
         {
             string normalizedPath = fullPath.Replace('\\', '/');
             string normalizedDirectory = directoryPath.Replace('\\', '/');

@@ -252,7 +252,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return retryOnly;
         }
 
-        internal static void RewriteShimCompileFailureIndirectCallerReasons(
+        private static void RewriteShimCompileFailureIndirectCallerReasons(
             List<TransformWorkerSkippedDto> retryOnlyRows,
             IReadOnlyCollection<string> excludedAddedMethodKeys)
         {
@@ -298,7 +298,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal static bool FirstPassContainsSkippedPair(
+        private static bool FirstPassContainsSkippedPair(
             TransformWorkerSkippedDto[] firstPassSkipped,
             TransformWorkerSkippedDto retryRow)
         {
@@ -318,7 +318,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        internal static List<HotReloadMethodOutcome> BuildFailedMethodOutcomes(
+        private static List<HotReloadMethodOutcome> BuildFailedMethodOutcomes(
             HotReloadShimErrorAttribution.ShimCompileErrorAttribution attribution,
             string assemblyResolvePath,
             TransformWorkerSkippedDto[] skipped)
@@ -404,7 +404,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 excludedCallerEntries);
         }
 
-        internal static List<TransformWorkerEntryDto> CollectCallerEntriesOfAddedMethods(
+        private static List<TransformWorkerEntryDto> CollectCallerEntriesOfAddedMethods(
             HashSet<string> addedMethodKeys,
             HashSet<string> alreadyExcludedEntryKeys,
             TransformWorkerEntryDto[] allEntries)

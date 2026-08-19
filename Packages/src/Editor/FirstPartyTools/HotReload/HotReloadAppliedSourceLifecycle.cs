@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // converging to compiled IL yields empty outcomes on the empty-entries path. Recording
         // that as non-baseline would make the next identical reload claim a prior Skipped/Failed
         // that never happened.
-        internal static (string Hash, bool IsFullyApplied)? DecideAppliedSourceRecord(
+        private static (string Hash, bool IsFullyApplied)? DecideAppliedSourceRecord(
             string sourceContentSha256,
             IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
@@ -166,7 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why first-pass added entries: a return-type replacement is both an added entry and
         // a removed signature with the same label, so subtracting removals would swallow the
         // warning. Convergence is quiet because dropping the declaration also drops the entry.
-        internal static HashSet<string> CollectAddedEntryLabels(TransformWorkerOutputDto workerOutput)
+        private static HashSet<string> CollectAddedEntryLabels(TransformWorkerOutputDto workerOutput)
         {
             HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
             if (workerOutput == null || workerOutput.entries == null)
@@ -195,7 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why union Skipped labels: a still-declared added method can leave the first-pass
         // entries when the worker skips it (virtual, generic, interface). Why not Failed:
         // a Failed added method is always a first-pass added entry.
-        internal static HashSet<string> CollectStillDeclaredAddedLabels(
+        private static HashSet<string> CollectStillDeclaredAddedLabels(
             TransformWorkerOutputDto workerOutput,
             IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
@@ -220,7 +220,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return labels;
         }
 
-        internal static bool IsUnexpectedDeactivation(
+        private static bool IsUnexpectedDeactivation(
             string label,
             HashSet<string> currentLabels,
             HashSet<string> stillDeclaredAddedLabels)
@@ -272,7 +272,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadConstants.DeactivatedPatchesWarningFormat);
         }
 
-        internal static void AppendDeactivatedWarningLine(
+        private static void AppendDeactivatedWarningLine(
             List<string> warnings,
             List<string> labels,
             string format)

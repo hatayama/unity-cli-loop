@@ -133,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal static HotReloadMethodOutcome ApplyEntry(
+        private static HotReloadMethodOutcome ApplyEntry(
             TransformWorkerEntryDto entry,
             string assemblyName,
             Assembly shimAssembly,
@@ -241,7 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return HotReloadMethodOutcome.Patched(methodLabel, filePath, entry.lifecycleNote);
         }
 
-        internal static HotReloadMethodOutcome ApplyAddedMethodEntry(
+        private static HotReloadMethodOutcome ApplyAddedMethodEntry(
             TransformWorkerEntryDto entry,
             string methodLabel,
             Assembly shimAssembly,
@@ -281,7 +281,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return HotReloadMethodOutcome.Added(methodLabel, filePath, entry.lifecycleNote);
         }
 
-        internal static (MethodInfo ShimMethod, string ErrorMessage) FindShimMethod(
+        private static (MethodInfo ShimMethod, string ErrorMessage) FindShimMethod(
             Type shimType,
             string shimMethodName)
         {
@@ -308,7 +308,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // What: after Apply (+ retarget handler), splits armed markers into retargeted vs suppressed.
         // Expired skips are recorded as a pending-drain event inside SourcePausePointPatcher and
         // surfaced from HotReloadTools.BuildApplyResponse (same pattern as line-drift warnings).
-        internal static void AppendPausePointTransitionIds(
+        private static void AppendPausePointTransitionIds(
             MethodBase method,
             List<string> suppressedPausePointIds,
             List<string> retargetedPausePointIds)
@@ -400,7 +400,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return failureReasonByShimTypeName;
         }
 
-        internal static Type FindShimType(Assembly shimAssembly, string shimTypeName)
+        private static Type FindShimType(Assembly shimAssembly, string shimTypeName)
         {
             if (string.IsNullOrEmpty(shimTypeName))
             {

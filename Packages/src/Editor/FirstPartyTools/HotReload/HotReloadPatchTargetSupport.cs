@@ -106,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (null, projectRelativePath, assemblyName, compilationAssembly, targetDllPath, projectRoot);
         }
 
-        internal static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)
+        private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)
         {
             foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
             {
@@ -142,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return paths;
         }
 
-        internal static string CheckMvidGuard(string assemblyName, string targetDllPath)
+        private static string CheckMvidGuard(string assemblyName, string targetDllPath)
         {
             ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
             using AssemblyDefinition assemblyDefinition =

@@ -55,7 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why signature keys, not simple names: a gated replacement and a real deletion can
         // share a method name across types in the same file. Name-only suppression would
         // drop the deletion warning (fail-open).
-        internal static bool ShouldSuppressGatedRemovedMethodName(
+        private static bool ShouldSuppressGatedRemovedMethodName(
             string methodName,
             TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures,
             HashSet<string> gatedReplacementMethodKeys)

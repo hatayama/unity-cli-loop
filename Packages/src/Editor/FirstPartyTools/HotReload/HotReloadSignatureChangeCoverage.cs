@@ -168,7 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal static string FormatCallSiteCallerLabel(HotReloadCallSiteScanner.CallSiteHit hit)
+        private static string FormatCallSiteCallerLabel(HotReloadCallSiteScanner.CallSiteHit hit)
         {
             Debug.Assert(hit != null, "hit must not be null.");
             return HotReloadPatcher.FormatMethodKeyParts(
@@ -178,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ReadGenericArityFromWireMethodKey(hit.CallerMethodKey, hit.CallerMethodName));
         }
 
-        internal static int ReadGenericArityFromWireMethodKey(string methodKey, string methodName)
+        private static int ReadGenericArityFromWireMethodKey(string methodKey, string methodName)
         {
             Debug.Assert(!string.IsNullOrEmpty(methodKey), "methodKey must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be null or empty.");

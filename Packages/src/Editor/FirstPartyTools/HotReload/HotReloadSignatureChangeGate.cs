@@ -117,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 gatedReplacementMethodKeys);
         }
 
-        internal static List<TransformWorkerEntryDto> CollectReplacementEntries(
+        private static List<TransformWorkerEntryDto> CollectReplacementEntries(
             TransformWorkerEntryDto[] entries)
         {
             List<TransformWorkerEntryDto> replacements = new List<TransformWorkerEntryDto>();
@@ -132,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return replacements;
         }
 
-        internal static HotReloadCallSiteScanner.CompiledMethodIdentity[] CollectScanTargets(
+        private static HotReloadCallSiteScanner.CompiledMethodIdentity[] CollectScanTargets(
             string assemblyName,
             IReadOnlyList<TransformWorkerEntryDto> replacementEntries,
             TransformWorkerRemovedMethodSignatureDto[] removedSignatures)
@@ -167,7 +167,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return targets.ToArray();
         }
 
-        internal static void TryAddScanTarget(
+        private static void TryAddScanTarget(
             List<HotReloadCallSiteScanner.CompiledMethodIdentity> targets,
             HashSet<string> seenKeys,
             string assemblyName,
@@ -195,7 +195,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     genericArity));
         }
 
-        internal static List<TransformWorkerEntryDto> CollectGatedReplacementEntries(
+        private static List<TransformWorkerEntryDto> CollectGatedReplacementEntries(
             IReadOnlyList<TransformWorkerEntryDto> replacementEntries,
             Dictionary<string, List<string>> uncoveredCallersByTarget)
         {
@@ -213,7 +213,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return gated;
         }
 
-        internal static List<string> CollectGatedReplacementMethodKeys(
+        private static List<string> CollectGatedReplacementMethodKeys(
             IReadOnlyList<TransformWorkerEntryDto> gatedReplacements)
         {
             List<string> keys = new List<string>();
@@ -245,7 +245,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 entry.genericArity);
         }
 
-        internal static List<HotReloadMethodOutcome> BuildGatedReplacementSkipOutcomes(
+        private static List<HotReloadMethodOutcome> BuildGatedReplacementSkipOutcomes(
             IReadOnlyList<TransformWorkerEntryDto> gatedReplacements,
             Dictionary<string, List<string>> uncoveredCallersByTarget,
             HashSet<string> editedFileMethodKeys,
