@@ -38,38 +38,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return ApplyOnExplicitUpdate(apply, targetUpdateType, ct);
             }
 
-            TaskCompletionSource<InputSimulationWaitOutcome> tcs =
-                new(TaskCreationOptions.RunContinuationsAsynchronously);
-            CancellationTokenRegistration registration = default;
-            int applyWaitState = ApplyWaitStateWaiting;
-            Action? callback = null;
-            InputSystemUpdateSubscription? subscription = null;
-
-            void TryDiscardForPause()
+            ConfiguredUpdateApplyWait wait = new()
             {
-                if (Interlocked.CompareExchange(
-                        ref applyWaitState,
-                        ApplyWaitStateFinishedWithoutApply,
-                        ApplyWaitStateWaiting) != ApplyWaitStateWaiting)
-                {
-                    return;
-                }
+                Apply = apply,
+                TargetUpdateType = targetUpdateType,
+                Completion = new TaskCompletionSource<InputSimulationWaitOutcome>(
+                    TaskCreationOptions.RunContinuationsAsynchronously)
+            };
+            wait.Subscription = new InputSystemUpdateSubscription(CreateConfiguredUpdateCallback(wait));
+            return await AwaitConfiguredUpdateResult(wait, ct).ConfigureAwait(false);
+        }
 
-                // Dispose before cleanup release so a queued edge cannot apply after resume.
-                subscription?.Dispose();
-                tcs.TrySetResult(InputSimulationWaitOutcome.Paused);
+        private sealed class ConfiguredUpdateApplyWait
+        {
+            public Action Apply = null!;
+            public InputUpdateType TargetUpdateType;
+            public TaskCompletionSource<InputSimulationWaitOutcome> Completion = null!;
+            public InputSystemUpdateSubscription? Subscription;
+            public int ApplyWaitState;
+        }
+
+        private static void TryDiscardConfiguredUpdateForPause(ConfiguredUpdateApplyWait wait)
+        {
+            if (Interlocked.CompareExchange(
+                    ref wait.ApplyWaitState,
+                    ApplyWaitStateFinishedWithoutApply,
+                    ApplyWaitStateWaiting) != ApplyWaitStateWaiting)
+            {
+                return;
             }
 
-            callback = () =>
+            // Dispose before cleanup release so a queued edge cannot apply after resume.
+            wait.Subscription?.Dispose();
+            wait.Completion.TrySetResult(InputSimulationWaitOutcome.Paused);
+        }
+
+        private static Action CreateConfiguredUpdateCallback(ConfiguredUpdateApplyWait wait)
+        {
+            return () =>
             {
-                Debug.Assert(callback != null, "callback must be assigned before subscription");
-                Debug.Assert(subscription != null, "subscription must be assigned before callback invocation");
+                Debug.Assert(wait.Subscription != null, "subscription must be assigned before callback invocation");
                 if (Interlocked.CompareExchange(
-                        ref applyWaitState,
+                        ref wait.ApplyWaitState,
                         ApplyWaitStateWaiting,
                         ApplyWaitStateWaiting) != ApplyWaitStateWaiting)
                 {
-                    subscription?.Dispose();
+                    wait.Subscription?.Dispose();
                     return;
                 }
 
@@ -77,39 +91,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // it after resume (that delayed apply is the Repro B / round-8 stale press).
                 if (InputSystemUpdateHelper.IsPaused())
                 {
-                    TryDiscardForPause();
+                    TryDiscardConfiguredUpdateForPause(wait);
                     return;
                 }
 
                 InputUpdateType currentUpdateType = InputState.currentUpdateType;
-                if (!InputUpdateTypeResolver.IsMatch(currentUpdateType, targetUpdateType))
+                if (!InputUpdateTypeResolver.IsMatch(currentUpdateType, wait.TargetUpdateType))
                 {
                     return;
                 }
 
                 if (Interlocked.CompareExchange(
-                        ref applyWaitState,
+                        ref wait.ApplyWaitState,
                         ApplyWaitStateApplying,
                         ApplyWaitStateWaiting) != ApplyWaitStateWaiting)
                 {
-                    subscription?.Dispose();
+                    wait.Subscription?.Dispose();
                     return;
                 }
 
-                subscription?.Dispose();
+                wait.Subscription?.Dispose();
                 try
                 {
-                    apply();
-                    tcs.TrySetResult(InputSimulationWaitOutcome.Completed);
+                    wait.Apply();
+                    wait.Completion.TrySetResult(InputSimulationWaitOutcome.Completed);
                 }
                 catch (Exception exception)
                 {
                     // Convert apply failures into the awaited task result so timeout paths never wait on an orphaned TCS.
-                    tcs.TrySetException(exception);
+                    wait.Completion.TrySetException(exception);
                 }
             };
+        }
 
-            subscription = new InputSystemUpdateSubscription(callback);
+        private static async Task<InputSimulationWaitOutcome> AwaitConfiguredUpdateResult(
+            ConfiguredUpdateApplyWait wait,
+            CancellationToken ct)
+        {
+            CancellationTokenRegistration registration = default;
             try
             {
                 if (ct.CanBeCanceled)
@@ -117,12 +136,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     registration = ct.Register(() =>
                     {
                         if (Interlocked.CompareExchange(
-                                ref applyWaitState,
+                                ref wait.ApplyWaitState,
                                 ApplyWaitStateFinishedWithoutApply,
                                 ApplyWaitStateWaiting) == ApplyWaitStateWaiting)
                         {
-                            subscription?.Dispose();
-                            tcs.TrySetCanceled(ct);
+                            wait.Subscription?.Dispose();
+                            wait.Completion.TrySetCanceled(ct);
                         }
                     });
                 }
@@ -133,37 +152,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     timeoutCts.Token);
                 // Why: onBeforeUpdate may not run while paused, so poll pause separately and
                 // dispose the subscription before any later resume can apply the queued edge.
-                _ = WatchForPauseDiscardAsync(TryDiscardForPause, timeoutCts.Token);
-                Task completedTask = await Task.WhenAny(tcs.Task, timeoutTask).ConfigureAwait(false);
+                _ = WatchForPauseDiscardAsync(() => TryDiscardConfiguredUpdateForPause(wait), timeoutCts.Token);
+                Task completedTask = await Task.WhenAny(wait.Completion.Task, timeoutTask).ConfigureAwait(false);
                 if (completedTask == timeoutTask)
                 {
-                    await timeoutTask.ConfigureAwait(false);
-                    // Why: cancel before scope-exit dispose so the pause watcher exits instead of polling a disposed token.
-                    timeoutCts.Cancel();
-                    if (Interlocked.CompareExchange(
-                            ref applyWaitState,
-                            ApplyWaitStateFinishedWithoutApply,
-                            ApplyWaitStateWaiting) == ApplyWaitStateWaiting)
-                    {
-                        subscription.Dispose();
-                        return InputSimulationWaitOutcome.TimedOut;
-                    }
-
-                    InputSimulationWaitOutcome appliedOutcome = await tcs.Task.ConfigureAwait(false);
-                    await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
-                    return appliedOutcome;
+                    return await FinishConfiguredUpdateTimeout(wait, timeoutTask, timeoutCts).ConfigureAwait(false);
                 }
 
                 timeoutCts.Cancel();
-                InputSimulationWaitOutcome outcome = await tcs.Task.ConfigureAwait(false);
+                InputSimulationWaitOutcome outcome = await wait.Completion.Task.ConfigureAwait(false);
                 await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
                 return outcome;
             }
             finally
             {
                 registration.Dispose();
-                subscription?.Dispose();
+                wait.Subscription?.Dispose();
             }
+        }
+
+        private static async Task<InputSimulationWaitOutcome> FinishConfiguredUpdateTimeout(
+            ConfiguredUpdateApplyWait wait,
+            Task timeoutTask,
+            CancellationTokenSource timeoutCts)
+        {
+            await timeoutTask.ConfigureAwait(false);
+            // Why: cancel before scope-exit dispose so the pause watcher exits instead of polling a disposed token.
+            timeoutCts.Cancel();
+            if (Interlocked.CompareExchange(
+                    ref wait.ApplyWaitState,
+                    ApplyWaitStateFinishedWithoutApply,
+                    ApplyWaitStateWaiting) == ApplyWaitStateWaiting)
+            {
+                wait.Subscription?.Dispose();
+                return InputSimulationWaitOutcome.TimedOut;
+            }
+
+            InputSimulationWaitOutcome appliedOutcome = await wait.Completion.Task.ConfigureAwait(false);
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+            return appliedOutcome;
         }
 
         private static async Task WatchForPauseDiscardAsync(Action tryDiscardForPause, CancellationToken ct)

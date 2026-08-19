@@ -122,43 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (value is IEnumerable enumerable)
             {
-                if (!visited.Add(value))
-                {
-                    return new JValue("(circular)");
-                }
-
-                // Why: an array or dictionary whose elements/keys/values are all primitives/enums
-                // costs no further recursion budget once reached (each one resolves via the
-                // IsJsonPrimitive branch above regardless of depth), so gating it on remainingDepth
-                // here would degrade a nested field like "Board._cells" (a PieceType?[,]) to a bare
-                // type-name string purely because two field-access hops already spent the depth
-                // budget, not because previewing it is actually unsafe or unbounded.
-                bool isPrimitiveElementArray =
-                    value is Array primitiveElementArray && IsJsonPrimitiveElementType(primitiveElementArray.GetType().GetElementType());
-                bool isPrimitiveKeyValueDictionary =
-                    value is IDictionary && IsPrimitiveKeyValueDictionaryType(value.GetType());
-
-                if (remainingDepth <= 0 && !isPrimitiveElementArray && !isPrimitiveKeyValueDictionary)
-                {
-                    return new JValue(SafeToString(value));
-                }
-
-                if (value is IDictionary dictionary)
-                {
-                    return BuildDictionaryToken(dictionary, remainingDepth, maxElementCount, visited, ref truncated);
-                }
-
-                if (value is Array multidimensionalArray && multidimensionalArray.Rank > 1)
-                {
-                    return BuildMultidimensionalArrayToken(multidimensionalArray, remainingDepth, maxElementCount, visited, ref truncated);
-                }
-
-                if (value is ICollection)
-                {
-                    return BuildArrayToken(enumerable, remainingDepth, maxElementCount, visited, ref truncated);
-                }
-
-                return new JValue(SafeToString(value));
+                return BuildEnumerableToken(enumerable, remainingDepth, maxElementCount, visited, ref truncated);
             }
 
             if (!HasToStringOverride(value.GetType()))
@@ -333,14 +297,68 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Type-level counterpart of IsJsonPrimitive (plus string, which BuildToken also resolves
         // unconditionally above), used to recognize an array/dictionary whose elements will always
         // resolve regardless of remaining depth budget.
+        // Why a helper: the IEnumerable branch has its own circular-ref, depth-budget, and
+        // collection-kind decisions, and leaving them inline kept BuildToken over CA1502.
+        private static JToken BuildEnumerableToken(
+            IEnumerable enumerable, int remainingDepth, int maxElementCount, HashSet<object> visited, ref bool truncated)
+        {
+            if (!visited.Add(enumerable))
+            {
+                return new JValue("(circular)");
+            }
+
+            // Why: an array or dictionary whose elements/keys/values are all primitives/enums
+            // costs no further recursion budget once reached (each one resolves via the
+            // IsJsonPrimitive branch above regardless of depth), so gating it on remainingDepth
+            // here would degrade a nested field like "Board._cells" (a PieceType?[,]) to a bare
+            // type-name string purely because two field-access hops already spent the depth
+            // budget, not because previewing it is actually unsafe or unbounded.
+            bool isPrimitiveElementArray =
+                enumerable is Array primitiveElementArray && IsJsonPrimitiveElementType(primitiveElementArray.GetType().GetElementType());
+            bool isPrimitiveKeyValueDictionary =
+                enumerable is IDictionary && IsPrimitiveKeyValueDictionaryType(enumerable.GetType());
+
+            if (remainingDepth <= 0 && !isPrimitiveElementArray && !isPrimitiveKeyValueDictionary)
+            {
+                return new JValue(SafeToString(enumerable));
+            }
+
+            if (enumerable is IDictionary dictionary)
+            {
+                return BuildDictionaryToken(dictionary, remainingDepth, maxElementCount, visited, ref truncated);
+            }
+
+            if (enumerable is Array multidimensionalArray && multidimensionalArray.Rank > 1)
+            {
+                return BuildMultidimensionalArrayToken(multidimensionalArray, remainingDepth, maxElementCount, visited, ref truncated);
+            }
+
+            if (enumerable is ICollection)
+            {
+                return BuildArrayToken(enumerable, remainingDepth, maxElementCount, visited, ref truncated);
+            }
+
+            return new JValue(SafeToString(enumerable));
+        }
+
         private static bool IsJsonPrimitiveElementType(Type elementType)
         {
             Type underlyingType = Nullable.GetUnderlyingType(elementType) ?? elementType;
-            return underlyingType == typeof(bool)
-                || underlyingType == typeof(byte) || underlyingType == typeof(sbyte)
+            return IsJsonPrimitiveIntegerElementType(underlyingType)
+                || IsJsonPrimitiveNonIntegerElementType(underlyingType);
+        }
+
+        private static bool IsJsonPrimitiveIntegerElementType(Type underlyingType)
+        {
+            return underlyingType == typeof(byte) || underlyingType == typeof(sbyte)
                 || underlyingType == typeof(short) || underlyingType == typeof(ushort)
                 || underlyingType == typeof(int) || underlyingType == typeof(uint)
-                || underlyingType == typeof(long) || underlyingType == typeof(ulong)
+                || underlyingType == typeof(long) || underlyingType == typeof(ulong);
+        }
+
+        private static bool IsJsonPrimitiveNonIntegerElementType(Type underlyingType)
+        {
+            return underlyingType == typeof(bool)
                 || underlyingType == typeof(float) || underlyingType == typeof(double)
                 || underlyingType == typeof(decimal)
                 || underlyingType == typeof(char)

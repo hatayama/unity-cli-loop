@@ -42,45 +42,68 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _refreshSkillsStateButton = refreshSkillsStateButton
                 ?? throw new System.ArgumentNullException(nameof(refreshSkillsStateButton));
 
-            _skillTargetStatusList = root.Q<VisualElement>("skill-target-status-list");
-            _skillTargetStatusDivider = root.Q<VisualElement>("skill-target-status-divider");
-            _skillTargetStatusSummary = root.Q<Label>("skill-target-status-summary");
-            _skillsNoTargetsMessage = root.Q<Label>("skills-no-targets-message");
-            _installAllSkillsButton = root.Q<Button>("install-all-skills-button");
-            _installSpecificTargetFoldout = root.Q<Foldout>("install-specific-target-foldout");
-            _groupSkillsRow = root.Q<VisualElement>("group-skills-row");
-            _groupSkillsToggle = root.Q<Toggle>("group-skills-toggle");
-            _skillsTargetField = root.Q<EnumField>("skills-target-field");
-            _installSelectedSkillsButton = root.Q<Button>("install-selected-skills-button");
-
-            Debug.Assert(_skillTargetStatusList != null, "skill-target-status-list must not be null");
-            Debug.Assert(_skillTargetStatusDivider != null, "skill-target-status-divider must not be null");
-            Debug.Assert(_skillTargetStatusSummary != null, "skill-target-status-summary must not be null");
-            Debug.Assert(_skillsNoTargetsMessage != null, "skills-no-targets-message must not be null");
-            Debug.Assert(_installAllSkillsButton != null, "install-all-skills-button must not be null");
-            Debug.Assert(_installSpecificTargetFoldout != null, "install-specific-target-foldout must not be null");
-            Debug.Assert(_groupSkillsRow != null, "group-skills-row must not be null");
-            Debug.Assert(_groupSkillsToggle != null, "group-skills-toggle must not be null");
-            Debug.Assert(_skillsTargetField != null, "skills-target-field must not be null");
-            Debug.Assert(_installSelectedSkillsButton != null, "install-selected-skills-button must not be null");
-
-            _ = _skillTargetStatusList ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusList));
-            _ = _skillTargetStatusDivider ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusDivider));
-            _ = _skillTargetStatusSummary ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusSummary));
-            _ = _skillsNoTargetsMessage ?? throw new System.ArgumentNullException(nameof(_skillsNoTargetsMessage));
-            _ = _installAllSkillsButton ?? throw new System.ArgumentNullException(nameof(_installAllSkillsButton));
-            _ = _installSpecificTargetFoldout
-                ?? throw new System.ArgumentNullException(nameof(_installSpecificTargetFoldout));
-            _ = _groupSkillsRow ?? throw new System.ArgumentNullException(nameof(_groupSkillsRow));
-            _ = _groupSkillsToggle ?? throw new System.ArgumentNullException(nameof(_groupSkillsToggle));
-            _ = _skillsTargetField ?? throw new System.ArgumentNullException(nameof(_skillsTargetField));
-            _ = _installSelectedSkillsButton
-                ?? throw new System.ArgumentNullException(nameof(_installSelectedSkillsButton));
+            RequiredSkillsPanelElements elements = QueryRequiredElements(root);
+            _skillTargetStatusList = elements.StatusList;
+            _skillTargetStatusDivider = elements.StatusDivider;
+            _skillTargetStatusSummary = elements.StatusSummary;
+            _skillsNoTargetsMessage = elements.NoTargetsMessage;
+            _installAllSkillsButton = elements.InstallAllButton;
+            _installSpecificTargetFoldout = elements.InstallSpecificTargetFoldout;
+            _groupSkillsRow = elements.GroupSkillsRow;
+            _groupSkillsToggle = elements.GroupSkillsToggle;
+            _skillsTargetField = elements.SkillsTargetField;
+            _installSelectedSkillsButton = elements.InstallSelectedButton;
 
             _installSpecificTargetFoldout.SetValueWithoutNotify(false);
             ViewDataBinder.SetVisible(_groupSkillsRow, false);
             ViewDataBinder.SetVisible(_skillsNoTargetsMessage, false);
+            WireEventHandlers();
+        }
 
+        // Why a helper: the ctor's Q/assert/throw fan-out is one query step, and leaving it
+        // inline kept the constructor over CA1502.
+        // Why three phases: the original queried every node, emitted every missing-node
+        // Debug.Assert, and only then threw for the first missing one. Assert-then-throw
+        // per element skipped later asserts.
+        private static RequiredSkillsPanelElements QueryRequiredElements(VisualElement root)
+        {
+            VisualElement skillTargetStatusList = root.Q<VisualElement>("skill-target-status-list");
+            VisualElement skillTargetStatusDivider = root.Q<VisualElement>("skill-target-status-divider");
+            Label skillTargetStatusSummary = root.Q<Label>("skill-target-status-summary");
+            Label skillsNoTargetsMessage = root.Q<Label>("skills-no-targets-message");
+            Button installAllSkillsButton = root.Q<Button>("install-all-skills-button");
+            Foldout installSpecificTargetFoldout = root.Q<Foldout>("install-specific-target-foldout");
+            VisualElement groupSkillsRow = root.Q<VisualElement>("group-skills-row");
+            Toggle groupSkillsToggle = root.Q<Toggle>("group-skills-toggle");
+            EnumField skillsTargetField = root.Q<EnumField>("skills-target-field");
+            Button installSelectedSkillsButton = root.Q<Button>("install-selected-skills-button");
+
+            Debug.Assert(skillTargetStatusList != null, "skill-target-status-list must not be null");
+            Debug.Assert(skillTargetStatusDivider != null, "skill-target-status-divider must not be null");
+            Debug.Assert(skillTargetStatusSummary != null, "skill-target-status-summary must not be null");
+            Debug.Assert(skillsNoTargetsMessage != null, "skills-no-targets-message must not be null");
+            Debug.Assert(installAllSkillsButton != null, "install-all-skills-button must not be null");
+            Debug.Assert(installSpecificTargetFoldout != null, "install-specific-target-foldout must not be null");
+            Debug.Assert(groupSkillsRow != null, "group-skills-row must not be null");
+            Debug.Assert(groupSkillsToggle != null, "group-skills-toggle must not be null");
+            Debug.Assert(skillsTargetField != null, "skills-target-field must not be null");
+            Debug.Assert(installSelectedSkillsButton != null, "install-selected-skills-button must not be null");
+
+            return new RequiredSkillsPanelElements(
+                skillTargetStatusList ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusList)),
+                skillTargetStatusDivider ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusDivider)),
+                skillTargetStatusSummary ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusSummary)),
+                skillsNoTargetsMessage ?? throw new System.ArgumentNullException(nameof(_skillsNoTargetsMessage)),
+                installAllSkillsButton ?? throw new System.ArgumentNullException(nameof(_installAllSkillsButton)),
+                installSpecificTargetFoldout ?? throw new System.ArgumentNullException(nameof(_installSpecificTargetFoldout)),
+                groupSkillsRow ?? throw new System.ArgumentNullException(nameof(_groupSkillsRow)),
+                groupSkillsToggle ?? throw new System.ArgumentNullException(nameof(_groupSkillsToggle)),
+                skillsTargetField ?? throw new System.ArgumentNullException(nameof(_skillsTargetField)),
+                installSelectedSkillsButton ?? throw new System.ArgumentNullException(nameof(_installSelectedSkillsButton)));
+        }
+
+        private void WireEventHandlers()
+        {
             _installAllSkillsButton.clicked += () => OnInstallAllClicked?.Invoke();
             _installSelectedSkillsButton.clicked += () => OnInstallSelectedClicked?.Invoke();
             _refreshSkillsStateButton.clicked += () => OnRefreshClicked?.Invoke();
@@ -90,6 +113,44 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 OnGroupSkillsChanged?.Invoke(evt.newValue);
             });
             _groupSkillsRow.RegisterCallback<ClickEvent>(HandleGroupSkillsRowClicked);
+        }
+
+        private readonly struct RequiredSkillsPanelElements
+        {
+            internal readonly VisualElement StatusList;
+            internal readonly VisualElement StatusDivider;
+            internal readonly Label StatusSummary;
+            internal readonly Label NoTargetsMessage;
+            internal readonly Button InstallAllButton;
+            internal readonly Foldout InstallSpecificTargetFoldout;
+            internal readonly VisualElement GroupSkillsRow;
+            internal readonly Toggle GroupSkillsToggle;
+            internal readonly EnumField SkillsTargetField;
+            internal readonly Button InstallSelectedButton;
+
+            internal RequiredSkillsPanelElements(
+                VisualElement statusList,
+                VisualElement statusDivider,
+                Label statusSummary,
+                Label noTargetsMessage,
+                Button installAllButton,
+                Foldout installSpecificTargetFoldout,
+                VisualElement groupSkillsRow,
+                Toggle groupSkillsToggle,
+                EnumField skillsTargetField,
+                Button installSelectedButton)
+            {
+                StatusList = statusList;
+                StatusDivider = statusDivider;
+                StatusSummary = statusSummary;
+                NoTargetsMessage = noTargetsMessage;
+                InstallAllButton = installAllButton;
+                InstallSpecificTargetFoldout = installSpecificTargetFoldout;
+                GroupSkillsRow = groupSkillsRow;
+                GroupSkillsToggle = groupSkillsToggle;
+                SkillsTargetField = skillsTargetField;
+                InstallSelectedButton = installSelectedButton;
+            }
         }
 
         internal void ShowChecking()

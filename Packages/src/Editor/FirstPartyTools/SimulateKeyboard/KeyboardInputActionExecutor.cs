@@ -19,27 +19,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static async Task<SimulateKeyboardResponse> ExecutePress(
             Keyboard keyboard, Key key, float duration, CancellationToken ct)
         {
-            if (duration < 0f || float.IsNaN(duration) || float.IsInfinity(duration))
+            SimulateKeyboardResponse? invalidDuration = CreateInvalidPressDurationResponse(key, duration);
+            if (invalidDuration != null)
             {
-                return new SimulateKeyboardResponse
-                {
-                    Success = false,
-                    Message = $"Duration must be non-negative, got: {duration}",
-                    Action = UnityCliLoopKeyboardAction.Press.ToString(),
-                    KeyName = key.ToString()
-                };
-            }
-
-            if (duration > SimulateInputConstants.MaxDurationSeconds)
-            {
-                return new SimulateKeyboardResponse
-                {
-                    Success = false,
-                    Message =
-                        $"Duration must be {SimulateInputConstants.MaxDurationSeconds} seconds or less, got: {duration}. The unit is seconds, not milliseconds.",
-                    Action = UnityCliLoopKeyboardAction.Press.ToString(),
-                    KeyName = key.ToString()
-                };
+                return invalidDuration;
             }
 
             string keyName = key.ToString();
@@ -96,52 +79,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
-                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
-                InputSystem.onAfterUpdate -= pressEdgeMonitor;
-                if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
-                {
-                    KeyboardInputMainThreadCleanup.ScheduleTimedOutPressCleanup(
-                        keyboard,
-                        key,
-                        pressWasApplied);
-                }
-                else if (waitOutcome == InputSimulationWaitOutcome.Paused)
-                {
-                    // Why: ApplyOnNextConfiguredUpdate already disposed any pending press
-                    // subscription when it returned Paused. Release + latch-sync only after
-                    // that dispose — a live queued edge or a stale wasPressedThisFrame latch
-                    // (armed by edge monitoring even when apply never committed) would both
-                    // look like a re-press after resume.
-                    KeyboardInputMainThreadCleanup.ReleaseKeyStateImmediatelyAfterPauseInterruption(
-                        keyboard,
-                        key);
-
-                    KeyboardKeyState.UnregisterTransientKey(key);
-                    SimulateKeyboardOverlayState.ClearPress();
-                }
-                else if (pressWasApplied)
-                {
-                    InputSimulationWaitOutcome releaseOutcome =
-                        await KeyboardInputMainThreadCleanup.ReleaseKeyStateIfPossible(
-                            keyboard,
-                            key,
-                            CancellationToken.None).ConfigureAwait(false);
-                    if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
-                    {
-                        waitOutcome = InputSimulationWaitOutcome.TimedOut;
-                        KeyboardInputMainThreadCleanup.ScheduleTimedOutPressCleanup(keyboard, key, false);
-                    }
-                    else
-                    {
-                        KeyboardKeyState.UnregisterTransientKey(key);
-                        await KeyboardInputMainThreadCleanup.FinalizePressOverlay(ct).ConfigureAwait(false);
-                    }
-                }
-                else
-                {
-                    KeyboardKeyState.UnregisterTransientKey(key);
-                    SimulateKeyboardOverlayState.ClearPress();
-                }
+                waitOutcome = await CleanupPressWaitAsync(
+                    keyboard,
+                    key,
+                    pressWasApplied,
+                    waitOutcome,
+                    pressEdgeMonitor,
+                    ct).ConfigureAwait(false);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.Paused)
@@ -159,27 +103,109 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     keyName);
             }
 
-            string durationText = duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(duration)}s" : "";
-            string edgeText;
-            if (pressEdgeObserved && pressHoldExtendedFrames > 0)
+            return BuildPressSuccessResponse(
+                keyName,
+                duration,
+                pressEdgeObserved,
+                pressHoldExtendedFrames,
+                edgeMissDiagnostics);
+        }
+
+        private static SimulateKeyboardResponse? CreateInvalidPressDurationResponse(Key key, float duration)
+        {
+            if (duration < 0f || float.IsNaN(duration) || float.IsInfinity(duration))
             {
-                edgeText =
-                    $" (release delayed {pressHoldExtendedFrames} frame(s) until wasPressedThisFrame was observed)";
-            }
-            else if (pressEdgeObserved)
-            {
-                edgeText = "";
-            }
-            else
-            {
-                edgeText =
-                    " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it, so retry or verify with a focused log)" +
-                    PressEdgeDiagnosticsMessageFormatter.BuildSuffix(
-                        edgeMissDiagnostics.ConsumedByUpdateType,
-                        edgeMissDiagnostics.AnyDynamicUpdateObserved,
-                        edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue);
+                return new SimulateKeyboardResponse
+                {
+                    Success = false,
+                    Message = $"Duration must be non-negative, got: {duration}",
+                    Action = UnityCliLoopKeyboardAction.Press.ToString(),
+                    KeyName = key.ToString()
+                };
             }
 
+            if (duration > SimulateInputConstants.MaxDurationSeconds)
+            {
+                return new SimulateKeyboardResponse
+                {
+                    Success = false,
+                    Message =
+                        $"Duration must be {SimulateInputConstants.MaxDurationSeconds} seconds or less, got: {duration}. The unit is seconds, not milliseconds.",
+                    Action = UnityCliLoopKeyboardAction.Press.ToString(),
+                    KeyName = key.ToString()
+                };
+            }
+
+            return null;
+        }
+
+        private static async Task<InputSimulationWaitOutcome> CleanupPressWaitAsync(
+            Keyboard keyboard,
+            Key key,
+            bool pressWasApplied,
+            InputSimulationWaitOutcome waitOutcome,
+            Action pressEdgeMonitor,
+            CancellationToken ct)
+        {
+            await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+            InputSystem.onAfterUpdate -= pressEdgeMonitor;
+            if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                KeyboardInputMainThreadCleanup.ScheduleTimedOutPressCleanup(
+                    keyboard,
+                    key,
+                    pressWasApplied);
+                return waitOutcome;
+            }
+
+            if (waitOutcome == InputSimulationWaitOutcome.Paused)
+            {
+                // Why: ApplyOnNextConfiguredUpdate already disposed any pending press
+                // subscription when it returned Paused. Release + latch-sync only after
+                // that dispose — a live queued edge or a stale wasPressedThisFrame latch
+                // (armed by edge monitoring even when apply never committed) would both
+                // look like a re-press after resume.
+                KeyboardInputMainThreadCleanup.ReleaseKeyStateImmediatelyAfterPauseInterruption(
+                    keyboard,
+                    key);
+
+                KeyboardKeyState.UnregisterTransientKey(key);
+                SimulateKeyboardOverlayState.ClearPress();
+                return waitOutcome;
+            }
+
+            if (!pressWasApplied)
+            {
+                KeyboardKeyState.UnregisterTransientKey(key);
+                SimulateKeyboardOverlayState.ClearPress();
+                return waitOutcome;
+            }
+
+            InputSimulationWaitOutcome releaseOutcome =
+                await KeyboardInputMainThreadCleanup.ReleaseKeyStateIfPossible(
+                    keyboard,
+                    key,
+                    CancellationToken.None).ConfigureAwait(false);
+            if (releaseOutcome == InputSimulationWaitOutcome.TimedOut)
+            {
+                KeyboardInputMainThreadCleanup.ScheduleTimedOutPressCleanup(keyboard, key, false);
+                return InputSimulationWaitOutcome.TimedOut;
+            }
+
+            KeyboardKeyState.UnregisterTransientKey(key);
+            await KeyboardInputMainThreadCleanup.FinalizePressOverlay(ct).ConfigureAwait(false);
+            return waitOutcome;
+        }
+
+        private static SimulateKeyboardResponse BuildPressSuccessResponse(
+            string keyName,
+            float duration,
+            bool pressEdgeObserved,
+            int pressHoldExtendedFrames,
+            PressEdgeMissDiagnostics edgeMissDiagnostics)
+        {
+            string durationText = duration > 0f ? $" for {InputSimulationDurationFormatter.FormatSeconds(duration)}s" : "";
+            string edgeText = BuildPressEdgeText(pressEdgeObserved, pressHoldExtendedFrames, edgeMissDiagnostics);
             return new SimulateKeyboardResponse
             {
                 Success = true,
@@ -192,6 +218,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PressEdgeAnyDynamicUpdateObserved = pressEdgeObserved ? null : edgeMissDiagnostics.AnyDynamicUpdateObserved,
                 PressEdgeKeyAlreadyPressedBeforeQueue = pressEdgeObserved ? null : edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue
             };
+        }
+
+        private static string BuildPressEdgeText(
+            bool pressEdgeObserved,
+            int pressHoldExtendedFrames,
+            PressEdgeMissDiagnostics edgeMissDiagnostics)
+        {
+            if (pressEdgeObserved && pressHoldExtendedFrames > 0)
+            {
+                return
+                    $" (release delayed {pressHoldExtendedFrames} frame(s) until wasPressedThisFrame was observed)";
+            }
+
+            if (pressEdgeObserved)
+            {
+                return "";
+            }
+
+            return
+                " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it, so retry or verify with a focused log)" +
+                PressEdgeDiagnosticsMessageFormatter.BuildSuffix(
+                    edgeMissDiagnostics.ConsumedByUpdateType,
+                    edgeMissDiagnostics.AnyDynamicUpdateObserved,
+                    edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue);
         }
 
         internal static async Task<SimulateKeyboardResponse> ExecuteKeyDown(
