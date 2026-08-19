@@ -84,13 +84,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "A sequence point's offset must correspond to an instruction in the same method body.");
 
             List<SourcePausePointLocalVariable> locals =
-                SourcePausePointResolver.CollectCapturableLocals(containingMethod, sequencePoint.Offset);
+                SourcePausePointCaptureEligibility.CollectCapturableLocals(containingMethod, sequencePoint.Offset);
             // Why fallback: observed during PR-3 development — shim PDBs with #line can place the
             // return sequence point after lexical local scopes close, so in-scope collection is
             // empty while named locals still exist in the method debug info.
             if (locals.Count == 0)
             {
-                locals = SourcePausePointResolver.CollectAllCapturableLocals(containingMethod);
+                locals = SourcePausePointCaptureEligibility.CollectAllCapturableLocals(containingMethod);
             }
 
             int containingToken = containingMethod.MetadataToken.ToInt32();
@@ -100,7 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (isShimMethodBody && !methodEntry.IsDelegation)
             {
                 List<SourcePausePointParameter> parameters =
-                    SourcePausePointResolver.CollectParametersFromReflection(
+                    SourcePausePointCaptureEligibility.CollectParametersFromReflection(
                         methodEntry.OriginalMethod,
                         skipFirstParameter: false);
                 return SourcePausePointShimResolution.TransplantChainJoin(
@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 && methodEntry.IsDelegation
                 && !methodEntry.OriginalMethod.IsStatic;
             List<SourcePausePointParameter> shimParameters =
-                SourcePausePointResolver.CollectParametersFromReflection(
+                SourcePausePointCaptureEligibility.CollectParametersFromReflection(
                     targetMethod,
                     skipFirstParameter: instanceFromFirstArgument);
 

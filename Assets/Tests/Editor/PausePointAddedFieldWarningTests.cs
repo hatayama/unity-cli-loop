@@ -61,9 +61,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 typeName,
                 2,
                 "alpha, beta");
-            string expectedWarning = PausePointUseCase.MergeWarnings(
-                PausePointUseCase.MergeWarnings(
-                    PausePointUseCase.CreateEnableWarning(),
+            string expectedWarning = PausePointEnableWarnings.MergeWarnings(
+                PausePointEnableWarnings.MergeWarnings(
+                    PausePointEnableWarnings.CreateEnableWarning(),
                     SourcePausePointConstants.SmallMethodInliningRiskWarning),
                 addedFieldsWarning);
             Assert.That(response.Warning, Is.EqualTo(expectedWarning));
@@ -88,8 +88,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 response.Success,
                 Is.True,
                 response.ErrorCode + " / " + response.Message);
-            string expectedWarning = PausePointUseCase.MergeWarnings(
-                PausePointUseCase.CreateEnableWarning(),
+            string expectedWarning = PausePointEnableWarnings.MergeWarnings(
+                PausePointEnableWarnings.CreateEnableWarning(),
                 SourcePausePointConstants.SmallMethodInliningRiskWarning);
             Assert.That(response.Warning, Is.EqualTo(expectedWarning));
         }

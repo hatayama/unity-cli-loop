@@ -127,7 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Only walks base types Cecil already resolved within the same module (nested classes of a
         // custom base class in this assembly); an external non-MonoBehaviour base (e.g. a plain
         // framework type) stops the walk rather than forcing cross-assembly resolution, mirroring
-        // SourcePausePointResolver.IsRefStructType's stance on the same tradeoff.
+        // SourcePausePointCaptureEligibility.IsRefStructType's stance on the same tradeoff.
         private static bool DerivesFromMonoBehaviour(TypeDefinition type)
         {
             TypeReference current = type.BaseType;
