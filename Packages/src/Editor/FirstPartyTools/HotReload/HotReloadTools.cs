@@ -340,52 +340,70 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string message;
-            int addedCount = CountAddedOutcomes(result);
-            bool isAppliedBranch = false;
-            if (hasFailure)
+            bool isAppliedBranch;
+            (message, isAppliedBranch) = BuildApplyOutcomeMessage(result, hasFailure);
+            message = AppendUnchangedAndLifecycleNotes(message, result);
+
+            if (isAppliedBranch && HasSkippedOutcome(result))
             {
-                message = "Hot reload finished with one or more Failed method outcomes. See Methods.";
-            }
-            else if (result.Methods.Count == 0)
-            {
-                message = "Hot reload found no patchable method bodies in the given files; nothing was changed. "
-                    + "Hot reload only replaces existing ordinary method bodies; use uloop compile for other edits.";
-            }
-            else if (AreAllOutcomesAlreadyActive(result))
-            {
-                message = string.Format(
-                    HotReloadConstants.AlreadyActiveApplyMessageFormat,
-                    result.Methods.Count);
-            }
-            else if (result.PatchedTotal == 0 && addedCount == 0)
-            {
-                message = HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage;
-            }
-            else
-            {
-                isAppliedBranch = true;
-                message = "Hot reload applied. PatchedTotal=" + result.PatchedTotal
-                    + ", ActivePatchTotal=" + result.ActivePatchTotal + ".";
-                if (addedCount > 0)
-                {
-                    message += " Added: " + addedCount + ".";
-                }
+                message += " See Methods for Skipped reasons.";
             }
 
+            return AppendWarningCount(message, warningCount, appendCompileResolution);
+        }
+
+        private static (string Message, bool IsAppliedBranch) BuildApplyOutcomeMessage(
+            HotReloadOrchestratorResult result,
+            bool hasFailure)
+        {
+            int addedCount = CountAddedOutcomes(result);
+            if (hasFailure)
+            {
+                return ("Hot reload finished with one or more Failed method outcomes. See Methods.", false);
+            }
+
+            if (result.Methods.Count == 0)
+            {
+                return (
+                    "Hot reload found no patchable method bodies in the given files; nothing was changed. "
+                    + "Hot reload only replaces existing ordinary method bodies; use uloop compile for other edits.",
+                    false);
+            }
+
+            if (AreAllOutcomesAlreadyActive(result))
+            {
+                return (
+                    string.Format(
+                        HotReloadConstants.AlreadyActiveApplyMessageFormat,
+                        result.Methods.Count),
+                    false);
+            }
+
+            if (result.PatchedTotal == 0 && addedCount == 0)
+            {
+                return (HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage, false);
+            }
+
+            string message = "Hot reload applied. PatchedTotal=" + result.PatchedTotal
+                + ", ActivePatchTotal=" + result.ActivePatchTotal + ".";
+            if (addedCount > 0)
+            {
+                message += " Added: " + addedCount + ".";
+            }
+
+            return (message, true);
+        }
+
+        private static string AppendUnchangedAndLifecycleNotes(
+            string message,
+            HotReloadOrchestratorResult result)
+        {
             if (result.UnchangedTotal > 0)
             {
                 message += " " + result.UnchangedTotal + " unchanged methods were left untouched.";
             }
 
-            int lifecycleNoteCount = 0;
-            for (int index = 0; index < result.Methods.Count; index++)
-            {
-                if (!string.IsNullOrEmpty(result.Methods[index].LifecycleNote))
-                {
-                    lifecycleNoteCount++;
-                }
-            }
-
+            int lifecycleNoteCount = CountLifecycleNotes(result);
             if (lifecycleNoteCount > 0)
             {
                 // Why aggregate: per-method text already lives on Methods[].LifecycleNote;
@@ -395,12 +413,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     lifecycleNoteCount);
             }
 
-            if (isAppliedBranch && HasSkippedOutcome(result))
+            return message;
+        }
+
+        private static int CountLifecycleNotes(HotReloadOrchestratorResult result)
+        {
+            int lifecycleNoteCount = 0;
+            for (int index = 0; index < result.Methods.Count; index++)
             {
-                message += " See Methods for Skipped reasons.";
+                if (!string.IsNullOrEmpty(result.Methods[index].LifecycleNote))
+                {
+                    lifecycleNoteCount++;
+                }
             }
 
-            return AppendWarningCount(message, warningCount, appendCompileResolution);
+            return lifecycleNoteCount;
         }
 
         private static bool AreAllOutcomesAlreadyActive(HotReloadOrchestratorResult result)
