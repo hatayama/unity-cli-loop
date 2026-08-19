@@ -36,9 +36,6 @@ public static class TransformWorkerProgram
         WriteIndented = false
     };
 
-    private static readonly SymbolDisplayFormat FullyQualifiedTypeFormat =
-        SymbolDisplayFormat.FullyQualifiedFormat;
-
     public static int Main(string[] args)
     {
         if (args.Length != 2)
@@ -7683,8 +7680,6 @@ internal sealed class ShimTypeBuilder
         MethodDeclarationSyntax named = shimMethod.WithIdentifier(SyntaxFactory.Identifier(shimMethodName));
         _methods.Add(named);
     }
-
-    public IReadOnlyList<MethodDeclarationSyntax> Methods => _methods;
 
     public IEnumerable<MemberDeclarationSyntax> EmitMembers()
     {
