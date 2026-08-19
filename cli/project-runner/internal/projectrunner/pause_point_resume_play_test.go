@@ -501,87 +501,96 @@ func TestResumePlayModeForPausePointFromUnityBranches(t *testing.T) {
 	defer func() { sendControlPlayModeForPausePoint = originalSend }()
 
 	t.Run("Status transport failure", func(t *testing.T) {
-		actions := make([]string, 0, 1)
-		sendControlPlayModeForPausePoint = func(
-			ctx context.Context,
-			connection unityipc.Connection,
-			action string,
-		) (controlPlayModeToolResponse, error) {
-			actions = append(actions, action)
-			return controlPlayModeToolResponse{}, fmt.Errorf("boom")
-		}
-
-		result := resumePlayModeForPausePointFromUnity(context.Background(), unityipc.Connection{})
-		if result.WasPaused || result.Resumed || !strings.Contains(result.Error, "control-play-mode Status failed") {
-			t.Fatalf("result mismatch: %#v", result)
-		}
-		if len(actions) != 1 || actions[0] != "Status" {
-			t.Fatalf("expected only Status, got %#v", actions)
-		}
+		assertResumePlayModeFromUnityBranch(t, stubControlPlayModeStatusError("boom"), pausePointResumePlayResult{
+			Error: "control-play-mode Status failed: boom",
+		}, []string{"Status"})
 	})
 
 	t.Run("Status Success=false", func(t *testing.T) {
-		actions := make([]string, 0, 1)
-		sendControlPlayModeForPausePoint = func(
-			ctx context.Context,
-			connection unityipc.Connection,
-			action string,
-		) (controlPlayModeToolResponse, error) {
-			actions = append(actions, action)
-			return controlPlayModeToolResponse{Success: false, Message: "status denied"}, nil
-		}
-
-		result := resumePlayModeForPausePointFromUnity(context.Background(), unityipc.Connection{})
-		if result.WasPaused || result.Resumed || result.Error != "status denied" {
-			t.Fatalf("result mismatch: %#v", result)
-		}
-		if len(actions) != 1 || actions[0] != "Status" {
-			t.Fatalf("expected only Status, got %#v", actions)
-		}
+		assertResumePlayModeFromUnityBranch(t, stubControlPlayModeFixed(controlPlayModeToolResponse{
+			Success: false,
+			Message: "status denied",
+		}, nil), pausePointResumePlayResult{Error: "status denied"}, []string{"Status"})
 	})
 
 	t.Run("IsPaused=false skips Play", func(t *testing.T) {
-		actions := make([]string, 0, 1)
-		sendControlPlayModeForPausePoint = func(
-			ctx context.Context,
-			connection unityipc.Connection,
-			action string,
-		) (controlPlayModeToolResponse, error) {
-			actions = append(actions, action)
-			return controlPlayModeToolResponse{Success: true, IsPaused: false}, nil
-		}
-
-		result := resumePlayModeForPausePointFromUnity(context.Background(), unityipc.Connection{})
-		if result.WasPaused || result.Resumed || result.Error != "" {
-			t.Fatalf("result mismatch: %#v", result)
-		}
-		if len(actions) != 1 || actions[0] != "Status" {
-			t.Fatalf("expected only Status, got %#v", actions)
-		}
+		assertResumePlayModeFromUnityBranch(t, stubControlPlayModeFixed(controlPlayModeToolResponse{
+			Success:  true,
+			IsPaused: false,
+		}, nil), pausePointResumePlayResult{}, []string{"Status"})
 	})
 
 	t.Run("Play transport failure", func(t *testing.T) {
-		actions := make([]string, 0, 2)
-		sendControlPlayModeForPausePoint = func(
-			ctx context.Context,
-			connection unityipc.Connection,
-			action string,
-		) (controlPlayModeToolResponse, error) {
-			actions = append(actions, action)
-			if action == "Status" {
-				return controlPlayModeToolResponse{Success: true, IsPaused: true}, nil
-			}
-			return controlPlayModeToolResponse{}, fmt.Errorf("play boom")
-		}
-
-		result := resumePlayModeForPausePointFromUnity(context.Background(), unityipc.Connection{})
-		if !result.WasPaused || result.Resumed || !strings.Contains(result.Error, "control-play-mode Play failed") {
-			t.Fatalf("result mismatch: %#v", result)
-		}
-		if len(actions) != 2 || actions[0] != "Status" || actions[1] != "Play" {
-			t.Fatalf("expected Status then Play, got %#v", actions)
-		}
+		assertResumePlayModeFromUnityBranch(t, stubControlPlayModePlayError("play boom"), pausePointResumePlayResult{
+			WasPaused: true,
+			Error:     "control-play-mode Play failed: play boom",
+		}, []string{"Status", "Play"})
 	})
+}
+
+func stubControlPlayModeFixed(
+	response controlPlayModeToolResponse,
+	err error,
+) func(context.Context, unityipc.Connection, string) (controlPlayModeToolResponse, error) {
+	return func(
+		_ context.Context,
+		_ unityipc.Connection,
+		_ string,
+	) (controlPlayModeToolResponse, error) {
+		return response, err
+	}
+}
+
+func stubControlPlayModeStatusError(
+	message string,
+) func(context.Context, unityipc.Connection, string) (controlPlayModeToolResponse, error) {
+	return stubControlPlayModeFixed(controlPlayModeToolResponse{}, fmt.Errorf("%s", message))
+}
+
+func stubControlPlayModePlayError(
+	message string,
+) func(context.Context, unityipc.Connection, string) (controlPlayModeToolResponse, error) {
+	return func(
+		_ context.Context,
+		_ unityipc.Connection,
+		action string,
+	) (controlPlayModeToolResponse, error) {
+		if action == "Status" {
+			return controlPlayModeToolResponse{Success: true, IsPaused: true}, nil
+		}
+		return controlPlayModeToolResponse{}, fmt.Errorf("%s", message)
+	}
+}
+
+func assertResumePlayModeFromUnityBranch(
+	t *testing.T,
+	stub func(context.Context, unityipc.Connection, string) (controlPlayModeToolResponse, error),
+	want pausePointResumePlayResult,
+	wantActions []string,
+) {
+	t.Helper()
+	actions := make([]string, 0, len(wantActions))
+	sendControlPlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		action string,
+	) (controlPlayModeToolResponse, error) {
+		actions = append(actions, action)
+		return stub(ctx, connection, action)
+	}
+
+	result := resumePlayModeForPausePointFromUnity(context.Background(), unityipc.Connection{})
+	if result != want {
+		t.Fatalf("result mismatch: got %#v, want %#v", result, want)
+	}
+	if len(actions) != len(wantActions) {
+		t.Fatalf("expected actions %#v, got %#v", wantActions, actions)
+	}
+	for index, action := range wantActions {
+		if actions[index] != action {
+			t.Fatalf("expected actions %#v, got %#v", wantActions, actions)
+		}
+	}
 }
 
 // Verifies wait-start unarmed errors include the observed Cleared status and AwaitTimeoutAutoClear

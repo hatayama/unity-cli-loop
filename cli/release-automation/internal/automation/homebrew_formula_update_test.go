@@ -177,41 +177,8 @@ func TestUpdateHomebrewFormulaSkipsWithoutToken(t *testing.T) {
 // TestUpdateHomebrewFormulaCreatesFormulaWhenAbsent verifies a missing tap formula is created without sha.
 func TestUpdateHomebrewFormulaCreatesFormulaWhenAbsent(t *testing.T) {
 	t.Setenv(homebrewTapTokenEnvName, "tap-token")
-	formula, err := renderHomebrewFormula(homebrewFormulaData{
-		Version:     "3.0.0-beta.30",
-		Repository:  "hatayama/unity-cli-loop",
-		SHA256Arm64: testHomebrewArm64SHA256,
-		SHA256Amd64: testHomebrewAmd64SHA256,
-	})
-	if err != nil {
-		t.Fatalf("renderHomebrewFormula failed: %v", err)
-	}
-	encodedFormula := base64.StdEncoding.EncodeToString([]byte(formula))
-
-	var putArgs []string
-	deps := homebrewFormulaUpdateDeps{
-		runOutput: func(_ context.Context, extraEnv []string, name string, args ...string) (string, error) {
-			joined := strings.Join(args, " ")
-			switch {
-			case strings.Contains(joined, "release download") && strings.Contains(joined, homebrewDarwinArm64AssetName+".sha256"):
-				return testHomebrewArm64SHA256 + "  " + homebrewDarwinArm64AssetName + "\n", nil
-			case strings.Contains(joined, "release download") && strings.Contains(joined, homebrewDarwinAmd64AssetName+".sha256"):
-				return testHomebrewAmd64SHA256 + "  " + homebrewDarwinAmd64AssetName + "\n", nil
-			case strings.Contains(joined, "repos/hatayama/homebrew-tap/contents/"+homebrewFormulaPath):
-				if strings.Contains(joined, "-X PUT") {
-					putArgs = append([]string{}, args...)
-					return `{"content":{"sha":"new-sha"}}`, nil
-				}
-				if len(extraEnv) == 0 || !strings.Contains(strings.Join(extraEnv, "\n"), "GH_TOKEN=tap-token") {
-					t.Fatalf("expected tap token env on contents GET, got %v", extraEnv)
-				}
-				return "", errors.New("gh api failed: HTTP 404 Not Found")
-			default:
-				return "", errors.New("unexpected command: " + name + " " + joined)
-			}
-		},
-	}
-
+	encodedFormula := mustRenderHomebrewFormulaBase64(t)
+	putArgs := []string{}
 	code := runUpdateHomebrewFormulaWithDeps(
 		context.Background(),
 		&bytes.Buffer{},
@@ -221,8 +188,63 @@ func TestUpdateHomebrewFormulaCreatesFormulaWhenAbsent(t *testing.T) {
 			tag:        "dispatcher-v3.0.0-beta.30",
 			tapRepo:    "hatayama/homebrew-tap",
 		},
-		deps,
+		homebrewFormulaUpdateDeps{
+			runOutput: stubHomebrewCreateFormulaWhenAbsent(t, &putArgs),
+		},
 	)
+	assertHomebrewFormulaCreatedWithoutSHA(t, code, putArgs, encodedFormula)
+}
+
+func mustRenderHomebrewFormulaBase64(t *testing.T) string {
+	t.Helper()
+	formula, err := renderHomebrewFormula(homebrewFormulaData{
+		Version:     "3.0.0-beta.30",
+		Repository:  "hatayama/unity-cli-loop",
+		SHA256Arm64: testHomebrewArm64SHA256,
+		SHA256Amd64: testHomebrewAmd64SHA256,
+	})
+	if err != nil {
+		t.Fatalf("renderHomebrewFormula failed: %v", err)
+	}
+	return base64.StdEncoding.EncodeToString([]byte(formula))
+}
+
+func stubHomebrewCreateFormulaWhenAbsent(
+	t *testing.T,
+	putArgs *[]string,
+) func(context.Context, []string, string, ...string) (string, error) {
+	t.Helper()
+	return func(_ context.Context, extraEnv []string, name string, args ...string) (string, error) {
+		joined := strings.Join(args, " ")
+		if output, handled, err := homebrewFormulaSHADownloadOutput(joined); handled {
+			return output, err
+		}
+		if !strings.Contains(joined, "repos/hatayama/homebrew-tap/contents/"+homebrewFormulaPath) {
+			return "", errors.New("unexpected command: " + name + " " + joined)
+		}
+		if strings.Contains(joined, "-X PUT") {
+			*putArgs = append([]string{}, args...)
+			return `{"content":{"sha":"new-sha"}}`, nil
+		}
+		if len(extraEnv) == 0 || !strings.Contains(strings.Join(extraEnv, "\n"), "GH_TOKEN=tap-token") {
+			t.Fatalf("expected tap token env on contents GET, got %v", extraEnv)
+		}
+		return "", errors.New("gh api failed: HTTP 404 Not Found")
+	}
+}
+
+func homebrewFormulaSHADownloadOutput(joined string) (string, bool, error) {
+	if strings.Contains(joined, "release download") && strings.Contains(joined, homebrewDarwinArm64AssetName+".sha256") {
+		return testHomebrewArm64SHA256 + "  " + homebrewDarwinArm64AssetName + "\n", true, nil
+	}
+	if strings.Contains(joined, "release download") && strings.Contains(joined, homebrewDarwinAmd64AssetName+".sha256") {
+		return testHomebrewAmd64SHA256 + "  " + homebrewDarwinAmd64AssetName + "\n", true, nil
+	}
+	return "", false, nil
+}
+
+func assertHomebrewFormulaCreatedWithoutSHA(t *testing.T, code int, putArgs []string, encodedFormula string) {
+	t.Helper()
 	if code != 0 {
 		t.Fatalf("exit code = %d", code)
 	}

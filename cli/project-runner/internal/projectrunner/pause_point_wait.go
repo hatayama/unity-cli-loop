@@ -346,55 +346,8 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 		if err != nil {
 			return waitForPausePointOptions{}, err
 		}
-
-		switch name {
-		case PausePointIDFlagName:
-			options.id = value
-		case PausePointTimeoutFlagName:
-			timeoutSeconds, parseErr := parsePausePointTimeoutSeconds(value)
-			if parseErr != nil {
-				return waitForPausePointOptions{}, parseErr
-			}
-			options.timeoutSeconds = timeoutSeconds
-			options.timeout = time.Duration(timeoutSeconds) * time.Second
-		case PausePointLogsMaxCountFlagName:
-			maxCount, parseErr := strconv.Atoi(value)
-			if parseErr != nil || maxCount <= 0 {
-				return waitForPausePointOptions{}, clierrors.InvalidValueArgumentError(
-					"--"+PausePointLogsMaxCountFlagName, value, "positive integer")
-			}
-			options.matchingLogsMaxCount = maxCount
-		case tooldocs.PausePointCapturedVariablesFlagName:
-			mode, parseErr := parsePausePointCapturedVariablesMode(value)
-			if parseErr != nil {
-				return waitForPausePointOptions{}, parseErr
-			}
-			options.capturedVariablesMode = mode
-		case tooldocs.PausePointCapturedVariableNamesFlagName:
-			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
-		case tooldocs.PausePointExpectFlagName:
-			expectation, parseErr := parsePausePointExpectFlagValue(value)
-			if parseErr != nil {
-				return waitForPausePointOptions{}, parseErr
-			}
-			options.expectations = append(options.expectations, expectation)
-		case tooldocs.PausePointTriggerFlagName:
-			triggerCommand, triggerArgs, parseErr := parsePausePointTriggerCommand(clicore.PausePointAwaitCommandName, value)
-			if parseErr != nil {
-				return waitForPausePointOptions{}, parseErr
-			}
-			options.triggerCommand = triggerCommand
-			options.triggerArgs = triggerArgs
-		case tooldocs.PausePointResumePlayFlagName:
-			// --resume-play=true style is accepted; any other value is rejected so a typo cannot
-			// silently disable the resume step.
-			if value != "true" && value != "1" {
-				return waitForPausePointOptions{}, clierrors.InvalidValueArgumentError(
-					"--"+tooldocs.PausePointResumePlayFlagName, value, "boolean flag (pass with no value)")
-			}
-			options.resumePlay = true
-		default:
-			return waitForPausePointOptions{}, pausePointUnknownOptionError(clicore.PausePointAwaitCommandName, name)
+		if applyErr := applyWaitForPausePointFlag(&options, name, value); applyErr != nil {
+			return waitForPausePointOptions{}, applyErr
 		}
 
 		if consumedNext {
