@@ -1036,9 +1036,21 @@ public static class TransformWorkerProgram
     private const string OutsideMethodBodyDriftWarningFormat =
         "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
 
-    // Syntax-based method key for same-file snapshot vs current comparison. Do not mix with
-    // BuildMethodKey (Cecil/metadata names used by the orchestrator exclusion path).
-    // Used only for in-memory baseline maps — safe to evolve without wire compatibility concerns.
+    private static void AppendOutsideMethodBodyDriftWarningIfNeeded(
+        CompilationUnitSyntax snapshotRoot,
+        CompilationUnitSyntax currentRoot,
+        string fileName,
+        List<string> declarationDriftWarnings,
+        AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        HashSet<string> snapshotKeys = new HashSet<string>(
+            addedMethodCatalog.RemovedSyntaxKeys,
+            StringComparer.Ordinal);
+        foreach (string key in addedFieldCatalog.RemovedSyntaxKeys)
+        {
+            snapshotKeys.Add(key);
+        }
 
         HashSet<string> currentKeys = new HashSet<string>(
             addedMethodCatalog.AddedSyntaxKeys,

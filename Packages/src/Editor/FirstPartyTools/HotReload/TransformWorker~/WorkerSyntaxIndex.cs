@@ -17,6 +17,9 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class WorkerSyntaxIndex
 {
+    // Syntax-based method key for same-file snapshot vs current comparison. Do not mix with
+    // BuildMethodKey (Cecil/metadata names used by the orchestrator exclusion path).
+    // Used only for in-memory baseline maps — safe to evolve without wire compatibility concerns.
     internal static string BuildSyntaxMethodKey(string typeMetadataName, MethodDeclarationSyntax methodDeclaration)
     {
         List<string> parameterKeys = new List<string>();
