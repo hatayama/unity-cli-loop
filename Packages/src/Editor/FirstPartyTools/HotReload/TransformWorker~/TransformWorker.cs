@@ -259,7 +259,7 @@ public static class TransformWorkerProgram
             // Why after property emit: added-property syntax keys are registered when a skip
             // row is written. Running the drift check first would miss those keys and keep
             // the false outside-body warning for added properties that already have a row.
-            AppendOutsideMethodBodyDriftWarningIfNeeded(
+            OutsideMethodBodyDriftChecker.AppendOutsideMethodBodyDriftWarningIfNeeded(
                 baseline.SnapshotRoot,
                 plainRoot,
                 Path.GetFileName(input.SourcePath),
@@ -770,53 +770,6 @@ public static class TransformWorkerProgram
     private const string UnsupportedMemberKindSkipReason =
         "Constructors, operators, and event accessors are out of scope for v1; "
         + "run 'uloop compile' to apply these edits.";
-
-    private const string OutsideMethodBodyDriftWarningFormat =
-        "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
-
-    private static void AppendOutsideMethodBodyDriftWarningIfNeeded(
-        CompilationUnitSyntax snapshotRoot,
-        CompilationUnitSyntax currentRoot,
-        string fileName,
-        List<string> declarationDriftWarnings,
-        AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog)
-    {
-        HashSet<string> snapshotKeys = new HashSet<string>(
-            addedMethodCatalog.RemovedSyntaxKeys,
-            StringComparer.Ordinal);
-        foreach (string key in addedFieldCatalog.RemovedSyntaxKeys)
-        {
-            snapshotKeys.Add(key);
-        }
-
-        HashSet<string> currentKeys = new HashSet<string>(
-            addedMethodCatalog.AddedSyntaxKeys,
-            StringComparer.Ordinal);
-        foreach (string key in addedFieldCatalog.AddedSyntaxKeys)
-        {
-            currentKeys.Add(key);
-        }
-
-        StripHandledMemberDeclarationsRewriter stripSnapshot =
-            new StripHandledMemberDeclarationsRewriter(
-                snapshotKeys,
-                Array.Empty<string>(),
-                Array.Empty<string>());
-        StripHandledMemberDeclarationsRewriter stripCurrent =
-            new StripHandledMemberDeclarationsRewriter(
-                currentKeys,
-                addedMethodCatalog.AddedTypeSyntaxKeys,
-                addedMethodCatalog.AddedPropertySyntaxKeys);
-        StripMethodBodiesRewriter bodyStripper = new StripMethodBodiesRewriter();
-        SyntaxNode strippedSnapshot = bodyStripper.Visit(stripSnapshot.Visit(snapshotRoot));
-        SyntaxNode strippedCurrent = bodyStripper.Visit(stripCurrent.Visit(currentRoot));
-        if (!SyntaxFactory.AreEquivalent(strippedSnapshot, strippedCurrent, topLevel: false))
-        {
-            declarationDriftWarnings.Add(
-                string.Format(CultureInfo.InvariantCulture, OutsideMethodBodyDriftWarningFormat, fileName));
-        }
-    }
 
     private sealed class StripHandledMemberDeclarationsRewriter : CSharpSyntaxRewriter
     {

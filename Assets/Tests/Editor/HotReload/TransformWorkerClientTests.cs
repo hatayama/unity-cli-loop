@@ -1525,7 +1525,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "run 'uloop compile' to apply these edits.";
 
         // Keep in sync with OutsideMethodBodyDriftWarningFormat in
-        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
+        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/OutsideMethodBodyDriftChecker.cs.
         // That constant lives in the Unity-ignored worker process and is not visible here.
         private const string OutsideMethodBodyDriftWarningFormat =
             "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";
