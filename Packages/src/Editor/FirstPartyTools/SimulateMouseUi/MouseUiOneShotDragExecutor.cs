@@ -70,6 +70,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
+                // Why no ConfigureAwait(false): AnimateDragMotionOrAbortAsync ends on the main
+                // thread after SwitchToMainThread. ConfigureAwait(false) would hop off-main
+                // before OverlayState.Update / PlayDissipateAnimation.
                 SimulateMouseUiResponse? motionAbort = await AnimateDragMotionOrAbortAsync(
                     parameters,
                     pointerData,
@@ -80,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     targetName,
                     DragInterruptedDuringMotionMessage,
                     cleanupScheduler,
-                    ct).ConfigureAwait(false);
+                    ct);
                 if (motionAbort != null)
                 {
                     return motionAbort;
@@ -130,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 null,
                 NoTargetInterruptedMessage,
                 cleanupScheduler,
-                ct).ConfigureAwait(false);
+                ct);
             if (expandAbort != null)
             {
                 return expandAbort;
@@ -143,7 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 null,
                 NoTargetInterruptedMessage,
                 cleanupScheduler,
-                ct).ConfigureAwait(false);
+                ct);
             if (dissipateAbort != null)
             {
                 return dissipateAbort;
@@ -182,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetName,
                 interruptedMessage,
                 cleanupScheduler,
-                ct).ConfigureAwait(false);
+                ct);
             if (expandAbort != null)
             {
                 return expandAbort;
@@ -196,7 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetName,
                 interruptedMessage,
                 cleanupScheduler,
-                ct).ConfigureAwait(false);
+                ct);
             if (dragAbort != null)
             {
                 return dragAbort;
@@ -209,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetName,
                 interruptedMessage,
                 cleanupScheduler,
-                ct).ConfigureAwait(false);
+                ct);
         }
 
         private static async Task<SimulateMouseUiResponse?> AbortDragOnOverlayOutcomeAsync(

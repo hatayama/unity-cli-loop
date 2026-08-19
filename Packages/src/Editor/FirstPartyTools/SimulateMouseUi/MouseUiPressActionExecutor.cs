@@ -147,8 +147,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
+                // Why no ConfigureAwait(false): the helper already switched to the main thread
+                // on its last iteration. ConfigureAwait(false) here would resume off-main
+                // before PlayDissipateAnimation, which the inlined loop never did.
                 SimulateMouseUiResponse? holdAbort = await HoldLongPressOrAbortAsync(
-                    parameters.Duration, inputPos, targetName, cleanupScheduler, ct).ConfigureAwait(false);
+                    parameters.Duration, inputPos, targetName, cleanupScheduler, ct);
                 if (holdAbort != null)
                 {
                     return holdAbort;

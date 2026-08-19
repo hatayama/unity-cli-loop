@@ -65,22 +65,55 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static RequiredSkillsPanelElements QueryRequiredElements(VisualElement root)
         {
             return new RequiredSkillsPanelElements(
-                RequireNamedElement(root.Q<VisualElement>("skill-target-status-list"), "skill-target-status-list"),
-                RequireNamedElement(root.Q<VisualElement>("skill-target-status-divider"), "skill-target-status-divider"),
-                RequireNamedElement(root.Q<Label>("skill-target-status-summary"), "skill-target-status-summary"),
-                RequireNamedElement(root.Q<Label>("skills-no-targets-message"), "skills-no-targets-message"),
-                RequireNamedElement(root.Q<Button>("install-all-skills-button"), "install-all-skills-button"),
-                RequireNamedElement(root.Q<Foldout>("install-specific-target-foldout"), "install-specific-target-foldout"),
-                RequireNamedElement(root.Q<VisualElement>("group-skills-row"), "group-skills-row"),
-                RequireNamedElement(root.Q<Toggle>("group-skills-toggle"), "group-skills-toggle"),
-                RequireNamedElement(root.Q<EnumField>("skills-target-field"), "skills-target-field"),
-                RequireNamedElement(root.Q<Button>("install-selected-skills-button"), "install-selected-skills-button"));
+                RequireNamedElement(
+                    root.Q<VisualElement>("skill-target-status-list"),
+                    "skill-target-status-list",
+                    "_skillTargetStatusList"),
+                RequireNamedElement(
+                    root.Q<VisualElement>("skill-target-status-divider"),
+                    "skill-target-status-divider",
+                    "_skillTargetStatusDivider"),
+                RequireNamedElement(
+                    root.Q<Label>("skill-target-status-summary"),
+                    "skill-target-status-summary",
+                    "_skillTargetStatusSummary"),
+                RequireNamedElement(
+                    root.Q<Label>("skills-no-targets-message"),
+                    "skills-no-targets-message",
+                    "_skillsNoTargetsMessage"),
+                RequireNamedElement(
+                    root.Q<Button>("install-all-skills-button"),
+                    "install-all-skills-button",
+                    "_installAllSkillsButton"),
+                RequireNamedElement(
+                    root.Q<Foldout>("install-specific-target-foldout"),
+                    "install-specific-target-foldout",
+                    "_installSpecificTargetFoldout"),
+                RequireNamedElement(
+                    root.Q<VisualElement>("group-skills-row"),
+                    "group-skills-row",
+                    "_groupSkillsRow"),
+                RequireNamedElement(
+                    root.Q<Toggle>("group-skills-toggle"),
+                    "group-skills-toggle",
+                    "_groupSkillsToggle"),
+                RequireNamedElement(
+                    root.Q<EnumField>("skills-target-field"),
+                    "skills-target-field",
+                    "_skillsTargetField"),
+                RequireNamedElement(
+                    root.Q<Button>("install-selected-skills-button"),
+                    "install-selected-skills-button",
+                    "_installSelectedSkillsButton"));
         }
 
-        private static T RequireNamedElement<T>(T value, string name) where T : VisualElement
+        // Why two names: Debug.Assert used the UXML name; ArgumentNullException used the field
+        // nameof. Combining them into one string changed the exception ParamName.
+        private static T RequireNamedElement<T>(T value, string assertName, string exceptionParamName)
+            where T : VisualElement
         {
-            Debug.Assert(value != null, name + " must not be null");
-            return value ?? throw new System.ArgumentNullException(name);
+            Debug.Assert(value != null, assertName + " must not be null");
+            return value ?? throw new System.ArgumentNullException(exceptionParamName);
         }
 
         private void WireEventHandlers()

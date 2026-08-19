@@ -301,9 +301,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 try
                 {
-                    ScreenshotResponse overlayTimeout;
-                    (annotationOverlay, overlayTimeout) = await ShowAnnotationOverlayOrTimeoutAsync(
-                        request, annotationCapture, editorContext, correlationId, ct).ConfigureAwait(false);
+                    // Assign before any await so the inner finally still destroys the overlay
+                    // if WaitForRenderedFrameAsync throws after CreateAnnotationOverlay.
+                    annotationOverlay = CreateAnnotationOverlayIfNeeded(request, annotationCapture);
+                    ScreenshotResponse overlayTimeout = await WaitAfterShowingAnnotationOverlayAsync(
+                        annotationOverlay, editorContext, correlationId, ct).ConfigureAwait(false);
                     if (overlayTimeout != null)
                     {
                         return (null, default, overlayTimeout);
@@ -375,16 +377,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        private async Task<(GameObject overlay, ScreenshotResponse timeout)> ShowAnnotationOverlayOrTimeoutAsync(
+        private static GameObject CreateAnnotationOverlayIfNeeded(
             ScreenshotSchema request,
-            RenderingAnnotationCapture annotationCapture,
-            SynchronizationContext editorContext,
-            string correlationId,
-            CancellationToken ct)
+            RenderingAnnotationCapture annotationCapture)
         {
             if (!request.AnnotateElements && !request.AnnotateRaycastGrid)
             {
-                return (null, null);
+                return null;
             }
 
             List<UIElementInfo> overlayElements = new(annotationCapture.AnnotatedElements);
@@ -393,6 +392,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 overlayElements,
                 request.ResolutionScale);
             Canvas.ForceUpdateCanvases();
+            return annotationOverlay;
+        }
+
+        private async Task<ScreenshotResponse> WaitAfterShowingAnnotationOverlayAsync(
+            GameObject annotationOverlay,
+            SynchronizationContext editorContext,
+            string correlationId,
+            CancellationToken ct)
+        {
+            if (ReferenceEquals(annotationOverlay, null))
+            {
+                return null;
+            }
+
             // Chained CLI calls can read the previous GameView RT before overlay rendering catches up.
             PlayModeViewRenderWaitResult overlayWaitResult =
                 await PlayModeViewRenderWaiter.WaitForRenderedFrameAsync(
@@ -400,10 +413,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ct).ConfigureAwait(false);
             if (overlayWaitResult == PlayModeViewRenderWaitResult.TicksStalled)
             {
-                return (annotationOverlay, CreateTimedOutResult(
+                return CreateTimedOutResult(
                     "annotation overlay render",
                     correlationId,
-                    new List<ScreenshotInfo>()));
+                    new List<ScreenshotInfo>());
             }
 
             if (overlayWaitResult == PlayModeViewRenderWaitResult.NotRendered)
@@ -415,7 +428,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
-            return (annotationOverlay, null);
+            return null;
         }
 
         private async Task<ScreenshotResponse> CaptureWindowsAsync(
