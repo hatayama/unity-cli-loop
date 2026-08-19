@@ -13,13 +13,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int frameCount,
             string hitAtUtc,
             IReadOnlyList<UloopCapturedVariable> capturedVariables,
-            bool truncated)
+            bool truncated,
+            IReadOnlyList<UloopPausePointCallerFrame> callerFrames)
         {
             HitSequence = hitSequence;
             FrameCount = frameCount;
             HitAtUtc = hitAtUtc;
             CapturedVariables = capturedVariables;
             Truncated = truncated;
+            CallerFrames = callerFrames;
         }
 
         public int HitSequence { get; }
@@ -27,6 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string HitAtUtc { get; }
         public IReadOnlyList<UloopCapturedVariable> CapturedVariables { get; }
         public bool Truncated { get; }
+        public IReadOnlyList<UloopPausePointCallerFrame> CallerFrames { get; }
     }
 }
 #endif

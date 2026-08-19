@@ -31,6 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IsEnabled = true;
             Message = "Pause point enabled.";
             CapturedVariables = Array.Empty<UloopCapturedVariable>();
+            CallerFrames = Array.Empty<UloopPausePointCallerFrame>();
             TruncatedVariableNames = Array.Empty<string>();
             _capturedVariableHistory = new Queue<UloopPausePointCapturedHistoryFrame>(maxHistory);
         }
@@ -54,6 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool IsPausedAtHit { get; private set; }
         public string Message { get; private set; }
         public IReadOnlyList<UloopCapturedVariable> CapturedVariables { get; private set; }
+        public IReadOnlyList<UloopPausePointCallerFrame> CallerFrames { get; private set; }
         public bool CapturedVariablesTruncated { get; private set; }
         public IReadOnlyList<string> TruncatedVariableNames { get; private set; }
         public int TruncatedVariableCount { get; private set; }
@@ -180,12 +182,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IReadOnlyList<UloopCapturedVariable> capturedVariables,
             bool capturedVariablesTruncated,
             IReadOnlyList<string> truncatedVariableNames,
-            int truncatedVariableCount)
+            int truncatedVariableCount,
+            IReadOnlyList<UloopPausePointCallerFrame> callerFrames)
         {
             Debug.Assert(hitSequence > 0, "hitSequence must be greater than zero");
             Debug.Assert(capturedVariables != null, "capturedVariables must not be null");
             Debug.Assert(truncatedVariableNames != null, "truncatedVariableNames must not be null");
             Debug.Assert(truncatedVariableCount >= 0, "truncatedVariableCount must not be negative");
+            Debug.Assert(callerFrames != null, "callerFrames must not be null");
 
             if (HitCount == 0)
             {
@@ -204,6 +208,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 ? "Pause point hit; recorded to history without pausing (trace mode)."
                 : "Pause point hit; Unity pause was requested.";
             CapturedVariables = capturedVariables;
+            CallerFrames = callerFrames;
             CapturedVariablesTruncated = capturedVariablesTruncated;
             TruncatedVariableNames = truncatedVariableNames;
             TruncatedVariableCount = truncatedVariableCount;
@@ -220,7 +225,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                     frameCount,
                     FormatUtc(nowUtc),
                     capturedVariables,
-                    capturedVariablesTruncated));
+                    capturedVariablesTruncated,
+                    callerFrames));
         }
 
         public UloopPausePointSnapshot ToSnapshot(DateTime nowUtc, IUloopPausePointPauseController pauseController)
@@ -268,6 +274,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 Message,
                 recommendedNextAction,
                 CapturedVariables,
+                CallerFrames,
                 CapturedVariablesTruncated,
                 TruncatedVariableNames,
                 TruncatedVariableCount,
