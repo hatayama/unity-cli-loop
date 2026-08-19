@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         // Keep in sync with AddedMethodSkipReasons.UnavailableAddedCall in
-        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
+        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/AddedMethodSkipReasons.cs.
         // That type lives in the Unity-ignored worker process and is not visible here.
         private const string UnavailableAddedCallSkipReason =
             "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
