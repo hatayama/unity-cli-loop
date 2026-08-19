@@ -459,7 +459,7 @@ internal static class OrdinaryMethodQueue
         IMethodSymbol methodSymbol,
         List<string> declarationDriftWarnings)
     {
-        if (!TransformWorkerProgram.IsUnityEngineMonoBehaviourDerived(typeSymbol)
+        if (!ShimMethodEmitter.IsUnityEngineMonoBehaviourDerived(typeSymbol)
             || !UnityMessageNames.Contains(methodSymbol.Name))
         {
             return;

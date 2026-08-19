@@ -238,7 +238,7 @@ public static class TransformWorkerProgram
             addedFieldCatalog,
             skipped);
 
-        EmitQueuedMethodsAndPropertyGetters(
+        ShimMethodEmitter.EmitQueuedMethodsAndPropertyGetters(
             typeEmitStates,
             semanticModel,
             addedMethodCatalog,
@@ -395,50 +395,6 @@ public static class TransformWorkerProgram
         return driftCompilation.GetAssemblyOrModuleSymbol(targetTypesReference) as IAssemblySymbol;
     }
 
-    private static (int ShimTypeCounter, int GlobalShimMethodCounter) EmitQueuedMethodsAndPropertyGetters(
-        List<TypeEmitState> typeEmitStates,
-        SemanticModel semanticModel,
-        AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog,
-        CompilationUnitSyntax root,
-        WorkerInput input,
-        BaselineSnapshotState baseline,
-        List<WorkerEntry> entries,
-        List<WorkerSkipped> skipped,
-        List<WorkerUnchangedMethod> unchangedMethods,
-        List<ShimTypeBuilder> shimTypes,
-        List<UsingDirectiveSyntax> assemblyGlobalUsings,
-        int shimTypeCounter,
-        int globalShimMethodCounter)
-    {
-        foreach (TypeEmitState typeState in typeEmitStates)
-        {
-            EmitQueuedMethods(
-                typeState,
-                semanticModel,
-                addedMethodCatalog,
-                addedFieldCatalog,
-                entries);
-            (shimTypeCounter, globalShimMethodCounter) = PropertyGetterEmitter.EmitPropertyGettersForType(
-                typeState,
-                semanticModel,
-                addedMethodCatalog,
-                addedFieldCatalog,
-                root,
-                input,
-                baseline,
-                entries,
-                skipped,
-                unchangedMethods,
-                shimTypes,
-                assemblyGlobalUsings,
-                shimTypeCounter,
-                globalShimMethodCounter);
-        }
-
-        return (shimTypeCounter, globalShimMethodCounter);
-    }
-
     private static WorkerOutput BuildWorkerOutput(
         CompilationUnitSyntax root,
         string projectRelativePath,
@@ -497,73 +453,6 @@ public static class TransformWorkerProgram
         return builder.ToString();
     }
 
-    /// <summary>
-    /// Attaches original-source 1-based line annotations to every method and statement in the
-    /// parsed tree. Must run before compilation so the SemanticModel binds the annotated tree.
-    /// </summary>
-    // What: direct one-shot Unity lifecycle note only. Indirect "only called from Awake"
-    // notes were dropped — syntax-only caller walks cannot prove that claim (ctors,
-    // accessors, lambdas, other types in the same file).
-    private static string ComputeLifecycleNote(
-        MethodDeclarationSyntax methodDeclaration,
-        IMethodSymbol methodSymbol,
-        INamedTypeSymbol typeSymbol)
-    {
-        string methodName = methodDeclaration.Identifier.Text;
-        if (!IsOneShotLifecycleMethodName(methodName))
-        {
-            return null;
-        }
-
-        if (!IsUnityEngineMonoBehaviourDerived(typeSymbol))
-        {
-            return null;
-        }
-
-        // Why private void (): Unity message methods are instance void with no parameters;
-        // public/static/parameterized Start() on a MonoBehaviour is not the lifecycle hook.
-        if (methodSymbol.DeclaredAccessibility != Accessibility.Private
-            || methodSymbol.IsStatic
-            || !methodSymbol.ReturnsVoid
-            || methodSymbol.Parameters.Length != 0)
-        {
-            return null;
-        }
-
-        return string.Format(LifecycleNotes.DirectFormat, methodName);
-    }
-
-    private static bool IsOneShotLifecycleMethodName(string methodName)
-    {
-        for (int index = 0; index < LifecycleNotes.OneShotLifecycleMethodNames.Length; index++)
-        {
-            if (LifecycleNotes.OneShotLifecycleMethodNames[index] == methodName)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool IsUnityEngineMonoBehaviourDerived(INamedTypeSymbol typeSymbol)
-    {
-        INamedTypeSymbol current = typeSymbol;
-        while (current != null)
-        {
-            if (current.Name == "MonoBehaviour"
-                && current.ContainingNamespace != null
-                && current.ContainingNamespace.ToDisplayString() == "UnityEngine")
-            {
-                return true;
-            }
-
-            current = current.BaseType;
-        }
-
-        return false;
-    }
-
     private static IEnumerable<TypeDeclarationSyntax> EnumerateTypeDeclarations(CompilationUnitSyntax root)
     {
         // Why interfaces: a new interface (including default methods) is absent from the compiled
@@ -578,57 +467,6 @@ public static class TransformWorkerProgram
                 || typeDeclaration is InterfaceDeclarationSyntax);
     }
 
-    private static void EmitQueuedMethods(
-        TypeEmitState typeState,
-        SemanticModel semanticModel,
-        AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog,
-        List<WorkerEntry> entries)
-    {
-        foreach (QueuedShimMethod queued in typeState.QueuedMethods)
-        {
-            AccessorPlan rewritePlan = queued.Decision.UsesDelegation
-                ? queued.ShimType.AccessorPlan
-                : null;
-            MethodDeclarationSyntax rewrittenMethod = RewriteMethodBody(
-                queued.MethodDeclaration,
-                queued.MethodSymbol,
-                typeState.TypeSymbol,
-                semanticModel,
-                rewritePlan,
-                addedMethodCatalog,
-                addedFieldCatalog);
-            queued.ShimType.AddMethod(rewrittenMethod, queued.ShimMethodName);
-
-            SyntaxNode bodyNode =
-                (SyntaxNode)queued.MethodDeclaration.Body ?? queued.MethodDeclaration.ExpressionBody;
-            string[] calledAddedMethodKeys = AddedCallSiteGuard.CollectCalledAddedMethodKeys(
-                bodyNode,
-                semanticModel,
-                addedMethodCatalog,
-                queued.MethodKey);
-
-            entries.Add(new WorkerEntry
-            {
-                TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
-                MethodName = queued.MethodSymbol.Name,
-                ParameterTypeFullNames = queued.ParameterTypeFullNames,
-                GenericArity = queued.MethodSymbol.Arity,
-                ShimTypeName = queued.ShimType.ShimTypeName,
-                ShimMethodName = queued.ShimMethodName,
-                PatchKind = queued.Decision.PatchKind,
-                CalledAddedMethodKeys = calledAddedMethodKeys,
-                SourceStartLine = queued.SourceStartLine,
-                SourceEndLine = queued.SourceEndLine,
-                LifecycleNote = ComputeLifecycleNote(
-                    queued.MethodDeclaration,
-                    queued.MethodSymbol,
-                    typeState.TypeSymbol),
-                ReplacesCompiledMethod = queued.ReplacesCompiledMethod
-            });
-        }
-    }
-
     private static string BuildMethodKeyFromSymbol(IMethodSymbol methodSymbol)
     {
         string[] parameterTypeFullNames = methodSymbol.Parameters
@@ -639,27 +477,6 @@ public static class TransformWorkerProgram
             methodSymbol.Name,
             parameterTypeFullNames,
             methodSymbol.Arity);
-    }
-
-    private static MethodDeclarationSyntax RewriteMethodBody(
-        MethodDeclarationSyntax methodDeclaration,
-        IMethodSymbol methodSymbol,
-        INamedTypeSymbol targetType,
-        SemanticModel semanticModel,
-        AccessorPlan accessorPlan,
-        AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog)
-    {
-        // Why a single rewriter: rewriting the tree invalidates SemanticModel for new nodes.
-        // Qualify + accessor rewrite both classify symbols on the original tree in one Visit pass.
-        ShimBodyRewriter rewriter = new ShimBodyRewriter(
-            semanticModel,
-            targetType,
-            accessorPlan,
-            addedMethodCatalog,
-            addedFieldCatalog);
-        MethodDeclarationSyntax rewritten = (MethodDeclarationSyntax)rewriter.Visit(methodDeclaration);
-        return ShimMethodFactory.ToShimMethod(rewritten, methodSymbol);
     }
 
     // Keep in sync with HotReloadPatcher.FormatMethodKeyParts.
