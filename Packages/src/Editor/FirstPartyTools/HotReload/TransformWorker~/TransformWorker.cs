@@ -414,9 +414,9 @@ public static class TransformWorkerProgram
                 parseOptions)
             .GetCompilationUnitRoot();
         Dictionary<string, MethodDeclarationSyntax> snapMethods =
-            BuildSyntaxMethodMapOrNull(baseline.SnapshotRoot);
+            WorkerSyntaxIndex.BuildSyntaxMethodMapOrNull(baseline.SnapshotRoot);
         // Why plainRoot: annotated current nodes break AreEquivalent for some shapes (see plainRoot above).
-        Dictionary<string, MethodDeclarationSyntax> currentMethods = BuildSyntaxMethodMapOrNull(plainRoot);
+        Dictionary<string, MethodDeclarationSyntax> currentMethods = WorkerSyntaxIndex.BuildSyntaxMethodMapOrNull(plainRoot);
         if (snapMethods == null || currentMethods == null)
         {
             // Why surface: previously a colliding key silently disabled baseline and patched all.
@@ -431,16 +431,16 @@ public static class TransformWorkerProgram
         baseline.PlainCurrentMethodMap = currentMethods;
         // Why null is kept as-is: a colliding property/indexer key only disables accessor
         // gating for this file; method-level baseline matching still applies.
-        baseline.SnapshotPropertyMap = BuildSyntaxPropertyMapOrNull(baseline.SnapshotRoot);
-        baseline.SnapshotIndexerMap = BuildSyntaxIndexerMapOrNull(baseline.SnapshotRoot);
-        baseline.SnapshotConstructorMap = BuildSyntaxConstructorMapOrNull(baseline.SnapshotRoot);
-        baseline.SnapshotOperatorMap = BuildSyntaxOperatorMapOrNull(baseline.SnapshotRoot);
-        baseline.SnapshotEventMap = BuildSyntaxEventMapOrNull(baseline.SnapshotRoot);
-        baseline.PlainCurrentPropertyMap = BuildSyntaxPropertyMapOrNull(plainRoot);
-        baseline.PlainCurrentIndexerMap = BuildSyntaxIndexerMapOrNull(plainRoot);
-        baseline.PlainCurrentConstructorMap = BuildSyntaxConstructorMapOrNull(plainRoot);
-        baseline.PlainCurrentOperatorMap = BuildSyntaxOperatorMapOrNull(plainRoot);
-        baseline.PlainCurrentEventMap = BuildSyntaxEventMapOrNull(plainRoot);
+        baseline.SnapshotPropertyMap = WorkerSyntaxIndex.BuildSyntaxPropertyMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotIndexerMap = WorkerSyntaxIndex.BuildSyntaxIndexerMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotConstructorMap = WorkerSyntaxIndex.BuildSyntaxConstructorMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotOperatorMap = WorkerSyntaxIndex.BuildSyntaxOperatorMapOrNull(baseline.SnapshotRoot);
+        baseline.SnapshotEventMap = WorkerSyntaxIndex.BuildSyntaxEventMapOrNull(baseline.SnapshotRoot);
+        baseline.PlainCurrentPropertyMap = WorkerSyntaxIndex.BuildSyntaxPropertyMapOrNull(plainRoot);
+        baseline.PlainCurrentIndexerMap = WorkerSyntaxIndex.BuildSyntaxIndexerMapOrNull(plainRoot);
+        baseline.PlainCurrentConstructorMap = WorkerSyntaxIndex.BuildSyntaxConstructorMapOrNull(plainRoot);
+        baseline.PlainCurrentOperatorMap = WorkerSyntaxIndex.BuildSyntaxOperatorMapOrNull(plainRoot);
+        baseline.PlainCurrentEventMap = WorkerSyntaxIndex.BuildSyntaxEventMapOrNull(plainRoot);
         return baseline;
     }
 
@@ -472,7 +472,7 @@ public static class TransformWorkerProgram
                 continue;
             }
 
-            string typeMetadataNameFromSyntax = BuildTypeMetadataNameFromSyntax(typeDeclaration);
+            string typeMetadataNameFromSyntax = WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration);
 
             // Property setters/init and all indexer accessors with bodies stay Skipped.
             // Property getters are patched below (not reported here).
@@ -572,9 +572,9 @@ public static class TransformWorkerProgram
             removedMembers,
             removedMethodSignatures);
         Dictionary<string, VariableDeclaratorSyntax> snapshotFieldMap =
-            BuildSyntaxFieldMapOrNull(baseline.SnapshotRoot);
+            WorkerSyntaxIndex.BuildSyntaxFieldMapOrNull(baseline.SnapshotRoot);
         Dictionary<string, VariableDeclaratorSyntax> currentFieldMap =
-            BuildSyntaxFieldMapOrNull(plainRoot);
+            WorkerSyntaxIndex.BuildSyntaxFieldMapOrNull(plainRoot);
         if (snapshotFieldMap != null && currentFieldMap != null)
         {
             CollectRemovedFields(
@@ -1080,422 +1080,6 @@ public static class TransformWorkerProgram
     // Syntax-based method key for same-file snapshot vs current comparison. Do not mix with
     // BuildMethodKey (Cecil/metadata names used by the orchestrator exclusion path).
     // Used only for in-memory baseline maps — safe to evolve without wire compatibility concerns.
-    private static string BuildSyntaxMethodKey(string typeMetadataName, MethodDeclarationSyntax methodDeclaration)
-    {
-        List<string> parameterKeys = new List<string>();
-        if (methodDeclaration.ParameterList != null)
-        {
-            foreach (ParameterSyntax parameter in methodDeclaration.ParameterList.Parameters)
-            {
-                parameterKeys.Add(BuildSyntaxParameterTypeKey(parameter));
-            }
-        }
-
-        // Why arity suffix: void F(int) and void F<T>(int) must not share a key (was silent
-        // baseline-disable). Arity 0 keeps the bare name so existing non-generic keys stay stable.
-        string methodName = methodDeclaration.Identifier.Text;
-        if (methodDeclaration.TypeParameterList != null
-            && methodDeclaration.TypeParameterList.Parameters.Count > 0)
-        {
-            methodName += "`"
-                + methodDeclaration.TypeParameterList.Parameters.Count.ToString(CultureInfo.InvariantCulture);
-        }
-
-        // Why explicit-interface qualifier: IA.Run() and IB.Run() must not share a key (same as
-        // BuildSyntaxPropertyKey). Property keys already include ExplicitInterfaceSpecifier.
-        if (methodDeclaration.ExplicitInterfaceSpecifier != null)
-        {
-            methodName = methodDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace().ToString()
-                + "." + methodName;
-        }
-
-        return typeMetadataName + "::" + methodName + "("
-            + string.Join(",", parameterKeys) + ")";
-    }
-
-    // Keep in sync with HotReloadAddedFieldStore.FormatFieldKey / FieldKeySeparator.
-    private static string BuildSyntaxFieldKey(string typeMetadataName, string fieldName)
-    {
-        return typeMetadataName + TransformWorkerProgramMarker.AddedFieldKeySeparator + fieldName;
-    }
-
-    private static string BuildSyntaxParameterTypeKey(ParameterSyntax parameter)
-    {
-        // Why NormalizeWhitespace: trivia / spacing differences must not invent distinct keys.
-        string typeText = parameter.Type != null
-            ? parameter.Type.NormalizeWhitespace().ToString()
-            : string.Empty;
-        if (parameter.Modifiers.Any(SyntaxKind.RefKeyword)
-            || parameter.Modifiers.Any(SyntaxKind.OutKeyword)
-            || parameter.Modifiers.Any(SyntaxKind.InKeyword))
-        {
-            typeText += "&";
-        }
-
-        return typeText;
-    }
-
-    // What: syntax-only type metadata name for baseline signature keys (not shim naming).
-    private static string BuildTypeMetadataNameFromSyntax(TypeDeclarationSyntax typeDeclaration)
-    {
-        List<string> nestedNames = new List<string>();
-        TypeDeclarationSyntax current = typeDeclaration;
-        while (current != null)
-        {
-            string simpleName = current.Identifier.Text;
-            if (current.TypeParameterList != null && current.TypeParameterList.Parameters.Count > 0)
-            {
-                simpleName += "`" + current.TypeParameterList.Parameters.Count.ToString(CultureInfo.InvariantCulture);
-            }
-
-            nestedNames.Add(simpleName);
-            current = current.Parent as TypeDeclarationSyntax;
-        }
-
-        nestedNames.Reverse();
-        string typeMetadataName = string.Join("+", nestedNames);
-
-        string namespaceName = GetContainingNamespaceName(typeDeclaration);
-        if (string.IsNullOrEmpty(namespaceName))
-        {
-            return typeMetadataName;
-        }
-
-        return namespaceName + "." + typeMetadataName;
-    }
-
-    // What: dotted namespace path including all ancestor namespaces (not only the innermost).
-    private static string GetContainingNamespaceName(SyntaxNode node)
-    {
-        List<string> parts = new List<string>();
-        SyntaxNode current = node.Parent;
-        while (current != null)
-        {
-            // Why NormalizeWhitespace: trivia in nested namespace names must not invent distinct keys.
-            if (current is NamespaceDeclarationSyntax namespaceDeclaration)
-            {
-                parts.Add(namespaceDeclaration.Name.NormalizeWhitespace().ToString());
-            }
-            else if (current is FileScopedNamespaceDeclarationSyntax fileScopedNamespace)
-            {
-                parts.Add(fileScopedNamespace.Name.NormalizeWhitespace().ToString());
-            }
-
-            current = current.Parent;
-        }
-
-        if (parts.Count == 0)
-        {
-            return string.Empty;
-        }
-
-        parts.Reverse();
-        return string.Join(".", parts);
-    }
-
-    private static string BuildSyntaxPropertyKey(
-        string typeMetadataName,
-        PropertyDeclarationSyntax propertyDeclaration)
-    {
-        string name = propertyDeclaration.Identifier.Text;
-        if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
-        {
-            // Why NormalizeWhitespace: keep property keys symmetric with BuildSyntaxMethodKey so
-            // trivia in the interface name cannot invent a distinct baseline key.
-            name = propertyDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace().ToString()
-                + "." + name;
-        }
-
-        return typeMetadataName + "::" + name;
-    }
-
-    private static string BuildSyntaxIndexerKey(
-        string typeMetadataName,
-        IndexerDeclarationSyntax indexerDeclaration)
-    {
-        List<string> parameterKeys = new List<string>();
-        if (indexerDeclaration.ParameterList != null)
-        {
-            foreach (ParameterSyntax parameter in indexerDeclaration.ParameterList.Parameters)
-            {
-                parameterKeys.Add(BuildSyntaxParameterTypeKey(parameter));
-            }
-        }
-
-        return typeMetadataName + "::this(" + string.Join(",", parameterKeys) + ")";
-    }
-
-    private static string BuildSyntaxConstructorKey(
-        string typeMetadataName,
-        ConstructorDeclarationSyntax constructorDeclaration)
-    {
-        List<string> parameterKeys = new List<string>();
-        if (constructorDeclaration.ParameterList != null)
-        {
-            foreach (ParameterSyntax parameter in constructorDeclaration.ParameterList.Parameters)
-            {
-                parameterKeys.Add(BuildSyntaxParameterTypeKey(parameter));
-            }
-        }
-
-        string name = constructorDeclaration.Modifiers.Any(SyntaxKind.StaticKeyword)
-            ? ".cctor"
-            : ".ctor";
-        return typeMetadataName + "::" + name + "(" + string.Join(",", parameterKeys) + ")";
-    }
-
-    private static string BuildSyntaxOperatorKey(
-        string typeMetadataName,
-        OperatorDeclarationSyntax operatorDeclaration)
-    {
-        List<string> parameterKeys = new List<string>();
-        if (operatorDeclaration.ParameterList != null)
-        {
-            foreach (ParameterSyntax parameter in operatorDeclaration.ParameterList.Parameters)
-            {
-                parameterKeys.Add(BuildSyntaxParameterTypeKey(parameter));
-            }
-        }
-
-        return typeMetadataName + "::" + operatorDeclaration.OperatorToken.ValueText
-            + "(" + string.Join(",", parameterKeys) + ")";
-    }
-
-    private static string BuildSyntaxConversionOperatorKey(
-        string typeMetadataName,
-        ConversionOperatorDeclarationSyntax conversionDeclaration)
-    {
-        List<string> parameterKeys = new List<string>();
-        if (conversionDeclaration.ParameterList != null)
-        {
-            foreach (ParameterSyntax parameter in conversionDeclaration.ParameterList.Parameters)
-            {
-                parameterKeys.Add(BuildSyntaxParameterTypeKey(parameter));
-            }
-        }
-
-        string targetType = conversionDeclaration.Type != null
-            ? conversionDeclaration.Type.NormalizeWhitespace().ToString()
-            : string.Empty;
-        return typeMetadataName + "::" + conversionDeclaration.ImplicitOrExplicitKeyword.ValueText
-            + "->" + targetType + "(" + string.Join(",", parameterKeys) + ")";
-    }
-
-    private static string BuildSyntaxEventKey(
-        string typeMetadataName,
-        EventDeclarationSyntax eventDeclaration)
-    {
-        string name = eventDeclaration.Identifier.Text;
-        if (eventDeclaration.ExplicitInterfaceSpecifier != null)
-        {
-            name = eventDeclaration.ExplicitInterfaceSpecifier.Name.NormalizeWhitespace().ToString()
-                + "." + name;
-        }
-
-        return typeMetadataName + "::" + name;
-    }
-
-    private static Dictionary<string, MethodDeclarationSyntax> BuildSyntaxMethodMapOrNull(
-        CompilationUnitSyntax root)
-    {
-        Dictionary<string, MethodDeclarationSyntax> map = new Dictionary<string, MethodDeclarationSyntax>();
-        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
-        {
-            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
-            foreach (MethodDeclarationSyntax methodDeclaration in typeDeclaration.Members.OfType<MethodDeclarationSyntax>())
-            {
-                string key = BuildSyntaxMethodKey(typeMetadataName, methodDeclaration);
-                if (map.ContainsKey(key))
-                {
-                    return null;
-                }
-
-                map[key] = methodDeclaration;
-            }
-        }
-
-        return map;
-    }
-
-    private static Dictionary<string, VariableDeclaratorSyntax> BuildSyntaxFieldMapOrNull(
-        CompilationUnitSyntax root)
-    {
-        Dictionary<string, VariableDeclaratorSyntax> map =
-            new Dictionary<string, VariableDeclaratorSyntax>(StringComparer.Ordinal);
-        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
-        {
-            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
-            foreach (FieldDeclarationSyntax fieldDeclaration in typeDeclaration.Members
-                .OfType<FieldDeclarationSyntax>())
-            {
-                foreach (VariableDeclaratorSyntax variable in fieldDeclaration.Declaration.Variables)
-                {
-                    string key = BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.Text);
-                    if (map.ContainsKey(key))
-                    {
-                        return null;
-                    }
-
-                    map[key] = variable;
-                }
-            }
-        }
-
-        return map;
-    }
-
-    private static Dictionary<string, PropertyDeclarationSyntax> BuildSyntaxPropertyMapOrNull(
-        CompilationUnitSyntax root)
-    {
-        Dictionary<string, PropertyDeclarationSyntax> map = new Dictionary<string, PropertyDeclarationSyntax>();
-        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
-        {
-            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
-            foreach (PropertyDeclarationSyntax propertyDeclaration in typeDeclaration.Members.OfType<PropertyDeclarationSyntax>())
-            {
-                string key = BuildSyntaxPropertyKey(typeMetadataName, propertyDeclaration);
-                if (map.ContainsKey(key))
-                {
-                    return null;
-                }
-
-                map[key] = propertyDeclaration;
-            }
-        }
-
-        return map;
-    }
-
-    private static Dictionary<string, IndexerDeclarationSyntax> BuildSyntaxIndexerMapOrNull(
-        CompilationUnitSyntax root)
-    {
-        Dictionary<string, IndexerDeclarationSyntax> map = new Dictionary<string, IndexerDeclarationSyntax>();
-        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
-        {
-            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
-            foreach (IndexerDeclarationSyntax indexerDeclaration in typeDeclaration.Members.OfType<IndexerDeclarationSyntax>())
-            {
-                string key = BuildSyntaxIndexerKey(typeMetadataName, indexerDeclaration);
-                if (map.ContainsKey(key))
-                {
-                    return null;
-                }
-
-                map[key] = indexerDeclaration;
-            }
-        }
-
-        return map;
-    }
-
-    private static Dictionary<string, ConstructorDeclarationSyntax> BuildSyntaxConstructorMapOrNull(
-        CompilationUnitSyntax root)
-    {
-        Dictionary<string, ConstructorDeclarationSyntax> map =
-            new Dictionary<string, ConstructorDeclarationSyntax>();
-        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
-        {
-            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
-            foreach (ConstructorDeclarationSyntax constructorDeclaration in typeDeclaration.Members
-                .OfType<ConstructorDeclarationSyntax>())
-            {
-                string key = BuildSyntaxConstructorKey(typeMetadataName, constructorDeclaration);
-                if (map.ContainsKey(key))
-                {
-                    return null;
-                }
-
-                map[key] = constructorDeclaration;
-            }
-        }
-
-        return map;
-    }
-
-    private static Dictionary<string, MemberDeclarationSyntax> BuildSyntaxOperatorMapOrNull(
-        CompilationUnitSyntax root)
-    {
-        Dictionary<string, MemberDeclarationSyntax> map =
-            new Dictionary<string, MemberDeclarationSyntax>();
-        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
-        {
-            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
-            foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
-            {
-                string key = TryBuildSyntaxOperatorMemberKey(typeMetadataName, member);
-                if (key == null)
-                {
-                    continue;
-                }
-
-                if (map.ContainsKey(key))
-                {
-                    return null;
-                }
-
-                map[key] = member;
-            }
-        }
-
-        return map;
-    }
-
-    private static string TryBuildSyntaxOperatorMemberKey(
-        string typeMetadataName,
-        MemberDeclarationSyntax member)
-    {
-        if (member is OperatorDeclarationSyntax operatorDeclaration)
-        {
-            return BuildSyntaxOperatorKey(typeMetadataName, operatorDeclaration);
-        }
-
-        if (member is ConversionOperatorDeclarationSyntax conversionDeclaration)
-        {
-            return BuildSyntaxConversionOperatorKey(typeMetadataName, conversionDeclaration);
-        }
-
-        return null;
-    }
-
-    private static Dictionary<string, EventDeclarationSyntax> BuildSyntaxEventMapOrNull(
-        CompilationUnitSyntax root)
-    {
-        Dictionary<string, EventDeclarationSyntax> map =
-            new Dictionary<string, EventDeclarationSyntax>();
-        foreach (TypeDeclarationSyntax typeDeclaration in EnumerateTypeDeclarations(root))
-        {
-            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
-            foreach (EventDeclarationSyntax eventDeclaration in typeDeclaration.Members
-                .OfType<EventDeclarationSyntax>())
-            {
-                string key = BuildSyntaxEventKey(typeMetadataName, eventDeclaration);
-                if (map.ContainsKey(key))
-                {
-                    return null;
-                }
-
-                map[key] = eventDeclaration;
-            }
-        }
-
-        return map;
-    }
-
-    private static void AppendOutsideMethodBodyDriftWarningIfNeeded(
-        CompilationUnitSyntax snapshotRoot,
-        CompilationUnitSyntax currentRoot,
-        string fileName,
-        List<string> declarationDriftWarnings,
-        AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog)
-    {
-        HashSet<string> snapshotKeys = new HashSet<string>(
-            addedMethodCatalog.RemovedSyntaxKeys,
-            StringComparer.Ordinal);
-        foreach (string key in addedFieldCatalog.RemovedSyntaxKeys)
-        {
-            snapshotKeys.Add(key);
-        }
 
         HashSet<string> currentKeys = new HashSet<string>(
             addedMethodCatalog.AddedSyntaxKeys,
@@ -1587,7 +1171,7 @@ public static class TransformWorkerProgram
 
         private bool ShouldStripType(TypeDeclarationSyntax node)
         {
-            return _typeSyntaxKeysToStrip.Contains(BuildTypeMetadataNameFromSyntax(node));
+            return _typeSyntaxKeysToStrip.Contains(WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(node));
         }
 
         public override SyntaxNode VisitMethodDeclaration(MethodDeclarationSyntax node)
@@ -1598,8 +1182,8 @@ public static class TransformWorkerProgram
                 return base.VisitMethodDeclaration(node);
             }
 
-            string syntaxKey = BuildSyntaxMethodKey(
-                BuildTypeMetadataNameFromSyntax(typeDeclaration),
+            string syntaxKey = WorkerSyntaxIndex.BuildSyntaxMethodKey(
+                WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration),
                 node);
             if (_syntaxKeysToStrip.Contains(syntaxKey))
             {
@@ -1617,8 +1201,8 @@ public static class TransformWorkerProgram
                 return base.VisitPropertyDeclaration(node);
             }
 
-            string syntaxKey = BuildSyntaxPropertyKey(
-                BuildTypeMetadataNameFromSyntax(typeDeclaration),
+            string syntaxKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(
+                WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration),
                 node);
             if (_propertySyntaxKeysToStrip.Contains(syntaxKey))
             {
@@ -1636,11 +1220,11 @@ public static class TransformWorkerProgram
                 return base.VisitFieldDeclaration(node);
             }
 
-            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
+            string typeMetadataName = WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration);
             List<VariableDeclaratorSyntax> remaining = new List<VariableDeclaratorSyntax>();
             foreach (VariableDeclaratorSyntax variable in node.Declaration.Variables)
             {
-                string syntaxKey = BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.Text);
+                string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.Text);
                 if (!_syntaxKeysToStrip.Contains(syntaxKey))
                 {
                     remaining.Add(variable);
@@ -1868,7 +1452,7 @@ public static class TransformWorkerProgram
         {
             if (member is PropertyDeclarationSyntax propertyDeclaration)
             {
-                string propertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
+                string propertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
                 // Why plainCurrentPropertyMap: annotated property nodes break AreEquivalent the
                 // same way annotated method bodies do; compare unannotated peers only.
                 if (snapshotPropertyMap != null
@@ -1896,7 +1480,7 @@ public static class TransformWorkerProgram
 
             if (member is IndexerDeclarationSyntax indexerDeclaration)
             {
-                string indexerKey = BuildSyntaxIndexerKey(typeMetadataNameFromSyntax, indexerDeclaration);
+                string indexerKey = WorkerSyntaxIndex.BuildSyntaxIndexerKey(typeMetadataNameFromSyntax, indexerDeclaration);
                 if (snapshotIndexerMap != null
                     && plainCurrentIndexerMap != null
                     && snapshotIndexerMap.TryGetValue(
@@ -1984,7 +1568,7 @@ public static class TransformWorkerProgram
             return;
         }
 
-        string propertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, namedProperty);
+        string propertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, namedProperty);
         if (!snapshotPropertyMap.ContainsKey(propertyKey))
         {
             addedMethodCatalog.AddAddedPropertySyntaxKey(propertyKey);
@@ -2103,7 +1687,7 @@ public static class TransformWorkerProgram
         foreach (ConstructorDeclarationSyntax constructorDeclaration in typeDeclaration.Members
             .OfType<ConstructorDeclarationSyntax>())
         {
-            string constructorKey = BuildSyntaxConstructorKey(
+            string constructorKey = WorkerSyntaxIndex.BuildSyntaxConstructorKey(
                 typeMetadataNameFromSyntax,
                 constructorDeclaration);
             if (snapshotConstructorMap != null
@@ -2134,7 +1718,7 @@ public static class TransformWorkerProgram
     {
         foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
         {
-            string operatorKey = TryBuildSyntaxOperatorMemberKey(typeMetadataNameFromSyntax, member);
+            string operatorKey = WorkerSyntaxIndex.TryBuildSyntaxOperatorMemberKey(typeMetadataNameFromSyntax, member);
             if (operatorKey == null)
             {
                 continue;
@@ -2165,7 +1749,7 @@ public static class TransformWorkerProgram
         foreach (EventDeclarationSyntax eventDeclaration in typeDeclaration.Members
             .OfType<EventDeclarationSyntax>())
         {
-            string eventKey = BuildSyntaxEventKey(typeMetadataNameFromSyntax, eventDeclaration);
+            string eventKey = WorkerSyntaxIndex.BuildSyntaxEventKey(typeMetadataNameFromSyntax, eventDeclaration);
             if (snapshotEventMap != null
                 && plainCurrentEventMap != null
                 && snapshotEventMap.TryGetValue(eventKey, out EventDeclarationSyntax snapshotEvent)
@@ -2379,7 +1963,7 @@ public static class TransformWorkerProgram
             return false;
         }
 
-        string propertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
+        string propertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
         if (snapshotPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax snapshotProperty)
             && plainCurrentPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax plainProperty)
             && ArePropertyGettersEquivalent(snapshotProperty, plainProperty))
@@ -2414,7 +1998,7 @@ public static class TransformWorkerProgram
             return false;
         }
 
-        string addedPropertyKey = BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
+        string addedPropertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
         if (snapshotPropertyMap.ContainsKey(addedPropertyKey))
         {
             return false;
@@ -3355,7 +2939,7 @@ public static class TransformWorkerProgram
             return (shimTypeCounter, globalShimMethodCounter);
         }
 
-        string syntaxMethodKey = BuildSyntaxMethodKey(
+        string syntaxMethodKey = WorkerSyntaxIndex.BuildSyntaxMethodKey(
             typeState.TypeMetadataNameFromSyntax,
             methodDeclaration);
         if (TrySkipInterfaceOrdinaryMethod(
@@ -3475,7 +3059,7 @@ public static class TransformWorkerProgram
             {
                 RecordHandledAddedMethodSyntaxKey(
                     addedMethodCatalog,
-                    BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration),
+                    WorkerSyntaxIndex.BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration),
                     replacesCompiledMethod,
                     snapshotMethodMap,
                     plainCurrentMethodMap);
@@ -4592,7 +4176,7 @@ public static class TransformWorkerProgram
         List<string> declarationDriftWarnings,
         CompiledFieldMatch fieldMatch)
     {
-        string syntaxKey = BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, fieldSymbol.Name);
+        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(typeState.TypeMetadataNameFromSyntax, fieldSymbol.Name);
         string fieldKey = FormatAddedFieldStoreKey(
             CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
             fieldSymbol.Name);
