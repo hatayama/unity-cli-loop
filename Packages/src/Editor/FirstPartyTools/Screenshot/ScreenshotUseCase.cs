@@ -97,6 +97,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return overlayTimeout;
             }
 
+            // Why switch after the helper: CaptureTextureAfterHidingOverlaysAsync ends on the
+            // editor context, but ConfigureAwait(false) resumes this method on a thread-pool
+            // thread. texture.width / EncodeToPNG / DestroyImmediate are main-thread only.
+            await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+
             // Uses the settled capture-time size, not the pre-capture gameViewSize sample, so annotated
             // element coordinates stay consistent with the GameViewWidth/Height this response reports.
             UIElementAnnotator.ConvertToSimCoordinates(annotationCapture.AnnotatedElements, Mathf.RoundToInt(captureRenderingInfo.GameViewSize.y));
@@ -299,6 +304,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return (null, default, hideTimeout);
                 }
 
+                // Why switch after the helper: when the overlay was active the helper awaited,
+                // so ConfigureAwait(false) resumes here off-main before CreateAnnotationOverlay
+                // (new GameObject / AddComponent / Canvas.ForceUpdateCanvases).
+                await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
+
                 try
                 {
                     // Assign before any await so the inner finally still destroys the overlay
@@ -310,6 +320,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         return (null, default, overlayTimeout);
                     }
+
+                    // Why switch after the helper: the original entered CaptureGameRenderingAsync
+                    // on the main thread. ConfigureAwait(false) hops off-main after the overlay wait.
+                    await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
 
                     bool captureTimedOut;
                     (texture, captureRenderingInfo, captureTimedOut) = await EditorWindowCaptureUtility.CaptureGameRenderingAsync(

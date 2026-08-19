@@ -62,58 +62,44 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         // Why a helper: the ctor's Q/assert/throw fan-out is one query step, and leaving it
         // inline kept the constructor over CA1502.
+        // Why three phases: the original queried every node, emitted every missing-node
+        // Debug.Assert, and only then threw for the first missing one. Assert-then-throw
+        // per element skipped later asserts.
         private static RequiredSkillsPanelElements QueryRequiredElements(VisualElement root)
         {
-            return new RequiredSkillsPanelElements(
-                RequireNamedElement(
-                    root.Q<VisualElement>("skill-target-status-list"),
-                    "skill-target-status-list",
-                    "_skillTargetStatusList"),
-                RequireNamedElement(
-                    root.Q<VisualElement>("skill-target-status-divider"),
-                    "skill-target-status-divider",
-                    "_skillTargetStatusDivider"),
-                RequireNamedElement(
-                    root.Q<Label>("skill-target-status-summary"),
-                    "skill-target-status-summary",
-                    "_skillTargetStatusSummary"),
-                RequireNamedElement(
-                    root.Q<Label>("skills-no-targets-message"),
-                    "skills-no-targets-message",
-                    "_skillsNoTargetsMessage"),
-                RequireNamedElement(
-                    root.Q<Button>("install-all-skills-button"),
-                    "install-all-skills-button",
-                    "_installAllSkillsButton"),
-                RequireNamedElement(
-                    root.Q<Foldout>("install-specific-target-foldout"),
-                    "install-specific-target-foldout",
-                    "_installSpecificTargetFoldout"),
-                RequireNamedElement(
-                    root.Q<VisualElement>("group-skills-row"),
-                    "group-skills-row",
-                    "_groupSkillsRow"),
-                RequireNamedElement(
-                    root.Q<Toggle>("group-skills-toggle"),
-                    "group-skills-toggle",
-                    "_groupSkillsToggle"),
-                RequireNamedElement(
-                    root.Q<EnumField>("skills-target-field"),
-                    "skills-target-field",
-                    "_skillsTargetField"),
-                RequireNamedElement(
-                    root.Q<Button>("install-selected-skills-button"),
-                    "install-selected-skills-button",
-                    "_installSelectedSkillsButton"));
-        }
+            VisualElement skillTargetStatusList = root.Q<VisualElement>("skill-target-status-list");
+            VisualElement skillTargetStatusDivider = root.Q<VisualElement>("skill-target-status-divider");
+            Label skillTargetStatusSummary = root.Q<Label>("skill-target-status-summary");
+            Label skillsNoTargetsMessage = root.Q<Label>("skills-no-targets-message");
+            Button installAllSkillsButton = root.Q<Button>("install-all-skills-button");
+            Foldout installSpecificTargetFoldout = root.Q<Foldout>("install-specific-target-foldout");
+            VisualElement groupSkillsRow = root.Q<VisualElement>("group-skills-row");
+            Toggle groupSkillsToggle = root.Q<Toggle>("group-skills-toggle");
+            EnumField skillsTargetField = root.Q<EnumField>("skills-target-field");
+            Button installSelectedSkillsButton = root.Q<Button>("install-selected-skills-button");
 
-        // Why two names: Debug.Assert used the UXML name; ArgumentNullException used the field
-        // nameof. Combining them into one string changed the exception ParamName.
-        private static T RequireNamedElement<T>(T value, string assertName, string exceptionParamName)
-            where T : VisualElement
-        {
-            Debug.Assert(value != null, assertName + " must not be null");
-            return value ?? throw new System.ArgumentNullException(exceptionParamName);
+            Debug.Assert(skillTargetStatusList != null, "skill-target-status-list must not be null");
+            Debug.Assert(skillTargetStatusDivider != null, "skill-target-status-divider must not be null");
+            Debug.Assert(skillTargetStatusSummary != null, "skill-target-status-summary must not be null");
+            Debug.Assert(skillsNoTargetsMessage != null, "skills-no-targets-message must not be null");
+            Debug.Assert(installAllSkillsButton != null, "install-all-skills-button must not be null");
+            Debug.Assert(installSpecificTargetFoldout != null, "install-specific-target-foldout must not be null");
+            Debug.Assert(groupSkillsRow != null, "group-skills-row must not be null");
+            Debug.Assert(groupSkillsToggle != null, "group-skills-toggle must not be null");
+            Debug.Assert(skillsTargetField != null, "skills-target-field must not be null");
+            Debug.Assert(installSelectedSkillsButton != null, "install-selected-skills-button must not be null");
+
+            return new RequiredSkillsPanelElements(
+                skillTargetStatusList ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusList)),
+                skillTargetStatusDivider ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusDivider)),
+                skillTargetStatusSummary ?? throw new System.ArgumentNullException(nameof(_skillTargetStatusSummary)),
+                skillsNoTargetsMessage ?? throw new System.ArgumentNullException(nameof(_skillsNoTargetsMessage)),
+                installAllSkillsButton ?? throw new System.ArgumentNullException(nameof(_installAllSkillsButton)),
+                installSpecificTargetFoldout ?? throw new System.ArgumentNullException(nameof(_installSpecificTargetFoldout)),
+                groupSkillsRow ?? throw new System.ArgumentNullException(nameof(_groupSkillsRow)),
+                groupSkillsToggle ?? throw new System.ArgumentNullException(nameof(_groupSkillsToggle)),
+                skillsTargetField ?? throw new System.ArgumentNullException(nameof(_skillsTargetField)),
+                installSelectedSkillsButton ?? throw new System.ArgumentNullException(nameof(_installSelectedSkillsButton)));
         }
 
         private void WireEventHandlers()
