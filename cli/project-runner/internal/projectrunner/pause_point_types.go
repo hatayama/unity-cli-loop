@@ -162,3 +162,17 @@ type pausePointCapturedVariable struct {
 func pausePointVariableValue(value string) *string {
 	return &value
 }
+
+// normalizePausePointCallerFrames replaces nil caller-frame slices with empty ones so a
+// payload from a package generation that predates CallerFrames still re-marshals as []
+// (the Unity contract shape) rather than null.
+func normalizePausePointCallerFrames(response *pausePointStatusResponse) {
+	if response.CallerFrames == nil {
+		response.CallerFrames = []pausePointCallerFrame{}
+	}
+	for i := range response.CapturedVariableHistory {
+		if response.CapturedVariableHistory[i].CallerFrames == nil {
+			response.CapturedVariableHistory[i].CallerFrames = []pausePointCallerFrame{}
+		}
+	}
+}

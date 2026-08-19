@@ -154,27 +154,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return normalized.Substring(earliest + 1);
             }
 
-            if (IsRootedPath(normalized))
+            foreach (string segment in ProjectRelativeRootSegments)
             {
-                // A rooted path with no recognizable project segment would leak a machine
-                // path into the payload; degrade to a method-only frame instead. Select
-                // already coerces Line to 0 when File is null.
-                return null;
+                // The segment minus its leading slash is the project-relative prefix
+                // form ("/Assets/" -> "Assets/").
+                if (normalized.StartsWith(segment.Substring(1), StringComparison.Ordinal))
+                {
+                    return normalized;
+                }
             }
 
-            return normalized;
-        }
-
-        // Detects absolute paths on both platforms: POSIX (and UNC after backslash
-        // normalization) via the leading slash, Windows drive paths via "X:/".
-        private static bool IsRootedPath(string normalized)
-        {
-            if (normalized[0] == '/')
-            {
-                return true;
-            }
-
-            return normalized.Length >= 3 && normalized[1] == ':' && normalized[2] == '/';
+            // Anything else — rooted machine paths, ../ escapes, unrecognized relative
+            // forms — would leak non-project structure into the payload; degrade to a
+            // method-only frame instead. Select already coerces Line to 0 when File is
+            // null.
+            return null;
         }
     }
 }

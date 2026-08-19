@@ -256,6 +256,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a relative path outside the known Unity roots normalizes to null instead of
+        /// leaking non-project structure into the payload.
+        /// </summary>
+        [Test]
+        public void NormalizeFilePath_WhenRelativePathOutsideKnownRoots_ReturnsNull()
+        {
+            string normalized = SourcePausePointCallerFrameSelector.NormalizeFilePath(
+                "External/Src/Foo.cs");
+
+            Assert.That(normalized, Is.Null);
+        }
+
+        /// <summary>
+        /// What: a parent-directory escape with no known project segment normalizes to null.
+        /// </summary>
+        [Test]
+        public void NormalizeFilePath_WhenParentDirectoryEscape_ReturnsNull()
+        {
+            string normalized = SourcePausePointCallerFrameSelector.NormalizeFilePath(
+                "../External/Src/Foo.cs");
+
+            Assert.That(normalized, Is.Null);
+        }
+
+        /// <summary>
         /// What: a missing file name normalizes to null rather than empty.
         /// </summary>
         [Test]

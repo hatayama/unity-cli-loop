@@ -47,6 +47,7 @@ func sendPausePointStatusCommand(
 	if err := json.Unmarshal(result, &response); err != nil {
 		return pausePointStatusResponse{}, err
 	}
+	normalizePausePointCallerFrames(&response)
 	return response, nil
 }
 
