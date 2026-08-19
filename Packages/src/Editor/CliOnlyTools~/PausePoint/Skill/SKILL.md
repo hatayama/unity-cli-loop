@@ -118,6 +118,8 @@ For multi-step verification, avoid repeating enable→await→clear cycles with 
 
 Every hit response embeds `CapturedVariables`: the method's in-scope locals, its parameters, and the `this` instance fields, captured at the exact moment execution reached the patched line. Values are point-in-time strings, not live references, so they stay valid as evidence even after Unity resumes.
 
+`CallerFrames`: up to two caller stack frames showing how execution reached the marker, nearest caller first. Always present (empty array when no managed callers were captured — for example when the marker's method was entered from native code or resumed after an `await`). Each frame has `Method`; `File` (project-relative, forward slashes) and `Line` are omitted when debug symbols are unavailable. A rooted source path outside `Assets/`, `Packages/`, or `Library/PackageCache/` degrades to a method-only frame. Frame-selection rules: [references/captured-variables.md](references/captured-variables.md).
+
 - The snapshot is taken **before** the resolved line executes, exactly like an IDE breakpoint on that line. To inspect a value after an assignment, place the pause point on the following line.
 - `Scope` is `Local`, `Parameter`, `InstanceField`, or `This`. The synthetic `this` entry identifies which instance or GameObject was hit via `UnityObjectPath` and `UnityObjectInstanceId`; `UnityEngine.Object` values carry the same handle fields for follow-up digs with `get-hierarchy`, `find-game-objects`, or `execute-dynamic-code`.
 - `--captured-variables names` on `await-pause-point`/`pause-point-status` drops every `Value` and keeps `Name`/`Scope`/`TypeName` — use it first on field-heavy classes, then fetch full values with a plain `pause-point-status` call.
@@ -134,7 +136,7 @@ Every hit response embeds `CapturedVariables`: the method's in-scope locals, its
 - Collection values (arrays, `List<T>`, dictionaries, plain objects) render as a JSON preview capped at 10 elements by default. When the elements you need sit past that cap (a 10x20 grid, a long list), re-enable with `--max-preview-elements <n>` (1–1000). The value set at enable time also caps the previews in every later `pause-point-status` response for that marker — status has no flag to change it.
 - While Unity is still paused, `UloopPausePoint.TryGetCapturedValue("name")` (and `"this"`) returns live captured references for `execute-dynamic-code`; the return is a `(bool Found, object Value)` tuple, and the holder clears on resume. (file:line marker hits only — id-only markers store no capture) These are **live objects in their frame-completed state, not snapshots** — use them only to dig further into objects that are still alive, never to reconstruct what a value was at the paused line.
 
-For snapshot timing, preview/truncation caps, Unity-object `Value` semantics, capture-time vs live evidence, `Warning`/`MatchingLogs`, marker freshness, and the raw capture API, read [references/captured-variables.md](references/captured-variables.md).
+For snapshot timing, preview/truncation caps, Unity-object `Value` semantics, capture-time vs live evidence, `Warning`/`MatchingLogs`, marker freshness, caller frames, and the raw capture API, read [references/captured-variables.md](references/captured-variables.md).
 
 ## Watch Expressions
 

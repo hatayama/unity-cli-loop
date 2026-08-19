@@ -92,3 +92,14 @@ For a self-progressing game, arranging a scenario through real input alone is a 
 `await-pause-point`'s hit response also carries a top-level `Warning` (omitted when empty): it flags multiple hits, multiple matching logs, or truncated matching logs, so you can tell a single clean hit apart from evidence that needs closer inspection. Enable-time patch diagnostics (for example physics-callback cached dispatch) are not in `Warning`; on `enable-pause-point --await` they appear as `EnableTimeWarning` instead. `MatchingLogs` (log entries whose text contains the marker id) is still embedded, but source-derived ids rarely appear in log text, so treat `CapturedVariables` as the primary variable evidence.
 
 Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or status response to tell a fresh marker from stale evidence with the same id. `RemainingMilliseconds` and `Expired` are returned directly so you do not need to infer marker lifetime from elapsed time.
+
+## Caller frames
+
+Each hit records up to two managed caller frames (`CallerFrames`, nearest caller first) in the latest capture and in every history frame. The field is always present (an empty array when no managed callers were captured). Selection rules:
+
+- Runtime async machinery (`System.*`), patching infrastructure (`HarmonyLib.*`, `MonoMod.*`), and uloop's own frames are skipped. Unity engine and editor frames are kept because an entry point such as `UnityEditor.EditorApplication.update` is itself diagnostic.
+- Async callers are reported by their logical method name (compiler state-machine frames are demangled to `Namespace.Type.Method`).
+- `File` and `Line` come from the debug symbols Unity emits with Debug code optimization — the same prerequisite pause points already have. Frames without symbols (for example a caller whose body is currently hot-reload patched, which executes as a Harmony dynamic method) keep their raw method name and report no `File`/`Line`. A rooted source path outside `Assets/`, `Packages/`, or `Library/PackageCache/` degrades to a method-only frame so the payload never carries a machine path.
+- The frames are the synchronous call chain at the moment the marker line ran. A marker that resumes after an `await` sees scheduler frames only, so `CallerFrames` can legitimately be an empty array; the same is true when the marker's method is called directly by the engine.
+
+Capturing the frames costs on the order of 0.1 ms per hit, which also bounds the extra trace-mode overhead per recorded hit.
