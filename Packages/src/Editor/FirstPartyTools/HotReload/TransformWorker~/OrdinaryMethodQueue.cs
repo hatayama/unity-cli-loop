@@ -47,7 +47,7 @@ internal static class OrdinaryMethodQueue
         string[] parameterTypeFullNames = methodSymbol.Parameters
             .Select(CecilTypeNames.ToParameterTypeFullName)
             .ToArray();
-        string methodKey = TransformWorkerProgram.BuildMethodKey(
+        string methodKey = WorkerMethodKeys.BuildMethodKey(
             CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
             methodSymbol.Name,
             parameterTypeFullNames,
@@ -112,7 +112,7 @@ internal static class OrdinaryMethodQueue
         {
             skipped.Add(new WorkerSkipped
             {
-                Method = TransformWorkerProgram.FormatMethodLabel(methodSymbol),
+                Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
                 Reason = decision.SkipReason
             });
             if (isAddedMethod)
@@ -232,7 +232,7 @@ internal static class OrdinaryMethodQueue
 
         skipped.Add(new WorkerSkipped
         {
-            Method = TransformWorkerProgram.FormatMethodLabel(methodSymbol),
+            Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
             Reason = AddedMethodSkipReasons.InterfaceMember
         });
         if (isAddedMethod)
@@ -448,7 +448,7 @@ internal static class OrdinaryMethodQueue
 
             skipped.Add(new WorkerSkipped
             {
-                Method = TransformWorkerProgram.FormatMethodLabel(methodSymbol),
+                Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
                 Reason = AddedMethodSkipReasons.NewTypeOutOfScope
             });
         }

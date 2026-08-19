@@ -78,7 +78,7 @@ internal static class PropertyGetterClassifier
 
         skipped.Add(new WorkerSkipped
         {
-            Method = TransformWorkerProgram.FormatMethodLabel(getterSymbol),
+            Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
             Reason = AddedMethodSkipReasons.AddedProperty
         });
         addedMethodCatalog.AddAddedPropertySyntaxKey(addedPropertyKey);
@@ -106,7 +106,7 @@ internal static class PropertyGetterClassifier
         {
             skipped.Add(new WorkerSkipped
             {
-                Method = TransformWorkerProgram.FormatMethodLabel(getterSymbol),
+                Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
                 Reason = decision.SkipReason
             });
             return (true, decision);
@@ -124,12 +124,12 @@ internal static class PropertyGetterClassifier
 
         skipped.Add(new WorkerSkipped
         {
-            Method = TransformWorkerProgram.FormatMethodLabel(getterSymbol),
+            Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
             Reason = addedCallSiteSkip,
             CalledAddedMethodKey = calledAddedMethodKey,
             MethodKey = calledAddedMethodKey == null
                 ? null
-                : TransformWorkerProgram.BuildMethodKeyFromSymbol(getterSymbol)
+                : WorkerMethodKeys.BuildMethodKeyFromSymbol(getterSymbol)
         });
         return (true, decision);
     }
@@ -223,7 +223,7 @@ internal static class PropertyGetterClassifier
 
         skipped.Add(new WorkerSkipped
         {
-            Method = TransformWorkerProgram.FormatMethodLabel(propertySymbol.GetMethod),
+            Method = WorkerMethodKeys.FormatMethodLabel(propertySymbol.GetMethod),
             Reason = AddedMethodSkipReasons.NewTypeOutOfScope
         });
     }

@@ -115,7 +115,7 @@ internal static class PropertyGetterEmitter
 
         IMethodSymbol getterSymbol = propertySymbol.GetMethod;
         string[] parameterTypeFullNames = Array.Empty<string>();
-        string methodKey = TransformWorkerProgram.BuildMethodKey(
+        string methodKey = WorkerMethodKeys.BuildMethodKey(
             CecilTypeNames.ToMetadataName(typeSymbol),
             getterSymbol.Name,
             parameterTypeFullNames,
@@ -158,7 +158,7 @@ internal static class PropertyGetterEmitter
         {
             skipped.Add(new WorkerSkipped
             {
-                Method = TransformWorkerProgram.FormatMethodLabel(getterSymbol),
+                Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
                 Reason = "Explicit interface implementations are skipped in v1."
             });
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);

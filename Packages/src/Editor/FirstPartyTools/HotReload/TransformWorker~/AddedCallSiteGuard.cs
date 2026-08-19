@@ -46,7 +46,7 @@ internal static class AddedCallSiteGuard
                     {
                         skipped.Add(new WorkerSkipped
                         {
-                            Method = TransformWorkerProgram.FormatMethodLabel(queued.MethodSymbol),
+                            Method = WorkerMethodKeys.FormatMethodLabel(queued.MethodSymbol),
                             Reason = skipReason,
                             CalledAddedMethodKey = calledAddedMethodKey,
                             MethodKey = calledAddedMethodKey == null ? null : queued.MethodKey
@@ -95,7 +95,7 @@ internal static class AddedCallSiteGuard
                 continue;
             }
 
-            string calledKey = TransformWorkerProgram.BuildMethodKeyFromSymbol(methodSymbol);
+            string calledKey = WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol);
             // Why the receiver spine (not a WhenNotNull ancestor walk): other?.Inner.AddedPing()
             // and other?.Get().AddedPing() walk left to a MemberBinding. An ancestor walk also
             // matches argument-list / lambda invocations that are ordinary rewrite targets.
@@ -133,7 +133,7 @@ internal static class AddedCallSiteGuard
 
             ISymbol symbol = semanticModel.GetSymbolInfo(name).Symbol;
             if (symbol is IMethodSymbol methodSymbol
-                && addedMethodCatalog.IsClassifiedAdded(TransformWorkerProgram.BuildMethodKeyFromSymbol(methodSymbol)))
+                && addedMethodCatalog.IsClassifiedAdded(WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol)))
             {
                 return true;
             }
@@ -150,7 +150,7 @@ internal static class AddedCallSiteGuard
 
             ISymbol symbol = semanticModel.GetSymbolInfo(access).Symbol;
             if (symbol is IMethodSymbol methodSymbol
-                && addedMethodCatalog.IsClassifiedAdded(TransformWorkerProgram.BuildMethodKeyFromSymbol(methodSymbol)))
+                && addedMethodCatalog.IsClassifiedAdded(WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol)))
             {
                 return true;
             }
@@ -276,7 +276,7 @@ internal static class AddedCallSiteGuard
                 continue;
             }
 
-            string calledKey = TransformWorkerProgram.BuildMethodKeyFromSymbol(methodSymbol);
+            string calledKey = WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol);
             if (calledKey == selfMethodKey)
             {
                 continue;

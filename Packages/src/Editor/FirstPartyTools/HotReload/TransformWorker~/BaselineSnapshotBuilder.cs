@@ -22,7 +22,7 @@ internal static class BaselineSnapshotBuilder
         CSharpParseOptions parseOptions,
         CompilationUnitSyntax plainRoot)
     {
-        // Syntax-key maps for edited-method detection. Distinct from TransformWorkerProgram.BuildMethodKey (Cecil names):
+        // Syntax-key maps for edited-method detection. Distinct from WorkerMethodKeys.BuildMethodKey (Cecil names):
         // same-file old/new comparison only needs syntax keys to stay consistent with each other.
         BaselineSnapshotState baseline = new BaselineSnapshotState();
         // Null disables comparison; empty string is a real (empty) baseline text.

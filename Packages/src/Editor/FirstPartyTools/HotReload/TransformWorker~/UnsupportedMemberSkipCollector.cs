@@ -145,7 +145,7 @@ internal static class UnsupportedMemberSkipCollector
 
             skipped.Add(new WorkerSkipped
             {
-                Method = TransformWorkerProgram.FormatMethodLabel(accessorMethod),
+                Method = WorkerMethodKeys.FormatMethodLabel(accessorMethod),
                 Reason = ExplicitAccessorSkipReason
             });
             emittedSkip = true;
@@ -178,7 +178,7 @@ internal static class UnsupportedMemberSkipCollector
             {
                 skipped.Add(new WorkerSkipped
                 {
-                    Method = TransformWorkerProgram.FormatMethodLabel(propertySymbol.GetMethod),
+                    Method = WorkerMethodKeys.FormatMethodLabel(propertySymbol.GetMethod),
                     Reason = ExplicitAccessorSkipReason
                 });
             }
@@ -206,7 +206,7 @@ internal static class UnsupportedMemberSkipCollector
 
             skipped.Add(new WorkerSkipped
             {
-                Method = TransformWorkerProgram.FormatMethodLabel(accessorMethod),
+                Method = WorkerMethodKeys.FormatMethodLabel(accessorMethod),
                 Reason = ExplicitAccessorSkipReason
             });
         }
@@ -403,7 +403,7 @@ internal static class UnsupportedMemberSkipCollector
 
         skipped.Add(new WorkerSkipped
         {
-            Method = TransformWorkerProgram.FormatMethodLabel(methodSymbol),
+            Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
             Reason = UnsupportedMemberKindSkipReason
         });
     }
