@@ -276,10 +276,16 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be null or empty");
 
             byte[] bom = new byte[4];
+            int readCount = ReadBomPrefix(GetFileSystemPath(filePath), bom);
+            return EncodingFromBomPrefix(bom, readCount);
+        }
+
+        // FileStream.Read may return fewer bytes than requested; keep reading until EOF or 4 bytes.
+        private static int ReadBomPrefix(string fileSystemPath, byte[] bom)
+        {
             int readCount = 0;
-            using (FileStream stream = File.OpenRead(GetFileSystemPath(filePath)))
+            using (FileStream stream = File.OpenRead(fileSystemPath))
             {
-                // FileStream.Read may return fewer bytes than requested; read until EOF or 4 bytes.
                 while (readCount < bom.Length)
                 {
                     int read = stream.Read(bom, readCount, bom.Length - readCount);
@@ -292,33 +298,53 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
             }
 
-            // UTF-32 BOMs must be checked before UTF-16 because they share the same leading bytes.
-            if (readCount >= 4 && bom[0] == 0xFF && bom[1] == 0xFE && bom[2] == 0x00 && bom[3] == 0x00)
+            return readCount;
+        }
+
+        // UTF-32 BOMs must be checked before UTF-16 because they share the same leading bytes.
+        private static Encoding EncodingFromBomPrefix(byte[] bom, int readCount)
+        {
+            if (MatchesFourByteBom(bom, readCount, 0xFF, 0xFE, 0x00, 0x00))
             {
                 return new UTF32Encoding(bigEndian: false, byteOrderMark: true);
             }
 
-            if (readCount >= 4 && bom[0] == 0x00 && bom[1] == 0x00 && bom[2] == 0xFE && bom[3] == 0xFF)
+            if (MatchesFourByteBom(bom, readCount, 0x00, 0x00, 0xFE, 0xFF))
             {
                 return new UTF32Encoding(bigEndian: true, byteOrderMark: true);
             }
 
-            if (readCount >= 3 && bom[0] == 0xEF && bom[1] == 0xBB && bom[2] == 0xBF)
+            if (MatchesThreeByteBom(bom, readCount, 0xEF, 0xBB, 0xBF))
             {
                 return new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
             }
 
-            if (readCount >= 2 && bom[0] == 0xFF && bom[1] == 0xFE)
+            if (MatchesTwoByteBom(bom, readCount, 0xFF, 0xFE))
             {
                 return new UnicodeEncoding(bigEndian: false, byteOrderMark: true);
             }
 
-            if (readCount >= 2 && bom[0] == 0xFE && bom[1] == 0xFF)
+            if (MatchesTwoByteBom(bom, readCount, 0xFE, 0xFF))
             {
                 return new UnicodeEncoding(bigEndian: true, byteOrderMark: true);
             }
 
             return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        }
+
+        private static bool MatchesTwoByteBom(byte[] bom, int readCount, byte first, byte second)
+        {
+            return readCount >= 2 && bom[0] == first && bom[1] == second;
+        }
+
+        private static bool MatchesThreeByteBom(byte[] bom, int readCount, byte first, byte second, byte third)
+        {
+            return readCount >= 3 && bom[0] == first && bom[1] == second && bom[2] == third;
+        }
+
+        private static bool MatchesFourByteBom(byte[] bom, int readCount, byte first, byte second, byte third, byte fourth)
+        {
+            return readCount >= 4 && bom[0] == first && bom[1] == second && bom[2] == third && bom[3] == fourth;
         }
 
         internal static void WriteAllTextWithEncoding(string filePath, string content, Encoding encoding)

@@ -49,50 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (target == null)
             {
-                SimulateMouseUiOverlayState.Update(
-                    MouseAction.Drag, inputStart, null, Handles.GetMainGameViewSize());
-                MouseUiFrameWaitOutcome noTargetExpandOutcome = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
-                if (noTargetExpandOutcome == MouseUiFrameWaitOutcome.TimedOut)
-                {
-                    cleanupScheduler.QueueOverlayClear();
-                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, null);
-                }
-                if (noTargetExpandOutcome == MouseUiFrameWaitOutcome.Paused)
-                {
-                    cleanupScheduler.QueueOverlayClear();
-                    return MouseUiSimulationResponseFactory.CreateInterruptedResult(
-                        MouseAction.Drag, inputStart, null,
-                        "Drag stopped because Unity paused during Pause Point inspection. No draggable target was found at the start position, so no drag was initiated.");
-                }
-                await MainThreadSwitcher.SwitchToMainThread(ct);
-
-                MouseUiFrameWaitOutcome noTargetDissipateOutcome = await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false);
-                if (noTargetDissipateOutcome == MouseUiFrameWaitOutcome.TimedOut)
-                {
-                    cleanupScheduler.QueueOverlayClear();
-                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, null);
-                }
-                if (noTargetDissipateOutcome == MouseUiFrameWaitOutcome.Paused)
-                {
-                    cleanupScheduler.QueueOverlayClear();
-                    return MouseUiSimulationResponseFactory.CreateInterruptedResult(
-                        MouseAction.Drag, inputStart, null,
-                        "Drag stopped because Unity paused during Pause Point inspection. No draggable target was found at the start position, so no drag was initiated.");
-                }
-                await MainThreadSwitcher.SwitchToMainThread(ct);
-
-                return new SimulateMouseUiResponse
-                {
-                    Success = false,
-                    Message = parameters.BypassRaycast
-                        ? $"TargetPath '{parameters.TargetPath}' has no drag handler."
-                        : $"No draggable UI element at ({inputStart.x:F1}, {inputStart.y:F1}). Use find-game-objects or screenshot to verify positions.",
-                    Action = MouseAction.Drag.ToString(),
-                    PositionX = inputStart.x,
-                    PositionY = inputStart.y,
-                    EndPositionX = inputEnd.x,
-                    EndPositionY = inputEnd.y
-                };
+                return await ExecuteNoTargetDragAsync(
+                    parameters, inputStart, inputEnd, cleanupScheduler, ct).ConfigureAwait(false);
             }
 
             // uGUI drag controls (ScrollRect, Slider) only respond to left-button drags
@@ -112,48 +70,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                MouseUiFrameWaitOutcome expandOutcome = await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false);
-                if (expandOutcome == MouseUiFrameWaitOutcome.TimedOut)
+                SimulateMouseUiResponse? motionAbort = await AnimateDragMotionOrAbortAsync(
+                    parameters,
+                    pointerData,
+                    target,
+                    inputStart,
+                    inputEnd,
+                    screenEnd,
+                    targetName,
+                    DragInterruptedDuringMotionMessage,
+                    cleanupScheduler,
+                    ct).ConfigureAwait(false);
+                if (motionAbort != null)
                 {
-                    cleanupScheduler.QueueOverlayClear();
-                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
+                    return motionAbort;
                 }
-                if (expandOutcome == MouseUiFrameWaitOutcome.Paused)
-                {
-                    cleanupScheduler.QueueOverlayClear();
-                    return MouseUiSimulationResponseFactory.CreateInterruptedResult(
-                        MouseAction.Drag, inputStart, targetName, DragInterruptedDuringMotionMessage);
-                }
-                await MainThreadSwitcher.SwitchToMainThread(ct);
-
-                MouseUiFrameWaitOutcome dragOutcome = await MouseUiDragEventExecutor.InterpolateDragPosition(pointerData, target, screenEnd, parameters.DragSpeed, ct)
-                    .ConfigureAwait(false);
-                if (dragOutcome == MouseUiFrameWaitOutcome.TimedOut)
-                {
-                    cleanupScheduler.QueueOverlayClear();
-                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
-                }
-                if (dragOutcome == MouseUiFrameWaitOutcome.Paused)
-                {
-                    cleanupScheduler.QueueOverlayClear();
-                    return MouseUiSimulationResponseFactory.CreateInterruptedResult(
-                        MouseAction.Drag, inputStart, targetName, DragInterruptedDuringMotionMessage);
-                }
-                await MainThreadSwitcher.SwitchToMainThread(ct);
-
-                MouseUiFrameWaitOutcome settleOutcome = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
-                if (settleOutcome == MouseUiFrameWaitOutcome.TimedOut)
-                {
-                    cleanupScheduler.QueueOverlayClear();
-                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
-                }
-                if (settleOutcome == MouseUiFrameWaitOutcome.Paused)
-                {
-                    cleanupScheduler.QueueOverlayClear();
-                    return MouseUiSimulationResponseFactory.CreateInterruptedResult(
-                        MouseAction.Drag, inputStart, targetName, DragInterruptedDuringMotionMessage);
-                }
-                await MainThreadSwitcher.SwitchToMainThread(ct);
             }
             finally
             {
@@ -179,6 +110,132 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
             return MouseUiSimulationResponseFactory.CreateDragResult(parameters, inputStart, inputEnd, targetName);
+        }
+
+        private static async Task<SimulateMouseUiResponse> ExecuteNoTargetDragAsync(
+            MouseUiSimulationCommand parameters,
+            Vector2 inputStart,
+            Vector2 inputEnd,
+            MouseUiMainThreadCleanupScheduler cleanupScheduler,
+            CancellationToken ct)
+        {
+            const string NoTargetInterruptedMessage =
+                "Drag stopped because Unity paused during Pause Point inspection. No draggable target was found at the start position, so no drag was initiated.";
+            SimulateMouseUiOverlayState.Update(
+                MouseAction.Drag, inputStart, null, Handles.GetMainGameViewSize());
+            SimulateMouseUiResponse? expandAbort = await AbortDragOnOverlayOutcomeAsync(
+                await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false),
+                inputStart,
+                inputEnd,
+                null,
+                NoTargetInterruptedMessage,
+                cleanupScheduler,
+                ct).ConfigureAwait(false);
+            if (expandAbort != null)
+            {
+                return expandAbort;
+            }
+
+            SimulateMouseUiResponse? dissipateAbort = await AbortDragOnOverlayOutcomeAsync(
+                await MouseUiOverlayAnimator.PlayDissipateAnimation(ct).ConfigureAwait(false),
+                inputStart,
+                inputEnd,
+                null,
+                NoTargetInterruptedMessage,
+                cleanupScheduler,
+                ct).ConfigureAwait(false);
+            if (dissipateAbort != null)
+            {
+                return dissipateAbort;
+            }
+
+            return new SimulateMouseUiResponse
+            {
+                Success = false,
+                Message = parameters.BypassRaycast
+                    ? $"TargetPath '{parameters.TargetPath}' has no drag handler."
+                    : $"No draggable UI element at ({inputStart.x:F1}, {inputStart.y:F1}). Use find-game-objects or screenshot to verify positions.",
+                Action = MouseAction.Drag.ToString(),
+                PositionX = inputStart.x,
+                PositionY = inputStart.y,
+                EndPositionX = inputEnd.x,
+                EndPositionY = inputEnd.y
+            };
+        }
+
+        private static async Task<SimulateMouseUiResponse?> AnimateDragMotionOrAbortAsync(
+            MouseUiSimulationCommand parameters,
+            PointerEventData pointerData,
+            GameObject target,
+            Vector2 inputStart,
+            Vector2 inputEnd,
+            Vector2 screenEnd,
+            string targetName,
+            string interruptedMessage,
+            MouseUiMainThreadCleanupScheduler cleanupScheduler,
+            CancellationToken ct)
+        {
+            SimulateMouseUiResponse? expandAbort = await AbortDragOnOverlayOutcomeAsync(
+                await MouseUiOverlayAnimator.PlayExpandAnimation(ct).ConfigureAwait(false),
+                inputStart,
+                inputEnd,
+                targetName,
+                interruptedMessage,
+                cleanupScheduler,
+                ct).ConfigureAwait(false);
+            if (expandAbort != null)
+            {
+                return expandAbort;
+            }
+
+            SimulateMouseUiResponse? dragAbort = await AbortDragOnOverlayOutcomeAsync(
+                await MouseUiDragEventExecutor.InterpolateDragPosition(pointerData, target, screenEnd, parameters.DragSpeed, ct)
+                    .ConfigureAwait(false),
+                inputStart,
+                inputEnd,
+                targetName,
+                interruptedMessage,
+                cleanupScheduler,
+                ct).ConfigureAwait(false);
+            if (dragAbort != null)
+            {
+                return dragAbort;
+            }
+
+            return await AbortDragOnOverlayOutcomeAsync(
+                await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false),
+                inputStart,
+                inputEnd,
+                targetName,
+                interruptedMessage,
+                cleanupScheduler,
+                ct).ConfigureAwait(false);
+        }
+
+        private static async Task<SimulateMouseUiResponse?> AbortDragOnOverlayOutcomeAsync(
+            MouseUiFrameWaitOutcome outcome,
+            Vector2 inputStart,
+            Vector2 inputEnd,
+            string? targetName,
+            string interruptedMessage,
+            MouseUiMainThreadCleanupScheduler cleanupScheduler,
+            CancellationToken ct)
+        {
+            if (outcome == MouseUiFrameWaitOutcome.TimedOut)
+            {
+                cleanupScheduler.QueueOverlayClear();
+                return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.Drag, inputStart, inputEnd, targetName);
+            }
+
+            if (outcome == MouseUiFrameWaitOutcome.Paused)
+            {
+                cleanupScheduler.QueueOverlayClear();
+                return MouseUiSimulationResponseFactory.CreateInterruptedResult(
+                    MouseAction.Drag, inputStart, targetName, interruptedMessage);
+            }
+
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            return null;
         }
     }
 }

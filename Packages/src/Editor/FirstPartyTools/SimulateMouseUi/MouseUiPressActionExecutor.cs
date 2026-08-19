@@ -92,25 +92,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MouseUiMainThreadCleanupScheduler cleanupScheduler,
             CancellationToken ct)
         {
-            if (parameters.Duration <= 0f || float.IsNaN(parameters.Duration) || float.IsInfinity(parameters.Duration))
+            SimulateMouseUiResponse? invalidDuration = CreateInvalidLongPressDurationResponse(parameters.Duration);
+            if (invalidDuration != null)
             {
-                return new SimulateMouseUiResponse
-                {
-                    Success = false,
-                    Message = $"Duration must be positive, got: {parameters.Duration}",
-                    Action = MouseAction.LongPress.ToString()
-                };
-            }
-
-            if (parameters.Duration > SimulateInputConstants.MaxDurationSeconds)
-            {
-                return new SimulateMouseUiResponse
-                {
-                    Success = false,
-                    Message =
-                        $"Duration must be {SimulateInputConstants.MaxDurationSeconds} seconds or less, got: {parameters.Duration}. The unit is seconds, not milliseconds.",
-                    Action = MouseAction.LongPress.ToString()
-                };
+                return invalidDuration;
             }
 
             Vector2 inputPos = new(parameters.X, parameters.Y);
@@ -162,30 +147,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                // Hold for Duration seconds, updating elapsed time each frame for overlay display
-                float startTime = Time.realtimeSinceStartup;
-                float elapsed = 0f;
-                while (elapsed < parameters.Duration)
+                SimulateMouseUiResponse? holdAbort = await HoldLongPressOrAbortAsync(
+                    parameters.Duration, inputPos, targetName, cleanupScheduler, ct).ConfigureAwait(false);
+                if (holdAbort != null)
                 {
-                    SimulateMouseUiOverlayState.UpdateLongPressElapsed(elapsed);
-                    MouseUiFrameWaitOutcome frameOutcome = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
-                    if (frameOutcome == MouseUiFrameWaitOutcome.TimedOut)
-                    {
-                        cleanupScheduler.QueueOverlayClear();
-                        return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.LongPress, inputPos, null, targetName);
-                    }
-                    if (frameOutcome == MouseUiFrameWaitOutcome.Paused)
-                    {
-                        // Returning here still runs the finally below, which releases pointerUp early.
-                        cleanupScheduler.QueueOverlayClear();
-                        return MouseUiSimulationResponseFactory.CreateInterruptedResult(
-                            MouseAction.LongPress, inputPos, targetName,
-                            "Long-press pointerDown was already dispatched. Unity paused during Pause Point inspection while holding; pointerUp was released early and the press duration was cut short.");
-                    }
-                    await MainThreadSwitcher.SwitchToMainThread(ct);
-                    elapsed = Time.realtimeSinceStartup - startTime;
+                    return holdAbort;
                 }
-                SimulateMouseUiOverlayState.UpdateLongPressElapsed(parameters.Duration);
             }
             finally
             {
@@ -213,6 +180,69 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
             return MouseUiSimulationResponseFactory.CreateLongPressResult(parameters, inputPos, targetName, hitTarget);
+        }
+
+        private static SimulateMouseUiResponse? CreateInvalidLongPressDurationResponse(float duration)
+        {
+            if (duration <= 0f || float.IsNaN(duration) || float.IsInfinity(duration))
+            {
+                return new SimulateMouseUiResponse
+                {
+                    Success = false,
+                    Message = $"Duration must be positive, got: {duration}",
+                    Action = MouseAction.LongPress.ToString()
+                };
+            }
+
+            if (duration > SimulateInputConstants.MaxDurationSeconds)
+            {
+                return new SimulateMouseUiResponse
+                {
+                    Success = false,
+                    Message =
+                        $"Duration must be {SimulateInputConstants.MaxDurationSeconds} seconds or less, got: {duration}. The unit is seconds, not milliseconds.",
+                    Action = MouseAction.LongPress.ToString()
+                };
+            }
+
+            return null;
+        }
+
+        private static async Task<SimulateMouseUiResponse?> HoldLongPressOrAbortAsync(
+            float duration,
+            Vector2 inputPos,
+            string? targetName,
+            MouseUiMainThreadCleanupScheduler cleanupScheduler,
+            CancellationToken ct)
+        {
+            // Hold for Duration seconds, updating elapsed time each frame for overlay display
+            float startTime = Time.realtimeSinceStartup;
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                SimulateMouseUiOverlayState.UpdateLongPressElapsed(elapsed);
+                MouseUiFrameWaitOutcome frameOutcome = await MouseUiEditorFrameWaiter.WaitForEditorFrameAndSwitchToMainThreadAsync(ct).ConfigureAwait(false);
+                if (frameOutcome == MouseUiFrameWaitOutcome.TimedOut)
+                {
+                    cleanupScheduler.QueueOverlayClear();
+                    return MouseUiSimulationResponseFactory.CreateFrameTimeoutResult(MouseAction.LongPress, inputPos, null, targetName);
+                }
+
+                if (frameOutcome == MouseUiFrameWaitOutcome.Paused)
+                {
+                    // Returning here still runs the finally below, which releases pointerUp early.
+                    cleanupScheduler.QueueOverlayClear();
+                    return MouseUiSimulationResponseFactory.CreateInterruptedResult(
+                        MouseAction.LongPress, inputPos, targetName,
+                        "Long-press pointerDown was already dispatched. Unity paused during Pause Point inspection while holding; pointerUp was released early and the press duration was cut short.");
+                }
+
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+                elapsed = Time.realtimeSinceStartup - startTime;
+            }
+
+            SimulateMouseUiOverlayState.UpdateLongPressElapsed(duration);
+            return null;
         }
 
         private static void ExecutePointerClickEvents(

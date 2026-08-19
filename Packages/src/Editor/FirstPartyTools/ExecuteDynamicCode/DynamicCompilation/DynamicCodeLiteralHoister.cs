@@ -21,74 +21,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             while (index < source.Length)
             {
-                if (DynamicCodeLiteralSyntaxScanner.TryCopyInterpolatedStringLiteral(source, rewrittenSource, ref index))
+                if (TryCopyProtectedSyntax(source, rewrittenSource, scopeTracker, ref index))
                 {
                     continue;
                 }
 
-                if (DynamicCodeLiteralSyntaxScanner.TryCopyVerbatimStringLiteral(source, rewrittenSource, ref index))
+                if (TryCopyScopePunctuation(source, rewrittenSource, scopeTracker, ref index))
                 {
                     continue;
                 }
 
-                if (DynamicCodeLiteralSyntaxScanner.TryCopyCharLiteral(source, rewrittenSource, ref index))
-                {
-                    continue;
-                }
-
-                if (DynamicCodeLiteralSyntaxScanner.TryCopyLineComment(source, rewrittenSource, ref index))
-                {
-                    continue;
-                }
-
-                if (DynamicCodeLiteralSyntaxScanner.TryCopyBlockComment(source, rewrittenSource, ref index))
-                {
-                    continue;
-                }
-
-                if (scopeTracker.TryConsumeStaticLocalFunctionHeader(source, index, rewrittenSource, ref index))
-                {
-                    continue;
-                }
-
-                if (source[index] == '{')
-                {
-                    scopeTracker.OnOpenBrace();
-                    rewrittenSource.Append('{');
-                    index++;
-                    continue;
-                }
-
-                if (source[index] == '}')
-                {
-                    scopeTracker.OnCloseBrace();
-                    rewrittenSource.Append('}');
-                    index++;
-                    continue;
-                }
-
-                if (source[index] == ';')
-                {
-                    scopeTracker.OnSemicolon();
-                    rewrittenSource.Append(';');
-                    index++;
-                    continue;
-                }
-
-                if (scopeTracker.ShouldSuppressLiteralHoisting)
-                {
-                    if (DynamicCodeLiteralSyntaxScanner.TryCopyRegularStringLiteral(source, rewrittenSource, ref index))
-                    {
-                        continue;
-                    }
-                }
-                else if (TryHoistRegularStringLiteral(source, rewrittenSource, bindings, ref index))
-                {
-                    continue;
-                }
-
-                if (!scopeTracker.ShouldSuppressLiteralHoisting
-                    && TryHoistIntegerLiteral(source, rewrittenSource, bindings, ref index))
+                if (TryHoistOrCopyLiterals(source, rewrittenSource, bindings, scopeTracker, ref index))
                 {
                     continue;
                 }
@@ -108,6 +51,96 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 rewrittenSource.ToString(),
                 bindings,
                 declarationLines);
+        }
+
+        // Copies syntax that must stay verbatim (strings with interpolation/verbatim, comments,
+        // and static local-function headers). Why a helper: those scanners are one skip-list,
+        // and leaving them inline kept Rewrite over CA1502.
+        private static bool TryCopyProtectedSyntax(
+            string source,
+            StringBuilder rewrittenSource,
+            LiteralHoistScopeTracker scopeTracker,
+            ref int index)
+        {
+            if (DynamicCodeLiteralSyntaxScanner.TryCopyInterpolatedStringLiteral(source, rewrittenSource, ref index))
+            {
+                return true;
+            }
+
+            if (DynamicCodeLiteralSyntaxScanner.TryCopyVerbatimStringLiteral(source, rewrittenSource, ref index))
+            {
+                return true;
+            }
+
+            if (DynamicCodeLiteralSyntaxScanner.TryCopyCharLiteral(source, rewrittenSource, ref index))
+            {
+                return true;
+            }
+
+            if (DynamicCodeLiteralSyntaxScanner.TryCopyLineComment(source, rewrittenSource, ref index))
+            {
+                return true;
+            }
+
+            if (DynamicCodeLiteralSyntaxScanner.TryCopyBlockComment(source, rewrittenSource, ref index))
+            {
+                return true;
+            }
+
+            return scopeTracker.TryConsumeStaticLocalFunctionHeader(source, index, rewrittenSource, ref index);
+        }
+
+        private static bool TryCopyScopePunctuation(
+            string source,
+            StringBuilder rewrittenSource,
+            LiteralHoistScopeTracker scopeTracker,
+            ref int index)
+        {
+            if (source[index] == '{')
+            {
+                scopeTracker.OnOpenBrace();
+                rewrittenSource.Append('{');
+                index++;
+                return true;
+            }
+
+            if (source[index] == '}')
+            {
+                scopeTracker.OnCloseBrace();
+                rewrittenSource.Append('}');
+                index++;
+                return true;
+            }
+
+            if (source[index] == ';')
+            {
+                scopeTracker.OnSemicolon();
+                rewrittenSource.Append(';');
+                index++;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryHoistOrCopyLiterals(
+            string source,
+            StringBuilder rewrittenSource,
+            List<HoistedLiteralBinding> bindings,
+            LiteralHoistScopeTracker scopeTracker,
+            ref int index)
+        {
+            if (scopeTracker.ShouldSuppressLiteralHoisting)
+            {
+                return DynamicCodeLiteralSyntaxScanner.TryCopyRegularStringLiteral(source, rewrittenSource, ref index);
+            }
+
+            if (TryHoistRegularStringLiteral(source, rewrittenSource, bindings, ref index))
+            {
+                return true;
+            }
+
+            return TryHoistIntegerLiteral(source, rewrittenSource, bindings, ref index);
         }
 
         private static bool TryHoistRegularStringLiteral(
