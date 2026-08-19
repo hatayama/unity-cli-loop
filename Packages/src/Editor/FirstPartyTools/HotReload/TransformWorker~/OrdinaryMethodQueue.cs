@@ -119,7 +119,7 @@ internal static class OrdinaryMethodQueue
             {
                 // Why strip skipped added declarations: otherwise drift warns about
                 // fields/initializers for a method the skip reason already explained.
-                TransformWorkerProgram.RecordHandledAddedMethodSyntaxKey(
+                RemovedMemberCollector.RecordHandledAddedMethodSyntaxKey(
                     addedMethodCatalog,
                     syntaxMethodKey,
                     replacesCompiledMethod,
@@ -188,7 +188,7 @@ internal static class OrdinaryMethodQueue
             addedMethodCatalog.MarkClassifiedAdded(methodKey);
             if (input.ExcludedAddedMethodKeys.Contains(methodKey))
             {
-                TransformWorkerProgram.RecordHandledAddedMethodSyntaxKey(
+                RemovedMemberCollector.RecordHandledAddedMethodSyntaxKey(
                     addedMethodCatalog,
                     WorkerSyntaxIndex.BuildSyntaxMethodKey(typeState.TypeMetadataNameFromSyntax, methodDeclaration),
                     replacesCompiledMethod,
@@ -237,7 +237,7 @@ internal static class OrdinaryMethodQueue
         });
         if (isAddedMethod)
         {
-            TransformWorkerProgram.RecordHandledAddedMethodSyntaxKey(
+            RemovedMemberCollector.RecordHandledAddedMethodSyntaxKey(
                 addedMethodCatalog,
                 syntaxMethodKey,
                 replacesCompiledMethod,
@@ -368,8 +368,8 @@ internal static class OrdinaryMethodQueue
 
         if (replacesCompiledMethod)
         {
-            TransformWorkerProgram.AddRemovedMethodName(removedMembers, methodSymbol.Name);
-            TransformWorkerProgram.AddRemovedMethodSignature(
+            RemovedMemberCollector.AddRemovedMethodName(removedMembers, methodSymbol.Name);
+            RemovedMemberCollector.AddRemovedMethodSignature(
                 removedMethodSignatures,
                 typeState.TypeSymbol,
                 methodSymbol.Name,
@@ -388,7 +388,7 @@ internal static class OrdinaryMethodQueue
                     NamespaceName = shimType.NamespaceName,
                     IsStatic = methodSymbol.IsStatic
                 });
-            TransformWorkerProgram.RecordHandledAddedMethodSyntaxKey(
+            RemovedMemberCollector.RecordHandledAddedMethodSyntaxKey(
                 addedMethodCatalog,
                 syntaxMethodKey,
                 replacesCompiledMethod,
