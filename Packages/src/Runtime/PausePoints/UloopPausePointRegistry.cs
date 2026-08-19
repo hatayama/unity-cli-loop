@@ -62,6 +62,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // referencing it directly.
         public static Action<string, int, string> OnClearResolved { get; set; }
 
+        // Error responses built outside the registry still need a truthful editor state; this
+        // exposes the same controller-backed capture the snapshot paths use.
+        public static UloopPausePointEditorStateSnapshot CaptureEditorState()
+        {
+            return UloopPausePointEditorStateSnapshot.FromController(
+                _pauseController,
+                UloopPausePointEditorStateCapturedAt.Current);
+        }
+
         public static UloopPausePointSnapshot Enable(
             string id,
             int timeoutSeconds,
@@ -90,7 +99,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return entry.ToSnapshot(now, _pauseController);
         }
 
-        public static (UloopPausePointSnapshot Snapshot, bool ResumedFromPause) Clear(string id)
+        /// <summary>
+        /// Clears one marker. ClearedCount is 1 when this call actually transitions the entry
+        /// to Cleared (from Enabled, Hit, or Expired), and 0 for unknown ids or already-cleared
+        /// entries. Why not derive it from the snapshot: StatusBeforeClear survives a no-op
+        /// second clear, so snapshot-based counting would treat a no-op as 1.
+        /// </summary>
+        public static (UloopPausePointSnapshot Snapshot, bool ResumedFromPause, int ClearedCount) Clear(
+            string id,
+            string clearedReason = UloopPausePointClearedReason.ExplicitClear)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
 
@@ -99,12 +116,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             DateTime now = NowUtc();
             if (!Entries.ContainsKey(id))
             {
-                return (UloopPausePointSnapshot.NotEnabled(id, _pauseController), false);
+                return (UloopPausePointSnapshot.NotEnabled(id, _pauseController), false, 0);
             }
 
             UloopPausePointEntry entry = Entries[id];
             // Resolve expiry first so a clear after the timeout reports "expired", not a normal clear.
             TryExpire(entry, now);
+            int clearedCount = entry.Status == UloopPausePointStatus.Cleared ? 0 : 1;
             string message = !entry.IsEnabled && entry.Status == UloopPausePointStatus.Hit
                 ? "Pause point was already hit (auto-disarmed); nothing to clear."
                 : entry.Status switch
@@ -118,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 UloopPausePointStatus.Cleared => "Pause point was already cleared.",
                 _ => "Pause point cleared."
             };
-            entry.MarkCleared(UloopPausePointClearedReason.ExplicitClear, message);
+            entry.MarkCleared(clearedReason, message);
             OnClearResolved?.Invoke(id, entry.HitCount, entry.StatusBeforeClear);
             ClearHitSnapshotAndRawCaptureForId(id);
             // Why only when pause-point-owned: a clear must not steal ownership of a manual pause
@@ -128,7 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // window, so they are left untouched. (Client disconnect and expiry still resume
             // unconditionally: those paths must guarantee release even for a manual pause.)
             bool resumedFromPause = ResumeEditorPauseIfOwnedByPausePoint();
-            return (entry.ToSnapshot(now, _pauseController), resumedFromPause);
+            return (entry.ToSnapshot(now, _pauseController), resumedFromPause, clearedCount);
         }
 
         public static UloopPausePointClearAllResult ClearAll(
@@ -182,6 +200,51 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             return entry.ToSnapshot(now, _pauseController);
+        }
+
+        /// <summary>
+        /// Marks whether an armed marker could not stay live across a hot-reload patch transition.
+        /// When <paramref name="suppressed"/> is false, <paramref name="reason"/> is cleared to null.
+        /// No-op when the id is unknown.
+        /// </summary>
+        public static void SetSuppressedByHotReload(string id, bool suppressed, string reason)
+        {
+            if (!Entries.TryGetValue(id, out UloopPausePointEntry entry))
+            {
+                return;
+            }
+
+            entry.SuppressedByHotReload = suppressed;
+            entry.SuppressedByHotReloadReason = suppressed ? reason : null;
+        }
+
+        /// <summary>
+        /// Marks whether the marker's instrumentation currently targets a hot-reload shim body.
+        /// No-op when the id is unknown.
+        /// </summary>
+        public static void SetRetargetedToHotReloadPatch(string id, bool value)
+        {
+            if (!Entries.TryGetValue(id, out UloopPausePointEntry entry))
+            {
+                return;
+            }
+
+            entry.RetargetedToHotReloadPatch = value;
+        }
+
+        /// <summary>
+        /// Stores the currently resolved source line for status / hot-reload retarget visibility.
+        /// Pass 0 / null to clear (unresolved). No-op when the id is unknown.
+        /// </summary>
+        public static void SetResolvedLine(string id, int resolvedLine, string resolvedLineText)
+        {
+            if (!Entries.TryGetValue(id, out UloopPausePointEntry entry))
+            {
+                return;
+            }
+
+            entry.ResolvedLine = resolvedLine;
+            entry.ResolvedLineText = resolvedLineText;
         }
 
         /// <summary>

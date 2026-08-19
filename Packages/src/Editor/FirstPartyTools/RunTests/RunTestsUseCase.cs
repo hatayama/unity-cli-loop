@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly TestFilterCreationService _filterService;
         private readonly TestExecutionService _executionService;
         private readonly TestExecutionStateValidationService _validationService;
-        private readonly RunTestsNoTestsDiagnosticService _noTestsDiagnosticService;
+        private readonly Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> _appendNoTestsDiagnostics;
         private readonly Func<string[]> _clearActivePausePoints;
         private readonly Func<CancellationToken, Task> _waitForTestRunnerCleanupAsync;
         private const int TestRunnerCleanupFallbackDelayMilliseconds = 3000;
@@ -36,7 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TestExecutionService executionService,
             TestExecutionStateValidationService validationService,
             Func<string[]> clearActivePausePoints = null,
-            Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null)
+            Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null,
+            Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> appendNoTestsDiagnostics = null)
         {
             Debug.Assert(filterService != null, "filterService must not be null");
             Debug.Assert(executionService != null, "executionService must not be null");
@@ -44,7 +45,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _filterService = filterService;
             _executionService = executionService;
             _validationService = validationService;
-            _noTestsDiagnosticService = new RunTestsNoTestsDiagnosticService();
+            RunTestsNoTestsDiagnosticService noTestsDiagnosticService = new RunTestsNoTestsDiagnosticService();
+            _appendNoTestsDiagnostics = appendNoTestsDiagnostics
+                ?? ((string message, bool noTestsFound, UnityCliLoopTestMode testMode, TestFilterType filterType) =>
+                    noTestsDiagnosticService.AppendDiagnosticsIfNeeded(message, noTestsFound, testMode, filterType));
             _clearActivePausePoints = clearActivePausePoints ?? ClearActivePausePointsDefault;
             _waitForTestRunnerCleanupAsync = waitForTestRunnerCleanupAsync ?? WaitForTestRunnerCleanupAsync;
         }
@@ -161,9 +165,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 response.ClearedPausePointIds = clearedPausePointIds;
             }
+
+            // Why switch here: cleanup waits with ConfigureAwait(false), so this resume is
+            // off-thread. No-tests diagnostics call AssetDatabase.FindAssets, a Unity API.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
             response.Message = RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
                 response.Message,
-                () => _noTestsDiagnosticService.AppendDiagnosticsIfNeeded(
+                () => _appendNoTestsDiagnostics(
                     response.Message,
                     response.NoTestsFound,
                     parameters.TestMode,

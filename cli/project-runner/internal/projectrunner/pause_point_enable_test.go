@@ -214,6 +214,81 @@ func TestRunEnablePausePointCommandAwaitsAfterSuccessfulEnable(t *testing.T) {
 	}
 }
 
+// Verifies enable-pause-point --await stdout includes StatusNote on a trace-mode Hit.
+// Removing applyPausePointTraceStatusNote from the enable-await hit path makes this test Red.
+func TestRunEnablePausePointCommandIncludesStatusNoteOnTraceHit(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	originalFetch := fetchMatchingLogs
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+		fetchMatchingLogs = originalFetch
+	})
+
+	statusResponses := []pausePointStatusResponse{
+		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
+		{
+			Id:        "jump",
+			Status:    pausePointStatusHit,
+			Mode:      pausePointModeTrace,
+			IsEnabled: true,
+			IsHit:     true,
+			HitCount:  1,
+		},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+	fetchMatchingLogs = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		searchText string,
+		maxCount int,
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{SearchText: searchText, Logs: []pausePointMatchingLog{}}, nil
+	}
+
+	listener := newLoopbackIpcListener(t)
+	enableRequests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointEnableCommandName,
+		enableRequests,
+		serverErr,
+		`{"Success":true,"Id":"jump","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointCommand(
+		context.Background(),
+		connection,
+		[]string{"--id", "jump", "--await"},
+		t.TempDir(),
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
+}
+
 // Verifies file:line enable --await copies ResolvedLine / ResolvedLineText / ResolvedMethod /
 // SnapshotTiming from the enable response into the await hit payload.
 func TestRunEnablePausePointCommandAwaitPropagatesFileLineResolvedFields(t *testing.T) {
@@ -294,6 +369,180 @@ func TestRunEnablePausePointCommandAwaitPropagatesFileLineResolvedFields(t *test
 	}
 	if response.SnapshotTiming != "OnEnter" {
 		t.Fatalf("SnapshotTiming mismatch: %#v", response)
+	}
+}
+
+// Verifies --await prefers status ResolvedLine / ResolvedLineText when a later status poll
+// carries retarget-updated values that differ from the enable-time fields.
+func TestRunEnablePausePointCommandAwaitPrefersStatusResolvedFieldsOverEnable(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	originalFetch := fetchMatchingLogs
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+		fetchMatchingLogs = originalFetch
+	})
+
+	statusResponses := []pausePointStatusResponse{
+		{Id: "Assets/Foo.cs:42", Status: pausePointStatusEnabled, IsEnabled: true},
+		{
+			Id:               "Assets/Foo.cs:42",
+			Status:           pausePointStatusHit,
+			IsHit:            true,
+			HitCount:         1,
+			ResolvedLine:     55,
+			ResolvedLineText: "    DoJumpRetargeted();",
+		},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+	fetchMatchingLogs = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		searchText string,
+		maxCount int,
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{SearchText: searchText, Logs: []pausePointMatchingLog{}}, nil
+	}
+
+	listener := newLoopbackIpcListener(t)
+	enableRequests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointEnableCommandName,
+		enableRequests,
+		serverErr,
+		`{"Success":true,"Id":"Assets/Foo.cs:42","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30,"ResolvedLine":42,"ResolvedLineText":"    DoJump();","ResolvedMethod":"Player.Update","SnapshotTiming":"OnEnter"}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointCommand(
+		context.Background(),
+		connection,
+		[]string{"--file", "Assets/Foo.cs", "--line", "42", "--await"},
+		t.TempDir(),
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	var response pausePointWaitResult
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
+	}
+	if response.ResolvedLine != 55 {
+		t.Fatalf("ResolvedLine should prefer status: %#v", response)
+	}
+	if response.ResolvedLineText != "    DoJumpRetargeted();" {
+		t.Fatalf("ResolvedLineText should prefer status: %#v", response)
+	}
+	if response.ResolvedMethod != "Player.Update" {
+		t.Fatalf("ResolvedMethod mismatch: %#v", response)
+	}
+	if response.SnapshotTiming != "OnEnter" {
+		t.Fatalf("SnapshotTiming mismatch: %#v", response)
+	}
+}
+
+// Verifies --await merges ResolvedLine/Text as a pair: a non-zero status line keeps status
+// text even when empty, instead of filling enable-time text onto a status line number.
+func TestRunEnablePausePointCommandAwaitKeepsStatusResolvedPairWhenTextEmpty(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	originalFetch := fetchMatchingLogs
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+		fetchMatchingLogs = originalFetch
+	})
+
+	statusResponses := []pausePointStatusResponse{
+		{Id: "Assets/Foo.cs:42", Status: pausePointStatusEnabled, IsEnabled: true},
+		{
+			Id:               "Assets/Foo.cs:42",
+			Status:           pausePointStatusHit,
+			IsHit:            true,
+			HitCount:         1,
+			ResolvedLine:     55,
+			ResolvedLineText: "",
+		},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+	fetchMatchingLogs = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		searchText string,
+		maxCount int,
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{SearchText: searchText, Logs: []pausePointMatchingLog{}}, nil
+	}
+
+	listener := newLoopbackIpcListener(t)
+	enableRequests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointEnableCommandName,
+		enableRequests,
+		serverErr,
+		`{"Success":true,"Id":"Assets/Foo.cs:42","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30,"ResolvedLine":42,"ResolvedLineText":"    DoJump();","ResolvedMethod":"Player.Update","SnapshotTiming":"OnEnter"}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointCommand(
+		context.Background(),
+		connection,
+		[]string{"--file", "Assets/Foo.cs", "--line", "42", "--await"},
+		t.TempDir(),
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	var response pausePointWaitResult
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
+	}
+	if response.ResolvedLine != 55 {
+		t.Fatalf("ResolvedLine should keep status pair: %#v", response)
+	}
+	if response.ResolvedLineText != "" {
+		t.Fatalf("ResolvedLineText must not fall back to enable text when status line is set: %#v", response)
 	}
 }
 
@@ -528,7 +777,18 @@ func TestRunEnablePausePointCommandAwaitTimeoutIncludesNonFiringHint(t *testing.
 		clearPausePointStatus = originalClear
 	})
 
+	cleared := false
 	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		if cleared {
+			return pausePointStatusResponse{
+				Id:                id,
+				Status:            pausePointStatusCleared,
+				ClearedReason:     pausePointAwaitTimeoutAutoClearReason,
+				StatusBeforeClear: pausePointStatusEnabled,
+				HitCount:          0,
+				EditorState:       pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+			}, nil
+		}
 		return pausePointStatusResponse{
 			Id:          id,
 			Status:      pausePointStatusEnabled,
@@ -538,6 +798,7 @@ func TestRunEnablePausePointCommandAwaitTimeoutIncludesNonFiringHint(t *testing.
 		}, nil
 	}
 	clearPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		cleared = true
 		return pausePointStatusResponse{Id: id, Status: pausePointStatusCleared}, nil
 	}
 
@@ -574,9 +835,57 @@ func TestRunEnablePausePointCommandAwaitTimeoutIncludesNonFiringHint(t *testing.
 		t.Fatalf("expected timeout failure, got %d with stdout %s", code, stdout.String())
 	}
 	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
-	hint, _ := envelope.Error.Details["Hint"].(string)
-	if !strings.Contains(hint, "non-firing patterns") {
-		t.Fatalf("expected non-firing pattern hint in composite await path, got: %q", hint)
+	if envelope.Error.Details["Status"] != pausePointStatusCleared {
+		t.Fatalf("status detail mismatch: %#v", envelope.Error.Details)
+	}
+	if envelope.Error.Details["MarkerClearedByThisCommand"] != true {
+		t.Fatalf("MarkerClearedByThisCommand mismatch: %#v", envelope.Error.Details)
+	}
+	if envelope.Error.Details["ClearedReason"] != pausePointAwaitTimeoutAutoClearReason {
+		t.Fatalf("ClearedReason mismatch: %#v", envelope.Error.Details)
+	}
+	wantHint := pausePointHintTimeoutAutoCleared + pausePointNonFiringPatternsHint
+	if envelope.Error.Details["Hint"] != wantHint {
+		t.Fatalf("hint mismatch: %#v", envelope.Error.Details["Hint"])
+	}
+}
+
+// Verifies the Unity clear IPC payload carries Id and Reason=AwaitTimeoutAutoClear, so a key
+// rename or a stub-only test cannot hide a broken timeout auto-clear contract.
+func TestClearPausePointStatusFromUnitySendsAwaitTimeoutAutoClearReason(t *testing.T) {
+	listener := newLoopbackIpcListener(t)
+	requests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointClearStatusCommandName,
+		requests,
+		serverErr,
+		`{"Success":true,"Id":"jump","Status":"Cleared","ClearedReason":"AwaitTimeoutAutoClear"}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	response, err := clearPausePointStatusFromUnity(context.Background(), connection, "jump")
+	if err != nil {
+		t.Fatalf("clearPausePointStatusFromUnity failed: %v", err)
+	}
+	if response.Id != "jump" || response.Status != pausePointStatusCleared {
+		t.Fatalf("response mismatch: %#v", response)
+	}
+
+	params := readIPCRequest(t, requests)
+	if params["Id"] != "jump" {
+		t.Fatalf("Id mismatch: %#v", params)
+	}
+	if params["Reason"] != pausePointAwaitTimeoutAutoClearReason {
+		t.Fatalf("Reason mismatch: %#v", params)
 	}
 }
 

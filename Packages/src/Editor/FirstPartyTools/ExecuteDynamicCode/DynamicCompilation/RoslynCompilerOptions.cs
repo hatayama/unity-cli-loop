@@ -13,11 +13,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool AllowUnsafeCode { get; }
 
         /// <summary>
+        /// When true, compile without optimizations so locals remain in PDB for pause-point capture.
+        /// Hot-reload shims set this; execute-dynamic-code keeps the optimized default.
+        /// </summary>
+        public bool EmitDebugCode { get; }
+
+        /// <summary>
         /// Creates an immutable compiler-settings snapshot for one compilation request.
         /// </summary>
         public RoslynCompilerOptions(
             IReadOnlyCollection<string> defineSymbols,
-            bool allowUnsafeCode)
+            bool allowUnsafeCode,
+            bool emitDebugCode)
         {
             Debug.Assert(defineSymbols != null, "defineSymbols must not be null");
 
@@ -32,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             DefineSymbols = filteredDefineSymbols.AsReadOnly();
             AllowUnsafeCode = allowUnsafeCode;
+            EmitDebugCode = emitDebugCode;
         }
     }
 }

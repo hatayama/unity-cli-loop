@@ -203,10 +203,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Memory.dll"));
             AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Buffers.dll"));
             AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Threading.Tasks.Extensions.dll"));
-            // Why: the CodeAnalysis Emit API surface references HashAlgorithmName from
-            // System.Security.Cryptography.Primitives; without this reference the worker build itself
-            // fails with CS0012 whenever the worker assembly has to be rebuilt.
+            // Why both cryptography assemblies: older Unity runtimes ship only the Primitives
+            // facade, while Unity 6000.5's .NET 8 runtime defines HashAlgorithmName in the
+            // consolidated System.Security.Cryptography assembly. Both are added conditionally so
+            // whichever layout is present satisfies the CodeAnalysis Emit surface.
             AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Security.Cryptography.Primitives.dll"));
+            AddIfExists(references, Path.Combine(sharedRuntimeDirectoryPath, "System.Security.Cryptography.dll"));
 
             return references;
         }

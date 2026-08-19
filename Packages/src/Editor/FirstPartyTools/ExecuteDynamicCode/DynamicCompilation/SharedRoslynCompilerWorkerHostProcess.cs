@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using UnityEditor.Compilation;
 
@@ -95,6 +96,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = false,
+                // Pairs with Console.OutputEncoding = Encoding.UTF8 in the worker template so
+                // diagnostic text survives non-UTF-8 default codepages on Windows. Stderr is
+                // not redirected, so StandardErrorEncoding must stay unset — Process.Start
+                // rejects it when RedirectStandardError is false.
+                StandardOutputEncoding = Encoding.UTF8,
                 CreateNoWindow = true
             };
 

@@ -86,6 +86,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// What: the worker reference set includes the consolidated System.Security.Cryptography assembly when that file exists.
+        /// </summary>
+        [Test]
+        public void BuildWorkerReferenceSet_WhenConsolidatedCryptographyAssemblyExists_ShouldIncludeConsolidatedReference()
+        {
+            ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(externalCompilerPaths, Is.Not.Null, "Unity external compiler layout should be available.");
+
+            string consolidatedAssemblyPath = Path.Combine(
+                externalCompilerPaths.NetCoreRuntimeSharedDirectoryPath,
+                "System.Security.Cryptography.dll");
+            if (!File.Exists(consolidatedAssemblyPath))
+            {
+                Assert.Ignore(
+                    "System.Security.Cryptography.dll is not present in this Unity NetCoreRuntime shared directory.");
+            }
+
+            List<string> references =
+                SharedRoslynCompilerWorkerAssemblyBuilder.BuildWorkerReferenceSet(externalCompilerPaths);
+
+            Assert.That(references, Does.Contain(consolidatedAssemblyPath));
+        }
+
+        /// <summary>
         /// Verifies shutdown remains an idempotent no-op before a worker process or directory exists.
         /// </summary>
         [Test]
@@ -615,6 +639,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             string programSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
 
             Assert.That(programSource, Does.Contain("DebugInformationFormat.PortablePdb"));
+        }
+
+        /// <summary>
+        /// Verifies the worker template forces UTF-8 stdout so diagnostics survive non-UTF-8 default codepages.
+        /// </summary>
+        [Test]
+        public void CreateProgramSource_SetsUtf8ConsoleOutputEncoding()
+        {
+            string programSource = SharedRoslynCompilerWorkerProtocol.CreateProgramSource();
+
+            Assert.That(programSource, Does.Contain("Console.OutputEncoding = Encoding.UTF8;"));
+        }
+
+        /// <summary>
+        /// Verifies the worker start info decodes stdout as UTF-8 to match the worker-side Console.OutputEncoding.
+        /// </summary>
+        [Test]
+        public void CreateWorkerStartInfo_SetsUtf8StandardOutputEncoding()
+        {
+            ExternalCompilerPaths externalCompilerPaths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(externalCompilerPaths, Is.Not.Null, "Unity external compiler layout should be available.");
+            SharedRoslynCompilerWorkerHostProcess.WorkerPaths workerPaths = new(
+                "worker-dir",
+                "worker-dir/RoslynCompilerWorker.cs",
+                "worker-dir/RoslynCompilerWorker.dll",
+                "worker-dir/RoslynCompilerWorker.rsp");
+
+            ProcessStartInfo startInfo = SharedRoslynCompilerWorkerHostProcess.CreateWorkerStartInfo(
+                externalCompilerPaths,
+                workerPaths);
+
+            Assert.That(startInfo.StandardOutputEncoding, Is.EqualTo(Encoding.UTF8));
+            Assert.That(startInfo.StandardErrorEncoding, Is.Null);
         }
 
         [Test]

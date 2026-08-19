@@ -58,5 +58,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result, Is.False);
         }
+
+        /// <summary>
+        /// What: a relative request matches a project-rooted absolute PDB document URL.
+        /// </summary>
+        [Test]
+        public void PathsReferToSameFile_WhenSecondArgumentIsAbsolute_ReturnsTrue()
+        {
+            bool result = SourcePausePointPathNormalizer.PathsReferToSameFile(
+                "Assets/Scripts/Foo.cs", "/Users/dev/Project/Assets/Scripts/Foo.cs");
+
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
+        /// What: matching only the trailing file name across different directories stays a miss.
+        /// </summary>
+        [Test]
+        public void PathsReferToSameFile_WhenOnlyFileNameMatches_ReturnsFalse()
+        {
+            bool result = SourcePausePointPathNormalizer.PathsReferToSameFile(
+                "Assets/Scripts/Foo.cs", "/Users/dev/Project/Assets/Other/Foo.cs");
+
+            Assert.That(result, Is.False);
+        }
+
+        /// <summary>
+        /// What: a shared multi-segment suffix under different Assets/ trees stays a miss.
+        /// </summary>
+        [Test]
+        public void PathsReferToSameFile_WhenMultiSegmentSuffixMatchesDifferentTrees_ReturnsFalse()
+        {
+            bool result = SourcePausePointPathNormalizer.PathsReferToSameFile(
+                "Assets/Common/Util.cs", "/proj/Assets/Other/Common/Util.cs");
+
+            Assert.That(result, Is.False);
+        }
     }
 }

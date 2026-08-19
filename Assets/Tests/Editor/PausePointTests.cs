@@ -215,7 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.RemainingMilliseconds, Is.EqualTo(0));
             Assert.That(
                 snapshot.RecommendedNextAction,
-                Is.EqualTo("Clear this marker, then re-enable it with the same Id and TimeoutSeconds values."));
+                Is.EqualTo("Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required."));
             Assert.That(snapshot.IsEnabled, Is.False);
             Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
         }
@@ -231,7 +231,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 snapshot.RecommendedNextAction,
-                Is.EqualTo("Clear this marker, then re-enable it with the same Id and TimeoutSeconds values."));
+                Is.EqualTo("Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required."));
         }
 
         [Test]
@@ -315,7 +315,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies explicit clear prevents later marker hits from pausing Unity.
             UloopPausePointRegistry.Enable("jump", 30);
 
-            (UloopPausePointSnapshot snapshot, _) = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot snapshot, _, _) = UloopPausePointRegistry.Clear("jump");
             UloopPausePoint.Pause("jump");
 
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
@@ -330,7 +330,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
 
-            (UloopPausePointSnapshot snapshot, _) = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot snapshot, _, _) = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point was already hit (auto-disarmed); nothing to clear."));
             Assert.That(_pauseController.IsPaused, Is.False);
@@ -344,7 +344,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePoint.Pause("jump");
             Assert.That(_pauseController.IsPaused, Is.True);
 
-            (UloopPausePointSnapshot _, bool resumedFromPause) = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot _, bool resumedFromPause, _) = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(resumedFromPause, Is.True);
             Assert.That(_pauseController.IsPaused, Is.False);
@@ -357,7 +357,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             _pauseController.PauseExternally();
 
-            (UloopPausePointSnapshot _, bool resumedFromPause) = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot _, bool resumedFromPause, _) = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(resumedFromPause, Is.False);
             Assert.That(_pauseController.IsPaused, Is.True);
@@ -403,7 +403,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePoint.Pause("jump");
             _pauseController.ResumeExternally();
 
-            (UloopPausePointSnapshot _, bool resumedFromPause) = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot _, bool resumedFromPause, _) = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(resumedFromPause, Is.False);
             Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
@@ -602,7 +602,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 1);
             _nowUtc = _nowUtc.AddSeconds(2);
 
-            (UloopPausePointSnapshot snapshot, _) = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot snapshot, _, _) = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point had already expired before being hit; nothing to clear."));
         }
@@ -614,9 +614,114 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePointRegistry.Clear("jump");
 
-            (UloopPausePointSnapshot snapshot, _) = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot snapshot, _, _) = UloopPausePointRegistry.Clear("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point was already cleared."));
+        }
+
+        /// <summary>
+        /// Verifies Clear(id) reports 1 when an enabled marker that has been hit is actually cleared.
+        /// </summary>
+        [Test]
+        public void Clear_WhenHitMarkerIsCleared_ReportsClearedCountOne()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            (UloopPausePointSnapshot _, bool _, int clearedCount) = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(clearedCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies Clear(id, AwaitTimeoutAutoClear) stores that reason on the cleared snapshot.
+        /// </summary>
+        [Test]
+        public void Clear_WithAwaitTimeoutAutoClearReason_ReportsThatReasonOnSnapshot()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            (UloopPausePointSnapshot snapshot, bool _, int clearedCount) =
+                UloopPausePointRegistry.Clear("jump", UloopPausePointClearedReason.AwaitTimeoutAutoClear);
+
+            Assert.That(clearedCount, Is.EqualTo(1));
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(snapshot.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.AwaitTimeoutAutoClear));
+            Assert.That(snapshot.StatusBeforeClear, Is.EqualTo(UloopPausePointStatus.Enabled));
+        }
+
+        /// <summary>
+        /// Verifies the status-bridge Clear path stores AwaitTimeoutAutoClear when Reason is supplied.
+        /// </summary>
+        [Test]
+        public void PausePointStatusBridgeCommand_Clear_WithAwaitTimeoutAutoClearReason_ReportsThatReason()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            JObject parameters = new()
+            {
+                ["Id"] = "jump",
+                ["Reason"] = UloopPausePointClearedReason.AwaitTimeoutAutoClear
+            };
+            PausePointStatusResponse response = PausePointStatusBridgeCommand.Clear(parameters);
+
+            Assert.That(response.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(response.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.AwaitTimeoutAutoClear));
+        }
+
+        /// <summary>
+        /// Verifies the status-bridge Clear path still records ExplicitClear when Reason is omitted.
+        /// </summary>
+        [Test]
+        public void PausePointStatusBridgeCommand_Clear_WithoutReason_ReportsExplicitClear()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            JObject parameters = new() { ["Id"] = "jump" };
+            PausePointStatusResponse response = PausePointStatusBridgeCommand.Clear(parameters);
+
+            Assert.That(response.Status, Is.EqualTo(UloopPausePointStatus.Cleared));
+            Assert.That(response.ClearedReason, Is.EqualTo(UloopPausePointClearedReason.ExplicitClear));
+        }
+
+        /// <summary>
+        /// Verifies Clear(id) reports 0 for an id that was never enabled.
+        /// </summary>
+        [Test]
+        public void Clear_WhenIdIsUnknown_ReportsClearedCountZero()
+        {
+            (UloopPausePointSnapshot _, bool _, int clearedCount) = UloopPausePointRegistry.Clear("missing");
+
+            Assert.That(clearedCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a second Clear(id) on the same marker reports 0 instead of recounting the first clear.
+        /// </summary>
+        [Test]
+        public void Clear_WhenSameIdClearedTwice_ReportsZeroOnSecondClear()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            (UloopPausePointSnapshot _, bool _, int firstClearedCount) = UloopPausePointRegistry.Clear("jump");
+
+            (UloopPausePointSnapshot _, bool _, int secondClearedCount) = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(firstClearedCount, Is.EqualTo(1));
+            Assert.That(secondClearedCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies Clear(id) reports 1 when the first clear happens after the capture window expired.
+        /// </summary>
+        [Test]
+        public void Clear_WhenExpiredMarkerIsCleared_ReportsClearedCountOne()
+        {
+            UloopPausePointRegistry.Enable("jump", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            (UloopPausePointSnapshot _, bool _, int clearedCount) = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(clearedCount, Is.EqualTo(1));
         }
 
         [Test]
@@ -664,6 +769,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Warning, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies clear-pause-point --id reports ClearedCount 1 through the public tool response path.
+        /// </summary>
+        [Test]
+        public async Task ClearPausePointTool_WhenClearingById_ReportsClearedCountOne()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "jump" };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.ClearedCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies clear-pause-point --id reports ClearedCount 0 on a no-op second clear through the public tool path.
+        /// </summary>
+        [Test]
+        public async Task ClearPausePointTool_WhenClearingSameIdTwice_ReportsClearedCountZeroOnSecondCall()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "jump" };
+            await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.ClearedCount, Is.EqualTo(0));
         }
 
         [Test]
@@ -877,7 +1013,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.Current));
             Assert.That(
                 response.RecommendedNextAction,
-                Is.EqualTo("Clear this marker, then re-enable it with the same Id and TimeoutSeconds values."));
+                Is.EqualTo("Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required."));
         }
 
         [Test]
@@ -1273,6 +1409,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EquivalentTo(new[] { "left", "right", "sum", "this", "Tag" }));
         }
 
+        /// <summary>
+        /// What: an enable failure response carries the live editor state instead of a
+        /// zero-filled default (IsPlaying/CapturedAt must flow from the registry's pause controller).
+        /// </summary>
+        [Test]
+        public void Enable_UnresolvableFile_CarriesLiveEditorState()
+        {
+            PausePointUseCase useCase = new();
+            PausePointResponse response = useCase.Enable(new EnablePausePointSchema
+            {
+                File = "Assets/UloopNoSuchFileForEditorStateTest.cs",
+                Line = 1
+            });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.Current),
+                "Error responses must capture the editor state instead of returning the zero-filled default.");
+            Assert.That(response.EditorState.IsPlaying, Is.True,
+                "SetUp's fake controller pins IsPlaying to true, so a zero-filled default (false) is detectable.");
+        }
+
         [Test]
         public async Task Enable_WhenIdAndFileBothProvided_ReturnsValidationFailureResponse()
         {
@@ -1435,6 +1592,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 resolution.IlOffset,
                 resolution.ResolvedLine,
                 resolution.ResolvedEndLine,
+                resolution.CompiledMethodStartLine,
+                resolution.CompiledMethodEndLine,
                 resolution.Locals,
                 resolution.Parameters);
         }

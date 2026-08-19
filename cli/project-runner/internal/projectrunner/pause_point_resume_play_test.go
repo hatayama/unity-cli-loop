@@ -346,8 +346,10 @@ func TestWaitForPausePointSkipsResumeWhenNotArmed(t *testing.T) {
 	if triggerResult != nil {
 		t.Fatalf("expected nil TriggerResult when --trigger was not given, got %#v", triggerResult)
 	}
-	if resumeResult == nil || resumeResult.Error == "" {
-		t.Fatalf("expected ResumePlayResult.Error explaining the skip, got %#v", resumeResult)
+	wantError := pausePointResumeNotArmedAtWaitStartError +
+		" marker status was 'NotEnabled' (ClearedReason: )"
+	if resumeResult == nil || resumeResult.Error != wantError {
+		t.Fatalf("ResumePlayResult.Error mismatch: got %#v, want %q", resumeResult, wantError)
 	}
 }
 
@@ -415,11 +417,15 @@ func TestWaitForPausePointSkipsResumeAndTriggerWhenNotArmed(t *testing.T) {
 	if dispatchCalled {
 		t.Fatal("expected dispatchPausePointTriggerCommand not to be called for a not-armed marker")
 	}
-	if resumeResult == nil || resumeResult.Error == "" {
-		t.Fatalf("expected ResumePlayResult.Error explaining the skip, got %#v", resumeResult)
+	wantResumeError := pausePointResumeNotArmedAtWaitStartError +
+		" marker status was 'NotEnabled' (ClearedReason: )"
+	wantTriggerError := pausePointTriggerNotArmedAtWaitStartError +
+		" marker status was 'NotEnabled' (ClearedReason: )"
+	if resumeResult == nil || resumeResult.Error != wantResumeError {
+		t.Fatalf("ResumePlayResult.Error mismatch: got %#v, want %q", resumeResult, wantResumeError)
 	}
-	if triggerResult == nil || triggerResult.Error == "" {
-		t.Fatalf("expected TriggerResult.Error explaining the skip, got %#v", triggerResult)
+	if triggerResult == nil || triggerResult.Error != wantTriggerError {
+		t.Fatalf("TriggerResult.Error mismatch: got %#v, want %q", triggerResult, wantTriggerError)
 	}
 }
 
@@ -576,4 +582,50 @@ func TestResumePlayModeForPausePointFromUnityBranches(t *testing.T) {
 			t.Fatalf("expected Status then Play, got %#v", actions)
 		}
 	})
+}
+
+// Verifies wait-start unarmed errors include the observed Cleared status and AwaitTimeoutAutoClear
+// reason when the arm-status query succeeded.
+func TestWaitForPausePointUnarmedErrorIncludesClearedReasonWhenQuerySucceeded(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalResume := resumePlayModeForPausePoint
+	defer func() {
+		queryPausePointStatus = originalQuery
+		resumePlayModeForPausePoint = originalResume
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:            id,
+			Status:        pausePointStatusCleared,
+			ClearedReason: pausePointAwaitTimeoutAutoClearReason,
+		}, nil
+	}
+
+	resumePlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+	) pausePointResumePlayResult {
+		t.Fatal("expected resumePlayModeForPausePoint not to be called for a cleared marker")
+		return pausePointResumePlayResult{}
+	}
+
+	_, _, _, resumeResult, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+		timeout:        time.Second,
+		resumePlay:     true,
+	})
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	wantError := pausePointResumeNotArmedAtWaitStartError +
+		" marker status was 'Cleared' (ClearedReason: AwaitTimeoutAutoClear)"
+	if resumeResult == nil || resumeResult.Error != wantError {
+		t.Fatalf("ResumePlayResult.Error mismatch: got %#v, want %q", resumeResult, wantError)
+	}
 }

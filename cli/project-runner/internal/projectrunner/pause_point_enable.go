@@ -399,12 +399,19 @@ func runPausePointWaitAfterEnable(
 
 		response.TriggerResult = triggerResult
 		response.ResumePlayResult = resumeResult
-		// Status polls never carry these fields today; always prefer the enable-time values.
-		response.ResolvedLine = enableFields.ResolvedLine
-		response.ResolvedLineText = enableFields.ResolvedLineText
+		// Why treat ResolvedLine/Text as a pair: Unity SetResolvedLine always writes or clears
+		// both together. Falling back field-by-field can synthesize a line number from status
+		// with enable-time text (or the reverse) when ReadLineText returns empty.
+		// Prefer the status pair when ResolvedLine is non-zero; otherwise keep enable-time.
+		if response.ResolvedLine == 0 {
+			response.ResolvedLine = enableFields.ResolvedLine
+			response.ResolvedLineText = enableFields.ResolvedLineText
+		}
+		// ResolvedMethod / SnapshotTiming are still enable-only on the status DTO today.
 		response.ResolvedMethod = enableFields.ResolvedMethod
 		response.SnapshotTiming = enableFields.SnapshotTiming
 		response = filterPausePointCapturedVariableHistory(response)
+		response = applyPausePointTraceStatusNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 
@@ -437,11 +444,20 @@ func runPausePointWaitAfterEnable(
 	// Why skip clear when hasNewHitBaseline: the continuous/trace marker is still armed, and the
 	// timeout hint tells the caller to await again (with --resume-play). Clearing here would disarm
 	// it and discard the raw capture holder, making that recovery path impossible.
+	markerClearedByThisCommand := false
 	if state == pausePointWaitStateTimeout && !hasNewHitBaseline {
-		clearPausePointAfterWaitTimeout(ctx, connection, options.id)
+		response, markerClearedByThisCommand = refreshPausePointStatusAfterWaitTimeoutAutoClear(
+			ctx, connection, options.id, response)
 	}
 
-	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state, hasNewHitBaseline)
+	waitErr := pausePointWaitError(
+		connection.ProjectRoot,
+		options,
+		response,
+		state,
+		hasNewHitBaseline,
+		markerClearedByThisCommand,
+	)
 	waitErr.Command = pausePointEnableCommandName
 	if enableFields.Warning != "" {
 		waitErr.Details["EnableWarning"] = enableFields.Warning

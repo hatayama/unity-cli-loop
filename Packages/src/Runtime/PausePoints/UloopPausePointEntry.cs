@@ -61,6 +61,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string ClearedReason { get; private set; } = string.Empty;
         public string StatusBeforeClear { get; private set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; private set; }
+        public bool SuppressedByHotReload { get; set; }
+        public string SuppressedByHotReloadReason { get; set; }
+        public bool RetargetedToHotReloadPatch { get; set; }
+        // 0 / null-or-empty means unresolved (not yet written by enable or retarget).
+        public int ResolvedLine { get; set; }
+        public string ResolvedLineText { get; set; }
 
         public bool ExpireIfNeeded(DateTime nowUtc)
         {
@@ -267,7 +273,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 TruncatedVariableCount,
                 ClearedReason,
                 StatusBeforeClear,
-                LateHitDiscardedAfterClear);
+                LateHitDiscardedAfterClear,
+                SuppressedByHotReload,
+                SuppressedByHotReloadReason,
+                RetargetedToHotReloadPatch,
+                ResolvedLine,
+                ResolvedLineText);
         }
 
         private long CalculateRemainingMilliseconds(DateTime nowUtc)
@@ -283,7 +294,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         private string CreateExpiredRecommendedNextAction()
         {
-            return "Clear this marker, then re-enable it with the same Id and TimeoutSeconds values.";
+            return "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
         }
 
         private static string FormatUtc(DateTime value)

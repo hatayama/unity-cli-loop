@@ -33,6 +33,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return message;
             }
 
+            Debug.Assert(
+                MainThreadSwitcher.IsMainThread,
+                "No-tests asmdef diagnostics must run on the main thread because AssetDatabase.FindAssets is a Unity API.");
+
             RunTestsAsmdefInfo[] asmdefs = LoadProjectAsmdefs();
             RunTestsAsmdefDiagnosticFinding[] findings = Analyze(asmdefs, testMode);
             return AppendFindingsIfEligible(message, noTestsFound, findings);

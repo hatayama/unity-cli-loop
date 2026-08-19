@@ -33,5 +33,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .Where(line => line.Length > 0);
             return string.Join(" ", trimmedNonEmptyLines);
         }
+
+        public static string ReadLineTextFromSource(string sourceText, int lineNumber)
+        {
+            if (string.IsNullOrEmpty(sourceText) || lineNumber <= 0)
+            {
+                return string.Empty;
+            }
+
+            string[] lines = sourceText.Replace("\r\n", "\n").Split('\n');
+            if (lineNumber > lines.Length)
+            {
+                return string.Empty;
+            }
+
+            return lines[lineNumber - 1].Trim();
+        }
     }
 }

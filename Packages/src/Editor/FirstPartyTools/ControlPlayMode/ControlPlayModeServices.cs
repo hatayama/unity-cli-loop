@@ -8,6 +8,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal ControlPlayModeCompilationFailureService CompilationFailureService { get; } = new();
         internal ControlPlayModeCompilationFailureGate CompilationFailureGate { get; } = new();
         internal ControlPlayModeEditorStateService EditorStateService { get; } = new();
+        internal ControlPlayModeDomainReloadDropStateService DomainReloadDropStateService { get; } = new();
 
         internal CliPlayModeRunInBackgroundService RunInBackgroundService { get; } =
             new CliPlayModeRunInBackgroundService(
@@ -35,6 +36,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static IControlPlayModeEditorStateService EditorStateService =>
             RegistryValue.EditorStateService;
+
+        internal static IControlPlayModeDomainReloadDropStateProvider DomainReloadDropStateProvider =>
+            RegistryValue.DomainReloadDropStateService;
 
         internal static CliPlayModeRunInBackgroundService RunInBackgroundService =>
             RegistryValue.RunInBackgroundService;

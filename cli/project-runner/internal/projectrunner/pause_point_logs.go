@@ -94,10 +94,13 @@ func buildPausePointHitPayload(inputs pausePointHitPayloadInputs) any {
 			AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
 		}{
 			pausePointStatusResponse: response,
-			Warning:                  joinPausePointWarnings(inputs.unityWarning, triggerWarning),
-			EnableTimeWarning:        inputs.enableTimeWarning,
-			Expectations:             inputs.expectations,
-			AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(inputs.expectations),
+			Warning: joinPausePointWarnings(
+				inputs.unityWarning,
+				triggerWarning,
+				buildPausePointExpectNotFoundWarning(inputs.expectations)),
+			EnableTimeWarning:     inputs.enableTimeWarning,
+			Expectations:          inputs.expectations,
+			AllExpectationsPassed: pausePointAllExpectationsPassedPointer(inputs.expectations),
 		}
 	}
 
@@ -107,7 +110,8 @@ func buildPausePointHitPayload(inputs pausePointHitPayloadInputs) any {
 		Warning: joinPausePointWarnings(
 			inputs.unityWarning,
 			buildPausePointWarning(inputs.logs, response.HitCount),
-			triggerWarning),
+			triggerWarning,
+			buildPausePointExpectNotFoundWarning(inputs.expectations)),
 		EnableTimeWarning:     inputs.enableTimeWarning,
 		Expectations:          inputs.expectations,
 		AllExpectationsPassed: pausePointAllExpectationsPassedPointer(inputs.expectations),

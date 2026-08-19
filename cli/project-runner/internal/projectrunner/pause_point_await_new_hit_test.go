@@ -138,6 +138,10 @@ func TestWaitForPausePointTimesOutWaitingForNewHitOnContinuousMarker(t *testing.
 	if strings.Contains(stderrText, clierrors.ErrorCodePausePointExpired) {
 		t.Fatalf("timeout must not be reclassified as expired: %s", stderrText)
 	}
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	if _, exists := envelope.Error.Details["MarkerClearedByThisCommand"]; exists {
+		t.Fatalf("new-hit baseline timeout must not claim this command cleared the marker: %#v", envelope.Error.Details)
+	}
 }
 
 // Verifies a transient arm-query failure does not decide "no baseline", so a later stale continuous
@@ -329,7 +333,7 @@ func TestPausePointTimeoutHintForNewHitBaseline(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateTimeout, true)
+	}, response, pausePointWaitStateTimeout, true, false)
 
 	if cliErr.ErrorCode != clierrors.ErrorCodePausePointWaitTimeout {
 		t.Fatalf("error code mismatch: %s", cliErr.ErrorCode)

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
+using System.Text.RegularExpressions;
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -19,7 +21,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class SourcePausePointResolver
     {
-        public static SourcePausePointResolveResult Resolve(string projectRelativeFilePath, int line)
+        public static SourcePausePointResolveResult Resolve(
+            string projectRelativeFilePath,
+            int line,
+            string methodFilter = null)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
             Debug.Assert(line > 0, "line must be a positive 1-based line number.");
@@ -56,7 +61,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"Debug symbols not found at '{pdbPath}'. Ensure the project uses Debug code optimization.");
             }
 
-            return ResolveFromCompiledAssembly(assemblyName, dllPath, pdbPath, normalizedInputPath, projectRelativeFilePath, line);
+            return ResolveFromCompiledAssembly(
+                assemblyName,
+                dllPath,
+                pdbPath,
+                normalizedInputPath,
+                projectRelativeFilePath,
+                line,
+                methodFilter);
         }
 
         private static SourcePausePointResolveResult ResolveFromCompiledAssembly(
@@ -65,7 +77,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string pdbPath,
             string normalizedInputPath,
             string originalInputPath,
-            int line)
+            int line,
+            string methodFilter)
         {
             using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using FileStream pdbStream = File.Open(pdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -81,13 +94,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(dllStream, readerParameters);
 
             (MethodDefinition method, SequencePoint sequencePoint) = FindClosestSequencePointOnOrAfterLine(
-                assemblyDefinition.MainModule, normalizedInputPath, line);
+                assemblyDefinition.MainModule, normalizedInputPath, line, methodFilter);
 
             if (method == null)
             {
+                IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods =
+                    FindNearbyCompiledMethods(assemblyDefinition.MainModule, normalizedInputPath, line);
+                string errorMessage = string.IsNullOrEmpty(methodFilter)
+                    ? $"No sequence point found on or after line {line} in '{originalInputPath}'."
+                    : string.Format(
+                        SourcePausePointConstants.NoMethodNamedWithSequencePointMessageFormat,
+                        methodFilter,
+                        line);
                 return SourcePausePointResolveResult.Failure(
                     SourcePausePointResolveFailureReason.NoSequencePointOnOrAfterLine,
-                    $"No sequence point found on or after line {line} in '{originalInputPath}'.");
+                    errorMessage,
+                    nearbyCompiledMethods);
             }
 
             int instructionIndex = FindInstructionIndex(method.Body.Instructions, sequencePoint.Offset);
@@ -95,6 +117,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<SourcePausePointLocalVariable> locals = CollectCapturableLocals(method, sequencePoint.Offset);
             List<SourcePausePointParameter> parameters = CollectParameters(method);
+            (int compiledMethodStartLine, int compiledMethodEndLine) = CollectCompiledMethodSpan(
+                method,
+                normalizedInputPath);
 
             SourcePausePointResolution resolution = new SourcePausePointResolution(
                 assemblyName,
@@ -107,6 +132,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sequencePoint.Offset,
                 sequencePoint.StartLine,
                 sequencePoint.EndLine,
+                compiledMethodStartLine,
+                compiledMethodEndLine,
                 locals,
                 parameters);
 
@@ -114,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static (MethodDefinition method, SequencePoint sequencePoint) FindClosestSequencePointOnOrAfterLine(
-            ModuleDefinition module, string normalizedInputPath, int line)
+            ModuleDefinition module, string normalizedInputPath, int line, string methodFilter)
         {
             MethodDefinition bestMethod = null;
             SequencePoint bestSequencePoint = null;
@@ -122,6 +149,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (MethodDefinition method in EnumerateMethodsInModule(module))
             {
                 if (!method.HasBody)
+                {
+                    continue;
+                }
+
+                if (!CompiledMethodMatchesFilter(methodFilter, method))
                 {
                     continue;
                 }
@@ -155,7 +187,258 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (bestMethod, bestSequencePoint);
         }
 
-        private static IEnumerable<MethodDefinition> EnumerateMethodsInModule(ModuleDefinition module)
+        private static bool CompiledMethodMatchesFilter(string methodFilter, MethodDefinition method)
+        {
+            string declaringTypeName = method.DeclaringType != null ? method.DeclaringType.Name : "?";
+            string nestedOuterTypeName =
+                method.DeclaringType != null && method.DeclaringType.DeclaringType != null
+                    ? method.DeclaringType.DeclaringType.Name
+                    : null;
+            return MethodMatchesFilter(methodFilter, method.Name, declaringTypeName, nestedOuterTypeName);
+        }
+
+        // Why Type.Name only: PR-2 short names keep the last type segment, so `Type.Method`
+        // matches the same label agents already see in skip reasons.
+        internal static bool MethodMatchesFilter(
+            string methodFilter,
+            string methodName,
+            string declaringTypeName,
+            string nestedOuterTypeName = null)
+        {
+            if (string.IsNullOrEmpty(methodFilter))
+            {
+                return true;
+            }
+
+            Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be empty.");
+            (string logicalMethodName, string logicalTypeName) = ToLogicalFilterNames(
+                methodName,
+                declaringTypeName,
+                nestedOuterTypeName);
+            if (methodFilter.IndexOf('.') >= 0)
+            {
+                return string.Equals(
+                    logicalTypeName + "." + logicalMethodName,
+                    methodFilter,
+                    StringComparison.Ordinal);
+            }
+
+            return string.Equals(logicalMethodName, methodFilter, StringComparison.Ordinal);
+        }
+
+        internal static (string MethodName, string DeclaringTypeName) ToLogicalFilterNames(
+            string methodName,
+            string declaringTypeName,
+            string nestedOuterTypeName)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be empty.");
+            string typeName = string.IsNullOrEmpty(declaringTypeName) ? "?" : declaringTypeName;
+            Match stateMachine = SourcePausePointConstants.StateMachineTypeNamePattern.Match(typeName);
+            if (stateMachine.Success)
+            {
+                string outerTypeName = string.IsNullOrEmpty(nestedOuterTypeName) ? "?" : nestedOuterTypeName;
+                return (stateMachine.Groups[1].Value, outerTypeName);
+            }
+
+            Match localFunction = SourcePausePointConstants.LocalFunctionMethodNamePattern.Match(methodName);
+            if (localFunction.Success)
+            {
+                return (localFunction.Groups[1].Value, typeName);
+            }
+
+            return (methodName, typeName);
+        }
+
+        // Why after bestMethod is chosen: the candidate loop walks every method in the
+        // document and also skips StartLine < requested line, so min/max there would be
+        // the whole file or a truncated body. Hidden points are 0xFEEFEE (16707566).
+        private static (int startLine, int endLine) CollectCompiledMethodSpan(
+            MethodDefinition method,
+            string normalizedInputPath)
+        {
+            Debug.Assert(method != null, "method must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(normalizedInputPath), "normalizedInputPath must not be empty.");
+
+            MethodDebugInformation debugInformation = method.DebugInformation;
+            if (debugInformation == null || !debugInformation.HasSequencePoints)
+            {
+                return (0, 0);
+            }
+
+            int startLine = 0;
+            int endLine = 0;
+            foreach (SequencePoint sequencePoint in debugInformation.SequencePoints)
+            {
+                if (sequencePoint.IsHidden)
+                {
+                    continue;
+                }
+
+                if (!SourcePausePointPathNormalizer.PathsReferToSameFile(
+                    sequencePoint.Document.Url,
+                    normalizedInputPath))
+                {
+                    continue;
+                }
+
+                if (startLine == 0 || sequencePoint.StartLine < startLine)
+                {
+                    startLine = sequencePoint.StartLine;
+                }
+
+                if (sequencePoint.EndLine > endLine)
+                {
+                    endLine = sequencePoint.EndLine;
+                }
+            }
+
+            return (startLine, endLine);
+        }
+
+        // Why a file:line entry: the resolver test assembly cannot take a Cecil
+        // ModuleDefinition dependency, but TakeAtMostTwo only runs on this walk.
+        internal static IReadOnlyList<SourcePausePointNearbyCompiledMethod> FindNearbyCompiledMethodsInFile(
+            string projectRelativeFilePath,
+            int line)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
+            Debug.Assert(line > 0, "line must be a positive 1-based line number.");
+
+            string normalizedInputPath = SourcePausePointPathNormalizer.ToForwardSlashes(projectRelativeFilePath);
+            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(normalizedInputPath);
+            if (string.IsNullOrEmpty(rawAssemblyName))
+            {
+                return Array.Empty<SourcePausePointNearbyCompiledMethod>();
+            }
+
+            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            string dllPath = Path.Combine(
+                projectRoot,
+                SourcePausePointConstants.ScriptAssembliesRelativeDirectory,
+                assemblyName + SourcePausePointConstants.CompiledAssemblyExtension);
+            string pdbPath = Path.Combine(
+                projectRoot,
+                SourcePausePointConstants.ScriptAssembliesRelativeDirectory,
+                assemblyName + SourcePausePointConstants.DebugSymbolsExtension);
+            if (!File.Exists(dllPath) || !File.Exists(pdbPath))
+            {
+                return Array.Empty<SourcePausePointNearbyCompiledMethod>();
+            }
+
+            using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using FileStream pdbStream = File.Open(pdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            ReaderParameters readerParameters = new ReaderParameters
+            {
+                InMemory = true,
+                ReadSymbols = true,
+                SymbolReaderProvider = new PortablePdbReaderProvider(),
+                SymbolStream = pdbStream
+            };
+            using AssemblyDefinition assemblyDefinition =
+                AssemblyDefinition.ReadAssembly(dllStream, readerParameters);
+            return FindNearbyCompiledMethods(assemblyDefinition.MainModule, normalizedInputPath, line);
+        }
+
+        // Why a separate walk from FindClosestSequencePointOnOrAfterLine: that search only
+        // looks forward, so a miss past the last statement would otherwise leave the caller
+        // with no compiled span to retarget against.
+        internal static IReadOnlyList<SourcePausePointNearbyCompiledMethod> FindNearbyCompiledMethods(
+            ModuleDefinition module,
+            string normalizedInputPath,
+            int line)
+        {
+            Debug.Assert(module != null, "module must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(normalizedInputPath), "normalizedInputPath must not be empty.");
+            Debug.Assert(line > 0, "line must be a positive 1-based line number.");
+
+            List<SourcePausePointNearbyCompiledMethod> containing = new List<SourcePausePointNearbyCompiledMethod>();
+            SourcePausePointNearbyCompiledMethod nearestBefore = null;
+            SourcePausePointNearbyCompiledMethod nearestAfter = null;
+
+            foreach (MethodDefinition method in EnumerateMethodsInModule(module))
+            {
+                SourcePausePointNearbyCompiledMethod candidate =
+                    TryCreateNearbyCompiledMethod(method, normalizedInputPath);
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                if (candidate.StartLine <= line && line <= candidate.EndLine)
+                {
+                    containing.Add(candidate);
+                    continue;
+                }
+
+                if (candidate.EndLine < line
+                    && (nearestBefore == null || candidate.EndLine > nearestBefore.EndLine))
+                {
+                    nearestBefore = candidate;
+                }
+
+                if (candidate.StartLine > line
+                    && (nearestAfter == null || candidate.StartLine < nearestAfter.StartLine))
+                {
+                    nearestAfter = candidate;
+                }
+            }
+
+            if (containing.Count > 0)
+            {
+                return TakeAtMostTwo(containing);
+            }
+
+            List<SourcePausePointNearbyCompiledMethod> nearby = new List<SourcePausePointNearbyCompiledMethod>();
+            if (nearestBefore != null)
+            {
+                nearby.Add(nearestBefore);
+            }
+
+            if (nearestAfter != null)
+            {
+                nearby.Add(nearestAfter);
+            }
+
+            return nearby;
+        }
+
+        private static SourcePausePointNearbyCompiledMethod TryCreateNearbyCompiledMethod(
+            MethodDefinition method,
+            string normalizedInputPath)
+        {
+            if (!method.HasBody)
+            {
+                return null;
+            }
+
+            (int startLine, int endLine) = CollectCompiledMethodSpan(method, normalizedInputPath);
+            if (startLine <= 0 || endLine <= 0)
+            {
+                return null;
+            }
+
+            string typeName = method.DeclaringType != null ? method.DeclaringType.Name : "?";
+            return new SourcePausePointNearbyCompiledMethod(
+                typeName + "." + method.Name,
+                startLine,
+                endLine);
+        }
+
+        private static IReadOnlyList<SourcePausePointNearbyCompiledMethod> TakeAtMostTwo(
+            List<SourcePausePointNearbyCompiledMethod> methods)
+        {
+            if (methods.Count <= 2)
+            {
+                return methods;
+            }
+
+            return new[] { methods[0], methods[1] };
+        }
+
+        // Shared with SourcePausePointShimResolver so shim-assembly sequence-point walks use the
+        // same nested-type enumeration and capturable-local / parameter exclusion rules.
+        internal static IEnumerable<MethodDefinition> EnumerateMethodsInModule(ModuleDefinition module)
         {
             foreach (TypeDefinition type in module.Types)
             {
@@ -182,7 +465,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static int FindInstructionIndex(Collection<Instruction> instructions, int offset)
+        internal static int FindInstructionIndex(Collection<Instruction> instructions, int offset)
         {
             for (int i = 0; i < instructions.Count; i++)
             {
@@ -195,7 +478,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return -1;
         }
 
-        private static List<SourcePausePointLocalVariable> CollectCapturableLocals(MethodDefinition method, int offset)
+        internal static List<SourcePausePointLocalVariable> CollectCapturableLocals(
+            MethodDefinition method,
+            int offset)
         {
             List<SourcePausePointLocalVariable> results = new List<SourcePausePointLocalVariable>();
             ScopeDebugInformation rootScope = method.DebugInformation.Scope;
@@ -205,6 +490,70 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return results;
+        }
+
+        /// <summary>
+        /// Collects every named capturable local in the method's debug scopes, ignoring IL offset.
+        /// Used when a shim sequence point lands on Ret (or similar) after local scopes close.
+        /// Keep-first dedupe by slot and by name avoids duplicate capture entries when scopes
+        /// reuse slots or nest identically named locals.
+        /// </summary>
+        internal static List<SourcePausePointLocalVariable> CollectAllCapturableLocals(
+            MethodDefinition method)
+        {
+            List<SourcePausePointLocalVariable> results = new List<SourcePausePointLocalVariable>();
+            ScopeDebugInformation rootScope = method.DebugInformation.Scope;
+            if (rootScope == null)
+            {
+                return results;
+            }
+
+            HashSet<int> seenSlots = new HashSet<int>();
+            HashSet<string> seenNames = new HashSet<string>(StringComparer.Ordinal);
+            CollectAllScopeVariables(rootScope, method.Body.Variables, results, seenSlots, seenNames);
+            return results;
+        }
+
+        private static void CollectAllScopeVariables(
+            ScopeDebugInformation scope,
+            Collection<VariableDefinition> methodVariables,
+            List<SourcePausePointLocalVariable> results,
+            HashSet<int> seenSlots,
+            HashSet<string> seenNames)
+        {
+            if (scope.HasVariables)
+            {
+                foreach (VariableDebugInformation variableDebugInformation in scope.Variables)
+                {
+                    int beforeCount = results.Count;
+                    AppendLocalIfCapturable(variableDebugInformation, methodVariables, results);
+                    if (results.Count == beforeCount)
+                    {
+                        continue;
+                    }
+
+                    SourcePausePointLocalVariable added = results[results.Count - 1];
+                    if (seenSlots.Contains(added.SlotIndex) || seenNames.Contains(added.Name))
+                    {
+                        results.RemoveAt(results.Count - 1);
+                    }
+                    else
+                    {
+                        seenSlots.Add(added.SlotIndex);
+                        seenNames.Add(added.Name);
+                    }
+                }
+            }
+
+            if (!scope.HasScopes)
+            {
+                return;
+            }
+
+            foreach (ScopeDebugInformation childScope in scope.Scopes)
+            {
+                CollectAllScopeVariables(childScope, methodVariables, results, seenSlots, seenNames);
+            }
         }
 
         private static void CollectInScopeVariables(
@@ -321,7 +670,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return elementType.FullName == "System.Span`1" || elementType.FullName == "System.ReadOnlySpan`1";
         }
 
-        private static List<SourcePausePointParameter> CollectParameters(MethodDefinition method)
+        internal static List<SourcePausePointParameter> CollectParameters(MethodDefinition method)
         {
             List<SourcePausePointParameter> parameters = new List<SourcePausePointParameter>();
             foreach (ParameterDefinition parameter in method.Parameters)
@@ -336,6 +685,66 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return parameters;
+        }
+
+        /// <summary>
+        /// Collects capturable parameters from a reflection MethodBase (transplant chain-join
+        /// uses the original method; shim-direct uses the resolved shim-side method).
+        /// </summary>
+        internal static List<SourcePausePointParameter> CollectParametersFromReflection(
+            MethodBase method,
+            bool skipFirstParameter)
+        {
+            Debug.Assert(method != null, "method must not be null.");
+
+            // Fully qualify: ToolContracts also defines ParameterInfo (tool schema DTO).
+            System.Reflection.ParameterInfo[] runtimeParameters = method.GetParameters();
+            List<SourcePausePointParameter> parameters = new List<SourcePausePointParameter>();
+            int startIndex = skipFirstParameter ? 1 : 0;
+            for (int index = startIndex; index < runtimeParameters.Length; index++)
+            {
+                System.Reflection.ParameterInfo parameter = runtimeParameters[index];
+                Type parameterType = parameter.ParameterType;
+                if (IsCaptureExcludedReflection(parameterType))
+                {
+                    continue;
+                }
+
+                // Keep GetParameters() position so LoadArgument hits the right slot even when
+                // earlier parameters were excluded from capture (same as Cecil Parameter.Index).
+                parameters.Add(
+                    new SourcePausePointParameter(
+                        parameter.Name,
+                        index,
+                        parameterType.FullName,
+                        parameterType.IsValueType));
+            }
+
+            return parameters;
+        }
+
+        private static bool IsCaptureExcludedReflection(Type type)
+        {
+            return type.IsByRef || type.IsPointer || IsByRefLikeTypeReflection(type);
+        }
+
+        private static bool IsByRefLikeTypeReflection(Type type)
+        {
+            Type elementType = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
+            if (elementType.FullName == "System.Span`1" || elementType.FullName == "System.ReadOnlySpan`1")
+            {
+                return true;
+            }
+
+            foreach (object attribute in type.GetCustomAttributes(inherit: false))
+            {
+                if (attribute.GetType().FullName == SourcePausePointConstants.IsByRefLikeAttributeFullName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

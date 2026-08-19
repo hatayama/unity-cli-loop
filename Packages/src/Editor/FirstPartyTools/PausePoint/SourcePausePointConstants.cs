@@ -14,6 +14,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static readonly Regex AutoPropertyBackingFieldPattern =
             new(@"^<([^>]+)>k__BackingField$", RegexOptions.Compiled);
 
+        // Why name patterns instead of HotReloadCallSiteScanner's attribute index: PausePoint
+        // cannot reference that assembly, and --method is a source name. Roslyn still encodes
+        // async/iterator owners as nested `<Name>d__N` types and local functions as
+        // `<Outer>g__Name|x_y`; lambdas (`<Outer>b__…`) have no source name and stay unmatched.
+        public static readonly Regex StateMachineTypeNamePattern =
+            new(@"^<([^>]+)>d__\d+$", RegexOptions.Compiled);
+        public static readonly Regex LocalFunctionMethodNamePattern =
+            new(@"^<[^>]+>g__([^|]+)\|\d+(?:_\d+)?$", RegexOptions.Compiled);
+
         public const string ScriptAssembliesRelativeDirectory = "Library/ScriptAssemblies";
         public const string CompiledAssemblyExtension = ".dll";
         public const string DebugSymbolsExtension = ".pdb";
@@ -146,6 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ErrorCodeReleaseCodeOptimization = "PAUSE_POINT_RELEASE_CODE_OPTIMIZATION";
         public const string ErrorCodeResolveFailed = "PAUSE_POINT_RESOLVE_FAILED";
         public const string ErrorCodePatchFailed = "PAUSE_POINT_PATCH_FAILED";
+        public const string ErrorCodePausePointPatchedByHotReload = "PAUSE_POINT_PATCHED_BY_HOT_RELOAD";
 
         // Why: Debug mode is lost on every Editor restart (including uloop launch -r), so the
         // recovery steps must remind callers to re-switch after restart rather than only once.
@@ -155,6 +165,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "Note: the Debug setting reverts to the 'Code Optimization On Startup' preference "
             + "whenever the Editor restarts, including uloop launch -r.";
 
+        // Why fill when empty: some Expired snapshots reach the response with no next
+        // action, and agents then have no recovery for a timeout that fired during setup.
+        public const string ExpiredRecommendedNextAction =
+            "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
+
         // Why: resolve failures have several distinct root causes (wrong path form, non-executable
         // line, stale PDBs after a Code Optimization switch); the skill troubleshooting reference
         // covers the patterns so this next-action stays short and stable.
@@ -163,5 +178,96 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "and that --line is on or after an executable statement inside a method body. After a code edit "
             + "or a Code Optimization switch, run uloop compile and retry. See the pause-point skill's "
             + "troubleshooting reference for specific failure patterns.";
+
+        // Format: method filter, requested line.
+        public const string NoMethodNamedWithSequencePointMessageFormat =
+            "No method named '{0}' with a sequence point on or after line {1} was found.";
+
+        // Auto-retarget failure reasons surfaced on status Warning / SuppressedByHotReloadReason.
+        public const string RetargetOntoHotReloadFailedReason =
+            "The marker's line no longer resolves inside the hot-reload patched body; it will not fire "
+            + "until the patch is reverted, the line exists again, or 'uloop compile' runs.";
+
+        public const string RestoreAfterHotReloadRevertFailedReason =
+            "Instrumentation could not be restored after the hot-reload patch was reverted; the line "
+            + "no longer resolves in the compiled assembly. Re-enable the marker after 'uloop compile'.";
+
+        // Why: unpatched methods keep the compiled line map while the editor shows the edited
+        // file. Agents otherwise arm a different method with no signal (FB9).
+        public const string HotReloadCompiledLineMapWarningFormat =
+            "'{0}' has active hot-reload patches. For methods this reload did not patch, --line "
+            + "resolves against the last compiled source, not the edited file. Methods currently "
+            + "patched by hot reload resolve against the edited file instead. Verify "
+            + "ResolvedMethod and ResolvedLineText, or run 'uloop compile' and re-enable.";
+
+        // Why a separate failure string: resolve failure leaves ResolvedMethod and
+        // ResolvedLineText empty, so pointing at those fields is a dead end.
+        public const string HotReloadCompiledLineMapResolveFailureWarningFormat =
+            "'{0}' has active hot-reload patches. --line resolves against the last compiled source, "
+            + "not the edited file, so a line number taken from the edited file can miss or fail to "
+            + "resolve. Methods currently patched by hot reload resolve against the edited file instead. "
+            + "Recompute the line against the last compiled source, or run 'uloop compile' "
+            + "and re-enable.";
+
+        public const string HotReloadCompiledLineMapResolveFailureNextAction =
+            "Pass a line number from the last compiled source (the editor shows the edited file, "
+            + "which can drift after hot reload), or run 'uloop compile' and re-enable the pause point.";
+
+        // Format: file, resolved line, compiled line text, edited line text.
+        public const string HotReloadCompiledLineMapLineDriftWarningFormat =
+            "'{0}' line {1} is '{2}' in the last compiled source but '{3}' in the edited file. "
+            + "The marker is armed on the compiled statement. If that is not the statement you meant, "
+            + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable.";
+
+        public const string HotReloadCompiledLineMapLineDriftNextAction =
+            "Verify ResolvedLineText is the statement you intended. If it is not, run 'uloop compile' "
+            + "and re-enable the pause point.";
+
+        // Format: declaring type name, method name, requested line.
+        public const string HotReloadPatchedLineOutsidePatchedBodyMessageFormat =
+            "'{0}.{1}' is currently hot-reload patched and line {2} does not fall inside any "
+            + "hot-reload patched method's current body, so the marker cannot be placed reliably. "
+            + "Patched methods resolve against the edited file; methods this reload did not patch "
+            + "resolve against the last compiled source. "
+            + "Either the compiled line map for this file is stale, or the method's active patch "
+            + "belongs to a superseded hot-reload generation.";
+
+        public const string HotReloadPatchedLineOutsidePatchedBodyNextAction =
+            "Pick a line inside the edited method body, run 'uloop hot-reload --revert-all' to "
+            + "restore compiled bodies, or run 'uloop compile' to realign line numbers.";
+
+        public const string HotReloadPatchedCompiledMethodSpanFormat =
+            " In the last compiled source, '{0}.{1}' spans lines {2}-{3}.";
+
+        // Format: resolved method display name, compiled start line, compiled end line.
+        public const string HotReloadCompiledMethodSpanInLastCompiledSourceFormat =
+            " In the last compiled source, '{0}' spans lines {1}-{2}.";
+
+        public const string NearbyCompiledMethodsPrefix =
+            " Nearby methods in the last compiled source: ";
+
+        public const string NearbyCompiledMethodSpanFormat = "'{0}' spans lines {1}-{2}";
+
+        // Format: patched method display name, requested line.
+        // Why a dedicated string: a patched method with no shim PDB still falls through to the
+        // compiled line map, so the generic "patched methods use the edited file" sentence would
+        // be a lie on that path.
+        public const string HotReloadPatchedMethodPdbUnavailableWarningFormat =
+            "--line {1} falls inside hot-reload patched method '{0}', but this patch has no debug "
+            + "symbols. Line numbers are therefore resolved against the last compiled source, not "
+            + "the edited file. Run 'uloop compile' and re-enable.";
+
+        // Format: resolved method display name, requested line, edited start line, edited end line.
+        public const string HotReloadRetargetedToEditedFileWarningFormat =
+            "--line {1} was resolved against the edited file because it falls inside hot-reload "
+            + "patched method '{0}' (edited lines {2}-{3}). Methods not patched by hot reload "
+            + "resolve against the last compiled source instead. If you meant a different method, "
+            + "verify ResolvedMethod, or pass a line outside patched methods' edited spans.";
+
+        // Format: declaring type name, added-field count, comma-separated simple field names.
+        public const string HotReloadAddedFieldsNotCapturedWarningFormat =
+            "Hot reload added {1} field(s) to '{0}' ({2}); their values live outside the compiled "
+            + "assembly and never appear in CapturedVariables. Read them via a patched method body "
+            + "or 'uloop execute-dynamic-code' instead.";
     }
 }

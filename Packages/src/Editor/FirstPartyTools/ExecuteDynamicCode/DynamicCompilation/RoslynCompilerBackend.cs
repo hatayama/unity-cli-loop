@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor.Compilation;
@@ -60,6 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string workerRequestFilePath = Path.ChangeExtension(sourcePath, ".worker");
             IReadOnlyCollection<string> defineSymbols = compilerOptions.DefineSymbols;
             bool allowUnsafeCode = compilerOptions.AllowUnsafeCode;
+            bool emitDebugCode = compilerOptions.EmitDebugCode;
 
             try
             {
@@ -69,7 +71,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     dllPath,
                     references,
                     defineSymbols,
-                    allowUnsafeCode);
+                    allowUnsafeCode,
+                    emitDebugCode);
 
                 SharedWorkerCompileOutcome workerOutcome = await SharedRoslynCompilerWorkerHost.TryCompileAsync(
                     workerRequestFilePath,
@@ -106,6 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     references,
                     defineSymbols,
                     allowUnsafeCode,
+                    emitDebugCode,
                     externalCompilerPaths,
                     ct,
                     markBuildStarted,
@@ -140,6 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> references,
             IReadOnlyCollection<string> defineSymbols,
             bool allowUnsafeCode,
+            bool emitDebugCode,
             ExternalCompilerPaths externalCompilerPaths,
             CancellationToken ct,
             Action markBuildStarted,
@@ -153,7 +158,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 dllPath,
                 references,
                 defineSymbols,
-                allowUnsafeCode);
+                allowUnsafeCode,
+                emitDebugCode);
 
             try
             {
@@ -167,7 +173,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8
                 };
 
                 markBuildStarted();
@@ -222,20 +230,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string dllPath,
             IReadOnlyCollection<string> references,
             IReadOnlyCollection<string> defineSymbols,
-            bool allowUnsafeCode)
+            bool allowUnsafeCode,
+            bool emitDebugCode)
         {
             List<string> lines = new()
             {
                 "-nologo",
+                // Diagnostics must be machine-readable by AI agents: English text, UTF-8 bytes.
+                "-preferreduilang:en-US",
+                "-utf8output",
                 "-nostdlib+",
                 "-target:library",
-                "-optimize+",
+                // Why -optimize- for emitDebugCode: hot-reload shims need locals in the PDB for
+                // pause-point capture; execute-dynamic-code keeps -optimize+.
+                emitDebugCode ? "-optimize-" : "-optimize+",
                 // Why portable: one-shot csc fallback must emit a PDB so Assembly.Load can map
                 // runtime exceptions back to user-snippet.cs lines (same as the shared worker).
                 "-debug:portable",
                 allowUnsafeCode ? "-unsafe+" : "-unsafe-",
                 QuoteResponseFileArgument("-out:", dllPath)
             };
+
+            // Why pathmap: csc resolves relative #line document paths against the source file's
+            // directory and writes work-directory absolute URLs into the PDB; map the compile
+            // directory back to the project root so PDB documents point at the real project files
+            // (the shared worker's ParseText path leaves the literal as-is and needs no mapping).
+            // Why GetProjectRoot: it is the single source of truth; process CWD can be moved by
+            // external assets via Directory.SetCurrentDirectory.
+            string sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
+            lines.Add(QuoteResponseFileArgument("-pathmap:", sourceDirectory + "=" + UnityCliLoopPathResolver.GetProjectRoot()));
 
             string defineOption = BuildDefineOption(defineSymbols);
             if (!string.IsNullOrEmpty(defineOption))
@@ -258,10 +281,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string dllPath,
             IReadOnlyCollection<string> references,
             IReadOnlyCollection<string> defineSymbols,
-            bool allowUnsafeCode)
+            bool allowUnsafeCode,
+            bool emitDebugCode)
         {
             List<string> lines = new() { Path.GetFullPath(sourcePath), Path.GetFullPath(dllPath) };
             lines.Add(allowUnsafeCode ? "unsafe:1" : "unsafe:0");
+            lines.Add(emitDebugCode ? "debugCode:1" : "debugCode:0");
 
             string serializedDefines = SerializeDefineSymbols(defineSymbols);
             if (!string.IsNullOrEmpty(serializedDefines))

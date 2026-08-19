@@ -52,10 +52,11 @@ Enable a pause point so Unity pauses when that code path is reached, either by a
 | `--mode` | enum | `single-shot` | Capture mode: single-shot pauses once, continuous pauses on every hit, trace records hits without pausing |
 | `--max-history` | integer | `20` | Maximum number of captured hit frames to retain (1-100) |
 | `--max-preview-elements` | integer | `10` | Maximum number of elements to include in a captured collection's preview (1-1000). The value set at enable time also caps the previews in every later pause-point-status response for that marker; status has no flag to change it. |
+| `--method` | string | - | Optional method simple name or `Type.Method`. When set, `--line` resolves only inside matching methods |
 
 ### clear-pause-point
 
-Clear one or all named UloopPausePoint.Pause markers
+Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is 0 or 1 for `--id`, and the number of markers actually cleared for `--all`.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -94,11 +95,20 @@ Clear one or all registered C# watch expressions
 Choose the capture mode when enabling a pause point:
 
 - `single-shot` is the default. The first hit pauses Unity and disarms the marker.
-- `continuous` pauses Unity on every hit and remains armed. `CapturedVariables` holds the latest hit; `CapturedVariableHistory` holds only strictly older frames, so with a single hit the history is empty.
+- `continuous` pauses Unity on every hit and remains armed.
 - `trace` remains armed and records each hit without pausing Unity.
+- In every mode, `CapturedVariables` holds the latest hit and `CapturedVariableHistory` holds only strictly older frames, so with a single hit the history is empty (for `single-shot` it always is). When the latest-hit frame is excluded, `CapturedVariableHistoryNote` explains that the latest hit's variables are in `CapturedVariables`.
+- In trace mode, Status "Hit" does not mean Play Mode paused; the response carries a StatusNote saying the marker fired while the game kept running.
+- An Expired response carries a RecommendedNextAction: re-enable the pause point with a longer --timeout-seconds (default 30) and trigger the code path again; clearing the expired marker first is not required.
 - For an already-hit `continuous` or `trace` marker, `await-pause-point` waits for a **new** hit after the wait starts (`LastHitSequence` advancing). It does not return the stale hit that is already present. Read the current hit with `pause-point-status` instead. If await times out while waiting for that new hit, the error stays `PAUSE_POINT_WAIT_TIMEOUT` and `Details.Hint` tells you to pass `--resume-play` (or resume Play Mode) so another hit can occur. A freshly enabled marker (including `enable-pause-point --await`) has no prior hit, so the first hit satisfies the wait as before.
 
 `--max-history` defaults to 20 and accepts values from 1 through 100. When the limit is exceeded, the oldest frames are dropped and `HistoryDroppedCount` reports how many were removed. `pause-point-status` returns the current `Mode`, `MaxHistory`, history frames, and dropped count.
+
+Re-enabling the same `file:line` replaces the marker instead of updating it: the
+marker starts a new generation and the previous `CapturedVariableHistory` is
+discarded, so a re-enable never carries frames over. Read the history you still
+need with `pause-point-status` before re-enabling (for example before raising
+`--max-preview-elements` or changing the mode).
 
 To inspect value changes one Editor Step at a time, pair a `continuous` marker with a `control-play-mode --action Step` + `pause-point-status` loop — see [references/captured-variables.md](references/captured-variables.md) for the loop and its caveats.
 
@@ -143,7 +153,7 @@ A watch evaluates only on a changed, paused frame, and a domain reload clears al
 - `UloopPausePoint.Pause(id)` is a hand-written marker call for code paths that file:line patching cannot reach. Pair it with `uloop enable-pause-point --id <id>` (no `--file`/`--line`). The call does not need to live in committed source — a dynamic-code watcher can fire it (see the next section).
 - The id-only marker records the hit itself and nothing more: `CapturedVariables` is always empty, and no raw capture is stored, so `TryGetCapturedValue`/`GetCapturedNames` return nothing for these hits. When you need variable values at an id-only marker, read the target objects directly with `execute-dynamic-code` while the Editor is paused, or use a file:line marker instead.
 - For ordinary file:line debugging you do not need `UloopPausePoint.Pause` in source. Prefer CLI enable when the target line can be patched.
-- Physics message methods (`OnCollisionEnter2D`, `OnTriggerEnter2D`, and similar callbacks), helpers they call, and methods already bound into delegates or events can miss hits on GameObjects that existed before enable — `enable-pause-point` warns where it can detect this. Confirmation steps and recovery order: [references/troubleshooting.md](references/troubleshooting.md).
+- Physics message methods (`OnCollisionEnter2D`, `OnTriggerEnter2D`, and similar callbacks), helpers they call, and methods already bound into delegates or events can miss hits on GameObjects that existed before enable — `enable-pause-point` warns where it can detect this. Confirmation steps and recovery order: [references/troubleshooting.md](references/troubleshooting.md). A one-way cross-check: hot-reload a temporary log line into the method (`uloop hot-reload`) and re-trigger — the log appearing proves the body ran even though the marker missed; the log staying absent proves nothing, because the same cached dispatch can bypass the hot-reload patch too.
 
 ## Catching a Runtime Condition with a Dynamic-Code Trigger
 
@@ -172,7 +182,21 @@ If a `simulate-*` command instead returns a failure whose message says PlayMode 
 
 ## Timeout Checks
 
-If this command times out, the patched line was not reached while the command waited. Read `Error.Details.Hint` first: it names the most likely cause when PlayMode is not running, Unity is already paused, or the marker was enabled but never hit. A `PAUSE_POINT_EXPIRED` error means the marker's own `enable-pause-point --timeout-seconds` window (measured from enable, not from wait) ran out first — clear and re-enable the pause point using the returned `Id` and `TimeoutSeconds`. When `--trigger` was passed, the expired envelope also carries `Error.Details.TriggerResult` (with `Completed: false` and no `Error` field when the trigger's outcome was still unknown at expiry). The countdown freezes while a hit holds the Editor paused; a manual pause without a hit does not stop it.
+If this command times out, the patched line was not reached while the command waited. Read `Error.Details.Hint` first: it names the most likely cause when PlayMode is not running, Unity is already paused, or the marker was enabled but never hit. A wait timeout that is not waiting for a new hit on a continuous/trace marker auto-clears the marker; `Error.Details.MarkerClearedByThisCommand` is true when this command did that. A `PAUSE_POINT_EXPIRED` error means the marker's own `enable-pause-point --timeout-seconds` window (measured from enable, not from wait) ran out first — clear and re-enable the pause point using the returned `Id` and `TimeoutSeconds`. When `--trigger` was passed, the expired envelope also carries `Error.Details.TriggerResult` (with `Completed: false` and no `Error` field when the trigger's outcome was still unknown at expiry). The countdown freezes while a hit holds the Editor paused; a manual pause without a hit does not stop it.
+
+`enable-pause-point` works on hot-reload patched methods: the marker resolves against
+the patched body, and `RetargetedToHotReloadPatch: true` in the response confirms it is
+armed on the edited code. Methods the reload did not patch are the opposite case: --line on them resolves against the last compiled source, not the edited file, so line drift from the edit can silently arm a different method. Pass `--method` with the simple method name or `Type.Method` to keep `--line` inside that method and fail instead of arming a neighbor. The response carries a Warning when this applies — check ResolvedMethod and ResolvedLineText before trusting the marker, or run 'uloop compile' and re-enable. When the compiled statement at the resolved line differs from the edited file, the response also includes a compiled-line drift Warning and RecommendedNextAction. When enable fails with `PAUSE_POINT_RESOLVE_FAILED` and the file still has active hot-reload patches, `ResolvedMethod` and `ResolvedLineText` are empty — do not look for them. Follow `RecommendedNextAction`: recompute `--line` against the last compiled source, or run `uloop compile` and re-enable. `CapturedVariables` never includes fields added by hot reload (their values live in a side table); enable-pause-point warns when the resolved type has any.
+`PAUSE_POINT_PATCHED_BY_HOT_RELOAD` is returned only when the
+requested line cannot be mapped onto the patched body — the file's line map is stale or
+the patch belongs to a superseded hot-reload generation. Pick a line inside the edited
+method body, run `uloop hot-reload --revert-all`, or run `uloop compile`, then retry.
+When the compiled line range of the patched method is known, the failure message also reports it, so you can see how far the edited file's line numbers have shifted from the compiled source.
+`SuppressedByHotReload: true` on a status response means a later hot-reload transition
+(apply, a newer generation, or revert) could not re-target the armed marker; the reason
+is in `SuppressedByHotReloadReason` and surfaced as the status `Warning`. The marker is
+not cleared — it fires again once a transition restores its line, or after
+`uloop compile` and a re-enable.
 
 Use `uloop pause-point-status --id "Assets/Scripts/Enemy.cs:42"` only when you need to confirm the marker is armed or inspect the current hit state.
 
@@ -210,5 +234,5 @@ For `ResumePlayResult` semantics, why `Time.timeScale = 0` is not a substitute f
 - **Release editors switch to Debug automatically.** When the Editor's Code Optimization mode is Release, `enable-pause-point` switches it to Debug and recompiles before arming (large projects can take a while). The response `Warning` records the switch. The Debug setting does not survive an Editor restart, including `uloop launch -r` — it reverts to the Preferences > General > Code Optimization On Startup value. If automatic recovery fails, enable is rejected with `ErrorCode: PAUSE_POINT_RELEASE_CODE_OPTIMIZATION`; follow `RecommendedNextAction`.
 - **Patches do not survive compiles or domain reloads.** Any script compile or domain reload removes every source pause point together with its marker, leaving the code exactly as compiled. Re-enable after the reload finishes. This is also why an interrupted CLI session never leaves stale patches behind.
 - **`uloop compile` while PlayMode is running triggers this same domain reload.** The reload also resets the running PlayMode session itself, so the game state you had arranged (scene, spawned objects, progress) is gone too. Re-enter PlayMode and re-enable the pause point; do not assume the paused scenario is still intact.
-- If `enable-pause-point` fails, branch on the failure `ErrorCode` and follow `RecommendedNextAction`; `Message` explains the rejection in prose. Codes: `INVALID_ARGUMENT` (fix the rejected argument and re-run), `PAUSE_POINT_RELEASE_CODE_OPTIMIZATION` (automatic Debug switch and recompile did not leave the Editor in Debug; retry after a successful compile), `PAUSE_POINT_RESOLVE_FAILED` (the file:line could not be mapped to a patch location), `PAUSE_POINT_PATCH_FAILED` (the resolved method cannot be patched). Enable-failure specifics (for example "No sequence point found") are covered in [references/troubleshooting.md](references/troubleshooting.md).
+- If `enable-pause-point` fails, branch on the failure `ErrorCode` and follow `RecommendedNextAction`; `Message` explains the rejection in prose. Codes: `INVALID_ARGUMENT` (fix the rejected argument and re-run), `PAUSE_POINT_RELEASE_CODE_OPTIMIZATION` (automatic Debug switch and recompile did not leave the Editor in Debug; retry after a successful compile), `PAUSE_POINT_RESOLVE_FAILED` (the file:line could not be mapped to a patch location; when the file has active hot-reload patches, `ResolvedMethod` and `ResolvedLineText` stay empty — follow `RecommendedNextAction` instead of those fields), `PAUSE_POINT_PATCH_FAILED` (the resolved method cannot be patched). Enable-failure specifics (for example "No sequence point found") are covered in [references/troubleshooting.md](references/troubleshooting.md).
 - For scripts under `Packages/`, pass the package-id form of the path — `Packages/<package-id>/...`, exactly as the Unity Project window and console stack traces show it. The physical checkout path of an embedded package does not resolve.

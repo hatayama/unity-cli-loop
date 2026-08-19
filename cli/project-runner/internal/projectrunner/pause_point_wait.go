@@ -16,16 +16,24 @@ import (
 )
 
 const (
-	pausePointStatusCommandName       = "get-pause-point-status"
-	pausePointClearStatusCommandName  = "clear-pause-point-status"
-	pausePointExtendStatusCommandName = "extend-pause-point-status"
-	pausePointDefaultTimeoutSeconds   = 30
-	pausePointStatusProbeTimeout      = 5 * time.Second
-	pausePointStatusEnabled           = "Enabled"
-	pausePointStatusHit               = "Hit"
-	pausePointStatusNotEnabled        = "NotEnabled"
-	pausePointStatusExpired           = "Expired"
-	pausePointStatusCleared           = "Cleared"
+	pausePointStatusCommandName           = "get-pause-point-status"
+	pausePointClearStatusCommandName      = "clear-pause-point-status"
+	pausePointExtendStatusCommandName     = "extend-pause-point-status"
+	pausePointDefaultTimeoutSeconds       = 30
+	pausePointStatusProbeTimeout          = 5 * time.Second
+	pausePointStatusEnabled               = "Enabled"
+	pausePointStatusHit                   = "Hit"
+	pausePointStatusNotEnabled            = "NotEnabled"
+	pausePointStatusExpired               = "Expired"
+	pausePointStatusCleared               = "Cleared"
+	pausePointAwaitTimeoutAutoClearReason = "AwaitTimeoutAutoClear"
+
+	// pausePointCapturedVariableHistoryNote explains why the latest hit is absent from
+	// CapturedVariableHistory: repeating it would duplicate CapturedVariables.
+	pausePointCapturedVariableHistoryNote = "CapturedVariableHistory lists hits before the latest one; the latest hit's variables are in CapturedVariables."
+
+	// pausePointTraceStatusNote explains that a trace-mode Hit did not pause Play Mode.
+	pausePointTraceStatusNote = "Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running."
 
 	// Mode strings mirror UloopPausePointCaptureMode on the Unity side. Await uses an allowlist
 	// (continuous/trace) for the new-hit baseline — never `Mode != "single-shot"` — so an empty
@@ -105,13 +113,26 @@ func normalizePausePointStatusResponse(response pausePointStatusResponse) pauseP
 // (one hit) always yields an empty history and continuous mode never repeats it.
 func filterPausePointCapturedVariableHistory(response pausePointStatusResponse) pausePointStatusResponse {
 	filtered := make([]pausePointCapturedHistoryFrame, 0, len(response.CapturedVariableHistory))
+	excludedCount := 0
 	for _, frame := range response.CapturedVariableHistory {
 		if frame.HitSequence == response.LastHitSequence {
+			excludedCount++
 			continue
 		}
 		filtered = append(filtered, frame)
 	}
 	response.CapturedVariableHistory = filtered
+	if excludedCount > 0 {
+		response.CapturedVariableHistoryNote = pausePointCapturedVariableHistoryNote
+	}
+	return response
+}
+
+// applyPausePointTraceStatusNote records that a trace-mode Hit did not pause Play Mode.
+func applyPausePointTraceStatusNote(response pausePointStatusResponse) pausePointStatusResponse {
+	if response.Mode == pausePointModeTrace && response.Status == pausePointStatusHit {
+		response.StatusNote = pausePointTraceStatusNote
+	}
 	return response
 }
 
@@ -183,6 +204,7 @@ func runPausePointStatusCommand(
 	}
 	response = normalizePausePointStatusResponse(response)
 	response = filterPausePointCapturedVariableHistory(response)
+	response = applyPausePointTraceStatusNote(response)
 	// Evaluated against the raw CapturedVariables, before the filters below can narrow or strip
 	// values, for the same reason as on the await path (runWaitForPausePoint): otherwise an --expect
 	// target not also requested via --captured-variable-names, or whose value names mode stripped,
@@ -238,6 +260,7 @@ func runWaitForPausePoint(
 		response.TriggerResult = triggerResult
 		response.ResumePlayResult = resumeResult
 		response = filterPausePointCapturedVariableHistory(response)
+		response = applyPausePointTraceStatusNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 		// Best-effort: a hit must stay a success even if Unity is busy while paused.
@@ -267,11 +290,20 @@ func runWaitForPausePoint(
 	// Why skip clear when hasNewHitBaseline: the continuous/trace marker is still armed, and the
 	// timeout hint tells the caller to await again (with --resume-play). Clearing here would disarm
 	// it and discard the raw capture holder, making that recovery path impossible.
+	markerClearedByThisCommand := false
 	if state == pausePointWaitStateTimeout && !hasNewHitBaseline {
-		clearPausePointAfterWaitTimeout(ctx, connection, options.id)
+		response, markerClearedByThisCommand = refreshPausePointStatusAfterWaitTimeoutAutoClear(
+			ctx, connection, options.id, response)
 	}
 
-	waitErr := pausePointWaitError(connection.ProjectRoot, options, response, state, hasNewHitBaseline)
+	waitErr := pausePointWaitError(
+		connection.ProjectRoot,
+		options,
+		response,
+		state,
+		hasNewHitBaseline,
+		markerClearedByThisCommand,
+	)
 	if triggerResult != nil {
 		waitErr.Details["TriggerResult"] = triggerResult
 	}

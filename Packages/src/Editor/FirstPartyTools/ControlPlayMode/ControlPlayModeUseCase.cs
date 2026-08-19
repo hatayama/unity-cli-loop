@@ -30,12 +30,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly IControlPlayModeCompilationFailureGate _compilationFailureGate;
         private readonly IEditorUnsavedChangesQuietSaver _unsavedChangesQuietSaver;
         private readonly IControlPlayModeEditorStateService _editorStateService;
+        private readonly IControlPlayModeDomainReloadDropStateProvider _domainReloadDropStateProvider;
 
         public ControlPlayModeUseCase(
             IControlPlayModeCompilationFailureProvider compilationFailureProvider = null,
             IControlPlayModeCompilationFailureGate compilationFailureGate = null,
             IEditorUnsavedChangesQuietSaver unsavedChangesQuietSaver = null,
-            IControlPlayModeEditorStateService editorStateService = null)
+            IControlPlayModeEditorStateService editorStateService = null,
+            IControlPlayModeDomainReloadDropStateProvider domainReloadDropStateProvider = null)
         {
             _compilationFailureProvider =
                 compilationFailureProvider ?? ControlPlayModeServices.CompilationFailureProvider;
@@ -45,6 +47,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unsavedChangesQuietSaver ?? new EditorUnsavedChangesQuietSaver();
             _editorStateService =
                 editorStateService ?? ControlPlayModeServices.EditorStateService;
+            _domainReloadDropStateProvider =
+                domainReloadDropStateProvider ?? ControlPlayModeServices.DomainReloadDropStateProvider;
         }
 
         public Task<ControlPlayModeResponse> ExecuteAsync(ControlPlayModeSchema parameters, CancellationToken ct)
@@ -148,6 +152,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private ControlPlayModeActionResult ExecutePlayModeStart(bool wasPaused, bool wasPlaying)
         {
+            // Captured before this method mutates editor state, so the warning reflects the
+            // request-start snapshot the same way CompileUseCase does.
+            int activeHotReloadPatchCount = _domainReloadDropStateProvider.GetActiveHotReloadPatchCount();
+            int activePausePointCount = _domainReloadDropStateProvider.GetActivePausePointCount();
+            bool isDomainReloadDisabledOnEnterPlayMode =
+                _domainReloadDropStateProvider.IsDomainReloadDisabledOnEnterPlayMode();
+
             if (ShouldBlockPlayForCompileErrors(PlayModeAction.Play, wasPlaying))
             {
                 ControlPlayModeCompileError[] compileErrors =
@@ -182,8 +193,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool changed = wasPaused || !wasPlaying;
             bool resumedFromPause = wasPaused && wasPlaying;
             string message = wasPaused ? "Play mode resumed" : "Play mode started";
-            string warning = wasPlaying ? string.Empty : FreshPlayStartFromNewSessionWarning;
+            string warning = JoinWarnings(
+                wasPlaying ? string.Empty : FreshPlayStartFromNewSessionWarning,
+                PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
+                    wasPlaying,
+                    isDomainReloadDisabledOnEnterPlayMode,
+                    activeHotReloadPatchCount,
+                    activePausePointCount));
             return ControlPlayModeActionResult.FromState(message, changed, false, resumedFromPause, warning);
+        }
+
+        private static string JoinWarnings(string first, string second)
+        {
+            if (string.IsNullOrEmpty(first))
+            {
+                return string.IsNullOrEmpty(second) ? string.Empty : second;
+            }
+
+            if (string.IsNullOrEmpty(second))
+            {
+                return first;
+            }
+
+            return first + " " + second;
         }
 
         private ControlPlayModeActionResult SaveDirtyEditorChangesBeforePlayStart()

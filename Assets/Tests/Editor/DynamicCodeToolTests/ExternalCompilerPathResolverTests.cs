@@ -220,6 +220,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(resolvedCompilerDirectoryPath, Is.EqualTo(expectedCompilerDirectoryPath));
         }
 
+        /// <summary>
+        /// What: a 6000.7-shaped layout (csc wants net10, NetCoreRuntime has only 8.x, DotNetSdk
+        /// is a complete host+shared 10.x root) pairs host and shared from DotNetSdk.
+        /// </summary>
+        [Test]
+        public void ResolveRuntimePairing_WhenNetCoreRuntimeMajorIsTooLow_ShouldUseDotNetSdkHostAndShared()
+        {
+            string scriptingRootPath = CreateDirectory("Scripting");
+            CreateFile(Path.Combine("Scripting", "NetCoreRuntime", "dotnet"));
+            CreateDirectory(Path.Combine("Scripting", "NetCoreRuntime", "shared", "Microsoft.NETCore.App", "8.0.21"));
+            string expectedHostPath = CreateFile(Path.Combine("Scripting", "DotNetSdk", "dotnet"));
+            string expectedSharedPath = CreateDirectory(
+                Path.Combine("Scripting", "DotNetSdk", "shared", "Microsoft.NETCore.App", "10.0.9"));
+            string compilerDirectoryPath = CreateDirectory(
+                Path.Combine("Scripting", "DotNetSdk", "sdk", "10.0.301", "Roslyn", "bincore"));
+            CreateFile(Path.Combine("Scripting", "DotNetSdk", "sdk", "10.0.301", "Roslyn", "bincore", "csc.dll"));
+            WriteCscRuntimeConfig(compilerDirectoryPath, "10.0.9");
+
+            ExternalCompilerRuntimePairing pairing = ExternalCompilerPathResolver.ResolveRuntimePairing(
+                scriptingRootPath,
+                compilerDirectoryPath,
+                "dotnet");
+
+            Assert.That(pairing.DotnetHostPath, Is.EqualTo(expectedHostPath));
+            Assert.That(pairing.NetCoreRuntimeSharedDirectoryPath, Is.EqualTo(expectedSharedPath));
+        }
+
+        /// <summary>
+        /// What: a 6000.5-shaped layout (DotNetSdk is a complete root but NetCoreRuntime already
+        /// satisfies csc's 8.x requirement) keeps host and shared on NetCoreRuntime.
+        /// </summary>
+        [Test]
+        public void ResolveRuntimePairing_WhenNetCoreRuntimeSatisfiesRequiredMajor_ShouldKeepNetCoreRuntimePair()
+        {
+            string scriptingRootPath = CreateDirectory("Scripting");
+            string expectedHostPath = CreateFile(Path.Combine("Scripting", "NetCoreRuntime", "dotnet"));
+            string expectedSharedPath = CreateDirectory(
+                Path.Combine("Scripting", "NetCoreRuntime", "shared", "Microsoft.NETCore.App", "8.0.21"));
+            CreateFile(Path.Combine("Scripting", "DotNetSdk", "dotnet"));
+            CreateDirectory(Path.Combine("Scripting", "DotNetSdk", "shared", "Microsoft.NETCore.App", "8.0.21"));
+            string compilerDirectoryPath = CreateDirectory(
+                Path.Combine("Scripting", "DotNetSdk", "sdk", "8.0.318", "Roslyn", "bincore"));
+            CreateFile(Path.Combine("Scripting", "DotNetSdk", "sdk", "8.0.318", "Roslyn", "bincore", "csc.dll"));
+            WriteCscRuntimeConfig(compilerDirectoryPath, "8.0.21");
+
+            ExternalCompilerRuntimePairing pairing = ExternalCompilerPathResolver.ResolveRuntimePairing(
+                scriptingRootPath,
+                compilerDirectoryPath,
+                "dotnet");
+
+            Assert.That(pairing.DotnetHostPath, Is.EqualTo(expectedHostPath));
+            Assert.That(pairing.NetCoreRuntimeSharedDirectoryPath, Is.EqualTo(expectedSharedPath));
+        }
+
         [Test]
         public async Task CompileAsync_WhenSharedWorkerBuildFails_ShouldFallbackToOneShotRoslyn()
         {
@@ -273,7 +327,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     dllPath,
                     references,
                     externalCompilerPaths,
-                    new RoslynCompilerOptions(Array.Empty<string>(), false),
+                    new RoslynCompilerOptions(Array.Empty<string>(), false, emitDebugCode: false),
                     compileCancellationTokenSource.Token,
                     () => buildStarted = true,
                     () => buildFinished = true,
@@ -336,7 +390,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                     dllPath,
                     references,
                     externalCompilerPaths,
-                    new RoslynCompilerOptions(Array.Empty<string>(), false),
+                    new RoslynCompilerOptions(Array.Empty<string>(), false, emitDebugCode: false),
                     compileCancellationTokenSource.Token,
                     () => buildStarted = true,
                     () => buildFinished = true,
@@ -383,6 +437,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Directory.CreateDirectory(Path.GetDirectoryName(filePath));
             File.WriteAllText(filePath, string.Empty);
             return filePath;
+        }
+
+        private static void WriteCscRuntimeConfig(string compilerDirectoryPath, string frameworkVersion)
+        {
+            string runtimeConfigPath = Path.Combine(compilerDirectoryPath, "csc.runtimeconfig.json");
+            string json =
+                "{\n"
+                + "  \"runtimeOptions\": {\n"
+                + "    \"framework\": {\n"
+                + "      \"name\": \"Microsoft.NETCore.App\",\n"
+                + "      \"version\": \"" + frameworkVersion + "\"\n"
+                + "    },\n"
+                + "    \"rollForward\": \"Major\"\n"
+                + "  }\n"
+                + "}\n";
+            File.WriteAllText(runtimeConfigPath, json);
         }
 
         private ExternalCompilerPaths CreateExternalCompilerPaths(ExternalCompilerLayoutKind layoutKind)

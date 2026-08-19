@@ -393,13 +393,17 @@
             "type": "integer",
             "description": "Maximum number of elements to include in a captured collection's preview (1-1000). The value set at enable time also caps the previews in every later pause-point-status response for that marker; status has no flag to change it.",
             "default": 10
+          },
+          "Method": {
+            "type": "string",
+            "description": "Optional method simple name or Type.Method. When set, --line resolves only inside matching methods"
           }
         }
       }
     },
     {
       "name": "clear-pause-point",
-      "description": "Clear one or all named UloopPausePoint.Pause markers",
+      "description": "Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is 0 or 1 for `--id`, and the number of markers actually cleared for `--all`.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -738,6 +742,30 @@
           "Height": {
             "type": "integer",
             "description": "Target Game View rendering height in pixels. Provide with --width to change the resolution."
+          }
+        }
+      }
+    },
+    {
+      "name": "hot-reload",
+      "description": "Apply method-body hot reload to edited C# sources in a running Unity Editor without domain reload. Use after small method edits when you need PlayMode/EditMode feedback without uloop compile.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Files": {
+            "type": "array",
+            "description": "Project-relative .cs paths whose method bodies should be hot-reloaded. Required when neither --revert-all nor --status is set",
+            "items": {
+              "type": "string"
+            }
+          },
+          "RevertAll": {
+            "type": "boolean",
+            "description": "Remove every active hot-reload patch and clear the patch ledger. When set, --files is ignored"
+          },
+          "Status": {
+            "type": "boolean",
+            "description": "Lists the currently active changes (patched methods and added members) without applying or reverting anything."
           }
         }
       }

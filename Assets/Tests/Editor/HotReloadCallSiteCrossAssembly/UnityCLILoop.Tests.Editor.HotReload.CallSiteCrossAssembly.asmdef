@@ -1,0 +1,18 @@
+{
+    "name": "UnityCLILoop.Tests.Editor.HotReload.CallSiteCrossAssembly",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload",
+    "references": [
+        "GUID:28ecd484b0cda4a278148b43a090fa74"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

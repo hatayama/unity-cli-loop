@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -14,6 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
     internal static class PausePointStatusBridgeCommand
     {
         private const string IdParamName = "Id";
+        private const string ReasonParamName = "Reason";
         private const string MinimumRemainingSecondsParamName = "MinimumRemainingSeconds";
 
         public static PausePointStatusResponse Execute(JToken paramsToken)
@@ -36,13 +38,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public static PausePointStatusResponse Clear(JToken paramsToken)
         {
             string id = ReadId(paramsToken);
+            string reason = ReadReason(paramsToken);
+            if (string.IsNullOrEmpty(reason))
+            {
+                reason = UloopPausePointClearedReason.ExplicitClear;
+            }
+
             // Registry.Clear unpatches any source pause point via the hook
             // SourcePausePointPatcher wires into it, so this bridge - which must not reference
             // that Editor-only tool assembly directly - never leaves a Harmony injection attached
             // after the marker itself reports Cleared.
             // The CLI polling bridge only reports marker status; the resumed-from-pause side
             // effect is surfaced through the clear-pause-point tool response, not this path.
-            (UloopPausePointSnapshot snapshot, bool _) = UloopPausePointRegistry.Clear(id);
+            (UloopPausePointSnapshot snapshot, bool _, int _) = UloopPausePointRegistry.Clear(id, reason);
             LogCleared(id, snapshot.StatusBeforeClear);
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {
@@ -86,6 +94,17 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             JToken idToken = paramsObject.GetValue(IdParamName, StringComparison.OrdinalIgnoreCase);
             return idToken?.ToString() ?? string.Empty;
+        }
+
+        private static string ReadReason(JToken paramsToken)
+        {
+            if (paramsToken is not JObject paramsObject)
+            {
+                return string.Empty;
+            }
+
+            JToken reasonToken = paramsObject.GetValue(ReasonParamName, StringComparison.OrdinalIgnoreCase);
+            return reasonToken?.ToString() ?? string.Empty;
         }
 
         private static int ReadMinimumRemainingSeconds(JToken paramsToken)
@@ -137,6 +156,21 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public string ClearedReason { get; set; } = string.Empty;
         public string StatusBeforeClear { get; set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; set; }
+        public bool SuppressedByHotReload { get; set; }
+        public bool RetargetedToHotReloadPatch { get; set; }
+        // Null when unset so the status contract omits the field (matches Go omitempty).
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string SuppressedByHotReloadReason { get; set; }
+        // Null when unset so the status contract omits Warning (matches Go omitempty).
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string Warning { get; set; }
+        // Why DefaultValue/Null ignore: match Go omitempty so unresolved markers omit the fields
+        // from the status contract shape (0 / empty must not appear in the shared JSON fixture).
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public int ResolvedLine { get; set; }
+
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ResolvedLineText { get; set; }
 
         internal static PausePointStatusResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
@@ -171,7 +205,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 FirstHitSequence = snapshot.FirstHitSequence,
                 LastHitSequence = snapshot.LastHitSequence,
                 Message = snapshot.Message,
-                RecommendedNextAction = snapshot.RecommendedNextAction,
+                RecommendedNextAction = ResolveExpiredRecommendedNextAction(
+                    snapshot.Status,
+                    snapshot.RecommendedNextAction),
                 CapturedVariables = snapshot.CapturedVariables
                     .Select(PausePointStatusCapturedVariable.FromCapturedVariable)
                     .ToList(),
@@ -180,8 +216,33 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 TruncatedVariableCount = snapshot.TruncatedVariableCount,
                 ClearedReason = snapshot.ClearedReason,
                 StatusBeforeClear = snapshot.StatusBeforeClear,
-                LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear
+                LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear,
+                SuppressedByHotReload = snapshot.SuppressedByHotReload,
+                RetargetedToHotReloadPatch = snapshot.RetargetedToHotReloadPatch,
+                SuppressedByHotReloadReason = snapshot.SuppressedByHotReloadReason,
+                // Why reason as Warning: agents already read Warning; suppressed=false clears both.
+                Warning = snapshot.SuppressedByHotReload ? snapshot.SuppressedByHotReloadReason : null,
+                ResolvedLine = snapshot.ResolvedLine,
+                ResolvedLineText = string.IsNullOrEmpty(snapshot.ResolvedLineText)
+                    ? null
+                    : snapshot.ResolvedLineText
             };
+        }
+
+        // Why duplicate: this bridge must not reference the Editor-only PausePoint assembly.
+        // Keep in sync with SourcePausePointConstants.ExpiredRecommendedNextAction.
+        private const string ExpiredRecommendedNextAction =
+            "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
+
+        private static string ResolveExpiredRecommendedNextAction(string status, string recommendedNextAction)
+        {
+            if (status == UloopPausePointStatus.Expired
+                && string.IsNullOrEmpty(recommendedNextAction))
+            {
+                return ExpiredRecommendedNextAction;
+            }
+
+            return recommendedNextAction ?? string.Empty;
         }
     }
 

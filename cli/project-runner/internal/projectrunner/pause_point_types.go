@@ -33,16 +33,21 @@ type pausePointStatusResponse struct {
 	ClearedReason                   string                           `json:"ClearedReason"`
 	StatusBeforeClear               string                           `json:"StatusBeforeClear"`
 	LateHitDiscardedAfterClear      bool                             `json:"LateHitDiscardedAfterClear"`
+	SuppressedByHotReload           bool                             `json:"SuppressedByHotReload"`
+	RetargetedToHotReloadPatch      bool                             `json:"RetargetedToHotReloadPatch"`
+	SuppressedByHotReloadReason     string                           `json:"SuppressedByHotReloadReason,omitempty"`
 
 	// Warning is set by Unity on enable/clear tool responses when this shared type decodes those
-	// envelopes. The status bridge never sets it. On enable-pause-point --await hits, that enable
-	// response text is exposed as EnableTimeWarning on the wait payload, not as hit-time Warning.
+	// envelopes. The status bridge sets it to SuppressedByHotReloadReason when suppressed.
+	// On enable-pause-point --await hits, that enable response text is exposed as EnableTimeWarning
+	// on the wait payload, not as hit-time Warning.
 	Warning string `json:"Warning,omitempty"`
 
-	// ResolvedLine / ResolvedLineText / ResolvedMethod / SnapshotTiming are copied from the
-	// enable-pause-point response on the --await hit path so a single await payload records
-	// both which source line was armed and what was captured. Method-name arms leave them empty
-	// on the Unity side, so omitempty keeps the historical await schema unchanged for those cases.
+	// ResolvedLine / ResolvedLineText are merged as a pair on the --await hit path: when status
+	// carries a non-zero ResolvedLine (retarget-updated), both fields come from status; otherwise
+	// both fall back to the enable-pause-point response. ResolvedMethod / SnapshotTiming are still
+	// enable-only today. Method-name arms leave them empty on the Unity side, so omitempty keeps
+	// the historical await schema unchanged for those cases.
 	ResolvedLine     int    `json:"ResolvedLine,omitempty"`
 	ResolvedLineText string `json:"ResolvedLineText,omitempty"`
 	ResolvedMethod   string `json:"ResolvedMethod,omitempty"`
@@ -60,6 +65,16 @@ type pausePointStatusResponse struct {
 	// response only carries the names that did match and CapturedVariableNameFilterNoMatch covers
 	// the all-or-nothing case. Both are emitted when nothing matched at all.
 	CapturedVariableNamesNotFound []string `json:"CapturedVariableNamesNotFound,omitempty"`
+
+	// CapturedVariableHistoryNote is set by the CLI, not Unity, when the latest-hit
+	// frame was dropped from CapturedVariableHistory because CapturedVariables already
+	// carries that hit. omitempty keeps the field off 0-hit and unfiltered responses.
+	CapturedVariableHistoryNote string `json:"CapturedVariableHistoryNote,omitempty"`
+
+	// StatusNote is set by the CLI, not Unity, when Mode is trace and Status is Hit.
+	// omitempty keeps the field off every other mode and status so the shared status
+	// contract fixture stays unchanged.
+	StatusNote string `json:"StatusNote,omitempty"`
 
 	// TriggerResult is set by the CLI, not Unity, only when --trigger was passed. It is omitted
 	// entirely otherwise, so callers that never use --trigger see no schema change at all.

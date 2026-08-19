@@ -12,6 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public const string RunTestsAutoClear = "RunTestsAutoClear";
         public const string AfterExpired = "AfterExpired";
         public const string AlreadyHit = "AlreadyHit";
+        public const string AwaitTimeoutAutoClear = "AwaitTimeoutAutoClear";
     }
 }
 #endif

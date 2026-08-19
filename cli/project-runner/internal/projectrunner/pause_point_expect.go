@@ -93,3 +93,22 @@ func allPausePointExpectationsPassed(results []pausePointExpectationResult) bool
 	}
 	return true
 }
+
+// buildPausePointExpectNotFoundWarning returns a hit-time warning when at least one --expect
+// target was absent from CapturedVariables (Found=false). Empty when every expectation was found.
+func buildPausePointExpectNotFoundWarning(results []pausePointExpectationResult) string {
+	missingNames := make([]string, 0)
+	for _, result := range results {
+		if result.Found {
+			continue
+		}
+		missingNames = append(missingNames, result.Name)
+	}
+	if len(missingNames) == 0 {
+		return ""
+	}
+
+	return "Expected variable(s) not present in CapturedVariables: " +
+		strings.Join(missingNames, ", ") +
+		". This is a not-found result, not a value mismatch — check the variable name; if the method is hot-reload patched, older patches may have dropped locals, so re-apply hot-reload or run uloop compile."
+}

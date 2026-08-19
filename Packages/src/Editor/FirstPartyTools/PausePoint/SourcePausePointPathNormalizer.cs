@@ -32,7 +32,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return true;
             }
 
-            return normalizedDocumentUrl.EndsWith("/" + normalizedRelativePath, comparison);
+            if (normalizedDocumentUrl.EndsWith("/" + normalizedRelativePath, comparison))
+            {
+                return true;
+            }
+
+            // Why reverse suffix: either argument may be the absolute side. Shim compiles route
+            // through the shared worker (relative literal documents) or the one-shot csc
+            // (project-rooted absolute documents), while the pause-point request may arrive
+            // relative or absolute.
+            return normalizedRelativePath.EndsWith("/" + normalizedDocumentUrl, comparison);
         }
     }
 }

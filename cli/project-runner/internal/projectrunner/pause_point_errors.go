@@ -15,6 +15,7 @@ func pausePointWaitError(
 	response pausePointStatusResponse,
 	state pausePointWaitState,
 	hasNewHitBaseline bool,
+	markerClearedByThisCommand bool,
 ) clierrors.CLIError {
 	response = normalizePausePointStatusResponse(response)
 
@@ -74,9 +75,12 @@ func pausePointWaitError(
 			options,
 			response,
 			true)
-		hint := pausePointTimeoutHint(response, hasNewHitBaseline)
+		hint := pausePointTimeoutHint(response, hasNewHitBaseline, markerClearedByThisCommand)
 		if hint != "" {
 			timeoutError.Details["Hint"] = hint
+		}
+		if markerClearedByThisCommand {
+			timeoutError.Details["MarkerClearedByThisCommand"] = true
 		}
 		return timeoutError
 	}
@@ -117,20 +121,48 @@ const (
 	// sequence can occur.
 	pausePointHintAlreadyHitWaitingForNew = "The marker had already hit and Unity may still be paused by that hit; pass --resume-play or resume Play Mode so a new hit can occur."
 
-	// Shared by both pausePointTimeoutHint and pausePointExpiredHint: patterns where the method
-	// body genuinely ran (or was invoked) yet the marker never fired — a physics/message callback
-	// missing a pre-existing GameObject, a pre-bound delegate bypassing the patch, or control flow
-	// exiting on an earlier branch before the target line. Kept as a single constant so the two
-	// hints stay in sync instead of drifting copies of the same diagnosis.
+	pausePointHintTimeoutAutoCleared = "This command disarmed the marker on timeout; re-enable the pause point (enable-pause-point) before waiting again. "
+
+	// Shared by both pausePointTimeoutHint and pausePointExpiredHint: reasons a wait saw no hit —
+	// a physics/message callback missing a pre-existing GameObject, a pre-bound delegate
+	// bypassing the patch, control flow exiting on an earlier branch, or --line resolving
+	// against a compiled map that no longer matches the editor after a hot reload. Kept as a
+	// single constant so the two hints stay in sync instead of drifting copies of the same
+	// diagnosis.
 	pausePointNonFiringPatternsHint = "If the target line never hit despite the trigger firing, check the non-firing patterns: " +
 		"(1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; " +
 		"(2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; " +
-		"(3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran."
+		"(3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. " +
+		"(4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable." +
+		" For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too." +
+		" Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file."
+
+	// pausePointHintSuppressedByHotReload short-circuits every other timeout diagnosis:
+	// a suppressed marker cannot fire no matter what the caller does in PlayMode.
+	pausePointHintSuppressedByHotReload = "The marker's method is hot-reload patched and the marker could not be re-targeted onto the patched body. Revert the patch with 'uloop hot-reload --revert-all' or run 'uloop compile', then re-enable the marker."
 )
+
+// pausePointSuppressedByHotReloadHint returns Unity's reason alone when present: both
+// retarget/restore reason strings already include recovery steps, and concatenating the
+// fixed "currently patched / revert-all" fallback after a restore-failure reason contradicts
+// itself (the patch was already reverted).
+func pausePointSuppressedByHotReloadHint(response pausePointStatusResponse) string {
+	if response.SuppressedByHotReloadReason != "" {
+		return response.SuppressedByHotReloadReason
+	}
+	return pausePointHintSuppressedByHotReload
+}
 
 // pausePointTimeoutHint maps the final probed status to a deterministic diagnosis,
 // because timeouts are where agents struggle to tell a missed code path from Editor state.
-func pausePointTimeoutHint(response pausePointStatusResponse, hasNewHitBaseline bool) string {
+func pausePointTimeoutHint(
+	response pausePointStatusResponse,
+	hasNewHitBaseline bool,
+	markerClearedByThisCommand bool,
+) string {
+	if response.SuppressedByHotReload {
+		return pausePointSuppressedByHotReloadHint(response)
+	}
 	if hasNewHitBaseline {
 		return pausePointHintAlreadyHitWaitingForNew
 	}
@@ -139,6 +171,9 @@ func pausePointTimeoutHint(response pausePointStatusResponse, hasNewHitBaseline 
 	}
 	if response.EditorState.IsPaused {
 		return pausePointHintEditorAlreadyPaused
+	}
+	if markerClearedByThisCommand {
+		return pausePointHintTimeoutAutoCleared + pausePointNonFiringPatternsHint
 	}
 	if response.HitCount == 0 && response.Status == pausePointStatusEnabled {
 		return "Marker was enabled but never hit. Confirm the id matches UloopPausePoint.Pause(\"<id>\") and that the code path was executed. In fast-progressing games the state may have already moved past the marker (for example back to Ready or GameOver), so re-trigger the code path and wait again. " +
@@ -154,6 +189,9 @@ func pausePointTimeoutHint(response pausePointStatusResponse, hasNewHitBaseline 
 // whose enable window ends before the wait deadline surfaces as PAUSE_POINT_EXPIRED instead
 // of a timeout and would otherwise carry no hint at all.
 func pausePointExpiredHint(response pausePointStatusResponse) string {
+	if response.SuppressedByHotReload {
+		return pausePointSuppressedByHotReloadHint(response)
+	}
 	if !response.EditorState.IsPlaying {
 		return pausePointHintPlayModeNotRunning
 	}
@@ -189,21 +227,39 @@ func pausePointStateError(
 			"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
 			"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
 		},
-		Details: map[string]any{
-			"Id":                              options.id,
-			"Status":                          response.Status,
-			"Expired":                         response.Expired,
-			"HitCount":                        response.HitCount,
-			"TimeoutSeconds":                  pausePointMarkerTimeoutSeconds(options, response),
-			"EnabledAtUtc":                    response.EnabledAtUtc,
-			"ElapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,
-			"Generation":                      response.Generation,
-			"EditorState":                     response.EditorState,
-			"RemainingMilliseconds":           pausePointRemainingMilliseconds(options, response),
-			"MarkerMessage":                   response.Message,
-			"RecommendedNextAction":           response.RecommendedNextAction,
-		},
+		Details: pausePointStateErrorDetails(options, response),
 	}
+}
+
+func pausePointStateErrorDetails(
+	options waitForPausePointOptions,
+	response pausePointStatusResponse,
+) map[string]any {
+	details := map[string]any{
+		"Id":                              options.id,
+		"Status":                          response.Status,
+		"Expired":                         response.Expired,
+		"HitCount":                        response.HitCount,
+		"TimeoutSeconds":                  pausePointMarkerTimeoutSeconds(options, response),
+		"EnabledAtUtc":                    response.EnabledAtUtc,
+		"ElapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,
+		"Generation":                      response.Generation,
+		"EditorState":                     response.EditorState,
+		"RemainingMilliseconds":           pausePointRemainingMilliseconds(options, response),
+		"MarkerMessage":                   response.Message,
+		"RecommendedNextAction":           response.RecommendedNextAction,
+		"SuppressedByHotReload":           response.SuppressedByHotReload,
+	}
+	if response.ClearedReason != "" {
+		details["ClearedReason"] = response.ClearedReason
+	}
+	if response.StatusBeforeClear != "" {
+		details["StatusBeforeClear"] = response.StatusBeforeClear
+	}
+	if response.LateHitDiscardedAfterClear {
+		details["LateHitDiscardedAfterClear"] = true
+	}
+	return details
 }
 
 func pausePointMarkerTimeoutSeconds(options waitForPausePointOptions, response pausePointStatusResponse) int {
