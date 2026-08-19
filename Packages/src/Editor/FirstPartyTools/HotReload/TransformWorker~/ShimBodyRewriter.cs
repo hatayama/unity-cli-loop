@@ -21,11 +21,13 @@ using Microsoft.CodeAnalysis.Text;
 /// </summary>
 internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 {
-    private readonly SemanticModel _semanticModel;
-    private readonly INamedTypeSymbol _targetType;
-    private readonly AccessorPlan _accessorPlan;
-    private readonly AddedMethodCatalog _addedMethodCatalog;
-    private readonly AddedFieldCatalog _addedFieldCatalog;
+    internal readonly SemanticModel _semanticModel;
+    internal readonly INamedTypeSymbol _targetType;
+    internal readonly AccessorPlan _accessorPlan;
+    internal readonly AddedMethodCatalog _addedMethodCatalog;
+    internal readonly AddedFieldCatalog _addedFieldCatalog;
+    internal readonly AddedFieldShimRewrite AddedFields;
+    internal readonly HarmonyAccessorShimRewrite HarmonyAccessors;
 
     public ShimBodyRewriter(
         SemanticModel semanticModel,
@@ -39,6 +41,8 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         _accessorPlan = accessorPlan;
         _addedMethodCatalog = addedMethodCatalog ?? new AddedMethodCatalog();
         _addedFieldCatalog = addedFieldCatalog ?? new AddedFieldCatalog();
+        AddedFields = new AddedFieldShimRewrite(this);
+        HarmonyAccessors = new HarmonyAccessorShimRewrite(this);
     }
 
     public override SyntaxNode VisitThisExpression(ThisExpressionSyntax node)
@@ -111,7 +115,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         // Why first: added-member rewrite must not depend on _accessorPlan. Transplant bodies
         // have a null plan and would skip rewrite; delegation bodies would otherwise bind
         // Harmony accessors onto members that do not exist on the compiled type (B1).
-        if (TransformWorkerProgram.NameofRules.IsNameofInvocation(node))
+        if (NameofRules.IsNameofInvocation(node))
         {
             ExpressionSyntax folded = TryFoldNameofAddedMember(node);
             if (folded != null)
@@ -122,13 +126,13 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitInvocationExpression(node);
         }
 
-        if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        if (NameofRules.IsInsideNameofArgument(node))
         {
             return base.VisitInvocationExpression(node);
         }
 
         ISymbol invokedSymbol = _semanticModel.GetSymbolInfo(node).Symbol;
-        if (TransformWorkerProgram.IsConditionalAccessReceiverSpine(node))
+        if (AddedCallSiteGuard.IsConditionalAccessReceiverSpine(node))
         {
             // Why not rewrite the spine invocation: ExtractReceiver cannot recover a
             // MemberBinding/ElementBinding receiver and would emit a parse-invalid shim.
@@ -199,7 +203,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
         if (symbol is IFieldSymbol fieldSymbol
             && _addedFieldCatalog.FindOrNull(
-                TransformWorkerProgram.FormatAddedFieldKeyFromSymbol(fieldSymbol)) != null)
+                AddedFieldBodyScan.FormatAddedFieldKeyFromSymbol(fieldSymbol)) != null)
         {
             return SyntaxFactory.LiteralExpression(
                     SyntaxKind.StringLiteralExpression,
@@ -280,15 +284,15 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitAssignmentExpression(node);
         }
 
-        if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        if (NameofRules.IsInsideNameofArgument(node))
         {
             return base.VisitAssignmentExpression(node);
         }
 
-        AddedFieldBinding assignedField = FindStoreBinding(_semanticModel.GetSymbolInfo(node.Left).Symbol);
+        AddedFieldBinding assignedField = AddedFields.FindStoreBinding(_semanticModel.GetSymbolInfo(node.Left).Symbol);
         if (assignedField != null)
         {
-            return RewriteAddedFieldAssignment(node, assignedField);
+            return AddedFields.RewriteAddedFieldAssignment(node, assignedField);
         }
 
         if (_accessorPlan == null)
@@ -302,7 +306,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             && !propertySymbol.IsStatic
             && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.SetMethod))
         {
-            return RewritePropertyAssignment(node, propertySymbol);
+            return HarmonyAccessors.RewritePropertyAssignment(node, propertySymbol);
         }
 
         if (leftSymbol is IFieldSymbol fieldSymbol
@@ -310,7 +314,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             && AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
         {
             AccessorEntry entry = _accessorPlan.GetOrAddField(fieldSymbol);
-            ExpressionSyntax fieldRefCall = CreateFieldRefInvocation(
+            ExpressionSyntax fieldRefCall = HarmonyAccessorShimRewrite.CreateFieldRefInvocation(
                 entry,
                 VisitReceiver(ExtractReceiver(node.Left)));
             return node
@@ -324,12 +328,12 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitPrefixUnaryExpression(PrefixUnaryExpressionSyntax node)
     {
-        if (TransformWorkerProgram.IsIncrementOrDecrement(node.Kind()))
+        if (AddedFieldBodyScan.IsIncrementOrDecrement(node.Kind()))
         {
-            AddedFieldBinding binding = FindStoreBinding(_semanticModel.GetSymbolInfo(node.Operand).Symbol);
+            AddedFieldBinding binding = AddedFields.FindStoreBinding(_semanticModel.GetSymbolInfo(node.Operand).Symbol);
             if (binding != null)
             {
-                return RewriteAddedFieldIncrement(node.Operand, binding, node);
+                return AddedFields.RewriteAddedFieldIncrement(node.Operand, binding, node);
             }
         }
 
@@ -338,271 +342,30 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     public override SyntaxNode VisitPostfixUnaryExpression(PostfixUnaryExpressionSyntax node)
     {
-        if (TransformWorkerProgram.IsIncrementOrDecrement(node.Kind()))
+        if (AddedFieldBodyScan.IsIncrementOrDecrement(node.Kind()))
         {
-            AddedFieldBinding binding = FindStoreBinding(_semanticModel.GetSymbolInfo(node.Operand).Symbol);
+            AddedFieldBinding binding = AddedFields.FindStoreBinding(_semanticModel.GetSymbolInfo(node.Operand).Symbol);
             if (binding != null)
             {
-                return RewriteAddedFieldIncrement(node.Operand, binding, node);
+                return AddedFields.RewriteAddedFieldIncrement(node.Operand, binding, node);
             }
         }
 
         return base.VisitPostfixUnaryExpression(node);
     }
 
-    private AddedFieldBinding FindStoreBinding(ISymbol symbol)
-    {
-        if (symbol is not IFieldSymbol fieldSymbol)
-        {
-            return null;
-        }
-
-        AddedFieldBinding binding = _addedFieldCatalog.FindOrNull(
-            TransformWorkerProgram.FormatAddedFieldKeyFromSymbol(fieldSymbol));
-        if (binding == null || !binding.IsStoreRewriteable)
-        {
-            return null;
-        }
-
-        return binding;
-    }
-
-    private AddedFieldBinding FindAnyAddedBinding(ISymbol symbol)
-    {
-        if (symbol is not IFieldSymbol fieldSymbol)
-        {
-            return null;
-        }
-
-        return _addedFieldCatalog.FindOrNull(
-            TransformWorkerProgram.FormatAddedFieldKeyFromSymbol(fieldSymbol));
-    }
-
-    private SyntaxNode TryRewriteAddedFieldRead(
-        ISymbol symbol,
-        ExpressionSyntax receiverSyntax,
-        SyntaxNode triviaSource)
-    {
-        AddedFieldBinding binding = FindAnyAddedBinding(symbol);
-        if (binding == null || binding.UnavailableReason != null)
-        {
-            return null;
-        }
-
-        if (binding.IsConst)
-        {
-            ExpressionSyntax literal = TransformWorkerProgram.TryCreateConstantLiteral(
-                binding.ConstantValue,
-                binding.FieldType);
-            if (literal == null)
-            {
-                return null;
-            }
-
-            _addedFieldCatalog.MarkConstFold(binding.FieldKey);
-            return literal.WithTriviaFrom(triviaSource);
-        }
-
-        if (!binding.IsStoreRewriteable)
-        {
-            return null;
-        }
-
-        return CreateAddedFieldGetOrInit(binding, receiverSyntax).WithTriviaFrom(triviaSource);
-    }
-
-    private SyntaxNode RewriteAddedFieldAssignment(
-        AssignmentExpressionSyntax node,
-        AddedFieldBinding binding)
-    {
-        ExpressionSyntax receiver = ExtractAddedFieldReceiver(node.Left, binding.IsStatic);
-        ExpressionSyntax visitedRight = (ExpressionSyntax)Visit(node.Right);
-        if (node.IsKind(SyntaxKind.SimpleAssignmentExpression))
-        {
-            return CreateAddedFieldSet(binding, receiver, visitedRight).WithTriviaFrom(node);
-        }
-
-        SyntaxKind binaryKind = GetCompoundAssignmentBinaryKind(node.Kind());
-        ExpressionSyntax getCall = CreateAddedFieldGetOrInit(binding, receiver);
-        ExpressionSyntax combined = SyntaxFactory.BinaryExpression(binaryKind, getCall, visitedRight);
-        return CreateAddedFieldSet(
-                binding,
-                receiver,
-                CastToAddedFieldType(combined, binding.FieldType))
-            .WithTriviaFrom(node);
-    }
-
-    private SyntaxNode RewriteAddedFieldIncrement(
-        ExpressionSyntax operand,
-        AddedFieldBinding binding,
-        SyntaxNode triviaSource)
-    {
-        ExpressionSyntax receiver = ExtractAddedFieldReceiver(operand, binding.IsStatic);
-        ExpressionSyntax getCall = CreateAddedFieldGetOrInit(binding, receiver);
-        SyntaxKind binaryKind = IsDecrementNode(triviaSource)
-            ? SyntaxKind.SubtractExpression
-            : SyntaxKind.AddExpression;
-        ExpressionSyntax combined = SyntaxFactory.BinaryExpression(
-            binaryKind,
-            getCall,
-            SyntaxFactory.LiteralExpression(
-                SyntaxKind.NumericLiteralExpression,
-                SyntaxFactory.Literal(1)));
-        return CreateAddedFieldSet(
-                binding,
-                receiver,
-                CastToAddedFieldType(combined, binding.FieldType))
-            .WithTriviaFrom(triviaSource);
-    }
-
-    private static bool IsDecrementNode(SyntaxNode node)
-    {
-        if (node is PrefixUnaryExpressionSyntax prefix)
-        {
-            return prefix.IsKind(SyntaxKind.PreDecrementExpression);
-        }
-
-        return node is PostfixUnaryExpressionSyntax postfix
-            && postfix.IsKind(SyntaxKind.PostDecrementExpression);
-    }
-
-    // Why cast: C# compound assignment and ++/-- apply a conversion back to the field type
-    // (byte += 1 is (byte)(byte + 1)). Emitting the binary without that conversion is CS1503.
-    private static ExpressionSyntax CastToAddedFieldType(ExpressionSyntax expression, ITypeSymbol fieldType)
-    {
-        TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
-            fieldType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-        return SyntaxFactory.CastExpression(
-            typeSyntax,
-            SyntaxFactory.ParenthesizedExpression(expression));
-    }
-
-    private ExpressionSyntax ExtractAddedFieldReceiver(ExpressionSyntax expression, bool isStatic)
-    {
-        if (isStatic)
-        {
-            return null;
-        }
-
-        ExpressionSyntax receiver = ExtractReceiver(expression);
-        if (receiver is ThisExpressionSyntax || receiver is BaseExpressionSyntax)
-        {
-            return SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName);
-        }
-
-        return VisitReceiver(receiver);
-    }
-
-    private InvocationExpressionSyntax CreateAddedFieldGetOrInit(
-        AddedFieldBinding binding,
-        ExpressionSyntax receiver)
-    {
-        _addedFieldCatalog.MarkStoreRewrite(binding.FieldKey);
-        string methodName = binding.IsStatic
-            ? TransformWorkerProgramMarker.AddedFieldGetOrInitStaticMethodName
-            : TransformWorkerProgramMarker.AddedFieldGetOrInitMethodName;
-        List<ArgumentSyntax> arguments = new List<ArgumentSyntax>();
-        if (!binding.IsStatic)
-        {
-            arguments.Add(SyntaxFactory.Argument(receiver));
-        }
-
-        arguments.Add(
-            SyntaxFactory.Argument(
-                SyntaxFactory.LiteralExpression(
-                    SyntaxKind.StringLiteralExpression,
-                    SyntaxFactory.Literal(binding.FieldKey))));
-        arguments.Add(SyntaxFactory.Argument(CreateAddedFieldInitializer(binding)));
-        return CreateAddedFieldStoreInvocation(methodName, binding.FieldType, arguments);
-    }
-
-    private InvocationExpressionSyntax CreateAddedFieldSet(
-        AddedFieldBinding binding,
-        ExpressionSyntax receiver,
-        ExpressionSyntax value)
-    {
-        _addedFieldCatalog.MarkStoreRewrite(binding.FieldKey);
-        string methodName = binding.IsStatic
-            ? TransformWorkerProgramMarker.AddedFieldSetStaticMethodName
-            : TransformWorkerProgramMarker.AddedFieldSetMethodName;
-        List<ArgumentSyntax> arguments = new List<ArgumentSyntax>();
-        if (!binding.IsStatic)
-        {
-            arguments.Add(SyntaxFactory.Argument(receiver));
-        }
-
-        arguments.Add(
-            SyntaxFactory.Argument(
-                SyntaxFactory.LiteralExpression(
-                    SyntaxKind.StringLiteralExpression,
-                    SyntaxFactory.Literal(binding.FieldKey))));
-        arguments.Add(SyntaxFactory.Argument(value));
-        return CreateAddedFieldStoreInvocation(methodName, binding.FieldType, arguments);
-    }
-
-    private static ExpressionSyntax CreateAddedFieldInitializer(AddedFieldBinding binding)
-    {
-        if (binding.Initializer == null)
-        {
-            return SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression);
-        }
-
-        ExpressionSyntax cloned = SyntaxFactory.ParseExpression(binding.Initializer.ToString());
-        return SyntaxFactory.ParenthesizedLambdaExpression(
-                SyntaxFactory.ParameterList(),
-                cloned)
-            .WithModifiers(SyntaxFactory.TokenList(SyntaxFactory.Token(SyntaxKind.StaticKeyword)));
-    }
-
-    private static InvocationExpressionSyntax CreateAddedFieldStoreInvocation(
-        string methodName,
-        ITypeSymbol fieldType,
-        List<ArgumentSyntax> arguments)
-    {
-        TypeSyntax storeType = SyntaxFactory.ParseTypeName(
-            TransformWorkerProgramMarker.AddedFieldStoreTypeName);
-        TypeSyntax typeArgument = SyntaxFactory.ParseTypeName(
-            fieldType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-        GenericNameSyntax genericName = SyntaxFactory.GenericName(SyntaxFactory.Identifier(methodName))
-            .WithTypeArgumentList(
-                SyntaxFactory.TypeArgumentList(SyntaxFactory.SingletonSeparatedList(typeArgument)));
-        return SyntaxFactory.InvocationExpression(
-            SyntaxFactory.MemberAccessExpression(
-                SyntaxKind.SimpleMemberAccessExpression,
-                storeType,
-                genericName),
-            SyntaxFactory.ArgumentList(SyntaxFactory.SeparatedList(arguments)));
-    }
-
-    private static bool IsAssignmentLeft(SyntaxNode node)
-    {
-        return node.Parent is AssignmentExpressionSyntax assignment && assignment.Left == node;
-    }
-
-    private static bool IsIncrementOperand(SyntaxNode node)
-    {
-        if (node.Parent is PrefixUnaryExpressionSyntax prefix
-            && TransformWorkerProgram.IsIncrementOrDecrement(prefix.Kind()))
-        {
-            return true;
-        }
-
-        return node.Parent is PostfixUnaryExpressionSyntax postfix
-            && TransformWorkerProgram.IsIncrementOrDecrement(postfix.Kind());
-    }
-
     public override SyntaxNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
     {
-        if (TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
+        if (NameofRules.IsInsideNameofArgument(node))
         {
             return base.VisitMemberAccessExpression(node);
         }
 
         ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
             ?? _semanticModel.GetSymbolInfo(node.Name).Symbol;
-        if (!IsAssignmentLeft(node) && !IsIncrementOperand(node))
+        if (!AddedFieldShimRewrite.IsAssignmentLeft(node) && !AddedFieldShimRewrite.IsIncrementOperand(node))
         {
-            SyntaxNode addedFieldRead = TryRewriteAddedFieldRead(symbol, node.Expression, node);
+            SyntaxNode addedFieldRead = AddedFields.TryRewriteAddedFieldRead(symbol, node.Expression, node);
             if (addedFieldRead != null)
             {
                 return addedFieldRead;
@@ -628,7 +391,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitMemberAccessExpression(node);
         }
 
-        ExpressionSyntax rewritten = TryRewriteInaccessibleRead(symbol, node.Expression, node);
+        ExpressionSyntax rewritten = HarmonyAccessors.TryRewriteInaccessibleRead(symbol, node.Expression, node);
         if (rewritten != null)
         {
             return rewritten;
@@ -639,7 +402,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     private SyntaxNode VisitName(SimpleNameSyntax node, SyntaxNode original)
     {
-        if (IsNameSideOfLargerExpression(node))
+        if (HarmonyAccessorShimRewrite.IsNameSideOfLargerExpression(node))
         {
             return original;
         }
@@ -650,163 +413,34 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return original;
         }
 
-        SyntaxNode addedFieldRead = TryRewriteUnownedAddedFieldRead(node, symbol);
+        SyntaxNode addedFieldRead = HarmonyAccessors.TryRewriteUnownedAddedFieldRead(node, symbol);
         if (addedFieldRead != null)
         {
             return addedFieldRead;
         }
 
         // Local/anonymous functions are emitted into the shim assembly — keep bare calls.
-        if (IsLocalOrAnonymousFunctionSymbol(symbol))
+        if (HarmonyAccessorShimRewrite.IsLocalOrAnonymousFunctionSymbol(symbol))
         {
             return original;
         }
 
-        SyntaxNode accessorRead = TryRewriteNameAsAccessorRead(node, symbol);
+        SyntaxNode accessorRead = HarmonyAccessors.TryRewriteNameAsAccessorRead(node, symbol);
         if (accessorRead != null)
         {
             return accessorRead;
         }
 
-        (bool owned, bool isStatic, INamedTypeSymbol containingType) ownership = ResolveOwnedMember(symbol);
+        (bool owned, bool isStatic, INamedTypeSymbol containingType) ownership = HarmonyAccessors.ResolveOwnedMember(symbol);
         if (!ownership.owned)
         {
             return original;
         }
 
-        return QualifyOwnedMemberAccess(node, ownership.isStatic, ownership.containingType);
+        return HarmonyAccessorShimRewrite.QualifyOwnedMemberAccess(node, ownership.isStatic, ownership.containingType);
     }
 
-    private static bool IsNameSideOfLargerExpression(SimpleNameSyntax node)
-    {
-        return IsMemberAccessNameSide(node)
-            || IsQualifiedNameRightSide(node)
-            || IsMemberBindingName(node)
-            || IsObjectOrCollectionInitializerMemberName(node);
-    }
-
-    private SyntaxNode TryRewriteUnownedAddedFieldRead(SimpleNameSyntax node, ISymbol symbol)
-    {
-        if (IsAssignmentLeft(node)
-            || IsIncrementOperand(node)
-            || TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node))
-        {
-            return null;
-        }
-
-        return TryRewriteAddedFieldRead(
-            symbol,
-            SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName),
-            node);
-    }
-
-    private static bool IsLocalOrAnonymousFunctionSymbol(ISymbol symbol)
-    {
-        return symbol is IMethodSymbol methodSymbol
-            && (methodSymbol.MethodKind == MethodKind.LocalFunction
-                || methodSymbol.MethodKind == MethodKind.AnonymousFunction);
-    }
-
-    private SyntaxNode TryRewriteNameAsAccessorRead(SimpleNameSyntax node, ISymbol symbol)
-    {
-        // nameof(...) and assignment left sides must keep a member-reference shape: qualify only,
-        // never rewrite to an accessor read (Func<> call results are not assignable).
-        bool suppressAccessorRead = TransformWorkerProgram.NameofRules.IsInsideNameofArgument(node)
-            || (node.Parent is AssignmentExpressionSyntax assignmentLeft
-                && assignmentLeft.Left == node);
-        if (_accessorPlan == null || suppressAccessorRead)
-        {
-            return null;
-        }
-
-        return TryRewriteInaccessibleRead(
-            symbol,
-            SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName),
-            node);
-    }
-
-    private static SyntaxNode QualifyOwnedMemberAccess(
-        SimpleNameSyntax node,
-        bool isStatic,
-        INamedTypeSymbol containingType)
-    {
-        if (isStatic)
-        {
-            TypeSyntax typeSyntax = SyntaxFactory.ParseTypeName(
-                containingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-            return SyntaxFactory.MemberAccessExpression(
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    typeSyntax,
-                    (SimpleNameSyntax)node.WithoutTrivia())
-                .WithTriviaFrom(node);
-        }
-
-        return SyntaxFactory.MemberAccessExpression(
-                SyntaxKind.SimpleMemberAccessExpression,
-                SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName),
-                (SimpleNameSyntax)node.WithoutTrivia())
-            .WithTriviaFrom(node);
-    }
-
-    private ExpressionSyntax TryRewriteInaccessibleRead(
-        ISymbol symbol,
-        ExpressionSyntax receiverSyntax,
-        SyntaxNode triviaSource)
-    {
-        if (symbol is IFieldSymbol fieldSymbol
-            && !fieldSymbol.IsConst
-            && AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))
-        {
-            AccessorEntry entry = _accessorPlan.GetOrAddField(fieldSymbol);
-            return CreateFieldRefInvocation(entry, VisitReceiver(receiverSyntax))
-                .WithTriviaFrom(triviaSource);
-        }
-
-        if (symbol is IPropertySymbol propertySymbol
-            && !propertySymbol.IsIndexer
-            && !propertySymbol.IsStatic
-            && AccessibilityRules.IsInaccessibleAccessor(propertySymbol.GetMethod))
-        {
-            AccessorEntry entry = _accessorPlan.GetOrAddPropertyGetter(propertySymbol);
-            return CreateDelegateInvocation(
-                    entry.DelegateFieldName,
-                    new[] { VisitReceiver(receiverSyntax) })
-                .WithTriviaFrom(triviaSource);
-        }
-
-        return null;
-    }
-
-    private SyntaxNode RewritePropertyAssignment(
-        AssignmentExpressionSyntax node,
-        IPropertySymbol propertySymbol)
-    {
-        ExpressionSyntax receiver = ExtractReceiver(node.Left);
-        ExpressionSyntax visitedReceiver = VisitReceiver(receiver);
-        ExpressionSyntax visitedRight = (ExpressionSyntax)Visit(node.Right);
-        AccessorEntry setter = _accessorPlan.GetOrAddPropertySetter(propertySymbol);
-
-        if (node.IsKind(SyntaxKind.SimpleAssignmentExpression))
-        {
-            return CreateDelegateInvocation(
-                    setter.DelegateFieldName,
-                    new[] { visitedReceiver, visitedRight })
-                .WithTriviaFrom(node);
-        }
-
-        AccessorEntry getter = _accessorPlan.GetOrAddPropertyGetter(propertySymbol);
-        ExpressionSyntax getCall = CreateDelegateInvocation(
-            getter.DelegateFieldName,
-            new[] { visitedReceiver });
-        SyntaxKind binaryKind = GetCompoundAssignmentBinaryKind(node.Kind());
-        ExpressionSyntax combined = SyntaxFactory.BinaryExpression(binaryKind, getCall, visitedRight);
-        return CreateDelegateInvocation(
-                setter.DelegateFieldName,
-                new[] { visitedReceiver, combined })
-            .WithTriviaFrom(node);
-    }
-
-    private static SyntaxKind GetCompoundAssignmentBinaryKind(SyntaxKind assignmentKind)
+    internal static SyntaxKind GetCompoundAssignmentBinaryKind(SyntaxKind assignmentKind)
     {
         return assignmentKind switch
         {
@@ -827,30 +461,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         };
     }
 
-    private static ExpressionSyntax CreateFieldRefInvocation(
-        AccessorEntry entry,
-        ExpressionSyntax visitedReceiver)
-    {
-        if (entry.FieldSymbol.IsStatic)
-        {
-            return CreateDelegateInvocation(entry.DelegateFieldName, Array.Empty<ExpressionSyntax>());
-        }
-
-        return CreateDelegateInvocation(entry.DelegateFieldName, new[] { visitedReceiver });
-    }
-
-    private static ExpressionSyntax CreateDelegateInvocation(
-        string delegateFieldName,
-        IReadOnlyList<ExpressionSyntax> arguments)
-    {
-        SeparatedSyntaxList<ArgumentSyntax> argumentList = SyntaxFactory.SeparatedList(
-            arguments.Select(SyntaxFactory.Argument));
-        return SyntaxFactory.InvocationExpression(
-            SyntaxFactory.IdentifierName(delegateFieldName),
-            SyntaxFactory.ArgumentList(argumentList));
-    }
-
-    private ExpressionSyntax ExtractReceiver(ExpressionSyntax expression)
+    internal ExpressionSyntax ExtractReceiver(ExpressionSyntax expression)
     {
         if (expression is MemberAccessExpressionSyntax memberAccess)
         {
@@ -862,7 +473,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     // Why not Visit synthetic nodes: GetSymbolInfo requires nodes from the original SemanticModel
     // tree. Bare-member rewrite invents IdentifierName(InstanceParameterName), which must not be re-visited.
-    private ExpressionSyntax VisitReceiver(ExpressionSyntax receiver)
+    internal ExpressionSyntax VisitReceiver(ExpressionSyntax receiver)
     {
         if (receiver.SyntaxTree != _semanticModel.SyntaxTree)
         {
@@ -870,96 +481,5 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         }
 
         return (ExpressionSyntax)Visit(receiver);
-    }
-
-    private (bool owned, bool isStatic, INamedTypeSymbol containingType) ResolveOwnedMember(ISymbol symbol)
-    {
-        INamedTypeSymbol containingType;
-        bool isStatic;
-
-        if (symbol is IMethodSymbol methodSymbol)
-        {
-            if (methodSymbol.IsExtensionMethod)
-            {
-                return (false, false, null);
-            }
-
-            containingType = methodSymbol.ContainingType;
-            isStatic = methodSymbol.IsStatic;
-        }
-        else if (symbol is IFieldSymbol fieldSymbol)
-        {
-            containingType = fieldSymbol.ContainingType;
-            isStatic = fieldSymbol.IsStatic;
-        }
-        else if (symbol is IPropertySymbol propertySymbol)
-        {
-            containingType = propertySymbol.ContainingType;
-            isStatic = propertySymbol.IsStatic;
-        }
-        else if (symbol is IEventSymbol eventSymbol)
-        {
-            containingType = eventSymbol.ContainingType;
-            isStatic = eventSymbol.IsStatic;
-        }
-        else
-        {
-            return (false, false, null);
-        }
-
-        if (containingType == null)
-        {
-            return (false, false, null);
-        }
-
-        if (!IsInInheritanceHierarchy(_targetType, containingType))
-        {
-            return (false, false, null);
-        }
-
-        return (true, isStatic, containingType);
-    }
-
-    private static bool IsInInheritanceHierarchy(INamedTypeSymbol derived, INamedTypeSymbol candidate)
-    {
-        for (INamedTypeSymbol current = derived; current != null; current = current.BaseType)
-        {
-            if (SymbolEqualityComparer.Default.Equals(current, candidate))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool IsMemberAccessNameSide(SimpleNameSyntax node)
-    {
-        return node.Parent is MemberAccessExpressionSyntax memberAccess
-            && memberAccess.Name == node;
-    }
-
-    private static bool IsQualifiedNameRightSide(SimpleNameSyntax node)
-    {
-        return node.Parent is QualifiedNameSyntax qualifiedName
-            && qualifiedName.Right == node;
-    }
-
-    private static bool IsMemberBindingName(SimpleNameSyntax node)
-    {
-        return node.Parent is MemberBindingExpressionSyntax memberBinding
-            && memberBinding.Name == node;
-    }
-
-    // `new T { _field = 1 }` must keep the bare member name; qualifying to instance._field is
-    // invalid inside an object/collection initializer.
-    private static bool IsObjectOrCollectionInitializerMemberName(SimpleNameSyntax node)
-    {
-        if (node.Parent is not AssignmentExpressionSyntax assignment || assignment.Left != node)
-        {
-            return false;
-        }
-
-        return assignment.Parent is InitializerExpressionSyntax;
     }
 }

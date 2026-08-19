@@ -25,7 +25,7 @@ internal sealed class WorkerInput
 
     public string TargetTypesAssemblyPath { get; set; }
 
-    // Method keys (see TransformWorkerProgram.BuildMethodKey) that the orchestrator already
+    // Method keys (see WorkerMethodKeys.BuildMethodKey) that the orchestrator already
     // reported Failed from a first compile round; the retry excludes them so it does not fail
     // on the same error again.
     public string[] ExcludedMethodKeys { get; set; }

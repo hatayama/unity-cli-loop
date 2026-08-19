@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Compiled event '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.";
 
         // Keep in sync with OutsideMethodBodyDriftWarningFormat in
-        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
+        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/OutsideMethodBodyDriftChecker.cs.
         // That constant lives in the Unity-ignored worker process and is not visible here.
         private const string OutsideMethodBodyDriftWarningFormat =
             "Edits outside method bodies in {0} (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up.";

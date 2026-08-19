@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Calls an added method that hot reload cannot emit. Run 'uloop compile'.";
 
         // Keep in sync with EvaluateHardSkipReason in
-        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/TransformWorker.cs.
+        // Packages/src/Editor/FirstPartyTools/HotReload/TransformWorker~/MethodTransformDecider.cs.
         private const string ExpectedGenericMethodSkipReason =
             "Generic methods and methods inside generic types cannot be safely patched with Harmony. Run 'uloop compile'.";
 

@@ -68,7 +68,7 @@ internal sealed class AddedFieldCatalog
 
     // Why rewritten keys, not RegisterStore/RegisterConst: those fire at declaration
     // classification, so unused fields and isolation-excluded bodies would still list.
-    // Excluded methods are dropped in QueueTypeMethods before rewrite, so a file-wide
+    // Excluded methods are dropped in TypeEmitPlanner.QueueTypeMethods before rewrite, so a file-wide
     // rewrite set matches emitted entries without per-entry tracking.
     public string[] ListRewrittenAddedFieldDisplayNames()
     {
@@ -91,7 +91,7 @@ internal sealed class AddedFieldCatalog
             StringComparison.Ordinal);
         Debug.Assert(
             separatorIndex >= 0,
-            "fieldKey is always built with FormatAddedFieldStoreKey / BuildSyntaxFieldKey.");
+            "fieldKey is always built with AddedFieldClassifier.FormatAddedFieldStoreKey / WorkerSyntaxIndex.BuildSyntaxFieldKey.");
 
         string typeMetadataName = fieldKey.Substring(0, separatorIndex).Replace('/', '+');
         string fieldName = fieldKey.Substring(
