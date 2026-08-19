@@ -2,7 +2,6 @@ name: Code Complexity
 
 on:
   pull_request:
-    branches: [ main, v3-beta ]
     paths:
       - 'cli/**/*.go'
       - 'cli/.go-version'
