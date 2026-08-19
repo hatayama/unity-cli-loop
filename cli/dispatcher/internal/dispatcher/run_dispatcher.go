@@ -61,23 +61,49 @@ func runDispatcherWithDeps(ctx context.Context, args []string, stdout io.Writer,
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{})
 		return 1
 	}
-	if len(args) == 0 || clicore.IsHelpRequest(remainingArgs) || clicore.IsVersionRequest(remainingArgs) || clicore.IsVersionJSONRequest(remainingArgs) {
-		if startPath, workingDirectoryErr := os.Getwd(); workingDirectoryErr == nil {
-			if projectRoot, resolveErr := resolveDispatcherProjectRoot(startPath, projectPath, remainingArgs); resolveErr == nil {
-				if handled, code := tryRunDetectedDispatcherV2Project(ctx, projectRoot, args, stdout, stderr, deps); handled {
-					return code
-				}
-			}
-		}
-		if handled, code := tryHandleDispatcherInfoRequest(args, stdout); handled {
-			return code
-		}
+	if handled, code := tryHandleDispatcherHelpOrVersion(ctx, args, remainingArgs, projectPath, stdout, stderr, deps); handled {
+		return code
 	}
-
 	if shouldRunInDispatcherProcess(remainingArgs) {
 		return runDispatcherProcessCommandWithDeps(ctx, args, remainingArgs, projectPath, stdout, stderr, deps)
 	}
+	return runPinnedDispatcherProjectRunner(ctx, args, remainingArgs, projectPath, stdout, stderr, deps)
+}
 
+func tryHandleDispatcherHelpOrVersion(
+	ctx context.Context,
+	args []string,
+	remainingArgs []string,
+	projectPath string,
+	stdout io.Writer,
+	stderr io.Writer,
+	deps dispatcherRunDeps,
+) (bool, int) {
+	if len(args) != 0 && !clicore.IsHelpRequest(remainingArgs) && !clicore.IsVersionRequest(remainingArgs) && !clicore.IsVersionJSONRequest(remainingArgs) {
+		return false, 0
+	}
+	if startPath, workingDirectoryErr := os.Getwd(); workingDirectoryErr == nil {
+		if projectRoot, resolveErr := resolveDispatcherProjectRoot(startPath, projectPath, remainingArgs); resolveErr == nil {
+			if handled, code := tryRunDetectedDispatcherV2Project(ctx, projectRoot, args, stdout, stderr, deps); handled {
+				return true, code
+			}
+		}
+	}
+	if handled, code := tryHandleDispatcherInfoRequest(args, stdout); handled {
+		return true, code
+	}
+	return false, 0
+}
+
+func runPinnedDispatcherProjectRunner(
+	ctx context.Context,
+	args []string,
+	remainingArgs []string,
+	projectPath string,
+	stdout io.Writer,
+	stderr io.Writer,
+	deps dispatcherRunDeps,
+) int {
 	startPath, err := os.Getwd()
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{})

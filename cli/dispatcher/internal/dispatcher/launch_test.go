@@ -207,6 +207,96 @@ func TestParseLaunchOptionsRejectsEmptyPlatformEqualsValue(t *testing.T) {
 	}
 }
 
+func TestApplyLaunchOptionCharacterizesTokenDispatch(t *testing.T) {
+	// Characterizes applyLaunchOption token families so extract-method refactors cannot change recognition or rejection.
+	testCases := []struct {
+		name     string
+		args     []string
+		seed     launchOptions
+		want     launchOptions
+		wantNext int
+		wantErr  string
+	}{
+		{name: "short restart", args: []string{"-r"}, want: launchOptions{restart: true}},
+		{name: "long restart", args: []string{"--restart"}, want: launchOptions{restart: true}},
+		{name: "short quit", args: []string{"-q"}, want: launchOptions{quit: true}},
+		{name: "long quit", args: []string{"--quit"}, want: launchOptions{quit: true}},
+		{name: "short delete recovery", args: []string{"-d"}, want: launchOptions{deleteRecovery: true}},
+		{name: "long delete recovery", args: []string{"--delete-recovery"}, want: launchOptions{deleteRecovery: true}},
+		{
+			name:     "editor version equals",
+			args:     []string{"--editor-version=6000.0.0f1"},
+			want:     launchOptions{editorVersion: "6000.0.0f1"},
+			wantNext: 0,
+		},
+		{
+			name:     "editor version separate",
+			args:     []string{"--editor-version", "6000.0.0f1"},
+			want:     launchOptions{editorVersion: "6000.0.0f1"},
+			wantNext: 1,
+		},
+		{
+			name:     "short platform",
+			args:     []string{"-p", "Android"},
+			want:     launchOptions{platform: "Android"},
+			wantNext: 1,
+		},
+		{
+			name:     "max depth equals",
+			args:     []string{"--max-depth=-1"},
+			want:     launchOptions{maxDepth: -1},
+			wantNext: 0,
+		},
+		{
+			name:     "project path",
+			args:     []string{"/tmp/project"},
+			want:     launchOptions{projectPath: "/tmp/project"},
+			wantNext: 0,
+		},
+		{
+			name:    "hub option",
+			args:    []string{"--add-unity-hub"},
+			wantErr: "Native launch does not support Unity Hub registration options.",
+		},
+		{
+			name:    "unknown option",
+			args:    []string{"--bogus"},
+			wantErr: "Unknown launch option: --bogus",
+		},
+		{
+			name:    "extra project path",
+			args:    []string{"/tmp/other"},
+			seed:    launchOptions{projectPath: "/tmp/first"},
+			wantErr: "Unexpected extra launch argument: /tmp/other",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			options := testCase.seed
+			next, err := applyLaunchOption(&options, testCase.args, 0)
+			if testCase.wantErr != "" {
+				if err == nil {
+					t.Fatal("expected applyLaunchOption error")
+				}
+				if err.Error() != testCase.wantErr {
+					t.Fatalf("error = %q, want %q", err.Error(), testCase.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("applyLaunchOption failed: %v", err)
+			}
+			if next != testCase.wantNext {
+				t.Fatalf("next index = %d, want %d", next, testCase.wantNext)
+			}
+			if options != testCase.want {
+				t.Fatalf("options = %#v, want %#v", options, testCase.want)
+			}
+		})
+	}
+}
+
 func TestReadUnityEditorVersion(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)
 	projectSettings := filepath.Join(projectRoot, "ProjectSettings")

@@ -259,6 +259,152 @@ func TestPackageStatusReportsInstalledVersion(t *testing.T) {
 	}
 }
 
+func TestInspectPackageManifestStatusCharacterizesInstalledFlags(t *testing.T) {
+	// Characterizes inspectPackageManifestStatus dependency and OpenUPM-scope detection.
+	testCases := []struct {
+		name        string
+		content     string
+		want        packageManifestStatus
+		wantErr     bool
+		wantErrText string
+	}{
+		{
+			name: "bare dependencies",
+			content: `{
+  "dependencies": {
+    "com.unity.modules.ai": "1.0.0"
+  }
+}
+`,
+			want: packageManifestStatus{},
+		},
+		{
+			name: "dependency without registry",
+			content: `{
+  "dependencies": {
+    "io.github.hatayama.uloopmcp": "1.2.3"
+  }
+}
+`,
+			want: packageManifestStatus{
+				dependencyInstalled: true,
+				dependencyVersion:   "1.2.3",
+			},
+		},
+		{
+			name: "openupm without package scope",
+			content: `{
+  "dependencies": {},
+  "scopedRegistries": [
+    {
+      "name": "package.openupm.com",
+      "url": "https://package.openupm.com",
+      "scopes": ["com.other.openupm"]
+    }
+  ]
+}
+`,
+			want: packageManifestStatus{},
+		},
+		{
+			name: "foreign registry only",
+			content: `{
+  "dependencies": {},
+  "scopedRegistries": [
+    {
+      "name": "Other",
+      "url": "https://example.invalid/registry",
+      "scopes": ["io.github.hatayama.uloopmcp"]
+    }
+  ]
+}
+`,
+			want: packageManifestStatus{},
+		},
+		{
+			name: "openupm scope without dependency",
+			content: `{
+  "dependencies": {},
+  "scopedRegistries": [
+    {
+      "name": "package.openupm.com",
+      "url": "https://package.openupm.com",
+      "scopes": ["io.github.hatayama.uloopmcp"]
+    }
+  ]
+}
+`,
+			want: packageManifestStatus{registryInstalled: true},
+		},
+		{
+			name:    "installed dependency and registry",
+			content: installedPackageManifest("1.2.3"),
+			want: packageManifestStatus{
+				registryInstalled:   true,
+				dependencyInstalled: true,
+				dependencyVersion:   "1.2.3",
+			},
+		},
+		{
+			name: "openupm entry missing url",
+			content: `{
+  "dependencies": {},
+  "scopedRegistries": [
+    {
+      "name": "package.openupm.com",
+      "scopes": ["io.github.hatayama.uloopmcp"]
+    }
+  ]
+}
+`,
+			want: packageManifestStatus{},
+		},
+		{
+			name:    "malformed json",
+			content: `{not json`,
+			wantErr: true,
+		},
+		{
+			name: "valid openupm followed by non object",
+			content: `{
+  "dependencies": {},
+  "scopedRegistries": [
+    {
+      "name": "package.openupm.com",
+      "url": "https://package.openupm.com",
+      "scopes": ["io.github.hatayama.uloopmcp"]
+    },
+    "not-an-object"
+  ]
+}
+`,
+			wantErr:     true,
+			wantErrText: "expected JSON object",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			status, err := inspectPackageManifestStatus([]byte(testCase.content))
+			if testCase.wantErr {
+				if err == nil {
+					t.Fatal("expected inspectPackageManifestStatus error")
+				}
+				if testCase.wantErrText != "" && err.Error() != testCase.wantErrText {
+					t.Fatalf("error = %q, want %q", err.Error(), testCase.wantErrText)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("inspectPackageManifestStatus failed: %v", err)
+			}
+			if status != testCase.want {
+				t.Fatalf("status = %#v, want %#v", status, testCase.want)
+			}
+		})
+	}
+}
+
 // Verifies an unknown package subcommand fails with guidance for valid subcommands.
 func TestPackageUnknownSubcommandFails(t *testing.T) {
 	t.Chdir(t.TempDir())
