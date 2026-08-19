@@ -137,6 +137,15 @@ for C#. The `Code Complexity` workflow fails the pull request when findings exce
 threshold. When you touch a reported function, reduce its complexity before adding behavior.
 Commands and the five places the threshold is declared: `docs/code-complexity.md`.
 
+## File Length
+
+The repository-wide maximum production file length is 500 SLOC, counted by the
+file-length checker after dropping comments and blank lines. The `File Length
+Report` job currently reports over-limit files without failing the pull request.
+When you touch a reported file, split it before adding behavior. Commands, the
+exclusion list, and the two places the threshold is declared:
+`docs/file-length.md`.
+
 ## Native Go CLI Validation
 
 When running `uloop` commands for this project during CLI development, do not use the `uloop`

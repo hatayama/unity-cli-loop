@@ -7,9 +7,12 @@ on:
       - 'cli/.go-version'
       - 'cli/.golangci-complexity.yml'
       - 'Packages/src/**/*.cs'
+      - 'tools/**/*.cs'
       - 'tools/UnityCliLoop.CodeComplexity/**'
       - 'tests/UnityCliLoop.CodeComplexity.Tests/**'
       - 'scripts/check-code-complexity.sh'
+      - 'scripts/check-file-length.sh'
+      - 'docs/file-length.md'
       - '.github/workflows/code-complexity.yml'
   workflow_dispatch:
 
@@ -71,3 +74,24 @@ jobs:
         with:
           name: code-complexity-results
           path: artifacts/*.json
+
+  file-length:
+    name: File Length Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache: false
+
+      - name: Report file length
+        env:
+          CODE_FILE_LENGTH_FAIL_ON_EXCEEDED: 'false'
+        run: scripts/check-file-length.sh
