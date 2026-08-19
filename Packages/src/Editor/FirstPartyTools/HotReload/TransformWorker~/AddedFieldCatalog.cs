@@ -91,7 +91,7 @@ internal sealed class AddedFieldCatalog
             StringComparison.Ordinal);
         Debug.Assert(
             separatorIndex >= 0,
-            "fieldKey is always built with FormatAddedFieldStoreKey / BuildSyntaxFieldKey.");
+            "fieldKey is always built with FormatAddedFieldStoreKey / WorkerSyntaxIndex.BuildSyntaxFieldKey.");
 
         string typeMetadataName = fieldKey.Substring(0, separatorIndex).Replace('/', '+');
         string fieldName = fieldKey.Substring(

@@ -762,6 +762,14 @@ public static class TransformWorkerProgram
 
         return false;
     }
+
+    /// <summary>
+    /// Detects const declarations (including enum members) in the edited source whose values
+    /// differ from the compiled target assembly. C# inlines const values at compile time and
+    /// shims compile against the already-compiled assembly, so such edits silently keep the old
+    /// value at runtime; each drift becomes a response warning instead of a silent no-op.
+    /// </summary>
+    private static List<string> CollectConstDriftWarnings(
         CompilationUnitSyntax root,
         SemanticModel semanticModel,
         IAssemblySymbol targetTypesAssemblySymbol)
