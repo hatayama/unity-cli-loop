@@ -16,8 +16,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class TransformWorkerBootstrapSourceEnumerationTests
     {
         /// <summary>
-        /// What: EnumerateWorkerSourceFiles returns every *.cs file sorted by file name with
-        /// StringComparer.Ordinal, independent of creation order.
+        /// What: EnumerateWorkerSourceFiles sorts by file name with StringComparer.Ordinal.
+        /// Mixed-case names (Beta.cs before alpha.cs) discriminate culture-sensitive and
+        /// case-insensitive sorts. GetFiles order cannot be forced from a test, so this does
+        /// not by itself prove a no-sort implementation fails on every filesystem.
         /// </summary>
         [Test]
         public void EnumerateWorkerSourceFiles_SortsByFileNameOrdinal()
@@ -26,13 +28,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             WriteSource(directoryPath, "zeta.cs", "class Zeta {}");
             WriteSource(directoryPath, "alpha.cs", "class Alpha {}");
             WriteSource(directoryPath, "mu.cs", "class Mu {}");
+            WriteSource(directoryPath, "Beta.cs", "class Beta {}");
 
             string[] sourcePaths = TransformWorkerBootstrap.EnumerateWorkerSourceFiles(directoryPath);
 
-            Assert.That(sourcePaths.Length, Is.EqualTo(3));
-            Assert.That(Path.GetFileName(sourcePaths[0]), Is.EqualTo("alpha.cs"));
-            Assert.That(Path.GetFileName(sourcePaths[1]), Is.EqualTo("mu.cs"));
-            Assert.That(Path.GetFileName(sourcePaths[2]), Is.EqualTo("zeta.cs"));
+            Assert.That(sourcePaths.Length, Is.EqualTo(4));
+            Assert.That(Path.GetFileName(sourcePaths[0]), Is.EqualTo("Beta.cs"));
+            Assert.That(Path.GetFileName(sourcePaths[1]), Is.EqualTo("alpha.cs"));
+            Assert.That(Path.GetFileName(sourcePaths[2]), Is.EqualTo("mu.cs"));
+            Assert.That(Path.GetFileName(sourcePaths[3]), Is.EqualTo("zeta.cs"));
         }
 
         /// <summary>
@@ -67,7 +71,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: ComputeCacheKey changes when any source file is renamed or when any source
-        /// file's bytes change, so a second file cannot be omitted from the cache identity.
+        /// file's bytes change, including a file that is not first in ordinal order, so hashing
+        /// only the first file's content cannot pass.
         /// </summary>
         [Test]
         public void ComputeCacheKey_ChangesWhenAnySourceNameOrContentChanges()
@@ -90,11 +95,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(renamedKey, Is.Not.EqualTo(originalKey));
 
             File.WriteAllText(Path.Combine(directoryPath, "alpha.cs"), "class AlphaChanged {}");
-            string contentChangedKey = TransformWorkerBootstrap.ComputeCacheKey(
+            string firstContentChangedKey = TransformWorkerBootstrap.ComputeCacheKey(
                 TransformWorkerBootstrap.EnumerateWorkerSourceFiles(directoryPath),
                 paths);
-            Assert.That(contentChangedKey, Is.Not.EqualTo(renamedKey));
-            Assert.That(contentChangedKey, Is.Not.EqualTo(originalKey));
+            Assert.That(firstContentChangedKey, Is.Not.EqualTo(renamedKey));
+            Assert.That(firstContentChangedKey, Is.Not.EqualTo(originalKey));
+
+            File.WriteAllText(Path.Combine(directoryPath, "mu.cs"), "class MuChanged {}");
+            string secondContentChangedKey = TransformWorkerBootstrap.ComputeCacheKey(
+                TransformWorkerBootstrap.EnumerateWorkerSourceFiles(directoryPath),
+                paths);
+            Assert.That(secondContentChangedKey, Is.Not.EqualTo(firstContentChangedKey));
+            Assert.That(secondContentChangedKey, Is.Not.EqualTo(renamedKey));
+            Assert.That(secondContentChangedKey, Is.Not.EqualTo(originalKey));
         }
 
         private static string CreateWorkDirectory()
