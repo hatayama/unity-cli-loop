@@ -143,7 +143,7 @@ internal static class AddedFieldClassifier
     {
         if (fieldSymbol.IsConst)
         {
-            if (TransformWorkerProgram.TryCreateConstantLiteral(binding.ConstantValue, fieldSymbol.Type) == null)
+            if (ConstantLiteralFactory.TryCreateConstantLiteral(binding.ConstantValue, fieldSymbol.Type) == null)
             {
                 return AddedFieldSkipReasons.UnavailableAddedField;
             }

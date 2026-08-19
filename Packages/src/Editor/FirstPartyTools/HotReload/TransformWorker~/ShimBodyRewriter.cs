@@ -391,7 +391,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
         if (binding.IsConst)
         {
-            ExpressionSyntax literal = TransformWorkerProgram.TryCreateConstantLiteral(
+            ExpressionSyntax literal = ConstantLiteralFactory.TryCreateConstantLiteral(
                 binding.ConstantValue,
                 binding.FieldType);
             if (literal == null)
