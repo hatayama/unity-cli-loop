@@ -501,7 +501,7 @@ public static class TransformWorkerProgram
         {
             if (typeState.TypeIsAbsentFromCompiledAssembly)
             {
-                SkipPropertyGetterOnUncompiledType(
+                PropertyGetterClassifier.SkipPropertyGetterOnUncompiledType(
                     propertyDeclaration,
                     semanticModel,
                     skipped);
@@ -694,7 +694,7 @@ public static class TransformWorkerProgram
         }
 
         (bool hasGetterBody, AccessorDeclarationSyntax getAccessor) =
-            TryGetPropertyGetterBody(propertyDeclaration);
+            PropertyGetterClassifier.TryGetPropertyGetterBody(propertyDeclaration);
         if (!hasGetterBody)
         {
             // Auto-property / setter-only: not a patch candidate (no Skipped row either).
@@ -713,7 +713,7 @@ public static class TransformWorkerProgram
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
 
-        if (TryRecordUnchangedPropertyGetter(
+        if (PropertyGetterClassifier.TryRecordUnchangedPropertyGetter(
             hasBaseline,
             snapshotPropertyMap,
             plainCurrentPropertyMap,
@@ -729,7 +729,7 @@ public static class TransformWorkerProgram
 
         // Why skip newly added properties: Harmony looks up get_<Name> on the compiled type
         // and fails with "No method 'get_X' ... was found" when the member does not exist.
-        if (TrySkipAddedProperty(
+        if (PropertyGetterClassifier.TrySkipAddedProperty(
             hasBaseline,
             snapshotPropertyMap,
             plainCurrentPropertyMap,
@@ -757,7 +757,7 @@ public static class TransformWorkerProgram
         SyntaxNode getterBodyNode = (SyntaxNode)propertyDeclaration.ExpressionBody
             ?? (SyntaxNode)getAccessor.Body
             ?? getAccessor.ExpressionBody;
-        (bool skipGetter, MethodTransformDecision decision) = TrySkipPropertyGetterByDecision(
+        (bool skipGetter, MethodTransformDecision decision) = PropertyGetterClassifier.TrySkipPropertyGetterByDecision(
             typeDeclaration,
             typeSymbol,
             getterSymbol,
@@ -790,123 +790,6 @@ public static class TransformWorkerProgram
             assemblyGlobalUsings,
             addedMethodCatalog,
             addedFieldCatalog);
-    }
-
-    private static bool TryRecordUnchangedPropertyGetter(
-        bool hasBaseline,
-        Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
-        Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
-        string typeMetadataNameFromSyntax,
-        PropertyDeclarationSyntax propertyDeclaration,
-        INamedTypeSymbol typeSymbol,
-        IMethodSymbol getterSymbol,
-        string[] parameterTypeFullNames,
-        List<WorkerUnchangedMethod> unchangedMethods)
-    {
-        if (!hasBaseline
-            || snapshotPropertyMap == null
-            || plainCurrentPropertyMap == null)
-        {
-            return false;
-        }
-
-        string propertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
-        if (snapshotPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax snapshotProperty)
-            && plainCurrentPropertyMap.TryGetValue(propertyKey, out PropertyDeclarationSyntax plainProperty)
-            && ArePropertyGettersEquivalent(snapshotProperty, plainProperty))
-        {
-            unchangedMethods.Add(new WorkerUnchangedMethod
-            {
-                TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
-                MethodName = getterSymbol.Name,
-                ParameterTypeFullNames = parameterTypeFullNames,
-                GenericArity = getterSymbol.Arity
-            });
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool TrySkipAddedProperty(
-        bool hasBaseline,
-        Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
-        Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
-        string typeMetadataNameFromSyntax,
-        PropertyDeclarationSyntax propertyDeclaration,
-        IMethodSymbol getterSymbol,
-        List<WorkerSkipped> skipped,
-        AddedMethodCatalog addedMethodCatalog)
-    {
-        if (!hasBaseline
-            || snapshotPropertyMap == null
-            || plainCurrentPropertyMap == null)
-        {
-            return false;
-        }
-
-        string addedPropertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
-        if (snapshotPropertyMap.ContainsKey(addedPropertyKey))
-        {
-            return false;
-        }
-
-        skipped.Add(new WorkerSkipped
-        {
-            Method = FormatMethodLabel(getterSymbol),
-            Reason = AddedMethodSkipReasons.AddedProperty
-        });
-        addedMethodCatalog.AddAddedPropertySyntaxKey(addedPropertyKey);
-        return true;
-    }
-
-    private static (bool SkipGetter, MethodTransformDecision Decision) TrySkipPropertyGetterByDecision(
-        TypeDeclarationSyntax typeDeclaration,
-        INamedTypeSymbol typeSymbol,
-        IMethodSymbol getterSymbol,
-        SyntaxNode getterBodyNode,
-        SemanticModel semanticModel,
-        AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog,
-        List<WorkerSkipped> skipped)
-    {
-        MethodTransformDecision decision = MethodTransformDecider.DecideMethodTransform(
-            typeDeclaration,
-            typeSymbol,
-            methodDeclaration: null,
-            getterSymbol,
-            getterBodyNode,
-            semanticModel);
-        if (decision.SkipReason != null)
-        {
-            skipped.Add(new WorkerSkipped
-            {
-                Method = FormatMethodLabel(getterSymbol),
-                Reason = decision.SkipReason
-            });
-            return (true, decision);
-        }
-
-        (string addedCallSiteSkip, string calledAddedMethodKey) = EvaluateAddedCallSiteSkipReason(
-            getterBodyNode,
-            semanticModel,
-            addedMethodCatalog,
-            addedFieldCatalog);
-        if (addedCallSiteSkip == null)
-        {
-            return (false, decision);
-        }
-
-        skipped.Add(new WorkerSkipped
-        {
-            Method = FormatMethodLabel(getterSymbol),
-            Reason = addedCallSiteSkip,
-            CalledAddedMethodKey = calledAddedMethodKey,
-            MethodKey = calledAddedMethodKey == null
-                ? null
-                : BuildMethodKeyFromSymbol(getterSymbol)
-        });
-        return (true, decision);
     }
 
     private static (ShimTypeBuilder CurrentShimType, int ShimTypeCounter, int GlobalShimMethodCounter)
@@ -986,75 +869,6 @@ public static class TransformWorkerProgram
         });
 
         return (currentShimType, shimTypeCounter, globalShimMethodCounter);
-    }
-
-    private static (bool HasGetterBody, AccessorDeclarationSyntax GetAccessor) TryGetPropertyGetterBody(
-        PropertyDeclarationSyntax propertyDeclaration)
-    {
-        if (propertyDeclaration.ExpressionBody != null)
-        {
-            return (true, null);
-        }
-
-        if (propertyDeclaration.AccessorList == null)
-        {
-            return (false, null);
-        }
-
-        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
-        {
-            if (!accessor.IsKind(SyntaxKind.GetAccessorDeclaration))
-            {
-                continue;
-            }
-
-            if (accessor.Body == null && accessor.ExpressionBody == null)
-            {
-                return (false, null);
-            }
-
-            return (true, accessor);
-        }
-
-        return (false, null);
-    }
-
-    // Why getter-only: whole-property AreEquivalent treats setter edits as getter changes and
-    // would emit a useless Patched get_ row beside Skipped set_.
-    private static bool ArePropertyGettersEquivalent(
-        PropertyDeclarationSyntax snapshotProperty,
-        PropertyDeclarationSyntax currentProperty)
-    {
-        return SyntaxFactory.AreEquivalent(
-            NormalizePropertyToGetterShape(snapshotProperty),
-            NormalizePropertyToGetterShape(currentProperty),
-            topLevel: false);
-    }
-
-    private static PropertyDeclarationSyntax NormalizePropertyToGetterShape(
-        PropertyDeclarationSyntax propertyDeclaration)
-    {
-        if (propertyDeclaration.ExpressionBody != null)
-        {
-            return propertyDeclaration.WithAccessorList(null);
-        }
-
-        if (propertyDeclaration.AccessorList == null)
-        {
-            return propertyDeclaration;
-        }
-
-        List<AccessorDeclarationSyntax> getAccessors = new List<AccessorDeclarationSyntax>();
-        foreach (AccessorDeclarationSyntax accessor in propertyDeclaration.AccessorList.Accessors)
-        {
-            if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration))
-            {
-                getAccessors.Add(accessor);
-            }
-        }
-
-        return propertyDeclaration.WithAccessorList(
-            SyntaxFactory.AccessorList(SyntaxFactory.List(getAccessors)));
     }
 
     // What: rewrite a getter body while it is still in the bound tree, then wrap as a shim method.
@@ -1482,31 +1296,6 @@ public static class TransformWorkerProgram
                 Name = name
             });
         }
-    }
-
-    private static void SkipPropertyGetterOnUncompiledType(
-        PropertyDeclarationSyntax propertyDeclaration,
-        SemanticModel semanticModel,
-        List<WorkerSkipped> skipped)
-    {
-        IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
-        if (propertySymbol == null || propertySymbol.GetMethod == null)
-        {
-            return;
-        }
-
-        (bool hasGetterBody, AccessorDeclarationSyntax _) =
-            TryGetPropertyGetterBody(propertyDeclaration);
-        if (!hasGetterBody)
-        {
-            return;
-        }
-
-        skipped.Add(new WorkerSkipped
-        {
-            Method = FormatMethodLabel(propertySymbol.GetMethod),
-            Reason = AddedMethodSkipReasons.NewTypeOutOfScope
-        });
     }
 
     private static void SkipBodiesThatCannotUseAddedMethods(
