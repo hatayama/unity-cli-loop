@@ -37,8 +37,15 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public List<ScreenshotInfo> Screenshots { get; set; } = new List<ScreenshotInfo>();
         public bool TimedOut { get; set; }
         public string Message { get; set; } = "";
+        public string Warning { get; set; } = "";
         public string[] NextActions { get; set; } = new string[0];
 
         public int ScreenshotCount => Screenshots.Count;
+
+        // Why omit empty: Edit Mode and rendering captures must not grow a Warning field.
+        public bool ShouldSerializeWarning()
+        {
+            return !string.IsNullOrEmpty(Warning);
+        }
     }
 }
