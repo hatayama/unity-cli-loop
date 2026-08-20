@@ -140,6 +140,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "The target method body is very small and may be inlined by Mono's JIT into its callers; "
             + "if HitCount stays 0 while the line demonstrably runs, move the pause point into the calling method.";
 
+        // Format: Type.Method display name, effective max-history.
+        // Why not a completed-tense overflow: trace history on a per-frame message can roll
+        // over quickly, but that is not guaranteed (low hit rate, a larger --max-history).
+        public const string PerFrameTraceNoticeFormat =
+            "'{0}' is a per-frame Unity message; with capture mode 'trace' the history (max {1}) can roll over within moments. Prefer a conditional line or a larger --max-history.";
+
         // Callers have observed captured values that look like they belong to the line after
         // ResolvedLine; this makes the pre-line snapshot timing explicit in the response itself
         // instead of leaving it documented only in the skill.

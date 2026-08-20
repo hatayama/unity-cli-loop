@@ -415,6 +415,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.Warning = PausePointEnableWarnings.MergeWarnings(
                 response.Warning,
                 PausePointEnableWarnings.BuildAddedFieldsNotCapturedWarningOrEmpty(patchResult.DeclaringType));
+            response.Warning = PausePointEnableWarnings.MergeWarnings(
+                response.Warning,
+                PausePointEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
+                    parameters.Mode,
+                    resolvedMethod,
+                    snapshot.MaxHistory));
             LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
 
             if (patchResult.HasPhysicsCallbackWarning)
