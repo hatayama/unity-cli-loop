@@ -1513,6 +1513,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: ProcessFileAsync surfaces the sibling scan-cap warning when 51 assembly
+        /// siblings differ from their snapshots by a trailing comment (no const drift).
+        /// </summary>
+        [Test]
+        public async Task Run_WhenFiftyOneSiblingsChanged_WarnsScanLimit()
+        {
+            using (TouchSmallestSiblingsWithTrailingComment(ResolveSiblingConstUserPath(), 51))
+            {
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { ResolveSiblingConstUserPath() },
+                    null,
+                    CancellationToken.None);
+
+                AssertNoFileLevelFailure(result);
+                Assert.That(
+                    result.Warnings,
+                    Has.Some.EqualTo(
+                        "sibling const-drift scan limited to first 50 changed files (51 total)"),
+                    "Expected the orchestrator to copy the sibling scan-cap warning.\n"
+                    + string.Join("\n", result.Warnings));
+            }
+        }
+
+        /// <summary>
         /// What: an unchanged const produces no drift warning.
         /// </summary>
         [Test]
@@ -6037,7 +6061,78 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 original.Replace(
                     compiledDeclaration,
                     "public const int SiblingTuning = " + newValue + ";"));
-            return new FileRestoreScope(path, original);
+            return new FileRestoreScope(new[] { path }, new[] { original });
+        }
+
+        private static IDisposable TouchSmallestSiblingsWithTrailingComment(
+            string editedAbsolutePath,
+            int siblingCount)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            UnityEditor.Compilation.Assembly compilationAssembly = null;
+            foreach (UnityEditor.Compilation.Assembly assembly in CompilationPipeline.GetAssemblies())
+            {
+                if (assembly.name == "UnityCLILoop.Tests.Editor.HotReload")
+                {
+                    compilationAssembly = assembly;
+                    break;
+                }
+            }
+
+            Assert.That(compilationAssembly, Is.Not.Null, "HotReload test assembly missing from CompilationPipeline.");
+            Assert.That(compilationAssembly.sourceFiles, Is.Not.Null);
+
+            List<string> siblingPaths = new List<string>();
+            foreach (string relative in compilationAssembly.sourceFiles)
+            {
+                string absolute = Path.GetFullPath(
+                    Path.Combine(projectRoot, relative.Replace('/', Path.DirectorySeparatorChar)));
+                if (string.Equals(absolute, editedAbsolutePath, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (!File.Exists(absolute))
+                {
+                    continue;
+                }
+
+                siblingPaths.Add(absolute);
+            }
+
+            Assert.That(
+                siblingPaths.Count,
+                Is.GreaterThanOrEqualTo(siblingCount),
+                "Need at least " + siblingCount + " sibling sources in the HotReload test assembly.");
+
+            // Why shortest first: the worker parses every changed sibling, and this assembly
+            // contains multi-thousand-line test files that would dominate runtime without
+            // changing what the cap warning asserts.
+            siblingPaths.Sort(CompareByFileLengthThenPath);
+            string[] paths = new string[siblingCount];
+            string[] originals = new string[siblingCount];
+            EditorApplication.LockReloadAssemblies();
+            for (int index = 0; index < siblingCount; index++)
+            {
+                paths[index] = siblingPaths[index];
+                originals[index] = File.ReadAllText(paths[index]);
+                File.WriteAllText(paths[index], originals[index] + "\n// sibling-scan-cap-probe");
+            }
+
+            return new FileRestoreScope(paths, originals);
+        }
+
+        private static int CompareByFileLengthThenPath(string left, string right)
+        {
+            long leftLength = new FileInfo(left).Length;
+            long rightLength = new FileInfo(right).Length;
+            int lengthCompare = leftLength.CompareTo(rightLength);
+            if (lengthCompare != 0)
+            {
+                return lengthCompare;
+            }
+
+            return string.CompareOrdinal(left, right);
         }
 
         private static IDisposable HideAssemblySnapshotDirectory()
@@ -6069,14 +6164,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private sealed class FileRestoreScope : IDisposable
         {
-            private readonly string _path;
-            private readonly string _original;
+            private readonly string[] _paths;
+            private readonly string[] _originals;
             private bool _disposed;
 
-            public FileRestoreScope(string path, string original)
+            public FileRestoreScope(string[] paths, string[] originals)
             {
-                _path = path;
-                _original = original;
+                Debug.Assert(paths != null, "paths must not be null.");
+                Debug.Assert(originals != null, "originals must not be null.");
+                Debug.Assert(paths.Length == originals.Length, "paths and originals must be the same length.");
+                _paths = paths;
+                _originals = originals;
             }
 
             public void Dispose()
@@ -6087,7 +6185,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
 
                 _disposed = true;
-                File.WriteAllText(_path, _original);
+                for (int index = 0; index < _paths.Length; index++)
+                {
+                    File.WriteAllText(_paths[index], _originals[index]);
+                }
+
                 EditorApplication.UnlockReloadAssemblies();
             }
         }

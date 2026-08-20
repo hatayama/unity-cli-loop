@@ -271,9 +271,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const int SiblingConstDriftScanFileLimit = 50;
 
-        // Format: total changed sibling count. Emitted when the scan truncates to
-        // SiblingConstDriftScanFileLimit so the cap is never silent.
+        // Format: scan file limit, total changed sibling count. Emitted when the scan
+        // truncates so the cap is never silent.
         public const string SiblingConstDriftScanLimitedWarningFormat =
-            "sibling const-drift scan limited to first 50 changed files ({0} total)";
+            "sibling const-drift scan limited to first {0} changed files ({1} total)";
     }
 }

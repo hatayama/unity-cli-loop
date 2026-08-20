@@ -108,8 +108,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: more than 50 changed siblings truncates the path list and emits the cap warning
-        /// with the total count.
+        /// What: a snapshot-identical sibling is omitted while a byte-changed sibling is returned.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_WhenOneSiblingMatchesSnapshot_OmitsTheIdenticalSibling()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string editedRelative = "Assets/Edited.cs";
+                string changedRelative = "Assets/ChangedSibling.cs";
+                string identicalRelative = "Assets/IdenticalSibling.cs";
+                WriteProjectFile(projectRoot, editedRelative, "edited-disk");
+                WriteProjectFile(projectRoot, changedRelative, "changed-disk");
+                WriteProjectFile(projectRoot, identicalRelative, "identical-bytes");
+                WriteSnapshot(projectRoot, "Asm-mvid", editedRelative, "edited-snapshot");
+                WriteSnapshot(projectRoot, "Asm-mvid", changedRelative, "changed-snapshot");
+                WriteSnapshot(projectRoot, "Asm-mvid", identicalRelative, "identical-bytes");
+
+                HotReloadChangedSiblingScanResult result =
+                    HotReloadChangedSiblingSourceDetector.DetectFromSnapshotDirectory(
+                        projectRoot,
+                        "Asm-mvid",
+                        new[] { editedRelative, changedRelative, identicalRelative },
+                        editedRelative);
+
+                Assert.That(result.ChangedSiblingAbsolutePaths, Has.Length.EqualTo(1));
+                Assert.That(
+                    result.ChangedSiblingAbsolutePaths[0],
+                    Is.EqualTo(AbsoluteProjectPath(projectRoot, changedRelative)));
+                Assert.That(
+                    result.ChangedSiblingAbsolutePaths,
+                    Does.Not.Contain(AbsoluteProjectPath(projectRoot, identicalRelative)));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: 51 changed siblings truncates the path list to 50 and emits the cap warning
+        /// with the fixed 50/51 wording.
         /// </summary>
         [Test]
         public void DetectFromSnapshotDirectory_WhenMoreThanLimitChanged_TruncatesAndWarns()
@@ -117,15 +157,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string projectRoot = CreateTempProjectRoot();
             try
             {
-                const int extraChanged = 3;
-                int totalChanged = HotReloadConstants.SiblingConstDriftScanFileLimit + extraChanged;
+                const int changedSiblingCount = 51;
                 string editedRelative = "Assets/Edited.cs";
                 WriteProjectFile(projectRoot, editedRelative, "edited-disk");
                 WriteSnapshot(projectRoot, "Asm-mvid", editedRelative, "edited-snapshot");
 
-                string[] sourceFiles = new string[totalChanged + 1];
+                string[] sourceFiles = new string[changedSiblingCount + 1];
                 sourceFiles[0] = editedRelative;
-                for (int index = 0; index < totalChanged; index++)
+                for (int index = 0; index < changedSiblingCount; index++)
                 {
                     string relative = "Assets/Sibling" + index.ToString(CultureInfo.InvariantCulture) + ".cs";
                     sourceFiles[index + 1] = relative;
@@ -140,15 +179,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         sourceFiles,
                         editedRelative);
 
-                Assert.That(
-                    result.ChangedSiblingAbsolutePaths,
-                    Has.Length.EqualTo(HotReloadConstants.SiblingConstDriftScanFileLimit));
+                Assert.That(result.ChangedSiblingAbsolutePaths, Has.Length.EqualTo(50));
                 Assert.That(
                     result.ScanLimitWarning,
-                    Is.EqualTo(
-                        string.Format(
-                            HotReloadConstants.SiblingConstDriftScanLimitedWarningFormat,
-                            totalChanged)));
+                    Is.EqualTo("sibling const-drift scan limited to first 50 changed files (51 total)"));
             }
             finally
             {

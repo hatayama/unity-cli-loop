@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 
 using UnityEngine;
@@ -149,7 +150,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] limited = new string[HotReloadConstants.SiblingConstDriftScanFileLimit];
             changedSiblingAbsolutePaths.CopyTo(0, limited, 0, HotReloadConstants.SiblingConstDriftScanFileLimit);
             string warning = string.Format(
+                CultureInfo.InvariantCulture,
                 HotReloadConstants.SiblingConstDriftScanLimitedWarningFormat,
+                HotReloadConstants.SiblingConstDriftScanFileLimit,
                 totalChanged);
             return new HotReloadChangedSiblingScanResult(limited, warning);
         }
