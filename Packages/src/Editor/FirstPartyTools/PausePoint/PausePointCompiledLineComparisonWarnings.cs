@@ -104,9 +104,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Why snap before resolved-line drift: the requested line is what the agent passed;
         // the armed line is what actually paused.
-        // Why search requested-line text too: after a snap the armed line is often blank or a
-        // brace, so the intended statement lives on the requested line.
-        // Why skip the second candidate search when texts match: the suffix would duplicate.
+        // Why resolved-text candidates only with a drift sentence: a snap-only warning already
+        // named the armed line, so searching that same text finds the armed line itself.
+        // Why still search requested-line text on a snap-only warning: the intended statement is
+        // on --line, including when braces at the armed line happen to match.
+        // Why skip the requested-line search when texts match: the suffix would duplicate.
         internal static string ComposeCompiledLineDriftAndSnapWarningOrEmpty(
             string file,
             int requestedLine,
@@ -140,10 +142,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedMethod,
                 compiledMethodStartLine,
                 compiledMethodEndLine);
-            combined = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
-                combined,
-                resolvedEditedLineText,
-                compiledSourceLines);
+            if (driftWarning.Length > 0)
+            {
+                combined = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                    combined,
+                    resolvedEditedLineText,
+                    compiledSourceLines);
+            }
+
             string resolvedTrimmed = resolvedEditedLineText == null
                 ? string.Empty
                 : resolvedEditedLineText.Trim();
@@ -152,8 +158,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : requestedEditedLineText.Trim();
             if (!string.Equals(resolvedTrimmed, requestedTrimmed, StringComparison.Ordinal))
             {
-                combined = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                combined = PausePointEnableWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
                     combined,
+                    requestedLine,
                     requestedEditedLineText,
                     compiledSourceLines);
             }

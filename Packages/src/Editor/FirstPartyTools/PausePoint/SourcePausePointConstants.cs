@@ -296,6 +296,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HotReloadCompiledLineDriftCandidateMultipleFormat =
             " Candidate: the edited line's text appears at lines {0} in the last compiled source.";
 
+        // Format: requested --line, 1-based compiled line number.
+        public const string HotReloadCompiledLineDriftRequestedLineCandidateSingleFormat =
+            " Candidate: the text at --line {0} in the edited file appears at line {1} in the last compiled source.";
+
+        // Format: requested --line, comma-separated 1-based compiled line numbers, with an
+        // optional truncation note.
+        public const string HotReloadCompiledLineDriftRequestedLineCandidateMultipleFormat =
+            " Candidate: the text at --line {0} in the edited file appears at lines {1} in the last compiled source.";
+
         // Why format from CompiledLineDriftCandidateMatchLimit: a hard-coded "3" would lie
         // if the cap changed.
         public const string HotReloadCompiledLineDriftCandidateTruncatedMatchesSuffixFormat =

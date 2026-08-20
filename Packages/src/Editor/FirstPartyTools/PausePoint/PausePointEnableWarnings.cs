@@ -193,6 +193,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return driftWarning + FormatCandidateCompiledLinesSuffix(matches, truncated);
         }
 
+        // Why a distinct sentence: the resolved-line candidate does not name --line, so two
+        // identical "edited line" suffixes would not say which search produced which hit.
+        internal static string AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string driftWarning,
+            int requestedLine,
+            string requestedLineEditedText,
+            IReadOnlyList<string> compiledSourceLines)
+        {
+            if (string.IsNullOrEmpty(driftWarning) || requestedLine <= 0)
+            {
+                return driftWarning ?? string.Empty;
+            }
+
+            if (string.IsNullOrEmpty(requestedLineEditedText) || compiledSourceLines == null)
+            {
+                return driftWarning;
+            }
+
+            string editedTrimmed = requestedLineEditedText.Trim();
+            if (editedTrimmed.Length == 0)
+            {
+                return driftWarning;
+            }
+
+            (List<int> matches, bool truncated) = CollectCandidateCompiledLineNumbers(
+                editedTrimmed,
+                compiledSourceLines);
+            if (matches.Count == 0)
+            {
+                return driftWarning;
+            }
+
+            return driftWarning + FormatRequestedLineCandidateCompiledLinesSuffix(
+                requestedLine,
+                matches,
+                truncated);
+        }
+
         private static (List<int> matches, bool truncated) CollectCandidateCompiledLineNumbers(
             string editedTrimmed,
             IReadOnlyList<string> compiledSourceLines)
@@ -244,6 +282,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return string.Format(
                 SourcePausePointConstants.HotReloadCompiledLineDriftCandidateMultipleFormat,
+                listed);
+        }
+
+        private static string FormatRequestedLineCandidateCompiledLinesSuffix(
+            int requestedLine,
+            List<int> matches,
+            bool truncated)
+        {
+            if (matches.Count == 1 && !truncated)
+            {
+                return string.Format(
+                    SourcePausePointConstants.HotReloadCompiledLineDriftRequestedLineCandidateSingleFormat,
+                    requestedLine,
+                    matches[0]);
+            }
+
+            string listed = string.Join(", ", matches);
+            if (truncated)
+            {
+                listed += string.Format(
+                    SourcePausePointConstants.HotReloadCompiledLineDriftCandidateTruncatedMatchesSuffixFormat,
+                    SourcePausePointConstants.CompiledLineDriftCandidateMatchLimit);
+            }
+
+            return string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineDriftRequestedLineCandidateMultipleFormat,
+                requestedLine,
                 listed);
         }
 
