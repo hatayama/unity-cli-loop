@@ -140,11 +140,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineDriftWarningOrEmpty_WhenTextsDiffer_ReturnsFormattedWarning()
         {
-            string warning = PausePointEnableWarnings.BuildCompiledLineDriftWarningOrEmpty(
+            string warning = PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
                 "  return 1;  ",
                 "return 2;",
                 ForwardSlashFile,
-                17);
+                17,
+                true);
 
             Assert.That(
                 warning,
@@ -163,35 +164,210 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineDriftWarningOrEmpty_WhenTextsMatchAfterTrim_ReturnsEmpty()
         {
-            string warning = PausePointEnableWarnings.BuildCompiledLineDriftWarningOrEmpty(
+            string warning = PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
                 "  return 1;  ",
                 "return 1;",
                 ForwardSlashFile,
-                17);
+                17,
+                true);
 
             Assert.That(warning, Is.EqualTo(string.Empty));
         }
 
         /// <summary>
-        /// What: a missing compiled or edited line skips the comparison instead of warning.
+        /// What: a missing compiled line, or a failed edited-line read, skips the comparison.
         /// </summary>
         [Test]
-        public void BuildCompiledLineDriftWarningOrEmpty_WhenEitherSideIsEmpty_ReturnsEmpty()
+        public void BuildCompiledLineDriftWarningOrEmpty_WhenCompiledMissingOrEditedReadFails_ReturnsEmpty()
         {
             Assert.That(
-                PausePointEnableWarnings.BuildCompiledLineDriftWarningOrEmpty(
+                PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
                     string.Empty,
                     "return 1;",
                     ForwardSlashFile,
-                    17),
+                    17,
+                    true),
                 Is.EqualTo(string.Empty));
             Assert.That(
-                PausePointEnableWarnings.BuildCompiledLineDriftWarningOrEmpty(
+                PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
                     "return 1;",
                     string.Empty,
                     ForwardSlashFile,
-                    17),
+                    17,
+                    false),
                 Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: a successfully read blank edited line at the resolved line is drift, not silence.
+        /// </summary>
+        [Test]
+        public void BuildCompiledLineDriftWarningOrEmpty_WhenEditedLineIsBlankAndReadSucceeded_ReturnsBlankDriftWarning()
+        {
+            string warning = PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
+                "  {  ",
+                "   ",
+                ForwardSlashFile,
+                109,
+                true);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    "'Assets/Scripts/Example.cs' line 109 is '{' in the last compiled source but blank in the edited file. "
+                    + "The marker is armed on the compiled statement. If that is not the statement you meant, "
+                    + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable."));
+        }
+
+        /// <summary>
+        /// What: a forward snap from the requested line names the requested edited text and the armed method.
+        /// </summary>
+        [Test]
+        public void BuildLineSnapDisclosureWarningOrEmpty_WhenResolvedLineDiffers_ReturnsSnapDisclosure()
+        {
+            string warning = PausePointCompiledLineComparisonWarnings.BuildLineSnapDisclosureWarningOrEmpty(
+                ForwardSlashFile,
+                107,
+                109,
+                "GameDirector.ComputeScoreTarget",
+                true,
+                "  LastRemainingBlocks = remainingBlocks;  ");
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    "'Assets/Scripts/Example.cs' --line 107 is 'LastRemainingBlocks = remainingBlocks;' in the edited file, "
+                    + "but the marker snapped forward to line 109 in 'GameDirector.ComputeScoreTarget'."));
+        }
+
+        /// <summary>
+        /// What: snap disclosure stays silent when the marker did not leave the requested line.
+        /// </summary>
+        [Test]
+        public void BuildLineSnapDisclosureWarningOrEmpty_WhenResolvedLineEqualsRequestedLine_ReturnsEmpty()
+        {
+            string warning = PausePointCompiledLineComparisonWarnings.BuildLineSnapDisclosureWarningOrEmpty(
+                ForwardSlashFile,
+                109,
+                109,
+                "GameDirector.ComputeScoreTarget",
+                true,
+                "LastRemainingBlocks = remainingBlocks;");
+
+            Assert.That(warning, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: a blank requested line still discloses the snap without quoting empty text.
+        /// </summary>
+        [Test]
+        public void BuildLineSnapDisclosureWarningOrEmpty_WhenRequestedLineIsBlank_ReturnsBlankSnapDisclosure()
+        {
+            string warning = PausePointCompiledLineComparisonWarnings.BuildLineSnapDisclosureWarningOrEmpty(
+                ForwardSlashFile,
+                107,
+                109,
+                "GameDirector.ComputeScoreTarget",
+                true,
+                "   ");
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    "'Assets/Scripts/Example.cs' --line 107 is blank in the edited file, "
+                    + "but the marker snapped forward to line 109 in 'GameDirector.ComputeScoreTarget'."));
+        }
+
+        /// <summary>
+        /// What: a failed requested-line read discloses the snap without claiming the line was blank.
+        /// </summary>
+        [Test]
+        public void BuildLineSnapDisclosureWarningOrEmpty_WhenRequestedLineReadFails_OmitsEditedText()
+        {
+            string warning = PausePointCompiledLineComparisonWarnings.BuildLineSnapDisclosureWarningOrEmpty(
+                ForwardSlashFile,
+                107,
+                109,
+                "GameDirector.ComputeScoreTarget",
+                false,
+                string.Empty);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    "'Assets/Scripts/Example.cs' --line 107 snapped forward to line 109 in 'GameDirector.ComputeScoreTarget'."));
+        }
+
+        /// <summary>
+        /// What: snap disclosure precedes resolved-line drift when both apply, using the existing
+        /// non-blank drift sentence unchanged.
+        /// </summary>
+        [Test]
+        public void ComposeCompiledLineDriftAndSnapWarningOrEmpty_WhenSnapAndNonBlankDrift_PutsSnapBeforeDrift()
+        {
+            string warning = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+                ForwardSlashFile,
+                10,
+                17,
+                "Example.Run",
+                "return 1;",
+                true,
+                "return 3;",
+                true,
+                "return 2;",
+                0,
+                0,
+                Array.Empty<string>());
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    "'Assets/Scripts/Example.cs' --line 10 is 'return 2;' in the edited file, "
+                    + "but the marker snapped forward to line 17 in 'Example.Run'. "
+                    + "'Assets/Scripts/Example.cs' line 17 is 'return 1;' in the last compiled source but 'return 3;' in the edited file. "
+                    + "The marker is armed on the compiled statement. If that is not the statement you meant, "
+                    + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable."));
+        }
+
+        /// <summary>
+        /// What: a forward snap onto a blank edited resolved line keeps a drift warning, discloses
+        /// the snap, and lists the compiled line that matches the requested edited statement.
+        /// </summary>
+        [Test]
+        public void ComposeCompiledLineDriftAndSnapWarningOrEmpty_WhenSnapAndBlankResolvedLine_DisclosesSnapBlankDriftAndRequestedCandidate()
+        {
+            string[] compiledSourceLines = new string[104];
+            for (int index = 0; index < 103; index++)
+            {
+                compiledSourceLines[index] = "class Sample";
+            }
+
+            compiledSourceLines[103] = "            LastRemainingBlocks = remainingBlocks;";
+
+            string warning = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+                ForwardSlashFile,
+                107,
+                109,
+                "GameDirector.ComputeScoreTarget",
+                "{",
+                true,
+                string.Empty,
+                true,
+                "LastRemainingBlocks = remainingBlocks;",
+                100,
+                120,
+                compiledSourceLines);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    "'Assets/Scripts/Example.cs' --line 107 is 'LastRemainingBlocks = remainingBlocks;' in the edited file, "
+                    + "but the marker snapped forward to line 109 in 'GameDirector.ComputeScoreTarget'. "
+                    + "'Assets/Scripts/Example.cs' line 109 is '{' in the last compiled source but blank in the edited file. "
+                    + "The marker is armed on the compiled statement. If that is not the statement you meant, "
+                    + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable. "
+                    + "In the last compiled source, 'GameDirector.ComputeScoreTarget' spans lines 100-120. "
+                    + "Candidate: the edited line's text appears at line 104 in the last compiled source."));
         }
 
         /// <summary>
@@ -270,6 +446,93 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             PausePointEnableWarnings.CreateEnableWarning(),
                             PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(true, ResolveFailureFile)),
                         expectedDrift),
+                    SourcePausePointConstants.SmallMethodInliningRiskWarning);
+                Assert.That(response.Warning, Is.EqualTo(expectedWarning));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction));
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.GetShimLookupForFile = previousLookup;
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousSnapshot;
+            }
+        }
+
+        /// <summary>
+        /// What: enable on a comment line that rounds forward discloses the snap even when the
+        /// armed compiled and edited texts match, and still sets the drift next-action.
+        /// </summary>
+        [Test]
+        public void Enable_WhenRequestedLineSnapsForward_DisclosesSnapAndSetsNextAction()
+        {
+            Func<string, HotReloadShimFileLookup> previousLookup =
+                HotReloadPausePointCoordination.GetShimLookupForFile;
+            Func<string, string> previousSnapshot =
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
+            HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
+                Array.Empty<byte>(),
+                Array.Empty<byte>(),
+                null,
+                Array.Empty<HotReloadShimMethodLookup>());
+
+            string absolutePath = Path.Combine(
+                UnityCliLoopPathResolver.GetProjectRoot(),
+                ResolveFailureFile);
+            string diskSource = File.ReadAllText(absolutePath);
+            int requestedLine = FindLineNumberContaining(
+                diskSource,
+                "compiled-line-drift" + "-probe-unique");
+            Assert.That(requestedLine, Is.GreaterThan(0));
+            int compiledResolvedLine = requestedLine + 1;
+
+            try
+            {
+                HotReloadPausePointCoordination.GetShimLookupForFile = _ => stubLookup;
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => diskSource;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = ResolveFailureFile,
+                    Line = requestedLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(
+                    response.Success,
+                    Is.True,
+                    response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
+                Assert.That(response.ResolvedLine, Is.EqualTo(compiledResolvedLine));
+                SourcePausePointResolveResult spanResult = SourcePausePointResolver.Resolve(
+                    ResolveFailureFile,
+                    response.ResolvedLine);
+                Assert.That(spanResult.Success, Is.True, spanResult.ErrorMessage);
+                string requestedEditedText = "// compiled-line-drift" + "-probe-unique";
+                string[] compiledLines = SourcePausePointSourceLineReader.SplitSourceLines(diskSource);
+                string expectedSnap =
+                    "'" + ResolveFailureFile + "' --line " + requestedLine
+                    + " is '" + requestedEditedText + "' in the edited file, but the marker snapped forward to line "
+                    + compiledResolvedLine + " in '" + response.ResolvedMethod + "'.";
+                expectedSnap = PausePointEnableWarnings.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+                    expectedSnap,
+                    response.ResolvedMethod,
+                    spanResult.Resolution.CompiledMethodStartLine,
+                    spanResult.Resolution.CompiledMethodEndLine);
+                expectedSnap = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                    expectedSnap,
+                    "return 424242;",
+                    compiledLines);
+                expectedSnap = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                    expectedSnap,
+                    requestedEditedText,
+                    compiledLines);
+                string expectedWarning = PausePointEnableWarnings.MergeWarnings(
+                    PausePointEnableWarnings.MergeWarnings(
+                        PausePointEnableWarnings.MergeWarnings(
+                            PausePointEnableWarnings.CreateEnableWarning(),
+                            PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(true, ResolveFailureFile)),
+                        expectedSnap),
                     SourcePausePointConstants.SmallMethodInliningRiskWarning);
                 Assert.That(response.Warning, Is.EqualTo(expectedWarning));
                 Assert.That(

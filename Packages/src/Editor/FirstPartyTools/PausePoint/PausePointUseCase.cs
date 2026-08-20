@@ -387,21 +387,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, compiledLineMapWarning);
             if (compareCompiledLineDrift)
             {
-                string editedLineText = PausePointEnableWarnings.ReadEditedLineTextOrEmpty(parameters.File, resolvedLine);
-                string driftWarning = PausePointEnableWarnings.BuildCompiledLineDriftWarningOrEmpty(
-                    resolvedLineText,
-                    editedLineText,
-                    parameters.File,
-                    resolvedLine);
-                driftWarning = PausePointEnableWarnings.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
-                    driftWarning,
-                    resolvedMethod,
-                    compiledMethodStartLine,
-                    compiledMethodEndLine);
+                (bool resolvedEditedReadOk, string resolvedEditedLineText) =
+                    PausePointCompiledLineComparisonWarnings.ReadEditedLineText(parameters.File, resolvedLine);
+                (bool requestedEditedReadOk, string requestedEditedLineText) =
+                    PausePointCompiledLineComparisonWarnings.ReadEditedLineText(parameters.File, parameters.Line);
                 string[] compiledSourceLines = SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
-                driftWarning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
-                    driftWarning,
-                    editedLineText,
+                string driftWarning = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+                    parameters.File,
+                    parameters.Line,
+                    resolvedLine,
+                    resolvedMethod,
+                    resolvedLineText,
+                    resolvedEditedReadOk,
+                    resolvedEditedLineText,
+                    requestedEditedReadOk,
+                    requestedEditedLineText,
+                    compiledMethodStartLine,
+                    compiledMethodEndLine,
                     compiledSourceLines);
                 enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, driftWarning);
                 if (driftWarning.Length > 0)

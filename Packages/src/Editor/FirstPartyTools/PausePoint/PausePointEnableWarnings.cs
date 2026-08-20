@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 
 using UnityEditor;
 using UnityEngine;
@@ -139,36 +138,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return typeName + "." + simpleName;
         }
 
-        // Why success-only: resolve failure leaves ResolvedMethod and ResolvedLineText empty,
-        // so this wording would point at fields that are not on the response.
-        // Why same resolvedLine on both sides: the resolver rounds empty/comment lines forward,
-        // so comparing the requested line to the resolved line is a false drift.
-        internal static string BuildCompiledLineDriftWarningOrEmpty(
-            string compiledLineText,
-            string editedLineText,
-            string file,
-            int resolvedLine)
-        {
-            if (string.IsNullOrEmpty(compiledLineText) || string.IsNullOrEmpty(editedLineText))
-            {
-                return string.Empty;
-            }
-
-            string compiledTrimmed = compiledLineText.Trim();
-            string editedTrimmed = editedLineText.Trim();
-            if (string.Equals(compiledTrimmed, editedTrimmed, StringComparison.Ordinal))
-            {
-                return string.Empty;
-            }
-
-            return string.Format(
-                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
-                SourcePausePointPathNormalizer.ToForwardSlashes(file),
-                resolvedLine,
-                compiledTrimmed,
-                editedTrimmed);
-        }
-
         internal static string AppendCompiledMethodSpanToDriftWarningOrUnchanged(
             string driftWarning,
             string resolvedMethod,
@@ -190,7 +159,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Why only after a non-empty drift warning: a candidate list without drift would look
-        // like a second resolution, and empty edited text never produces drift in the first place.
+        // like a second resolution.
+        // Why skip empty edited text: a blank line has no statement to locate in compiled source.
         internal static string AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
             string driftWarning,
             string editedLineText,
@@ -321,25 +291,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 + SourcePausePointConstants.NearbyCompiledMethodsPrefix
                 + string.Join("; ", parts)
                 + ".";
-        }
-
-        internal static string ReadEditedLineTextOrEmpty(string requestedFile, int resolvedLine)
-        {
-            if (string.IsNullOrEmpty(requestedFile) || resolvedLine <= 0)
-            {
-                return string.Empty;
-            }
-
-            string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
-            string absoluteFilePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), normalizedFile);
-            if (!File.Exists(absoluteFilePath))
-            {
-                return string.Empty;
-            }
-
-            return SourcePausePointSourceLineReader.ReadLineTextFromSource(
-                File.ReadAllText(absoluteFilePath),
-                resolvedLine);
         }
 
         internal static string BuildPatchedMethodPdbUnavailableWarningOrEmpty(
