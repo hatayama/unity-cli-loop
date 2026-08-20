@@ -268,6 +268,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(readOk, Is.False);
             Assert.That(text, Is.EqualTo(string.Empty));
         }
+
+        /// <summary>
+        /// What: a forward snap from the requested line names the requested edited text and the armed method.
         /// </summary>
         [Test]
         public void BuildLineSnapDisclosureWarningOrEmpty_WhenResolvedLineDiffers_ReturnsSnapDisclosure()
@@ -928,6 +931,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     drift
                     + " Candidate: the text at --line 107 in the edited file appears at lines 1, 3, 4 (first 3 matches) in the last compiled source."));
         }
+
+        /// <summary>
+        /// What: retarget warning interpolates resolved method, requested line, and edited span.
         /// </summary>
         [Test]
         public void BuildRetargetedToHotReloadPatchWarningOrEmpty_WhenRetargeted_ReturnsFormattedWarning()
