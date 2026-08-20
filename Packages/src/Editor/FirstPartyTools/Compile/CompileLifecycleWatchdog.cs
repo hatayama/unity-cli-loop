@@ -134,7 +134,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Warns once when assembly callbacks stop arriving while Unity still reports compiling.
+        /// Warns once per stall episode when assembly callbacks stop arriving while Unity still
+        /// reports compiling. A later assemblyCompilationFinished callback re-arms the warning.
         /// Watch continues so a later compilationFinished can still complete the request.
         /// </summary>
         private void NotifyAssemblyProgressStallIfNeeded(bool observedStart, bool isEditorCompiling)

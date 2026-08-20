@@ -239,7 +239,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies a stalled assembly-finished counter while isCompiling stays true raises the warning once.
+        /// Verifies a stalled assembly-finished counter while isCompiling stays true raises one warning for that episode.
         /// </summary>
         [Test]
         public async Task WatchAsync_WhenAssemblyProgressStallsWhileCompiling_WarnsOnce()
@@ -407,6 +407,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(missedCallbackCount, Is.EqualTo(0));
             Assert.That(startTimeoutCount, Is.EqualTo(0));
             Assert.That(cancellationCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a threshold crossing does not warn when that poll sees isCompiling=false.
+        /// </summary>
+        [Test]
+        public async Task WatchAsync_WhenElapsedExceedsThresholdButEditorIsNotCompiling_DoesNotWarn()
+        {
+            SequenceCompilationState compilationState = new SequenceCompilationState(
+                new bool[] { true, false, false });
+            int waitCount = 0;
+            double clockSeconds = 0;
+            int stallCallCount = 0;
+            int missedCallbackCount = 0;
+            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
+                compilationState.IsCompiling,
+                () => waitCount >= 2,
+                () =>
+                {
+                    waitCount++;
+                    if (waitCount == 1)
+                    {
+                        clockSeconds = 300;
+                    }
+
+                    return Task.CompletedTask;
+                },
+                _ => { },
+                _ => { },
+                _ => missedCallbackCount++,
+                _ => { },
+                () => 1,
+                () => clockSeconds,
+                _ => stallCallCount++);
+
+            await watchdog.WatchAsync(CancellationToken.None);
+
+            Assert.That(stallCallCount, Is.EqualTo(0));
+            Assert.That(missedCallbackCount, Is.EqualTo(0));
         }
 
         private sealed class SequenceCompilationState

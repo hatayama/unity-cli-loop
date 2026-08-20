@@ -49,7 +49,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 () => _isForceCompile,
                 () => _compileMessages.ToArray(),
                 () => _assemblyFinishedCount,
-                () => UnityEngine.Time.realtimeSinceStartupAsDouble,
+                // Why not Time.realtimeSinceStartupAsDouble: it freezes while the Editor is paused,
+                // and pause-point compiles run in that state.
+                () => EditorApplication.timeSinceStartup,
                 BuildCompileControllerStateContext,
                 AbortCompileWithResult,
                 AbortCompile);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor.Compilation;
 
@@ -157,10 +158,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(abortedWithMessage, Is.Null);
         }
 
+        /// <summary>
+        /// Verifies the stall handler emits compile_assembly_progress_stalled with the required context keys.
+        /// </summary>
+        [Test]
+        public void HandleAssemblyProgressStalled_WhenInvoked_LogsCompileAssemblyProgressStalledContext()
+        {
+            CompilerMessage[] compileMessages =
+            {
+                new()
+                {
+                    type = CompilerMessageType.Error,
+                    message = "CS0000: sample compile error",
+                    file = "Assets/Scripts/Sample.cs",
+                    line = 7
+                }
+            };
+            CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator(
+                getCompileMessages: () => compileMessages,
+                getAssemblyFinishedCount: () => 2);
+
+            VibeLogger.ClearMemoryLogs();
+            coordinator.HandleAssemblyProgressStalled(300000);
+
+            JArray entries = JArray.Parse(VibeLogger.GetLogsForAi());
+            JObject stallLog = null;
+            foreach (JToken token in entries)
+            {
+                JObject entry = (JObject)token;
+                if ((string)entry["operation"] == "compile_assembly_progress_stalled")
+                {
+                    stallLog = entry;
+                    break;
+                }
+            }
+
+            Assert.That(stallLog, Is.Not.Null);
+            JObject context = (JObject)stallLog["context"];
+            Assert.That(context, Is.Not.Null);
+            Assert.That((int)context["stalled_ms"], Is.EqualTo(300000));
+            Assert.That((int)context["assembly_finished_count"], Is.EqualTo(2));
+            Assert.That((int)context["message_count"], Is.EqualTo(1));
+            Assert.That(context["editor_compiling"].Type, Is.EqualTo(JTokenType.Boolean));
+            Assert.That(context["editor_updating"].Type, Is.EqualTo(JTokenType.Boolean));
+        }
+
         private static CompileLifecycleRecoveryCoordinator CreateCoordinator(
             Func<AssemblyDefinitionConsoleErrorResult> findAssemblyDefinitionErrors = null,
             Func<ValidationResult> validateNoDuplicateAsmdefNames = null,
             Func<CompilerMessage[]> getCompileMessages = null,
+            Func<int> getAssemblyFinishedCount = null,
             Func<bool> getIsForceCompile = null,
             Action<CompileResult> abortWithResult = null,
             Action<string> abort = null)
@@ -174,7 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 validateNoDuplicateAsmdefNames: validateNoDuplicateAsmdefNames ?? ValidationResult.Success,
                 getIsForceCompile: getIsForceCompile ?? (() => false),
                 getCompileMessages: getCompileMessages ?? (() => new CompilerMessage[0]),
-                getAssemblyFinishedCount: () => 0,
+                getAssemblyFinishedCount: getAssemblyFinishedCount ?? (() => 0),
                 getMonotonicSeconds: () => 0d,
                 buildStateContext: context => context,
                 abortWithResult: abortWithResult ?? (_ => { }),
