@@ -359,16 +359,6 @@ func runEnablePausePointAndAwait(
 	)
 }
 
-// enablePausePointPropagatedFields carries enable-time fields into the --await hit response,
-// matching how Warning alone used to be forwarded from runEnablePausePointAndAwait.
-type enablePausePointPropagatedFields struct {
-	Warning          string
-	ResolvedLine     int
-	ResolvedLineText string
-	ResolvedMethod   string
-	SnapshotTiming   string
-}
-
 // runPausePointWaitAfterEnable mirrors runWaitForPausePoint's response shaping (the shared
 // helpers it calls are reused as-is) but also folds enable-time fields (Warning and the
 // file:line resolution details) into the merged response, since --await must not drop evidence
@@ -399,17 +389,7 @@ func runPausePointWaitAfterEnable(
 
 		response.TriggerResult = triggerResult
 		response.ResumePlayResult = resumeResult
-		// Why treat ResolvedLine/Text as a pair: Unity SetResolvedLine always writes or clears
-		// both together. Falling back field-by-field can synthesize a line number from status
-		// with enable-time text (or the reverse) when ReadLineText returns empty.
-		// Prefer the status pair when ResolvedLine is non-zero; otherwise keep enable-time.
-		if response.ResolvedLine == 0 {
-			response.ResolvedLine = enableFields.ResolvedLine
-			response.ResolvedLineText = enableFields.ResolvedLineText
-		}
-		// ResolvedMethod / SnapshotTiming are still enable-only on the status DTO today.
-		response.ResolvedMethod = enableFields.ResolvedMethod
-		response.SnapshotTiming = enableFields.SnapshotTiming
+		response = mergeEnablePausePointResolvedFields(response, enableFields)
 		response = filterPausePointCapturedVariableHistory(response)
 		response = applyPausePointHitStatusNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
@@ -449,6 +429,9 @@ func runPausePointWaitAfterEnable(
 	if state == pausePointWaitStateTimeout && !hasNewHitBaseline {
 		response, markerClearedByThisCommand = refreshPausePointStatusAfterWaitTimeoutAutoClear(
 			ctx, connection, options.id, response)
+	}
+	if state == pausePointWaitStateExpired {
+		response = mergeEnablePausePointResolvedFields(response, enableFields)
 	}
 
 	waitErr := pausePointWaitError(

@@ -40,6 +40,10 @@ func pausePointWaitError(
 		if hint != "" {
 			expiredError.Details["Hint"] = hint
 		}
+		applyPausePointExpiredResolvedFieldDetails(expiredError.Details, response)
+		if note := pausePointExpiredResolvedFieldsNote(response); note != "" {
+			expiredError.Message = expiredError.Message + " " + note
+		}
 		return expiredError
 	case pausePointWaitStateTriggerFailed:
 		triggerFailedError := pausePointStateError(
@@ -122,6 +126,12 @@ const (
 	pausePointHintAlreadyHitWaitingForNew = "The marker had already hit and Unity may still be paused by that hit; pass --resume-play or resume Play Mode so a new hit can occur."
 
 	pausePointHintTimeoutAutoCleared = "This command disarmed the marker on timeout; re-enable the pause point (enable-pause-point) before waiting again. "
+
+	// Explains how to read resolved-line Details on Expired when HitCount is still 0.
+	// Why not mention ResolvedLineText: C# omits empty text, so Details may carry only ResolvedLine.
+	// Why not emit this when HitCount > 0: a trace/continuous hit can land just before expiry and
+	// the next poll then reports Expired; claiming the line never ran would contradict HitCount.
+	pausePointExpiredResolvedFieldsGuidance = "The marker stayed armed at the resolved line shown in Details; that line was never executed within the window."
 
 	// Shared by both pausePointTimeoutHint and pausePointExpiredHint: reasons a wait saw no hit —
 	// a physics/message callback missing a pre-existing GameObject, a pre-bound delegate
@@ -297,4 +307,26 @@ func pausePointRemainingMilliseconds(options waitForPausePointOptions, response 
 		return 0
 	}
 	return remainingMilliseconds
+}
+
+func pausePointExpiredResolvedFieldsNote(response pausePointStatusResponse) string {
+	if response.HitCount != 0 || response.ResolvedLine == 0 {
+		return ""
+	}
+	return pausePointExpiredResolvedFieldsGuidance
+}
+
+func applyPausePointExpiredResolvedFieldDetails(details map[string]any, response pausePointStatusResponse) {
+	if response.ResolvedLine != 0 {
+		details["ResolvedLine"] = response.ResolvedLine
+	}
+	if response.ResolvedLineText != "" {
+		details["ResolvedLineText"] = response.ResolvedLineText
+	}
+	if response.ResolvedMethod != "" {
+		details["ResolvedMethod"] = response.ResolvedMethod
+	}
+	if response.SnapshotTiming != "" {
+		details["SnapshotTiming"] = response.SnapshotTiming
+	}
 }
