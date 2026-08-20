@@ -81,6 +81,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] ClearedPausePointIds { get; set; }
 
         /// <summary>
+        /// Failed leaf tests, omitted from JSON when none failed.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public SerializableTestResult.FailedTestDetail[] FailedTests { get; set; }
+
+        /// <summary>
         /// Create a new RunTestsResponse. Every field is required so classification decisions
         /// stay at the call site (the Unity Test Runner adapter and use-case), not in this DTO.
         /// </summary>
