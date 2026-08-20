@@ -273,14 +273,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string recommendedNextAction = hasActiveHotReloadPatches
                     ? SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction
                     : SourcePausePointConstants.ResolveFailedRecommendedNextAction;
-                string compiledSnapshotSource = LoadCompiledSnapshotSourceOrEmpty(parameters.File);
-                IReadOnlyList<string> compiledSourceLinesOrNull = string.IsNullOrEmpty(compiledSnapshotSource)
-                    ? null
-                    : SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
-                (bool requestedLineReadOk, string requestedLineEditedText) =
-                    PausePointCompiledLineComparisonWarnings.ReadEditedLineText(
-                        parameters.File,
-                        parameters.Line);
+                IReadOnlyList<string> compiledSourceLinesOrNull = null;
+                bool requestedLineReadOk = false;
+                string requestedLineEditedText = string.Empty;
+                // Why skip snapshot/edited-line IO without patches: Candidate is omitted on that
+                // path, so those reads would change the historical no-patch failure for no gain.
+                if (hasActiveHotReloadPatches)
+                {
+                    string compiledSnapshotSource = LoadCompiledSnapshotSourceOrEmpty(parameters.File);
+                    compiledSourceLinesOrNull = string.IsNullOrEmpty(compiledSnapshotSource)
+                        ? null
+                        : SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
+                    (requestedLineReadOk, requestedLineEditedText) =
+                        PausePointCompiledLineComparisonWarnings.ReadEditedLineText(
+                            parameters.File,
+                            parameters.Line);
+                }
+
                 string message = PausePointEnableWarnings.BuildResolveFailureMessage(
                     resolveResult.ErrorMessage,
                     resolveResult.NearbyCompiledMethods,
