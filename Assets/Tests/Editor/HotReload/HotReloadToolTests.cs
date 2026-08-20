@@ -28,10 +28,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(tool.ToolName, Is.EqualTo("hot-reload"));
         }
 
+        /// <summary>
+        /// What: calling hot-reload with neither --files, --revert-all, nor --status names
+        /// --files and shows a project-relative .cs example.
+        /// </summary>
         [Test]
         public async Task ExecuteAsync_WithoutFilesOrRevertAll_ReturnsValidationFailure()
         {
-            // Verifies --files is required when --revert-all is not set.
             HotReloadTool tool = new HotReloadTool();
             JObject parameters = new JObject();
 
@@ -41,7 +44,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(response, Is.Not.Null);
             Assert.That(response.Success, Is.False);
-            Assert.That(response.Message, Does.Contain("Files is required"));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Files is required unless --revert-all or --status is set. Pass project-relative .cs paths with --files, e.g. 'uloop hot-reload --files Assets/Scripts/Player.cs'."));
         }
 
         /// <summary>
@@ -108,10 +114,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "Added-member calls are not instrumented, so InvocationCount is always 0 for this row."));
         }
 
+        /// <summary>
+        /// What: an empty Files list names --files and shows a project-relative .cs example.
+        /// </summary>
+        [Test]
+        public void ValidateApplyParameters_MissingFiles_ReturnsErrorNamingFilesOption()
+        {
+            HotReloadSchema schema = new HotReloadSchema
+            {
+                Files = Array.Empty<string>()
+            };
+
+            string error = HotReloadTool.ValidateApplyParameters(schema);
+
+            Assert.That(
+                error,
+                Is.EqualTo(
+                    "Files is required unless --revert-all or --status is set. Pass project-relative .cs paths with --files, e.g. 'uloop hot-reload --files Assets/Scripts/Player.cs'."));
+        }
+
+        /// <summary>
+        /// What: blank path entries are rejected before the orchestrator runs.
+        /// </summary>
         [Test]
         public void ValidateApplyParameters_WhitespaceOnlyPath_ReturnsError()
         {
-            // Verifies blank path entries are rejected before the orchestrator runs.
             HotReloadSchema schema = new HotReloadSchema
             {
                 Files = new[] { "   " }
