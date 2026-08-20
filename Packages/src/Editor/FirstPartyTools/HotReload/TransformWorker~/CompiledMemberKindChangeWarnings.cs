@@ -23,19 +23,26 @@ internal static class CompiledMemberKindChangeWarnings
     internal const string CompiledEventKindChangeWarningFormat =
         "Compiled event '{0}' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.";
 
+    internal sealed class SyntaxKeys
+    {
+        internal readonly List<string> PropertySyntaxKeys = new List<string>();
+        internal readonly List<string> EventSyntaxKeys = new List<string>();
+    }
+
     /// <summary>
     /// What: names compiled properties and events that the edited source deleted or
     /// redeclared as another member kind, even when no method body changed.
     /// </summary>
-    internal static void AppendCompiledPropertyOrEventKindChangeWarnings(
+    internal static SyntaxKeys AppendCompiledPropertyOrEventKindChangeWarnings(
         CompilationUnitSyntax root,
         SemanticModel semanticModel,
         IAssemblySymbol targetTypesAssemblySymbol,
         List<string> warnings)
     {
+        SyntaxKeys syntaxKeys = new SyntaxKeys();
         if (targetTypesAssemblySymbol == null)
         {
-            return;
+            return syntaxKeys;
         }
 
         HashSet<string> seenTypeMetadataNames = new HashSet<string>(StringComparer.Ordinal);
@@ -71,14 +78,23 @@ internal static class CompiledMemberKindChangeWarnings
                 continue;
             }
 
-            AppendMissingCompiledPropertyOrEventWarnings(compiledType, sourceType, warnings);
+            AppendMissingCompiledPropertyOrEventWarnings(
+                compiledType,
+                sourceType,
+                typeMetadataName,
+                warnings,
+                syntaxKeys);
         }
+
+        return syntaxKeys;
     }
 
     internal static void AppendMissingCompiledPropertyOrEventWarnings(
         INamedTypeSymbol compiledType,
         INamedTypeSymbol sourceType,
-        List<string> warnings)
+        string typeMetadataName,
+        List<string> warnings,
+        SyntaxKeys syntaxKeys)
     {
         foreach (ISymbol compiledMember in compiledType.GetMembers())
         {
@@ -89,6 +105,19 @@ internal static class CompiledMemberKindChangeWarnings
             }
 
             warnings.Add(warning);
+            // Why metadata name rather than ToDisplayString: nested types use '+' in syntax
+            // keys and '.' in display strings, so parsing the warning text cannot rebuild the key.
+            string syntaxKey = typeMetadataName
+                + TransformWorkerProgramMarker.AddedFieldKeySeparator
+                + compiledMember.Name;
+            if (compiledMember is IPropertySymbol)
+            {
+                syntaxKeys.PropertySyntaxKeys.Add(syntaxKey);
+            }
+            else
+            {
+                syntaxKeys.EventSyntaxKeys.Add(syntaxKey);
+            }
         }
     }
 

@@ -840,7 +840,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result.Output.declarationDriftWarnings,
                 Has.Some.Contain("Edits outside method bodies"),
                 "Non-const field initializer edits must still emit the outside-body warning.");
-            AssertContainsOutsideMethodBodyDriftWarning(result, "NonConstFieldInitializerDrift.cs");
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Does.Contain(
+                    "Edits outside method bodies in NonConstFieldInitializerDrift.cs (field initializer: _secret) are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -1808,7 +1811,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public HotReloadUnsupportedKindCtorFixture()\n        {",
                 "        public HotReloadUnsupportedKindCtorFixture() : this(0)\n        {");
 
-            AssertContainsOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Does.Contain(
+                    "Edits outside method bodies in UnsupportedKindCtorInitializerDrift.cs (constructor: .ctor) are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -1824,7 +1830,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public static HotReloadUnsupportedKindOperatorFixture operator +(",
                 "        [Obsolete]\n        public static HotReloadUnsupportedKindOperatorFixture operator +(");
 
-            AssertContainsOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Does.Contain(
+                    "Edits outside method bodies in UnsupportedKindOperatorAttributeDrift.cs (operator: +) are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -1840,7 +1849,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public static implicit operator int(HotReloadUnsupportedKindConversionFixture value)",
                 "        [Obsolete]\n        public static implicit operator int(HotReloadUnsupportedKindConversionFixture value)");
 
-            AssertContainsOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Does.Contain(
+                    "Edits outside method bodies in UnsupportedKindConversionAttributeDrift.cs (conversion: implicit->int) are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>
@@ -1856,7 +1868,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public event Action Edited",
                 "        [Obsolete]\n        public event Action Edited");
 
-            AssertContainsOutsideMethodBodyDriftWarning(result, fileName);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Does.Contain(
+                    "Edits outside method bodies in UnsupportedKindEventAttributeDrift.cs (event: Edited) are not applied by hot reload; run uloop compile to pick them up."));
         }
 
         /// <summary>

@@ -12,6 +12,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class HotReloadAddedMemberHost
     {
         public int PublicSeed = 3;
+        public int PairAlpha = 1, PairBeta = 2;
 
         public HotReloadAddedMemberHost Inner;
 

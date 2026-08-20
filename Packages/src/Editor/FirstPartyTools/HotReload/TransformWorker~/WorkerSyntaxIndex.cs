@@ -423,4 +423,33 @@ internal static class WorkerSyntaxIndex
 
         return map;
     }
+
+    internal static Dictionary<string, VariableDeclaratorSyntax> BuildSyntaxEventFieldMapOrNull(
+        CompilationUnitSyntax root)
+    {
+        Dictionary<string, VariableDeclaratorSyntax> map =
+            new Dictionary<string, VariableDeclaratorSyntax>(StringComparer.Ordinal);
+        foreach (TypeDeclarationSyntax typeDeclaration in TransformWorkerProgram.EnumerateTypeDeclarations(root))
+        {
+            string typeMetadataName = BuildTypeMetadataNameFromSyntax(typeDeclaration);
+            foreach (EventFieldDeclarationSyntax eventFieldDeclaration in typeDeclaration.Members
+                .OfType<EventFieldDeclarationSyntax>())
+            {
+                foreach (VariableDeclaratorSyntax variable in eventFieldDeclaration.Declaration.Variables)
+                {
+                    // Why field key format: kind-change identity is type metadata + "::" + name,
+                    // the same shape BuildSyntaxFieldKey already uses.
+                    string key = BuildSyntaxFieldKey(typeMetadataName, variable.Identifier.Text);
+                    if (map.ContainsKey(key))
+                    {
+                        return null;
+                    }
+
+                    map[key] = variable;
+                }
+            }
+        }
+
+        return map;
+    }
 }

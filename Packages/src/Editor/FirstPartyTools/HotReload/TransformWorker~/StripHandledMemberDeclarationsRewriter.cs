@@ -110,12 +110,142 @@ internal sealed class StripHandledMemberDeclarationsRewriter : CSharpSyntaxRewri
         string syntaxKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(
             WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration),
             node);
-        if (_propertySyntaxKeysToStrip.Contains(syntaxKey))
+        if (_propertySyntaxKeysToStrip.Contains(syntaxKey) || _syntaxKeysToStrip.Contains(syntaxKey))
         {
             return null;
         }
 
         return base.VisitPropertyDeclaration(node);
+    }
+
+    public override SyntaxNode VisitIndexerDeclaration(IndexerDeclarationSyntax node)
+    {
+        TypeDeclarationSyntax typeDeclaration = node.Parent as TypeDeclarationSyntax;
+        if (typeDeclaration == null)
+        {
+            return base.VisitIndexerDeclaration(node);
+        }
+
+        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxIndexerKey(
+            WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration),
+            node);
+        if (_syntaxKeysToStrip.Contains(syntaxKey))
+        {
+            return null;
+        }
+
+        return base.VisitIndexerDeclaration(node);
+    }
+
+    public override SyntaxNode VisitConstructorDeclaration(ConstructorDeclarationSyntax node)
+    {
+        TypeDeclarationSyntax typeDeclaration = node.Parent as TypeDeclarationSyntax;
+        if (typeDeclaration == null)
+        {
+            return base.VisitConstructorDeclaration(node);
+        }
+
+        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxConstructorKey(
+            WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration),
+            node);
+        if (_syntaxKeysToStrip.Contains(syntaxKey))
+        {
+            return null;
+        }
+
+        return base.VisitConstructorDeclaration(node);
+    }
+
+    public override SyntaxNode VisitOperatorDeclaration(OperatorDeclarationSyntax node)
+    {
+        TypeDeclarationSyntax typeDeclaration = node.Parent as TypeDeclarationSyntax;
+        if (typeDeclaration == null)
+        {
+            return base.VisitOperatorDeclaration(node);
+        }
+
+        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxOperatorKey(
+            WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration),
+            node);
+        if (_syntaxKeysToStrip.Contains(syntaxKey))
+        {
+            return null;
+        }
+
+        return base.VisitOperatorDeclaration(node);
+    }
+
+    public override SyntaxNode VisitConversionOperatorDeclaration(ConversionOperatorDeclarationSyntax node)
+    {
+        TypeDeclarationSyntax typeDeclaration = node.Parent as TypeDeclarationSyntax;
+        if (typeDeclaration == null)
+        {
+            return base.VisitConversionOperatorDeclaration(node);
+        }
+
+        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxConversionOperatorKey(
+            WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration),
+            node);
+        if (_syntaxKeysToStrip.Contains(syntaxKey))
+        {
+            return null;
+        }
+
+        return base.VisitConversionOperatorDeclaration(node);
+    }
+
+    public override SyntaxNode VisitEventDeclaration(EventDeclarationSyntax node)
+    {
+        TypeDeclarationSyntax typeDeclaration = node.Parent as TypeDeclarationSyntax;
+        if (typeDeclaration == null)
+        {
+            return base.VisitEventDeclaration(node);
+        }
+
+        string syntaxKey = WorkerSyntaxIndex.BuildSyntaxEventKey(
+            WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration),
+            node);
+        if (_syntaxKeysToStrip.Contains(syntaxKey))
+        {
+            return null;
+        }
+
+        return base.VisitEventDeclaration(node);
+    }
+
+    public override SyntaxNode VisitEventFieldDeclaration(EventFieldDeclarationSyntax node)
+    {
+        TypeDeclarationSyntax typeDeclaration = node.Parent as TypeDeclarationSyntax;
+        if (typeDeclaration == null)
+        {
+            return base.VisitEventFieldDeclaration(node);
+        }
+
+        string typeMetadataName = WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration);
+        List<VariableDeclaratorSyntax> remaining = new List<VariableDeclaratorSyntax>();
+        foreach (VariableDeclaratorSyntax variable in node.Declaration.Variables)
+        {
+            string syntaxKey = WorkerSyntaxIndex.BuildSyntaxFieldKey(
+                typeMetadataName,
+                variable.Identifier.Text);
+            if (!_syntaxKeysToStrip.Contains(syntaxKey))
+            {
+                remaining.Add(variable);
+            }
+        }
+
+        if (remaining.Count == 0)
+        {
+            return null;
+        }
+
+        if (remaining.Count == node.Declaration.Variables.Count)
+        {
+            return base.VisitEventFieldDeclaration(node);
+        }
+
+        return node.WithDeclaration(
+            node.Declaration.WithVariables(SyntaxFactory.SeparatedList(remaining)));
     }
 
     public override SyntaxNode VisitFieldDeclaration(FieldDeclarationSyntax node)
