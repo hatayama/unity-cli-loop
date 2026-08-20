@@ -55,6 +55,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        /// <summary>
+        /// Drops a key from the pending set after a later successful KeyDown so the deferred
+        /// callback will not treat that live press as a leftover latch.
+        /// </summary>
+        internal static void CancelPending(Key key)
+        {
+            if (!PendingKeys.Remove(key))
+            {
+                return;
+            }
+
+            if (PendingKeys.Count == 0)
+            {
+                Unsubscribe();
+            }
+        }
+
         internal static void ResetForTests()
         {
             ClearPendingAndUnsubscribe();
@@ -113,6 +130,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < keysToSync.Count; index++)
             {
                 Key key = keysToSync[index];
+                // Why skip tracked holds: a later KeyDown can legitimately re-press the same
+                // key after Schedule and before this callback. isPressed alone would treat that
+                // live press as a stale latch, ForceSync-release it, and leave KeyboardKeyState
+                // still held. After ReleaseAll/KeyUp the tracker is already cleared, so the
+                // stale path still syncs.
+                if (KeyboardKeyState.IsKeyHeld(key))
+                {
+                    continue;
+                }
+
                 if (keyboard[key].isPressed)
                 {
                     KeyboardInputMainThreadCleanup.ForceSyncButtonPressLatch(keyboard, key);

@@ -277,6 +277,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue = keyboard[key].isPressed;
                         KeyboardKeyState.SetKeyState(keyboard, key, true);
+                        // Why here: apply runs onBeforeUpdate of the same player tick that
+                        // fires deferred onAfterUpdate. SetKeyDown has not run yet, so the
+                        // IsKeyHeld skip cannot protect this frame.
+                        DeferredPlayerLatchSynchronizer.CancelPending(key);
                     },
                     ct).ConfigureAwait(false);
                 if (waitOutcome == InputSimulationWaitOutcome.Completed)
@@ -284,6 +288,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     keyDownApplied = true;
                     await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
                     KeyboardKeyState.SetKeyDown(key);
+                    DeferredPlayerLatchSynchronizer.CancelPending(key);
                     SimulateKeyboardOverlayState.AddHeldKey(keyName);
                     waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct)
                         .ConfigureAwait(false);

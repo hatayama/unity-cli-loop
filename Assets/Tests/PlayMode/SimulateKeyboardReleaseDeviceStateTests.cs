@@ -193,6 +193,75 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.That(keyboard[Key.D].isPressed, Is.False);
         }
 
+        /// <summary>
+        /// Verifies KeyDown after ReleaseAll of the same key is not ForceSync-released by the
+        /// deferred latch callback: a tracked re-press must stay pressed across player updates.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator KeyDown_AfterReleaseAll_SameKeyStaysPressedAcrossPlayerUpdates()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "D"
+            });
+            Assert.IsTrue(lastResponse.Success);
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = UnityCliLoopKeyboardAction.ReleaseAll.ToString()
+            });
+            Assert.IsTrue(lastResponse.Success);
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "D"
+            });
+            Assert.IsTrue(lastResponse.Success);
+            Assert.That(keyboard[Key.D].isPressed, Is.True);
+            Assert.That(KeyboardKeyState.IsKeyHeld(Key.D), Is.True);
+
+            // Why re-arm: UnityTest frame pumps between ReleaseAll and the second KeyDown
+            // already consume the ReleaseAll one-shot. Scheduling again while the tracker
+            // holds is the stale-shaped callback the IsKeyHeld skip must ignore.
+            bool scheduled = DeferredPlayerLatchSynchronizer.Schedule(new Key[] { Key.D });
+            Assert.That(scheduled, Is.True);
+
+            for (int frame = 0; frame < 5; frame++)
+            {
+                InputSystem.Update();
+                yield return null;
+            }
+
+            Assert.That(keyboard[Key.D].isPressed, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies Schedule plus a player update ForceSyncs a device press that the tracker
+        /// does not own, so deleting the onAfterUpdate subscription cannot satisfy this test.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Schedule_WhenDevicePressedWithoutTracker_ForceSyncsUnpressedOnNextPlayerUpdate()
+        {
+            yield return null;
+
+            InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.D));
+            InputSystem.Update();
+            Assert.That(keyboard[Key.D].isPressed, Is.True);
+            Assert.That(KeyboardKeyState.IsKeyHeld(Key.D), Is.False);
+
+            bool scheduled = DeferredPlayerLatchSynchronizer.Schedule(new Key[] { Key.D });
+            Assert.That(scheduled, Is.True);
+
+            InputSystem.Update();
+            yield return null;
+
+            Assert.That(keyboard[Key.D].isPressed, Is.False);
+        }
+
         private IEnumerator RunTool(JObject parameters)
         {
             Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
