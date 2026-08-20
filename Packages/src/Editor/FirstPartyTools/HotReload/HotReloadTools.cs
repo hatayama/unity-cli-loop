@@ -198,7 +198,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (parameters.Files == null || parameters.Files.Length == 0)
             {
-                return "Files is required unless --revert-all or --status is set.";
+                // Why: agents that omit --files otherwise cannot tell which option name to pass
+                // without a second --help round trip, and HotReloadResponse has no NextActions.
+                return "Files is required unless --revert-all or --status is set. Pass project-relative .cs paths with --files, e.g. 'uloop hot-reload --files Assets/Scripts/Player.cs'.";
             }
 
             for (int index = 0; index < parameters.Files.Length; index++)
