@@ -106,6 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.That(dState!.DeviceIsPressedAfterRelease, Is.EqualTo(keyboard[Key.D].isPressed));
             Assert.That(lastResponse.KeyStateReadUpdateType, Is.Not.Empty);
             Assert.That(lastResponse.KeyStateReadUpdateType, Is.EqualTo(InputState.currentUpdateType.ToString()));
+            Assert.That(lastResponse.Message, Is.EqualTo("Released 1 key(s): D"));
         }
 
         /// <summary>
@@ -225,6 +226,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
                 message,
                 Is.EqualTo(
                     "Released 2 key(s): D, W 1 key(s) still report pressed in the Editor view; the release may not yet be visible to gameplay polling."));
+        }
+
+        /// <summary>
+        /// Verifies a clean ReleaseAll message is left unchanged when every readback is unpressed.
+        /// </summary>
+        [Test]
+        public void AppendStillPressedNote_WhenNoKeyStillPressed_ReturnsMessageUnchanged()
+        {
+            ReleasedKeyState[] states =
+            {
+                new ReleasedKeyState { Key = "W", DeviceIsPressedAfterRelease = false },
+                new ReleasedKeyState { Key = "D", DeviceIsPressedAfterRelease = false }
+            };
+
+            string message = SimulateKeyboardReleaseMessageFormatter.AppendStillPressedNote(
+                "Released 2 key(s): D, W",
+                states,
+                "Editor");
+
+            Assert.That(message, Is.EqualTo("Released 2 key(s): D, W"));
+        }
+    }
+
+    /// <summary>
+    /// Verifies ReleaseAll device-state mapping copies the injected isPressed reader onto the DTO.
+    /// </summary>
+    public sealed class ReleasedKeyStateMappingTests
+    {
+        /// <summary>
+        /// Verifies a fake reader that reports one key pressed is copied as true onto ReleasedKeyState,
+        /// so a hardcoded-false mapper cannot pass.
+        /// </summary>
+        [Test]
+        public void MapReleasedKeyStates_WhenFakeReaderReportsOneKeyPressed_CopiesTrueOntoDto()
+        {
+            string[] releasedNames = { "W", "D" };
+            Key[] sortedKeys = { Key.W, Key.D };
+
+            List<ReleasedKeyState> states = KeyboardInputMainThreadCleanup.MapReleasedKeyStates(
+                releasedNames,
+                sortedKeys,
+                key => key == Key.D);
+
+            Assert.That(states, Has.Count.EqualTo(2));
+            Assert.That(states[0].Key, Is.EqualTo("W"));
+            Assert.That(states[0].DeviceIsPressedAfterRelease, Is.False);
+            Assert.That(states[1].Key, Is.EqualTo("D"));
+            Assert.That(states[1].DeviceIsPressedAfterRelease, Is.True);
         }
     }
 }
