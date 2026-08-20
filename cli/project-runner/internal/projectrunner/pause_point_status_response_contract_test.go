@@ -111,6 +111,29 @@ func TestPausePointStatusResponseNormalizesOmittedCallerFrames(t *testing.T) {
 	}
 }
 
+// TestUnityPausePointStatusContractTruncationInvariant verifies a Unity-originated
+// truncated snapshot always has TruncatedVariableCount>0 or a Truncated variable,
+// so CapturedVariablesTruncated:true with Count==0 and every listed variable complete
+// can only appear after the CLI name filter.
+func TestUnityPausePointStatusContractTruncationInvariant(t *testing.T) {
+	fixture := readPausePointStatusResponseContract(t)
+
+	var response pausePointStatusResponse
+	if err := json.Unmarshal(fixture, &response); err != nil {
+		t.Fatalf("failed to unmarshal shared pause point status response contract: %v", err)
+	}
+
+	if !response.CapturedVariablesTruncated {
+		t.Fatal("fixture must keep CapturedVariablesTruncated true so the Unity invariant is exercised")
+	}
+	if response.TruncatedVariableCount <= 0 && !pausePointResponseHasTruncatedCapturedVariable(response) {
+		t.Fatal("Unity-originated truncated responses must have TruncatedVariableCount>0 or a Truncated variable")
+	}
+	if response.CapturedVariablesTruncatedNote != "" {
+		t.Fatalf("Unity fixture must not carry the CLI-only note: %q", response.CapturedVariablesTruncatedNote)
+	}
+}
+
 func readPausePointStatusResponseContract(t *testing.T) []byte {
 	t.Helper()
 

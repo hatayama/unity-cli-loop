@@ -32,12 +32,20 @@ type pausePointStatusResponse struct {
 	CapturedVariablesTruncated      bool                             `json:"CapturedVariablesTruncated"`
 	TruncatedVariableNames          []string                         `json:"TruncatedVariableNames"`
 	TruncatedVariableCount          int                              `json:"TruncatedVariableCount"`
-	ClearedReason                   string                           `json:"ClearedReason"`
-	StatusBeforeClear               string                           `json:"StatusBeforeClear"`
-	LateHitDiscardedAfterClear      bool                             `json:"LateHitDiscardedAfterClear"`
-	SuppressedByHotReload           bool                             `json:"SuppressedByHotReload"`
-	RetargetedToHotReloadPatch      bool                             `json:"RetargetedToHotReloadPatch"`
-	SuppressedByHotReloadReason     string                           `json:"SuppressedByHotReloadReason,omitempty"`
+
+	// CapturedVariablesTruncatedNote is set by the CLI, not Unity, when
+	// --captured-variable-names dropped every truncated variable so the remaining
+	// list is complete even though CapturedVariablesTruncated stays true.
+	// omitempty keeps the field off unfiltered Unity payloads so the shared
+	// status contract fixture stays unchanged.
+	CapturedVariablesTruncatedNote string `json:"CapturedVariablesTruncatedNote,omitempty"`
+
+	ClearedReason               string `json:"ClearedReason"`
+	StatusBeforeClear           string `json:"StatusBeforeClear"`
+	LateHitDiscardedAfterClear  bool   `json:"LateHitDiscardedAfterClear"`
+	SuppressedByHotReload       bool   `json:"SuppressedByHotReload"`
+	RetargetedToHotReloadPatch  bool   `json:"RetargetedToHotReloadPatch"`
+	SuppressedByHotReloadReason string `json:"SuppressedByHotReloadReason,omitempty"`
 
 	// Warning is set by Unity on enable/clear tool responses when this shared type decodes those
 	// envelopes. The status bridge sets it to SuppressedByHotReloadReason when suppressed.
