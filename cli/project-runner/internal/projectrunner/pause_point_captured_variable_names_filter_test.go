@@ -261,7 +261,11 @@ func TestFilterPausePointCapturedVariablesByNameSetsTruncatedNote(t *testing.T) 
 			t.Fatalf("unfiltered responses must not get the CLI note: %q", result.CapturedVariablesTruncatedNote)
 		}
 	})
+}
 
+// TestFilterPausePointCapturedVariablesByNameOmitsTruncatedNote verifies additional
+// negative cases where the CLI must not attach CapturedVariablesTruncatedNote.
+func TestFilterPausePointCapturedVariablesByNameOmitsTruncatedNote(t *testing.T) {
 	t.Run("note is omitted when TruncatedVariableCount is already non-zero", func(t *testing.T) {
 		response := truncatedNameFilterResponse()
 		response.TruncatedVariableCount = 1
