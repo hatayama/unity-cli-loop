@@ -17,14 +17,15 @@ const (
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 type TerminalSpinner struct {
-	writer   io.Writer
-	Enabled  bool
-	message  string
-	frame    int
-	done     chan struct{}
-	stopped  chan struct{}
-	stopOnce sync.Once
-	mutex    sync.Mutex
+	writer      io.Writer
+	Enabled     bool
+	message     string
+	frame       int
+	done        chan struct{}
+	stopped     chan struct{}
+	stopOnce    sync.Once
+	mutex       sync.Mutex
+	stoppedFlag bool
 }
 
 func NewToolSpinner(stderr io.Writer, showFeedback bool) *TerminalSpinner {
@@ -77,6 +78,10 @@ func (spinner *TerminalSpinner) Update(message string) {
 	}
 
 	spinner.mutex.Lock()
+	if spinner.stoppedFlag {
+		spinner.mutex.Unlock()
+		return
+	}
 	spinner.message = message
 	spinner.mutex.Unlock()
 	spinner.render()
@@ -92,6 +97,7 @@ func (spinner *TerminalSpinner) Stop() {
 		<-spinner.stopped
 		spinner.mutex.Lock()
 		defer spinner.mutex.Unlock()
+		spinner.stoppedFlag = true
 		_, _ = fmt.Fprint(spinner.writer, "\r\x1b[K\n")
 	})
 }
@@ -114,6 +120,9 @@ func (spinner *TerminalSpinner) run() {
 func (spinner *TerminalSpinner) render() {
 	spinner.mutex.Lock()
 	defer spinner.mutex.Unlock()
+	if spinner.stoppedFlag {
+		return
+	}
 
 	frame := spinnerFrames[spinner.frame]
 	spinner.frame = (spinner.frame + 1) % len(spinnerFrames)

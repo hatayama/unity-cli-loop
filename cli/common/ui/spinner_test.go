@@ -89,6 +89,24 @@ func TestSpinnerProgressFuncMapsConnectionEventsToExecutingMessage(t *testing.T)
 	}
 }
 
+func TestSpinnerUpdateAfterStopWritesNothing(t *testing.T) {
+	// Verifies Update after Stop does not render leftover TTY frames.
+	var stderr bytes.Buffer
+
+	spinner := newSpinner(&stderr, true, "Executing compile...")
+	spinner.Stop()
+	afterStop := stderr.Len()
+
+	spinner.Update("Warming execute-dynamic-code after compile...")
+
+	if stderr.Len() != afterStop {
+		t.Fatalf("Update after Stop wrote output: %q", stderr.String()[afterStop:])
+	}
+	if strings.Contains(stderr.String(), "Warming execute-dynamic-code after compile...") {
+		t.Fatalf("stopped spinner rendered an Update message: %q", stderr.String())
+	}
+}
+
 func TestNewToolSpinnerRespectsFeedbackFlag(t *testing.T) {
 	// Verifies callers can disable tool spinner feedback for hot paths.
 	var stderr bytes.Buffer
