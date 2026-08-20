@@ -45,8 +45,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: --status Added rows carry the same not-instrumented Reason as AlreadyActive
-        /// added-member apply rows.
+        /// What: --status Added rows explain InvocationCount 0 with the not-instrumented Reason
+        /// only, not the AlreadyActive source-unchanged sentence.
         /// </summary>
         [Test]
         public async Task ExecuteAsync_Status_AddedRow_SetsNotInstrumentedReason()
@@ -85,14 +85,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     addedRow.Reason,
                     Is.EqualTo(
-                        "Source is unchanged since the last applied hot reload; the existing added member stays available. "
-                        + "Added-member calls are not instrumented, so InvocationCount is always 0 for this row."));
+                        "Added-member calls are not instrumented, so InvocationCount is always 0 for this row."));
                 Assert.That(addedRow.InvocationCount, Is.EqualTo(0L));
             }
             finally
             {
                 HotReloadAddedMemberRegistry.Clear();
             }
+        }
+
+        /// <summary>
+        /// What: composing AlreadyActiveAddedMemberReason from the not-instrumented constant
+        /// keeps the historical AlreadyActive added-member sentence byte-identical.
+        /// </summary>
+        [Test]
+        public void AlreadyActiveAddedMemberReason_KeepsHistoricalWording()
+        {
+            Assert.That(
+                HotReloadConstants.AlreadyActiveAddedMemberReason,
+                Is.EqualTo(
+                    "Source is unchanged since the last applied hot reload; the existing added member stays available. "
+                    + "Added-member calls are not instrumented, so InvocationCount is always 0 for this row."));
         }
 
         [Test]

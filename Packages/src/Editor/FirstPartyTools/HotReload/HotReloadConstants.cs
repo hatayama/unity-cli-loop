@@ -212,9 +212,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Source is unchanged since the last applied hot reload; the existing patch stays active "
             + "and keeps its InvocationCount. Edit and reload again to apply new changes.";
 
+        public const string AddedMemberNotInstrumentedReason =
+            "Added-member calls are not instrumented, so InvocationCount is always 0 for this row.";
+
         public const string AlreadyActiveAddedMemberReason =
             "Source is unchanged since the last applied hot reload; the existing added member stays available. "
-            + "Added-member calls are not instrumented, so InvocationCount is always 0 for this row.";
+            + AddedMemberNotInstrumentedReason;
 
         public const string MultiWarningSingleCompileResolutionMessage =
             "A single 'uloop compile' clears all of them at once.";
