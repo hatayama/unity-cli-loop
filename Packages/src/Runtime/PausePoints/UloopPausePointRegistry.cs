@@ -131,16 +131,19 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // Resolve expiry first so a clear after the timeout reports "expired", not a normal clear.
             TryExpire(entry, now);
             int clearedCount = entry.Status == UloopPausePointStatus.Cleared ? 0 : 1;
+            // Why not claim leftover-patch removal: this Runtime registry cannot know whether a
+            // patch exists. Id-only enables never call SourcePausePointPatcher, so OnCleared's
+            // Unpatch hook no-ops when MethodById lacks the id.
             string message = !entry.IsEnabled && entry.Status == UloopPausePointStatus.Hit
-                ? "Pause point was already hit (auto-disarmed); nothing to clear."
+                ? "Pause point was already auto-disarmed by its hit; this clear marked the record cleared. Capture history is preserved."
                 : entry.Status switch
             {
                 UloopPausePointStatus.Hit =>
                     $"Pause point cleared after {entry.HitCount} hit(s); capture history is preserved.",
                 UloopPausePointStatus.Expired when entry.HitCount > 0 =>
-                    "Pause point capture window had already expired; nothing to clear.",
+                    "Pause point capture window had already expired; this clear marked the record cleared.",
                 UloopPausePointStatus.Expired =>
-                    "Pause point had already expired before being hit; nothing to clear.",
+                    "Pause point had already expired before being hit; this clear marked the record cleared.",
                 UloopPausePointStatus.Cleared => "Pause point was already cleared.",
                 _ => "Pause point cleared."
             };

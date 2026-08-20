@@ -28,7 +28,7 @@ The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the
 
 3. Read `CapturedVariables` in the hit response first: the locals, parameters, and `this` instance fields at the paused line are already there (see Reading CapturedVariables).
 4. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
-5. A `single-shot` marker (the default) disarms itself after the hit, so no clear call is required before moving on. Clearing is still what removes the underlying code patch (a disarmed marker leaves the patch installed), so for `continuous`/`trace` markers, or when the method must run fully untouched again, clear it with `uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"` (or `--all` to clear every active marker at once) or stop PlayMode. Clearing resumes Play Mode only when the current pause is owned by a pause-point hit — the clear response then carries a `Warning` saying it resumed Play Mode. A manual pause (`control-play-mode --action Pause` or the Editor pause button) is left untouched by clear.
+5. A `single-shot` marker (the default) disarms itself after the hit, so no clear call is required before moving on. Clearing is still what removes the underlying code patch (a disarmed marker leaves the patch installed), so for `continuous`/`trace` markers, or when the method must run fully untouched again, clear it with `uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"` (or `--all` to clear every non-cleared pause point marker (armed, auto-disarmed, or expired) at once) or stop PlayMode. Clearing resumes Play Mode only when the current pause is owned by a pause-point hit — the clear response then carries a `Warning` saying it resumed Play Mode. A manual pause (`control-play-mode --action Pause` or the Editor pause button) is left untouched by clear.
 
 A hit pauses Unity at the next frame boundary — the patched method and the rest of that frame still run to completion. Only `CapturedVariables` is evidence of the values at the patched line; state read after the pause (for example via `execute-dynamic-code`) may already have advanced past it.
 
@@ -57,12 +57,12 @@ Enable a pause point so Unity pauses when that code path is reached, either by a
 
 ### clear-pause-point
 
-Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is 0 or 1 for `--id`, and the number of markers actually cleared for `--all`.
+Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is the number of markers this call transitioned to Cleared: 0 or 1 for `--id`, and the number transitioned for `--all`. Auto-disarmed and expired markers still count as 1; the record stays readable via `pause-point-status` (`StatusBeforeClear` keeps the prior state).
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--id` | string | - | Named pause point id to clear |
-| `--all` | flag | - | Clear every active pause point marker |
+| `--all` | flag | - | Clear every non-cleared pause point marker (armed, auto-disarmed, or expired) |
 
 ### enable-watch
 

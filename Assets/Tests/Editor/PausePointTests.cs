@@ -323,16 +323,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// What: clearing an auto-disarmed hit reports that the record was marked cleared with ClearedCount 1.
+        /// </summary>
         [Test]
         public void Clear_WhenPausePointWasHit_ReportsAlreadyHitMessage()
         {
-            // Verifies clearing an already-hit one-shot marker explains why nothing was armed anymore.
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
 
-            (UloopPausePointSnapshot snapshot, _, _) = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot snapshot, bool _, int clearedCount) =
+                UloopPausePointRegistry.Clear("jump");
 
-            Assert.That(snapshot.Message, Is.EqualTo("Pause point was already hit (auto-disarmed); nothing to clear."));
+            Assert.That(
+                snapshot.Message,
+                Is.EqualTo(
+                    "Pause point was already auto-disarmed by its hit; this clear marked the record cleared. Capture history is preserved."));
+            Assert.That(clearedCount, Is.EqualTo(1));
             Assert.That(_pauseController.IsPaused, Is.False);
         }
 
@@ -595,16 +602,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_pauseController.IsPaused, Is.False);
         }
 
+        /// <summary>
+        /// What: clearing an expired never-hit marker reports that the record was marked cleared with ClearedCount 1.
+        /// </summary>
         [Test]
         public void Clear_WhenPausePointExpired_ReportsAlreadyExpiredMessage()
         {
-            // Verifies clearing an expired marker explains it was never hit instead of claiming a clear.
             UloopPausePointRegistry.Enable("jump", 1);
             _nowUtc = _nowUtc.AddSeconds(2);
 
-            (UloopPausePointSnapshot snapshot, _, _) = UloopPausePointRegistry.Clear("jump");
+            (UloopPausePointSnapshot snapshot, bool _, int clearedCount) =
+                UloopPausePointRegistry.Clear("jump");
 
-            Assert.That(snapshot.Message, Is.EqualTo("Pause point had already expired before being hit; nothing to clear."));
+            Assert.That(
+                snapshot.Message,
+                Is.EqualTo(
+                    "Pause point had already expired before being hit; this clear marked the record cleared."));
+            Assert.That(clearedCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: clearing an expired marker that already hit reports that the record was marked cleared with ClearedCount 1.
+        /// </summary>
+        [Test]
+        public void Clear_WhenExpiredHitMarkerIsCleared_ReportsRecordClearedMessageAndClearedCountOne()
+        {
+            UloopPausePointRegistry.Enable("jump", 1, UloopPausePointCaptureMode.Trace);
+            UloopPausePoint.Pause("jump");
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            (UloopPausePointSnapshot snapshot, bool _, int clearedCount) =
+                UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(
+                snapshot.Message,
+                Is.EqualTo(
+                    "Pause point capture window had already expired; this clear marked the record cleared."));
+            Assert.That(clearedCount, Is.EqualTo(1));
         }
 
         [Test]
