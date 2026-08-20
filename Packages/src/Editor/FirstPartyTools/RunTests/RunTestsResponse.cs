@@ -14,7 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         internal const string NoTestsFoundMessage = "No tests found matching the specified filter criteria";
         internal const string NoTestsFoundExplanationText =
-            "No tests were discovered for this run. This is not a test failure; check TestMode, FilterType, and FilterValue. If newly added test scripts are never discovered, the most common cause is a missing test assembly: add an .asmdef with Test Assemblies enabled to the test folder (EditMode test assemblies target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests.";
+            "No tests were discovered for this run. This is not a test failure; check TestMode, FilterType, and FilterValue. If newly added test scripts are never discovered, the most common cause is a missing test assembly: add an .asmdef with Test Assemblies enabled to the test folder (EditMode test assemblies target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests. An .asmdef cannot reference the predefined Assembly-CSharp: if the code under test lives there, move it into its own .asmdef and add any package assemblies it uses to that .asmdef's references.";
 
         public static readonly string TestFrameworkUnavailableMessage =
             $"run-tests requires the Unity Test Framework package ({UnityCliLoopConstants.PACKAGE_NAME_TEST_FRAMEWORK}). Install it via Package Manager to use test execution.";
