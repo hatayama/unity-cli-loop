@@ -1,9 +1,9 @@
 package projectrunner
 
 import (
+	"sort"
 	"testing"
 
-	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 )
 
@@ -121,7 +121,7 @@ func TestPausePointSharedHelpOptionsAreAcceptedByTheWaitParser(t *testing.T) {
 }
 
 // runnerNativeCommandSampleArgs supplies one accepted argv form per flag advertised by a
-// runner-owned native command's --help. A flag added to runnerNativeCommandOptions without an entry
+// runner-owned native command's --help. A flag added to a tooldocs table without an entry
 // here fails the contract test below rather than silently going unchecked.
 var runnerNativeCommandSampleArgs = map[string][]string{
 	"--" + PausePointIDFlagName:                             {"--id", "marker"},
@@ -138,30 +138,106 @@ var runnerNativeCommandSampleArgs = map[string][]string{
 // own parser. The status parser is a separate switch from the await one, so a flag added to the help
 // table alone would be advertised and then rejected as unknown on use.
 func TestPausePointStatusHelpOptionsAreAcceptedByTheStatusParser(t *testing.T) {
-	for _, option := range runnerNativeCommandOptions[clicore.PausePointStatusUserCommandName] {
-		args, ok := runnerNativeCommandSampleArgs[option]
+	for _, option := range tooldocs.PausePointStatusCLIOnlyOptions() {
+		optionName := "--" + option.FlagName
+		args, ok := runnerNativeCommandSampleArgs[optionName]
 		if !ok {
-			t.Fatalf("no sample argv for %s: add one to runnerNativeCommandSampleArgs", option)
+			t.Fatalf("no sample argv for %s: add one to runnerNativeCommandSampleArgs", optionName)
 		}
 
 		statusArgs := append([]string{"--" + PausePointIDFlagName, "marker"}, args...)
 		if _, err := parsePausePointStatusOptions(statusArgs); err != nil {
-			t.Errorf("pause-point-status parser rejected advertised option %s: %v", option, err)
+			t.Errorf("pause-point-status parser rejected advertised option %s: %v", optionName, err)
 		}
 	}
 }
 
 // Verifies the same for await-pause-point, whose help table is the larger of the two.
 func TestPausePointAwaitHelpOptionsAreAcceptedByTheWaitParser(t *testing.T) {
-	for _, option := range runnerNativeCommandOptions[clicore.PausePointAwaitCommandName] {
-		args, ok := runnerNativeCommandSampleArgs[option]
+	for _, option := range tooldocs.PausePointAwaitCLIOnlyOptions() {
+		optionName := "--" + option.FlagName
+		args, ok := runnerNativeCommandSampleArgs[optionName]
 		if !ok {
-			t.Fatalf("no sample argv for %s: add one to runnerNativeCommandSampleArgs", option)
+			t.Fatalf("no sample argv for %s: add one to runnerNativeCommandSampleArgs", optionName)
 		}
 
 		waitArgs := append([]string{"--" + PausePointIDFlagName, "marker"}, args...)
 		if _, err := parseWaitForPausePointOptions(waitArgs); err != nil {
-			t.Errorf("await-pause-point parser rejected advertised option %s: %v", option, err)
+			t.Errorf("await-pause-point parser rejected advertised option %s: %v", optionName, err)
+		}
+	}
+}
+
+// pausePointAwaitAdvertisedFlagNames is the await-pause-point advertised flag set. These are
+// test-local literals, not tooldocs constants, so deleting a table row fails even when the
+// switch-based parser still accepts the flag.
+var pausePointAwaitAdvertisedFlagNames = []string{
+	"id",
+	"timeout-seconds",
+	"matching-logs-max-count",
+	"captured-variables",
+	"captured-variable-names",
+	"expect",
+	"trigger",
+	"resume-play",
+}
+
+// pausePointStatusAdvertisedFlagNames is the pause-point-status advertised flag set. Same
+// test-local-literal rule as pausePointAwaitAdvertisedFlagNames.
+var pausePointStatusAdvertisedFlagNames = []string{
+	"id",
+	"captured-variables",
+	"captured-variable-names",
+	"expect",
+}
+
+// Verifies the await-pause-point option table's flag names equal the advertised set. Table-to-parser
+// acceptance cannot see a deleted row: the parsers are switch-based, so a missing help row still
+// leaves the flag accepted.
+func TestPausePointAwaitCLIOnlyOptionsMatchFixedFlagSet(t *testing.T) {
+	assertPausePointCLIOnlyFlagNames(t, tooldocs.PausePointAwaitCLIOnlyOptions(), pausePointAwaitAdvertisedFlagNames)
+}
+
+// Verifies the same reverse-direction contract for pause-point-status.
+func TestPausePointStatusCLIOnlyOptionsMatchFixedFlagSet(t *testing.T) {
+	assertPausePointCLIOnlyFlagNames(t, tooldocs.PausePointStatusCLIOnlyOptions(), pausePointStatusAdvertisedFlagNames)
+}
+
+func assertPausePointCLIOnlyFlagNames(
+	t *testing.T,
+	options []tooldocs.PausePointCLIOnlyOption,
+	expected []string,
+) {
+	t.Helper()
+	actual := make([]string, 0, len(options))
+	for _, option := range options {
+		actual = append(actual, option.FlagName)
+	}
+	sort.Strings(actual)
+	want := append([]string{}, expected...)
+	sort.Strings(want)
+	if len(actual) != len(want) {
+		t.Fatalf("flag names = %v, want %v", actual, want)
+	}
+	for index, name := range want {
+		if actual[index] != name {
+			t.Fatalf("flag names = %v, want %v", actual, want)
+		}
+	}
+}
+
+// Verifies every await-pause-point and pause-point-status help table row has a description. A
+// names-only listing is how --help used to render these commands, so an empty Description would
+// recreate that gap even after the renderer learned to print a second column.
+func TestPausePointAwaitAndStatusCLIOnlyOptionsHaveDescriptions(t *testing.T) {
+	for _, option := range tooldocs.PausePointAwaitCLIOnlyOptions() {
+		if option.Description == "" {
+			t.Errorf("await-pause-point --%s has an empty description", option.FlagName)
+		}
+	}
+	for _, option := range tooldocs.PausePointStatusCLIOnlyOptions() {
+		if option.Description == "" {
+			t.Errorf("pause-point-status --%s has an empty description", option.FlagName)
 		}
 	}
 }

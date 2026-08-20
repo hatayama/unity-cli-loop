@@ -56,6 +56,36 @@ func TestPausePointEnableCLIOnlyOptionHelpUsage(t *testing.T) {
 	}
 }
 
+// Verifies await and status CLI-only tables produce --help rows with usage and description, so
+// native-command help can render the same shape as schema-driven tool help.
+func TestPausePointAwaitAndStatusCLIOnlyHelpEntries(t *testing.T) {
+	awaitEntries := PausePointCLIOnlyHelpEntries(PausePointAwaitCLIOnlyOptions())
+	if len(awaitEntries) != len(PausePointAwaitCLIOnlyOptions()) {
+		t.Fatalf("await help entries = %d, want %d", len(awaitEntries), len(PausePointAwaitCLIOnlyOptions()))
+	}
+	for _, entry := range awaitEntries {
+		if entry.Usage == "" {
+			t.Errorf("await help entry %s has empty usage", entry.Name)
+		}
+		if entry.Description == "" {
+			t.Errorf("await help entry %s has empty description", entry.Name)
+		}
+	}
+
+	statusEntries := PausePointCLIOnlyHelpEntries(PausePointStatusCLIOnlyOptions())
+	if len(statusEntries) != len(PausePointStatusCLIOnlyOptions()) {
+		t.Fatalf("status help entries = %d, want %d", len(statusEntries), len(PausePointStatusCLIOnlyOptions()))
+	}
+	for _, entry := range statusEntries {
+		if entry.Usage == "" {
+			t.Errorf("status help entry %s has empty usage", entry.Name)
+		}
+		if entry.Description == "" {
+			t.Errorf("status help entry %s has empty description", entry.Name)
+		}
+	}
+}
+
 // Verifies the CLI-only option table is not applied to unrelated tools, which would advertise
 // pause-point orchestration flags on commands that reject them.
 func TestVisibleOptionHelpEntriesOmitPausePointCLIOnlyOptionsForOtherTools(t *testing.T) {

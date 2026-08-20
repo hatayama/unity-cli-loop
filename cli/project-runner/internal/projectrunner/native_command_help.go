@@ -11,33 +11,25 @@ import (
 // Runner-specific pause-point flags: --id and --timeout-seconds mirror the Unity-side schema, and
 // --matching-logs-max-count only exists on the wait commands. The CLI-only flags shared with
 // enable-pause-point's --help listing live in tooldocs instead (pause_point_cli_options.go).
+// The string values are the tooldocs constants so parsers and option tables cannot drift.
 const (
-	PausePointIDFlagName           = "id"
-	PausePointTimeoutFlagName      = "timeout-seconds"
-	PausePointLogsMaxCountFlagName = "matching-logs-max-count"
+	PausePointIDFlagName           = tooldocs.PausePointIDFlagName
+	PausePointTimeoutFlagName      = tooldocs.PausePointTimeoutSecondsFlagName
+	PausePointLogsMaxCountFlagName = tooldocs.PausePointMatchingLogsMaxCountFlagName
 )
 
-// runnerNativeCommandOptions lists the flags accepted by each runner-owned
-// native command. It lives with the runner binary (rather than the
-// dispatcher) so that adding a flag to a runner-owned command never requires
-// a dispatcher code change or release.
-var runnerNativeCommandOptions = map[string][]string{
-	clicore.PausePointAwaitCommandName: {
-		"--" + PausePointIDFlagName,
-		"--" + PausePointTimeoutFlagName,
-		"--" + PausePointLogsMaxCountFlagName,
-		"--" + tooldocs.PausePointCapturedVariablesFlagName,
-		"--" + tooldocs.PausePointCapturedVariableNamesFlagName,
-		"--" + tooldocs.PausePointExpectFlagName,
-		"--" + tooldocs.PausePointTriggerFlagName,
-		"--" + tooldocs.PausePointResumePlayFlagName,
-	},
-	clicore.PausePointStatusUserCommandName: {
-		"--" + PausePointIDFlagName,
-		"--" + tooldocs.PausePointCapturedVariablesFlagName,
-		"--" + tooldocs.PausePointCapturedVariableNamesFlagName,
-		"--" + tooldocs.PausePointExpectFlagName,
-	},
+// runnerNativeCLIOnlyOptions returns the tooldocs table for a runner-owned native command.
+// Help rendering and unknown-option owner lookup both read this, so a flag added to a table
+// is advertised and recognized without a second handwritten name list.
+func runnerNativeCLIOnlyOptions(command string) []tooldocs.PausePointCLIOnlyOption {
+	switch command {
+	case clicore.PausePointAwaitCommandName:
+		return tooldocs.PausePointAwaitCLIOnlyOptions()
+	case clicore.PausePointStatusUserCommandName:
+		return tooldocs.PausePointStatusCLIOnlyOptions()
+	default:
+		return nil
+	}
 }
 
 // tryPrintNativeCommandHelp prints command-specific help for a runner-owned
@@ -55,17 +47,20 @@ func tryPrintNativeCommandHelp(command string, stdout io.Writer) bool {
 
 func printNativeCommandHelp(command string, stdout io.Writer) {
 	entry, _ := clicore.NativeCommand(command)
-	options := sortedNativeCommandOptions(runnerNativeCommandOptions[command])
+	helpEntries := sortedNativeCommandHelpEntries(
+		tooldocs.PausePointCLIOnlyHelpEntries(runnerNativeCLIOnlyOptions(command)))
 
 	clicore.WriteLine(stdout, "Usage:")
-	if len(options) > 0 {
+	if len(helpEntries) > 0 {
 		clicore.WriteFormat(stdout, "  uloop %s [options]\n", command)
 		clicore.WriteLine(stdout, "")
 		clicore.WriteLine(stdout, entry.Description)
 		clicore.WriteLine(stdout, "")
 		clicore.WriteLine(stdout, "Options:")
-		for _, option := range options {
-			clicore.WriteFormat(stdout, "  %s\n", option)
+		for _, helpEntry := range helpEntries {
+			// Wide enough for the longest usage string (--captured-variable-names <value>), so no
+			// single row pushes its description out of the column. Matches dispatcher tool help.
+			clicore.WriteFormat(stdout, "  %-34s %s\n", helpEntry.Usage, helpEntry.Description)
 		}
 	} else {
 		clicore.WriteFormat(stdout, "  uloop %s\n", command)
@@ -85,8 +80,10 @@ func printNativeCommandHelp(command string, stdout io.Writer) {
 	}
 }
 
-func sortedNativeCommandOptions(options []string) []string {
-	result := append([]string{}, options...)
-	sort.Strings(result)
+func sortedNativeCommandHelpEntries(entries []tooldocs.OptionHelpEntry) []tooldocs.OptionHelpEntry {
+	result := append([]tooldocs.OptionHelpEntry{}, entries...)
+	sort.Slice(result, func(left int, right int) bool {
+		return result[left].Name < result[right].Name
+	})
 	return result
 }
