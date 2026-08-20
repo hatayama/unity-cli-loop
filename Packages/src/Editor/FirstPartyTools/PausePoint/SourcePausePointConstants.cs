@@ -240,6 +240,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "The marker is armed on the compiled statement. If that is not the statement you meant, "
             + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable.";
 
+        // Format: file, resolved line, compiled line text.
+        // Why a distinct sentence: quoting an empty edited line as '' looks like a missing field.
+        public const string HotReloadCompiledLineMapBlankEditedLineDriftWarningFormat =
+            "'{0}' line {1} is '{2}' in the last compiled source but blank in the edited file. "
+            + "The marker is armed on the compiled statement. If that is not the statement you meant, "
+            + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable.";
+
+        // Format: file, requested line, requested edited text, resolved line, resolved method.
+        public const string HotReloadCompiledLineSnapDisclosureFormat =
+            "'{0}' --line {1} is '{2}' in the edited file, but the marker snapped forward to line {3} in '{4}'.";
+
+        // Format: file, requested line, resolved line, resolved method.
+        public const string HotReloadCompiledLineSnapDisclosureBlankRequestedLineFormat =
+            "'{0}' --line {1} is blank in the edited file, but the marker snapped forward to line {2} in '{3}'.";
+
+        // Format: file, requested line, resolved line, resolved method.
+        // Why omit edited text: a failed read is not the same as a blank line.
+        public const string HotReloadCompiledLineSnapDisclosureWithoutEditedTextFormat =
+            "'{0}' --line {1} snapped forward to line {2} in '{3}'.";
+
         public const string HotReloadCompiledLineMapLineDriftNextAction =
             "Verify ResolvedLineText is the statement you intended. If it is not, run 'uloop compile' "
             + "and re-enable the pause point.";
@@ -275,6 +295,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: comma-separated 1-based compiled line numbers, with an optional truncation note.
         public const string HotReloadCompiledLineDriftCandidateMultipleFormat =
             " Candidate: the edited line's text appears at lines {0} in the last compiled source.";
+
+        // Format: requested --line, 1-based compiled line number.
+        public const string HotReloadCompiledLineDriftRequestedLineCandidateSingleFormat =
+            " Candidate: the text at --line {0} in the edited file appears at line {1} in the last compiled source.";
+
+        // Format: requested --line, comma-separated 1-based compiled line numbers, with an
+        // optional truncation note.
+        public const string HotReloadCompiledLineDriftRequestedLineCandidateMultipleFormat =
+            " Candidate: the text at --line {0} in the edited file appears at lines {1} in the last compiled source.";
 
         // Why format from CompiledLineDriftCandidateMatchLimit: a hard-coded "3" would lie
         // if the cap changed.
