@@ -57,7 +57,7 @@ Enable a pause point so Unity pauses when that code path is reached, either by a
 
 ### clear-pause-point
 
-Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is 0 or 1 for `--id`, and the number of markers actually cleared for `--all`.
+Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is the number of marker records removed: 0 or 1 for `--id`, and the number of records removed for `--all`. Auto-disarmed and expired markers still count as 1 because this call removes their records.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
