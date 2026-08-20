@@ -39,6 +39,8 @@ return x;
 
 Prefer terminal commands for file operations and keep snippets focused on Unity Editor state that existing uloop tools cannot inspect or change.
 
+This snippet runs in the Editor execution context: `Screen.width` and `Screen.height` are Editor pixels, not the Game View resolution. For a ray through the Game View center, use `cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f))`.
+
 ## Known transpiler constraints
 
 - Literals inside recognized static local function bodies are kept inline automatically. Unsupported header shapes (generic `where` clauses, tuple return types, statement lambdas inside expression bodies) may still hoist literals and surface CS8421; remove `static` or rewrite the helper.
