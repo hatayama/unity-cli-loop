@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.Application;
@@ -95,6 +97,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 System.Threading.SynchronizationContext.SetSynchronizationContext(previousContext);
                 RestoreEditorMainThreadDispatcher();
             }
+        }
+
+        /// <summary>
+        /// Verifies ExecuteToolAsync copies the session elapsed-seconds snapshot onto the busy exception.
+        /// </summary>
+        [Test]
+        public void ExecuteToolAsync_WhenAnotherToolIsRunning_ShouldThrowBusyWithElapsedSeconds()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            session.TryEnter("running-tool");
+            timestamp += 5 * Stopwatch.Frequency;
+
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            BusyRouteRequestedTool requestedTool = new BusyRouteRequestedTool();
+            registry.RegisterTool(requestedTool);
+            UnityCliLoopToolExecutionService executionService =
+                new UnityCliLoopToolExecutionService(new NoOpEditorRuntimeStatePort(), session);
+
+            UnityCliLoopToolBusyException exception = Assert.ThrowsAsync<UnityCliLoopToolBusyException>(
+                () => executionService.ExecuteToolAsync(
+                    registry,
+                    requestedTool.ToolName,
+                    null,
+                    CancellationToken.None));
+
+            Assert.That(exception.RunningToolName, Is.EqualTo("running-tool"));
+            Assert.That(exception.RequestedToolName, Is.EqualTo(requestedTool.ToolName));
+            Assert.That(exception.RunningToolElapsedSeconds, Is.EqualTo(5));
+
+            session.Exit();
         }
 
         [Test]
@@ -196,6 +229,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void Complete()
             {
                 _completionSource.TrySetResult(new PendingTypedResponse());
+            }
+        }
+
+        private sealed class BusyRouteRequestedTool : IUnityCliLoopTool
+        {
+            public string ToolName => "requested-tool";
+
+            public ToolParameterSchema ParameterSchema => new();
+
+            public Task<UnityCliLoopToolResponse> ExecuteAsync(JToken paramsToken, CancellationToken ct)
+            {
+                return Task.FromResult<UnityCliLoopToolResponse>(new PendingTypedResponse());
             }
         }
 

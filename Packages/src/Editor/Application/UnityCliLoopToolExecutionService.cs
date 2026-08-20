@@ -15,13 +15,16 @@ namespace io.github.hatayama.UnityCliLoop.Application
     internal sealed class UnityCliLoopToolExecutionService
     {
         private readonly IEditorRuntimeStatePort _editorRuntimeStatePort;
-        private readonly ToolExecutionSession _executionSession = new();
+        private readonly ToolExecutionSession _executionSession;
 
-        internal UnityCliLoopToolExecutionService(IEditorRuntimeStatePort editorRuntimeStatePort)
+        internal UnityCliLoopToolExecutionService(
+            IEditorRuntimeStatePort editorRuntimeStatePort,
+            ToolExecutionSession executionSession = null)
         {
             Debug.Assert(editorRuntimeStatePort != null, "editorRuntimeStatePort must not be null");
 
             _editorRuntimeStatePort = editorRuntimeStatePort ?? throw new ArgumentNullException(nameof(editorRuntimeStatePort));
+            _executionSession = executionSession ?? new ToolExecutionSession();
         }
 
         internal async Task<UnityCliLoopToolResponse> ExecuteToolAsync(
