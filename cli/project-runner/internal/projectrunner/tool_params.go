@@ -19,12 +19,7 @@ func buildToolParams(args []string, tool clicore.ToolDefinition) (map[string]any
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
 		if !strings.HasPrefix(arg, "--") {
-			return nil, "", &clierrors.ArgumentError{
-				Message:     "Unexpected argument: " + arg,
-				Received:    arg,
-				Command:     tool.Name,
-				NextActions: []string{"Pass tool inputs as `--option value` pairs."},
-			}
+			return nil, "", unexpectedArgumentError(tool, arg)
 		}
 
 		flag, err := parseToolFlag(arg)
@@ -46,12 +41,7 @@ func buildToolParams(args []string, tool clicore.ToolDefinition) (map[string]any
 
 		propertyName, property, negated, ok := tooldocs.FindProperty(tool, flag.name)
 		if !ok {
-			return nil, "", &clierrors.ArgumentError{
-				Message:     "Unknown option for " + tool.Name + ": --" + flag.name,
-				Option:      "--" + flag.name,
-				Command:     tool.Name,
-				NextActions: []string{"Run `uloop " + tool.Name + " --help` to inspect supported options."},
-			}
+			return nil, "", unknownToolOptionError(tool, flag.name)
 		}
 
 		option := "--" + flag.name
