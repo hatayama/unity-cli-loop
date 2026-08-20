@@ -26,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private bool _reloadExternalSceneChanges = true;
         private CompileResultRecordingContext _resultRecordingContext = CompileResultRecordingContext.Disabled();
         private DateTime _compileStartedAtUtc = DateTime.MinValue;
+        private int _assemblyFinishedCount;
         private readonly CompileLifecycleRecoveryCoordinator _recoveryCoordinator;
 
         public CompileController(
@@ -47,6 +48,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 () => new AssemblyDefinitionDuplicationValidationService().ValidateNoDuplicateAsmdefNames(),
                 () => _isForceCompile,
                 () => _compileMessages.ToArray(),
+                () => _assemblyFinishedCount,
+                // Why not Time.realtimeSinceStartupAsDouble: it freezes while the Editor is paused,
+                // and pause-point compiles run in that state.
+                () => EditorApplication.timeSinceStartup,
                 BuildCompileControllerStateContext,
                 AbortCompileWithResult,
                 AbortCompile);
@@ -145,6 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _pendingPausePointWarning = pausePointWarning;
             _isCompiling = true;
             _compileMessages.Clear();
+            _assemblyFinishedCount = 0;
             _compileStartedAtUtc = DateTime.UtcNow;
             TaskCompletionSource<CompileResult> compileTask = new();
             _currentCompileTask = compileTask;
@@ -437,12 +443,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <param name="messages">The compiler messages.</param>
         private void HandleAssemblyFinished(string asmPath, CompilerMessage[] messages)
         {
+            _assemblyFinishedCount++;
             string assemblyName = System.IO.Path.GetFileName(asmPath);
 
             foreach (CompilerMessage message in messages)
             {
                 _compileMessages.Add(message);
             }
+
+            VibeLogger.LogInfo(
+                "compile_assembly_finished_callback_received",
+                "Unity assemblyCompilationFinished callback was received.",
+                new
+                {
+                    assembly_name = assemblyName,
+                    message_count = messages.Length,
+                    elapsed_ms = CompileElapsedMilliseconds()
+                });
 
             OnAssemblyCompiled?.Invoke(assemblyName, messages);
         }

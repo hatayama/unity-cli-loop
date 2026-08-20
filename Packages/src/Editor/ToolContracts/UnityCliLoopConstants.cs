@@ -132,6 +132,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const int COMPILE_START_TIMEOUT_MS = 5000;
         public const int COMPILE_START_POLL_INTERVAL_MS = 100;
         public const int COMPILE_FINISH_MISSED_CALLBACK_GRACE_MS = 2000;
+        /// <summary>
+        /// Wall-clock milliseconds without a new assemblyCompilationFinished callback while Unity
+        /// still reports isCompiling, after at least one assembly has finished. Warning only.
+        /// </summary>
+        public const int COMPILE_ASSEMBLY_PROGRESS_STALL_WARNING_MS = 300000;
         public const int EDITOR_FRAME_WAIT_TIMEOUT_MS = 5000;
         
         public const int MAX_SETTINGS_SIZE_BYTES = 1024 * 16;
