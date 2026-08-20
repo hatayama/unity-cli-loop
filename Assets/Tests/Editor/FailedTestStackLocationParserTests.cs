@@ -59,5 +59,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(file, Is.Null);
             Assert.That(line, Is.Null);
         }
+
+        /// <summary>
+        /// What: a 20-digit line number yields no location instead of overflowing int.Parse
+        /// or reporting a truncated 9-digit line from an unanchored match.
+        /// </summary>
+        [Test]
+        public void TryParse_WhenLineNumberHasTwentyDigits_ReturnsNullLocation()
+        {
+            (string parenthesizedFile, int? parenthesizedLine) = FailedTestStackLocationParser.TryParse(
+                "  (at Assets/Tests/FailingTest.cs:12345678901234567890)");
+            Assert.That(parenthesizedFile, Is.Null);
+            Assert.That(parenthesizedLine, Is.Null);
+
+            (string inFile, int? inLine) = FailedTestStackLocationParser.TryParse(
+                "at Example.Tests.FailingTest () [0x00000] in Assets/Tests/FailingTest.cs:12345678901234567890");
+            Assert.That(inFile, Is.Null);
+            Assert.That(inLine, Is.Null);
+        }
     }
 }

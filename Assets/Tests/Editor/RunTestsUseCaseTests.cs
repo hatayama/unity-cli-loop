@@ -539,6 +539,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: FailedCount equal to 10 leaves Message as the untruncated Failed status.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenExactlyTenTestsFail_LeavesMessageWithoutTruncationNote()
+        {
+            SerializableTestResult.FailedTestDetail[] details = new SerializableTestResult.FailedTestDetail[10];
+            for (int index = 0; index < 10; index++)
+            {
+                details[index] = new SerializableTestResult.FailedTestDetail
+                {
+                    FullName = "Example.Tests.FailingTest" + index,
+                    Message = "boom"
+                };
+            }
+
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = new SerializableTestResult
+                {
+                    success = false,
+                    status = RunTestsExecutionStatus.Failed,
+                    hasFailures = true,
+                    noTestsFound = false,
+                    noTestsFoundExplanation = string.Empty,
+                    message = "Test execution completed with status: Failed",
+                    completedAt = "2026-01-01T00:00:00.0000000Z",
+                    testCount = 10,
+                    passedCount = 0,
+                    failedCount = 10,
+                    skippedCount = 0,
+                    xmlPath = "TestResults/example.xml",
+                    failedTests = details
+                }
+            };
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(ValidationResult.Success());
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.FailedTests.Length, Is.EqualTo(10));
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Test execution completed with status: Failed"));
+        }
+
+        /// <summary>
         /// What: a passing run leaves FailedTests null so JSON omits the field.
         /// </summary>
         [Test]
