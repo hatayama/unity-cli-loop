@@ -152,6 +152,48 @@ func TestRunCompileAttachWaitsForInFlightCompileAndClearsRecord(t *testing.T) {
 	}
 }
 
+// Verifies attachWaitForPendingCompile binds the interim reporter so stderr
+// gets the progress line without injecting reportInterim on the caller.
+func TestRunCompileAttachWaitReportsInterimProgressLine(t *testing.T) {
+	projectRoot := t.TempDir()
+	requestID := "compile_attach_interim_route"
+	if err := writeCompilePendingRecord(projectRoot, compilePendingRecord{
+		RequestID:     requestID,
+		TimedOutAtUtc: time.Now().UTC().Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("write pending record failed: %v", err)
+	}
+
+	start := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	now := start
+	queryCalls := 0
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		queryCalls++
+		if queryCalls == 1 {
+			return compileStatusResponse{Ready: false, IsCompiling: true}, nil
+		}
+		now = now.Add(60 * time.Second)
+		return compileStatusResponse{Ready: false, IsCompiling: true}, nil
+	})
+	deps.now = func() time.Time { return now }
+	deps.interimReportInterval = 60 * time.Second
+	connection := unityipc.Connection{
+		Endpoint:    unityipc.Endpoint{Network: "tcp", Address: "127.0.0.1:1"},
+		ProjectRoot: projectRoot,
+	}
+	params := map[string]any{compileWaitTimeoutParam: 1}
+	var stdout, stderr bytes.Buffer
+
+	code := runCompileWithDomainReloadWaitWithDeps(context.Background(), connection, params, &stdout, &stderr, deps)
+	if code != 1 {
+		t.Fatalf("expected attach timeout exit 1: code=%d stderr=%s", code, stderr.String())
+	}
+	expected := "compile: still waiting for Unity (elapsed 60s; last status: is_compiling=true, is_domain_reload_in_progress=false)."
+	if !strings.Contains(stderr.String(), expected) {
+		t.Fatalf("attach wait must print the interim progress line via bindCompileWaitInterimReporter:\n%s", stderr.String())
+	}
+}
+
 // Verifies a completed pending compile returns the stored result without a new request.
 func TestRunCompileAttachReturnsStoredResultAndClearsRecord(t *testing.T) {
 	enableCliVibeLog(t)

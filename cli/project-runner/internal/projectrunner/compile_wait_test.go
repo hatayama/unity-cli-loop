@@ -835,6 +835,7 @@ func TestCompileWaitTimeoutError(t *testing.T) {
 		"Unity keeps compiling and refuses other commands with UNITY_SERVER_BUSY until it finishes. Re-run `uloop compile`: it will reattach to the in-flight compile and wait for its result instead of starting a new one. The result stays retrievable for roughly 18 more minutes.",
 		clierrors.ApiUpdateConsentModalNextAction,
 		"Only if Unity does not respond to any command, restart it with `uloop launch -r`.",
+		"If repeated waits keep showing is_compiling=true with no progress, the Editor's compile pipeline may be stalled (for example by a modal dialog); restart Unity with 'uloop launch -r' and rerun 'uloop compile'.",
 	}
 	if len(cliErr.NextActions) != len(expectedActions) {
 		t.Fatalf("next actions mismatch: %#v", cliErr.NextActions)

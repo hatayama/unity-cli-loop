@@ -183,6 +183,7 @@ func waitForCompileCompletionWithDeps(
 	lastObservationKey := ""
 
 	logCompileStatusPollStart(options, startedAt, deadline)
+	interim := newCompileWaitInterimState(compileWaitNow(deps))
 
 	ticker := time.NewTicker(options.pollInterval)
 	defer ticker.Stop()
@@ -205,6 +206,7 @@ func waitForCompileCompletionWithDeps(
 			observedStatus = true
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
+		observeCompileWaitInterim(&interim, deps, status, err)
 
 		select {
 		case <-ctx.Done():
