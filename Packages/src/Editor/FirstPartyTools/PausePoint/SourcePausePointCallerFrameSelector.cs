@@ -16,7 +16,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Frames whose declaring type starts with one of these carry no diagnostic value for
         // "how execution reached the marker": runtime async machinery, patching infrastructure,
         // and uloop's own plumbing. Unity engine/editor frames are deliberately kept because an
-        // entry point such as EditorApplication.update is itself diagnostic.
+        // entry point such as EditorApplication.update is itself diagnostic. MonoMod.* is still
+        // skipped as infrastructure, except Harmony patch bodies which Select re-includes via
+        // TryResolvePatchedCallerDisplay because they are the real application callers.
         private static readonly string[] SkippedTypePrefixes =
         {
             "System.",
@@ -45,6 +47,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 SourcePausePointRawStackFrame frame = rawFrames[i];
+                string patchedCallerDisplay = TryResolvePatchedCallerDisplay(frame);
+                if (patchedCallerDisplay != null)
+                {
+                    // A dynamic method carries no debug symbols, so the frame is method-only by
+                    // construction (File null, Line 0).
+                    selected.Add(new UloopPausePointCallerFrame(patchedCallerDisplay, null, 0));
+                    continue;
+                }
+
                 if (frame.TypeFullName != null && IsSkippedInfrastructureType(frame.TypeFullName))
                 {
                     continue;
@@ -58,6 +69,78 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return selected;
+        }
+
+        // A hot-reload-patched or pause-point-instrumented body executes as a Harmony dynamic
+        // method ("MonoMod.Utils.DynamicMethodDefinition" declaring type, "_Patch{N}" name
+        // suffix). Such a frame is a real application caller, so it must survive the
+        // infrastructure prefix skip and be reported under its original "{Type}.{Method}" name.
+        internal static string TryResolvePatchedCallerDisplay(SourcePausePointRawStackFrame frame)
+        {
+            if (frame.TypeFullName != SourcePausePointConstants.HarmonyDynamicMethodDeclaringType)
+            {
+                return null;
+            }
+
+            string logicalName = StripHarmonyPatchSuffix(frame.MethodName);
+            if (logicalName == null)
+            {
+                return null;
+            }
+
+            // The logical name starts with the original declaring type, so the infrastructure
+            // prefix policy still applies: a patched uloop-internal or BCL method must stay
+            // hidden exactly like its compiled counterpart would be.
+            if (IsSkippedInfrastructureType(logicalName))
+            {
+                return null;
+            }
+
+            // A patched async body surfaces as its state machine ("Ns.Type+<Method>d__N.MoveNext");
+            // route the logical name through the same demangling as compiled frames so the payload
+            // keeps the documented "logical method name" contract. For ordinary names the round
+            // trip is the identity.
+            int lastDot = logicalName.LastIndexOf('.');
+            if (lastDot <= 0 || lastDot == logicalName.Length - 1)
+            {
+                return logicalName;
+            }
+
+            return FormatMethodDisplay(logicalName.Substring(0, lastDot), logicalName.Substring(lastDot + 1));
+        }
+
+        // "Ns.Type.Method_Patch3" -> "Ns.Type.Method"; null when the name does not end with
+        // the Harmony patch suffix (then the frame is genuine MonoMod infrastructure, not a
+        // patch body, and must stay skipped).
+        private static string StripHarmonyPatchSuffix(string methodName)
+        {
+            if (string.IsNullOrEmpty(methodName))
+            {
+                return null;
+            }
+
+            int suffixIndex = methodName.LastIndexOf(
+                SourcePausePointConstants.HarmonyPatchNameSuffix, StringComparison.Ordinal);
+            if (suffixIndex <= 0)
+            {
+                return null;
+            }
+
+            int digitsStart = suffixIndex + SourcePausePointConstants.HarmonyPatchNameSuffix.Length;
+            if (digitsStart >= methodName.Length)
+            {
+                return null;
+            }
+
+            for (int i = digitsStart; i < methodName.Length; i++)
+            {
+                if (!char.IsDigit(methodName[i]))
+                {
+                    return null;
+                }
+            }
+
+            return methodName.Substring(0, suffixIndex);
         }
 
         internal static bool IsSkippedInfrastructureType(string typeFullName)
