@@ -560,6 +560,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     response.Success,
                     Is.True,
                     response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
+                Assert.That(
+                    response.ResolvedMethod,
+                    Is.EqualTo(
+                        "System.Int32 io.github.hatayama.UnityCliLoop.Tests.Editor.PausePointCompiledLineMapWarningTests::CompiledLineDriftProbe()"));
                 SourcePausePointResolveResult spanResult = SourcePausePointResolver.Resolve(
                     ResolveFailureFile,
                     response.ResolvedLine);
@@ -647,6 +651,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     response.Success,
                     Is.True,
                     response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
+                Assert.That(
+                    response.ResolvedMethod,
+                    Is.EqualTo(
+                        "System.Int32 io.github.hatayama.UnityCliLoop.Tests.Editor.PausePointCompiledLineMapWarningTests::CompiledLineDriftProbe()"));
                 Assert.That(response.ResolvedLine, Is.EqualTo(compiledResolvedLine));
                 SourcePausePointResolveResult spanResult = SourcePausePointResolver.Resolve(
                     ResolveFailureFile,

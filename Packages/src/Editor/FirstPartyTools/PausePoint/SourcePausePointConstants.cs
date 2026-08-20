@@ -232,7 +232,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // without a ResolvedMethod comparison (FB9).
         // Format: file, resolved method display name.
         public const string HotReloadCompiledLineMapWarningFormat =
-            "'{0}' has active hot-reload patches. The resolved method '{1}' is not patched by this reload, so --line resolved against the last compiled source, not the edited file. Verify ResolvedLineText matches the statement you meant, or run 'uloop compile' and re-enable.";
+            "'{0}' has active hot-reload patches. The resolved method '{1}' is not patched by this reload, "
+            + "so --line resolved against the last compiled source, not the edited file. Verify "
+            + "ResolvedLineText matches the statement you meant, or run 'uloop compile' and re-enable.";
 
         // Why a separate failure string: resolve failure leaves ResolvedMethod and
         // ResolvedLineText empty, so pointing at those fields is a dead end.
