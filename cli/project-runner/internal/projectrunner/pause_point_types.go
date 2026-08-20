@@ -12,6 +12,7 @@ type pausePointStatusResponse struct {
 	Mode                            string                           `json:"Mode"`
 	MaxHistory                      int                              `json:"MaxHistory"`
 	MaxPreviewElements              int                              `json:"MaxPreviewElements"`
+	MaxCallerFrames                 int                              `json:"MaxCallerFrames"`
 	CapturedVariableHistory         []pausePointCapturedHistoryFrame `json:"CapturedVariableHistory"`
 	HistoryDroppedCount             int                              `json:"HistoryDroppedCount"`
 	Expired                         bool                             `json:"Expired"`

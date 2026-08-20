@@ -37,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Mode = "continuous",
                 MaxHistory = 20,
                 MaxPreviewElements = 15,
+                MaxCallerFrames = 4,
                 CapturedVariableHistory = new List<PausePointStatusCapturedHistoryFrame>
                 {
                     new()

@@ -31,6 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public int MaxPreviewElements { get; set; } = UloopPausePointRegistry.DefaultMaxPreviewElements;
 
+        public int MaxCallerFrames { get; set; } = UloopPausePointRegistry.DefaultMaxCallerFrames;
+
         public string Method { get; set; } = string.Empty;
     }
 
@@ -62,6 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Mode { get; set; } = string.Empty;
         public int MaxHistory { get; set; }
         public int MaxPreviewElements { get; set; }
+        public int MaxCallerFrames { get; set; }
         public IReadOnlyList<PausePointCapturedHistoryFrame> CapturedVariableHistory { get; set; } =
             Array.Empty<PausePointCapturedHistoryFrame>();
         public int HistoryDroppedCount { get; set; }
@@ -106,6 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Mode = snapshot.Mode,
                 MaxHistory = snapshot.MaxHistory,
                 MaxPreviewElements = snapshot.MaxPreviewElements,
+                MaxCallerFrames = snapshot.MaxCallerFrames,
                 CapturedVariableHistory = snapshot.CapturedVariableHistory
                     .Select(PausePointCapturedHistoryFrame.FromSnapshot)
                     .ToList(),

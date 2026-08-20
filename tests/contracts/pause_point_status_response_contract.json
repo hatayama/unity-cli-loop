@@ -9,6 +9,7 @@
   "Mode": "continuous",
   "MaxHistory": 20,
   "MaxPreviewElements": 15,
+  "MaxCallerFrames": 4,
   "CapturedVariableHistory": [
     {
       "HitSequence": 1,

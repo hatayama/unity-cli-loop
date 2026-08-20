@@ -30,8 +30,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CaptureFrame(instance, parameterNamesAndValues, localNamesAndValues, maxPreviewElements);
             // The stack must be walked on the hitting thread; a deferred main-thread hit would see
             // the scheduler's stack instead of the caller chain that reached the marker.
+            int maxCallerFrames = UloopPausePointRegistry.GetMaxCallerFrames(id);
             List<UloopPausePointCallerFrame> callerFrames =
-                SourcePausePointCallerFrameCapture.CaptureCallerFrames();
+                SourcePausePointCallerFrameCapture.CaptureCallerFrames(maxCallerFrames);
 
             if (MainThreadSwitcher.IsMainThread)
             {

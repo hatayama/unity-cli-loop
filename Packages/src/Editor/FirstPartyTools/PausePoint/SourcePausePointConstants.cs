@@ -42,8 +42,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const int MaxCollectionPreviewValueLength = 1024;
         public const int MaxCollectionPreviewDepth = 2;
 
-        // Nearest caller plus one more; the CLI has no option to raise this.
-        public const int MaxCallerFrames = 2;
+        // Default nearest caller plus one more. enable-pause-point --max-caller-frames can raise
+        // or disable this per marker (0 skips capture; the examine walk stays capped at 24).
+        public const int MaxCallerFrames = UloopPausePointRegistry.DefaultMaxCallerFrames;
         // Walk this many raw stack frames so skipped infrastructure still leaves room for two callers.
         public const int MaxCallerStackFramesToExamine = 24;
 

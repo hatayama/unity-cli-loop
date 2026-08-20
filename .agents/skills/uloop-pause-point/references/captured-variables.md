@@ -95,7 +95,7 @@ Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or st
 
 ## Caller frames
 
-Each hit records up to two managed caller frames (`CallerFrames`, nearest caller first). `pause-point-status` and `await-pause-point` responses carry them top-level for the latest hit and on every history frame; `enable-pause-point` / `clear-pause-point` responses carry them on history frames only, because those payloads have no top-level capture. The field is always present — an empty array when no managed callers were captured. Selection rules:
+Each hit records up to `--max-caller-frames` managed caller frames (`CallerFrames`, nearest caller first; default 2, range 0–8). 0 disables capture and leaves an empty array. The value is fixed at enable time and also caps every later `pause-point-status` response for that marker; status has no flag to change it. `pause-point-status` and `await-pause-point` responses carry them top-level for the latest hit and on every history frame; `enable-pause-point` / `clear-pause-point` responses carry them on history frames only, because those payloads have no top-level capture. The field is always present — an empty array when no managed callers were captured. Selection rules:
 
 - Runtime machinery (`System.*`, `Microsoft.*`, `Mono.*`), patching infrastructure (`HarmonyLib.*`, `MonoMod.*`), and uloop's own frames are skipped — except a Harmony patch body, which is a real application caller and is kept as described below. Unity engine and editor frames are kept because an entry point such as `UnityEditor.EditorApplication.update` is itself diagnostic.
 - Async callers are reported by their logical method name (compiler state-machine frames are demangled to `Namespace.Type.Method`).

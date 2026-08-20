@@ -16,8 +16,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // fNeedFileInfo:true is effectively free on Mono (measured at parity with false,
         // ~0.12 ms per capture) and yields file:line for script assemblies compiled with
         // Debug code optimization — the same prerequisite pause points already require.
-        public static List<UloopPausePointCallerFrame> CaptureCallerFrames()
+        public static List<UloopPausePointCallerFrame> CaptureCallerFrames(int maxCallerFrames)
         {
+            Debug.Assert(maxCallerFrames >= 0, "maxCallerFrames must not be negative");
+            Debug.Assert(
+                maxCallerFrames <= UloopPausePointRegistry.MaxCallerFramesLimit,
+                "maxCallerFrames must not exceed the caller-frame limit");
+
+            if (maxCallerFrames == 0)
+            {
+                // Why skip the walk: 0 is the high-frequency trace escape hatch, so the cost of
+                // examining 24 frames would defeat the option.
+                return new List<UloopPausePointCallerFrame>();
+            }
+
             StackTrace stackTrace = new StackTrace(fNeedFileInfo: true);
             int frameCount = Math.Min(
                 stackTrace.FrameCount, SourcePausePointConstants.MaxCallerStackFramesToExamine);
@@ -52,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     frame.GetFileLineNumber()));
             }
 
-            return SourcePausePointCallerFrameSelector.Select(rawFrames);
+            return SourcePausePointCallerFrameSelector.Select(rawFrames, maxCallerFrames);
         }
     }
 }

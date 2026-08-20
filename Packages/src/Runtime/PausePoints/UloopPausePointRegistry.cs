@@ -20,6 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public const int MaxHistoryLimit = 100;
         public const int DefaultMaxPreviewElements = 10;
         public const int MaxPreviewElementsLimit = 1000;
+        public const int DefaultMaxCallerFrames = 2;
+        public const int MaxCallerFramesLimit = 8;
 
         private static readonly ConcurrentDictionary<string, UloopPausePointEntry> Entries = new();
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
@@ -76,7 +78,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int timeoutSeconds,
             string mode = UloopPausePointCaptureMode.SingleShot,
             int maxHistory = DefaultMaxHistory,
-            int maxPreviewElements = DefaultMaxPreviewElements)
+            int maxPreviewElements = DefaultMaxPreviewElements,
+            int maxCallerFrames = DefaultMaxCallerFrames)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
             Debug.Assert(timeoutSeconds > 0, "timeoutSeconds must be greater than zero");
@@ -87,10 +90,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Debug.Assert(
                 maxPreviewElements <= MaxPreviewElementsLimit,
                 "maxPreviewElements must not exceed the preview element limit");
+            Debug.Assert(maxCallerFrames >= 0, "maxCallerFrames must not be negative");
+            Debug.Assert(
+                maxCallerFrames <= MaxCallerFramesLimit,
+                "maxCallerFrames must not exceed the caller-frame limit");
 
             DateTime now = NowUtc();
             int generation = ++_nextGeneration;
-            UloopPausePointEntry entry = new(id, timeoutSeconds, mode, maxHistory, maxPreviewElements, now, generation);
+            UloopPausePointEntry entry = new(
+                id, timeoutSeconds, mode, maxHistory, maxPreviewElements, maxCallerFrames, now, generation);
             Entries[id] = entry;
             // Why not clear the raw capture holder here: a re-enable does not resume Unity, so the
             // paused-window constraint (see UloopPausePointRawCaptureHolder's class comment) is not
@@ -325,6 +333,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return Entries.TryGetValue(id, out UloopPausePointEntry entry)
                 ? entry.MaxPreviewElements
                 : DefaultMaxPreviewElements;
+        }
+
+        // Called from the Harmony Capture entry point so the per-marker caller-frame cap set at
+        // Enable time can size this hit. Falls back to the default when the id is unexpectedly
+        // missing (e.g. a race with Clear) rather than asserting, since Capture must never throw.
+        public static int GetMaxCallerFrames(string id)
+        {
+            return Entries.TryGetValue(id, out UloopPausePointEntry entry)
+                ? entry.MaxCallerFrames
+                : DefaultMaxCallerFrames;
         }
 
         /// <summary>

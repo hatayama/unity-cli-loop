@@ -394,6 +394,11 @@
             "description": "Maximum number of elements to include in a captured collection's preview (1-1000). The value set at enable time also caps the previews in every later pause-point-status response for that marker; status has no flag to change it.",
             "default": 10
           },
+          "MaxCallerFrames": {
+            "type": "integer",
+            "description": "Maximum number of caller stack frames to record on each hit (0-8). 0 disables capture (CallerFrames stays an empty array). The value set at enable time also caps every later pause-point-status response for that marker; status has no flag to change it.",
+            "default": 2
+          },
           "Method": {
             "type": "string",
             "description": "Optional method simple name or Type.Method. When set, --line resolves only inside matching methods"

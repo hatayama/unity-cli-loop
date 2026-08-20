@@ -86,7 +86,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.TimeoutSeconds,
                 parameters.Mode,
                 parameters.MaxHistory,
-                parameters.MaxPreviewElements);
+                parameters.MaxPreviewElements,
+                parameters.MaxCallerFrames);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.Warning = PausePointEnableWarnings.CreateEnableWarning();
             LogEnable(response.Id, resolvedMethod: string.Empty, fileLine: string.Empty, response.Mode, response.Warning);
@@ -341,7 +342,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.TimeoutSeconds,
                 parameters.Mode,
                 parameters.MaxHistory,
-                parameters.MaxPreviewElements);
+                parameters.MaxPreviewElements,
+                parameters.MaxCallerFrames);
             if (retargetedToHotReloadPatch)
             {
                 UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, true);
@@ -542,6 +544,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxPreviewElements > UloopPausePointRegistry.MaxPreviewElementsLimit)
             {
                 return $"MaxPreviewElements must be between 1 and {UloopPausePointRegistry.MaxPreviewElementsLimit}.";
+            }
+
+            if (parameters.MaxCallerFrames < 0 ||
+                parameters.MaxCallerFrames > UloopPausePointRegistry.MaxCallerFramesLimit)
+            {
+                return $"MaxCallerFrames must be between 0 and {UloopPausePointRegistry.MaxCallerFramesLimit}.";
             }
 
             return null;

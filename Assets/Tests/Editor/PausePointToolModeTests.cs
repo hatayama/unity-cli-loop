@@ -238,6 +238,105 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: max-caller-frames 0, 1, and 8 reach the enable response.
+        /// </summary>
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(8)]
+        public async Task Enable_WhenMaxCallerFramesIsInRange_MapsParameter(int maxCallerFrames)
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["timeoutSeconds"] = 30,
+                ["maxCallerFrames"] = maxCallerFrames
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.MaxCallerFrames, Is.EqualTo(maxCallerFrames));
+        }
+
+        /// <summary>
+        /// What: max-caller-frames defaults to 2 when omitted.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenMaxCallerFramesIsOmitted_DefaultsToTwo()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["timeoutSeconds"] = 30
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.MaxCallerFrames, Is.EqualTo(UloopPausePointRegistry.DefaultMaxCallerFrames));
+        }
+
+        /// <summary>
+        /// What: max-caller-frames 9 is rejected as out of range.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenMaxCallerFramesIsNine_ReturnsValidationFailure()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["maxCallerFrames"] = 9
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("MaxCallerFrames must be between 0 and 8."));
+        }
+
+        /// <summary>
+        /// What: GetMaxCallerFrames returns the per-marker cap stored at Enable.
+        /// </summary>
+        [Test]
+        public void GetMaxCallerFrames_WhenMarkerIsEnabled_ReturnsConfiguredValue()
+        {
+            UloopPausePointRegistry.Enable(
+                "jump", 30, UloopPausePointCaptureMode.SingleShot, 20, 10, 4);
+
+            Assert.That(UloopPausePointRegistry.GetMaxCallerFrames("jump"), Is.EqualTo(4));
+        }
+
+        /// <summary>
+        /// What: GetMaxCallerFrames falls back to the default for an unknown id.
+        /// </summary>
+        [Test]
+        public void GetMaxCallerFrames_WhenMarkerIsUnknown_ReturnsRegistryDefault()
+        {
+            Assert.That(
+                UloopPausePointRegistry.GetMaxCallerFrames("unknown"),
+                Is.EqualTo(UloopPausePointRegistry.DefaultMaxCallerFrames));
+        }
+
+        /// <summary>
+        /// What: a hit with max-caller-frames 0 still carries an empty CallerFrames array.
+        /// </summary>
+        [Test]
+        public void Hit_WhenMaxCallerFramesIsZero_ReturnsEmptyCallerFramesArray()
+        {
+            UloopPausePointRegistry.Enable(
+                "jump", 30, UloopPausePointCaptureMode.SingleShot, 20, 10, 0);
+
+            SourcePausePointCapture.Capture(
+                "jump", null, Array.Empty<object>(), Array.Empty<object>());
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(snapshot.CallerFrames, Is.Empty);
+        }
+
+        /// <summary>
         /// Verifies the CLI-only status bridge exposes mode and captured history fields.
         /// </summary>
         [Test]

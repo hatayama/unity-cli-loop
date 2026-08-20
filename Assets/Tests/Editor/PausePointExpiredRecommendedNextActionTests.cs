@@ -73,6 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UloopPausePointCaptureMode.SingleShot,
                 20,
                 15,
+                2,
                 Array.Empty<UloopPausePointCapturedHistoryFrame>(),
                 0,
                 true,
