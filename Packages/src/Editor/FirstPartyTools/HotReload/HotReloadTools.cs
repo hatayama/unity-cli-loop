@@ -166,7 +166,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         Kind = HotReloadConstants.AddedMemberStatusKind,
                         Method = added.MethodKey,
-                        FilePath = added.FilePath
+                        FilePath = added.FilePath,
+                        // Why: --status does not compare source, so the AlreadyActive first
+                        // sentence would be a lie after a post-reload edit; only the
+                        // not-instrumented fact is always true.
+                        Reason = HotReloadConstants.AddedMemberNotInstrumentedReason
                     });
             }
 
