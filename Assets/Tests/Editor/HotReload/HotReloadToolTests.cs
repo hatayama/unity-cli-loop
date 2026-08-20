@@ -169,6 +169,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: BuildApplyResponse treats a Failed run that applied only added members as a
+        /// partial apply, so CountAddedOutcomes cannot be dropped without this test failing.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenFailureWithOnlyAddedMembers_SetsPartialApplyRecommendedNextAction()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Added("Type.NewMember", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Failed("Type.Bad", "shim compile failed", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(
+                    "Partially applied. Fix the failed methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches."));
+            Assert.That(response.ShouldSerializeRecommendedNextAction(), Is.True);
+        }
+
+        /// <summary>
         /// What: BuildApplyResponse sets the fix-or-compile RecommendedNextAction when every
         /// outcome failed and nothing was applied.
         /// </summary>
