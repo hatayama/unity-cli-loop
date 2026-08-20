@@ -193,7 +193,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string listed = string.Join(", ", matches);
             if (truncated)
             {
-                listed += SourcePausePointConstants.HotReloadCompiledLineDriftCandidateTruncatedMatchesSuffix;
+                listed += string.Format(
+                    SourcePausePointConstants.HotReloadCompiledLineDriftCandidateTruncatedMatchesSuffixFormat,
+                    SourcePausePointConstants.CompiledLineDriftCandidateMatchLimit);
             }
 
             return string.Format(

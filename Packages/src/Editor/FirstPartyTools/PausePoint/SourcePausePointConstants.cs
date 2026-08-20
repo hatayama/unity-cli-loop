@@ -268,8 +268,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HotReloadCompiledLineDriftCandidateMultipleFormat =
             " Candidate: the edited line's text appears at lines {0} in the last compiled source.";
 
-        public const string HotReloadCompiledLineDriftCandidateTruncatedMatchesSuffix =
-            " (first 3 matches)";
+        // Why format from CompiledLineDriftCandidateMatchLimit: a hard-coded "3" would lie
+        // if the cap changed.
+        public const string HotReloadCompiledLineDriftCandidateTruncatedMatchesSuffixFormat =
+            " (first {0} matches)";
 
         public const string NearbyCompiledMethodsPrefix =
             " Nearby methods in the last compiled source: ";

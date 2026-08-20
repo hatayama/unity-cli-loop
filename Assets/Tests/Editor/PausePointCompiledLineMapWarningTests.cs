@@ -376,9 +376,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 warning,
                 Is.EqualTo(
-                    drift + string.Format(
-                        SourcePausePointConstants.HotReloadCompiledLineDriftCandidateSingleFormat,
-                        2)));
+                    drift + " Candidate: the edited line's text appears at line 2 in the last compiled source."));
         }
 
         /// <summary>
@@ -410,9 +408,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 warning,
                 Is.EqualTo(
-                    drift + string.Format(
-                        SourcePausePointConstants.HotReloadCompiledLineDriftCandidateMultipleFormat,
-                        "2, 4, 5")));
+                    drift + " Candidate: the edited line's text appears at lines 2, 4, 5 in the last compiled source."));
         }
 
         /// <summary>
@@ -444,9 +440,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 warning,
                 Is.EqualTo(
-                    drift + string.Format(
-                        SourcePausePointConstants.HotReloadCompiledLineDriftCandidateMultipleFormat,
-                        "1, 3, 4" + SourcePausePointConstants.HotReloadCompiledLineDriftCandidateTruncatedMatchesSuffix)));
+                    drift + " Candidate: the edited line's text appears at lines 1, 3, 4 (first 3 matches) in the last compiled source."));
         }
 
         /// <summary>
