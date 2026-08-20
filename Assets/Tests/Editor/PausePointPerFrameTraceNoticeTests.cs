@@ -10,7 +10,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Verifies the enable-time notice when a trace marker sits in a per-frame Unity message.
+    /// Verifies the enable-time notice when a trace marker's method name matches a per-frame Unity message.
     /// </summary>
     [TestFixture]
     public sealed class PausePointPerFrameTraceNoticeTests
@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string FixtureFilePath = "Assets/Tests/Editor/PausePointPerFrameTraceNoticeFixture.cs";
 
         private const string PlayerUpdateNotice =
-            "'Player.Update' is a per-frame Unity message; with capture mode 'trace' the history (max 8) can roll over within moments. Prefer a conditional line or a larger --max-history.";
+            "'Player.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.";
 
         [SetUp]
         public void SetUp()
@@ -38,16 +38,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         [TestCase(
             "Player.Update",
-            "'Player.Update' is a per-frame Unity message; with capture mode 'trace' the history (max 8) can roll over within moments. Prefer a conditional line or a larger --max-history.")]
+            "'Player.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.")]
         [TestCase(
             "Player.FixedUpdate",
-            "'Player.FixedUpdate' is a per-frame Unity message; with capture mode 'trace' the history (max 8) can roll over within moments. Prefer a conditional line or a larger --max-history.")]
+            "'Player.FixedUpdate' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.")]
         [TestCase(
             "Player.LateUpdate",
-            "'Player.LateUpdate' is a per-frame Unity message; with capture mode 'trace' the history (max 8) can roll over within moments. Prefer a conditional line or a larger --max-history.")]
+            "'Player.LateUpdate' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.")]
         [TestCase(
             "Player.OnGUI",
-            "'Player.OnGUI' is a per-frame Unity message; with capture mode 'trace' the history (max 8) can roll over within moments. Prefer a conditional line or a larger --max-history.")]
+            "'Player.OnGUI' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.")]
         public void BuildPerFrameTraceWarningOrEmpty_WhenTraceAndPerFrameMessage_ReturnsNotice(
             string resolvedMethod,
             string expectedNotice)
@@ -75,7 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: non-trace capture modes stay silent even when the method is a per-frame Unity message.
+        /// What: non-trace capture modes stay silent even when the method name matches a per-frame Unity message.
         /// </summary>
         [TestCase(UloopPausePointCaptureMode.SingleShot)]
         [TestCase(UloopPausePointCaptureMode.Continuous)]
@@ -122,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 merged,
                 Is.EqualTo(
-                    "Pause point was enabled before PlayMode while Domain Reload is enabled. Entering PlayMode may clear this marker; keep Domain Reload disabled for this workflow or enable the marker after PlayMode starts. 'Player.Update' is a per-frame Unity message; with capture mode 'trace' the history (max 8) can roll over within moments. Prefer a conditional line or a larger --max-history."));
+                    "Pause point was enabled before PlayMode while Domain Reload is enabled. Entering PlayMode may clear this marker; keep Domain Reload disabled for this workflow or enable the marker after PlayMode starts. 'Player.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history."));
         }
 
         /// <summary>
@@ -150,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.True,
                 response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
             string notice =
-                "'PerFrameTraceNoticeFixture.Update' is a per-frame Unity message; with capture mode 'trace' the history (max 8) can roll over within moments. Prefer a conditional line or a larger --max-history.";
+                "'PerFrameTraceNoticeFixture.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.";
             string expectedWarning = PausePointEnableWarnings.MergeWarnings(
                 PausePointEnableWarnings.MergeWarnings(
                     PausePointEnableWarnings.CreateEnableWarning(),
