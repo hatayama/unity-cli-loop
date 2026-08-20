@@ -65,11 +65,18 @@ internal static class OutsideMethodBodyDriftChecker
         AppendNamedWarningIfNeeded(fileName, declarationDriftWarnings, diff.ChangedLabels);
 
         HashSet<string> snapshotResidual = new HashSet<string>(snapshotHandled, StringComparer.Ordinal);
-        UnionInto(snapshotResidual, diff.PairedSyntaxKeys);
+        HashSet<string> currentResidual = new HashSet<string>(currentHandled, StringComparer.Ordinal);
+        // Why skip paired keys on order drift: pairing is position-blind, so equivalent
+        // members that only swapped declaration order would otherwise be stripped from
+        // both residual trees and go silent. Initializer order is observable.
+        if (!diff.OrderDrift)
+        {
+            UnionInto(snapshotResidual, diff.PairedSyntaxKeys);
+            UnionInto(currentResidual, diff.PairedSyntaxKeys);
+        }
+
         UnionInto(snapshotResidual, kindChangePropertySyntaxKeys);
         UnionInto(snapshotResidual, kindChangeEventSyntaxKeys);
-        HashSet<string> currentResidual = new HashSet<string>(currentHandled, StringComparer.Ordinal);
-        UnionInto(currentResidual, diff.PairedSyntaxKeys);
         AppendFileOnlyWarningIfTreesDiffer(
             snapshotRoot,
             currentRoot,

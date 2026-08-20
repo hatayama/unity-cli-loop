@@ -842,6 +842,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: swapping two compiled field declarations without changing initializers still
+        /// emits the file-only outside-body warning, because initializer order is observable.
+        /// </summary>
+        [Test]
+        public async Task Drift_FieldDeclarationOrderSwap_EmitsFileOnlyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            const string originalOrder =
+                "        public int PublicSeed = 3;\n        public int PairAlpha = 1, PairBeta = 2;";
+            const string swappedOrder =
+                "        public int PairAlpha = 1, PairBeta = 2;\n        public int PublicSeed = 3;";
+            Assert.That(onDisk, Does.Contain(originalOrder));
+            string edited = onDisk.Replace(originalOrder, swappedOrder, StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("FieldOrderSwapDrift.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Edits outside method bodies in FieldOrderSwapDrift.cs (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up."
+                    }));
+        }
+
+        /// <summary>
         /// What: changing attributes on a multi-declarator field names every sibling rather
         /// than attributing the edit to a single variable.
         /// </summary>

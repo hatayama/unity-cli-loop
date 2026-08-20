@@ -20,6 +20,7 @@ internal static class OutsideMethodBodyDeclarationDiff
     internal sealed class Result
     {
         internal bool DuplicateKeys;
+        internal bool OrderDrift;
         internal readonly List<string> ChangedLabels = new List<string>();
         internal readonly HashSet<string> PairedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
     }
@@ -111,6 +112,7 @@ internal static class OutsideMethodBodyDeclarationDiff
             handledCurrentKeys,
             result,
             FormatEventLabel);
+        MarkOrderDriftIfPairedKeysReordered(snapshotMaps, currentMaps, result);
         return result;
     }
 
@@ -460,5 +462,116 @@ internal static class OutsideMethodBodyDeclarationDiff
     private static string FormatEventLabel(EventDeclarationSyntax eventDeclaration)
     {
         return "event: " + eventDeclaration.Identifier.Text;
+    }
+
+    private static void MarkOrderDriftIfPairedKeysReordered(
+        MemberMaps snapshotMaps,
+        MemberMaps currentMaps,
+        Result result)
+    {
+        if (result.PairedSyntaxKeys.Count < 2)
+        {
+            return;
+        }
+
+        List<string> snapshotOrder = OrderKeysBySpanStart(result.PairedSyntaxKeys, snapshotMaps);
+        List<string> currentOrder = OrderKeysBySpanStart(result.PairedSyntaxKeys, currentMaps);
+        result.OrderDrift = !StringListsEqual(snapshotOrder, currentOrder);
+    }
+
+    private static List<string> OrderKeysBySpanStart(HashSet<string> keys, MemberMaps maps)
+    {
+        List<string> ordered = new List<string>(keys);
+        ordered.Sort(new SyntaxKeySpanComparer(maps));
+        return ordered;
+    }
+
+    private static bool StringListsEqual(List<string> left, List<string> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < left.Count; index++)
+        {
+            if (!string.Equals(left[index], right[index], StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int GetMappedNodeSpanStart(MemberMaps maps, string key)
+    {
+        SyntaxNode node = FindMappedNodeOrNull(maps, key);
+        if (node == null)
+        {
+            return int.MaxValue;
+        }
+
+        return node.SpanStart;
+    }
+
+    private static SyntaxNode FindMappedNodeOrNull(MemberMaps maps, string key)
+    {
+        if (maps.Fields.ContainsKey(key))
+        {
+            return maps.Fields[key];
+        }
+
+        if (maps.EventFields.ContainsKey(key))
+        {
+            return maps.EventFields[key];
+        }
+
+        if (maps.Methods.ContainsKey(key))
+        {
+            return maps.Methods[key];
+        }
+
+        if (maps.Properties.ContainsKey(key))
+        {
+            return maps.Properties[key];
+        }
+
+        if (maps.Indexers.ContainsKey(key))
+        {
+            return maps.Indexers[key];
+        }
+
+        if (maps.Constructors.ContainsKey(key))
+        {
+            return maps.Constructors[key];
+        }
+
+        if (maps.Operators.ContainsKey(key))
+        {
+            return maps.Operators[key];
+        }
+
+        if (maps.Events.ContainsKey(key))
+        {
+            return maps.Events[key];
+        }
+
+        return null;
+    }
+
+    private sealed class SyntaxKeySpanComparer : IComparer<string>
+    {
+        private readonly MemberMaps _maps;
+
+        internal SyntaxKeySpanComparer(MemberMaps maps)
+        {
+            _maps = maps;
+        }
+
+        public int Compare(string left, string right)
+        {
+            return GetMappedNodeSpanStart(_maps, left).CompareTo(GetMappedNodeSpanStart(_maps, right));
+        }
     }
 }
