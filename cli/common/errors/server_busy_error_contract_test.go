@@ -18,6 +18,12 @@ func TestDecodeServerBusyErrorData_WhenContractFixture_ReadsEveryField(t *testin
 	contract := readServerBusyErrorContract(t)
 
 	decoded := decodeServerBusyErrorData(contract.ErrorData)
+	assertServerBusyContractIdentity(t, decoded)
+	assertServerBusyContractEditorState(t, decoded)
+}
+
+func assertServerBusyContractIdentity(t *testing.T, decoded serverBusyErrorData) {
+	t.Helper()
 	if decoded.Type != "server_busy" {
 		t.Fatalf("type mismatch: %#v", decoded)
 	}
@@ -30,6 +36,13 @@ func TestDecodeServerBusyErrorData_WhenContractFixture_ReadsEveryField(t *testin
 	if decoded.RequestedToolName != "get-logs" {
 		t.Fatalf("requestedToolName mismatch: %#v", decoded)
 	}
+	if decoded.RunningToolElapsedSeconds == nil || *decoded.RunningToolElapsedSeconds != 12 {
+		t.Fatalf("runningToolElapsedSeconds mismatch: %#v", decoded)
+	}
+}
+
+func assertServerBusyContractEditorState(t *testing.T, decoded serverBusyErrorData) {
+	t.Helper()
 	if decoded.IsPlaying == nil || !*decoded.IsPlaying {
 		t.Fatalf("isPlaying mismatch: %#v", decoded)
 	}
@@ -44,9 +57,6 @@ func TestDecodeServerBusyErrorData_WhenContractFixture_ReadsEveryField(t *testin
 	}
 	if decoded.SecondsSinceLastMainThreadTick == nil || *decoded.SecondsSinceLastMainThreadTick != 1.5 {
 		t.Fatalf("secondsSinceLastMainThreadTick mismatch: %#v", decoded)
-	}
-	if decoded.RunningToolElapsedSeconds == nil || *decoded.RunningToolElapsedSeconds != 12 {
-		t.Fatalf("runningToolElapsedSeconds mismatch: %#v", decoded)
 	}
 }
 
