@@ -540,7 +540,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId: correlationId
             );
 
-            return new ScreenshotResponse { Screenshots = screenshots };
+            return new ScreenshotResponse
+            {
+                Screenshots = screenshots,
+                Warning = ScreenshotPlayModeWindowWarningBuilder.Build(
+                    request.CaptureMode, EditorApplication.isPlaying)
+            };
         }
     }
 }
