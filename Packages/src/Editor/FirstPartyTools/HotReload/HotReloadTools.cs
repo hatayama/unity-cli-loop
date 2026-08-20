@@ -243,6 +243,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             List<string> warnings = new List<string>(result.Warnings);
+            // Why before the pause-point extras: this warning is cleared by compile, so it must
+            // count toward the single-compile resolution suffix instead of suppressing it.
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                result.Methods,
+                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadEditedSourceFromDisk,
+                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadCompiledSnapshot);
             int orchestratorWarningCount = warnings.Count;
             AppendRetargetLineDriftWarnings(warnings);
             AppendExpiredNotRetargetedWarnings(warnings);
