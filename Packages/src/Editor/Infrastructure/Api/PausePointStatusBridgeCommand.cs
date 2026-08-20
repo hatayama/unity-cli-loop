@@ -366,6 +366,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public int Line { get; set; }
 
+        // Null when File is present. Distinguishes why File/Line were omitted.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string Note { get; set; }
+
         internal static PausePointStatusCallerFrame FromCallerFrame(UloopPausePointCallerFrame callerFrame)
         {
             if (callerFrame == null)
@@ -377,7 +381,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             {
                 Method = callerFrame.Method,
                 File = callerFrame.File,
-                Line = callerFrame.Line
+                Line = callerFrame.Line,
+                Note = callerFrame.Note
             };
         }
     }

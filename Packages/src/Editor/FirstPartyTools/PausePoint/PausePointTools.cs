@@ -259,6 +259,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public int Line { get; set; }
 
+        // Null when File is present. Distinguishes why File/Line were omitted.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string Note { get; set; }
+
         internal static PausePointCallerFrame FromSnapshot(UloopPausePointCallerFrame snapshot)
         {
             if (snapshot == null)
@@ -270,7 +274,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Method = snapshot.Method,
                 File = snapshot.File,
-                Line = snapshot.Line
+                Line = snapshot.Line,
+                Note = snapshot.Note
             };
         }
     }

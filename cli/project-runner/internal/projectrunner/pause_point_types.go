@@ -139,11 +139,13 @@ type pausePointCapturedHistoryFrame struct {
 }
 
 // pausePointCallerFrame mirrors the Unity-side caller-frame DTO: Method is always
-// present; File and Line are omitted when debug symbols are unavailable.
+// present; File and Line are omitted when debug symbols are unavailable. Note is
+// omitted when File is present.
 type pausePointCallerFrame struct {
 	Method string `json:"Method"`
 	File   string `json:"File,omitempty"`
 	Line   int    `json:"Line,omitempty"`
+	Note   string `json:"Note,omitempty"`
 }
 
 // pausePointCapturedVariable mirrors the flat Unity-side

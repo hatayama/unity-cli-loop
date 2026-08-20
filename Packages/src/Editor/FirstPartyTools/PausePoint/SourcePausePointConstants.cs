@@ -46,6 +46,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // dimension varies fastest), and the preview Elements array is that same flattening.
         public const string MultidimensionalArrayElementOrder = "row-major (last dimension fastest)";
 
+        // Why three distinct notes: File/Line omission has three causes that look identical on
+        // the wire without Note. NormalizeFilePath returning null covers both missing FileName
+        // and a non-project path, so that null must not be labeled "outside the project".
+        public const string CallerFrameDynamicMethodNote =
+            "dynamic method (patched by hot reload or pause-point instrumentation); no debug symbols";
+        public const string CallerFrameMissingDebugSymbolsNote =
+            "no source file information; the frame's assembly has no debug symbols";
+        public const string CallerFrameOutsideProjectNote =
+            "source file is outside the Unity project";
+
         // Default nearest caller plus one more. enable-pause-point --max-caller-frames can raise
         // or disable this per marker (0 skips capture; the examine walk stays capped at 24).
         public const int MaxCallerFrames = UloopPausePointRegistry.DefaultMaxCallerFrames;
