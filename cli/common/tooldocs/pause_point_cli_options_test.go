@@ -77,6 +77,9 @@ func TestPausePointAwaitAndStatusCLIOnlyHelpEntries(t *testing.T) {
 		t.Fatalf("status help entries = %d, want %d", len(statusEntries), len(PausePointStatusCLIOnlyOptions()))
 	}
 	for _, entry := range statusEntries {
+		if entry.Usage == "" {
+			t.Errorf("status help entry %s has empty usage", entry.Name)
+		}
 		if entry.Description == "" {
 			t.Errorf("status help entry %s has empty description", entry.Name)
 		}

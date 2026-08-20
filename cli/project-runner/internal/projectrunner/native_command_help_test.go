@@ -30,23 +30,21 @@ func TestRunProjectLocalAwaitPausePointHelpListsExpectedFlags(t *testing.T) {
 	}
 }
 
-// Verifies await-pause-point --help prints option descriptions, not names alone. The sentence is a
-// test-local literal so a renderer that drops the description column still fails even if the
-// tooldocs table is complete.
-func TestRunProjectLocalAwaitPausePointHelpDescribesTrigger(t *testing.T) {
-	t.Chdir(t.TempDir())
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	code := RunProjectLocal(context.Background(), []string{"await-pause-point", "--help"}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("await-pause-point --help failed: code=%d stderr=%s", code, stderr.String())
-	}
-	const expectedTriggerDescription = "Runs a single uloop subcommand in-process right after arming/registration"
-	if !strings.Contains(stdout.String(), expectedTriggerDescription) {
-		t.Fatalf("await-pause-point --help must describe --trigger: %s", stdout.String())
-	}
+// Verifies await-pause-point --help prints the full Options section: every usage column, every
+// description, %-34s alignment, and sort order. The expected text is a test-local literal so a
+// wrong non-empty description still fails.
+func TestRunProjectLocalAwaitPausePointHelpOptionsSection(t *testing.T) {
+	const expectedOptions = `Options:
+  --captured-variable-names <value>  Restrict CapturedVariables to these comma-separated names
+  --captured-variables <value>       How much of each captured variable to include in the response; values: full|names
+  --expect <value>                   Compare a captured variable against an expected value (repeatable; name=value)
+  --id <value>                       Pause-point marker id matching UloopPausePoint.Pause or the id returned by enable-pause-point
+  --matching-logs-max-count <value>  Maximum Console logs matching the marker id to include on a hit
+  --resume-play                      After confirming the marker is armed, resume PlayMode if paused (before --trigger), so a paused-arm workflow can fire input in one call
+  --timeout-seconds <value>          Seconds to wait for a hit before timing out
+  --trigger <value>                  Runs a single uloop subcommand in-process right after arming/registration
+`
+	assertNativeCommandHelpOptionsSection(t, "await-pause-point", expectedOptions)
 }
 
 // Verifies pause-point-status --help lists the flags it accepts.
@@ -68,6 +66,55 @@ func TestRunProjectLocalPausePointStatusHelpListsExpectedFlags(t *testing.T) {
 	if strings.Contains(stdout.String(), "--timeout-seconds") {
 		t.Fatalf("pause-point-status --help must not list await-pause-point-only flags: %s", stdout.String())
 	}
+}
+
+// Verifies pause-point-status --help prints the full Options section. Same test-local-literal
+// rule as TestRunProjectLocalAwaitPausePointHelpOptionsSection.
+func TestRunProjectLocalPausePointStatusHelpOptionsSection(t *testing.T) {
+	const expectedOptions = `Options:
+  --captured-variable-names <value>  Restrict CapturedVariables to these comma-separated names
+  --captured-variables <value>       How much of each captured variable to include in the response; values: full|names
+  --expect <value>                   Compare a captured variable against an expected value (repeatable; name=value)
+  --id <value>                       Pause-point marker id matching UloopPausePoint.Pause or the id returned by enable-pause-point
+`
+	assertNativeCommandHelpOptionsSection(t, "pause-point-status", expectedOptions)
+}
+
+func assertNativeCommandHelpOptionsSection(t *testing.T, command string, expectedOptions string) {
+	t.Helper()
+	t.Chdir(t.TempDir())
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunProjectLocal(context.Background(), []string{command, "--help"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("%s --help failed: code=%d stderr=%s", command, code, stderr.String())
+	}
+
+	actual, ok := nativeCommandHelpOptionsSection(stdout.String())
+	if !ok {
+		t.Fatalf("%s --help has no Options section: %s", command, stdout.String())
+	}
+	if actual != expectedOptions {
+		t.Fatalf("%s --help Options section mismatch:\n got:\n%s\nwant:\n%s", command, actual, expectedOptions)
+	}
+}
+
+func nativeCommandHelpOptionsSection(output string) (string, bool) {
+	// Why not compare stdout as-is: Windows test hosts can surface CRLF even though the
+	// writer emits \n, and a golden that only matches LF would fail there for an unrelated reason.
+	normalized := strings.ReplaceAll(output, "\r\n", "\n")
+	const header = "Options:\n"
+	start := strings.Index(normalized, header)
+	if start < 0 {
+		return "", false
+	}
+	rest := normalized[start:]
+	end := strings.Index(rest, "\nGlobal options:")
+	if end < 0 {
+		return "", false
+	}
+	return rest[:end], true
 }
 
 // Verifies runner-owned pause-point commands close their help with the instruction to load the

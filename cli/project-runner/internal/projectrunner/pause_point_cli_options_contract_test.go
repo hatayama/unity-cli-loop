@@ -1,6 +1,7 @@
 package projectrunner
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
@@ -163,6 +164,64 @@ func TestPausePointAwaitHelpOptionsAreAcceptedByTheWaitParser(t *testing.T) {
 		waitArgs := append([]string{"--" + PausePointIDFlagName, "marker"}, args...)
 		if _, err := parseWaitForPausePointOptions(waitArgs); err != nil {
 			t.Errorf("await-pause-point parser rejected advertised option %s: %v", optionName, err)
+		}
+	}
+}
+
+// pausePointAwaitAdvertisedFlagNames is the await-pause-point advertised flag set. These are
+// test-local literals, not tooldocs constants, so deleting a table row fails even when the
+// switch-based parser still accepts the flag.
+var pausePointAwaitAdvertisedFlagNames = []string{
+	"id",
+	"timeout-seconds",
+	"matching-logs-max-count",
+	"captured-variables",
+	"captured-variable-names",
+	"expect",
+	"trigger",
+	"resume-play",
+}
+
+// pausePointStatusAdvertisedFlagNames is the pause-point-status advertised flag set. Same
+// test-local-literal rule as pausePointAwaitAdvertisedFlagNames.
+var pausePointStatusAdvertisedFlagNames = []string{
+	"id",
+	"captured-variables",
+	"captured-variable-names",
+	"expect",
+}
+
+// Verifies the await-pause-point option table's flag names equal the advertised set. Table-to-parser
+// acceptance cannot see a deleted row: the parsers are switch-based, so a missing help row still
+// leaves the flag accepted.
+func TestPausePointAwaitCLIOnlyOptionsMatchFixedFlagSet(t *testing.T) {
+	assertPausePointCLIOnlyFlagNames(t, tooldocs.PausePointAwaitCLIOnlyOptions(), pausePointAwaitAdvertisedFlagNames)
+}
+
+// Verifies the same reverse-direction contract for pause-point-status.
+func TestPausePointStatusCLIOnlyOptionsMatchFixedFlagSet(t *testing.T) {
+	assertPausePointCLIOnlyFlagNames(t, tooldocs.PausePointStatusCLIOnlyOptions(), pausePointStatusAdvertisedFlagNames)
+}
+
+func assertPausePointCLIOnlyFlagNames(
+	t *testing.T,
+	options []tooldocs.PausePointCLIOnlyOption,
+	expected []string,
+) {
+	t.Helper()
+	actual := make([]string, 0, len(options))
+	for _, option := range options {
+		actual = append(actual, option.FlagName)
+	}
+	sort.Strings(actual)
+	want := append([]string{}, expected...)
+	sort.Strings(want)
+	if len(actual) != len(want) {
+		t.Fatalf("flag names = %v, want %v", actual, want)
+	}
+	for index, name := range want {
+		if actual[index] != name {
+			t.Fatalf("flag names = %v, want %v", actual, want)
 		}
 	}
 }
