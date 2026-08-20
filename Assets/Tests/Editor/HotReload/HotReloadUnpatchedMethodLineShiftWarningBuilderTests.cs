@@ -31,7 +31,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 warning,
                 Is.EqualTo(
-                    "Assets/Scripts/Player.cs: line numbers have shifted vs the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods resolve against the edited file."));
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+        }
+
+        /// <summary>
+        /// What: a file whose edited source lost a line vs compiled still warns (count can shrink).
+        /// </summary>
+        [Test]
+        public void Build_WhenEditedLineCountIsFewerThanCompiled_ReturnsShiftWarning()
+        {
+            string warning = HotReloadUnpatchedMethodLineShiftWarningBuilder.Build(
+                "Assets/Scripts/Player.cs",
+                "line1\nline2",
+                "line1\nline2\nline3");
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 2 lines vs compiled 3). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
         }
 
         /// <summary>
@@ -46,6 +63,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "alpha-edited\nbeta-edited");
 
             Assert.That(warning, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: CRLF vs LF with the same logical lines is not a count change after newline normalization.
+        /// </summary>
+        [Test]
+        public void Build_WhenCrlfAndLfHaveSameLogicalLineCount_ReturnsEmpty()
+        {
+            string warning = HotReloadUnpatchedMethodLineShiftWarningBuilder.Build(
+                "Assets/Scripts/Player.cs",
+                "line1\r\nline2",
+                "line1\nline2");
+
+            Assert.That(warning, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: a trailing newline alone increases the split count and therefore warns.
+        /// </summary>
+        [Test]
+        public void Build_WhenOnlyTrailingNewlineAddsALine_ReturnsShiftWarning()
+        {
+            string warning = HotReloadUnpatchedMethodLineShiftWarningBuilder.Build(
+                "Assets/Scripts/Player.cs",
+                "line1\nline2\n",
+                "line1\nline2");
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
         }
 
         /// <summary>
@@ -85,7 +133,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 warnings[0],
                 Is.EqualTo(
-                    "Assets/Scripts/Player.cs: line numbers have shifted vs the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods resolve against the edited file."));
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+        }
+
+        /// <summary>
+        /// What: relative and absolute spellings of the same apply file emit one warning labeled
+        /// with the project-relative path.
+        /// </summary>
+        [Test]
+        public void Append_WhenSameFileIsRelativeAndAbsolute_AddsOneWarningLabeledWithRelativePath()
+        {
+            string relativePath = "Assets/Scripts/Player.cs";
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string absolutePath = Path.Combine(
+                projectRoot,
+                relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+            List<string> warnings = new List<string>();
+            List<HotReloadMethodOutcome> methods = new List<HotReloadMethodOutcome>
+            {
+                HotReloadMethodOutcome.Patched("Player.Jump", relativePath),
+                HotReloadMethodOutcome.Patched("Player.Move", absolutePath)
+            };
+
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                methods,
+                file => "line1\nline2\nline3",
+                file => "line1\nline2");
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
         }
 
         /// <summary>
@@ -115,11 +196,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 warnings[0],
                 Is.EqualTo(
-                    "Assets/Scripts/Player.cs: line numbers have shifted vs the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods resolve against the edited file."));
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
         }
 
         /// <summary>
-        /// What: a line-shift warning counted with one other hot-reload warning keeps the
+        /// What: two files that both change line count each get their own warning.
+        /// </summary>
+        [Test]
+        public void Append_WhenTwoFilesBothShifted_AddsTwoWarnings()
+        {
+            List<string> warnings = new List<string>();
+            List<HotReloadMethodOutcome> methods = new List<HotReloadMethodOutcome>
+            {
+                HotReloadMethodOutcome.Patched("Player.Jump", "Assets/Scripts/Player.cs"),
+                HotReloadMethodOutcome.Patched("Enemy.Idle", "Assets/Scripts/Enemy.cs")
+            };
+
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                methods,
+                file => file.IndexOf("Player", StringComparison.Ordinal) >= 0
+                    ? "line1\nline2\nline3"
+                    : "a\nb\nc\nd",
+                file => file.IndexOf("Player", StringComparison.Ordinal) >= 0
+                    ? "line1\nline2"
+                    : "a\nb");
+
+            Assert.That(warnings.Count, Is.EqualTo(2));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+            Assert.That(
+                warnings[1],
+                Is.EqualTo(
+                    "Assets/Scripts/Enemy.cs: line count differs from the last compiled source (edited 4 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+        }
+
+        /// <summary>
+        /// What: a line-count warning counted with one other hot-reload warning keeps the
         /// single-compile resolution suffix, because compile restores compiled-source line numbers.
         /// </summary>
         [Test]
@@ -153,7 +268,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     response.Warnings[1],
                     Is.EqualTo(
-                        "Library/UloopHotReload/TestSources/line-shift-warning-probe.cs: line numbers have shifted vs the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods resolve against the edited file."));
+                        "Library/UloopHotReload/TestSources/line-shift-warning-probe.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
                 Assert.That(
                     response.Message,
                     Is.EqualTo(

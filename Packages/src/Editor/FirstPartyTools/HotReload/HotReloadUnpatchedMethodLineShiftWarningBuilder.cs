@@ -14,9 +14,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadUnpatchedMethodLineShiftWarningBuilder
     {
-        // Why file+line-count only: pause-point --line for methods not patched in this run still
-        // resolves against the compiled snapshot; one sentence per file is enough.
-        // Why empty when counts match: in-body edits do not shift later methods' compiled lines.
+        // Why "line count differs" not "line numbers have shifted": a trailing newline changes
+        // the split count without moving statements. Why "patched methods with debug symbols":
+        // PatchedMethodPdbUnavailable still falls through to the compiled line map.
         public static string Build(string file, string editedSource, string compiledSource)
         {
             if (string.IsNullOrEmpty(file) || editedSource == null || string.IsNullOrEmpty(compiledSource))
@@ -34,14 +34,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string normalizedFile = HotReloadSourcePathNormalizer.ToForwardSlashes(file);
             return string.Format(
                 CultureInfo.InvariantCulture,
-                "{0}: line numbers have shifted vs the last compiled source (edited {1} lines vs compiled {2}). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods resolve against the edited file.",
+                "{0}: line count differs from the last compiled source (edited {1} lines vs compiled {2}). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file.",
                 normalizedFile,
                 editedLineCount,
                 compiledLineCount);
         }
 
-        // Why unique file: the apply lists one Methods row per member; one shift sentence per file
-        // is enough for agents to recompute --line against compiled source.
+        // Why unique canonical file: outcome FilePath is the raw apply input, so absolute+relative
+        // (or Windows casing) spellings of one file would otherwise emit duplicate warnings.
         public static void Append(
             List<string> warnings,
             IReadOnlyList<HotReloadMethodOutcome> methods,
@@ -53,7 +53,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(readEditedSource != null, "readEditedSource must not be null.");
             Debug.Assert(readCompiledSource != null, "readCompiledSource must not be null.");
 
-            HashSet<string> seenFiles = new HashSet<string>(StringComparer.Ordinal);
+            StringComparer fileComparer = Application.platform == RuntimePlatform.WindowsEditor
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+            HashSet<string> seenFiles = new HashSet<string>(fileComparer);
             for (int index = 0; index < methods.Count; index++)
             {
                 string filePath = methods[index].FilePath;
@@ -62,16 +65,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string normalizedFile = HotReloadSourcePathNormalizer.ToForwardSlashes(filePath);
-                if (!seenFiles.Add(normalizedFile))
+                string canonicalFile = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath);
+                if (!seenFiles.Add(canonicalFile))
                 {
                     continue;
                 }
 
                 string warning = Build(
-                    normalizedFile,
-                    readEditedSource(filePath),
-                    readCompiledSource(filePath));
+                    canonicalFile,
+                    readEditedSource(canonicalFile),
+                    readCompiledSource(canonicalFile));
                 if (warning.Length == 0)
                 {
                     continue;
