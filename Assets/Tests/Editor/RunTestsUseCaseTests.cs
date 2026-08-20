@@ -223,6 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.HasFailures, Is.False);
             Assert.That(response.NoTestsFound, Is.True);
             Assert.That(response.NoTestsFoundExplanation, Does.Contain("not a test failure"));
+            Assert.That(response.NoTestsFoundExplanation, Does.Contain("missing test assembly"));
             Assert.That(response.Message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
             Assert.That(response.TestCount, Is.EqualTo(0));
             Assert.That(response.FailedCount, Is.EqualTo(0));
