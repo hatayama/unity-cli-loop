@@ -350,12 +350,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 snapshot = UloopPausePointRegistry.GetStatus(id);
             }
 
-            string resolvedLineText = ResolveEnableLineText(
-                parameters.File,
-                resolvedLine,
-                resolvedEndLine,
-                retargetedToHotReloadPatch,
-                hasActiveHotReloadPatches);
+            bool compareCompiledLineDrift = hasActiveHotReloadPatches && !retargetedToHotReloadPatch;
+            string compiledSnapshotSource = compareCompiledLineDrift
+                ? LoadCompiledSnapshotSourceOrEmpty(parameters.File)
+                : string.Empty;
+            // Why snapshot over disk: the editor file may already include unpatched-line drift, so
+            // reading disk at the compiled ResolvedLine shows the wrong statement (FB9 empty/mismatch).
+            // The snapshot read stays single-line because the verified snapshot has no end-line data;
+            // the disk read spans resolvedLine..resolvedEndLine so a rounded-forward multi-line
+            // statement returns its full text.
+            string resolvedLineText = compareCompiledLineDrift
+                ? SourcePausePointSourceLineReader.ReadLineTextFromSource(compiledSnapshotSource, resolvedLine)
+                : PausePointLineTextReader.ReadResolvedLineText(parameters.File, resolvedLine, resolvedEndLine);
             UloopPausePointRegistry.SetResolvedLine(id, resolvedLine, resolvedLineText);
 
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
@@ -373,7 +379,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.Line,
                     editedMethodStartLine,
                     editedMethodEndLine));
-            bool compareCompiledLineDrift = hasActiveHotReloadPatches && !retargetedToHotReloadPatch;
             string compiledLineMapWarning = PausePointEnableWarnings.ChooseCompiledLineMapWarning(
                 patchedMethodPdbUnavailableWarning,
                 PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
@@ -393,6 +398,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     resolvedMethod,
                     compiledMethodStartLine,
                     compiledMethodEndLine);
+                string[] compiledSourceLines = SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
+                driftWarning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                    driftWarning,
+                    editedLineText,
+                    compiledSourceLines);
                 enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, driftWarning);
                 if (driftWarning.Length > 0)
                 {
@@ -466,27 +476,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 });
         }
 
-        // Why snapshot over disk: the editor file may already include unpatched-line drift, so
-        // reading disk at the compiled ResolvedLine shows the wrong statement (FB9 empty/mismatch).
-        // The snapshot read stays single-line because the verified snapshot has no end-line data;
-        // the disk read spans resolvedLine..resolvedEndLine so a rounded-forward multi-line
-        // statement returns its full text.
-        private static string ResolveEnableLineText(
-            string requestedFile,
-            int resolvedLine,
-            int resolvedEndLine,
-            bool retargetedToHotReloadPatch,
-            bool hasActiveHotReloadPatches)
+        private static string LoadCompiledSnapshotSourceOrEmpty(string requestedFile)
         {
-            if (hasActiveHotReloadPatches && !retargetedToHotReloadPatch)
-            {
-                string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
-                string snapshotSource =
-                    HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile?.Invoke(normalizedFile);
-                return SourcePausePointSourceLineReader.ReadLineTextFromSource(snapshotSource, resolvedLine);
-            }
-
-            return PausePointLineTextReader.ReadResolvedLineText(requestedFile, resolvedLine, resolvedEndLine);
+            string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
+            string snapshotSource =
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile?.Invoke(normalizedFile);
+            return snapshotSource ?? string.Empty;
         }
 
         // The derived id must use the originally requested file/line (not the resolved/rounded

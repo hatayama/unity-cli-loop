@@ -256,6 +256,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HotReloadCompiledMethodSpanInLastCompiledSourceFormat =
             " In the last compiled source, '{0}' spans lines {1}-{2}.";
 
+        // Why cap 3: a longer match list turns the enable warning into another line-number puzzle.
+        public const int CompiledLineDriftCandidateMatchLimit = 3;
+
+        // Format: 1-based compiled line number. Why "Candidate": this is a search hit, not a
+        // guarantee that re-enabling there is the intended statement.
+        public const string HotReloadCompiledLineDriftCandidateSingleFormat =
+            " Candidate: the edited line's text appears at line {0} in the last compiled source.";
+
+        // Format: comma-separated 1-based compiled line numbers, with an optional truncation note.
+        public const string HotReloadCompiledLineDriftCandidateMultipleFormat =
+            " Candidate: the edited line's text appears at lines {0} in the last compiled source.";
+
+        public const string HotReloadCompiledLineDriftCandidateTruncatedMatchesSuffix =
+            " (first 3 matches)";
+
         public const string NearbyCompiledMethodsPrefix =
             " Nearby methods in the last compiled source: ";
 
