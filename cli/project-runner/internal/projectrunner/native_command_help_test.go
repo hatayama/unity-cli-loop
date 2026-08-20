@@ -30,6 +30,25 @@ func TestRunProjectLocalAwaitPausePointHelpListsExpectedFlags(t *testing.T) {
 	}
 }
 
+// Verifies await-pause-point --help prints option descriptions, not names alone. The sentence is a
+// test-local literal so a renderer that drops the description column still fails even if the
+// tooldocs table is complete.
+func TestRunProjectLocalAwaitPausePointHelpDescribesTrigger(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunProjectLocal(context.Background(), []string{"await-pause-point", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("await-pause-point --help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	const expectedTriggerDescription = "Runs a single uloop subcommand in-process right after arming/registration"
+	if !strings.Contains(stdout.String(), expectedTriggerDescription) {
+		t.Fatalf("await-pause-point --help must describe --trigger: %s", stdout.String())
+	}
+}
+
 // Verifies pause-point-status --help lists the flags it accepts.
 func TestRunProjectLocalPausePointStatusHelpListsExpectedFlags(t *testing.T) {
 	t.Chdir(t.TempDir())

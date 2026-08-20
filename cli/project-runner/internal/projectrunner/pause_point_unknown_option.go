@@ -94,9 +94,10 @@ func pausePointCommandFlagNames(command string) []string {
 		return pausePointEnableFlagNames()
 	}
 
-	names := make([]string, 0, len(runnerNativeCommandOptions[command]))
-	for _, option := range runnerNativeCommandOptions[command] {
-		names = append(names, strings.TrimPrefix(option, "--"))
+	options := runnerNativeCLIOnlyOptions(command)
+	names := make([]string, 0, len(options))
+	for _, option := range options {
+		names = append(names, option.FlagName)
 	}
 	return names
 }
