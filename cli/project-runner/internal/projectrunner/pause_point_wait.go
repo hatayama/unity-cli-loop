@@ -222,6 +222,7 @@ func runPausePointStatusCommand(
 	expectations := evaluatePausePointExpectations(response.CapturedVariables, options.expectations)
 	response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 	response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
+	response = applyPausePointCapturedVariablePreviewNote(response)
 
 	// Expectation verdicts never change the exit code: whether the query succeeded and whether the
 	// captured state matched are separate questions, as on await-pause-point.
@@ -273,6 +274,7 @@ func runWaitForPausePoint(
 		response = applyPausePointHitStatusNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
+		response = applyPausePointCapturedVariablePreviewNote(response)
 		// Best-effort: a hit must stay a success even if Unity is busy while paused.
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
 		payload := buildPausePointHitPayload(pausePointHitPayloadInputs{

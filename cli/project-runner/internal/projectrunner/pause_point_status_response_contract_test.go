@@ -132,6 +132,9 @@ func TestUnityPausePointStatusContractTruncationInvariant(t *testing.T) {
 	if response.CapturedVariablesTruncatedNote != "" {
 		t.Fatalf("Unity fixture must not carry the CLI-only note: %q", response.CapturedVariablesTruncatedNote)
 	}
+	if response.CapturedVariablePreviewNote != "" {
+		t.Fatalf("Unity fixture must not carry the CLI-only preview note: %q", response.CapturedVariablePreviewNote)
+	}
 }
 
 func readPausePointStatusResponseContract(t *testing.T) []byte {

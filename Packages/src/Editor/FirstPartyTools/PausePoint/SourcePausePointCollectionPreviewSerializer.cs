@@ -216,12 +216,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string elementTypeName = array.GetType().GetElementType().Name;
             IEnumerable<string> dimensions = Enumerable.Range(0, array.Rank).Select(dimension => array.GetLength(dimension).ToString());
 
+            JArray elements = BuildArrayToken(array, remainingDepth, maxElementCount, visited, ref truncated);
+            int previewedElements = elements.Count;
             JObject shapeToken = new()
             {
                 ["Shape"] = $"{elementTypeName}[{string.Join(",", dimensions)}]",
                 ["TotalElements"] = array.Length,
-                ["Elements"] = BuildArrayToken(array, remainingDepth, maxElementCount, visited, ref truncated)
+                ["PreviewedElements"] = previewedElements,
+                ["ElementOrder"] = SourcePausePointConstants.MultidimensionalArrayElementOrder,
+                ["Elements"] = elements
             };
+            if (previewedElements < array.Length)
+            {
+                shapeToken["ElementsTruncated"] = true;
+            }
+
             return shapeToken;
         }
 
