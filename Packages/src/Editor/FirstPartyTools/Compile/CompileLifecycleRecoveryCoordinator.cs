@@ -24,6 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<ValidationResult> _validateNoDuplicateAsmdefNames;
         private readonly Func<bool> _getIsForceCompile;
         private readonly Func<CompilerMessage[]> _getCompileMessages;
+        private readonly Func<int> _getAssemblyFinishedCount;
+        private readonly Func<double> _getMonotonicSeconds;
         private readonly Func<Dictionary<string, object>, Dictionary<string, object>> _buildStateContext;
         private readonly Action<CompileResult> _abortWithResult;
         private readonly Action<string> _abort;
@@ -36,6 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<ValidationResult> validateNoDuplicateAsmdefNames,
             Func<bool> getIsForceCompile,
             Func<CompilerMessage[]> getCompileMessages,
+            Func<int> getAssemblyFinishedCount,
+            Func<double> getMonotonicSeconds,
             Func<Dictionary<string, object>, Dictionary<string, object>> buildStateContext,
             Action<CompileResult> abortWithResult,
             Action<string> abort)
@@ -47,6 +51,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(validateNoDuplicateAsmdefNames != null, "validateNoDuplicateAsmdefNames must not be null");
             Debug.Assert(getIsForceCompile != null, "getIsForceCompile must not be null");
             Debug.Assert(getCompileMessages != null, "getCompileMessages must not be null");
+            Debug.Assert(getAssemblyFinishedCount != null, "getAssemblyFinishedCount must not be null");
+            Debug.Assert(getMonotonicSeconds != null, "getMonotonicSeconds must not be null");
             Debug.Assert(buildStateContext != null, "buildStateContext must not be null");
             Debug.Assert(abortWithResult != null, "abortWithResult must not be null");
             Debug.Assert(abort != null, "abort must not be null");
@@ -60,6 +66,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(validateNoDuplicateAsmdefNames));
             _getIsForceCompile = getIsForceCompile ?? throw new ArgumentNullException(nameof(getIsForceCompile));
             _getCompileMessages = getCompileMessages ?? throw new ArgumentNullException(nameof(getCompileMessages));
+            _getAssemblyFinishedCount = getAssemblyFinishedCount ??
+                throw new ArgumentNullException(nameof(getAssemblyFinishedCount));
+            _getMonotonicSeconds = getMonotonicSeconds ?? throw new ArgumentNullException(nameof(getMonotonicSeconds));
             _buildStateContext = buildStateContext ?? throw new ArgumentNullException(nameof(buildStateContext));
             _abortWithResult = abortWithResult ?? throw new ArgumentNullException(nameof(abortWithResult));
             _abort = abort ?? throw new ArgumentNullException(nameof(abort));
@@ -89,8 +98,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _ => { },
                 HandleCompileStartTimeout,
                 HandleCompileStoppedWithoutFinishEvent,
-                _abort);
+                _abort,
+                _getAssemblyFinishedCount,
+                _getMonotonicSeconds,
+                HandleAssemblyProgressStalled);
             return watchdog.WatchAsync(ct);
+        }
+
+        /// <summary>
+        /// Records a warning when assembly callbacks stall while Unity still reports compiling.
+        /// Why not abort: assembly progress can pause for a valid long compile, and aborting
+        /// would create false-positive compile failures.
+        /// </summary>
+        internal void HandleAssemblyProgressStalled(int stalledMs)
+        {
+            CompilerMessage[] compileMessages = _getCompileMessages();
+            VibeLogger.LogWarning(
+                "compile_assembly_progress_stalled",
+                "Assembly compilation progress stalled while Unity still reports compiling.",
+                new
+                {
+                    stalled_ms = stalledMs,
+                    assembly_finished_count = _getAssemblyFinishedCount(),
+                    message_count = compileMessages.Length,
+                    editor_compiling = EditorApplication.isCompiling,
+                    editor_updating = EditorApplication.isUpdating
+                });
         }
 
         private static Task WaitForCompileWatchdogPollAsync()

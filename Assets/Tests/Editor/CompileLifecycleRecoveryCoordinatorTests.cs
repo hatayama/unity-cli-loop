@@ -139,6 +139,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(abortedWithResult.Errors[0].message, Is.EqualTo("CS0000: sample compile error"));
         }
 
+        /// <summary>
+        /// Verifies an assembly-progress stall warning never aborts the compile request.
+        /// </summary>
+        [Test]
+        public void HandleAssemblyProgressStalled_WhenInvoked_DoesNotAbort()
+        {
+            CompileResult abortedWithResult = null;
+            string abortedWithMessage = null;
+            CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator(
+                abortWithResult: result => abortedWithResult = result,
+                abort: message => abortedWithMessage = message);
+
+            coordinator.HandleAssemblyProgressStalled(300000);
+
+            Assert.That(abortedWithResult, Is.Null);
+            Assert.That(abortedWithMessage, Is.Null);
+        }
+
         private static CompileLifecycleRecoveryCoordinator CreateCoordinator(
             Func<AssemblyDefinitionConsoleErrorResult> findAssemblyDefinitionErrors = null,
             Func<ValidationResult> validateNoDuplicateAsmdefNames = null,
@@ -156,6 +174,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 validateNoDuplicateAsmdefNames: validateNoDuplicateAsmdefNames ?? ValidationResult.Success,
                 getIsForceCompile: getIsForceCompile ?? (() => false),
                 getCompileMessages: getCompileMessages ?? (() => new CompilerMessage[0]),
+                getAssemblyFinishedCount: () => 0,
+                getMonotonicSeconds: () => 0d,
                 buildStateContext: context => context,
                 abortWithResult: abortWithResult ?? (_ => { }),
                 abort: abort ?? (_ => { }));

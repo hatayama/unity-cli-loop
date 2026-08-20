@@ -31,7 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _ => { },
                 _ => startTimeoutCount++,
                 stoppedMs => missedCallbackStoppedMs = stoppedMs,
-                _ => cancellationCount++);
+                _ => cancellationCount++,
+                () => 0,
+                () => 0d,
+                _ => { });
 
             await watchdog.WatchAsync(CancellationToken.None);
 
@@ -60,6 +63,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _ => { },
                 _ => startTimeoutCount++,
                 _ => missedCallbackCount++,
+                _ => { },
+                () => 0,
+                () => 0d,
                 _ => { });
 
             await watchdog.WatchAsync(CancellationToken.None);
@@ -88,6 +94,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _ => { },
                 _ => startTimeoutCount++,
                 _ => missedCallbackCount++,
+                _ => { },
+                () => 0,
+                () => 0d,
                 _ => { });
 
             await watchdog.WatchAsync(CancellationToken.None);
@@ -111,6 +120,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _ => { },
                 waitedMs => startTimeoutMs = waitedMs,
                 _ => missedCallbackCount++,
+                _ => { },
+                () => 0,
+                () => 0d,
                 _ => { });
 
             await watchdog.WatchAsync(CancellationToken.None);
@@ -132,6 +144,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _ => { },
                 _ => { },
                 _ => { },
+                _ => { },
+                () => 0,
+                () => 0d,
                 _ => { });
 
             InvalidOperationException actualException = Assert.ThrowsAsync<InvalidOperationException>(
@@ -221,6 +236,177 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.IsIndeterminate, Is.True);
             Assert.That(result.ErrorCount, Is.EqualTo(1));
             Assert.That(result.Errors[0].message, Is.EqualTo("CS0000: sample compile error"));
+        }
+
+        /// <summary>
+        /// Verifies a stalled assembly-finished counter while isCompiling stays true raises the warning once.
+        /// </summary>
+        [Test]
+        public async Task WatchAsync_WhenAssemblyProgressStallsWhileCompiling_WarnsOnce()
+        {
+            ConstantCompilationState compilationState = new ConstantCompilationState(true);
+            int waitCount = 0;
+            double clockSeconds = 0;
+            int stallCallCount = 0;
+            int stalledMs = -1;
+            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
+                compilationState.IsCompiling,
+                () => waitCount >= 4,
+                () =>
+                {
+                    waitCount++;
+                    if (waitCount == 1)
+                    {
+                        clockSeconds = 300;
+                    }
+
+                    return Task.CompletedTask;
+                },
+                _ => { },
+                _ => { },
+                _ => { },
+                _ => { },
+                () => 1,
+                () => clockSeconds,
+                ms =>
+                {
+                    stallCallCount++;
+                    stalledMs = ms;
+                });
+
+            await watchdog.WatchAsync(CancellationToken.None);
+
+            Assert.That(stallCallCount, Is.EqualTo(1));
+            Assert.That(stalledMs, Is.EqualTo(300000));
+        }
+
+        /// <summary>
+        /// Verifies a zero assembly-finished count never raises the stall warning, even after the threshold.
+        /// </summary>
+        [Test]
+        public async Task WatchAsync_WhenNoAssemblyHasFinished_DoesNotWarnOnElapsedTime()
+        {
+            ConstantCompilationState compilationState = new ConstantCompilationState(true);
+            int waitCount = 0;
+            double clockSeconds = 0;
+            int stallCallCount = 0;
+            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
+                compilationState.IsCompiling,
+                () => waitCount >= 3,
+                () =>
+                {
+                    waitCount++;
+                    clockSeconds = 300;
+                    return Task.CompletedTask;
+                },
+                _ => { },
+                _ => { },
+                _ => { },
+                _ => { },
+                () => 0,
+                () => clockSeconds,
+                _ => stallCallCount++);
+
+            await watchdog.WatchAsync(CancellationToken.None);
+
+            Assert.That(stallCallCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies a later assembly-finished increment restarts the stall clock instead of warning from the old anchor.
+        /// </summary>
+        [Test]
+        public async Task WatchAsync_WhenAssemblyFinishedCountIncreases_ResetsStallMeasurement()
+        {
+            ConstantCompilationState compilationState = new ConstantCompilationState(true);
+            int waitCount = 0;
+            int assemblyFinishedCount = 1;
+            double clockSeconds = 0;
+            int stallCallCount = 0;
+            int stalledMs = -1;
+            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
+                compilationState.IsCompiling,
+                () => waitCount >= 6,
+                () =>
+                {
+                    waitCount++;
+                    if (waitCount == 1)
+                    {
+                        clockSeconds = 200;
+                    }
+                    else if (waitCount == 2)
+                    {
+                        assemblyFinishedCount = 2;
+                    }
+                    else if (waitCount == 3)
+                    {
+                        clockSeconds = 400;
+                    }
+                    else if (waitCount == 4)
+                    {
+                        clockSeconds = 500;
+                    }
+
+                    return Task.CompletedTask;
+                },
+                _ => { },
+                _ => { },
+                _ => { },
+                _ => { },
+                () => assemblyFinishedCount,
+                () => clockSeconds,
+                ms =>
+                {
+                    stallCallCount++;
+                    stalledMs = ms;
+                });
+
+            await watchdog.WatchAsync(CancellationToken.None);
+
+            Assert.That(stallCallCount, Is.EqualTo(1));
+            Assert.That(stalledMs, Is.EqualTo(300000));
+        }
+
+        /// <summary>
+        /// Verifies the stall warning does not end the watch, so a later compilationFinished can still complete it.
+        /// </summary>
+        [Test]
+        public async Task WatchAsync_WhenAssemblyProgressStallWarned_ContinuesUntilRequestCompletes()
+        {
+            ConstantCompilationState compilationState = new ConstantCompilationState(true);
+            int waitCount = 0;
+            double clockSeconds = 0;
+            int stallCallCount = 0;
+            int missedCallbackCount = 0;
+            int startTimeoutCount = 0;
+            int cancellationCount = 0;
+            CompileLifecycleWatchdog watchdog = new CompileLifecycleWatchdog(
+                compilationState.IsCompiling,
+                () => waitCount >= 4,
+                () =>
+                {
+                    waitCount++;
+                    if (waitCount == 1)
+                    {
+                        clockSeconds = 300;
+                    }
+
+                    return Task.CompletedTask;
+                },
+                _ => { },
+                _ => startTimeoutCount++,
+                _ => missedCallbackCount++,
+                _ => cancellationCount++,
+                () => 1,
+                () => clockSeconds,
+                _ => stallCallCount++);
+
+            await watchdog.WatchAsync(CancellationToken.None);
+
+            Assert.That(stallCallCount, Is.EqualTo(1));
+            Assert.That(missedCallbackCount, Is.EqualTo(0));
+            Assert.That(startTimeoutCount, Is.EqualTo(0));
+            Assert.That(cancellationCount, Is.EqualTo(0));
         }
 
         private sealed class SequenceCompilationState
