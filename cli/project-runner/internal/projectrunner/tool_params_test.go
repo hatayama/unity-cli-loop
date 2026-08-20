@@ -214,3 +214,95 @@ func TestBuildToolParamsUnknownOptionIgnoresShortSharedKebabToken(t *testing.T) 
 		"Run `uloop sample-tool --help` to inspect supported options.",
 	})
 }
+
+// Verifies an enum-value match beats a close option-name typo so --status suggests --action Status, not --stat.
+func TestBuildToolParamsUnknownOptionPrefersEnumMatchOverCloseOptionName(t *testing.T) {
+	tool := clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Action": {Type: "string", Enum: []string{"Status"}},
+				"Stat":   {Type: "string"},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--status"}, tool)
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop sample-tool --action Status",
+		"Run `uloop sample-tool --help` to inspect supported options.",
+	})
+}
+
+// Verifies a close typo beats a shared kebab token so --time-out suggests --timeout, not --time-scale.
+func TestBuildToolParamsUnknownOptionPrefersCloseTypoOverSharedKebabToken(t *testing.T) {
+	tool := clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Timeout":   {Type: "integer"},
+				"TimeScale": {Type: "number"},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--time-out"}, tool)
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop sample-tool --timeout",
+		"Run `uloop sample-tool --help` to inspect supported options.",
+	})
+}
+
+// Verifies an unknown flag at edit distance 2 still suggests the nearest option (threshold inclusive).
+func TestBuildToolParamsUnknownOptionSuggestsAtEditDistanceTwo(t *testing.T) {
+	tool := clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Action": {Type: "string"},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--acxxon"}, tool)
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop sample-tool --action",
+		"Run `uloop sample-tool --help` to inspect supported options.",
+	})
+}
+
+// Verifies an unknown flag at edit distance 3 does not suggest an option past the threshold.
+func TestBuildToolParamsUnknownOptionDoesNotSuggestAtEditDistanceThree(t *testing.T) {
+	tool := clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Action": {Type: "string"},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--acxxxn"}, tool)
+	requireNextActions(t, err, []string{
+		"Run `uloop sample-tool --help` to inspect supported options.",
+	})
+}
+
+// Verifies equal edit-distance option names suggest the sorted-first property name only.
+func TestBuildToolParamsUnknownOptionTieBreaksToSortedFirstOptionName(t *testing.T) {
+	tool := clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"OutputPile": {Type: "string"},
+				"OutputFile": {Type: "string"},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--output-bile"}, tool)
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop sample-tool --output-file",
+		"Run `uloop sample-tool --help` to inspect supported options.",
+	})
+}
