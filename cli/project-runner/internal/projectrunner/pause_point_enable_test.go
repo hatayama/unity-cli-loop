@@ -215,7 +215,7 @@ func TestRunEnablePausePointCommandAwaitsAfterSuccessfulEnable(t *testing.T) {
 }
 
 // Verifies enable-pause-point --await stdout includes StatusNote on a trace-mode Hit.
-// Removing applyPausePointTraceStatusNote from the enable-await hit path makes this test Red.
+// Removing applyPausePointHitStatusNote from the enable-await hit path makes this test Red.
 func TestRunEnablePausePointCommandIncludesStatusNoteOnTraceHit(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalPoll := pausePointStatusPoll
@@ -287,6 +287,83 @@ func TestRunEnablePausePointCommandIncludesStatusNoteOnTraceHit(t *testing.T) {
 	}
 
 	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
+}
+
+// Verifies enable-pause-point --await stdout includes the frame-boundary StatusNote
+// on a non-trace Hit. Removing applyPausePointHitStatusNote from the enable-await
+// hit path makes this test Red.
+func TestRunEnablePausePointCommandIncludesStatusNoteOnSingleShotHit(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	originalFetch := fetchMatchingLogs
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+		fetchMatchingLogs = originalFetch
+	})
+
+	statusResponses := []pausePointStatusResponse{
+		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
+		{
+			Id:        "jump",
+			Status:    pausePointStatusHit,
+			Mode:      "single-shot",
+			IsEnabled: true,
+			IsHit:     true,
+			HitCount:  1,
+		},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+	fetchMatchingLogs = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		searchText string,
+		maxCount int,
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{SearchText: searchText, Logs: []pausePointMatchingLog{}}, nil
+	}
+
+	listener := newLoopbackIpcListener(t)
+	enableRequests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointEnableCommandName,
+		enableRequests,
+		serverErr,
+		`{"Success":true,"Id":"jump","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointCommand(
+		context.Background(),
+		connection,
+		[]string{"--id", "jump", "--await"},
+		t.TempDir(),
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	assertStdoutHasPausePointStatusNote(t, stdout.Bytes(),
+		"Unity pauses at the next frame boundary; the rest of the hit frame already ran. Read at-line values from CapturedVariables; live reads via execute-dynamic-code reflect post-frame state.")
 }
 
 // Verifies file:line enable --await copies ResolvedLine / ResolvedLineText / ResolvedMethod /

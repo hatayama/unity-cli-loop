@@ -221,14 +221,22 @@ func pausePointStateError(
 		SafeToRetry: retryable,
 		ProjectRoot: projectRoot,
 		Command:     clicore.PausePointAwaitCommandName,
-		NextActions: []string{
-			"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
-			"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",
-			"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
-			"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
-		},
-		Details: pausePointStateErrorDetails(options, response),
+		NextActions: pausePointStateNextActions(response),
+		Details:     pausePointStateErrorDetails(options, response),
 	}
+}
+
+func pausePointStateNextActions(response pausePointStatusResponse) []string {
+	nextActions := []string{
+		"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
+		"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",
+		"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+		"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
+	}
+	if response.RecommendedNextAction == "" {
+		return nextActions
+	}
+	return append([]string{response.RecommendedNextAction}, nextActions...)
 }
 
 func pausePointStateErrorDetails(
