@@ -114,6 +114,165 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a Harmony-patched caller (DMD declaring type and _PatchN name) is reported
+        /// as a method-only frame under its original Type.Method name.
+        /// </summary>
+        [Test]
+        public void Select_WhenCallerIsHarmonyPatchedBody_ReportsOriginalMethodNameWithoutFileOrLine()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(
+                    SourcePausePointConstants.HarmonyDynamicMethodDeclaringType,
+                    "Game.Player.Jump_Patch1",
+                    null,
+                    0),
+                CreateRawFrame(
+                    SourcePausePointConstants.HarmonyDynamicMethodDeclaringType,
+                    "Game.Input.HandleJump_Patch1",
+                    null,
+                    0),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Has.Count.EqualTo(1));
+            Assert.That(selected[0].Method, Is.EqualTo("Game.Input.HandleJump"));
+            Assert.That(selected[0].File, Is.Null);
+            Assert.That(selected[0].Line, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a multi-digit Harmony patch suffix still resolves to the original method name.
+        /// </summary>
+        [Test]
+        public void Select_WhenHarmonyPatchSuffixIsMultiDigit_ReportsOriginalMethodName()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(
+                    SourcePausePointConstants.HarmonyDynamicMethodDeclaringType,
+                    "Game.Player.Jump_Patch1",
+                    null,
+                    0),
+                CreateRawFrame(
+                    SourcePausePointConstants.HarmonyDynamicMethodDeclaringType,
+                    "Game.Input.HandleJump_Patch12",
+                    null,
+                    0),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Has.Count.EqualTo(1));
+            Assert.That(selected[0].Method, Is.EqualTo("Game.Input.HandleJump"));
+            Assert.That(selected[0].File, Is.Null);
+            Assert.That(selected[0].Line, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a DMD frame whose name has no Harmony _Patch digits suffix stays skipped as
+        /// genuine MonoMod infrastructure.
+        /// </summary>
+        [Test]
+        public void Select_WhenDmdNameHasNoPatchSuffix_OmitsThatFrame()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame(
+                    SourcePausePointConstants.HarmonyDynamicMethodDeclaringType,
+                    "MonoMod.Utils.DynamicMethodDefinition.Generate",
+                    null,
+                    0),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a DMD frame with a non-digit tail after _Patch stays skipped.
+        /// </summary>
+        [Test]
+        public void Select_WhenDmdNameHasNonDigitPatchTail_OmitsThatFrame()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame(
+                    SourcePausePointConstants.HarmonyDynamicMethodDeclaringType,
+                    "Foo.Bar_PatchX",
+                    null,
+                    0),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a Harmony-patched uloop-internal caller stays skipped after logical-name
+        /// resolution, matching the compiled-counterpart skip policy.
+        /// </summary>
+        [Test]
+        public void Select_WhenPatchedCallerIsUloopInternal_OmitsThatFrame()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame(
+                    SourcePausePointConstants.HarmonyDynamicMethodDeclaringType,
+                    "io.github.hatayama.UnityCliLoop.Foo.Bar_Patch1",
+                    null,
+                    0),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: Dump 3 shape (marker DMD + patched caller DMD + patched Update DMD) yields
+        /// both callers as method-only frames instead of an empty payload.
+        /// </summary>
+        [Test]
+        public void Select_WhenMarkerAndCallersAreAllHarmonyPatched_ReportsBothCallers()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(
+                    SourcePausePointConstants.HarmonyDynamicMethodDeclaringType,
+                    "CallerFrameProbe.ShallowMarker_Patch3",
+                    null,
+                    0),
+                CreateRawFrame(
+                    SourcePausePointConstants.HarmonyDynamicMethodDeclaringType,
+                    "CallerFrameProbe.ShallowCaller_Patch3",
+                    null,
+                    0),
+                CreateRawFrame(
+                    SourcePausePointConstants.HarmonyDynamicMethodDeclaringType,
+                    "CallerFrameProbe.Update_Patch1",
+                    null,
+                    0),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Has.Count.EqualTo(2));
+            Assert.That(selected[0].Method, Is.EqualTo("CallerFrameProbe.ShallowCaller"));
+            Assert.That(selected[0].File, Is.Null);
+            Assert.That(selected[0].Line, Is.EqualTo(0));
+            Assert.That(selected[1].Method, Is.EqualTo("CallerFrameProbe.Update"));
+            Assert.That(selected[1].File, Is.Null);
+            Assert.That(selected[1].Line, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// What: selection stops at two user frames even when more callers remain.
         /// </summary>
         [Test]

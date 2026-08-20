@@ -47,6 +47,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Walk this many raw stack frames so skipped infrastructure still leaves room for two callers.
         public const int MaxCallerStackFramesToExamine = 24;
 
+        // Frame identity of a Harmony patch body on Mono: MonoMod assigns this declaring type
+        // to every DynamicMethodDefinition-generated method, and Harmony names the patch
+        // "{OriginalType}.{OriginalMethod}_Patch{N}". Both are needed to tell a real patched
+        // application caller apart from genuine MonoMod infrastructure frames.
+        public const string HarmonyDynamicMethodDeclaringType = "MonoMod.Utils.DynamicMethodDefinition";
+        public const string HarmonyPatchNameSuffix = "_Patch";
+
         public const string HarmonyId = "io.github.hatayama.uloop.source-pause-point";
         public const string BurstCompileAttributeFullName = "Unity.Burst.BurstCompileAttribute";
 
