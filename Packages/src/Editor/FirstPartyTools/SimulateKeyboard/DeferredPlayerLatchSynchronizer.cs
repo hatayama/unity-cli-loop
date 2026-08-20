@@ -75,6 +75,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void ResetForTests()
         {
             ClearPendingAndUnsubscribe();
+            // Why: leftover playModeStateChanged survives tests when domain reload is
+            // skipped. Schedule re-hooks on next use via HookPlayModeExitIfNeeded.
+            if (playModeExitHooked)
+            {
+                EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+                playModeExitHooked = false;
+            }
         }
 
         private static void HookPlayModeExitIfNeeded()
