@@ -38,6 +38,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _pendingReason = reason;
         }
 
+        internal static void ClearPendingIfScriptCompilationFallback()
+        {
+            if (_pendingReason != ControlPlayModeConstants.StoppedByScriptCompilation)
+            {
+                return;
+            }
+
+            _pendingReason = null;
+        }
+
         internal static void ConfirmPending(string stoppedAtUtc)
         {
             Debug.Assert(!string.IsNullOrEmpty(stoppedAtUtc), "stoppedAtUtc must not be empty.");

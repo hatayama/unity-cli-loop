@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -126,12 +127,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 StoppedBy = "cli-control-play-mode",
                 StoppedAt = "2026-01-01T00:00:00.0000000Z"
             };
-            string populatedJson = JsonConvert.SerializeObject(
-                populated,
-                Formatting.None,
-                UnityCliLoopJsonResponseSerializerSettings.Settings);
-            Assert.That(populatedJson, Does.Contain("\"StoppedBy\":\"cli-control-play-mode\""));
-            Assert.That(populatedJson, Does.Contain("\"StoppedAt\":\"2026-01-01T00:00:00.0000000Z\""));
+            JObject populatedJson = LoadJsonWithoutDateParsing(
+                JsonConvert.SerializeObject(
+                    populated,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+            Assert.That(populatedJson["StoppedBy"]?.Value<string>(), Is.EqualTo("cli-control-play-mode"));
+            Assert.That(populatedJson["StoppedAt"]?.Value<string>(), Is.EqualTo("2026-01-01T00:00:00.0000000Z"));
         }
 
         /// <summary>
@@ -157,6 +159,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.WasAlreadyStopped, Is.False);
             Assert.That(response.StoppedBy, Is.Null);
             Assert.That(response.StoppedAt, Is.Null);
+        }
+
+        private static JObject LoadJsonWithoutDateParsing(string json)
+        {
+            using (StringReader stringReader = new StringReader(json))
+            using (JsonTextReader jsonReader = new JsonTextReader(stringReader))
+            {
+                jsonReader.DateParseHandling = DateParseHandling.None;
+                return JObject.Load(jsonReader);
+            }
         }
 
         private sealed class EmptyCompilationFailureProvider : IControlPlayModeCompilationFailureProvider
