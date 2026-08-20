@@ -1469,6 +1469,102 @@ func TestPausePointExpiredErrorReportsNoRemainingTime(t *testing.T) {
 	}
 }
 
+// Verifies Expired with HitCount > 0 still copies Resolved* into Details but does not claim
+// the armed line never ran.
+func TestPausePointExpiredErrorOmitsResolvedNoteWhenHitCountPositive(t *testing.T) {
+	response := pausePointStatusResponse{
+		Id:               "jump",
+		Status:           pausePointStatusExpired,
+		Expired:          true,
+		HitCount:         1,
+		ResolvedLine:     42,
+		ResolvedLineText: "    DoJump();",
+		ResolvedMethod:   "Player.Update",
+		SnapshotTiming:   "OnEnter",
+		EditorState:      pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+	}
+
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+	}, response, pausePointWaitStateExpired, false, false)
+
+	if cliErr.Message != "Pause point expired before it was hit." {
+		t.Fatalf("Message mismatch: %q", cliErr.Message)
+	}
+	if cliErr.Details["ResolvedLine"] != 42 {
+		t.Fatalf("ResolvedLine mismatch: %#v", cliErr.Details["ResolvedLine"])
+	}
+	if cliErr.Details["ResolvedLineText"] != "    DoJump();" {
+		t.Fatalf("ResolvedLineText mismatch: %#v", cliErr.Details["ResolvedLineText"])
+	}
+	if cliErr.Details["ResolvedMethod"] != "Player.Update" {
+		t.Fatalf("ResolvedMethod mismatch: %#v", cliErr.Details["ResolvedMethod"])
+	}
+	if cliErr.Details["SnapshotTiming"] != "OnEnter" {
+		t.Fatalf("SnapshotTiming mismatch: %#v", cliErr.Details["SnapshotTiming"])
+	}
+}
+
+// Verifies Expired with a non-zero ResolvedLine and empty ResolvedLineText still adds the
+// reading note and omits the empty text key from Details.
+func TestPausePointExpiredErrorNotesResolvedLineWhenTextEmpty(t *testing.T) {
+	response := pausePointStatusResponse{
+		Id:               "jump",
+		Status:           pausePointStatusExpired,
+		Expired:          true,
+		ResolvedLine:     55,
+		ResolvedLineText: "",
+		EditorState:      pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+	}
+
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+	}, response, pausePointWaitStateExpired, false, false)
+
+	if cliErr.Details["ResolvedLine"] != 55 {
+		t.Fatalf("ResolvedLine mismatch: %#v", cliErr.Details["ResolvedLine"])
+	}
+	if _, present := cliErr.Details["ResolvedLineText"]; present {
+		t.Fatalf("ResolvedLineText must be absent, got %#v", cliErr.Details["ResolvedLineText"])
+	}
+	wantMessage := "Pause point expired before it was hit. The marker stayed armed at the resolved line shown in Details; that line was never executed within the window."
+	if cliErr.Message != wantMessage {
+		t.Fatalf("Message mismatch:\nwant: %q\ngot:  %q", wantMessage, cliErr.Message)
+	}
+}
+
+// Verifies a Timeout envelope stays byte-identical for Resolved* even when the status stub
+// already carries ResolvedLine.
+func TestPausePointTimeoutErrorOmitsResolvedFieldDetails(t *testing.T) {
+	response := pausePointStatusResponse{
+		Id:               "jump",
+		Status:           pausePointStatusEnabled,
+		IsEnabled:        true,
+		ResolvedLine:     42,
+		ResolvedLineText: "    DoJump();",
+		ResolvedMethod:   "Player.Update",
+		SnapshotTiming:   "OnEnter",
+		EditorState:      pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		HitCount:         0,
+	}
+
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+	}, response, pausePointWaitStateTimeout, false, false)
+
+	if cliErr.Message != "Pause point was not hit within 1s." {
+		t.Fatalf("Message mismatch: %q", cliErr.Message)
+	}
+	for _, field := range []string{"ResolvedLine", "ResolvedLineText", "ResolvedMethod", "SnapshotTiming"} {
+		if _, present := cliErr.Details[field]; present {
+			t.Fatalf("%s must be absent from Timeout Details, got %#v", field, cliErr.Details[field])
+		}
+	}
+}
+
 // Verifies disabled native pause-point commands are rejected before Unity dispatch.
 func TestRunProjectLocalWaitForPausePointRespectsToolSettings(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)

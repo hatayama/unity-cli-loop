@@ -764,7 +764,7 @@ func TestRunPausePointWaitAfterEnablePropagatesResolvedFieldsOnExpired(t *testin
 	if envelope.Error.Details["SnapshotTiming"] != "OnEnter" {
 		t.Fatalf("SnapshotTiming mismatch: %#v", envelope.Error.Details["SnapshotTiming"])
 	}
-	wantMessage := "Pause point expired before it was hit. The marker stayed armed on ResolvedLine/ResolvedLineText below; the line was never executed within the window."
+	wantMessage := "Pause point expired before it was hit. The marker stayed armed at the resolved line shown in Details; that line was never executed within the window."
 	if envelope.Error.Message != wantMessage {
 		t.Fatalf("Message mismatch:\nwant: %q\ngot:  %q", wantMessage, envelope.Error.Message)
 	}
