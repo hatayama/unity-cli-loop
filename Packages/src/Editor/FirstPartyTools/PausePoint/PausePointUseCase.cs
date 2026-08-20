@@ -273,10 +273,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string recommendedNextAction = hasActiveHotReloadPatches
                     ? SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction
                     : SourcePausePointConstants.ResolveFailedRecommendedNextAction;
+                IReadOnlyList<string> compiledSourceLinesOrNull = null;
+                bool requestedLineReadOk = false;
+                string requestedLineEditedText = string.Empty;
+                // Why skip snapshot/edited-line IO without patches: Candidate is omitted on that
+                // path, so those reads would change the historical no-patch failure for no gain.
+                if (hasActiveHotReloadPatches)
+                {
+                    string compiledSnapshotSource = LoadCompiledSnapshotSourceOrEmpty(parameters.File);
+                    compiledSourceLinesOrNull = string.IsNullOrEmpty(compiledSnapshotSource)
+                        ? null
+                        : SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
+                    (requestedLineReadOk, requestedLineEditedText) =
+                        PausePointCompiledLineComparisonWarnings.ReadEditedLineText(
+                            parameters.File,
+                            parameters.Line);
+                }
+
+                string message = PausePointEnableWarnings.BuildResolveFailureMessage(
+                    resolveResult.ErrorMessage,
+                    resolveResult.NearbyCompiledMethods,
+                    hasActiveHotReloadPatches,
+                    parameters.Line,
+                    requestedLineReadOk,
+                    requestedLineEditedText,
+                    compiledSourceLinesOrNull);
+
                 PausePointResponse response = CreateValidationFailure(
-                    PausePointEnableWarnings.AppendNearbyCompiledMethodsSuffix(
-                        resolveResult.ErrorMessage,
-                        resolveResult.NearbyCompiledMethods),
+                    message,
                     SourcePausePointConstants.ErrorCodeResolveFailed,
                     recommendedNextAction);
                 response.Warning = PausePointEnableWarnings.ChooseCompiledLineMapWarning(

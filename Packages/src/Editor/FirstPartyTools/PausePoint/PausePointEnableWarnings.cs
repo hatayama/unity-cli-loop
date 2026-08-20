@@ -231,6 +231,76 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 truncated);
         }
 
+        /// <summary>
+        /// Appends compiled-line Candidate text to a resolve-failure Message when the edited
+        /// --line text appears in the last compiled source.
+        /// </summary>
+        internal static string AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
+            string message,
+            int requestedLine,
+            string requestedLineEditedText,
+            IReadOnlyList<string> compiledSourceLines)
+        {
+            if (string.IsNullOrEmpty(message) || requestedLine <= 0)
+            {
+                return message ?? string.Empty;
+            }
+
+            if (string.IsNullOrEmpty(requestedLineEditedText) || compiledSourceLines == null)
+            {
+                return message;
+            }
+
+            string editedTrimmed = requestedLineEditedText.Trim();
+            if (editedTrimmed.Length == 0)
+            {
+                return message;
+            }
+
+            (List<int> matches, bool truncated) = CollectCandidateCompiledLineNumbers(
+                editedTrimmed,
+                compiledSourceLines);
+            if (matches.Count == 0)
+            {
+                return message;
+            }
+
+            // Why no drift-warning gate: resolve-failure Messages have no drift warning, and
+            // Candidate is the only compiled-line number the caller can retry with.
+            return message + FormatRequestedLineCandidateCompiledLinesSuffix(
+                requestedLine,
+                matches,
+                truncated);
+        }
+
+        /// <summary>
+        /// Builds a resolve-failure Message: Nearby methods, then Candidate when hot-reload
+        /// patches are active and the edited --line text was read.
+        /// </summary>
+        internal static string BuildResolveFailureMessage(
+            string errorMessage,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods,
+            bool hasActiveHotReloadPatches,
+            int requestedLine,
+            bool requestedLineReadOk,
+            string requestedLineEditedText,
+            IReadOnlyList<string> compiledSourceLinesOrNull)
+        {
+            string message = AppendNearbyCompiledMethodsSuffix(errorMessage, nearbyCompiledMethods);
+            // Why skip Candidate when the edited line was not read: the Candidate sentence names
+            // the text at --line N in the edited file, which is false if that read failed.
+            if (!hasActiveHotReloadPatches || !requestedLineReadOk)
+            {
+                return message;
+            }
+
+            return AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
+                message,
+                requestedLine,
+                requestedLineEditedText,
+                compiledSourceLinesOrNull);
+        }
+
         private static (List<int> matches, bool truncated) CollectCandidateCompiledLineNumbers(
             string editedTrimmed,
             IReadOnlyList<string> compiledSourceLines)
