@@ -260,6 +260,8 @@ below) — raising is only expressible inside the declaring type, which a shim i
 | Condition | Notes |
 |-----------|-------|
 | File does not belong to any compiled assembly | Per-file entry with `Method` = `(file)`; only `Assets/` and `Packages/` sources resolve |
+| Resolved assembly name is missing from CompilationPipeline | Per-file entry with `Method` = `(file)`; Unity may have mapped a not-yet-imported `.asmdef` onto a predefined assembly. Run `uloop compile` first |
+| Script is not in the last compiled assembly's source list | Per-file entry with `Method` = `(file)`; a newly added script is not hot-reloadable until `uloop compile` |
 | Loaded assembly differs from the one on disk (pending compile) | Run `uloop compile` first, then retry |
 | Source file fails to parse | Per-file entry carrying the parse errors |
 | Method signature not found in the loaded assembly | Usually a stale assembly; run `uloop compile`. In-file renames and signature changes are classified as added members before reaching this point |
