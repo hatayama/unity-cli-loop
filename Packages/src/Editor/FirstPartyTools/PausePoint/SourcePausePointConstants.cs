@@ -140,6 +140,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "The target method body is very small and may be inlined by Mono's JIT into its callers; "
             + "if HitCount stays 0 while the line demonstrably runs, move the pause point into the calling method.";
 
+        // Format: Type.Method display name, effective max-history.
+        // Why name-based, not a MonoBehaviour type check: a plain C# Update is often driven
+        // every frame by a MonoBehaviour delegate, and a type check would miss that case.
+        // Why conditional wording: the name match is not proof this is a Unity message, so
+        // "is a per-frame Unity message" would be false for non-MonoBehaviour types.
+        public const string PerFrameTraceNoticeFormat =
+            "'{0}' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max {1}) over within moments. Prefer a conditional line or a larger --max-history.";
+
         // Callers have observed captured values that look like they belong to the line after
         // ResolvedLine; this makes the pre-line snapshot timing explicit in the response itself
         // instead of leaving it documented only in the skill.
