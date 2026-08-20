@@ -67,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             InputSettings settings = RequireInputSettings();
             settings.updateMode = originalUpdateMode;
             Time.timeScale = originalTimeScale;
+            DeferredPlayerLatchSynchronizer.ResetForTests();
             KeyboardKeyState.ReleaseAllKeys();
             SimulateKeyboardOverlayState.Clear();
             InputVisualizationCanvas[] canvases =

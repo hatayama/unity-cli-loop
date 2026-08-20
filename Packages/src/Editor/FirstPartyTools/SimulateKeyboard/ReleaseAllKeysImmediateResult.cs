@@ -1,6 +1,8 @@
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 
 using System.Collections.Generic;
+using UnityEngine.InputSystem;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -12,15 +14,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal ReleaseAllKeysImmediateResult(
             IReadOnlyList<string> releasedKeys,
             IReadOnlyList<ReleasedKeyState> releasedKeyStates,
-            string keyStateReadUpdateType)
+            string keyStateReadUpdateType,
+            IReadOnlyList<Key> releasedInputKeys)
         {
             ReleasedKeys = releasedKeys;
             ReleasedKeyStates = releasedKeyStates;
             KeyStateReadUpdateType = keyStateReadUpdateType;
+            ReleasedInputKeys = releasedInputKeys;
         }
 
         internal IReadOnlyList<string> ReleasedKeys { get; }
         internal IReadOnlyList<ReleasedKeyState> ReleasedKeyStates { get; }
         internal string KeyStateReadUpdateType { get; }
+        internal IReadOnlyList<Key> ReleasedInputKeys { get; }
     }
 }
+#endif
