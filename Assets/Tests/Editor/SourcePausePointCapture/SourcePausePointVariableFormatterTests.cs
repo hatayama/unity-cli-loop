@@ -363,12 +363,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 null, Array.Empty<object>(), locals);
 
             string value = variables.Single().Value;
-            Assert.That(value, Does.Contain("\"Shape\":\"Int32[2,3]\""));
-            Assert.That(value, Does.Contain("\"TotalElements\":6"));
-            Assert.That(value, Does.Contain("\"PreviewedElements\":6"));
-            Assert.That(value, Does.Contain("\"ElementOrder\":\"row-major (last dimension fastest)\""));
-            Assert.That(value, Does.Not.Contain("ElementsTruncated"));
-            Assert.That(value, Does.Contain("\"Elements\":[1,2,3,4,5,6]"));
+            Assert.That(
+                value,
+                Is.EqualTo(
+                    "{\"Shape\":\"Int32[2,3]\",\"TotalElements\":6,\"PreviewedElements\":6," +
+                    "\"ElementOrder\":\"row-major (last dimension fastest)\",\"Elements\":[1,2,3,4,5,6]}"));
             Assert.That(truncated, Is.False);
         }
 
@@ -391,12 +390,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 null, Array.Empty<object>(), locals);
 
             string value = variables.Single().Value;
-            Assert.That(value, Does.Contain("\"Shape\":\"Int32[3,5]\""));
-            Assert.That(value, Does.Contain("\"TotalElements\":15"));
-            Assert.That(value, Does.Contain("\"PreviewedElements\":10"));
-            Assert.That(value, Does.Contain("\"ElementsTruncated\":true"));
-            Assert.That(value, Does.Contain("\"ElementOrder\":\"row-major (last dimension fastest)\""));
-            Assert.That(value, Does.Contain("\"Elements\":[1,2,3,4,5,6,7,8,9,10]"));
+            Assert.That(
+                value,
+                Is.EqualTo(
+                    "{\"Shape\":\"Int32[3,5]\",\"TotalElements\":15,\"PreviewedElements\":10," +
+                    "\"ElementOrder\":\"row-major (last dimension fastest)\"," +
+                    "\"Elements\":[1,2,3,4,5,6,7,8,9,10],\"ElementsTruncated\":true}"));
             Assert.That(truncated, Is.True);
         }
 
