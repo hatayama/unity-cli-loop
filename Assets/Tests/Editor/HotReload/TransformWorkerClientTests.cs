@@ -772,6 +772,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a changed sibling const is reported when the worker runs against the referencing
+        /// file and ChangedSiblingSourcePaths points at the drifted holder.
+        /// </summary>
+        [Test]
+        public async Task Run_WithChangedSiblingConstHolder_EmitsSiblingConstDriftWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string directory = Path.Combine(projectRoot, HotReloadConstants.TestSourcesRelativeDirectory);
+            Directory.CreateDirectory(directory);
+            string siblingPath = Path.Combine(directory, "SiblingConstHolderDrift.cs");
+            File.WriteAllText(
+                siblingPath,
+                "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload\n"
+                + "{\n"
+                + "    public static class HotReloadSiblingConstDefinitions\n"
+                + "    {\n"
+                + "        public const int SiblingTuning = 7;\n"
+                + "    }\n"
+                + "}\n");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                ResolveE2EFixturePath(),
+                ResolveE2EFixtureProjectRelativePath(),
+                snapshotSource: onDisk,
+                additionalAssemblySourcePaths: null,
+                changedSiblingSourcePaths: new[] { siblingPath });
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.Some.EqualTo(
+                    "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload. Run 'uloop compile' to apply this change."),
+                "Sibling const drift must use the same warning text as an edited-file const drift.\n"
+                + string.Join("\n", result.Output.declarationDriftWarnings));
+        }
+
+        /// <summary>
         /// What: editing only an enum member value emits the dedicated const-drift warning and
         /// does not also emit the generic outside-method-body warning.
         /// </summary>
@@ -2119,7 +2158,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string sourcePath,
             string projectRelativePath,
             string snapshotSource = null,
-            string[] additionalAssemblySourcePaths = null)
+            string[] additionalAssemblySourcePaths = null,
+            string[] changedSiblingSourcePaths = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -2169,7 +2209,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 targetTypesAssemblyPath = targetDllPath,
                 snapshotSource = snapshotSource,
                 projectRelativePath = projectRelativePath,
-                assemblySourcePaths = assemblySourcePaths
+                assemblySourcePaths = assemblySourcePaths,
+                changedSiblingSourcePaths = changedSiblingSourcePaths
             };
 
             return await TransformWorkerClient.RunAsync(input, CancellationToken.None);

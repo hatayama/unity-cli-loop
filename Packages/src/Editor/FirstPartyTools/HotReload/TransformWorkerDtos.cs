@@ -34,6 +34,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Absolute paths of every source file in the edited file's compilation assembly.
         // The worker scans these for global using directives. Null/omitted is treated as empty.
         public string[] assemblySourcePaths;
+
+        // Absolute paths of snapshot-mismatched sibling sources in the same compilation assembly.
+        // The worker scans these for const drift the edited file's syntax tree cannot see.
+        // Null/omitted is treated as empty.
+        public string[] changedSiblingSourcePaths;
     }
 
     /// <summary>

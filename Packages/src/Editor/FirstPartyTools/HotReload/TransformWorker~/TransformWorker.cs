@@ -105,6 +105,7 @@ public static class TransformWorkerProgram
         input.ExcludedMethodKeys ??= Array.Empty<string>();
         input.ExcludedAddedMethodKeys ??= Array.Empty<string>();
         input.AssemblySourcePaths ??= Array.Empty<string>();
+        input.ChangedSiblingSourcePaths ??= Array.Empty<string>();
         return input;
     }
 
@@ -157,6 +158,12 @@ public static class TransformWorkerProgram
             root,
             semanticModel,
             targetTypesAssemblySymbol);
+        declarationDriftWarnings.AddRange(
+            SiblingConstDriftCollector.CollectConstDriftWarnings(
+                input.ChangedSiblingSourcePaths,
+                parseOptions,
+                references,
+                targetTypesAssemblySymbol));
         // Why here: a compiled property/event can disappear or change kind with no
         // touched body, so the generic outside-body warning would bury the name.
         CompiledMemberKindChangeWarnings.SyntaxKeys kindChangeSyntaxKeys =

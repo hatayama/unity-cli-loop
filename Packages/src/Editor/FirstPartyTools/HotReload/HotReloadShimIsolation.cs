@@ -107,7 +107,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // again and diverge the retry entries set from the first-pass isolation baseline.
                 snapshotSource = workerInput.snapshotSource,
                 projectRelativePath = workerInput.projectRelativePath,
-                assemblySourcePaths = workerInput.assemblySourcePaths
+                assemblySourcePaths = workerInput.assemblySourcePaths,
+                changedSiblingSourcePaths = workerInput.changedSiblingSourcePaths
             };
 
             TransformWorkerClientResult retryWorkerResult =

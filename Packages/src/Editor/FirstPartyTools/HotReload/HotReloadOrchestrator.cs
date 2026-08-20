@@ -122,9 +122,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 addedCount,
                 failedCount == 0,
                 correlationId);
+            List<string> uniqueWarnings = HotReloadOutcomeAggregation.DeduplicatePreserveOrder(warnings);
             return new HotReloadOrchestratorResult(
                 outcomes,
-                warnings,
+                uniqueWarnings,
                 patchedTotal,
                 HotReloadPatcher.ActiveChangeCount,
                 suppressedPausePointIds,
@@ -181,6 +182,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 targetDllPath);
 
+            HotReloadChangedSiblingScanResult siblingScan = HotReloadChangedSiblingSourceDetector.Detect(
+                projectRoot,
+                assemblyName,
+                targetDllPath,
+                compilationAssembly.sourceFiles,
+                projectRelativePath);
+            if (!string.IsNullOrEmpty(siblingScan.ScanLimitWarning))
+            {
+                warnings.Add(siblingScan.ScanLimitWarning);
+            }
+
             TransformWorkerInputDto workerInput = new TransformWorkerInputDto
             {
                 sourcePath = Path.GetFullPath(workerSourcePath),
@@ -189,7 +201,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetTypesAssemblyPath = Path.GetFullPath(targetDllPath),
                 snapshotSource = snapshotSource,
                 projectRelativePath = projectRelativePath,
-                assemblySourcePaths = HotReloadPatchTargetSupport.BuildAssemblySourcePaths(projectRoot, compilationAssembly.sourceFiles)
+                assemblySourcePaths = HotReloadPatchTargetSupport.BuildAssemblySourcePaths(projectRoot, compilationAssembly.sourceFiles),
+                changedSiblingSourcePaths = siblingScan.ChangedSiblingAbsolutePaths
             };
 
             TransformWorkerClientResult workerResult =
