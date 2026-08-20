@@ -51,8 +51,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
             UnityCompilationAssembly compilationAssembly = FindCompilationAssembly(assemblyName);
-            string importedAsmdefPath = CompilationPipeline.GetAssemblyDefinitionFilePathFromScriptPath(projectRelativePath);
-            bool hasUnimportedAsmdefOnDisk = string.IsNullOrEmpty(importedAsmdefPath)
+            // Why gate on compilationAssembly == null: the unimported-asmdef flag is only
+            // consumed on that branch, and walking ancestor directories on every successful
+            // resolve (including loose Assembly-CSharp scripts) is wasted disk I/O.
+            bool hasUnimportedAsmdefOnDisk = compilationAssembly == null
+                && string.IsNullOrEmpty(
+                    CompilationPipeline.GetAssemblyDefinitionFilePathFromScriptPath(projectRelativePath))
                 && HotReloadAssemblyResolutionDiagnostics.AncestorDirectoryContainsAsmdef(assemblyResolvePath);
             string resolutionFailureReason = HotReloadAssemblyResolutionDiagnostics.TryGetAssemblyResolutionFailureReason(
                 assemblyName,

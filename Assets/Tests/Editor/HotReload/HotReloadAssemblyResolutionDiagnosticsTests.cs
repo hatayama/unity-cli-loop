@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 using NUnit.Framework;
@@ -90,6 +91,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             UnityCompilationAssembly compilationAssembly = FindCompilationAssembly(HotReloadTestAssemblyName);
             Assert.That(compilationAssembly, Is.Not.Null);
+
+            string reason = HotReloadAssemblyResolutionDiagnostics.TryGetAssemblyResolutionFailureReason(
+                HotReloadTestAssemblyName,
+                compilationAssembly,
+                ExistingHotReloadScriptPath,
+                false);
+
+            Assert.That(reason, Is.Null);
+        }
+
+        /// <summary>
+        /// What: an on-disk .asmdef in the script's ancestor directory is detected without
+        /// creating or importing any new assets.
+        /// </summary>
+        [Test]
+        public void AncestorDirectoryContainsAsmdef_WhenAncestorHasAsmdef_ReturnsTrue()
+        {
+            Assert.That(
+                HotReloadAssemblyResolutionDiagnostics.AncestorDirectoryContainsAsmdef(
+                    "Assets/Tests/Editor/HotReload/NotExist.cs"),
+                Is.True);
+        }
+
+        /// <summary>
+        /// What: a loose Assets path whose ancestor directories have no .asmdef on disk
+        /// is not reported as an unimported-asmdef case.
+        /// </summary>
+        [Test]
+        public void AncestorDirectoryContainsAsmdef_WhenNoAncestorHasAsmdef_ReturnsFalse()
+        {
+            Assert.That(
+                HotReloadAssemblyResolutionDiagnostics.AncestorDirectoryContainsAsmdef(
+                    "Assets/RegressionHarness/HotReload/NotExist.cs"),
+                Is.False);
+        }
+
+        /// <summary>
+        /// What: sourceFiles that use Windows backslash separators still match the
+        /// project-relative path after separator normalization.
+        /// </summary>
+        [Test]
+        public void TryGetAssemblyResolutionFailureReason_WhenSourceFilesUseBackslashSeparators_ReturnsNull()
+        {
+            UnityCompilationAssembly compilationAssembly = new UnityCompilationAssembly(
+                HotReloadTestAssemblyName,
+                "Library/ScriptAssemblies/UnityCLILoop.Tests.Editor.HotReload.dll",
+                new[] { @"Assets\Tests\Editor\HotReload\HotReloadToolTests.cs" },
+                Array.Empty<string>(),
+                Array.Empty<UnityCompilationAssembly>(),
+                Array.Empty<string>(),
+                AssemblyFlags.None);
 
             string reason = HotReloadAssemblyResolutionDiagnostics.TryGetAssemblyResolutionFailureReason(
                 HotReloadTestAssemblyName,
