@@ -103,3 +103,114 @@ func TestConvertValuePassesThroughStringWithoutEnum(t *testing.T) {
 		t.Fatalf("expected converted value %q, got %q", "anything", converted)
 	}
 }
+
+func toolParamsSuggestionTool() clicore.ToolDefinition {
+	return clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Action": {
+					Type: "string",
+					Enum: []string{"Play", "Stop", "Pause", "Status"},
+				},
+				"OutputDirectory": {
+					Type: "string",
+				},
+			},
+		},
+	}
+}
+
+func requireArgumentError(t *testing.T, err error) *clierrors.ArgumentError {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	var argumentError *clierrors.ArgumentError
+	if !errors.As(err, &argumentError) {
+		t.Fatalf("expected an *ArgumentError, got %T: %v", err, err)
+	}
+	return argumentError
+}
+
+func requireNextActions(t *testing.T, err error, want []string) {
+	t.Helper()
+	argumentError := requireArgumentError(t, err)
+	if len(argumentError.NextActions) != len(want) {
+		t.Fatalf("NextActions length mismatch:\nwant: %#v\ngot:  %#v", want, argumentError.NextActions)
+	}
+	for index := range want {
+		if argumentError.NextActions[index] != want[index] {
+			t.Fatalf("NextActions mismatch at %d:\nwant: %#v\ngot:  %#v", index, want, argumentError.NextActions)
+		}
+	}
+}
+
+// Verifies a positional token that matches an option enum value suggests the --option Value form.
+func TestBuildToolParamsUnexpectedArgumentSuggestsMatchingEnumOption(t *testing.T) {
+	_, _, err := buildToolParams([]string{"status"}, toolParamsSuggestionTool())
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop sample-tool --action Status",
+		"Pass tool inputs as `--option value` pairs.",
+	})
+}
+
+// Verifies a positional token that matches no enum keeps only the original NextAction.
+func TestBuildToolParamsUnexpectedArgumentWithoutEnumMatchKeepsOriginalNextAction(t *testing.T) {
+	_, _, err := buildToolParams([]string{"not-an-enum"}, toolParamsSuggestionTool())
+	requireNextActions(t, err, []string{
+		"Pass tool inputs as `--option value` pairs.",
+	})
+}
+
+// Verifies an unknown flag whose name matches an option enum value suggests that option and value.
+func TestBuildToolParamsUnknownOptionSuggestsMatchingEnumValue(t *testing.T) {
+	_, _, err := buildToolParams([]string{"--status"}, toolParamsSuggestionTool())
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop sample-tool --action Status",
+		"Run `uloop sample-tool --help` to inspect supported options.",
+	})
+}
+
+// Verifies a close typo of a known option name suggests that option via edit distance.
+func TestBuildToolParamsUnknownOptionSuggestsCloseTypo(t *testing.T) {
+	_, _, err := buildToolParams([]string{"--output-directry"}, toolParamsSuggestionTool())
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop sample-tool --output-directory",
+		"Run `uloop sample-tool --help` to inspect supported options.",
+	})
+}
+
+// Verifies an unknown flag that shares a kebab first token with a known option suggests that option.
+func TestBuildToolParamsUnknownOptionSuggestsSharedKebabToken(t *testing.T) {
+	_, _, err := buildToolParams([]string{"--output-path"}, toolParamsSuggestionTool())
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop sample-tool --output-directory",
+		"Run `uloop sample-tool --help` to inspect supported options.",
+	})
+}
+
+// Verifies an unrelated unknown flag keeps only the --help NextAction.
+func TestBuildToolParamsUnknownOptionWithoutSuggestionKeepsHelpNextAction(t *testing.T) {
+	_, _, err := buildToolParams([]string{"--zzzzzzzz"}, toolParamsSuggestionTool())
+	requireNextActions(t, err, []string{
+		"Run `uloop sample-tool --help` to inspect supported options.",
+	})
+}
+
+// Verifies a 2-character shared kebab prefix such as "no" does not pair unrelated flags.
+func TestBuildToolParamsUnknownOptionIgnoresShortSharedKebabToken(t *testing.T) {
+	tool := clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Cache": {Type: "boolean", Default: true},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--no-foo"}, tool)
+	requireNextActions(t, err, []string{
+		"Run `uloop sample-tool --help` to inspect supported options.",
+	})
+}
