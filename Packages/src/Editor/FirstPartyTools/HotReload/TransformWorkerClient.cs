@@ -109,6 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             output.skipped ??= Array.Empty<TransformWorkerSkippedDto>();
             output.parseErrors ??= Array.Empty<string>();
             output.declarationDriftWarnings ??= Array.Empty<string>();
+            output.siblingConstDriftWarnings ??= Array.Empty<string>();
             output.unchangedMethods ??= Array.Empty<TransformWorkerUnchangedMethodDto>();
             output.removedMembers ??= Array.Empty<TransformWorkerRemovedMemberDto>();
             output.removedMethodSignatures ??= Array.Empty<TransformWorkerRemovedMethodSignatureDto>();

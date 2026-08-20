@@ -41,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> retargetedPausePointIds = new List<string>();
             List<string> inlineRiskMethodLabels = new List<string>();
             List<string> addedFields = new List<string>();
+            List<string> siblingDerivedWarnings = new List<string>();
             int patchedTotal = 0;
             int unchangedTotal = 0;
             // Why after the file loop (not inside ProcessFileAsync): duplicate paths in one
@@ -67,6 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     filePath,
                     workerSourcePath,
                     correlationId,
+                    siblingDerivedWarnings,
                     ct).ConfigureAwait(false);
 
                 outcomes.AddRange(fileResult.Outcomes);
@@ -122,10 +124,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 addedCount,
                 failedCount == 0,
                 correlationId);
-            List<string> uniqueWarnings = HotReloadOutcomeAggregation.DeduplicatePreserveOrder(warnings);
+            HotReloadOutcomeAggregation.AppendSiblingDerivedWarnings(warnings, siblingDerivedWarnings);
             return new HotReloadOrchestratorResult(
                 outcomes,
-                uniqueWarnings,
+                warnings,
                 patchedTotal,
                 HotReloadPatcher.ActiveChangeCount,
                 suppressedPausePointIds,
@@ -138,8 +140,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblyResolvePath,
             string workerSourcePath,
             string correlationId,
+            List<string> siblingDerivedWarnings,
             CancellationToken ct)
         {
+            Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
             List<string> suppressedPausePointIds = new List<string>();
@@ -190,7 +194,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath);
             if (!string.IsNullOrEmpty(siblingScan.ScanLimitWarning))
             {
-                warnings.Add(siblingScan.ScanLimitWarning);
+                siblingDerivedWarnings.Add(siblingScan.ScanLimitWarning);
             }
 
             TransformWorkerInputDto workerInput = new TransformWorkerInputDto
@@ -224,7 +228,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblyName,
                 assemblyResolvePath,
                 outcomes,
-                warnings);
+                warnings,
+                siblingDerivedWarnings);
 
             TransformWorkerUnchangedMethodDto[] unchangedMethods =
                 workerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>();
@@ -247,6 +252,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 correlationId,
                 ct).ConfigureAwait(false);
+            AppendRetrySiblingConstDriftWarnings(siblingDerivedWarnings, gateResult.Isolation);
             // Why after the gate: a gated replacement is not applied, so listing it under
             // "Removed members stay present... edited bodies no longer call them" is false.
             string removedMembersWarning = HotReloadRemovedMembersWarning.FormatRemovedMembersWarning(
@@ -299,6 +305,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 suppressedPausePointIds,
                 retargetedPausePointIds,
                 unchangedMethodCount,
+                siblingDerivedWarnings,
                 ct).ConfigureAwait(false);
             if (earlyEntries != null)
             {
@@ -369,8 +376,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblyName,
             string assemblyResolvePath,
             List<HotReloadMethodOutcome> outcomes,
-            List<string> warnings)
+            List<string> warnings,
+            List<string> siblingDerivedWarnings)
         {
+            Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
             if (snapshotSource == null
                 && CountPatchCandidateRows(workerOutput) >= 1)
             {
@@ -418,6 +427,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     warnings.Add(driftWarning);
                 }
+            }
+
+            if (workerOutput.siblingConstDriftWarnings != null)
+            {
+                foreach (string siblingWarning in workerOutput.siblingConstDriftWarnings)
+                {
+                    siblingDerivedWarnings.Add(siblingWarning);
+                }
+            }
+        }
+
+        private static void AppendRetrySiblingConstDriftWarnings(
+            List<string> siblingDerivedWarnings,
+            HotReloadShimIsolation.HotReloadShimIsolationResult isolation)
+        {
+            if (isolation == null || isolation.SiblingConstDriftWarnings == null)
+            {
+                return;
+            }
+
+            foreach (string siblingWarning in isolation.SiblingConstDriftWarnings)
+            {
+                siblingDerivedWarnings.Add(siblingWarning);
             }
         }
 

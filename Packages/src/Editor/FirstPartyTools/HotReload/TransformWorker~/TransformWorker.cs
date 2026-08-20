@@ -158,12 +158,11 @@ public static class TransformWorkerProgram
             root,
             semanticModel,
             targetTypesAssemblySymbol);
-        declarationDriftWarnings.AddRange(
-            SiblingConstDriftCollector.CollectConstDriftWarnings(
-                input.ChangedSiblingSourcePaths,
-                parseOptions,
-                references,
-                targetTypesAssemblySymbol));
+        List<string> siblingConstDriftWarnings = SiblingConstDriftCollector.CollectConstDriftWarnings(
+            input.ChangedSiblingSourcePaths,
+            parseOptions,
+            references,
+            targetTypesAssemblySymbol);
         // Why here: a compiled property/event can disappear or change kind with no
         // touched body, so the generic outside-body warning would bury the name.
         CompiledMemberKindChangeWarnings.SyntaxKeys kindChangeSyntaxKeys =
@@ -265,6 +264,7 @@ public static class TransformWorkerProgram
             entries,
             skipped,
             declarationDriftWarnings,
+            siblingConstDriftWarnings,
             parseErrors,
             unchangedMethods,
             baseline,
@@ -392,6 +392,7 @@ public static class TransformWorkerProgram
         List<WorkerEntry> entries,
         List<WorkerSkipped> skipped,
         List<string> declarationDriftWarnings,
+        List<string> siblingConstDriftWarnings,
         List<string> parseErrors,
         List<WorkerUnchangedMethod> unchangedMethods,
         BaselineSnapshotState baseline,
@@ -417,6 +418,7 @@ public static class TransformWorkerProgram
             Entries = entries.ToArray(),
             Skipped = skipped.ToArray(),
             DeclarationDriftWarnings = declarationDriftWarnings.ToArray(),
+            SiblingConstDriftWarnings = siblingConstDriftWarnings.ToArray(),
             ParseErrors = parseErrors.ToArray(),
             UnchangedMethods = unchangedMethods.ToArray(),
             BaselineDisabledByDuplicateKeys = baseline.BaselineDisabledByDuplicateKeys,

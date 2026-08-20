@@ -1457,7 +1457,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: passing both the holder and the referencing file emits the sibling const-drift
-        /// warning once after string-equal dedupe.
+        /// warning once because the own-file copy wins and the sibling-derived copy is skipped.
         /// </summary>
         [Test]
         public async Task Run_HolderAndReferencingFiles_DedupesSiblingConstDriftWarning()
@@ -1482,7 +1482,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     matchCount,
                     Is.EqualTo(1),
-                    "Expected the sibling const-drift warning once after dedupe.\n"
+                    "Expected the sibling const-drift warning once after provenance merge.\n"
+                    + string.Join("\n", result.Warnings));
+            }
+        }
+
+        /// <summary>
+        /// What: passing the holder first, then the referencing file, still emits the sibling
+        /// const-drift warning once (reversed input order of the holder+user case).
+        /// </summary>
+        [Test]
+        public async Task Run_DefinitionsThenUser_DedupesSiblingConstDriftWarning()
+        {
+            using (MutateSiblingTuningValue(7))
+            {
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { ResolveSiblingConstDefinitionsPath(), ResolveSiblingConstUserPath() },
+                    null,
+                    CancellationToken.None);
+
+                AssertNoFileLevelFailure(result);
+                int matchCount = 0;
+                foreach (string warning in result.Warnings)
+                {
+                    if (warning == ExpectedSiblingTuningDriftWarning)
+                    {
+                        matchCount++;
+                    }
+                }
+
+                Assert.That(
+                    matchCount,
+                    Is.EqualTo(1),
+                    "Expected the sibling const-drift warning once with definitions-first order.\n"
                     + string.Join("\n", result.Warnings));
             }
         }

@@ -801,13 +801,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 changedSiblingSourcePaths: new[] { siblingPath });
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(result.Output.siblingConstDriftWarnings, Is.Not.Null);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.siblingConstDriftWarnings,
                 Has.Some.EqualTo(
                     "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload. Run 'uloop compile' to apply this change."),
                 "Sibling const drift must use the same warning text as an edited-file const drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings));
+                + string.Join("\n", result.Output.siblingConstDriftWarnings));
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Has.None.EqualTo(
+                    "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload. Run 'uloop compile' to apply this change."),
+                "Sibling const-drift warnings must stay on siblingConstDriftWarnings, not declarationDriftWarnings.");
         }
 
         /// <summary>
@@ -2416,6 +2421,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(omitted.entries[0].calledAddedMethodKeys, Is.Not.Null);
             Assert.That(omitted.entries[0].calledAddedMethodKeys, Is.Empty);
             Assert.That(omitted.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(omitted.siblingConstDriftWarnings, Is.Not.Null);
             Assert.That(omitted.unchangedMethods, Is.Not.Null);
             Assert.That(omitted.parseErrors, Is.Not.Null);
             Assert.That(omitted.skipped, Is.Not.Null);

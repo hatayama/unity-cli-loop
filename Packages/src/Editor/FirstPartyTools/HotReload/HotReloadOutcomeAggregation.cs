@@ -33,25 +33,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        // Why HashSet (not AppendDistinct): sibling const-drift warnings repeat once per
-        // --files entry of the same assembly. AppendDistinct is the pause-point id / method
-        // label merger and must stay dedicated to those lists.
-        internal static List<string> DeduplicatePreserveOrder(IReadOnlyList<string> warnings)
+        // Why a dedicated sibling list (not a global HashSet over all warnings): duplicate
+        // file inputs must still emit the same own-file warning twice. Sibling-derived
+        // strings are appended after own-file warnings, ordinal-deduped among themselves,
+        // and skipped when the own-file list already contains the exact text so holder +
+        // referencing stays one warning in either file order.
+        internal static void AppendSiblingDerivedWarnings(
+            List<string> ownFileWarnings,
+            IReadOnlyList<string> siblingDerivedWarnings)
         {
-            Debug.Assert(warnings != null, "warnings must not be null.");
+            Debug.Assert(ownFileWarnings != null, "ownFileWarnings must not be null.");
+            Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
 
-            HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
-            List<string> unique = new List<string>();
-            for (int index = 0; index < warnings.Count; index++)
+            HashSet<string> seen = new HashSet<string>(ownFileWarnings, StringComparer.Ordinal);
+            for (int index = 0; index < siblingDerivedWarnings.Count; index++)
             {
-                string warning = warnings[index];
+                string warning = siblingDerivedWarnings[index];
+                if (string.IsNullOrEmpty(warning))
+                {
+                    continue;
+                }
+
                 if (seen.Add(warning))
                 {
-                    unique.Add(warning);
+                    ownFileWarnings.Add(warning);
                 }
             }
-
-            return unique;
         }
 
         internal static (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount)

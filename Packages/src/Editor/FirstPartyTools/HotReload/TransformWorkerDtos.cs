@@ -53,6 +53,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] parseErrors;
         public string[] declarationDriftWarnings;
 
+        // Const-drift warnings collected from snapshot-mismatched sibling sources.
+        // Kept separate from declarationDriftWarnings so the orchestrator can dedupe
+        // sibling-derived text without collapsing own-file duplicate-input warnings.
+        public string[] siblingConstDriftWarnings;
+
         // Identities of methods left untouched because they match the verified snapshot.
         // Null/empty means none (or no baseline). UnchangedTotal is derived from Length.
         public TransformWorkerUnchangedMethodDto[] unchangedMethods;

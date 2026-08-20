@@ -25,6 +25,9 @@ internal sealed class WorkerOutput
 
     public string[] DeclarationDriftWarnings { get; set; }
 
+    // Keep in sync with TransformWorkerOutputDto.siblingConstDriftWarnings.
+    public string[] SiblingConstDriftWarnings { get; set; }
+
     public string[] ParseErrors { get; set; }
 
     public WorkerUnchangedMethod[] UnchangedMethods { get; set; }

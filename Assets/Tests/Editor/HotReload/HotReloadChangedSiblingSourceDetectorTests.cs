@@ -191,16 +191,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: DeduplicatePreserveOrder keeps the first copy of a repeated warning string.
+        /// What: sibling-derived warnings are ordinal-deduped among themselves and skipped
+        /// when the own-file list already contains the exact string, without collapsing
+        /// duplicates that were already in the own-file list.
         /// </summary>
         [Test]
-        public void DeduplicatePreserveOrder_WhenWarningsRepeat_KeepsFirstOccurrence()
+        public void AppendSiblingDerivedWarnings_DedupesAmongSiblingsAndSkipsOwnFileMatches()
         {
-            System.Collections.Generic.List<string> unique =
-                HotReloadOutcomeAggregation.DeduplicatePreserveOrder(
-                    new[] { "a", "b", "a", "c", "b" });
+            System.Collections.Generic.List<string> ownFileWarnings =
+                new System.Collections.Generic.List<string> { "own-a", "own-a", "shared" };
 
-            Assert.That(unique, Is.EqualTo(new[] { "a", "b", "c" }));
+            HotReloadOutcomeAggregation.AppendSiblingDerivedWarnings(
+                ownFileWarnings,
+                new[] { "shared", "sibling-b", "sibling-b", "own-a" });
+
+            Assert.That(
+                ownFileWarnings,
+                Is.EqualTo(new[] { "own-a", "own-a", "shared", "sibling-b" }));
         }
 
         private static string CreateTempProjectRoot()
