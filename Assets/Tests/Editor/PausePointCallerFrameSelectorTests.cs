@@ -381,7 +381,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: CaptureCallerFrames with cap 0 skips the stack walk and returns an empty array.
+        /// What: CaptureCallerFrames with cap 0 returns an empty array.
         /// </summary>
         [Test]
         public void CaptureCallerFrames_WhenCapIsZero_ReturnsEmptyArray()

@@ -1556,6 +1556,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: max-caller-frames on a file:line enable reaches the response, covering the
+        /// source-location Enable path that the id-only tests do not exercise.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenFileAndLineAndMaxCallerFramesAreProvided_MapsParameter()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["file"] = FixtureFilePath,
+                ["line"] = FixtureLine,
+                ["timeoutSeconds"] = 30,
+                ["maxCallerFrames"] = 5
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.MaxCallerFrames, Is.EqualTo(5));
+        }
+
+        /// <summary>
         /// What: an enable failure response carries the live editor state instead of a
         /// zero-filled default (IsPlaying/CapturedAt must flow from the registry's pause controller).
         /// </summary>
