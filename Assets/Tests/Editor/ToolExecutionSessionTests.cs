@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -172,6 +173,115 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(busyAfterOneExit.IsEntered, Is.False);
             Assert.That(busyAfterOneExit.RunningToolName, Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
             Assert.That(enteredAfterBothExit.IsEntered, Is.True);
+
+            session.Exit();
+        }
+
+        /// <summary>
+        /// Verifies a shared-slot second enter does not overwrite the first start timestamp.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenSharedSlotSecondEnter_ShouldKeepFirstStartTimestamp()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+
+            session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE);
+            timestamp += 3 * Stopwatch.Frequency;
+            session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE);
+            timestamp += 4 * Stopwatch.Frequency;
+            ToolExecutionSessionEnterResult busyResult = session.TryEnter("other-tool");
+
+            Assert.That(busyResult.IsEntered, Is.False);
+            Assert.That(busyResult.RunningToolName, Is.EqualTo(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE));
+            Assert.That(busyResult.RunningToolElapsedSeconds, Is.EqualTo(7));
+
+            session.Exit();
+            session.Exit();
+        }
+
+        /// <summary>
+        /// Verifies one shared-slot exit keeps the original start timestamp for the remaining execution.
+        /// </summary>
+        [Test]
+        public void Exit_WhenOneSharedExecutionRemains_ShouldKeepOriginalStartTimestamp()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+
+            session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE);
+            session.TryEnter(UnityCliLoopConstants.TOOL_NAME_EXECUTE_DYNAMIC_CODE);
+            timestamp += 5 * Stopwatch.Frequency;
+            session.Exit();
+            ToolExecutionSessionEnterResult busyResult = session.TryEnter("other-tool");
+
+            Assert.That(busyResult.IsEntered, Is.False);
+            Assert.That(busyResult.RunningToolElapsedSeconds, Is.EqualTo(5));
+
+            session.Exit();
+        }
+
+        /// <summary>
+        /// Verifies the start timestamp is cleared when the last execution exits.
+        /// </summary>
+        [Test]
+        public void Exit_WhenLastExecutionExits_ShouldClearStartTimestamp()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+
+            session.TryEnter("first-tool");
+            timestamp += 10 * Stopwatch.Frequency;
+            session.Exit();
+            session.TryEnter("second-tool");
+            timestamp += 2 * Stopwatch.Frequency;
+            ToolExecutionSessionEnterResult busyResult = session.TryEnter("other-tool");
+
+            Assert.That(busyResult.IsEntered, Is.False);
+            Assert.That(busyResult.RunningToolName, Is.EqualTo("second-tool"));
+            Assert.That(busyResult.RunningToolElapsedSeconds, Is.EqualTo(2));
+
+            session.Exit();
+        }
+
+        /// <summary>
+        /// Verifies a busy decision returns the running tool name and elapsed seconds from one snapshot.
+        /// </summary>
+        [Test]
+        public void TryEnter_WhenBusy_ShouldReturnNameAndElapsedFromSameSnapshot()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+
+            session.TryEnter("running-tool");
+            timestamp += 4 * Stopwatch.Frequency + (Stopwatch.Frequency - 1);
+            ToolExecutionSessionEnterResult busyResult = session.TryEnter("requested-tool");
+
+            Assert.That(busyResult.IsEntered, Is.False);
+            Assert.That(busyResult.RunningToolName, Is.EqualTo("running-tool"));
+            Assert.That(busyResult.RunningToolElapsedSeconds, Is.EqualTo(4));
+
+            session.Exit();
+        }
+
+        /// <summary>
+        /// Verifies Begin busy results carry the same elapsed snapshot as TryEnter.
+        /// </summary>
+        [Test]
+        public void Begin_WhenDifferentToolIsRunning_ShouldReturnBusyWithElapsedSeconds()
+        {
+            long timestamp = 0;
+            ToolExecutionSession session = new ToolExecutionSession(() => timestamp);
+            SessionTestTool requestedTool = new SessionTestTool("requested-tool");
+            UnityCliLoopToolRegistry registry = CreateRegistry(new InMemoryToolSettingsPort(), new IUnityCliLoopTool[] { requestedTool });
+            session.TryEnter("running-tool");
+            timestamp += 6 * Stopwatch.Frequency;
+
+            ToolExecutionSessionBeginResult result = session.Begin(registry, requestedTool.ToolName);
+
+            Assert.That(result.IsEntered, Is.False);
+            Assert.That(result.RunningToolName, Is.EqualTo("running-tool"));
+            Assert.That(result.RunningToolElapsedSeconds, Is.EqualTo(6));
 
             session.Exit();
         }

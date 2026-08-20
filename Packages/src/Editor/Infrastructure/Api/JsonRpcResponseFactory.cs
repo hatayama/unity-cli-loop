@@ -80,7 +80,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                     exceptionResponse.Explanation ?? ex.Message,
                     EditorMainThreadLivenessTracker.SecondsSinceLastMainThreadTick(),
                     busyEx.IsCompiling,
-                    busyEx.IsUpdating);
+                    busyEx.IsUpdating,
+                    busyEx.RunningToolElapsedSeconds);
             }
             else
             {

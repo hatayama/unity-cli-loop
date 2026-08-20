@@ -302,6 +302,22 @@ func TestClassifyServerBusyRPCError(t *testing.T) {
 	}
 }
 
+func TestClassifyServerBusyRPCError_WhenElapsedSecondsPresent_IncludesElapsedMessage(t *testing.T) {
+	// Verifies a present runningToolElapsedSeconds field uses the elapsed busy wording verbatim.
+	err := &unityipc.RPCError{
+		Code:    -32603,
+		Message: "Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes.",
+		Data: json.RawMessage(
+			`{"type":"server_busy","runningToolName":"compile","requestedToolName":"get-logs","runningToolElapsedSeconds":12}`),
+	}
+
+	cliErr := ClassifyError(err, ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "get-logs"})
+	expectedMessage := "'get-logs' was not executed because Unity is busy running 'compile' (running for 12s). uloop is single-flight by design; never run uloop commands in parallel. The CLI already retried for up to 10 seconds, so wait for 'compile' to complete and run the command again."
+	if cliErr.Message != expectedMessage {
+		t.Fatalf("message mismatch: %s", cliErr.Message)
+	}
+}
+
 func TestClassifyServerBusyRPCError_WhenCompiling_IncludesEditorActivityAndGuidance(t *testing.T) {
 	// Verifies compiling busy payloads add editor activity details and compile-specific guidance.
 	err := &unityipc.RPCError{

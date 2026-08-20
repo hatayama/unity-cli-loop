@@ -30,7 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: "Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes.",
                 secondsSinceLastMainThreadTick: 1.5,
                 isCompiling: true,
-                isUpdating: false);
+                isUpdating: false,
+                runningToolElapsedSeconds: 12);
             string json = JsonConvert.SerializeObject(
                 errorData,
                 Formatting.None,

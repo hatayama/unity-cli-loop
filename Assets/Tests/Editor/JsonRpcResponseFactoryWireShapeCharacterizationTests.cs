@@ -100,6 +100,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(dataToken["type"]!.Value<string>(), Is.EqualTo(JsonRpcErrorTypes.ServerBusy));
             Assert.That(dataToken["secondsSinceLastMainThreadTick"], Is.Not.Null);
             Assert.That(dataToken["secondsSinceLastMainThreadTick"]!.Value<double>(), Is.GreaterThanOrEqualTo(0));
+            Assert.That(dataToken["runningToolElapsedSeconds"], Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies a single-flight busy payload copies the session elapsed seconds onto the wire.
+        /// </summary>
+        [Test]
+        public void CreateErrorResponse_ForBusyException_IncludesRunningToolElapsedSeconds()
+        {
+            UnityCliLoopToolBusyException busyException = new(
+                "running-tool",
+                "requested-tool",
+                isPlaying: true,
+                isPaused: true,
+                runningToolElapsedSeconds: 12);
+
+            string response = JsonRpcResponseFactory.CreateErrorResponse(1, busyException);
+
+            JObject json = JObject.Parse(response);
+            JToken dataToken = json["error"]!["data"]!;
+            Assert.That(dataToken["type"]!.Value<string>(), Is.EqualTo(JsonRpcErrorTypes.ServerBusy));
+            Assert.That(dataToken["runningToolElapsedSeconds"]!.Value<int>(), Is.EqualTo(12));
         }
 
         [Test]

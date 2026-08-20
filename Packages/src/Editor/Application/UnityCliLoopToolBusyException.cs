@@ -13,7 +13,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
             bool? isPlaying = null,
             bool? isPaused = null,
             bool? isCompiling = null,
-            bool? isUpdating = null)
+            bool? isUpdating = null,
+            int? runningToolElapsedSeconds = null)
             : base(CreateMessage(runningToolName, requestedToolName))
         {
             RunningToolName = runningToolName;
@@ -22,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Application
             IsPaused = isPaused;
             IsCompiling = isCompiling;
             IsUpdating = isUpdating;
+            RunningToolElapsedSeconds = runningToolElapsedSeconds;
         }
 
         public string RunningToolName { get; }
@@ -35,6 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
         public bool? IsCompiling { get; }
 
         public bool? IsUpdating { get; }
+
+        public int? RunningToolElapsedSeconds { get; }
 
         private static string CreateMessage(string runningToolName, string requestedToolName)
         {
