@@ -159,11 +159,12 @@ public static class TransformWorkerProgram
             targetTypesAssemblySymbol);
         // Why here: a compiled property/event can disappear or change kind with no
         // touched body, so the generic outside-body warning would bury the name.
-        CompiledMemberKindChangeWarnings.AppendCompiledPropertyOrEventKindChangeWarnings(
-            root,
-            semanticModel,
-            targetTypesAssemblySymbol,
-            declarationDriftWarnings);
+        CompiledMemberKindChangeWarnings.SyntaxKeys kindChangeSyntaxKeys =
+            CompiledMemberKindChangeWarnings.AppendCompiledPropertyOrEventKindChangeWarnings(
+                root,
+                semanticModel,
+                targetTypesAssemblySymbol,
+                declarationDriftWarnings);
 
         BaselineSnapshotState baseline = BaselineSnapshotBuilder.BuildBaselineSnapshotState(input, parseOptions, plainRoot);
 
@@ -245,7 +246,9 @@ public static class TransformWorkerProgram
                 Path.GetFileName(input.SourcePath),
                 declarationDriftWarnings,
                 addedMethodCatalog,
-                addedFieldCatalog);
+                addedFieldCatalog,
+                kindChangeSyntaxKeys.PropertySyntaxKeys,
+                kindChangeSyntaxKeys.EventSyntaxKeys);
         }
 
         return BuildWorkerOutput(

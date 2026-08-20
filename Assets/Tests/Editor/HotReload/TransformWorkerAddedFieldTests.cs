@@ -809,7 +809,119 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.That(foundDrift, Is.True, "Existing field initializer edits must still warn.");
+            AssertHasDeclarationDriftWarning(
+                result,
+                "Edits outside method bodies in AddedFieldWithInitializerDrift.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up.");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
+        }
+
+        /// <summary>
+        /// What: editing an existing field initializer names that field in the outside-body
+        /// warning rather than emitting the file-only wording.
+        /// </summary>
+        [Test]
+        public async Task Drift_ExistingInitializerEdit_NamesDeclaration()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PublicSeed = 3;",
+                "        public int PublicSeed = 99;",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("NamedInitializerDrift.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Edits outside method bodies in NamedInitializerDrift.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up."
+                    }));
+        }
+
+        /// <summary>
+        /// What: changing attributes on a multi-declarator field names every sibling rather
+        /// than attributing the edit to a single variable.
+        /// </summary>
+        [Test]
+        public async Task Drift_MultiDeclaratorAttributeEdit_NamesEverySibling()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            Assert.That(onDisk, Does.Contain("        public int PairAlpha = 1, PairBeta = 2;"));
+            string edited = onDisk.Replace(
+                "        public int PairAlpha = 1, PairBeta = 2;",
+                "        [Obsolete]\n        public int PairAlpha = 1, PairBeta = 2;",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("MultiDeclaratorAttributeDrift.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Edits outside method bodies in MultiDeclaratorAttributeDrift.cs (field attributes: PairAlpha, PairBeta) are not applied by hot reload; run uloop compile to pick them up."
+                    }));
+        }
+
+        /// <summary>
+        /// What: changing one initializer on a multi-declarator field names only that
+        /// variable, not its sibling.
+        /// </summary>
+        [Test]
+        public async Task Drift_MultiDeclaratorInitializerEdit_NamesOnlyChangedVariable()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PairAlpha = 1, PairBeta = 2;",
+                "        public int PairAlpha = 99, PairBeta = 2;",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("MultiDeclaratorInitializerDrift.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Edits outside method bodies in MultiDeclaratorInitializerDrift.cs (field initializer: PairAlpha) are not applied by hot reload; run uloop compile to pick them up."
+                    }));
+        }
+
+        /// <summary>
+        /// What: a duplicate field syntax key fails open to the file-only outside-body warning
+        /// instead of suppressing it or emitting a named declaration warning.
+        /// </summary>
+        [Test]
+        public async Task Drift_DuplicateFieldSyntaxKey_FailsOpenToFileOnlyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string snapshotSource = onDisk.Replace(
+                "        public int PublicSeed = 3;",
+                "        public int PublicSeed = 3;\n        public int DupCollide;\n        public int DupCollide;",
+                StringComparison.Ordinal);
+            string edited = onDisk.Replace(
+                "        public int PublicSeed = 3;",
+                "        public int PublicSeed = 99;",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("DupFieldKeyFailOpen.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: snapshotSource);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Edits outside method bodies in DupFieldKeyFailOpen.cs (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up."
+                    }));
         }
 
         /// <summary>
@@ -1002,6 +1114,120 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CompiledEventWarningFormat,
                 "ScoreChanged",
                 "WarnEventRewrittenAsField.cs");
+        }
+
+        /// <summary>
+        /// What: rewriting compiled property Hp to a field emits the kind-change warning and
+        /// does not also emit the generic outside-body warning.
+        /// </summary>
+        [Test]
+        public async Task Drift_PropertyKindChangeOnly_DoesNotEmitOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int Hp { get; set; }",
+                "        public int Hp;",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PropertyKindChangeOnlyNoOutsideBody.cs", edited),
+                FieldKindChangeProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Compiled property 'io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadFieldKindChangeFixture.Hp' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'."
+                    }));
+        }
+
+        /// <summary>
+        /// What: rewriting compiled event ScoreChanged to a field emits the kind-change warning
+        /// and does not also emit the generic outside-body warning.
+        /// </summary>
+        [Test]
+        public async Task Drift_EventKindChangeOnly_DoesNotEmitOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public event Action ScoreChanged;",
+                "        public int ScoreChanged;",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("EventKindChangeOnlyNoOutsideBody.cs", edited),
+                FieldKindChangeProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Compiled event 'io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadFieldKindChangeFixture.ScoreChanged' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'."
+                    }));
+        }
+
+        /// <summary>
+        /// What: a property-to-field kind change in the same file as an initializer edit keeps
+        /// the named outside-body warning for that initializer.
+        /// </summary>
+        [Test]
+        public async Task Drift_PropertyKindChangeWithInitializerEdit_StillEmitsNamedOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int Hp { get; set; }",
+                "        public int Hp;",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int PublicSeed = 3;",
+                "        public int PublicSeed = 99;",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("PropertyKindChangeWithInitializer.cs", edited),
+                FieldKindChangeProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Compiled property 'io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadFieldKindChangeFixture.Hp' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.",
+                        "Edits outside method bodies in PropertyKindChangeWithInitializer.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up."
+                    }));
+        }
+
+        /// <summary>
+        /// What: an event-to-field kind change in the same file as an initializer edit keeps
+        /// the named outside-body warning for that initializer.
+        /// </summary>
+        [Test]
+        public async Task Drift_EventKindChangeWithInitializerEdit_StillEmitsNamedOutsideBodyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public event Action ScoreChanged;",
+                "        public int ScoreChanged;",
+                StringComparison.Ordinal);
+            edited = edited.Replace(
+                "        public int PublicSeed = 3;",
+                "        public int PublicSeed = 99;",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("EventKindChangeWithInitializer.cs", edited),
+                FieldKindChangeProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Compiled event 'io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadFieldKindChangeFixture.ScoreChanged' was removed or redeclared as a different member kind in the edited source; the compiled member stays until 'uloop compile'.",
+                        "Edits outside method bodies in EventKindChangeWithInitializer.cs (field initializer: PublicSeed) are not applied by hot reload; run uloop compile to pick them up."
+                    }));
         }
 
         /// <summary>
