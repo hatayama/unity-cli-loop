@@ -154,7 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.status, Is.EqualTo(RunTestsExecutionStatus.NoTestsFound));
             Assert.That(result.hasFailures, Is.False);
             Assert.That(result.noTestsFound, Is.True);
-            Assert.That(result.noTestsFoundExplanation, Does.Contain("not a test failure"));
+            Assert.That(result.noTestsFoundExplanation, Is.EqualTo("No tests were discovered for this run. This is not a test failure; check TestMode, FilterType, and FilterValue. If newly added test scripts are never discovered, the most common cause is a missing test assembly: add an .asmdef with Test Assemblies enabled to the test folder (EditMode test assemblies target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests."));
             Assert.That(result.message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
             Assert.That(result.testCount, Is.EqualTo(0));
             Assert.That(result.failedCount, Is.EqualTo(0));
