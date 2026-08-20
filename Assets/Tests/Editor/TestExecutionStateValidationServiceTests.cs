@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ValidationResult result = service.Validate(UnityCliLoopTestMode.EditMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.False);
-            Assert.That(result.ErrorMessage, Is.EqualTo("EditMode tests cannot run during play mode"));
+            Assert.That(result.ErrorMessage, Is.EqualTo("EditMode tests cannot run during play mode. Use control-play-mode --action Stop to exit play mode, then rerun the tests."));
         }
 
         [Test]
@@ -96,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ValidationResult result = service.Validate(UnityCliLoopTestMode.EditMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.False);
-            Assert.That(result.ErrorMessage, Is.EqualTo("EditMode tests cannot run during play mode"));
+            Assert.That(result.ErrorMessage, Is.EqualTo("EditMode tests cannot run during play mode. Use control-play-mode --action Stop to exit play mode, then rerun the tests."));
         }
 
         [Test]

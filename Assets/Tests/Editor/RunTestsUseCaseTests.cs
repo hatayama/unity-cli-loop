@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies validation failures remain command failures without pretending tests failed.
             StubTestExecutionService executionService = new();
             StubTestExecutionStateValidationService validationService = new(
-                ValidationResult.Failure("EditMode tests cannot run during play mode"));
+                ValidationResult.Failure("EditMode tests cannot run during play mode. Use control-play-mode --action Stop to exit play mode, then rerun the tests."));
             RunTestsUseCase useCase = new(
                 new TestFilterCreationService(),
                 executionService,
@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.HasFailures, Is.False);
             Assert.That(response.NoTestsFound, Is.False);
             Assert.That(response.NoTestsFoundExplanation, Is.Empty);
-            Assert.That(response.Message, Is.EqualTo("EditMode tests cannot run during play mode"));
+            Assert.That(response.Message, Is.EqualTo("EditMode tests cannot run during play mode. Use control-play-mode --action Stop to exit play mode, then rerun the tests."));
             Assert.That(response.CompletedAt, Is.Not.Empty);
             Assert.That(response.TestCount, Is.EqualTo(0));
             Assert.That(response.PassedCount, Is.EqualTo(0));
@@ -288,7 +288,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             int cleanupWaitCount = 0;
             StubTestExecutionService executionService = new();
             StubTestExecutionStateValidationService validationService = new(
-                ValidationResult.Failure("EditMode tests cannot run during play mode"));
+                ValidationResult.Failure("EditMode tests cannot run during play mode. Use control-play-mode --action Stop to exit play mode, then rerun the tests."));
             RunTestsUseCase useCase = new(
                 new TestFilterCreationService(),
                 executionService,
@@ -370,7 +370,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool clearCalled = false;
             StubTestExecutionService executionService = new();
             StubTestExecutionStateValidationService validationService = new(
-                ValidationResult.Failure("EditMode tests cannot run during play mode"));
+                ValidationResult.Failure("EditMode tests cannot run during play mode. Use control-play-mode --action Stop to exit play mode, then rerun the tests."));
             RunTestsUseCase useCase = new(
                 new TestFilterCreationService(),
                 executionService,

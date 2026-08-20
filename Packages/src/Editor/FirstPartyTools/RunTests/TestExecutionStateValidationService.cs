@@ -16,6 +16,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Use control-play-mode --action Play to resume, " +
             "or clear-pause-point --all if a pause point caused the pause.";
 
+        private const string EditModePlayModeBlockedMessage =
+            "EditMode tests cannot run during play mode. Use control-play-mode --action Stop to exit play mode, then rerun the tests.";
+
         private const string UnsavedEditorChangesFailureMessage =
             "Tests cannot run while the editor has unsaved scene or prefab changes. Save or discard these changes before running tests.";
         private const string UnsavedEditorChangesSaveFailureMessage =
@@ -68,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (testMode == UnityCliLoopTestMode.EditMode && IsPlaying)
             {
-                return ValidationResult.Failure("EditMode tests cannot run during play mode");
+                return ValidationResult.Failure(EditModePlayModeBlockedMessage);
             }
 
             if (testMode == UnityCliLoopTestMode.PlayMode && IsPaused)
