@@ -7,11 +7,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class ScreenshotPlayModeWindowWarningBuilder
     {
-        // Why only window+playing: rendering already is the Game View image, and Edit Mode
-        // window captures are the expected chrome-inclusive Editor screenshot.
-        public static string Build(CaptureMode captureMode, bool isPlaying)
+        // Why window+playing+at-least-one-image: rendering already is the Game View image,
+        // Edit Mode window captures are the expected chrome-inclusive Editor screenshot,
+        // and a chrome warning would describe images that do not exist when capturedCount is 0.
+        public static string Build(CaptureMode captureMode, bool isPlaying, int capturedCount)
         {
-            if (captureMode != CaptureMode.window || !isPlaying)
+            if (captureMode != CaptureMode.window || !isPlaying || capturedCount == 0)
             {
                 return string.Empty;
             }

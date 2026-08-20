@@ -432,6 +432,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string safeWindowName = ScreenshotCaptureResults.SanitizeFileName(captureWindowName);
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
             List<ScreenshotInfo> screenshots = new();
+            // Why before the loop: a Play Mode exit mid-capture must not skew the chrome Warning.
+            bool isPlaying = EditorApplication.isPlaying;
 
             // Why SwitchTo before hide: SetActive/Canvas/RT clear are main-thread only. Keep this
             // await outside try — nothing is hidden yet if cancellation throws here.
@@ -451,10 +453,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ct).ConfigureAwait(false);
                     if (!hideFramesReady)
                     {
-                        return ScreenshotCaptureResults.CreateTimedOutResult(
+                        ScreenshotResponse hideTimedOut = ScreenshotCaptureResults.CreateTimedOutResult(
                             "input visualization overlay hide",
                             correlationId,
                             screenshots);
+                        hideTimedOut.Warning = ScreenshotPlayModeWindowWarningBuilder.Build(
+                            request.CaptureMode, isPlaying, hideTimedOut.Screenshots.Count);
+                        return hideTimedOut;
                     }
 
                     await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
@@ -470,7 +475,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ct).ConfigureAwait(false);
                     if (timedOut)
                     {
-                        return ScreenshotCaptureResults.CreateTimedOutResult("EditorWindow capture", correlationId, screenshots);
+                        ScreenshotResponse captureTimedOut = ScreenshotCaptureResults.CreateTimedOutResult(
+                            "EditorWindow capture",
+                            correlationId,
+                            screenshots);
+                        captureTimedOut.Warning = ScreenshotPlayModeWindowWarningBuilder.Build(
+                            request.CaptureMode, isPlaying, captureTimedOut.Screenshots.Count);
+                        return captureTimedOut;
                     }
 
                     await CapturedEditorSynchronizationContext.SwitchTo(editorContext, ct);
@@ -544,7 +555,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Screenshots = screenshots,
                 Warning = ScreenshotPlayModeWindowWarningBuilder.Build(
-                    request.CaptureMode, EditorApplication.isPlaying)
+                    request.CaptureMode, isPlaying, screenshots.Count)
             };
         }
     }
