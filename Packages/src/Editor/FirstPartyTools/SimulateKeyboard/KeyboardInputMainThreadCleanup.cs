@@ -1,5 +1,6 @@
 #if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Forces every tracked and device-pressed key up via an explicit update, then clears
         /// bookkeeping. Safe while PlayMode is paused (ReleaseAll's paused-tolerant path).
         /// </summary>
-        internal static IReadOnlyList<string> ReleaseAllKeysImmediately(Keyboard keyboard)
+        internal static ReleaseAllKeysImmediateResult ReleaseAllKeysImmediately(Keyboard keyboard)
         {
             HashSet<Key> keysToRelease = new HashSet<Key>();
             foreach (Key tracked in KeyboardKeyState.ClearTrackedKeys())
@@ -42,13 +43,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            List<string> releasedNames = new List<string>(keysToRelease.Count);
-            foreach (Key key in keysToRelease)
+            List<Key> sortedKeys = new List<Key>(keysToRelease);
+            sortedKeys.Sort(CompareKeysByOrdinalName);
+
+            List<string> releasedNames = new List<string>(sortedKeys.Count);
+            foreach (Key key in sortedKeys)
             {
                 releasedNames.Add(key.ToString());
             }
-
-            releasedNames.Sort(System.StringComparer.Ordinal);
 
             if (keyboard != null && keysToRelease.Count > 0 && CanInjectKeyboardState(keyboard))
             {
@@ -79,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             SimulateKeyboardOverlayState.ClearPress();
-            return releasedNames;
+            return ReadReleasedKeyStates(keyboard, releasedNames, sortedKeys);
         }
 
         internal static async Task FinalizePressOverlay(CancellationToken ct)
@@ -263,6 +265,78 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool CanInjectKeyboardState(Keyboard keyboard)
         {
             return EditorApplication.isPlaying && keyboard != null;
+        }
+
+        // Why after ForceSync: the response must report the device state after release
+        // processing, not the pre-sync stale latch that ForceSync exists to clear.
+        private static ReleaseAllKeysImmediateResult ReadReleasedKeyStates(
+            Keyboard? keyboard,
+            IReadOnlyList<string> releasedNames,
+            IReadOnlyList<Key> sortedKeys)
+        {
+            List<ReleasedKeyState> releasedKeyStates;
+            string keyStateReadUpdateType = string.Empty;
+            if (keyboard != null)
+            {
+                keyStateReadUpdateType = InputState.currentUpdateType.ToString();
+                Func<Key, bool> isPressedReader = key => keyboard[key].isPressed;
+                releasedKeyStates = MapReleasedKeyStates(releasedNames, sortedKeys, isPressedReader);
+            }
+            else
+            {
+                releasedKeyStates = new List<ReleasedKeyState>();
+            }
+
+            return new ReleaseAllKeysImmediateResult(releasedNames, releasedKeyStates, keyStateReadUpdateType);
+        }
+
+        // Why a pure mapper: PlayMode readback is false on a healthy device, so a hardcoded
+        // false implementation would still match a live isPressed read. Tests inject a fake
+        // reader that returns true for one key and assert that true is copied onto the DTO.
+        internal static List<ReleasedKeyState> MapReleasedKeyStates(
+            IReadOnlyList<string> releasedNames,
+            IReadOnlyList<Key> sortedKeys,
+            Func<Key, bool> isPressedReader)
+        {
+            if (releasedNames == null)
+            {
+                Debug.Assert(false, "readback mapping requires released names");
+                return new List<ReleasedKeyState>();
+            }
+
+            if (sortedKeys == null)
+            {
+                Debug.Assert(false, "readback mapping requires sorted keys");
+                return new List<ReleasedKeyState>();
+            }
+
+            if (isPressedReader == null)
+            {
+                Debug.Assert(false, "readback mapping requires an isPressed reader");
+                return new List<ReleasedKeyState>();
+            }
+
+            Debug.Assert(
+                releasedNames.Count == sortedKeys.Count,
+                "released names and sorted keys must stay 1:1 during readback mapping");
+
+            List<ReleasedKeyState> releasedKeyStates = new List<ReleasedKeyState>(sortedKeys.Count);
+            for (int index = 0; index < sortedKeys.Count; index++)
+            {
+                Key key = sortedKeys[index];
+                releasedKeyStates.Add(new ReleasedKeyState
+                {
+                    Key = releasedNames[index],
+                    DeviceIsPressedAfterRelease = isPressedReader(key)
+                });
+            }
+
+            return releasedKeyStates;
+        }
+
+        private static int CompareKeysByOrdinalName(Key left, Key right)
+        {
+            return string.CompareOrdinal(left.ToString(), right.ToString());
         }
     }
 }

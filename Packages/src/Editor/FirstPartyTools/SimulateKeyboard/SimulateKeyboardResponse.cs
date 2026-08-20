@@ -55,20 +55,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public bool? PressEdgeKeyAlreadyPressedBeforeQueue { get; set; }
 
-        // The following two KeyState* fields are set only on the KeyDown "already held down"
-        // and KeyUp "not currently held" rejections, to help diagnose whether the uloop-side
-        // tracker and the Input System device actually agree, without changing whether the
-        // action is accepted or rejected.
+        // KeyStateTrackedHeld / KeyStateDeviceIsPressed are set on KeyDown "already held"
+        // and KeyUp "not currently held" rejections, and on successful KeyUp, so callers can
+        // tell whether the uloop-side tracker and the Input System device agree.
 
         /// <summary>
         /// Whether Unity CLI Loop's own key-hold tracker (not the Input System device) considered
-        /// the key held at the moment of rejection.
+        /// the key held at the moment of the diagnostic read.
         /// </summary>
         public bool? KeyStateTrackedHeld { get; set; }
 
         /// <summary>
         /// Whether the Input System device (<c>keyboard[key].isPressed</c>) reported the key as
-        /// pressed at the moment of rejection.
+        /// pressed at the moment of the diagnostic read.
         /// </summary>
         public bool? KeyStateDeviceIsPressed { get; set; }
 
@@ -76,6 +75,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Key names released by the ReleaseAll action (bookkeeping and/or device). Null for other actions.
         /// </summary>
         public List<string>? ReleasedKeys { get; set; }
+
+        /// <summary>
+        /// Per-key device readback after ReleaseAll injection. Null for other actions.
+        /// </summary>
+        public List<ReleasedKeyState>? ReleasedKeyStates { get; set; }
+
+        /// <summary>
+        /// <c>InputState.currentUpdateType</c> at the ReleaseAll device readback. Empty when omitted.
+        /// </summary>
+        public string? KeyStateReadUpdateType { get; set; }
+
+        public bool ShouldSerializeReleasedKeyStates()
+        {
+            return ReleasedKeyStates != null;
+        }
+
+        public bool ShouldSerializeKeyStateReadUpdateType()
+        {
+            return !string.IsNullOrEmpty(KeyStateReadUpdateType);
+        }
 
         public SimulateKeyboardResponse()
         {

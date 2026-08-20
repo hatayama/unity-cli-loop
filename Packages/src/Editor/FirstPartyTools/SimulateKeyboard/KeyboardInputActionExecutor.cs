@@ -414,7 +414,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Success = true,
                 Message = $"Key '{keyName}' released",
                 Action = UnityCliLoopKeyboardAction.KeyUp.ToString(),
-                KeyName = keyName
+                KeyName = keyName,
+                KeyStateTrackedHeld = KeyboardKeyState.IsKeyHeld(key),
+                KeyStateDeviceIsPressed = keyboard[key].isPressed
             };
         }
 

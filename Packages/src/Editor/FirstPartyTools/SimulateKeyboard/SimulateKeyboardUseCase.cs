@@ -201,20 +201,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 EnsureOverlayExists();
                 await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(ct);
                 Keyboard keyboard = Keyboard.current;
-                IReadOnlyList<string> releasedKeys =
+                ReleaseAllKeysImmediateResult releaseResult =
                     KeyboardInputMainThreadCleanup.ReleaseAllKeysImmediately(keyboard);
-                List<string> releasedKeysList = new List<string>(releasedKeys);
+                List<string> releasedKeysList = new List<string>(releaseResult.ReleasedKeys);
+                List<ReleasedKeyState> releasedKeyStatesList =
+                    new List<ReleasedKeyState>(releaseResult.ReleasedKeyStates);
 
                 string message = releasedKeysList.Count == 0
                     ? "Released all keys (none were held)."
                     : $"Released {releasedKeysList.Count} key(s): {string.Join(", ", releasedKeysList)}";
+                message = SimulateKeyboardReleaseMessageFormatter.AppendStillPressedNote(
+                    message,
+                    releasedKeyStatesList,
+                    releaseResult.KeyStateReadUpdateType);
 
                 SimulateKeyboardResponse response = new SimulateKeyboardResponse
                 {
                     Success = true,
                     Message = message,
                     Action = UnityCliLoopKeyboardAction.ReleaseAll.ToString(),
-                    ReleasedKeys = releasedKeysList
+                    ReleasedKeys = releasedKeysList,
+                    ReleasedKeyStates = releasedKeyStatesList,
+                    KeyStateReadUpdateType = releaseResult.KeyStateReadUpdateType
                 };
 
                 VibeLogger.LogInfo(
