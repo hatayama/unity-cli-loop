@@ -699,6 +699,77 @@ func TestRunEnablePausePointCommandAwaitOmitsResolvedFieldsForMethodArm(t *testi
 	}
 }
 
+// Verifies enable --await Expired copies enable-time ResolvedLine / ResolvedLineText /
+// ResolvedMethod / SnapshotTiming into the error Details and explains how to read them.
+func TestRunPausePointWaitAfterEnablePropagatesResolvedFieldsOnExpired(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+	})
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusExpired,
+			Expired:     true,
+			EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointWaitAfterEnable(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		waitForPausePointOptions{
+			id:                   "Assets/Foo.cs:42",
+			timeoutSeconds:       1,
+			timeout:              time.Second,
+			matchingLogsMaxCount: 5,
+			markerJustEnabled:    true,
+		},
+		enablePausePointPropagatedFields{
+			ResolvedLine:     42,
+			ResolvedLineText: "    DoJump();",
+			ResolvedMethod:   "Player.Update",
+			SnapshotTiming:   "OnEnter",
+		},
+		&stdout,
+		&stderr,
+	)
+	if code != 1 {
+		t.Fatalf("expected expired failure, got %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	if envelope.Error.ErrorCode != "PAUSE_POINT_EXPIRED" {
+		t.Fatalf("error code mismatch: %s", envelope.Error.ErrorCode)
+	}
+	if envelope.Error.Details["ResolvedLine"] != float64(42) {
+		t.Fatalf("ResolvedLine mismatch: %#v", envelope.Error.Details["ResolvedLine"])
+	}
+	if envelope.Error.Details["ResolvedLineText"] != "    DoJump();" {
+		t.Fatalf("ResolvedLineText mismatch: %#v", envelope.Error.Details["ResolvedLineText"])
+	}
+	if envelope.Error.Details["ResolvedMethod"] != "Player.Update" {
+		t.Fatalf("ResolvedMethod mismatch: %#v", envelope.Error.Details["ResolvedMethod"])
+	}
+	if envelope.Error.Details["SnapshotTiming"] != "OnEnter" {
+		t.Fatalf("SnapshotTiming mismatch: %#v", envelope.Error.Details["SnapshotTiming"])
+	}
+	wantMessage := "Pause point expired before it was hit. The marker stayed armed on ResolvedLine/ResolvedLineText below; the line was never executed within the window."
+	if envelope.Error.Message != wantMessage {
+		t.Fatalf("Message mismatch:\nwant: %q\ngot:  %q", wantMessage, envelope.Error.Message)
+	}
+}
+
 // Verifies a log fetch failure after --await never turns a successful hit into an error, and
 // omits MatchingLogs entirely (like the plain await-pause-point path) rather than emitting an
 // empty array, so "empty array" keeps meaning "fetch succeeded with no matches" for both commands.

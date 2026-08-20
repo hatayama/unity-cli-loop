@@ -40,6 +40,9 @@ func pausePointWaitError(
 		if hint != "" {
 			expiredError.Details["Hint"] = hint
 		}
+		if note := pausePointExpiredResolvedFieldsNote(response); note != "" {
+			expiredError.Message = expiredError.Message + " " + note
+		}
 		return expiredError
 	case pausePointWaitStateTriggerFailed:
 		triggerFailedError := pausePointStateError(
@@ -122,6 +125,11 @@ const (
 	pausePointHintAlreadyHitWaitingForNew = "The marker had already hit and Unity may still be paused by that hit; pass --resume-play or resume Play Mode so a new hit can occur."
 
 	pausePointHintTimeoutAutoCleared = "This command disarmed the marker on timeout; re-enable the pause point (enable-pause-point) before waiting again. "
+
+	// Explains how to read enable-time resolution echoed on Expired --await. Why not claim the
+	// method ran or did not: that granularity belongs to issue #2307; expiry only proves the
+	// armed line was not executed within the window.
+	pausePointExpiredResolvedFieldsGuidance = "The marker stayed armed on ResolvedLine/ResolvedLineText below; the line was never executed within the window."
 
 	// Shared by both pausePointTimeoutHint and pausePointExpiredHint: reasons a wait saw no hit —
 	// a physics/message callback missing a pre-existing GameObject, a pre-bound delegate
@@ -258,6 +266,18 @@ func pausePointStateErrorDetails(
 		"RecommendedNextAction":           response.RecommendedNextAction,
 		"SuppressedByHotReload":           response.SuppressedByHotReload,
 	}
+	if response.ResolvedLine != 0 {
+		details["ResolvedLine"] = response.ResolvedLine
+	}
+	if response.ResolvedLineText != "" {
+		details["ResolvedLineText"] = response.ResolvedLineText
+	}
+	if response.ResolvedMethod != "" {
+		details["ResolvedMethod"] = response.ResolvedMethod
+	}
+	if response.SnapshotTiming != "" {
+		details["SnapshotTiming"] = response.SnapshotTiming
+	}
 	if response.ClearedReason != "" {
 		details["ClearedReason"] = response.ClearedReason
 	}
@@ -297,4 +317,11 @@ func pausePointRemainingMilliseconds(options waitForPausePointOptions, response 
 		return 0
 	}
 	return remainingMilliseconds
+}
+
+func pausePointExpiredResolvedFieldsNote(response pausePointStatusResponse) string {
+	if response.ResolvedLine == 0 && response.ResolvedLineText == "" {
+		return ""
+	}
+	return pausePointExpiredResolvedFieldsGuidance
 }

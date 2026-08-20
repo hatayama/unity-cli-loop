@@ -359,14 +359,32 @@ func runEnablePausePointAndAwait(
 	)
 }
 
-// enablePausePointPropagatedFields carries enable-time fields into the --await hit response,
-// matching how Warning alone used to be forwarded from runEnablePausePointAndAwait.
+// enablePausePointPropagatedFields carries enable-time fields into the --await hit and Expired
+// responses, matching how Warning alone used to be forwarded from runEnablePausePointAndAwait.
 type enablePausePointPropagatedFields struct {
 	Warning          string
 	ResolvedLine     int
 	ResolvedLineText string
 	ResolvedMethod   string
 	SnapshotTiming   string
+}
+
+// mergeEnablePausePointResolvedFields copies enable-time resolution onto a wait status for both
+// hit and Expired. Why Line/Text as a pair: Unity SetResolvedLine always writes or clears both
+// together, so field-by-field fallback can mix a status line number with enable-time text.
+// Prefer the status pair when ResolvedLine is non-zero; otherwise keep enable-time.
+// Why Method/SnapshotTiming always from enable: the Unity status DTO still does not carry them.
+func mergeEnablePausePointResolvedFields(
+	response pausePointStatusResponse,
+	enableFields enablePausePointPropagatedFields,
+) pausePointStatusResponse {
+	if response.ResolvedLine == 0 {
+		response.ResolvedLine = enableFields.ResolvedLine
+		response.ResolvedLineText = enableFields.ResolvedLineText
+	}
+	response.ResolvedMethod = enableFields.ResolvedMethod
+	response.SnapshotTiming = enableFields.SnapshotTiming
+	return response
 }
 
 // runPausePointWaitAfterEnable mirrors runWaitForPausePoint's response shaping (the shared
@@ -399,17 +417,7 @@ func runPausePointWaitAfterEnable(
 
 		response.TriggerResult = triggerResult
 		response.ResumePlayResult = resumeResult
-		// Why treat ResolvedLine/Text as a pair: Unity SetResolvedLine always writes or clears
-		// both together. Falling back field-by-field can synthesize a line number from status
-		// with enable-time text (or the reverse) when ReadLineText returns empty.
-		// Prefer the status pair when ResolvedLine is non-zero; otherwise keep enable-time.
-		if response.ResolvedLine == 0 {
-			response.ResolvedLine = enableFields.ResolvedLine
-			response.ResolvedLineText = enableFields.ResolvedLineText
-		}
-		// ResolvedMethod / SnapshotTiming are still enable-only on the status DTO today.
-		response.ResolvedMethod = enableFields.ResolvedMethod
-		response.SnapshotTiming = enableFields.SnapshotTiming
+		response = mergeEnablePausePointResolvedFields(response, enableFields)
 		response = filterPausePointCapturedVariableHistory(response)
 		response = applyPausePointHitStatusNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
@@ -449,6 +457,9 @@ func runPausePointWaitAfterEnable(
 	if state == pausePointWaitStateTimeout && !hasNewHitBaseline {
 		response, markerClearedByThisCommand = refreshPausePointStatusAfterWaitTimeoutAutoClear(
 			ctx, connection, options.id, response)
+	}
+	if state == pausePointWaitStateExpired {
+		response = mergeEnablePausePointResolvedFields(response, enableFields)
 	}
 
 	waitErr := pausePointWaitError(
