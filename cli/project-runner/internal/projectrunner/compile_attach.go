@@ -141,6 +141,7 @@ func attachWaitForPendingCompile(
 		pollInterval = compileWaitPollInterval
 	}
 	waitStartedAt := time.Now()
+	bindCompileWaitInterimReporter(stderr, spinner, &deps)
 	result, outcome, lastStatus, waitErr := waitForAttachedCompileCompletion(ctx, compileCompletionOptions{
 		connection:   connection,
 		requestID:    record.RequestID,
@@ -204,6 +205,7 @@ func waitForAttachedCompileCompletion(
 	lastObservationKey := ""
 
 	logCompileStatusPollStart(options, startedAt, deadline)
+	interim := newCompileWaitInterimState(compileWaitNow(deps))
 
 	ticker := time.NewTicker(options.pollInterval)
 	defer ticker.Stop()
@@ -235,6 +237,7 @@ func waitForAttachedCompileCompletion(
 			}
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
+		observeCompileWaitInterim(&interim, deps, status, err)
 
 		select {
 		case <-ctx.Done():

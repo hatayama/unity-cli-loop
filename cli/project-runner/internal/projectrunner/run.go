@@ -241,6 +241,7 @@ func runFreshCompileWithDomainReloadWaitWithDeps(
 
 	spinner.Update("Waiting for domain reload to complete...")
 	waitStartedAt := time.Now()
+	bindCompileWaitInterimReporter(stderr, spinner, &compileWait)
 	result, completed, lastStatus, waitErr := waitForCompileCompletionWithDeps(ctx, compileCompletionOptions{
 		connection:     connection,
 		requestID:      requestID,

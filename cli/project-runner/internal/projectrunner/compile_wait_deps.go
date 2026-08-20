@@ -22,6 +22,9 @@ type compileWaitDeps struct {
 	attachProbeTimeout     time.Duration
 	attachProbeInterval    time.Duration
 	attachWaitPollInterval time.Duration
+	now                    func() time.Time
+	interimReportInterval  time.Duration
+	reportInterim          compileWaitInterimReporter
 }
 
 func compileSendOrDefault(deps compileWaitDeps) compileSendFunc {
