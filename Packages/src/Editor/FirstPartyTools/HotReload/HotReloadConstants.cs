@@ -262,5 +262,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: project-relative script path, compiled assembly name.
         public const string SourceFileNotInCompiledAssemblyReasonFormat =
             "'{0}' is not part of the last compiled assembly '{1}' (a newly added script). New files require a real compile; run 'uloop compile' first.";
+
+        public const string PartialApplyRecommendedNextAction =
+            "Partially applied. Fix the failed methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches.";
+
+        public const string FailedWithNoApplyRecommendedNextAction =
+            "Fix the failed methods and rerun, or run 'uloop compile'.";
     }
 }

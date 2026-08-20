@@ -77,6 +77,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] AddedFields { get; set; } = Array.Empty<string>();
 
         public string Message { get; set; } = string.Empty;
+
+        public string RecommendedNextAction { get; set; } = string.Empty;
+
+        // Why omit empty: success and validation-only payloads must not grow a next-action
+        // field that PausePoint-style responses leave blank on the wire.
+        public bool ShouldSerializeRecommendedNextAction()
+        {
+            return !string.IsNullOrEmpty(RecommendedNextAction);
+        }
     }
 
     /// <summary>
@@ -272,7 +281,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     hasFailure,
                     warnings.Count,
                     appendCompileResolution: orchestratorWarningCount >= 2
-                        && orchestratorWarningCount == warnings.Count)
+                        && orchestratorWarningCount == warnings.Count),
+                RecommendedNextAction = HotReloadRecommendedNextAction.Resolve(
+                    hasFailure,
+                    result.PatchedTotal,
+                    CountAddedOutcomes(result))
             };
         }
 

@@ -143,6 +143,78 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: BuildApplyResponse sets the partial-apply RecommendedNextAction when a Failed
+        /// outcome is mixed with patched methods.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenFailureWithPatchedMethods_SetsPartialApplyRecommendedNextAction()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Ok", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Failed("Type.Bad", "shim compile failed", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(
+                    "Partially applied. Fix the failed methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches."));
+            Assert.That(response.ShouldSerializeRecommendedNextAction(), Is.True);
+        }
+
+        /// <summary>
+        /// What: BuildApplyResponse sets the fix-or-compile RecommendedNextAction when every
+        /// outcome failed and nothing was applied.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenFailureWithNothingApplied_SetsFixOrCompileRecommendedNextAction()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Failed("Type.Method", "shim compile failed", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo("Fix the failed methods and rerun, or run 'uloop compile'."));
+            Assert.That(response.ShouldSerializeRecommendedNextAction(), Is.True);
+        }
+
+        /// <summary>
+        /// What: BuildApplyResponse leaves RecommendedNextAction empty on a successful apply
+        /// so the field is omitted from JSON.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenSuccess_LeavesRecommendedNextActionEmpty()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.RecommendedNextAction, Is.EqualTo(string.Empty));
+            Assert.That(response.ShouldSerializeRecommendedNextAction(), Is.False);
+        }
+
+        /// <summary>
         /// What: BuildApplyResponse does not emit pause-point warnings when no markers
         /// were retargeted or suppressed, even if PatchedTotal &gt; 0.
         /// </summary>

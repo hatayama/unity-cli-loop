@@ -369,3 +369,4 @@ Returns JSON with:
 - `ActivePatchTotal` (number): Active changes after this run — patched methods plus added members. `--revert-all` clears both and reports the combined count in `ClearedCount`
 - `ClearedCount` (number): Patches removed by `--revert-all` (0 on apply)
 - `Message` (string): Short summary
+- `RecommendedNextAction` (string): Present when any method outcome is `Failed`. A partial apply (some methods patched or added) says to fix and rerun, run `uloop compile`, or `uloop hot-reload --revert-all`; a failure with nothing applied says to fix and rerun or compile. Omitted on success.
