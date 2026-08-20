@@ -45,6 +45,9 @@ func TestDecodeServerBusyErrorData_WhenContractFixture_ReadsEveryField(t *testin
 	if decoded.SecondsSinceLastMainThreadTick == nil || *decoded.SecondsSinceLastMainThreadTick != 1.5 {
 		t.Fatalf("secondsSinceLastMainThreadTick mismatch: %#v", decoded)
 	}
+	if decoded.RunningToolElapsedSeconds == nil || *decoded.RunningToolElapsedSeconds != 12 {
+		t.Fatalf("runningToolElapsedSeconds mismatch: %#v", decoded)
+	}
 }
 
 func readServerBusyErrorContract(t *testing.T) serverBusyErrorContractFile {

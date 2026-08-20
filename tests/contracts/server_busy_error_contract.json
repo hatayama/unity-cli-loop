@@ -9,6 +9,7 @@
     "isPaused": false,
     "isCompiling": true,
     "isUpdating": false,
-    "secondsSinceLastMainThreadTick": 1.5
+    "secondsSinceLastMainThreadTick": 1.5,
+    "runningToolElapsedSeconds": 12
   }
 }

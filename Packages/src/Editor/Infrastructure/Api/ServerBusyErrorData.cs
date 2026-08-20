@@ -30,6 +30,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public double? secondsSinceLastMainThreadTick { get; }
 
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? runningToolElapsedSeconds { get; }
+
         public ServerBusyErrorData(
             string runningToolName,
             string requestedToolName,
@@ -38,7 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string message,
             double? secondsSinceLastMainThreadTick = null,
             bool? isCompiling = null,
-            bool? isUpdating = null)
+            bool? isUpdating = null,
+            int? runningToolElapsedSeconds = null)
             : base(message)
         {
             this.runningToolName = runningToolName;
@@ -48,6 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             this.isCompiling = isCompiling;
             this.isUpdating = isUpdating;
             this.secondsSinceLastMainThreadTick = secondsSinceLastMainThreadTick;
+            this.runningToolElapsedSeconds = runningToolElapsedSeconds;
         }
     }
 }

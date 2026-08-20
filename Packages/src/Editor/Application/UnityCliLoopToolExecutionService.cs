@@ -38,7 +38,11 @@ namespace io.github.hatayama.UnityCliLoop.Application
             ToolExecutionSessionBeginResult beginResult = _executionSession.Begin(registry, toolName);
             if (!beginResult.IsEntered)
             {
-                throw CreateBusyException(beginResult.RunningToolName, toolName, _editorRuntimeStatePort);
+                throw CreateBusyException(
+                    beginResult.RunningToolName,
+                    toolName,
+                    _editorRuntimeStatePort,
+                    beginResult.RunningToolElapsedSeconds);
             }
 
             try
@@ -64,7 +68,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
         internal static UnityCliLoopToolBusyException CreateBusyException(
             string runningToolName,
             string requestedToolName,
-            IEditorRuntimeStatePort editorRuntimeStatePort)
+            IEditorRuntimeStatePort editorRuntimeStatePort,
+            int? runningToolElapsedSeconds = null)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(runningToolName), "runningToolName must not be null or whitespace");
             Debug.Assert(!string.IsNullOrWhiteSpace(requestedToolName), "requestedToolName must not be null or whitespace");
@@ -78,7 +83,8 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     editorRuntimeStatePort.IsPlaying,
                     editorRuntimeStatePort.IsPaused,
                     editorRuntimeStatePort.IsCompiling,
-                    editorRuntimeStatePort.IsUpdating);
+                    editorRuntimeStatePort.IsUpdating,
+                    runningToolElapsedSeconds);
             }
 
             (bool HasValue, bool IsPlaying, bool IsPaused) playState =
@@ -89,10 +95,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
                     runningToolName,
                     requestedToolName,
                     playState.IsPlaying,
-                    playState.IsPaused);
+                    playState.IsPaused,
+                    runningToolElapsedSeconds: runningToolElapsedSeconds);
             }
 
-            return new UnityCliLoopToolBusyException(runningToolName, requestedToolName);
+            return new UnityCliLoopToolBusyException(
+                runningToolName,
+                requestedToolName,
+                runningToolElapsedSeconds: runningToolElapsedSeconds);
         }
     }
 }
