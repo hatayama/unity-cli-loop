@@ -324,7 +324,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: clearing an auto-disarmed hit reports leftover-patch removal with ClearedCount 1.
+        /// What: clearing an auto-disarmed hit reports that the record was marked cleared with ClearedCount 1.
         /// </summary>
         [Test]
         public void Clear_WhenPausePointWasHit_ReportsAlreadyHitMessage()
@@ -338,7 +338,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 snapshot.Message,
                 Is.EqualTo(
-                    "Pause point was already auto-disarmed by its hit; this clear removed its leftover code patch and marked the record cleared. Capture history is preserved."));
+                    "Pause point was already auto-disarmed by its hit; this clear marked the record cleared. Capture history is preserved."));
             Assert.That(clearedCount, Is.EqualTo(1));
             Assert.That(_pauseController.IsPaused, Is.False);
         }
@@ -603,7 +603,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: clearing an expired never-hit marker reports leftover-patch removal with ClearedCount 1.
+        /// What: clearing an expired never-hit marker reports that the record was marked cleared with ClearedCount 1.
         /// </summary>
         [Test]
         public void Clear_WhenPausePointExpired_ReportsAlreadyExpiredMessage()
@@ -617,15 +617,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 snapshot.Message,
                 Is.EqualTo(
-                    "Pause point had already expired before being hit; this clear removed its leftover code patch and marked the record cleared."));
+                    "Pause point had already expired before being hit; this clear marked the record cleared."));
             Assert.That(clearedCount, Is.EqualTo(1));
         }
 
         /// <summary>
-        /// What: clearing an expired marker that already hit reports leftover-patch removal with ClearedCount 1.
+        /// What: clearing an expired marker that already hit reports that the record was marked cleared with ClearedCount 1.
         /// </summary>
         [Test]
-        public void Clear_WhenExpiredHitMarkerIsCleared_ReportsLeftoverPatchRemovedMessageAndClearedCountOne()
+        public void Clear_WhenExpiredHitMarkerIsCleared_ReportsRecordClearedMessageAndClearedCountOne()
         {
             UloopPausePointRegistry.Enable("jump", 1, UloopPausePointCaptureMode.Trace);
             UloopPausePoint.Pause("jump");
@@ -637,7 +637,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 snapshot.Message,
                 Is.EqualTo(
-                    "Pause point capture window had already expired; this clear removed its leftover code patch and marked the record cleared."));
+                    "Pause point capture window had already expired; this clear marked the record cleared."));
             Assert.That(clearedCount, Is.EqualTo(1));
         }
 

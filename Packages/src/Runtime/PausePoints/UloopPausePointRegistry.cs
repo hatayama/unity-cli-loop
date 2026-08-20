@@ -131,19 +131,19 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // Resolve expiry first so a clear after the timeout reports "expired", not a normal clear.
             TryExpire(entry, now);
             int clearedCount = entry.Status == UloopPausePointStatus.Cleared ? 0 : 1;
-            // Why not "nothing to clear" or "removed its record": ClearedCount 1 means this
-            // call unpatched leftover Harmony code and marked the entry Cleared; the entry
-            // stays in Entries and remains readable via pause-point-status.
+            // Why not claim leftover-patch removal: this Runtime registry cannot know whether a
+            // patch exists. Id-only enables never call SourcePausePointPatcher, so OnCleared's
+            // Unpatch hook no-ops when MethodById lacks the id.
             string message = !entry.IsEnabled && entry.Status == UloopPausePointStatus.Hit
-                ? "Pause point was already auto-disarmed by its hit; this clear removed its leftover code patch and marked the record cleared. Capture history is preserved."
+                ? "Pause point was already auto-disarmed by its hit; this clear marked the record cleared. Capture history is preserved."
                 : entry.Status switch
             {
                 UloopPausePointStatus.Hit =>
                     $"Pause point cleared after {entry.HitCount} hit(s); capture history is preserved.",
                 UloopPausePointStatus.Expired when entry.HitCount > 0 =>
-                    "Pause point capture window had already expired; this clear removed its leftover code patch and marked the record cleared.",
+                    "Pause point capture window had already expired; this clear marked the record cleared.",
                 UloopPausePointStatus.Expired =>
-                    "Pause point had already expired before being hit; this clear removed its leftover code patch and marked the record cleared.",
+                    "Pause point had already expired before being hit; this clear marked the record cleared.",
                 UloopPausePointStatus.Cleared => "Pause point was already cleared.",
                 _ => "Pause point cleared."
             };
