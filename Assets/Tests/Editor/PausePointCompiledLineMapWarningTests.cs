@@ -18,6 +18,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private const string ForwardSlashFile = "Assets/Scripts/Example.cs";
 
+        private const string ExampleResolvedMethod = "ExampleType.ExampleMethod";
+
+        private const string ExpectedCompiledLineMapWarning =
+            "'Assets/Scripts/Example.cs' has active hot-reload patches. The resolved method "
+            + "'ExampleType.ExampleMethod' is not patched by this reload, so --line resolved "
+            + "against the last compiled source, not the edited file. Verify ResolvedLineText "
+            + "matches the statement you meant, or run 'uloop compile' and re-enable.";
+
+        private const string ExpectedCompiledLineMapResolveFailureWarning =
+            "'Assets/Scripts/Example.cs' has active hot-reload patches. --line resolves against "
+            + "the last compiled source, not the edited file, so a line number taken from the "
+            + "edited file can miss or fail to resolve. Methods currently patched by hot reload "
+            + "resolve against the edited file instead. Recompute the line against the last "
+            + "compiled source, or run 'uloop compile' and re-enable.";
+
+        private const string ExpectedEnableResolveFailureWarning =
+            "'Assets/Tests/Editor/PausePointCompiledLineMapWarningTests.cs' has active "
+            + "hot-reload patches. --line resolves against the last compiled source, not the "
+            + "edited file, so a line number taken from the edited file can miss or fail to "
+            + "resolve. Methods currently patched by hot reload resolve against the edited file "
+            + "instead. Recompute the line against the last compiled source, or run 'uloop compile' "
+            + "and re-enable.";
+
         private const string ResolveFailureFile =
             "Assets/Tests/Editor/PausePointCompiledLineMapWarningTests.cs";
 
@@ -48,19 +71,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: an active-patch file produces the success-path compiled-line-map warning.
+        /// What: an active-patch file produces the success-path compiled-line-map warning
+        /// that names the unpatched resolved method.
         /// </summary>
         [Test]
         public void BuildCompiledLineMapWarningOrEmpty_WhenPatchesAreActive_ReturnsFormattedWarning()
         {
-            string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(true, ForwardSlashFile);
+            string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
+                true,
+                ForwardSlashFile,
+                ExampleResolvedMethod);
 
-            Assert.That(
-                warning,
-                Is.EqualTo(
-                    string.Format(
-                        SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat,
-                        ForwardSlashFile)));
+            Assert.That(warning, Is.EqualTo(ExpectedCompiledLineMapWarning));
         }
 
         /// <summary>
@@ -69,14 +91,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineMapWarningOrEmpty_WhenFileUsesBackslashes_NormalizesToForwardSlashes()
         {
-            string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(true, "Assets\\Scripts\\Example.cs");
+            string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
+                true,
+                "Assets\\Scripts\\Example.cs",
+                ExampleResolvedMethod);
 
-            Assert.That(
-                warning,
-                Is.EqualTo(
-                    string.Format(
-                        SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat,
-                        ForwardSlashFile)));
+            Assert.That(warning, Is.EqualTo(ExpectedCompiledLineMapWarning));
         }
 
         /// <summary>
@@ -85,7 +105,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineMapWarningOrEmpty_WhenPatchesAreInactive_ReturnsEmpty()
         {
-            string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(false, ForwardSlashFile);
+            string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
+                false,
+                ForwardSlashFile,
+                ExampleResolvedMethod);
 
             Assert.That(warning, Is.EqualTo(string.Empty));
         }
@@ -101,12 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 true,
                 ForwardSlashFile);
 
-            Assert.That(
-                warning,
-                Is.EqualTo(
-                    string.Format(
-                        SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureWarningFormat,
-                        ForwardSlashFile)));
+            Assert.That(warning, Is.EqualTo(ExpectedCompiledLineMapResolveFailureWarning));
         }
 
         /// <summary>
@@ -120,12 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 true,
                 "Assets\\Scripts\\Example.cs");
 
-            Assert.That(
-                warning,
-                Is.EqualTo(
-                    string.Format(
-                        SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureWarningFormat,
-                        ForwardSlashFile)));
+            Assert.That(warning, Is.EqualTo(ExpectedCompiledLineMapResolveFailureWarning));
         }
 
         /// <summary>
@@ -572,7 +585,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     PausePointEnableWarnings.MergeWarnings(
                         PausePointEnableWarnings.MergeWarnings(
                             PausePointEnableWarnings.CreateEnableWarning(),
-                            PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(true, ResolveFailureFile)),
+                            PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
+                                true,
+                                ResolveFailureFile,
+                                response.ResolvedMethod)),
                         expectedDrift),
                     SourcePausePointConstants.SmallMethodInliningRiskWarning);
                 Assert.That(response.Warning, Is.EqualTo(expectedWarning));
@@ -651,7 +667,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     PausePointEnableWarnings.MergeWarnings(
                         PausePointEnableWarnings.MergeWarnings(
                             PausePointEnableWarnings.CreateEnableWarning(),
-                            PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(true, ResolveFailureFile)),
+                            PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
+                                true,
+                                ResolveFailureFile,
+                                response.ResolvedMethod)),
                         expectedSnap),
                     SourcePausePointConstants.SmallMethodInliningRiskWarning);
                 Assert.That(response.Warning, Is.EqualTo(expectedWarning));
@@ -1390,12 +1409,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(withPatches.Success, Is.False);
                 Assert.That(withPatches.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-                Assert.That(
-                    withPatches.Warning,
-                    Is.EqualTo(
-                        string.Format(
-                            SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureWarningFormat,
-                            ResolveFailureFile)));
+                Assert.That(withPatches.Warning, Is.EqualTo(ExpectedEnableResolveFailureWarning));
                 Assert.That(
                     withPatches.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction));
