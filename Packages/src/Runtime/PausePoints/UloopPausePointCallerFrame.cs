@@ -8,7 +8,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     /// </summary>
     internal sealed class UloopPausePointCallerFrame
     {
-        public UloopPausePointCallerFrame(string method, string file, int line)
+        public UloopPausePointCallerFrame(string method, string file, int line, string note)
         {
             Debug.Assert(!string.IsNullOrEmpty(method), "method must not be null or empty");
             // A frame without debug symbols must not report a stale line number.
@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Method = method;
             File = file;
             Line = line;
+            Note = note;
         }
 
         public string Method { get; }
@@ -26,6 +27,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string File { get; }
 
         public int Line { get; }
+
+        // Null when File is present. Set when File/Line are omitted, distinguishing a dynamic
+        // method, missing debug symbols, and a source path outside the Unity project.
+        public string Note { get; }
     }
 }
 #endif

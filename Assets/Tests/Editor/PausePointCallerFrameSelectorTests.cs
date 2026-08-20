@@ -24,6 +24,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string UserFile = "Assets/Scripts/Input.cs";
         private const int UserLine = 10;
 
+        private const string WantDynamicMethodNote =
+            "dynamic method (patched by hot reload or pause-point instrumentation); no debug symbols";
+        private const string WantMissingDebugSymbolsNote =
+            "no source file information; the frame's assembly has no debug symbols";
+        private const string WantOutsideProjectNote =
+            "source file is outside the Unity project";
+
         /// <summary>
         /// What: rawFrames[0] is the marker's own frame and is skipped by position, so it
         /// never appears in the selected callers.
@@ -43,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(selected[0].Method, Is.EqualTo(UserType + "." + UserMethod));
             Assert.That(selected[0].File, Is.EqualTo(UserFile));
             Assert.That(selected[0].Line, Is.EqualTo(UserLine));
+            Assert.That(selected[0].Note, Is.Null);
         }
 
         /// <summary>
@@ -111,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(selected[0].Method, Is.EqualTo("DMD<Foo>"));
             Assert.That(selected[0].File, Is.Null);
             Assert.That(selected[0].Line, Is.EqualTo(0));
+            Assert.That(selected[0].Note, Is.EqualTo(WantMissingDebugSymbolsNote));
         }
 
         /// <summary>
@@ -140,6 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(selected[0].Method, Is.EqualTo("Game.Input.HandleJump"));
             Assert.That(selected[0].File, Is.Null);
             Assert.That(selected[0].Line, Is.EqualTo(0));
+            Assert.That(selected[0].Note, Is.EqualTo(WantDynamicMethodNote));
         }
 
         /// <summary>
@@ -168,6 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(selected[0].Method, Is.EqualTo("Game.Input.HandleJump"));
             Assert.That(selected[0].File, Is.Null);
             Assert.That(selected[0].Line, Is.EqualTo(0));
+            Assert.That(selected[0].Note, Is.EqualTo(WantDynamicMethodNote));
         }
 
         /// <summary>
@@ -592,6 +603,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].File, Is.Null);
             Assert.That(selected[0].Line, Is.EqualTo(0));
+            Assert.That(selected[0].Note, Is.EqualTo(WantMissingDebugSymbolsNote));
         }
 
         /// <summary>
@@ -707,6 +719,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].File, Is.Null);
             Assert.That(selected[0].Line, Is.EqualTo(0));
+            Assert.That(selected[0].Note, Is.EqualTo(WantOutsideProjectNote));
+        }
+
+        /// <summary>
+        /// What: an empty FileName is the missing-debug-symbols path, not "outside the project",
+        /// so checking IsNullOrEmpty before NormalizeFilePath is required.
+        /// </summary>
+        [Test]
+        public void Select_WhenFileNameIsEmpty_ReportsMissingDebugSymbolsNote()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame(UserType, UserMethod, string.Empty, 42),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
+
+            Assert.That(selected, Has.Count.EqualTo(1));
+            Assert.That(selected[0].File, Is.Null);
+            Assert.That(selected[0].Line, Is.EqualTo(0));
+            Assert.That(selected[0].Note, Is.EqualTo(WantMissingDebugSymbolsNote));
         }
 
         /// <summary>

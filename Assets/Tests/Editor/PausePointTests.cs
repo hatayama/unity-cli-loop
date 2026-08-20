@@ -1161,8 +1161,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointCapturedVariableFrame frame = CreateEmptyCapturedFrame();
             UloopPausePointCallerFrame[] callerFrames =
             {
-                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10),
-                new("Game.Player.Update", "Assets/Scripts/Player.cs", 20),
+                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10, null),
+                new("Game.Player.Update", "Assets/Scripts/Player.cs", 20, null),
             };
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.HitWithCapturedFrame(
@@ -1181,12 +1181,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointCapturedVariableFrame frame = CreateEmptyCapturedFrame();
             UloopPausePointCallerFrame[] firstCallerFrames =
             {
-                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10),
+                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10, null),
             };
             UloopPausePointCallerFrame[] secondCallerFrames =
             {
-                new("Game.AI.Tick", "Assets/Scripts/AI.cs", 44),
-                new("Game.World.Update", "Assets/Scripts/World.cs", 8),
+                new("Game.AI.Tick", "Assets/Scripts/AI.cs", 44, null),
+                new("Game.World.Update", "Assets/Scripts/World.cs", 8, null),
             };
 
             UloopPausePointRegistry.HitWithCapturedFrame(
@@ -1242,7 +1242,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePointCallerFrame[] callerFrames =
             {
-                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10),
+                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10, null),
             };
             UloopPausePointRegistry.HitWithCapturedFrame(
                 "jump",
@@ -1275,7 +1275,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePointCallerFrame[] callerFrames =
             {
-                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10),
+                new("Game.Input.HandleJump", "Assets/Scripts/Input.cs", 10, null),
             };
             UloopPausePointRegistry.HitWithCapturedFrame(
                 "jump",

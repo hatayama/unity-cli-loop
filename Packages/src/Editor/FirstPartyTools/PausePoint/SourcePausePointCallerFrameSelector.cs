@@ -61,8 +61,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (patchedCallerDisplay != null)
                 {
                     // A dynamic method carries no debug symbols, so the frame is method-only by
-                    // construction (File null, Line 0).
-                    selected.Add(new UloopPausePointCallerFrame(patchedCallerDisplay, null, 0));
+                    // construction (File null, Line 0). Note names the cause: hot-reload patch
+                    // or pause-point instrumentation, not a missing FileName in general.
+                    selected.Add(new UloopPausePointCallerFrame(
+                        patchedCallerDisplay,
+                        null,
+                        0,
+                        SourcePausePointConstants.CallerFrameDynamicMethodNote));
                     continue;
                 }
 
@@ -71,11 +76,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                string methodDisplay = FormatMethodDisplay(frame.TypeFullName, frame.MethodName);
+                // Why inspect FileName before NormalizeFilePath: that helper also returns null
+                // for an empty FileName, and labeling every null as "outside the project" would
+                // mis-describe frames that simply have no debug symbols.
+                if (string.IsNullOrEmpty(frame.FileName))
+                {
+                    selected.Add(new UloopPausePointCallerFrame(
+                        methodDisplay,
+                        null,
+                        0,
+                        SourcePausePointConstants.CallerFrameMissingDebugSymbolsNote));
+                    continue;
+                }
+
                 string file = NormalizeFilePath(frame.FileName);
-                selected.Add(new UloopPausePointCallerFrame(
-                    FormatMethodDisplay(frame.TypeFullName, frame.MethodName),
-                    file,
-                    file == null ? 0 : frame.Line));
+                if (file == null)
+                {
+                    selected.Add(new UloopPausePointCallerFrame(
+                        methodDisplay,
+                        null,
+                        0,
+                        SourcePausePointConstants.CallerFrameOutsideProjectNote));
+                    continue;
+                }
+
+                selected.Add(new UloopPausePointCallerFrame(methodDisplay, file, frame.Line, null));
             }
 
             return selected;
