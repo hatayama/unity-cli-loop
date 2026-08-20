@@ -166,7 +166,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         Kind = HotReloadConstants.AddedMemberStatusKind,
                         Method = added.MethodKey,
-                        FilePath = added.FilePath
+                        FilePath = added.FilePath,
+                        // Why: added-member calls are not instrumented, so InvocationCount stays 0;
+                        // without Reason, --status looks like the member was never called.
+                        Reason = HotReloadConstants.AlreadyActiveAddedMemberReason
                     });
             }
 

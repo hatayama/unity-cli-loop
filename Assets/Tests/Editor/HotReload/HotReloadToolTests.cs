@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -41,6 +42,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(response, Is.Not.Null);
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Does.Contain("Files is required"));
+        }
+
+        /// <summary>
+        /// What: --status Added rows carry the same not-instrumented Reason as AlreadyActive
+        /// added-member apply rows.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_AddedRow_SetsNotInstrumentedReason()
+        {
+            const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedReason.cs";
+            const string methodKey = "Host.NewHelper(System.Int32)";
+            MethodInfo shim = typeof(HotReloadAddedMemberHost).GetMethod(
+                nameof(HotReloadAddedMemberHost.ExistingCaller),
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(shim, Is.Not.Null);
+
+            HotReloadAddedMemberRegistry.BeginFileGeneration(filePath);
+            HotReloadAddedMemberRegistry.Register(filePath, methodKey, shim, filePath);
+            try
+            {
+                HotReloadTool tool = new HotReloadTool();
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                    new JObject { ["Status"] = true },
+                    CancellationToken.None);
+                HotReloadResponse response = baseResponse as HotReloadResponse;
+
+                Assert.That(response, Is.Not.Null);
+                Assert.That(response.Success, Is.True);
+                HotReloadMethodResult addedRow = null;
+                for (int index = 0; index < response.Methods.Count; index++)
+                {
+                    HotReloadMethodResult row = response.Methods[index];
+                    if (row.Kind == HotReloadConstants.AddedMemberStatusKind && row.Method == methodKey)
+                    {
+                        addedRow = row;
+                        break;
+                    }
+                }
+
+                Assert.That(addedRow, Is.Not.Null);
+                Assert.That(
+                    addedRow.Reason,
+                    Is.EqualTo(
+                        "Source is unchanged since the last applied hot reload; the existing added member stays available. "
+                        + "Added-member calls are not instrumented, so InvocationCount is always 0 for this row."));
+                Assert.That(addedRow.InvocationCount, Is.EqualTo(0L));
+            }
+            finally
+            {
+                HotReloadAddedMemberRegistry.Clear();
+            }
         }
 
         [Test]
