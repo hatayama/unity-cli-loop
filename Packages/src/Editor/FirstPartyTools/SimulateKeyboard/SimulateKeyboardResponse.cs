@@ -86,6 +86,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public string? KeyStateReadUpdateType { get; set; }
 
+        /// <summary>
+        /// True when a one-shot player-update latch sync was scheduled after this ReleaseAll or KeyUp.
+        /// Omitted when false.
+        /// </summary>
+        public bool DeferredLatchSyncScheduled { get; set; }
+
         public bool ShouldSerializeReleasedKeyStates()
         {
             return ReleasedKeyStates != null;
@@ -94,6 +100,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeKeyStateReadUpdateType()
         {
             return !string.IsNullOrEmpty(KeyStateReadUpdateType);
+        }
+
+        public bool ShouldSerializeDeferredLatchSyncScheduled()
+        {
+            return DeferredLatchSyncScheduled;
         }
 
         public SimulateKeyboardResponse()

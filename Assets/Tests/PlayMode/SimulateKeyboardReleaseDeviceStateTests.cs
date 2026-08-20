@@ -35,6 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
         public override void TearDown()
         {
+            DeferredPlayerLatchSynchronizer.ResetForTests();
             KeyboardKeyState.ReleaseAllKeys();
             SimulateKeyboardOverlayState.Clear();
             InputVisualizationCanvas[] canvases =
@@ -106,7 +107,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.That(dState!.DeviceIsPressedAfterRelease, Is.EqualTo(keyboard[Key.D].isPressed));
             Assert.That(lastResponse.KeyStateReadUpdateType, Is.Not.Empty);
             Assert.That(lastResponse.KeyStateReadUpdateType, Is.EqualTo(InputState.currentUpdateType.ToString()));
-            Assert.That(lastResponse.Message, Is.EqualTo("Released 1 key(s): D"));
+            Assert.That(lastResponse.DeferredLatchSyncScheduled, Is.True);
+            Assert.That(
+                lastResponse.Message,
+                Is.EqualTo(
+                    "Released 1 key(s): D A deferred latch sync will run on the next player input update."));
         }
 
         /// <summary>
@@ -125,6 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(lastResponse.Success);
             Assert.That(lastResponse.ReleasedKeys, Is.Empty);
             Assert.That(lastResponse.ReleasedKeyStates, Is.Empty);
+            Assert.That(lastResponse.DeferredLatchSyncScheduled, Is.False);
         }
 
         /// <summary>
@@ -152,6 +158,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.That(lastResponse.KeyStateTrackedHeld, Is.EqualTo(KeyboardKeyState.IsKeyHeld(Key.W)));
             Assert.That(lastResponse.KeyStateDeviceIsPressed, Is.Not.Null);
             Assert.That(lastResponse.KeyStateDeviceIsPressed, Is.EqualTo(keyboard[Key.W].isPressed));
+            Assert.That(lastResponse.DeferredLatchSyncScheduled, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies KeyDown then ReleaseAll leaves the device unpressed after player update frames,
+        /// including the deferred latch-sync path.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ReleaseAll_AfterHeldKey_DeviceIsUnpressedAfterPlayerUpdateFrames()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "D"
+            });
+            Assert.IsTrue(lastResponse.Success);
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = UnityCliLoopKeyboardAction.ReleaseAll.ToString()
+            });
+            Assert.IsTrue(lastResponse.Success);
+            Assert.That(lastResponse.DeferredLatchSyncScheduled, Is.True);
+
+            for (int frame = 0; frame < 5; frame++)
+            {
+                InputSystem.Update();
+                yield return null;
+            }
+
+            Assert.That(keyboard[Key.D].isPressed, Is.False);
         }
 
         private IEnumerator RunTool(JObject parameters)
@@ -246,6 +285,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
                 "Editor");
 
             Assert.That(message, Is.EqualTo("Released 2 key(s): D, W"));
+        }
+
+        /// <summary>
+        /// Verifies the deferred latch-sync note matches the exact English sentence callers will see.
+        /// </summary>
+        [Test]
+        public void AppendDeferredLatchSyncNote_WhenScheduled_AppendsExactLiteral()
+        {
+            string message = SimulateKeyboardReleaseMessageFormatter.AppendDeferredLatchSyncNote(
+                "Released 1 key(s): D",
+                true);
+
+            Assert.That(
+                message,
+                Is.EqualTo(
+                    "Released 1 key(s): D A deferred latch sync will run on the next player input update."));
+        }
+
+        /// <summary>
+        /// Verifies the deferred latch-sync note is omitted when nothing was scheduled.
+        /// </summary>
+        [Test]
+        public void AppendDeferredLatchSyncNote_WhenNotScheduled_ReturnsMessageUnchanged()
+        {
+            string message = SimulateKeyboardReleaseMessageFormatter.AppendDeferredLatchSyncNote(
+                "Released all keys (none were held).",
+                false);
+
+            Assert.That(message, Is.EqualTo("Released all keys (none were held)."));
         }
     }
 

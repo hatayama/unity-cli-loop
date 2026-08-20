@@ -214,6 +214,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     message,
                     releasedKeyStatesList,
                     releaseResult.KeyStateReadUpdateType);
+                bool deferredLatchSyncScheduled =
+                    DeferredPlayerLatchSynchronizer.Schedule(releaseResult.ReleasedInputKeys);
+                message = SimulateKeyboardReleaseMessageFormatter.AppendDeferredLatchSyncNote(
+                    message,
+                    deferredLatchSyncScheduled);
 
                 SimulateKeyboardResponse response = new SimulateKeyboardResponse
                 {
@@ -222,7 +227,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Action = UnityCliLoopKeyboardAction.ReleaseAll.ToString(),
                     ReleasedKeys = releasedKeysList,
                     ReleasedKeyStates = releasedKeyStatesList,
-                    KeyStateReadUpdateType = releaseResult.KeyStateReadUpdateType
+                    KeyStateReadUpdateType = releaseResult.KeyStateReadUpdateType,
+                    DeferredLatchSyncScheduled = deferredLatchSyncScheduled
                 };
 
                 VibeLogger.LogInfo(

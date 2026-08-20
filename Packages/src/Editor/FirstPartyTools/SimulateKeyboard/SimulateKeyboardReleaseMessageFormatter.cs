@@ -15,6 +15,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal const string StillPressedInViewNoteFormat =
             "{0} key(s) still report pressed in the {1} view; the release may not yet be visible to gameplay polling.";
 
+        internal const string DeferredLatchSyncScheduledNote =
+            "A deferred latch sync will run on the next player input update.";
+
         internal static string FormatStillPressedNote(int stillPressedCount, string updateType)
         {
             Debug.Assert(stillPressedCount > 0, "still-pressed note is only for remaining pressed keys");
@@ -57,6 +60,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return stillPressedCount;
+        }
+
+        internal static string AppendDeferredLatchSyncNote(string message, bool scheduled)
+        {
+            if (!scheduled)
+            {
+                return message ?? string.Empty;
+            }
+
+            if (message == null)
+            {
+                Debug.Assert(false, "release message must exist when appending the deferred latch-sync note");
+                return DeferredLatchSyncScheduledNote;
+            }
+
+            return message + " " + DeferredLatchSyncScheduledNote;
         }
     }
 }

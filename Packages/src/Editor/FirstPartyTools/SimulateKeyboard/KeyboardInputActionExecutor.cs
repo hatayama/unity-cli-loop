@@ -391,6 +391,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
             KeyboardKeyState.SetKeyUp(key);
             SimulateKeyboardOverlayState.RemoveHeldKey(keyName);
+            bool deferredLatchSyncScheduled = DeferredPlayerLatchSynchronizer.Schedule(new Key[] { key });
 
             InputSimulationWaitOutcome waitOutcome = await InputSystemUpdateHelper.WaitForObservationFrames(ct)
                 .ConfigureAwait(false);
@@ -412,11 +413,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new SimulateKeyboardResponse
             {
                 Success = true,
-                Message = $"Key '{keyName}' released",
+                Message = SimulateKeyboardReleaseMessageFormatter.AppendDeferredLatchSyncNote(
+                    $"Key '{keyName}' released",
+                    deferredLatchSyncScheduled),
                 Action = UnityCliLoopKeyboardAction.KeyUp.ToString(),
                 KeyName = keyName,
                 KeyStateTrackedHeld = KeyboardKeyState.IsKeyHeld(key),
-                KeyStateDeviceIsPressed = keyboard[key].isPressed
+                KeyStateDeviceIsPressed = keyboard[key].isPressed,
+                DeferredLatchSyncScheduled = deferredLatchSyncScheduled
             };
         }
 

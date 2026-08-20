@@ -201,7 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Writing zero into an already-zero state buffer is a no-op for that latch sync, so after
         /// Editor pause/resume isPressed can stay true forever while ReadValue is 0.
         /// </summary>
-        private static void ForceSyncButtonPressLatch(Keyboard keyboard, Key key)
+        internal static void ForceSyncButtonPressLatch(Keyboard keyboard, Key key)
         {
             Debug.Assert(CanInjectKeyboardState(keyboard), "press latch sync requires an injectable keyboard");
             if (!CanInjectKeyboardState(keyboard))
@@ -287,7 +287,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 releasedKeyStates = new List<ReleasedKeyState>();
             }
 
-            return new ReleaseAllKeysImmediateResult(releasedNames, releasedKeyStates, keyStateReadUpdateType);
+            return new ReleaseAllKeysImmediateResult(
+                releasedNames,
+                releasedKeyStates,
+                keyStateReadUpdateType,
+                sortedKeys);
         }
 
         // Why a pure mapper: PlayMode readback is false on a healthy device, so a hardcoded
