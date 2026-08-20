@@ -231,6 +231,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 truncated);
         }
 
+        /// <summary>
+        /// Appends compiled-line Candidate text to a resolve-failure Message when the edited
+        /// --line text appears in the last compiled source.
+        /// </summary>
+        internal static string AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
+            string message,
+            int requestedLine,
+            string requestedLineEditedText,
+            IReadOnlyList<string> compiledSourceLines)
+        {
+            if (string.IsNullOrEmpty(message) || requestedLine <= 0)
+            {
+                return message ?? string.Empty;
+            }
+
+            if (string.IsNullOrEmpty(requestedLineEditedText) || compiledSourceLines == null)
+            {
+                return message;
+            }
+
+            string editedTrimmed = requestedLineEditedText.Trim();
+            if (editedTrimmed.Length == 0)
+            {
+                return message;
+            }
+
+            (List<int> matches, bool truncated) = CollectCandidateCompiledLineNumbers(
+                editedTrimmed,
+                compiledSourceLines);
+            if (matches.Count == 0)
+            {
+                return message;
+            }
+
+            // Why no drift-warning gate: resolve-failure Messages have no drift warning, and
+            // Candidate is the only compiled-line number the caller can retry with.
+            return message + FormatRequestedLineCandidateCompiledLinesSuffix(
+                requestedLine,
+                matches,
+                truncated);
+        }
+
         private static (List<int> matches, bool truncated) CollectCandidateCompiledLineNumbers(
             string editedTrimmed,
             IReadOnlyList<string> compiledSourceLines)
