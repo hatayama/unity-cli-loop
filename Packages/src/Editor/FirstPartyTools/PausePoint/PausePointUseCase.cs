@@ -273,15 +273,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string recommendedNextAction = hasActiveHotReloadPatches
                     ? SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction
                     : SourcePausePointConstants.ResolveFailedRecommendedNextAction;
-                string message = PausePointEnableWarnings.AppendNearbyCompiledMethodsSuffix(
+                string compiledSnapshotSource = LoadCompiledSnapshotSourceOrEmpty(parameters.File);
+                IReadOnlyList<string> compiledSourceLinesOrNull = string.IsNullOrEmpty(compiledSnapshotSource)
+                    ? null
+                    : SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
+                (bool requestedLineReadOk, string requestedLineEditedText) =
+                    PausePointCompiledLineComparisonWarnings.ReadEditedLineText(
+                        parameters.File,
+                        parameters.Line);
+                string message = PausePointEnableWarnings.BuildResolveFailureMessage(
                     resolveResult.ErrorMessage,
-                    resolveResult.NearbyCompiledMethods);
-                if (hasActiveHotReloadPatches)
-                {
-                    message = AppendResolveFailureRequestedLineCandidateOrUnchanged(
-                        message,
-                        parameters);
-                }
+                    resolveResult.NearbyCompiledMethods,
+                    hasActiveHotReloadPatches,
+                    parameters.Line,
+                    requestedLineReadOk,
+                    requestedLineEditedText,
+                    compiledSourceLinesOrNull);
 
                 PausePointResponse response = CreateValidationFailure(
                     message,
@@ -498,36 +505,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string snapshotSource =
                 HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile?.Invoke(normalizedFile);
             return snapshotSource ?? string.Empty;
-        }
-
-        /// <summary>
-        /// Appends a compiled-line Candidate to a resolve-failure Message when the edited
-        /// --line text exists in the compiled snapshot.
-        /// </summary>
-        private static string AppendResolveFailureRequestedLineCandidateOrUnchanged(
-            string message,
-            EnablePausePointSchema parameters)
-        {
-            string compiledSnapshotSource = LoadCompiledSnapshotSourceOrEmpty(parameters.File);
-            if (string.IsNullOrEmpty(compiledSnapshotSource))
-            {
-                return message;
-            }
-
-            (bool editedReadOk, string requestedLineEditedText) =
-                PausePointCompiledLineComparisonWarnings.ReadEditedLineText(
-                    parameters.File,
-                    parameters.Line);
-            if (!editedReadOk)
-            {
-                return message;
-            }
-
-            return PausePointEnableWarnings.AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
-                message,
-                parameters.Line,
-                requestedLineEditedText,
-                SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource));
         }
 
         // The derived id must use the originally requested file/line (not the resolved/rounded

@@ -273,6 +273,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 truncated);
         }
 
+        /// <summary>
+        /// Builds a resolve-failure Message: Nearby methods, then Candidate when hot-reload
+        /// patches are active and the edited --line text was read.
+        /// </summary>
+        internal static string BuildResolveFailureMessage(
+            string errorMessage,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> nearbyCompiledMethods,
+            bool hasActiveHotReloadPatches,
+            int requestedLine,
+            bool requestedLineReadOk,
+            string requestedLineEditedText,
+            IReadOnlyList<string> compiledSourceLinesOrNull)
+        {
+            string message = AppendNearbyCompiledMethodsSuffix(errorMessage, nearbyCompiledMethods);
+            // Why skip Candidate when the edited line was not read: the Candidate sentence names
+            // the text at --line N in the edited file, which is false if that read failed.
+            if (!hasActiveHotReloadPatches || !requestedLineReadOk)
+            {
+                return message;
+            }
+
+            return AppendResolveFailureRequestedLineCandidateSuffixOrUnchanged(
+                message,
+                requestedLine,
+                requestedLineEditedText,
+                compiledSourceLinesOrNull);
+        }
+
         private static (List<int> matches, bool truncated) CollectCandidateCompiledLineNumbers(
             string editedTrimmed,
             IReadOnlyList<string> compiledSourceLines)

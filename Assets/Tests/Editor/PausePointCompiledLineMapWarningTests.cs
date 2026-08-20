@@ -1085,6 +1085,139 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: an active hot-reload gate plus a compiled-source match appends Candidate after
+        /// Nearby methods on a resolve-failure Message.
+        /// </summary>
+        [Test]
+        public void BuildResolveFailureMessage_WhenHotReloadGateTrueAndLineMatches_AppendsNearbyThenCandidate()
+        {
+            const string errorMessage =
+                "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'.";
+            SourcePausePointNearbyCompiledMethod[] nearby =
+            {
+                new SourcePausePointNearbyCompiledMethod("Enemy.Update", 100, 120)
+            };
+            string[] compiledLines =
+            {
+                "            return 2;"
+            };
+
+            string result = PausePointEnableWarnings.BuildResolveFailureMessage(
+                errorMessage,
+                nearby,
+                true,
+                116,
+                true,
+                "return 2;",
+                compiledLines);
+
+            Assert.That(
+                result,
+                Is.EqualTo(
+                    "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
+                    + " Nearby methods in the last compiled source: 'Enemy.Update' spans lines 100-120."
+                    + " Candidate: the text at --line 116 in the edited file appears at line 1 in the last compiled source."));
+        }
+
+        /// <summary>
+        /// What: the same matching inputs without the hot-reload gate keep Nearby methods and omit
+        /// Candidate.
+        /// </summary>
+        [Test]
+        public void BuildResolveFailureMessage_WhenHotReloadGateFalseAndLineMatches_AppendsNearbyOnly()
+        {
+            const string errorMessage =
+                "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'.";
+            SourcePausePointNearbyCompiledMethod[] nearby =
+            {
+                new SourcePausePointNearbyCompiledMethod("Enemy.Update", 100, 120)
+            };
+            string[] compiledLines =
+            {
+                "            return 2;"
+            };
+
+            string result = PausePointEnableWarnings.BuildResolveFailureMessage(
+                errorMessage,
+                nearby,
+                false,
+                116,
+                true,
+                "return 2;",
+                compiledLines);
+
+            Assert.That(
+                result,
+                Is.EqualTo(
+                    "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
+                    + " Nearby methods in the last compiled source: 'Enemy.Update' spans lines 100-120."));
+        }
+
+        /// <summary>
+        /// What: a null compiled-source list under an active hot-reload gate keeps Nearby methods
+        /// and omits Candidate.
+        /// </summary>
+        [Test]
+        public void BuildResolveFailureMessage_WhenCompiledSourceLinesNull_AppendsNearbyOnly()
+        {
+            const string errorMessage =
+                "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'.";
+            SourcePausePointNearbyCompiledMethod[] nearby =
+            {
+                new SourcePausePointNearbyCompiledMethod("Enemy.Update", 100, 120)
+            };
+
+            string result = PausePointEnableWarnings.BuildResolveFailureMessage(
+                errorMessage,
+                nearby,
+                true,
+                116,
+                true,
+                "return 2;",
+                null);
+
+            Assert.That(
+                result,
+                Is.EqualTo(
+                    "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
+                    + " Nearby methods in the last compiled source: 'Enemy.Update' spans lines 100-120."));
+        }
+
+        /// <summary>
+        /// What: a failed edited-line read under an active hot-reload gate keeps Nearby methods and
+        /// omits Candidate even when compiled source would match.
+        /// </summary>
+        [Test]
+        public void BuildResolveFailureMessage_WhenRequestedLineReadFails_AppendsNearbyOnly()
+        {
+            const string errorMessage =
+                "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'.";
+            SourcePausePointNearbyCompiledMethod[] nearby =
+            {
+                new SourcePausePointNearbyCompiledMethod("Enemy.Update", 100, 120)
+            };
+            string[] compiledLines =
+            {
+                "            return 2;"
+            };
+
+            string result = PausePointEnableWarnings.BuildResolveFailureMessage(
+                errorMessage,
+                nearby,
+                true,
+                116,
+                false,
+                "return 2;",
+                compiledLines);
+
+            Assert.That(
+                result,
+                Is.EqualTo(
+                    "No sequence point found on or after line 116 in 'Assets/Scripts/Enemy.cs'."
+                    + " Nearby methods in the last compiled source: 'Enemy.Update' spans lines 100-120."));
+        }
+
+        /// <summary>
         /// What: retarget warning interpolates resolved method, requested line, and edited span.
         /// </summary>
         [Test]
