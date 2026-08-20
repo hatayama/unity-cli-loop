@@ -223,6 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             string[] snapshotLines = diskSource.Replace("\r\n", "\n").Split('\n');
             snapshotLines[requestedLine - 1] = "            return 0;";
+            snapshotLines[markerLine - 1] = "            return 424242;";
             string snapshotSource = string.Join("\n", snapshotLines);
 
             try
@@ -259,6 +260,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     response.ResolvedMethod,
                     spanResult.Resolution.CompiledMethodStartLine,
                     spanResult.Resolution.CompiledMethodEndLine);
+                expectedDrift = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                    expectedDrift,
+                    "return 424242;",
+                    snapshotLines);
                 string expectedWarning = PausePointEnableWarnings.MergeWarnings(
                     PausePointEnableWarnings.MergeWarnings(
                         PausePointEnableWarnings.MergeWarnings(
@@ -340,6 +345,145 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "Example.Run",
                 8,
                 11);
+
+            Assert.That(warning, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: one trimmed compiled-source match appends a single-line candidate to the drift warning.
+        /// </summary>
+        [Test]
+        public void AppendCandidateCompiledLinesToDriftWarningOrUnchanged_WhenOneLineMatches_AppendsSingleCandidate()
+        {
+            string drift = string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                ForwardSlashFile,
+                17,
+                "return 1;",
+                "return 2;");
+            string[] compiledLines =
+            {
+                "class Sample",
+                "            return 2;",
+                "            return 1;"
+            };
+
+            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                "  return 2;  ",
+                compiledLines);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift + " Candidate: the edited line's text appears at line 2 in the last compiled source."));
+        }
+
+        /// <summary>
+        /// What: two or three trimmed compiled-source matches append every matching line number.
+        /// </summary>
+        [Test]
+        public void AppendCandidateCompiledLinesToDriftWarningOrUnchanged_WhenThreeLinesMatch_AppendsAllCandidates()
+        {
+            string drift = string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                ForwardSlashFile,
+                17,
+                "return 1;",
+                "return 2;");
+            string[] compiledLines =
+            {
+                "class Sample",
+                "            return 2;",
+                "            return 1;",
+                "            return 2;",
+                "            return 2;"
+            };
+
+            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                "return 2;",
+                compiledLines);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift + " Candidate: the edited line's text appears at lines 2, 4, 5 in the last compiled source."));
+        }
+
+        /// <summary>
+        /// What: more than three trimmed compiled-source matches append the first three and a truncation note.
+        /// </summary>
+        [Test]
+        public void AppendCandidateCompiledLinesToDriftWarningOrUnchanged_WhenMoreThanThreeLinesMatch_CapsAtFirstThree()
+        {
+            string drift = string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                ForwardSlashFile,
+                17,
+                "return 1;",
+                "return 2;");
+            string[] compiledLines =
+            {
+                "            return 2;",
+                "            return 1;",
+                "            return 2;",
+                "            return 2;",
+                "            return 2;"
+            };
+
+            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                "return 2;",
+                compiledLines);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift + " Candidate: the edited line's text appears at lines 1, 3, 4 (first 3 matches) in the last compiled source."));
+        }
+
+        /// <summary>
+        /// What: no compiled-source match leaves the drift warning unchanged.
+        /// </summary>
+        [Test]
+        public void AppendCandidateCompiledLinesToDriftWarningOrUnchanged_WhenNoLineMatches_LeavesWarningUnchanged()
+        {
+            string drift = string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                ForwardSlashFile,
+                17,
+                "return 1;",
+                "return 2;");
+            string[] compiledLines =
+            {
+                "class Sample",
+                "            return 1;"
+            };
+
+            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                "return 2;",
+                compiledLines);
+
+            Assert.That(warning, Is.EqualTo(drift));
+        }
+
+        /// <summary>
+        /// What: an empty drift warning stays empty even when compiled source contains the edited text.
+        /// </summary>
+        [Test]
+        public void AppendCandidateCompiledLinesToDriftWarningOrUnchanged_WhenDriftIsEmpty_ReturnsEmpty()
+        {
+            string[] compiledLines =
+            {
+                "            return 2;"
+            };
+
+            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                string.Empty,
+                "return 2;",
+                compiledLines);
 
             Assert.That(warning, Is.EqualTo(string.Empty));
         }

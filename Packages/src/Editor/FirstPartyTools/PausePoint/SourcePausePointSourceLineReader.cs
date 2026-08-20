@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -34,6 +35,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return string.Join(" ", trimmedNonEmptyLines);
         }
 
+        public static string[] SplitSourceLines(string sourceText)
+        {
+            if (string.IsNullOrEmpty(sourceText))
+            {
+                return Array.Empty<string>();
+            }
+
+            return sourceText.Replace("\r\n", "\n").Split('\n');
+        }
+
         public static string ReadLineTextFromSource(string sourceText, int lineNumber)
         {
             if (string.IsNullOrEmpty(sourceText) || lineNumber <= 0)
@@ -41,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return string.Empty;
             }
 
-            string[] lines = sourceText.Replace("\r\n", "\n").Split('\n');
+            string[] lines = SplitSourceLines(sourceText);
             if (lineNumber > lines.Length)
             {
                 return string.Empty;

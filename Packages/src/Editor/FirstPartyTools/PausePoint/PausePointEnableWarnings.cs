@@ -115,6 +115,94 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compiledMethodEndLine);
         }
 
+        // Why only after a non-empty drift warning: a candidate list without drift would look
+        // like a second resolution, and empty edited text never produces drift in the first place.
+        internal static string AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+            string driftWarning,
+            string editedLineText,
+            IReadOnlyList<string> compiledSourceLines)
+        {
+            if (string.IsNullOrEmpty(driftWarning))
+            {
+                return driftWarning ?? string.Empty;
+            }
+
+            if (string.IsNullOrEmpty(editedLineText) || compiledSourceLines == null)
+            {
+                return driftWarning;
+            }
+
+            string editedTrimmed = editedLineText.Trim();
+            if (editedTrimmed.Length == 0)
+            {
+                return driftWarning;
+            }
+
+            (List<int> matches, bool truncated) = CollectCandidateCompiledLineNumbers(
+                editedTrimmed,
+                compiledSourceLines);
+            if (matches.Count == 0)
+            {
+                return driftWarning;
+            }
+
+            return driftWarning + FormatCandidateCompiledLinesSuffix(matches, truncated);
+        }
+
+        private static (List<int> matches, bool truncated) CollectCandidateCompiledLineNumbers(
+            string editedTrimmed,
+            IReadOnlyList<string> compiledSourceLines)
+        {
+            int matchLimit = SourcePausePointConstants.CompiledLineDriftCandidateMatchLimit;
+            List<int> matches = new List<int>();
+            bool truncated = false;
+            for (int index = 0; index < compiledSourceLines.Count; index++)
+            {
+                string compiledLine = compiledSourceLines[index];
+                if (compiledLine == null)
+                {
+                    continue;
+                }
+
+                if (!string.Equals(compiledLine.Trim(), editedTrimmed, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (matches.Count == matchLimit)
+                {
+                    truncated = true;
+                    break;
+                }
+
+                matches.Add(index + 1);
+            }
+
+            return (matches, truncated);
+        }
+
+        private static string FormatCandidateCompiledLinesSuffix(List<int> matches, bool truncated)
+        {
+            if (matches.Count == 1 && !truncated)
+            {
+                return string.Format(
+                    SourcePausePointConstants.HotReloadCompiledLineDriftCandidateSingleFormat,
+                    matches[0]);
+            }
+
+            string listed = string.Join(", ", matches);
+            if (truncated)
+            {
+                listed += string.Format(
+                    SourcePausePointConstants.HotReloadCompiledLineDriftCandidateTruncatedMatchesSuffixFormat,
+                    SourcePausePointConstants.CompiledLineDriftCandidateMatchLimit);
+            }
+
+            return string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineDriftCandidateMultipleFormat,
+                listed);
+        }
+
         internal static string BuildRetargetedToHotReloadPatchWarningOrEmpty(
             bool retargetedToHotReloadPatch,
             string resolvedMethod,
