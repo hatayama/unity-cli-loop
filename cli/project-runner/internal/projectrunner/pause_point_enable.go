@@ -414,6 +414,7 @@ func runPausePointWaitAfterEnable(
 		response = applyPausePointHitStatusNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
+		response = applyPausePointCapturedVariablePreviewNote(response)
 
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
 		// Why not join enableFields.Warning into Warning: that text is an enable-time patch

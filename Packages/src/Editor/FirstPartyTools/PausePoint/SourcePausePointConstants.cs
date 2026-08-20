@@ -42,6 +42,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const int MaxCollectionPreviewValueLength = 1024;
         public const int MaxCollectionPreviewDepth = 2;
 
+        // Why this wording: C# foreach over a multidimensional array is row-major (the last
+        // dimension varies fastest), and the preview Elements array is that same flattening.
+        public const string MultidimensionalArrayElementOrder = "row-major (last dimension fastest)";
+
         // Default nearest caller plus one more. enable-pause-point --max-caller-frames can raise
         // or disable this per marker (0 skips capture; the examine walk stays capped at 24).
         public const int MaxCallerFrames = UloopPausePointRegistry.DefaultMaxCallerFrames;

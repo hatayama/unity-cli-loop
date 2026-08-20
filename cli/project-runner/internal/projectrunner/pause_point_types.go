@@ -40,6 +40,12 @@ type pausePointStatusResponse struct {
 	// status contract fixture stays unchanged.
 	CapturedVariablesTruncatedNote string `json:"CapturedVariablesTruncatedNote,omitempty"`
 
+	// CapturedVariablePreviewNote is set by the CLI, not Unity, when at least one
+	// remaining captured variable (current or history) has Truncated set. omitempty
+	// keeps the field off complete snapshots so the shared status contract fixture
+	// stays unchanged.
+	CapturedVariablePreviewNote string `json:"CapturedVariablePreviewNote,omitempty"`
+
 	ClearedReason               string `json:"ClearedReason"`
 	StatusBeforeClear           string `json:"StatusBeforeClear"`
 	LateHitDiscardedAfterClear  bool   `json:"LateHitDiscardedAfterClear"`

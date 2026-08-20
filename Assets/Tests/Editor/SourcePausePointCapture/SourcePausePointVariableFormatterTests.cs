@@ -349,11 +349,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(truncated, Is.False);
         }
 
+        /// <summary>
+        /// Verifies a T[,] preview reports rank, total count, previewed count, and row-major
+        /// element order instead of a flat array that looks truncated or empty.
+        /// </summary>
         [Test]
         public void Format_WithMultidimensionalArray_AnnotatesPreviewWithShape()
         {
-            // Verifies a T[,] preview reports its rank/dimensions and total element count instead of
-            // a flat array that looks like an empty or truncated board to a reader.
             int[,] board = new int[2, 3] { { 1, 2, 3 }, { 4, 5, 6 } };
             object[] locals = { "board", board };
 
@@ -363,8 +365,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string value = variables.Single().Value;
             Assert.That(value, Does.Contain("\"Shape\":\"Int32[2,3]\""));
             Assert.That(value, Does.Contain("\"TotalElements\":6"));
+            Assert.That(value, Does.Contain("\"PreviewedElements\":6"));
+            Assert.That(value, Does.Contain("\"ElementOrder\":\"row-major (last dimension fastest)\""));
+            Assert.That(value, Does.Not.Contain("ElementsTruncated"));
             Assert.That(value, Does.Contain("\"Elements\":[1,2,3,4,5,6]"));
             Assert.That(truncated, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies a multidimensional array that exceeds the preview element cap reports
+        /// PreviewedElements, ElementsTruncated, and row-major ElementOrder as fixed literals.
+        /// </summary>
+        [Test]
+        public void Format_WithMultidimensionalArrayExceedingPreviewCap_AnnotatesTruncationAndOrder()
+        {
+            int[,] board = new int[3, 5]
+            {
+                { 1, 2, 3, 4, 5 },
+                { 6, 7, 8, 9, 10 },
+                { 11, 12, 13, 14, 15 }
+            };
+            object[] locals = { "board", board };
+
+            (List<UloopCapturedVariable> variables, bool truncated) = SourcePausePointVariableFormatter.Format(
+                null, Array.Empty<object>(), locals);
+
+            string value = variables.Single().Value;
+            Assert.That(value, Does.Contain("\"Shape\":\"Int32[3,5]\""));
+            Assert.That(value, Does.Contain("\"TotalElements\":15"));
+            Assert.That(value, Does.Contain("\"PreviewedElements\":10"));
+            Assert.That(value, Does.Contain("\"ElementsTruncated\":true"));
+            Assert.That(value, Does.Contain("\"ElementOrder\":\"row-major (last dimension fastest)\""));
+            Assert.That(value, Does.Contain("\"Elements\":[1,2,3,4,5,6,7,8,9,10]"));
+            Assert.That(truncated, Is.True);
         }
 
         [Test]
