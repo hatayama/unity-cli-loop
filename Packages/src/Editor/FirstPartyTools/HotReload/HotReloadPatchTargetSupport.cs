@@ -51,12 +51,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
             UnityCompilationAssembly compilationAssembly = FindCompilationAssembly(assemblyName);
-            if (compilationAssembly == null)
+            string importedAsmdefPath = CompilationPipeline.GetAssemblyDefinitionFilePathFromScriptPath(projectRelativePath);
+            bool hasUnimportedAsmdefOnDisk = string.IsNullOrEmpty(importedAsmdefPath)
+                && HotReloadAssemblyResolutionDiagnostics.AncestorDirectoryContainsAsmdef(assemblyResolvePath);
+            string resolutionFailureReason = HotReloadAssemblyResolutionDiagnostics.TryGetAssemblyResolutionFailureReason(
+                assemblyName,
+                compilationAssembly,
+                projectRelativePath,
+                hasUnimportedAsmdefOnDisk);
+            if (resolutionFailureReason != null)
             {
                 outcomes.Add(
                     HotReloadMethodOutcome.Failed(
                         "(file)",
-                        "CompilationPipeline assembly not found: " + assemblyName,
+                        resolutionFailureReason,
                         assemblyResolvePath));
                 return (new HotReloadOrchestrator.HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
             }

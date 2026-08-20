@@ -247,5 +247,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogShimCompileStageRetry = "retry";
         public const string VibeLogIsolationTriggerShimCompileFailure = "shim_compile_failure";
         public const string VibeLogIsolationTriggerSignatureChangeGate = "signature_change_gate";
+
+        // Format: resolved assembly name. Unity maps not-yet-imported .asmdef scripts onto a
+        // predefined assembly, so the name from GetAssemblyNameFromScriptPath often does not
+        // exist in CompilationPipeline.GetAssemblies().
+        public const string CompilationAssemblyNotFoundReasonFormat =
+            "Resolved assembly '{0}' was not found in the compilation pipeline. Unity resolves files under a not-yet-imported .asmdef to a predefined assembly, so a brand-new .asmdef or a brand-new script cannot be hot-reloaded. Run 'uloop compile' first.";
+
+        // Format: resolved assembly name, project-relative script path. Used when the script
+        // has no imported .asmdef but an ancestor directory already has one on disk.
+        public const string UnimportedAsmdefCompilationAssemblyNotFoundReasonFormat =
+            "Resolved assembly '{0}' was not found in the compilation pipeline. '{1}' sits under a .asmdef that Unity has not imported yet, so hot reload cannot target it. Run 'uloop compile' first.";
+
+        // Format: project-relative script path, compiled assembly name.
+        public const string SourceFileNotInCompiledAssemblyReasonFormat =
+            "'{0}' is not part of the last compiled assembly '{1}' (a newly added script). New files require a real compile; run 'uloop compile' first.";
     }
 }
