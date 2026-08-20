@@ -112,6 +112,7 @@ func TestPausePointCarriedOverEnableFlagsAreVisibleInTheStatusResponse(t *testin
 		Mode:               "continuous",
 		MaxHistory:         20,
 		MaxPreviewElements: 5,
+		MaxCallerFrames:    4,
 		TimeoutSeconds:     30,
 	})
 	if err != nil {
@@ -122,6 +123,7 @@ func TestPausePointCarriedOverEnableFlagsAreVisibleInTheStatusResponse(t *testin
 		"mode":                 "Mode",
 		"max-history":          "MaxHistory",
 		"max-preview-elements": "MaxPreviewElements",
+		"max-caller-frames":    "MaxCallerFrames",
 		"timeout-seconds":      "TimeoutSeconds",
 	}
 	if len(carriedOverFields) != len(pausePointCarriedOverEnableFlagNames) {

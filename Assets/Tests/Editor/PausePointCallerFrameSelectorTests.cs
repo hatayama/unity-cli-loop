@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateRawFrame(UserType, UserMethod, UserFile, UserLine),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].Method, Is.EqualTo(UserType + "." + UserMethod));
@@ -63,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateRawFrame(skippedTypeFullName, "Run", "Packages/Infrastructure/Run.cs", 7),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Is.Empty);
         }
@@ -84,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     120),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].Method, Is.EqualTo("UnityEditor.EditorApplication.update"));
@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateRawFrame(null, "DMD<Foo>", null, 99),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].Method, Is.EqualTo("DMD<Foo>"));
@@ -134,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     0),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].Method, Is.EqualTo("Game.Input.HandleJump"));
@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     0),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].Method, Is.EqualTo("Game.Input.HandleJump"));
@@ -187,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     0),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Is.Empty);
         }
@@ -208,7 +208,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     0),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Is.Empty);
         }
@@ -230,7 +230,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     0),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Is.Empty);
         }
@@ -261,7 +261,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     0),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(2));
             Assert.That(selected[0].Method, Is.EqualTo("CallerFrameProbe.ShallowCaller"));
@@ -289,7 +289,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     0),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].Method, Is.EqualTo("Game.Enemy.PatrolAsync"));
@@ -311,11 +311,85 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateRawFrame("Game.C", "M3", "Assets/Scripts/C.cs", 3),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(2));
             Assert.That(selected[0].Method, Is.EqualTo("Game.A.M1"));
             Assert.That(selected[1].Method, Is.EqualTo("Game.B.M2"));
+        }
+
+        /// <summary>
+        /// What: a per-marker cap of 1 keeps only the nearest caller.
+        /// </summary>
+        [Test]
+        public void Select_WhenMaxCallerFramesIsOne_ReturnsNearestCallerOnly()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame("Game.A", "M1", "Assets/Scripts/A.cs", 1),
+                CreateRawFrame("Game.B", "M2", "Assets/Scripts/B.cs", 2),
+                CreateRawFrame("Game.C", "M3", "Assets/Scripts/C.cs", 3),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, 1);
+
+            Assert.That(selected, Has.Count.EqualTo(1));
+            Assert.That(selected[0].Method, Is.EqualTo("Game.A.M1"));
+        }
+
+        /// <summary>
+        /// What: a per-marker cap of 4 returns four callers when more remain above the marker.
+        /// </summary>
+        [Test]
+        public void Select_WhenMaxCallerFramesIsFour_ReturnsFourCallers()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame("Game.A", "M1", "Assets/Scripts/A.cs", 1),
+                CreateRawFrame("Game.B", "M2", "Assets/Scripts/B.cs", 2),
+                CreateRawFrame("Game.C", "M3", "Assets/Scripts/C.cs", 3),
+                CreateRawFrame("Game.D", "M4", "Assets/Scripts/D.cs", 4),
+                CreateRawFrame("Game.E", "M5", "Assets/Scripts/E.cs", 5),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, 4);
+
+            Assert.That(selected, Has.Count.EqualTo(4));
+            Assert.That(selected[0].Method, Is.EqualTo("Game.A.M1"));
+            Assert.That(selected[1].Method, Is.EqualTo("Game.B.M2"));
+            Assert.That(selected[2].Method, Is.EqualTo("Game.C.M3"));
+            Assert.That(selected[3].Method, Is.EqualTo("Game.D.M4"));
+        }
+
+        /// <summary>
+        /// What: a per-marker cap of 0 disables capture and always returns an empty array.
+        /// </summary>
+        [Test]
+        public void Select_WhenMaxCallerFramesIsZero_ReturnsEmptyArray()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame(UserType, UserMethod, UserFile, UserLine),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, 0);
+
+            Assert.That(selected, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: CaptureCallerFrames with cap 0 skips the stack walk and returns an empty array.
+        /// </summary>
+        [Test]
+        public void CaptureCallerFrames_WhenCapIsZero_ReturnsEmptyArray()
+        {
+            List<UloopPausePointCallerFrame> selected =
+                SourcePausePointCallerFrameCapture.CaptureCallerFrames(0);
+
+            Assert.That(selected, Is.Empty);
         }
 
         /// <summary>
@@ -513,7 +587,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateRawFrame(UserType, UserMethod, null, 42),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].File, Is.Null);
@@ -528,7 +602,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             SourcePausePointRawStackFrame[] rawFrames = { };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Is.Empty);
         }
@@ -544,7 +618,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Is.Empty);
         }
@@ -562,7 +636,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateRawFrame("Game.Enemy+<Chase>d__7", "MoveNext", "Assets/Scripts/Enemy.cs", 55),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].Method, Is.EqualTo("Game.Enemy.Chase"));
@@ -584,7 +658,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateRawFrame(UserType, UserMethod, ".\\Assets\\Scripts\\Input.cs", 10),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].File, Is.EqualTo("Assets/Scripts/Input.cs"));
@@ -608,7 +682,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     10),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].File, Is.EqualTo("Assets/Scripts/Input.cs"));
@@ -628,7 +702,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CreateRawFrame(UserType, UserMethod, "/Users/<USER_NAME>/External/Src/Foo.cs", 10),
             };
 
-            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames, SourcePausePointConstants.MaxCallerFrames);
 
             Assert.That(selected, Has.Count.EqualTo(1));
             Assert.That(selected[0].File, Is.Null);
@@ -680,6 +754,6 @@ namespace PausePointCallerFrameLiveTestSupport
         public static List<UloopPausePointCallerFrame> Level1() { return Level2(); }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        public static List<UloopPausePointCallerFrame> Level2() { return SourcePausePointCallerFrameCapture.CaptureCallerFrames(); }
+        public static List<UloopPausePointCallerFrame> Level2() { return SourcePausePointCallerFrameCapture.CaptureCallerFrames(SourcePausePointConstants.MaxCallerFrames); }
     }
 }

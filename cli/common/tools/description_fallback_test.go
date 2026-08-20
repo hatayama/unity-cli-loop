@@ -206,3 +206,17 @@ func TestEmbeddedEnablePausePointDocumentsMaxPreviewElementsCarryOver(t *testing
 		t.Errorf("--max-preview-elements description does not mention pause-point-status: %q", description)
 	}
 }
+
+// Verifies enable-pause-point documents that --max-caller-frames also shapes later
+// pause-point-status responses, which is not discoverable from the option name.
+func TestEmbeddedEnablePausePointDocumentsMaxCallerFramesCarryOver(t *testing.T) {
+	tool, ok := Find(LoadDefault(), "enable-pause-point")
+	if !ok {
+		t.Fatal("embedded catalog has no enable-pause-point tool")
+	}
+
+	description := tool.EffectiveInputSchema().Properties["MaxCallerFrames"].Description
+	if !strings.Contains(description, "pause-point-status") {
+		t.Errorf("--max-caller-frames description does not mention pause-point-status: %q", description)
+	}
+}

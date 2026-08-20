@@ -22,13 +22,14 @@ var pausePointFlagOwnerSearchOrder = []string{
 }
 
 // pausePointCarriedOverEnableFlagNames are the enable-pause-point flags whose values Unity reports
-// back on every later status response (as Mode, MaxHistory, MaxPreviewElements and TimeoutSeconds).
+// back on every later status response (as Mode, MaxHistory, MaxPreviewElements, MaxCallerFrames and TimeoutSeconds).
 // Passing one of these to a query command is not just misplaced, it is unnecessary — which is the
 // part a caller cannot infer from "wrong command" alone.
 var pausePointCarriedOverEnableFlagNames = []string{
 	"mode",
 	"max-history",
 	"max-preview-elements",
+	"max-caller-frames",
 	PausePointTimeoutFlagName,
 }
 

@@ -33,15 +33,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // positionally instead of by identity because a hot-reload-patched marker method can
         // appear as a Harmony dynamic method whose display name is not predictable.
         public static List<UloopPausePointCallerFrame> Select(
-            IReadOnlyList<SourcePausePointRawStackFrame> rawFrames)
+            IReadOnlyList<SourcePausePointRawStackFrame> rawFrames,
+            int maxCallerFrames)
         {
             Debug.Assert(rawFrames != null, "rawFrames must not be null");
+            Debug.Assert(maxCallerFrames >= 0, "maxCallerFrames must not be negative");
+            Debug.Assert(
+                maxCallerFrames <= UloopPausePointRegistry.MaxCallerFramesLimit,
+                "maxCallerFrames must not exceed the caller-frame limit");
 
             List<UloopPausePointCallerFrame> selected =
-                new List<UloopPausePointCallerFrame>(SourcePausePointConstants.MaxCallerFrames);
+                new List<UloopPausePointCallerFrame>(maxCallerFrames);
+            if (maxCallerFrames == 0)
+            {
+                return selected;
+            }
+
             for (int i = 1; i < rawFrames.Count; i++)
             {
-                if (selected.Count == SourcePausePointConstants.MaxCallerFrames)
+                if (selected.Count == maxCallerFrames)
                 {
                     break;
                 }
