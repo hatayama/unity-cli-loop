@@ -23,7 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Forces every tracked and device-pressed key up via an explicit update, then clears
         /// bookkeeping. Safe while PlayMode is paused (ReleaseAll's paused-tolerant path).
         /// </summary>
-        internal static IReadOnlyList<string> ReleaseAllKeysImmediately(Keyboard keyboard)
+        internal static ReleaseAllKeysImmediateResult ReleaseAllKeysImmediately(Keyboard keyboard)
         {
             HashSet<Key> keysToRelease = new HashSet<Key>();
             foreach (Key tracked in KeyboardKeyState.ClearTrackedKeys())
@@ -42,13 +42,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            List<string> releasedNames = new List<string>(keysToRelease.Count);
-            foreach (Key key in keysToRelease)
+            List<Key> sortedKeys = new List<Key>(keysToRelease);
+            sortedKeys.Sort(CompareKeysByOrdinalName);
+
+            List<string> releasedNames = new List<string>(sortedKeys.Count);
+            foreach (Key key in sortedKeys)
             {
                 releasedNames.Add(key.ToString());
             }
-
-            releasedNames.Sort(System.StringComparer.Ordinal);
 
             if (keyboard != null && keysToRelease.Count > 0 && CanInjectKeyboardState(keyboard))
             {
@@ -79,7 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             SimulateKeyboardOverlayState.ClearPress();
-            return releasedNames;
+            return ReadReleasedKeyStates(keyboard, releasedNames, sortedKeys);
         }
 
         internal static async Task FinalizePressOverlay(CancellationToken ct)
@@ -263,6 +264,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static bool CanInjectKeyboardState(Keyboard keyboard)
         {
             return EditorApplication.isPlaying && keyboard != null;
+        }
+
+        // Why after ForceSync: the response must report the device state after release
+        // processing, not the pre-sync stale latch that ForceSync exists to clear.
+        private static ReleaseAllKeysImmediateResult ReadReleasedKeyStates(
+            Keyboard? keyboard,
+            IReadOnlyList<string> releasedNames,
+            IReadOnlyList<Key> sortedKeys)
+        {
+            List<ReleasedKeyState> releasedKeyStates = new List<ReleasedKeyState>(sortedKeys.Count);
+            string keyStateReadUpdateType = string.Empty;
+            if (keyboard != null)
+            {
+                keyStateReadUpdateType = InputState.currentUpdateType.ToString();
+                for (int index = 0; index < sortedKeys.Count; index++)
+                {
+                    Key key = sortedKeys[index];
+                    releasedKeyStates.Add(new ReleasedKeyState
+                    {
+                        Key = releasedNames[index],
+                        DeviceIsPressedAfterRelease = keyboard[key].isPressed
+                    });
+                }
+            }
+
+            return new ReleaseAllKeysImmediateResult(releasedNames, releasedKeyStates, keyStateReadUpdateType);
+        }
+
+        private static int CompareKeysByOrdinalName(Key left, Key right)
+        {
+            return string.CompareOrdinal(left.ToString(), right.ToString());
         }
     }
 }
