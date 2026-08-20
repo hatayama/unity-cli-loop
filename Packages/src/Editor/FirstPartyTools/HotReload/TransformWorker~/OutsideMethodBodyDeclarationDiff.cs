@@ -198,7 +198,6 @@ internal static class OutsideMethodBodyDeclarationDiff
                 continue;
             }
 
-            result.PairedSyntaxKeys.Add(pair.Key);
             BaseFieldDeclarationSyntax snapshotParent =
                 pair.Value.Parent?.Parent as BaseFieldDeclarationSyntax;
             if (snapshotParent == null || !processedParents.Add(snapshotParent))
@@ -243,6 +242,19 @@ internal static class OutsideMethodBodyDeclarationDiff
         if (currentParent == null)
         {
             return;
+        }
+
+        // Why fail-open: splitting a multi-declarator across declarations makes the shared
+        // header ambiguous. Pairing here would strip siblings whose own header was never
+        // compared and hide the residual warning.
+        if (!CurrentDeclaratorsShareParent(comparableKeys, currentMap, currentParent))
+        {
+            return;
+        }
+
+        foreach (string key in comparableKeys)
+        {
+            result.PairedSyntaxKeys.Add(key);
         }
 
         bool attributesDiffer = AttributeListsDiffer(
@@ -302,6 +314,22 @@ internal static class OutsideMethodBodyDeclarationDiff
         }
 
         return comparableKeys;
+    }
+
+    private static bool CurrentDeclaratorsShareParent(
+        List<string> comparableKeys,
+        Dictionary<string, VariableDeclaratorSyntax> currentMap,
+        BaseFieldDeclarationSyntax currentParent)
+    {
+        foreach (string key in comparableKeys)
+        {
+            if (currentMap[key].Parent?.Parent != currentParent)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static string FormatSharedHeaderLabel(

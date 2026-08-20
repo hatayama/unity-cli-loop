@@ -895,6 +895,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: splitting a multi-declarator across declarations fails open to the file-only
+        /// warning instead of stripping both names and going silent.
+        /// </summary>
+        [Test]
+        public async Task Drift_MultiDeclaratorRegroup_FailsOpenToFileOnlyWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PairAlpha = 1, PairBeta = 2;",
+                "        public int PairAlpha = 1;\n        [Obsolete] public int PairBeta = 2;",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("MultiDeclaratorRegroupDrift.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.declarationDriftWarnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Edits outside method bodies in MultiDeclaratorRegroupDrift.cs (fields, initializers, or attributes) are not applied by hot reload; run uloop compile to pick them up."
+                    }));
+        }
+
+        /// <summary>
         /// What: a duplicate field syntax key fails open to the file-only outside-body warning
         /// instead of suppressing it or emitting a named declaration warning.
         /// </summary>
