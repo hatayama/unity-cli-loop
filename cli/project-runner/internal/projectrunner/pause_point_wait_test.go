@@ -462,12 +462,16 @@ func TestPausePointExpiredErrorPrependsRecommendedNextAction(t *testing.T) {
 		timeoutSeconds: 1,
 	}, response, pausePointWaitStateExpired, false, false)
 
-	if len(cliErr.NextActions) == 0 {
-		t.Fatal("NextActions must not be empty")
+	wantNextActions := []string{
+		expiredNextAction,
+		"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
+		"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",
+		"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+		"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
 	}
-	if cliErr.NextActions[0] != expiredNextAction {
-		t.Fatalf("NextActions[0] mismatch: got %#v, want %#v",
-			cliErr.NextActions[0], expiredNextAction)
+	if !reflect.DeepEqual(cliErr.NextActions, wantNextActions) {
+		t.Fatalf("NextActions mismatch:\n got: %#v\nwant: %#v",
+			cliErr.NextActions, wantNextActions)
 	}
 }
 
@@ -486,13 +490,15 @@ func TestPausePointExpiredErrorOmitsEmptyRecommendedNextAction(t *testing.T) {
 		timeoutSeconds: 1,
 	}, response, pausePointWaitStateExpired, false, false)
 
-	wantFirst := "Run `uloop enable-pause-point --id <marker-id>` before waiting."
-	if len(cliErr.NextActions) == 0 {
-		t.Fatal("NextActions must not be empty")
+	wantNextActions := []string{
+		"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
+		"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",
+		"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+		"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
 	}
-	if cliErr.NextActions[0] != wantFirst {
-		t.Fatalf("NextActions[0] mismatch: got %#v, want %#v",
-			cliErr.NextActions[0], wantFirst)
+	if !reflect.DeepEqual(cliErr.NextActions, wantNextActions) {
+		t.Fatalf("NextActions mismatch:\n got: %#v\nwant: %#v",
+			cliErr.NextActions, wantNextActions)
 	}
 }
 
@@ -1182,6 +1188,7 @@ func TestPausePointStatusResponseOmitsEmptyCapturedVariableHistoryNote(t *testin
 // so omitempty keeps the historical JSON shape.
 func TestApplyPausePointHitStatusNote(t *testing.T) {
 	const frameBoundaryNote = "Unity pauses at the next frame boundary; the rest of the hit frame already ran. Read at-line values from CapturedVariables; live reads via execute-dynamic-code reflect post-frame state."
+	const traceNote = "Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running."
 	cases := []struct {
 		name     string
 		mode     string
@@ -1192,7 +1199,7 @@ func TestApplyPausePointHitStatusNote(t *testing.T) {
 			name:     "trace hit sets note",
 			mode:     pausePointModeTrace,
 			status:   pausePointStatusHit,
-			wantNote: pausePointTraceStatusNote,
+			wantNote: traceNote,
 		},
 		{
 			name:     "continuous hit sets frame-boundary note",
@@ -1915,7 +1922,8 @@ func TestRunWaitForPausePointCommandIncludesStatusNoteOnSingleShotHit(t *testing
 
 func assertStdoutHasPausePointTraceStatusNote(t *testing.T, stdout []byte) {
 	t.Helper()
-	assertStdoutHasPausePointStatusNote(t, stdout, pausePointTraceStatusNote)
+	assertStdoutHasPausePointStatusNote(t, stdout,
+		"Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running.")
 }
 
 func assertStdoutHasPausePointStatusNote(t *testing.T, stdout []byte, wantNote string) {
