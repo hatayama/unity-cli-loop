@@ -50,6 +50,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 EditorApplication.isPaused = false;
             }
+
+            PlayModeStopReasonSessionStore.SetPending(
+                ControlPlayModeConstants.StoppedByCliCompileStopSetting);
             EditorApplication.isPlaying = false;
         }
     }

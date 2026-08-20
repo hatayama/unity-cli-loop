@@ -76,7 +76,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 actionResult.Changed,
                 actionResult.WasAlreadyStopped,
                 actionResult.ResumedFromPause,
-                actionResult.Warning));
+                actionResult.Warning,
+                parameters.Action));
         }
 
         private ControlPlayModeResponse CreateStatusOnlyResponse(ControlPlayModeSchema parameters)
@@ -88,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateCompileErrorBlockedResponse(compileErrors);
             }
 
-            return CreateResponse("Play mode status", false, false);
+            return CreateResponse("Play mode status", false, false, action: parameters.Action);
         }
 
         private ControlPlayModeActionResult ExecuteRequestedPlayModeAction(PlayModeAction action)
@@ -134,7 +135,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             ControlPlayModeCompileError[] compileErrors =
                 _compilationFailureProvider.GetLastFailedErrors() ?? Array.Empty<ControlPlayModeCompileError>();
-            ControlPlayModeResponse response = CreateResponse("Play mode status", false, false);
+            ControlPlayModeResponse response = CreateResponse(
+                "Play mode status",
+                false,
+                false,
+                action: PlayModeAction.Status);
             response.BlockedByCompileErrors = true;
             response.CompileErrors = compileErrors;
             response.CompileErrorCount = compileErrors.Length;
@@ -279,7 +284,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool changed,
             bool wasAlreadyStopped,
             bool resumedFromPause = false,
-            string warning = "")
+            string warning = "",
+            PlayModeAction action = PlayModeAction.Play)
         {
             ControlPlayModeResponse response = new()
             {
@@ -292,6 +298,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Message = message,
                 Warning = warning
             };
+            PlayModeStopReasonResponseFiller.CopyConfirmedIfNeeded(response, action, wasAlreadyStopped);
 
             return response;
         }

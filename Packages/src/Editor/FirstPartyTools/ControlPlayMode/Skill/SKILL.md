@@ -32,6 +32,8 @@ Returns JSON with the current play mode state:
 - `ResumedFromPause`: Whether `Play` resumed a paused Play Mode session instead of starting a new one
 - `Message`: Description of the action performed
 - `Warning`: Set when the action carries a caveat. A fresh `Play` start always notes that the session started from Edit-time scene state; additionally, when active hot-reload patches or enabled pause points exist and Domain Reload is enabled, it reports how many of them the Play-entry domain reload will discard.
+- `StoppedBy` (string, optional): Why Play Mode last stopped: `cli-control-play-mode`, `cli-compile-stop-setting`, `cli-run-tests-cancel`, `script-compilation`, or `unknown`. Present on `Stop` when Play Mode was already stopped, and on `Status` when Play Mode is not running. Omitted when this Editor session has no confirmed stop.
+- `StoppedAt` (string, optional): UTC ISO 8601 timestamp of that stop. Omitted together with `StoppedBy` when no stop is recorded.
 
 ## Notes
 
