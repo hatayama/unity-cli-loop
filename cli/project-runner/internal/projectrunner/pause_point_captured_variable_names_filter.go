@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+const (
+	// pausePointCapturedVariablesTruncatedNote explains why CapturedVariablesTruncated
+	// can stay true after --captured-variable-names dropped every clipped variable.
+	pausePointCapturedVariablesTruncatedNote = "the truncation flag refers to a variable excluded by --captured-variable-names; every variable listed here is complete."
+)
+
 // parsePausePointCapturedVariableNames splits the comma-separated --captured-variable-names
 // value into individual names, trimming surrounding whitespace and dropping empty entries.
 func parsePausePointCapturedVariableNames(value string) []string {
@@ -73,7 +79,8 @@ func filterPausePointCapturedVariablesByName(
 			response.Warning,
 			"No captured variable matched the requested names; the hit captured other variables. Check CapturedVariableNamesNotFound for the names that were absent.")
 	}
-	return response
+
+	return applyPausePointCapturedVariablesTruncatedNote(response)
 }
 
 // pausePointResponseHasCapturedVariables reports whether the snapshot already holds any
@@ -129,4 +136,42 @@ func filterCapturedVariablesByNameSet(
 		}
 	}
 	return filtered, len(filtered)
+}
+
+// applyPausePointCapturedVariablesTruncatedNote records that the Unity truncation
+// flag is about a variable the name filter excluded. The flag itself is left
+// unchanged: clearing it would hide that a captured value was clipped.
+func applyPausePointCapturedVariablesTruncatedNote(
+	response pausePointStatusResponse,
+) pausePointStatusResponse {
+	if !response.CapturedVariablesTruncated {
+		return response
+	}
+	if response.TruncatedVariableCount != 0 {
+		return response
+	}
+	if pausePointResponseHasTruncatedCapturedVariable(response) {
+		return response
+	}
+
+	response.CapturedVariablesTruncatedNote = pausePointCapturedVariablesTruncatedNote
+	return response
+}
+
+// pausePointResponseHasTruncatedCapturedVariable reports whether any remaining
+// captured variable (current or history) still has Truncated set.
+func pausePointResponseHasTruncatedCapturedVariable(response pausePointStatusResponse) bool {
+	for _, variable := range response.CapturedVariables {
+		if variable.Truncated {
+			return true
+		}
+	}
+	for _, frame := range response.CapturedVariableHistory {
+		for _, variable := range frame.CapturedVariables {
+			if variable.Truncated {
+				return true
+			}
+		}
+	}
+	return false
 }

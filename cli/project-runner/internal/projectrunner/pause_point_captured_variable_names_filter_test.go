@@ -1,6 +1,10 @@
 package projectrunner
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 // capturedVariableNamesFilterResponse is the fixture both --captured-variable-names test functions
 // filter: three current variables, two of which also appear in one history frame.
@@ -199,4 +203,114 @@ func TestFilterPausePointCapturedVariablesByNameReportsNotFound(t *testing.T) {
 			t.Fatalf("expected no missing names: %#v", result.CapturedVariableNamesNotFound)
 		}
 	})
+}
+
+// truncatedNameFilterResponse is a Unity snapshot where preview clipping set
+// CapturedVariablesTruncated without a variable-count drop (Count==0).
+func truncatedNameFilterResponse() pausePointStatusResponse {
+	return pausePointStatusResponse{
+		CapturedVariablesTruncated: true,
+		TruncatedVariableCount:     0,
+		CapturedVariables: []pausePointCapturedVariable{
+			{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
+			{Name: "board", Scope: "Local", TypeName: "Boolean[,]", Value: pausePointVariableValue("[...]"), Truncated: true},
+		},
+		CapturedVariableHistory: []pausePointCapturedHistoryFrame{
+			{
+				HitSequence: 1,
+				CapturedVariables: []pausePointCapturedVariable{
+					{Name: "board", Scope: "Local", TypeName: "Boolean[,]", Value: pausePointVariableValue("[...]"), Truncated: true},
+				},
+			},
+		},
+	}
+}
+
+// TestFilterPausePointCapturedVariablesByNameSetsTruncatedNote verifies the CLI
+// explains CapturedVariablesTruncated when --captured-variable-names dropped every
+// truncated variable, and that it does not rewrite the truncation flag.
+func TestFilterPausePointCapturedVariablesByNameSetsTruncatedNote(t *testing.T) {
+	t.Run("note is set when the truncated variable is excluded", func(t *testing.T) {
+		result := filterPausePointCapturedVariablesByName(truncatedNameFilterResponse(), []string{"health"})
+		if !result.CapturedVariablesTruncated {
+			t.Fatal("CapturedVariablesTruncated must stay true; the note explains it")
+		}
+		if result.CapturedVariablesTruncatedNote != pausePointCapturedVariablesTruncatedNote {
+			t.Fatalf("expected truncated-by-name-filter note: %q", result.CapturedVariablesTruncatedNote)
+		}
+		if len(result.CapturedVariables) != 1 || result.CapturedVariables[0].Name != "health" {
+			t.Fatalf("expected only health to survive: %#v", result.CapturedVariables)
+		}
+	})
+
+	t.Run("note is omitted when a truncated variable remains", func(t *testing.T) {
+		result := filterPausePointCapturedVariablesByName(truncatedNameFilterResponse(), []string{"board"})
+		if result.CapturedVariablesTruncatedNote != "" {
+			t.Fatalf("listed truncated values must not get the complete-list note: %q", result.CapturedVariablesTruncatedNote)
+		}
+		if !result.CapturedVariablesTruncated {
+			t.Fatal("CapturedVariablesTruncated must stay true")
+		}
+	})
+
+	t.Run("note is omitted when no name filter is applied", func(t *testing.T) {
+		result := filterPausePointCapturedVariablesByName(truncatedNameFilterResponse(), nil)
+		if result.CapturedVariablesTruncatedNote != "" {
+			t.Fatalf("unfiltered responses must not get the CLI note: %q", result.CapturedVariablesTruncatedNote)
+		}
+	})
+
+	t.Run("note is omitted when TruncatedVariableCount is already non-zero", func(t *testing.T) {
+		response := truncatedNameFilterResponse()
+		response.TruncatedVariableCount = 1
+		response.TruncatedVariableNames = []string{"extraField"}
+		result := filterPausePointCapturedVariablesByName(response, []string{"health"})
+		if result.CapturedVariablesTruncatedNote != "" {
+			t.Fatalf("count-cap truncation must not be described as a name-filter drop: %q", result.CapturedVariablesTruncatedNote)
+		}
+	})
+}
+
+// TestPausePointStatusResponseIncludesCapturedVariablesTruncatedNote verifies the
+// CLI note survives json.Marshal under that exact key.
+func TestPausePointStatusResponseIncludesCapturedVariablesTruncatedNote(t *testing.T) {
+	marshaled, err := json.Marshal(pausePointStatusResponse{
+		CapturedVariablesTruncatedNote: pausePointCapturedVariablesTruncatedNote,
+	})
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(marshaled, &decoded); err != nil {
+		t.Fatalf("unmarshal envelope failed: %v", err)
+	}
+
+	rawNote, ok := decoded["CapturedVariablesTruncatedNote"]
+	if !ok {
+		t.Fatalf("CapturedVariablesTruncatedNote missing from JSON: %s", marshaled)
+	}
+
+	var note string
+	if err := json.Unmarshal(rawNote, &note); err != nil {
+		t.Fatalf("unmarshal note failed: %v", err)
+	}
+	if note != pausePointCapturedVariablesTruncatedNote {
+		t.Fatalf("note mismatch: got %#v, want %#v", note, pausePointCapturedVariablesTruncatedNote)
+	}
+}
+
+// TestPausePointStatusResponseOmitsEmptyCapturedVariablesTruncatedNote verifies an
+// empty note is omitted so unfiltered Unity payloads keep their historical shape.
+func TestPausePointStatusResponseOmitsEmptyCapturedVariablesTruncatedNote(t *testing.T) {
+	marshaled, err := json.Marshal(pausePointStatusResponse{
+		CapturedVariablesTruncated: true,
+	})
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	if strings.Contains(string(marshaled), "CapturedVariablesTruncatedNote") {
+		t.Fatalf("empty CapturedVariablesTruncatedNote must be omitted from JSON: %s", marshaled)
+	}
 }
