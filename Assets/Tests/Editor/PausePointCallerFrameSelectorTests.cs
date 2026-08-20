@@ -273,6 +273,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a Harmony-patched async caller (state-machine MoveNext_PatchN) is reported
+        /// by its logical method name, matching compiled async frames.
+        /// </summary>
+        [Test]
+        public void Select_WhenPatchedCallerIsAsyncStateMachine_ReportsLogicalMethodName()
+        {
+            SourcePausePointRawStackFrame[] rawFrames =
+            {
+                CreateRawFrame(MarkerType, MarkerMethod, MarkerFile, MarkerLine),
+                CreateRawFrame(
+                    SourcePausePointConstants.HarmonyDynamicMethodDeclaringType,
+                    "Game.Enemy+<PatrolAsync>d__4.MoveNext_Patch2",
+                    null,
+                    0),
+            };
+
+            List<UloopPausePointCallerFrame> selected = SourcePausePointCallerFrameSelector.Select(rawFrames);
+
+            Assert.That(selected, Has.Count.EqualTo(1));
+            Assert.That(selected[0].Method, Is.EqualTo("Game.Enemy.PatrolAsync"));
+            Assert.That(selected[0].File, Is.Null);
+            Assert.That(selected[0].Line, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// What: selection stops at two user frames even when more callers remain.
         /// </summary>
         [Test]

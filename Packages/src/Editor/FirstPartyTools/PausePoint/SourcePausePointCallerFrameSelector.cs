@@ -96,7 +96,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            return logicalName;
+            // A patched async body surfaces as its state machine ("Ns.Type+<Method>d__N.MoveNext");
+            // route the logical name through the same demangling as compiled frames so the payload
+            // keeps the documented "logical method name" contract. For ordinary names the round
+            // trip is the identity.
+            int lastDot = logicalName.LastIndexOf('.');
+            if (lastDot <= 0 || lastDot == logicalName.Length - 1)
+            {
+                return logicalName;
+            }
+
+            return FormatMethodDisplay(logicalName.Substring(0, lastDot), logicalName.Substring(lastDot + 1));
         }
 
         // "Ns.Type.Method_Patch3" -> "Ns.Type.Method"; null when the name does not end with
