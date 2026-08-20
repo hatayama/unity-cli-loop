@@ -444,6 +444,64 @@ func TestPausePointExpiredErrorReportsRecoveryFields(t *testing.T) {
 	}
 }
 
+// Verifies an Expired error prepends Unity's RecommendedNextAction onto NextActions
+// so the recovery hint is visible without opening Details.
+func TestPausePointExpiredErrorPrependsRecommendedNextAction(t *testing.T) {
+	const expiredNextAction = "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required."
+	response := pausePointStatusResponse{
+		Id:                    "jump",
+		Status:                pausePointStatusExpired,
+		Expired:               true,
+		EditorState:           pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		Message:               "Pause point expired before it was hit.",
+		RecommendedNextAction: expiredNextAction,
+	}
+
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+	}, response, pausePointWaitStateExpired, false, false)
+
+	wantNextActions := []string{
+		expiredNextAction,
+		"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
+		"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",
+		"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+		"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
+	}
+	if !reflect.DeepEqual(cliErr.NextActions, wantNextActions) {
+		t.Fatalf("NextActions mismatch:\n got: %#v\nwant: %#v",
+			cliErr.NextActions, wantNextActions)
+	}
+}
+
+// Verifies an empty RecommendedNextAction does not prepend a blank NextActions entry.
+func TestPausePointExpiredErrorOmitsEmptyRecommendedNextAction(t *testing.T) {
+	response := pausePointStatusResponse{
+		Id:          "jump",
+		Status:      pausePointStatusExpired,
+		Expired:     true,
+		EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		Message:     "Pause point expired before it was hit.",
+	}
+
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+	}, response, pausePointWaitStateExpired, false, false)
+
+	wantNextActions := []string{
+		"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
+		"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",
+		"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+		"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
+	}
+	if !reflect.DeepEqual(cliErr.NextActions, wantNextActions) {
+		t.Fatalf("NextActions mismatch:\n got: %#v\nwant: %#v",
+			cliErr.NextActions, wantNextActions)
+	}
+}
+
 // Verifies recovery details use the marker lifetime instead of the wait deadline.
 func TestPausePointExpiredErrorReportsMarkerTimeoutSeconds(t *testing.T) {
 	response := pausePointStatusResponse{
@@ -1125,9 +1183,12 @@ func TestPausePointStatusResponseOmitsEmptyCapturedVariableHistoryNote(t *testin
 	}
 }
 
-// Verifies StatusNote is set only for a trace-mode Hit: other modes and statuses stay empty
+// Verifies StatusNote is set for every Hit: trace keeps the no-pause wording,
+// and non-trace modes get the frame-boundary wording. Non-Hit statuses stay empty
 // so omitempty keeps the historical JSON shape.
-func TestApplyPausePointTraceStatusNote(t *testing.T) {
+func TestApplyPausePointHitStatusNote(t *testing.T) {
+	const frameBoundaryNote = "Unity pauses at the next frame boundary; the rest of the hit frame already ran. Read at-line values from CapturedVariables; live reads via execute-dynamic-code reflect post-frame state."
+	const traceNote = "Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running."
 	cases := []struct {
 		name     string
 		mode     string
@@ -1138,13 +1199,25 @@ func TestApplyPausePointTraceStatusNote(t *testing.T) {
 			name:     "trace hit sets note",
 			mode:     pausePointModeTrace,
 			status:   pausePointStatusHit,
-			wantNote: pausePointTraceStatusNote,
+			wantNote: traceNote,
 		},
 		{
-			name:     "continuous hit omits note",
+			name:     "continuous hit sets frame-boundary note",
 			mode:     pausePointModeContinuous,
 			status:   pausePointStatusHit,
-			wantNote: "",
+			wantNote: frameBoundaryNote,
+		},
+		{
+			name:     "single-shot hit sets frame-boundary note",
+			mode:     "single-shot",
+			status:   pausePointStatusHit,
+			wantNote: frameBoundaryNote,
+		},
+		{
+			name:     "empty mode hit sets frame-boundary note",
+			mode:     "",
+			status:   pausePointStatusHit,
+			wantNote: frameBoundaryNote,
 		},
 		{
 			name:     "trace enabled omits note",
@@ -1162,7 +1235,7 @@ func TestApplyPausePointTraceStatusNote(t *testing.T) {
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			response := applyPausePointTraceStatusNote(pausePointStatusResponse{
+			response := applyPausePointHitStatusNote(pausePointStatusResponse{
 				Mode:   testCase.mode,
 				Status: testCase.status,
 			})
@@ -1202,8 +1275,8 @@ func TestPausePointStatusResponseIncludesStatusNote(t *testing.T) {
 	}
 }
 
-// Verifies an empty StatusNote is omitted from JSON so non-trace and non-Hit
-// responses keep the historical shape.
+// Verifies an empty StatusNote is omitted from JSON so non-Hit responses keep
+// the historical shape.
 func TestPausePointStatusResponseOmitsEmptyStatusNote(t *testing.T) {
 	marshaled, err := json.Marshal(pausePointStatusResponse{
 		Mode:   pausePointModeTrace,
@@ -1643,7 +1716,7 @@ func TestRunPausePointStatusOmitsCapturedVariableHistoryNoteOnZeroHit(t *testing
 }
 
 // Verifies pause-point-status stdout includes StatusNote when Unity reports a
-// trace-mode Hit. Removing applyPausePointTraceStatusNote from the status
+// trace-mode Hit. Removing applyPausePointHitStatusNote from the status
 // command path makes this test Red.
 func TestRunPausePointStatusIncludesStatusNoteOnTraceHit(t *testing.T) {
 	originalQuery := queryPausePointStatus
@@ -1682,8 +1755,10 @@ func TestRunPausePointStatusIncludesStatusNoteOnTraceHit(t *testing.T) {
 	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
 }
 
-// Verifies pause-point-status stdout omits StatusNote on a non-trace Hit.
-func TestRunPausePointStatusOmitsStatusNoteOnContinuousHit(t *testing.T) {
+// Verifies pause-point-status stdout includes the frame-boundary StatusNote on a
+// non-trace Hit. Removing applyPausePointHitStatusNote from the status command
+// path makes this test Red.
+func TestRunPausePointStatusIncludesStatusNoteOnSingleShotHit(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	defer func() {
 		queryPausePointStatus = originalQuery
@@ -1697,7 +1772,7 @@ func TestRunPausePointStatusOmitsStatusNoteOnContinuousHit(t *testing.T) {
 		return pausePointStatusResponse{
 			Id:        id,
 			Status:    pausePointStatusHit,
-			Mode:      pausePointModeContinuous,
+			Mode:      "single-shot",
 			IsEnabled: true,
 			IsHit:     true,
 			HitCount:  1,
@@ -1717,13 +1792,12 @@ func TestRunPausePointStatusOmitsStatusNoteOnContinuousHit(t *testing.T) {
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
 
-	if strings.Contains(stdout.String(), "StatusNote") {
-		t.Fatalf("continuous Hit status JSON must omit StatusNote: %s", stdout.String())
-	}
+	assertStdoutHasPausePointStatusNote(t, stdout.Bytes(),
+		"Unity pauses at the next frame boundary; the rest of the hit frame already ran. Read at-line values from CapturedVariables; live reads via execute-dynamic-code reflect post-frame state.")
 }
 
 // Verifies await-pause-point stdout includes StatusNote on a trace-mode Hit.
-// Removing applyPausePointTraceStatusNote from the wait hit path makes this test Red.
+// Removing applyPausePointHitStatusNote from the wait hit path makes this test Red.
 func TestRunWaitForPausePointCommandIncludesStatusNoteOnTraceHit(t *testing.T) {
 	originalExtend := extendPausePointExpiry
 	originalQuery := queryPausePointStatus
@@ -1783,7 +1857,76 @@ func TestRunWaitForPausePointCommandIncludesStatusNoteOnTraceHit(t *testing.T) {
 	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
 }
 
+// Verifies await-pause-point stdout includes the frame-boundary StatusNote on a
+// non-trace Hit. Removing applyPausePointHitStatusNote from the wait hit path
+// makes this test Red.
+func TestRunWaitForPausePointCommandIncludesStatusNoteOnSingleShotHit(t *testing.T) {
+	originalExtend := extendPausePointExpiry
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		extendPausePointExpiry = originalExtend
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+	})
+
+	extendPausePointExpiry = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+		minimumRemainingSeconds int,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusEnabled}, nil
+	}
+
+	statusResponses := []pausePointStatusResponse{
+		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
+		{
+			Id:        "jump",
+			Status:    pausePointStatusHit,
+			Mode:      "single-shot",
+			IsEnabled: true,
+			IsHit:     true,
+			HitCount:  1,
+		},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePointCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump", "--timeout-seconds", "1"},
+		"",
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	assertStdoutHasPausePointStatusNote(t, stdout.Bytes(),
+		"Unity pauses at the next frame boundary; the rest of the hit frame already ran. Read at-line values from CapturedVariables; live reads via execute-dynamic-code reflect post-frame state.")
+}
+
 func assertStdoutHasPausePointTraceStatusNote(t *testing.T, stdout []byte) {
+	t.Helper()
+	assertStdoutHasPausePointStatusNote(t, stdout,
+		"Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running.")
+}
+
+func assertStdoutHasPausePointStatusNote(t *testing.T, stdout []byte, wantNote string) {
 	t.Helper()
 
 	var decoded map[string]json.RawMessage
@@ -1800,9 +1943,9 @@ func assertStdoutHasPausePointTraceStatusNote(t *testing.T, stdout []byte) {
 	if err := json.Unmarshal(rawNote, &note); err != nil {
 		t.Fatalf("unmarshal note failed: %v", err)
 	}
-	if note != pausePointTraceStatusNote {
+	if note != wantNote {
 		t.Fatalf("StatusNote mismatch: got %#v, want %#v",
-			note, pausePointTraceStatusNote)
+			note, wantNote)
 	}
 }
 

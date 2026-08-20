@@ -73,9 +73,10 @@ type pausePointStatusResponse struct {
 	// carries that hit. omitempty keeps the field off 0-hit and unfiltered responses.
 	CapturedVariableHistoryNote string `json:"CapturedVariableHistoryNote,omitempty"`
 
-	// StatusNote is set by the CLI, not Unity, when Mode is trace and Status is Hit.
-	// omitempty keeps the field off every other mode and status so the shared status
-	// contract fixture stays unchanged.
+	// StatusNote is set by the CLI, not Unity, when Status is Hit. Trace mode explains
+	// that Play Mode was not paused; other modes explain the frame-boundary pause.
+	// omitempty keeps the field off non-Hit statuses so the shared status contract
+	// fixture stays unchanged.
 	StatusNote string `json:"StatusNote,omitempty"`
 
 	// TriggerResult is set by the CLI, not Unity, only when --trigger was passed. It is omitted
