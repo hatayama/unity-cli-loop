@@ -226,92 +226,109 @@ func truncatedNameFilterResponse() pausePointStatusResponse {
 	}
 }
 
+const truncatedByNameFilterNote = "the truncation flag refers to a variable excluded by --captured-variable-names; every variable listed here is complete."
+
 // TestFilterPausePointCapturedVariablesByNameSetsTruncatedNote verifies the CLI
 // explains CapturedVariablesTruncated when --captured-variable-names dropped every
 // truncated variable, and that it does not rewrite the truncation flag.
 func TestFilterPausePointCapturedVariablesByNameSetsTruncatedNote(t *testing.T) {
-	const wantTruncatedNote = "the truncation flag refers to a variable excluded by --captured-variable-names; every variable listed here is complete."
+	t.Run("note is set when the truncated variable is excluded", truncatedNoteWhenExcluded)
+	t.Run("note is omitted when a truncated variable remains", truncatedNoteOmittedWhenTruncatedRemains)
+	t.Run("note is omitted when no name filter is applied", truncatedNoteOmittedWhenNoNameFilter)
+	t.Run("note is omitted when TruncatedVariableCount is already non-zero", truncatedNoteOmittedWhenCountCap)
+	t.Run("note is omitted when CapturedVariablesTruncated is false", truncatedNoteOmittedWhenNotTruncated)
+	t.Run("note is omitted when only a history variable remains truncated", truncatedNoteOmittedWhenHistoryTruncated)
+}
 
-	t.Run("note is set when the truncated variable is excluded", func(t *testing.T) {
-		result := filterPausePointCapturedVariablesByName(truncatedNameFilterResponse(), []string{"health"})
-		if !result.CapturedVariablesTruncated {
-			t.Fatal("CapturedVariablesTruncated must stay true; the note explains it")
-		}
-		if result.CapturedVariablesTruncatedNote != wantTruncatedNote {
-			t.Fatalf("expected truncated-by-name-filter note: %q", result.CapturedVariablesTruncatedNote)
-		}
-		if len(result.CapturedVariables) != 1 || result.CapturedVariables[0].Name != "health" {
-			t.Fatalf("expected only health to survive: %#v", result.CapturedVariables)
-		}
-	})
+func truncatedNoteWhenExcluded(t *testing.T) {
+	result := filterPausePointCapturedVariablesByName(truncatedNameFilterResponse(), []string{"health"})
+	if !result.CapturedVariablesTruncated {
+		t.Fatal("CapturedVariablesTruncated must stay true; the note explains it")
+	}
+	if result.CapturedVariablesTruncatedNote != truncatedByNameFilterNote {
+		t.Fatalf("expected truncated-by-name-filter note: %q", result.CapturedVariablesTruncatedNote)
+	}
+	if len(result.CapturedVariables) != 1 {
+		t.Fatalf("expected only health to survive: %#v", result.CapturedVariables)
+	}
+	if result.CapturedVariables[0].Name != "health" {
+		t.Fatalf("expected only health to survive: %#v", result.CapturedVariables)
+	}
+}
 
-	t.Run("note is omitted when a truncated variable remains", func(t *testing.T) {
-		result := filterPausePointCapturedVariablesByName(truncatedNameFilterResponse(), []string{"board"})
-		if result.CapturedVariablesTruncatedNote != "" {
-			t.Fatalf("listed truncated values must not get the complete-list note: %q", result.CapturedVariablesTruncatedNote)
-		}
-		if !result.CapturedVariablesTruncated {
-			t.Fatal("CapturedVariablesTruncated must stay true")
-		}
-	})
+func truncatedNoteOmittedWhenTruncatedRemains(t *testing.T) {
+	result := filterPausePointCapturedVariablesByName(truncatedNameFilterResponse(), []string{"board"})
+	if result.CapturedVariablesTruncatedNote != "" {
+		t.Fatalf("listed truncated values must not get the complete-list note: %q", result.CapturedVariablesTruncatedNote)
+	}
+	if !result.CapturedVariablesTruncated {
+		t.Fatal("CapturedVariablesTruncated must stay true")
+	}
+}
 
-	t.Run("note is omitted when no name filter is applied", func(t *testing.T) {
-		result := filterPausePointCapturedVariablesByName(truncatedNameFilterResponse(), nil)
-		if result.CapturedVariablesTruncatedNote != "" {
-			t.Fatalf("unfiltered responses must not get the CLI note: %q", result.CapturedVariablesTruncatedNote)
-		}
-	})
+func truncatedNoteOmittedWhenNoNameFilter(t *testing.T) {
+	result := filterPausePointCapturedVariablesByName(truncatedNameFilterResponse(), nil)
+	if result.CapturedVariablesTruncatedNote != "" {
+		t.Fatalf("unfiltered responses must not get the CLI note: %q", result.CapturedVariablesTruncatedNote)
+	}
+}
 
-	t.Run("note is omitted when TruncatedVariableCount is already non-zero", func(t *testing.T) {
-		response := truncatedNameFilterResponse()
-		response.TruncatedVariableCount = 1
-		response.TruncatedVariableNames = []string{"extraField"}
-		result := filterPausePointCapturedVariablesByName(response, []string{"health"})
-		if result.CapturedVariablesTruncatedNote != "" {
-			t.Fatalf("count-cap truncation must not be described as a name-filter drop: %q", result.CapturedVariablesTruncatedNote)
-		}
-	})
+func truncatedNoteOmittedWhenCountCap(t *testing.T) {
+	response := truncatedNameFilterResponse()
+	response.TruncatedVariableCount = 1
+	response.TruncatedVariableNames = []string{"extraField"}
+	result := filterPausePointCapturedVariablesByName(response, []string{"health"})
+	if result.CapturedVariablesTruncatedNote != "" {
+		t.Fatalf("count-cap truncation must not be described as a name-filter drop: %q", result.CapturedVariablesTruncatedNote)
+	}
+}
 
-	t.Run("note is omitted when CapturedVariablesTruncated is false", func(t *testing.T) {
-		response := truncatedNameFilterResponse()
-		response.CapturedVariablesTruncated = false
-		result := filterPausePointCapturedVariablesByName(response, []string{"health"})
-		if result.CapturedVariablesTruncatedNote != "" {
-			t.Fatalf("a non-truncated snapshot must not get the CLI note: %q", result.CapturedVariablesTruncatedNote)
-		}
-	})
+func truncatedNoteOmittedWhenNotTruncated(t *testing.T) {
+	response := truncatedNameFilterResponse()
+	response.CapturedVariablesTruncated = false
+	result := filterPausePointCapturedVariablesByName(response, []string{"health"})
+	if result.CapturedVariablesTruncatedNote != "" {
+		t.Fatalf("a non-truncated snapshot must not get the CLI note: %q", result.CapturedVariablesTruncatedNote)
+	}
+}
 
-	t.Run("note is omitted when only a history variable remains truncated", func(t *testing.T) {
-		response := pausePointStatusResponse{
-			CapturedVariablesTruncated: true,
-			TruncatedVariableCount:     0,
-			CapturedVariables: []pausePointCapturedVariable{
-				{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
-				{Name: "velocity", Scope: "Local", TypeName: "Vector3", Value: pausePointVariableValue("(1,0,0)")},
-			},
-			CapturedVariableHistory: []pausePointCapturedHistoryFrame{
-				{
-					HitSequence: 1,
-					CapturedVariables: []pausePointCapturedVariable{
-						{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
-						{Name: "board", Scope: "Local", TypeName: "Boolean[,]", Value: pausePointVariableValue("[...]"), Truncated: true},
-					},
+func truncatedNoteOmittedWhenHistoryTruncated(t *testing.T) {
+	response := pausePointStatusResponse{
+		CapturedVariablesTruncated: true,
+		TruncatedVariableCount:     0,
+		CapturedVariables: []pausePointCapturedVariable{
+			{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
+			{Name: "velocity", Scope: "Local", TypeName: "Vector3", Value: pausePointVariableValue("(1,0,0)")},
+		},
+		CapturedVariableHistory: []pausePointCapturedHistoryFrame{
+			{
+				HitSequence: 1,
+				CapturedVariables: []pausePointCapturedVariable{
+					{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
+					{Name: "board", Scope: "Local", TypeName: "Boolean[,]", Value: pausePointVariableValue("[...]"), Truncated: true},
 				},
 			},
-		}
-		result := filterPausePointCapturedVariablesByName(response, []string{"health", "board"})
-		if result.CapturedVariablesTruncatedNote != "" {
-			t.Fatalf("a truncated history survivor must not get the complete-list note: %q", result.CapturedVariablesTruncatedNote)
-		}
-		if len(result.CapturedVariables) != 1 || result.CapturedVariables[0].Truncated {
-			t.Fatalf("expected only complete current variables: %#v", result.CapturedVariables)
-		}
-		if len(result.CapturedVariableHistory) != 1 ||
-			len(result.CapturedVariableHistory[0].CapturedVariables) != 2 ||
-			!result.CapturedVariableHistory[0].CapturedVariables[1].Truncated {
-			t.Fatalf("expected truncated board to remain in history: %#v", result.CapturedVariableHistory)
-		}
-	})
+		},
+	}
+	result := filterPausePointCapturedVariablesByName(response, []string{"health", "board"})
+	if result.CapturedVariablesTruncatedNote != "" {
+		t.Fatalf("a truncated history survivor must not get the complete-list note: %q", result.CapturedVariablesTruncatedNote)
+	}
+	if len(result.CapturedVariables) != 1 {
+		t.Fatalf("expected only complete current variables: %#v", result.CapturedVariables)
+	}
+	if result.CapturedVariables[0].Truncated {
+		t.Fatalf("expected only complete current variables: %#v", result.CapturedVariables)
+	}
+	if len(result.CapturedVariableHistory) != 1 {
+		t.Fatalf("expected truncated board to remain in history: %#v", result.CapturedVariableHistory)
+	}
+	if len(result.CapturedVariableHistory[0].CapturedVariables) != 2 {
+		t.Fatalf("expected truncated board to remain in history: %#v", result.CapturedVariableHistory)
+	}
+	if !result.CapturedVariableHistory[0].CapturedVariables[1].Truncated {
+		t.Fatalf("expected truncated board to remain in history: %#v", result.CapturedVariableHistory)
+	}
 }
 
 // TestPausePointStatusResponseIncludesCapturedVariablesTruncatedNote verifies the
