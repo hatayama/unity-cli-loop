@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private static readonly HashSet<Key> PendingKeys = new HashSet<Key>();
         private static Action? registeredCallback;
+        private static bool playModeExitHooked;
 
         /// <summary>
         /// Merges keys into the pending set and registers onAfterUpdate when playing.
@@ -42,6 +43,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PendingKeys.Add(key);
             }
 
+            HookPlayModeExitIfNeeded();
+
             if (registeredCallback != null)
             {
                 return true;
@@ -53,6 +56,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         internal static void ResetForTests()
+        {
+            ClearPendingAndUnsubscribe();
+        }
+
+        private static void HookPlayModeExitIfNeeded()
+        {
+            if (playModeExitHooked)
+            {
+                return;
+            }
+
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            playModeExitHooked = true;
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange change)
+        {
+            if (change != PlayModeStateChange.ExitingPlayMode)
+            {
+                return;
+            }
+
+            // Why: Enter Play Mode Options can skip domain reload, so a static onAfterUpdate
+            // subscription would survive Stop and ForceSync on the next session's first player update.
+            ClearPendingAndUnsubscribe();
+        }
+
+        private static void ClearPendingAndUnsubscribe()
         {
             Unsubscribe();
             PendingKeys.Clear();
@@ -71,8 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<Key> keysToSync = new List<Key>(PendingKeys);
             // Why unsubscribe before ForceSync: ForceSync runs nested InputSystem.Update, which
             // would re-enter this handler and recurse if the one-shot were still registered.
-            Unsubscribe();
-            PendingKeys.Clear();
+            ClearPendingAndUnsubscribe();
 
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null)
