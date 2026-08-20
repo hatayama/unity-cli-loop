@@ -34,6 +34,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Absolute paths of every source file in the edited file's compilation assembly.
         // The worker scans these for global using directives. Null/omitted is treated as empty.
         public string[] assemblySourcePaths;
+
+        // Absolute paths of snapshot-mismatched sibling sources in the same compilation assembly.
+        // The worker scans these for const drift the edited file's syntax tree cannot see.
+        // Null/omitted is treated as empty.
+        public string[] changedSiblingSourcePaths;
     }
 
     /// <summary>
@@ -47,6 +52,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public TransformWorkerSkippedDto[] skipped;
         public string[] parseErrors;
         public string[] declarationDriftWarnings;
+
+        // Const-drift warnings collected from snapshot-mismatched sibling sources.
+        // Kept separate from declarationDriftWarnings so the orchestrator can dedupe
+        // sibling-derived text without collapsing own-file duplicate-input warnings.
+        public string[] siblingConstDriftWarnings;
 
         // Identities of methods left untouched because they match the verified snapshot.
         // Null/empty means none (or no baseline). UnchangedTotal is derived from Length.

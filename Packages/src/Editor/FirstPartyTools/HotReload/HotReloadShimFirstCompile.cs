@@ -42,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> suppressedPausePointIds,
             List<string> retargetedPausePointIds,
             int unchangedMethodCount,
+            List<string> siblingDerivedWarnings,
             CancellationToken ct)
         {
             if (gateResult.UsedWorkerRetry)
@@ -111,6 +112,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines,
                 assemblyResolvePath,
                 correlationId,
+                siblingDerivedWarnings,
                 ct).ConfigureAwait(false);
             if (firstCompile.AddedFieldNames != null)
             {
@@ -166,8 +168,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] defines,
             string assemblyResolvePath,
             string correlationId,
+            List<string> siblingDerivedWarnings,
             CancellationToken ct)
         {
+            Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
             // BuildShimReferencePaths reads Application.dataPath / platform; stay on main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
             bool includeHarmonyReference = HotReloadShimReferenceBuilder.NeedsHarmonyReference(workerOutput);
@@ -253,6 +257,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         assemblyResolvePath));
             }
 
+            siblingDerivedWarnings.AddRange(isolation.SiblingConstDriftWarnings);
             List<HotReloadMethodOutcome> isolationOutcomes = new List<HotReloadMethodOutcome>();
             isolationOutcomes.AddRange(isolation.FailedMethodOutcomes);
             isolationOutcomes.AddRange(isolation.SkippedCallerOutcomes);

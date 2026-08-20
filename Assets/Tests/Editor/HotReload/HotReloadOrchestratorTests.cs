@@ -12,6 +12,7 @@ using Newtonsoft.Json.Linq;
 
 using HarmonyLib;
 
+using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
 
@@ -1429,6 +1430,142 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Expected a const drift warning for TuningConst.\n"
                 + string.Join("\n", result.Warnings));
+        }
+
+        /// <summary>
+        /// What: hot-reloading only the referencing file still reports a sibling const-drift
+        /// warning when the holder file's on-disk bytes differ from the snapshot.
+        /// </summary>
+        [Test]
+        public async Task Run_ReferencingFileOnly_WarnsSiblingConstDrift()
+        {
+            using (MutateSiblingTuningValue(7))
+            {
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { ResolveSiblingConstUserPath() },
+                    null,
+                    CancellationToken.None);
+
+                AssertNoFileLevelFailure(result);
+                Assert.That(
+                    result.Warnings,
+                    Has.Some.EqualTo(ExpectedSiblingTuningDriftWarning),
+                    "Expected sibling const drift when only the referencing file is passed.\n"
+                    + string.Join("\n", result.Warnings));
+            }
+        }
+
+        /// <summary>
+        /// What: passing both the holder and the referencing file emits the sibling const-drift
+        /// warning once because the own-file copy wins and the sibling-derived copy is skipped.
+        /// </summary>
+        [Test]
+        public async Task Run_HolderAndReferencingFiles_DedupesSiblingConstDriftWarning()
+        {
+            using (MutateSiblingTuningValue(7))
+            {
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { ResolveSiblingConstUserPath(), ResolveSiblingConstDefinitionsPath() },
+                    null,
+                    CancellationToken.None);
+
+                AssertNoFileLevelFailure(result);
+                int matchCount = 0;
+                foreach (string warning in result.Warnings)
+                {
+                    if (warning == ExpectedSiblingTuningDriftWarning)
+                    {
+                        matchCount++;
+                    }
+                }
+
+                Assert.That(
+                    matchCount,
+                    Is.EqualTo(1),
+                    "Expected the sibling const-drift warning once after provenance merge.\n"
+                    + string.Join("\n", result.Warnings));
+            }
+        }
+
+        /// <summary>
+        /// What: passing the holder first, then the referencing file, still emits the sibling
+        /// const-drift warning once (reversed input order of the holder+user case).
+        /// </summary>
+        [Test]
+        public async Task Run_DefinitionsThenUser_DedupesSiblingConstDriftWarning()
+        {
+            using (MutateSiblingTuningValue(7))
+            {
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { ResolveSiblingConstDefinitionsPath(), ResolveSiblingConstUserPath() },
+                    null,
+                    CancellationToken.None);
+
+                AssertNoFileLevelFailure(result);
+                int matchCount = 0;
+                foreach (string warning in result.Warnings)
+                {
+                    if (warning == ExpectedSiblingTuningDriftWarning)
+                    {
+                        matchCount++;
+                    }
+                }
+
+                Assert.That(
+                    matchCount,
+                    Is.EqualTo(1),
+                    "Expected the sibling const-drift warning once with definitions-first order.\n"
+                    + string.Join("\n", result.Warnings));
+            }
+        }
+
+        /// <summary>
+        /// What: hiding the assembly snapshot directory skips sibling const-drift warnings.
+        /// </summary>
+        [Test]
+        public async Task Run_WhenAssemblySnapshotMissing_DoesNotWarnSiblingConstDrift()
+        {
+            using (MutateSiblingTuningValue(7))
+            using (HideAssemblySnapshotDirectory())
+            {
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { ResolveSiblingConstUserPath() },
+                    null,
+                    CancellationToken.None);
+
+                AssertNoFileLevelFailure(result);
+                foreach (string warning in result.Warnings)
+                {
+                    Assert.That(
+                        warning.Contains("SiblingTuning"),
+                        Is.False,
+                        "Sibling const drift must stay silent without a snapshot.\n" + warning);
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: ProcessFileAsync surfaces the sibling scan-cap warning when 51 assembly
+        /// siblings differ from their snapshots by a trailing comment (no const drift).
+        /// </summary>
+        [Test]
+        public async Task Run_WhenFiftyOneSiblingsChanged_WarnsScanLimit()
+        {
+            using (TouchSmallestSiblingsWithTrailingComment(ResolveSiblingConstUserPath(), 51))
+            {
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { ResolveSiblingConstUserPath() },
+                    null,
+                    CancellationToken.None);
+
+                AssertNoFileLevelFailure(result);
+                Assert.That(
+                    result.Warnings,
+                    Has.Some.EqualTo(
+                        "sibling const-drift scan limited to first 50 changed files (51 total)"),
+                    "Expected the orchestrator to copy the sibling scan-cap warning.\n"
+                    + string.Join("\n", result.Warnings));
+            }
         }
 
         /// <summary>
@@ -5912,6 +6049,215 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string path = Path.Combine(directory, fileName);
             File.WriteAllText(path, contents);
             return path;
+        }
+
+        private static string ResolveSiblingConstDefinitionsPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSiblingConstDefinitions.cs");
+            Assert.That(File.Exists(path), Is.True, "Sibling const holder fixture missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSiblingConstUserPath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSiblingConstUser.cs");
+            Assert.That(File.Exists(path), Is.True, "Sibling const user fixture missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private const string ExpectedSiblingTuningDriftWarning =
+            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload. Run 'uloop compile' to apply this change.";
+
+        private static IDisposable MutateSiblingTuningValue(int newValue)
+        {
+            string path = ResolveSiblingConstDefinitionsPath();
+            string original = File.ReadAllText(path);
+            string compiledDeclaration = "public const int SiblingTuning = 6;";
+            Assert.That(
+                original.Contains(compiledDeclaration),
+                Is.True,
+                "Precondition: compiled sibling const declaration must still be on disk.");
+            EditorApplication.LockReloadAssemblies();
+            File.WriteAllText(
+                path,
+                original.Replace(
+                    compiledDeclaration,
+                    "public const int SiblingTuning = " + newValue + ";"));
+            return new FileRestoreScope(new[] { path }, new[] { original });
+        }
+
+        private static IDisposable TouchSmallestSiblingsWithTrailingComment(
+            string editedAbsolutePath,
+            int siblingCount)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            UnityEditor.Compilation.Assembly compilationAssembly = null;
+            foreach (UnityEditor.Compilation.Assembly assembly in CompilationPipeline.GetAssemblies())
+            {
+                if (assembly.name == "UnityCLILoop.Tests.Editor.HotReload")
+                {
+                    compilationAssembly = assembly;
+                    break;
+                }
+            }
+
+            Assert.That(compilationAssembly, Is.Not.Null, "HotReload test assembly missing from CompilationPipeline.");
+            Assert.That(compilationAssembly.sourceFiles, Is.Not.Null);
+
+            List<string> siblingPaths = new List<string>();
+            foreach (string relative in compilationAssembly.sourceFiles)
+            {
+                string absolute = Path.GetFullPath(
+                    Path.Combine(projectRoot, relative.Replace('/', Path.DirectorySeparatorChar)));
+                if (string.Equals(absolute, editedAbsolutePath, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (!File.Exists(absolute))
+                {
+                    continue;
+                }
+
+                siblingPaths.Add(absolute);
+            }
+
+            Assert.That(
+                siblingPaths.Count,
+                Is.GreaterThanOrEqualTo(siblingCount),
+                "Need at least " + siblingCount + " sibling sources in the HotReload test assembly.");
+
+            // Why shortest first: the worker parses every changed sibling, and this assembly
+            // contains multi-thousand-line test files that would dominate runtime without
+            // changing what the cap warning asserts.
+            siblingPaths.Sort(CompareByFileLengthThenPath);
+            string[] paths = new string[siblingCount];
+            string[] originals = new string[siblingCount];
+            EditorApplication.LockReloadAssemblies();
+            for (int index = 0; index < siblingCount; index++)
+            {
+                paths[index] = siblingPaths[index];
+                originals[index] = File.ReadAllText(paths[index]);
+                File.WriteAllText(paths[index], originals[index] + "\n// sibling-scan-cap-probe");
+            }
+
+            return new FileRestoreScope(paths, originals);
+        }
+
+        private static int CompareByFileLengthThenPath(string left, string right)
+        {
+            long leftLength = new FileInfo(left).Length;
+            long rightLength = new FileInfo(right).Length;
+            int lengthCompare = leftLength.CompareTo(rightLength);
+            if (lengthCompare != 0)
+            {
+                return lengthCompare;
+            }
+
+            return string.CompareOrdinal(left, right);
+        }
+
+        private static IDisposable HideAssemblySnapshotDirectory()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string targetDllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                "UnityCLILoop.Tests.Editor.HotReload"
+                + HotReloadConstants.CompiledAssemblyExtension);
+            string mvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath);
+            string snapshotDirectory = Path.Combine(
+                projectRoot,
+                HotReloadConstants.SourceSnapshotRelativeDirectory,
+                "UnityCLILoop.Tests.Editor.HotReload-" + mvid);
+            Assert.That(
+                Directory.Exists(snapshotDirectory),
+                Is.True,
+                "Precondition: assembly snapshot directory must exist to hide: " + snapshotDirectory);
+            string hiddenDirectory = snapshotDirectory + ".hidden-for-test";
+            if (Directory.Exists(hiddenDirectory))
+            {
+                Directory.Delete(hiddenDirectory, recursive: true);
+            }
+
+            Directory.Move(snapshotDirectory, hiddenDirectory);
+            return new DirectoryRestoreScope(snapshotDirectory, hiddenDirectory);
+        }
+
+        private sealed class FileRestoreScope : IDisposable
+        {
+            private readonly string[] _paths;
+            private readonly string[] _originals;
+            private bool _disposed;
+
+            public FileRestoreScope(string[] paths, string[] originals)
+            {
+                Debug.Assert(paths != null, "paths must not be null.");
+                Debug.Assert(originals != null, "originals must not be null.");
+                Debug.Assert(paths.Length == originals.Length, "paths and originals must be the same length.");
+                _paths = paths;
+                _originals = originals;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+                for (int index = 0; index < _paths.Length; index++)
+                {
+                    File.WriteAllText(_paths[index], _originals[index]);
+                }
+
+                EditorApplication.UnlockReloadAssemblies();
+            }
+        }
+
+        private sealed class DirectoryRestoreScope : IDisposable
+        {
+            private readonly string _originalDirectory;
+            private readonly string _hiddenDirectory;
+            private bool _disposed;
+
+            public DirectoryRestoreScope(string originalDirectory, string hiddenDirectory)
+            {
+                _originalDirectory = originalDirectory;
+                _hiddenDirectory = hiddenDirectory;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+                if (!Directory.Exists(_hiddenDirectory))
+                {
+                    return;
+                }
+
+                if (Directory.Exists(_originalDirectory))
+                {
+                    Directory.Delete(_originalDirectory, recursive: true);
+                }
+
+                Directory.Move(_hiddenDirectory, _originalDirectory);
+            }
         }
 
         /// <summary>

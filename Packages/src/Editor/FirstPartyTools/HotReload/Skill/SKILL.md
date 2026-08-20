@@ -130,7 +130,9 @@ initializer, an attribute — leaves runtime behavior unchanged even though the
 response reports `Success` — shims resolve those symbols
 against the already-compiled assembly, and C# bakes `const` values into IL at compile
 time. Changed `const` values (including enum member values) are detected and reported
-as a `Warnings` entry naming the constant and both values. When a verified source
+as a `Warnings` entry naming the constant and both values. The scan includes
+changed sibling files in the same assembly, not only the file passed to
+`--files`. When a verified source
 baseline is available (next paragraph), other outside-body drift — existing-field
 initializers, attributes, and other declaration edits — is reported as a `Warnings`
 entry as well (handled added members and reported removed members are excluded

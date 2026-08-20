@@ -268,5 +268,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string FailedWithNoApplyRecommendedNextAction =
             "Fix the failed methods and rerun, or run 'uloop compile'.";
+
+        public const int SiblingConstDriftScanFileLimit = 50;
+
+        // Format: scan file limit, total changed sibling count. Emitted when the scan
+        // truncates so the cap is never silent.
+        public const string SiblingConstDriftScanLimitedWarningFormat =
+            "sibling const-drift scan limited to first {0} changed files ({1} total)";
     }
 }

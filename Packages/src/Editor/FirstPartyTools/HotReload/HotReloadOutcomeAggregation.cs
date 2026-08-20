@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -27,6 +29,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!target.Contains(addition))
                 {
                     target.Add(addition);
+                }
+            }
+        }
+
+        // Why a dedicated sibling list (not a global HashSet over all warnings): duplicate
+        // file inputs must still emit the same own-file warning twice. Sibling-derived
+        // strings are appended after own-file warnings, ordinal-deduped among themselves,
+        // and skipped when the own-file list already contains the exact text so holder +
+        // referencing stays one warning in either file order.
+        internal static void AppendSiblingDerivedWarnings(
+            List<string> ownFileWarnings,
+            IReadOnlyList<string> siblingDerivedWarnings)
+        {
+            Debug.Assert(ownFileWarnings != null, "ownFileWarnings must not be null.");
+            Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
+
+            HashSet<string> seen = new HashSet<string>(ownFileWarnings, StringComparer.Ordinal);
+            for (int index = 0; index < siblingDerivedWarnings.Count; index++)
+            {
+                string warning = siblingDerivedWarnings[index];
+                if (string.IsNullOrEmpty(warning))
+                {
+                    continue;
+                }
+
+                if (seen.Add(warning))
+                {
+                    ownFileWarnings.Add(warning);
                 }
             }
         }

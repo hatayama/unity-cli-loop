@@ -45,4 +45,8 @@ internal sealed class WorkerInput
     // Absolute paths of every source file in the edited file's compilation assembly.
     // Null/omitted is treated as empty (no sibling global usings collected).
     public string[] AssemblySourcePaths { get; set; }
+
+    // Absolute paths of snapshot-mismatched sibling sources in the same compilation assembly.
+    // Null/omitted is treated as empty (no sibling const-drift scan).
+    public string[] ChangedSiblingSourcePaths { get; set; }
 }

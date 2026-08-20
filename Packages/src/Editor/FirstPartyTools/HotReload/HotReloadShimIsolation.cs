@@ -107,7 +107,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // again and diverge the retry entries set from the first-pass isolation baseline.
                 snapshotSource = workerInput.snapshotSource,
                 projectRelativePath = workerInput.projectRelativePath,
-                assemblySourcePaths = workerInput.assemblySourcePaths
+                assemblySourcePaths = workerInput.assemblySourcePaths,
+                // Why copy: retry must still scan the same snapshot-mismatched siblings so
+                // siblingConstDriftWarnings stay populated on the retry worker output.
+                changedSiblingSourcePaths = workerInput.changedSiblingSourcePaths
             };
 
             TransformWorkerClientResult retryWorkerResult =
@@ -155,7 +158,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         skippedCallerOutcomes,
                         Array.Empty<TransformWorkerEntryDto>(),
                         null,
-                        retryOutput.addedFieldNames));
+                        retryOutput.addedFieldNames,
+                        retryOutput.siblingConstDriftWarnings));
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -197,7 +201,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     skippedCallerOutcomes,
                     retryOutput.entries,
                     retryCompileResult,
-                    retryOutput.addedFieldNames));
+                    retryOutput.addedFieldNames,
+                    retryOutput.siblingConstDriftWarnings));
         }
 
         /// <summary>
@@ -523,13 +528,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public TransformWorkerEntryDto[] RetryEntries { get; }
             public HotReloadShimCompileResult RetryCompileResult { get; }
             public string[] AddedFieldNames { get; }
+            public string[] SiblingConstDriftWarnings { get; }
 
             public HotReloadShimIsolationResult(
                 List<HotReloadMethodOutcome> failedMethodOutcomes,
                 List<HotReloadMethodOutcome> skippedCallerOutcomes,
                 TransformWorkerEntryDto[] retryEntries,
                 HotReloadShimCompileResult retryCompileResult,
-                string[] addedFieldNames = null)
+                string[] addedFieldNames = null,
+                string[] siblingConstDriftWarnings = null)
             {
                 Debug.Assert(skippedCallerOutcomes != null, "skippedCallerOutcomes must not be null.");
                 FailedMethodOutcomes = failedMethodOutcomes;
@@ -537,6 +544,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RetryEntries = retryEntries;
                 RetryCompileResult = retryCompileResult;
                 AddedFieldNames = addedFieldNames ?? Array.Empty<string>();
+                SiblingConstDriftWarnings = siblingConstDriftWarnings ?? Array.Empty<string>();
             }
         }
     }
