@@ -3,6 +3,7 @@
     "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
     "references": [
         "UnityCLILoop.FirstPartyTools.RunTests.Editor",
+        "UnityCLILoop.FirstPartyTools.ControlPlayMode.Editor",
         "UnityCLILoop.FirstPartyTools.Common.EditorUtility.Editor",
         "UnityCLILoop.FirstPartyTools.Common.OutputRetention.Editor",
         "UnityCLILoop.ToolContracts",

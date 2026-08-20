@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -18,5 +20,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public ControlPlayModeCompileError[] CompileErrors { get; set; }
         public string Message { get; set; }
         public string Warning { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Why Play Mode last stopped. Omitted when this Editor session has no confirmed stop.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string StoppedBy { get; set; }
+
+        /// <summary>
+        /// UTC ISO 8601 timestamp of the last Play Mode stop. Omitted with StoppedBy when none is recorded.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string StoppedAt { get; set; }
     }
 }

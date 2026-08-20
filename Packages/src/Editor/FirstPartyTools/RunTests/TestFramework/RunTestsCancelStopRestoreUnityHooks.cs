@@ -39,16 +39,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ? TestRunnerApiCancelBridge.TryIsRunActive
                     : null,
                 IsPlaying = () => EditorApplication.isPlaying,
-                RequestExitPlayMode = () =>
-                {
-                    if (EditorApplication.isPlaying)
-                    {
-                        EditorApplication.isPlaying = false;
-                    }
-                },
+                RequestExitPlayMode = StopPlayingForCancel,
                 DelayAsync = (milliseconds, ct) => TimerDelay.Wait(milliseconds, ct),
                 LogWarning = message => Debug.LogWarning(message)
             };
+        }
+
+        /// <summary>
+        /// Records the run-tests cancel stop reason, then exits Play Mode when it is running.
+        /// </summary>
+        internal static void StopPlayingForCancel()
+        {
+            PlayModeStopReasonSessionStore.SetPending(
+                ControlPlayModeConstants.StoppedByCliRunTestsCancel);
+            if (EditorApplication.isPlaying)
+            {
+                EditorApplication.isPlaying = false;
+            }
         }
     }
 }

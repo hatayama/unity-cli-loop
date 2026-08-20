@@ -20,7 +20,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool IsPlaying
         {
             get => EditorApplication.isPlaying;
-            set => EditorApplication.isPlaying = value;
+            set
+            {
+                if (!value)
+                {
+                    PlayModeStopReasonSessionStore.SetPending(
+                        ControlPlayModeConstants.StoppedByCliControlPlayMode);
+                }
+
+                EditorApplication.isPlaying = value;
+            }
         }
 
         public bool IsPaused
