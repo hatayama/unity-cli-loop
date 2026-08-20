@@ -1,5 +1,6 @@
 #if ULOOP_HAS_TEST_FRAMEWORK
 using System;
+using System.Collections.Generic;
 using UnityEditor.TestTools.TestRunner.Api;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -57,7 +58,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 passedCount = passedTests,
                 failedCount = failedTests,
                 skippedCount = skippedTests,
-                xmlPath = null
+                xmlPath = null,
+                failedTests = CollectFailedTestDetails(result)
             };
         }
 
@@ -139,6 +141,65 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 CountTestsByStatus(child, ref count, targetStatus);
             }
+        }
+
+        private static SerializableTestResult.FailedTestDetail[] CollectFailedTestDetails(ITestResultAdaptor result)
+        {
+            List<SerializableTestResult.FailedTestDetail> details =
+                new List<SerializableTestResult.FailedTestDetail>();
+            AppendFailedTestDetails(result, details);
+            if (details.Count == 0)
+            {
+                return null;
+            }
+
+            return details.ToArray();
+        }
+
+        private static void AppendFailedTestDetails(
+            ITestResultAdaptor result,
+            List<SerializableTestResult.FailedTestDetail> details)
+        {
+            if (details.Count >= RunTestsConstants.FailedTestDetailsLimit)
+            {
+                return;
+            }
+
+            if (!result.Test.IsSuite)
+            {
+                if (result.TestStatus == TestStatus.Failed)
+                {
+                    details.Add(CreateFailedTestDetail(result));
+                }
+
+                return;
+            }
+
+            if (result.Children == null)
+            {
+                return;
+            }
+
+            foreach (ITestResultAdaptor child in result.Children)
+            {
+                AppendFailedTestDetails(child, details);
+                if (details.Count >= RunTestsConstants.FailedTestDetailsLimit)
+                {
+                    return;
+                }
+            }
+        }
+
+        private static SerializableTestResult.FailedTestDetail CreateFailedTestDetail(ITestResultAdaptor result)
+        {
+            (string file, int? line) = FailedTestStackLocationParser.TryParse(result.StackTrace);
+            return new SerializableTestResult.FailedTestDetail
+            {
+                FullName = result.Test.FullName,
+                Message = result.Message ?? string.Empty,
+                File = file,
+                Line = line
+            };
         }
     }
 }

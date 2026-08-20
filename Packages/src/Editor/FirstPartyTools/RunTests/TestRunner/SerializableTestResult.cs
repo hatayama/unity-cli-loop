@@ -1,4 +1,5 @@
 using System;
+using Newtonsoft.Json;
 using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -21,6 +22,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         [SerializeField] public int failedCount;
         [SerializeField] public int skippedCount;
         [SerializeField] public string xmlPath;
+
+        /// <summary>
+        /// Failed leaf tests, capped for the JSON response. Null when none failed.
+        /// </summary>
+        public FailedTestDetail[] failedTests;
+
+        /// <summary>
+        /// One failed test leaf included in a run-tests response.
+        /// </summary>
+        [Serializable]
+        public class FailedTestDetail
+        {
+            public string FullName { get; set; }
+
+            public string Message { get; set; }
+
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+            public string File { get; set; }
+
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+            public int? Line { get; set; }
+        }
 
         public static SerializableTestResult CreateTestFrameworkUnavailable()
         {

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Threading.Tasks;
 using System.Threading;
 using UnityEngine;
@@ -164,6 +165,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (clearedPausePointIds != null && clearedPausePointIds.Length > 0)
             {
                 response.ClearedPausePointIds = clearedPausePointIds;
+            }
+
+            if (result.failedTests != null && result.failedTests.Length > 0)
+            {
+                response.FailedTests = result.failedTests;
+            }
+
+            if (result.failedCount > RunTestsConstants.FailedTestDetailsLimit)
+            {
+                response.Message = response.Message
+                    + " "
+                    + string.Format(
+                        CultureInfo.InvariantCulture,
+                        RunTestsConstants.FailedTestDetailsTruncatedMessageFormat,
+                        RunTestsConstants.FailedTestDetailsLimit,
+                        result.failedCount);
             }
 
             // Why switch here: cleanup waits with ConfigureAwait(false), so this resume is

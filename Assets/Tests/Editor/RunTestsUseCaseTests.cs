@@ -431,6 +431,134 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.ClearedPausePointIds, Is.Null);
         }
 
+        /// <summary>
+        /// What: FailedTests from the execution result is copied onto the response.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenTestsFail_CopiesFailedTestDetailsOntoResponse()
+        {
+            SerializableTestResult.FailedTestDetail detail = new SerializableTestResult.FailedTestDetail
+            {
+                FullName = "Example.Tests.FailingTest",
+                Message = "Expected 2 But was: 1",
+                File = "Assets/Tests/FailingTest.cs",
+                Line = 42
+            };
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = new SerializableTestResult
+                {
+                    success = false,
+                    status = RunTestsExecutionStatus.Failed,
+                    hasFailures = true,
+                    noTestsFound = false,
+                    noTestsFoundExplanation = string.Empty,
+                    message = "Test execution completed with status: Failed",
+                    completedAt = "2026-01-01T00:00:00.0000000Z",
+                    testCount = 1,
+                    passedCount = 0,
+                    failedCount = 1,
+                    skippedCount = 0,
+                    xmlPath = "TestResults/example.xml",
+                    failedTests = new[] { detail }
+                }
+            };
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(ValidationResult.Success());
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.FailedTests, Is.Not.Null);
+            Assert.That(response.FailedTests.Length, Is.EqualTo(1));
+            Assert.That(response.FailedTests[0].FullName, Is.EqualTo("Example.Tests.FailingTest"));
+            Assert.That(response.FailedTests[0].Message, Is.EqualTo("Expected 2 But was: 1"));
+            Assert.That(response.FailedTests[0].File, Is.EqualTo("Assets/Tests/FailingTest.cs"));
+            Assert.That(response.FailedTests[0].Line, Is.EqualTo(42));
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Test execution completed with status: Failed"));
+        }
+
+        /// <summary>
+        /// What: FailedCount above 10 appends the fixed-literal truncation note to Message.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenElevenTestsFail_AppendsTruncationNoteToMessage()
+        {
+            SerializableTestResult.FailedTestDetail[] details = new SerializableTestResult.FailedTestDetail[10];
+            for (int index = 0; index < 10; index++)
+            {
+                details[index] = new SerializableTestResult.FailedTestDetail
+                {
+                    FullName = "Example.Tests.FailingTest" + index,
+                    Message = "boom"
+                };
+            }
+
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = new SerializableTestResult
+                {
+                    success = false,
+                    status = RunTestsExecutionStatus.Failed,
+                    hasFailures = true,
+                    noTestsFound = false,
+                    noTestsFoundExplanation = string.Empty,
+                    message = "Test execution completed with status: Failed",
+                    completedAt = "2026-01-01T00:00:00.0000000Z",
+                    testCount = 11,
+                    passedCount = 0,
+                    failedCount = 11,
+                    skippedCount = 0,
+                    xmlPath = "TestResults/example.xml",
+                    failedTests = details
+                }
+            };
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(ValidationResult.Success());
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.FailedTests.Length, Is.EqualTo(10));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Test execution completed with status: Failed first 10 of 11 failures listed; see XmlPath for full results."));
+        }
+
+        /// <summary>
+        /// What: a passing run leaves FailedTests null so JSON omits the field.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenNoTestsFail_LeavesFailedTestsNull()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(ValidationResult.Success());
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.FailedTests, Is.Null);
+        }
+
         [Test]
         public async Task ExecuteAsync_WithUnsupportedFilterType_ShouldNotClearPausePoints()
         {

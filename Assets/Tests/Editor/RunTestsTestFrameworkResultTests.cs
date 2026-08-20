@@ -135,6 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.failedCount, Is.EqualTo(0));
             Assert.That(result.skippedCount, Is.EqualTo(0));
             Assert.That(result.xmlPath, Is.Null);
+            Assert.That(result.failedTests, Is.Null);
         }
 
         [Test]
@@ -157,6 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
             Assert.That(result.testCount, Is.EqualTo(0));
             Assert.That(result.failedCount, Is.EqualTo(0));
+            Assert.That(result.failedTests, Is.Null);
         }
 
         [Test]
@@ -181,6 +183,99 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.noTestsFoundExplanation, Is.Empty);
             Assert.That(result.testCount, Is.EqualTo(1));
             Assert.That(result.failedCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a failed leaf copies FullName, Message, and File/Line parsed from (at path:line).
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenAChildTestFails_CollectsFailedTestDetailWithStackLocation()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase(
+                        "FailingTest",
+                        TestResultStatus.Failed,
+                        0.1,
+                        "Expected 2 But was: 1",
+                        "at Example.Tests.FailingTest () [0x00000] in /ignored/path.cs:1\n  (at Assets/Tests/FailingTest.cs:42)")
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.failedTests, Is.Not.Null);
+            Assert.That(result.failedTests.Length, Is.EqualTo(1));
+            Assert.That(result.failedTests[0].FullName, Is.EqualTo("Example.Tests.FailingTest"));
+            Assert.That(result.failedTests[0].Message, Is.EqualTo("Expected 2 But was: 1"));
+            Assert.That(result.failedTests[0].File, Is.EqualTo("Assets/Tests/FailingTest.cs"));
+            Assert.That(result.failedTests[0].Line, Is.EqualTo(42));
+        }
+
+        /// <summary>
+        /// What: only the first 10 failed leaves are listed when eleven tests fail.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenElevenTestsFail_ListsFirstTenFailedDetails()
+        {
+            List<ITestResultAdaptor> children = new List<ITestResultAdaptor>();
+            for (int index = 0; index < 11; index++)
+            {
+                string suffix = index.ToString(CultureInfo.InvariantCulture);
+                children.Add(
+                    CreateTestCase(
+                        "FailingTest" + suffix,
+                        TestResultStatus.Failed,
+                        0.1,
+                        "boom " + suffix,
+                        "(at Assets/Tests/FailingTest.cs:" + (10 + index).ToString(CultureInfo.InvariantCulture) + ")"));
+            }
+
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                children);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.failedCount, Is.EqualTo(11));
+            Assert.That(result.failedTests, Is.Not.Null);
+            Assert.That(result.failedTests.Length, Is.EqualTo(10));
+            Assert.That(result.failedTests[0].FullName, Is.EqualTo("Example.Tests.FailingTest0"));
+            Assert.That(result.failedTests[9].FullName, Is.EqualTo("Example.Tests.FailingTest9"));
+        }
+
+        /// <summary>
+        /// What: a passing leaf is omitted from FailedTests even when a sibling failed.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenMixedPassAndFail_OmitsPassingLeafFromFailedTests()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Failed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase(
+                        "FailingTest",
+                        TestResultStatus.Failed,
+                        0.1,
+                        "failed")
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.failedCount, Is.EqualTo(1));
+            Assert.That(result.failedTests.Length, Is.EqualTo(1));
+            Assert.That(result.failedTests[0].FullName, Is.EqualTo("Example.Tests.FailingTest"));
+            Assert.That(result.failedTests[0].File, Is.Null);
+            Assert.That(result.failedTests[0].Line, Is.Null);
         }
 
         [Test]
@@ -234,10 +329,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return new FakeTestResultAdaptor(test, status, durationSeconds, children);
         }
 
-        private static ITestResultAdaptor CreateTestCase(string name, TestResultStatus status, double durationSeconds)
+        private static ITestResultAdaptor CreateTestCase(
+            string name,
+            TestResultStatus status,
+            double durationSeconds,
+            string message = "",
+            string stackTrace = "")
         {
             FakeTestAdaptor test = new FakeTestAdaptor(name, false);
-            return new FakeTestResultAdaptor(test, status, durationSeconds, new List<ITestResultAdaptor>());
+            return new FakeTestResultAdaptor(
+                test,
+                status,
+                durationSeconds,
+                new List<ITestResultAdaptor>(),
+                message,
+                stackTrace);
         }
 
         private sealed class FakeTestResultAdaptor : ITestResultAdaptor
@@ -246,17 +352,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             private readonly TestResultStatus _status;
             private readonly double _durationSeconds;
             private readonly IReadOnlyList<ITestResultAdaptor> _children;
+            private readonly string _message;
+            private readonly string _stackTrace;
 
             public FakeTestResultAdaptor(
                 ITestAdaptor test,
                 TestResultStatus status,
                 double durationSeconds,
-                IReadOnlyList<ITestResultAdaptor> children)
+                IReadOnlyList<ITestResultAdaptor> children,
+                string message = "",
+                string stackTrace = "")
             {
                 _test = test;
                 _status = status;
                 _durationSeconds = durationSeconds;
                 _children = children;
+                _message = message ?? string.Empty;
+                _stackTrace = stackTrace ?? string.Empty;
             }
 
             public ITestAdaptor Test => _test;
@@ -267,8 +379,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public double Duration => _durationSeconds;
             public DateTime StartTime => new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
             public DateTime EndTime => StartTime.AddSeconds(_durationSeconds);
-            public string Message => string.Empty;
-            public string StackTrace => string.Empty;
+            public string Message => _message;
+            public string StackTrace => _stackTrace;
             public int AssertCount => 0;
             public int FailCount => CountByStatus(TestResultStatus.Failed);
             public int PassCount => CountByStatus(TestResultStatus.Passed);
