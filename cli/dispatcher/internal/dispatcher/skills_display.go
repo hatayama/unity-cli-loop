@@ -71,8 +71,8 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 	clicore.WriteLine(stdout, "Options:")
 	clicore.WriteLine(stdout, "  -g, --global")
 	clicore.WriteLine(stdout, "      --flat")
-	if !isV3MigrationSkillSubcommand(command) {
-		clicore.WriteLine(stdout, "      --output-dir <path>")
+	if skillsSubcommandSupportsOutputDir(command) {
+		clicore.WriteLine(stdout, "      "+skillsOutputDirFlagName+" <path>")
 	}
 	printSkillTargetFlagLines(stdout, "      ")
 	clicore.WriteLine(stdout, "")
@@ -81,11 +81,12 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 		clicore.WriteLine(stdout, "even when their flag is omitted, so previously installed copies never go stale.")
 		clicore.WriteLine(stdout, "")
 	}
-	if !isV3MigrationSkillSubcommand(command) {
+	if skillsSubcommandSupportsOutputDir(command) {
 		clicore.WriteLine(stdout, "With --output-dir, skills sync flat into <path>/<skill-name> with no target")
-		clicore.WriteLine(stdout, "subdirectories; files uloop does not manage there are left untouched.")
-		clicore.WriteLine(stdout, "Skills are sourced from the Unity project, so run this inside a Unity")
-		clicore.WriteLine(stdout, "project or pass --project-path.")
+		clicore.WriteLine(stdout, "subdirectories. Top-level files uloop does not manage are left untouched,")
+		clicore.WriteLine(stdout, "while source-owned directories such as references/ are replaced wholly on")
+		clicore.WriteLine(stdout, "update. Skills are sourced from the Unity project, so run this inside a")
+		clicore.WriteLine(stdout, "Unity project or pass --project-path.")
 		clicore.WriteLine(stdout, "")
 	}
 	if command == "install-v3-migration" {
@@ -103,9 +104,9 @@ func printSkillsTargetGuidance(command string, stdout io.Writer) {
 	clicore.WriteFormat(stdout, "\nPlease specify at least one target for '%s':\n\n", command)
 	clicore.WriteLine(stdout, "Available targets:")
 	printSkillTargetFlagLines(stdout, "  ")
-	if !isV3MigrationSkillSubcommand(command) {
+	if skillsSubcommandSupportsOutputDir(command) {
 		clicore.WriteLine(stdout, "")
-		clicore.WriteLine(stdout, "Or pass --output-dir <path> to sync skills into a custom directory.")
+		clicore.WriteLine(stdout, "Or pass "+skillsOutputDirFlagName+" <path> to sync skills into a custom directory.")
 	}
 }
 
