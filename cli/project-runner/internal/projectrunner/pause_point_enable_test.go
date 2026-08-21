@@ -215,7 +215,7 @@ func TestRunEnablePausePointCommandAwaitsAfterSuccessfulEnable(t *testing.T) {
 }
 
 // Verifies enable-pause-point --await prints the armed-wait line to stderr as soon as
-// the marker is armed, and keeps stdout a single JSON object.
+// the marker is armed (before the first status poll), and keeps stdout a single JSON object.
 func TestRunEnablePausePointCommandAnnouncesArmedWaitOnStderr(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalPoll := pausePointStatusPoll
@@ -227,12 +227,19 @@ func TestRunEnablePausePointCommandAnnouncesArmedWaitOnStderr(t *testing.T) {
 		fetchMatchingLogs = originalFetch
 	})
 
+	const wantAnnounce = "Pause point armed (Id: jump). Waiting up to 45s for a hit; the JSON response prints only when the wait ends. If this output gets cut off before then, read the outcome with: uloop pause-point-status --id \"jump\"\n"
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
 	statusResponses := []pausePointStatusResponse{
 		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
 		{Id: "jump", Status: pausePointStatusHit, IsHit: true, HitCount: 1},
 	}
 	statusCallCount := 0
 	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		if statusCallCount == 0 && stderr.String() != wantAnnounce {
+			t.Fatalf("announce must appear before the first status poll:\nwant %q\ngot  %q", wantAnnounce, stderr.String())
+		}
 		response := statusResponses[statusCallCount]
 		statusCallCount++
 		return response, nil
@@ -265,8 +272,6 @@ func TestRunEnablePausePointCommandAnnouncesArmedWaitOnStderr(t *testing.T) {
 		ProjectRoot: t.TempDir(),
 	}
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
 	code := runEnablePausePointCommand(
 		context.Background(),
 		connection,
@@ -279,8 +284,9 @@ func TestRunEnablePausePointCommandAnnouncesArmedWaitOnStderr(t *testing.T) {
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
 	_ = readIPCRequest(t, enableRequests)
-	assertStderrHasExactLine(t, stderr.String(),
-		"Pause point armed (Id: jump). Waiting up to 45s for a hit; the JSON response prints only when the wait ends. If this output gets cut off before then, read the outcome with 'uloop pause-point-status --id jump'.")
+	if stderr.String() != wantAnnounce {
+		t.Fatalf("stderr mismatch:\nwant %q\ngot  %q", wantAnnounce, stderr.String())
+	}
 	assertStdoutIsSingleJSONObject(t, stdout.Bytes())
 
 	var response pausePointWaitResult
@@ -987,6 +993,9 @@ func TestRunEnablePausePointCommandDoesNotAwaitAfterFailedEnable(t *testing.T) {
 	if !strings.Contains(stdout.String(), "Id must not be null or empty.") {
 		t.Fatalf("expected enable failure message in stdout: %s", stdout.String())
 	}
+	if stderr.Len() != 0 {
+		t.Fatalf("failed enable must not announce a wait start, got stderr %q", stderr.String())
+	}
 }
 
 // Verifies enable-pause-point --await's composite wait path mirrors await-pause-point's
@@ -1060,7 +1069,8 @@ func TestRunEnablePausePointCommandAwaitTimeoutIncludesNonFiringHint(t *testing.
 	if code != 1 {
 		t.Fatalf("expected timeout failure, got %d with stdout %s", code, stdout.String())
 	}
-	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	envelope := parsePausePointErrorEnvelopeAfterAnnounce(t, stderr.Bytes(),
+		"Pause point armed (Id: jump). Waiting up to 1s for a hit; the JSON response prints only when the wait ends. If this output gets cut off before then, read the outcome with: uloop pause-point-status --id \"jump\"")
 	if envelope.Error.Details["Status"] != pausePointStatusCleared {
 		t.Fatalf("status detail mismatch: %#v", envelope.Error.Details)
 	}

@@ -133,8 +133,8 @@ func TestRunWaitForPausePointCommandExtendsExpiryBeforePolling(t *testing.T) {
 	}
 }
 
-// Verifies await-pause-point prints the wait-start line to stderr immediately and keeps
-// stdout a single JSON object.
+// Verifies await-pause-point prints the wait-start line to stderr immediately (before the
+// first status poll) and keeps stdout a single JSON object.
 func TestRunWaitForPausePointCommandAnnouncesWaitStartOnStderr(t *testing.T) {
 	originalExtend := extendPausePointExpiry
 	originalQuery := queryPausePointStatus
@@ -142,6 +142,11 @@ func TestRunWaitForPausePointCommandAnnouncesWaitStartOnStderr(t *testing.T) {
 		extendPausePointExpiry = originalExtend
 		queryPausePointStatus = originalQuery
 	}()
+
+	const wantAnnounce = "Waiting for pause point jump (up to 7s). The JSON response prints only when the wait ends. If this output gets cut off before then, read the outcome with: uloop pause-point-status --id \"jump\"\n"
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	statusCallCount := 0
 
 	extendPausePointExpiry = func(
 		ctx context.Context,
@@ -156,6 +161,10 @@ func TestRunWaitForPausePointCommandAnnouncesWaitStartOnStderr(t *testing.T) {
 		connection unityipc.Connection,
 		id string,
 	) (pausePointStatusResponse, error) {
+		if statusCallCount == 0 && stderr.String() != wantAnnounce {
+			t.Fatalf("announce must appear before the first status poll:\nwant %q\ngot  %q", wantAnnounce, stderr.String())
+		}
+		statusCallCount++
 		return pausePointStatusResponse{
 			Id:          id,
 			Status:      pausePointStatusHit,
@@ -165,8 +174,6 @@ func TestRunWaitForPausePointCommandAnnouncesWaitStartOnStderr(t *testing.T) {
 		}, nil
 	}
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
 	code := runWaitForPausePointCommand(
 		context.Background(),
 		unityipc.Connection{},
@@ -178,8 +185,9 @@ func TestRunWaitForPausePointCommandAnnouncesWaitStartOnStderr(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
-	assertStderrHasExactLine(t, stderr.String(),
-		"Waiting for pause point jump (up to 7s). The JSON response prints only when the wait ends. If this output gets cut off before then, read the outcome with 'uloop pause-point-status --id jump'.")
+	if stderr.String() != wantAnnounce {
+		t.Fatalf("stderr mismatch:\nwant %q\ngot  %q", wantAnnounce, stderr.String())
+	}
 	assertStdoutIsSingleJSONObject(t, stdout.Bytes())
 
 	var response pausePointWaitResult
@@ -189,6 +197,64 @@ func TestRunWaitForPausePointCommandAnnouncesWaitStartOnStderr(t *testing.T) {
 	if response.Status != pausePointStatusHit || response.HitCount != 1 {
 		t.Fatalf("response mismatch: %#v", response)
 	}
+}
+
+// Verifies await-pause-point quotes a whitespace-containing marker id in the recovery
+// command so the stderr line stays copy-pasteable.
+func TestRunWaitForPausePointCommandQuotesWhitespaceIdOnStderr(t *testing.T) {
+	originalExtend := extendPausePointExpiry
+	originalQuery := queryPausePointStatus
+	defer func() {
+		extendPausePointExpiry = originalExtend
+		queryPausePointStatus = originalQuery
+	}()
+
+	const wantAnnounce = "Waiting for pause point Assets/My Folder/Foo.cs:42 (up to 7s). The JSON response prints only when the wait ends. If this output gets cut off before then, read the outcome with: uloop pause-point-status --id \"Assets/My Folder/Foo.cs:42\"\n"
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	statusCallCount := 0
+
+	extendPausePointExpiry = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+		minimumRemainingSeconds int,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusEnabled}, nil
+	}
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		if statusCallCount == 0 && stderr.String() != wantAnnounce {
+			t.Fatalf("announce must appear before the first status poll:\nwant %q\ngot  %q", wantAnnounce, stderr.String())
+		}
+		statusCallCount++
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusHit,
+			IsHit:       true,
+			HitCount:    1,
+			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+		}, nil
+	}
+
+	code := runWaitForPausePointCommand(
+		context.Background(),
+		unityipc.Connection{},
+		[]string{"--id", "Assets/My Folder/Foo.cs:42", "--timeout-seconds", "7"},
+		"",
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+	if stderr.String() != wantAnnounce {
+		t.Fatalf("stderr mismatch:\nwant %q\ngot  %q", wantAnnounce, stderr.String())
+	}
+	assertStdoutIsSingleJSONObject(t, stdout.Bytes())
 }
 
 // Verifies await-pause-point polls until Unity reports the marker hit.
@@ -2452,26 +2518,20 @@ func TestParsePausePointStatusOptionsRequiresID(t *testing.T) {
 func parsePausePointErrorEnvelope(t *testing.T, payload []byte) clierrors.CLIErrorEnvelope {
 	t.Helper()
 
-	jsonStart := bytes.IndexByte(payload, '{')
-	if jsonStart < 0 {
-		t.Fatalf("stderr has no JSON envelope:\n%s", payload)
-	}
-
 	var envelope clierrors.CLIErrorEnvelope
-	if err := json.Unmarshal(payload[jsonStart:], &envelope); err != nil {
+	if err := json.Unmarshal(payload, &envelope); err != nil {
 		t.Fatalf("stderr is not valid JSON: %v\n%s", err, string(payload))
 	}
 	return envelope
 }
 
-func assertStderrHasExactLine(t *testing.T, stderr string, want string) {
+func parsePausePointErrorEnvelopeAfterAnnounce(t *testing.T, payload []byte, announceLine string) clierrors.CLIErrorEnvelope {
 	t.Helper()
-	for _, line := range strings.Split(stderr, "\n") {
-		if line == want {
-			return
-		}
+	prefix := announceLine + "\n"
+	if !bytes.HasPrefix(payload, []byte(prefix)) {
+		t.Fatalf("stderr missing announce prefix %q\nstderr:\n%s", announceLine, payload)
 	}
-	t.Fatalf("stderr missing exact line %q\nstderr:\n%s", want, stderr)
+	return parsePausePointErrorEnvelope(t, payload[len(prefix):])
 }
 
 func assertStdoutIsSingleJSONObject(t *testing.T, stdout []byte) {
