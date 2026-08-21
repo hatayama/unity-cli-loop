@@ -888,6 +888,104 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.UnfilteredTestNames, Is.Null);
         }
 
+        /// <summary>
+        /// What: filter-all NoTestsFound appends the predefined-assembly notice after the original message when findings exist.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilterAllNoTestsFoundWithPredefinedAssemblyTests_AppendsNotice()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult(),
+                PredefinedAssemblyTestFindings = RunTestsPredefinedAssemblyTestFindings.Create(
+                    2,
+                    new[]
+                    {
+                        "Assembly-CSharp: Game.Foo.Alpha",
+                        "Assembly-CSharp-Editor: Editor.Bar.Beta"
+                    })
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "No tests found matching the specified filter criteria. Additionally, 2 NUnit test method(s) are compiled into predefined assemblies rather than any test assembly, so this run could not discover them: Assembly-CSharp: Game.Foo.Alpha, Assembly-CSharp-Editor: Editor.Bar.Beta. Move these scripts into a folder whose .asmdef has Test Assemblies enabled (EditMode tests target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests."));
+        }
+
+        /// <summary>
+        /// What: filter-all NoTestsFound appends the predefined-assembly notice after a period-terminated asmdef hint without a second period.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilterAllNoTestsFoundWithAsmdefHintAndPredefinedAssemblyTests_AppendsNoticeAfterPeriod()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult(),
+                PredefinedAssemblyTestFindings = RunTestsPredefinedAssemblyTestFindings.Create(
+                    1,
+                    new[] { "Assembly-CSharp: Game.Foo.Alpha" })
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                appendNoTestsDiagnostics: AppendPeriodTerminatedAsmdefHint);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "No tests found matching the specified filter criteria Possible asmdef issues: Assets/Tests/EditMode/Sample.Tests.asmdef: sample finding. Additionally, 1 NUnit test method(s) are compiled into predefined assemblies rather than any test assembly, so this run could not discover them: Assembly-CSharp: Game.Foo.Alpha. Move these scripts into a folder whose .asmdef has Test Assemblies enabled (EditMode tests target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests."));
+        }
+
+        /// <summary>
+        /// What: filter-all NoTestsFound keeps the original message when predefined-assembly findings are empty.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilterAllNoTestsFoundWithNoPredefinedAssemblyTests_KeepsOriginalMessage()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult(),
+                PredefinedAssemblyTestFindings = RunTestsPredefinedAssemblyTestFindings.None()
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
+        }
+
         private static SerializableTestResult CreateNoTestsFoundResult()
         {
             return new SerializableTestResult
@@ -905,6 +1003,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 skippedCount = 0,
                 xmlPath = null
             };
+        }
+
+        private static string AppendPeriodTerminatedAsmdefHint(
+            string message,
+            bool noTestsFound,
+            UnityCliLoopTestMode testMode,
+            TestFilterType filterType)
+        {
+            return message + " Possible asmdef issues: Assets/Tests/EditMode/Sample.Tests.asmdef: sample finding.";
         }
 
         private static string PassThroughNoTestsDiagnostics(
@@ -966,6 +1073,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public RunTestsUnfilteredTestListResult UnfilteredTestListResult { get; set; } =
                 RunTestsUnfilteredTestListResult.NotRetrieved();
 
+            public RunTestsPredefinedAssemblyTestFindings PredefinedAssemblyTestFindings { get; set; } =
+                RunTestsPredefinedAssemblyTestFindings.None();
+
             public override Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
             {
                 ct.ThrowIfCancellationRequested();
@@ -986,6 +1096,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 ct.ThrowIfCancellationRequested();
                 return Task.FromResult(UnfilteredTestListResult);
+            }
+
+            internal override RunTestsPredefinedAssemblyTestFindings ScanPredefinedAssemblyTests()
+            {
+                return PredefinedAssemblyTestFindings;
             }
         }
 

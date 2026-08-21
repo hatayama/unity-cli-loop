@@ -190,7 +190,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // Why switch here: cleanup waits with ConfigureAwait(false), so this resume is
-            // off-thread. No-tests diagnostics call AssetDatabase.FindAssets, a Unity API.
+            // off-thread. No-tests diagnostics call AssetDatabase.FindAssets, and the
+            // predefined-assembly scan calls TypeCache, both Unity Editor APIs.
             await MainThreadSwitcher.SwitchToMainThread(ct);
             response.Message = RunTestsNoTestsDiagnosticService.AppendDiagnosticsOrOriginalMessage(
                 response.Message,
@@ -199,9 +200,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     response.NoTestsFound,
                     parameters.TestMode,
                     parameters.FilterType));
+            AppendPredefinedAssemblyTestNoticeIfNeeded(response, parameters);
             await ApplyUnfilteredFilterEchoIfNeededAsync(response, parameters, ct)
                 .ConfigureAwait(false);
             return response;
+        }
+
+        private void AppendPredefinedAssemblyTestNoticeIfNeeded(
+            RunTestsResponse response,
+            RunTestsSchema parameters)
+        {
+            Debug.Assert(response != null, "response must not be null");
+            Debug.Assert(parameters != null, "parameters must not be null");
+
+            if (!RunTestsNoTestsDiagnosticService.ShouldAppendDiagnostics(
+                    response.NoTestsFound,
+                    parameters.FilterType))
+            {
+                return;
+            }
+
+            RunTestsPredefinedAssemblyTestFindings findings = _executionService.ScanPredefinedAssemblyTests();
+            response.Message = RunTestsPredefinedAssemblyTestNoticeFormatter.AppendIfNeeded(
+                response.Message,
+                findings);
         }
 
         private async Task ApplyUnfilteredFilterEchoIfNeededAsync(

@@ -45,6 +45,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ct.ThrowIfCancellationRequested();
             return UnityTestFrameworkExecutionServiceRegistry.Current.RetrieveUnfilteredTestNamesAsync(testMode, ct);
         }
+
+        /// <summary>
+        /// Names NUnit test methods compiled into Unity predefined assemblies.
+        /// </summary>
+        internal virtual RunTestsPredefinedAssemblyTestFindings ScanPredefinedAssemblyTests()
+        {
+            return UnityTestFrameworkExecutionServiceRegistry.Current.ScanPredefinedAssemblyTests();
+        }
     }
 
     internal interface IUnityTestFrameworkExecutionService
@@ -54,6 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         Task<RunTestsUnfilteredTestListResult> RetrieveUnfilteredTestNamesAsync(
             UnityCliLoopTestMode testMode,
             CancellationToken ct);
+        RunTestsPredefinedAssemblyTestFindings ScanPredefinedAssemblyTests();
     }
 
     internal static class UnityTestFrameworkExecutionServiceRegistry
@@ -93,6 +102,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             ct.ThrowIfCancellationRequested();
             return Task.FromResult(RunTestsUnfilteredTestListResult.NotRetrieved());
+        }
+
+        public RunTestsPredefinedAssemblyTestFindings ScanPredefinedAssemblyTests()
+        {
+            return RunTestsPredefinedAssemblyTestFindings.None();
         }
     }
 }
