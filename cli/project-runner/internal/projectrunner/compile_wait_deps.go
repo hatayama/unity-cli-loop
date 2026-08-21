@@ -25,6 +25,27 @@ type compileWaitDeps struct {
 	now                    func() time.Time
 	interimReportInterval  time.Duration
 	reportInterim          compileWaitInterimReporter
+	// Zero keeps compileStartStallFocusThreshold. Tests shorten it so they do not wait 10s.
+	startStallFocusThreshold time.Duration
+	focus                    connectionRetryDeps
+}
+
+func compileStartStallFocusThresholdFor(deps compileWaitDeps) time.Duration {
+	if deps.startStallFocusThreshold > 0 {
+		return deps.startStallFocusThreshold
+	}
+	return compileStartStallFocusThreshold
+}
+
+func compileWaitFocusDeps(deps compileWaitDeps) connectionRetryDeps {
+	merged := defaultConnectionRetryDeps()
+	if deps.focus.findRunningUnityProcess != nil {
+		merged.findRunningUnityProcess = deps.focus.findRunningUnityProcess
+	}
+	if deps.focus.focusUnityProcess != nil {
+		merged.focusUnityProcess = deps.focus.focusUnityProcess
+	}
+	return merged
 }
 
 func compileSendOrDefault(deps compileWaitDeps) compileSendFunc {
