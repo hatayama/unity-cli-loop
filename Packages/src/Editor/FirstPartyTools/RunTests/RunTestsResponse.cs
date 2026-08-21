@@ -87,6 +87,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public SerializableTestResult.FailedTestDetail[] FailedTests { get; set; }
 
         /// <summary>
+        /// Policy warning when hot-reload changes were live at test-run start. Empty when none
+        /// were active; omitted from JSON via ShouldSerializeWarning.
+        /// </summary>
+        public string Warning { get; set; } = string.Empty;
+
+        // Why omit empty: a clean run with no live patches must not grow a Warning field.
+        public bool ShouldSerializeWarning()
+        {
+            return !string.IsNullOrEmpty(Warning);
+        }
+
+        /// <summary>
         /// Create a new RunTestsResponse. Every field is required so classification decisions
         /// stay at the call site (the Unity Test Runner adapter and use-case), not in this DTO.
         /// </summary>

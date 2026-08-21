@@ -81,5 +81,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(first.Property("File"), Is.Null);
             Assert.That(first.Property("Line"), Is.Null);
         }
+
+        /// <summary>
+        /// What: an empty Warning is omitted from production JSON so the key cannot reappear unnoticed.
+        /// </summary>
+        [Test]
+        public void RunTestsResponse_WhenWarningIsEmpty_OmitsWarningPropertyFromJson()
+        {
+            RunTestsResponse response = new RunTestsResponse(
+                success: true,
+                message: "Test execution completed with status: Passed",
+                completedAt: "2026-01-01T00:00:00.0000000Z",
+                testCount: 1,
+                passedCount: 1,
+                failedCount: 0,
+                skippedCount: 0,
+                xmlPath: string.Empty,
+                status: RunTestsExecutionStatus.Passed,
+                hasFailures: false,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty);
+
+            JObject parsed = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    response,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+
+            Assert.That(parsed.Property("Warning"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: a set Warning serializes under Warning with the exact policy-form sentence.
+        /// </summary>
+        [Test]
+        public void RunTestsResponse_WhenWarningIsSet_SerializesExactPolicyFormSentence()
+        {
+            RunTestsResponse response = new RunTestsResponse(
+                success: true,
+                message: "Test execution completed with status: Passed",
+                completedAt: "2026-01-01T00:00:00.0000000Z",
+                testCount: 1,
+                passedCount: 1,
+                failedCount: 0,
+                skippedCount: 0,
+                xmlPath: string.Empty,
+                status: RunTestsExecutionStatus.Passed,
+                hasFailures: false,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty)
+            {
+                Warning =
+                    "2 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards active patches - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."
+            };
+
+            JObject parsed = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    response,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+
+            Assert.That(
+                parsed.Value<string>("Warning"),
+                Is.EqualTo(
+                    "2 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards active patches - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."));
+        }
     }
 }

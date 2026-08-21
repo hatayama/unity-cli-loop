@@ -14,6 +14,8 @@ Before executing tests, `uloop run-tests` saves unsaved loaded Scene changes and
 
 Active pause points are automatically cleared (the underlying code patches are removed as well) before test execution begins. Cleared IDs are reported in the response's `ClearedPausePointIds` field.
 
+A test run can end by discarding active hot-reload changes: script edits imported during the run are compiled when the test runner releases its assembly-reload lock, and that deferred domain reload wipes the patches even though the tests themselves ran patched. The response's Warning field reports this; re-apply 'uloop hot-reload' or bake the edits in with 'uloop compile' before the next Play or test run.
+
 `NoTestsFound` means zero tests matched — not a test failure. Check `NoTestsFoundExplanation` and `Message` for asmdef hints.
 
 ## Usage
@@ -31,6 +33,8 @@ uloop run-tests [options]
 | `--filter-value` | string | - | Filter value (test name, pattern, or assembly) |
 | `--fail-on-unsaved-changes` | flag | - | Fail before test execution if unsaved editor changes remain instead of auto-saving them |
 | `--timeout-seconds` | integer | `600` | Maximum seconds to wait for RunFinished before canceling the await (max `1500`). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands |
+
+exact matches the full test name (Namespace.Class.Method); use regex to run a whole test class, e.g. --filter-type regex --filter 'MyGame\.Tests\.PlayerTests\.'
 
 ## Output
 

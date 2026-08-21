@@ -301,7 +301,7 @@ a pause is not evidence either way.
   behavior converges by construction.
 - Patches and loaded shim assemblies are static Editor state and disappear on the next
   domain reload — that includes entering Play Mode with Domain Reload enabled (the
-  default), not just `uloop compile`. `uloop control-play-mode --action Play` warns with
+  default), `uloop compile`, and `uloop run-tests`. `uloop control-play-mode --action Play` warns with
   the counts when it is about to drop patches or pause points. There is no persistence
   and no automatic re-apply.
 - Never reflected by hot reload: initializer changes on compiled fields and new

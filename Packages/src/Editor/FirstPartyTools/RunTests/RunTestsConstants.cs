@@ -11,5 +11,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // listed cap so the truncation is never silent.
         public const string FailedTestDetailsTruncatedMessageFormat =
             "first {0} of {1} failures listed; see XmlPath for full results.";
+
+        // Format: active hot-reload change count at test-run start. Policy-form because
+        // response construction was measured to run before any deferred domain reload.
+        public const string HotReloadDiscardWarningFormat =
+            "{0} active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards active patches - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in.";
     }
 }
