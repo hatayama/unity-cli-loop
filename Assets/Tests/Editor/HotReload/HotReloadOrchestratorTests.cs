@@ -1488,6 +1488,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: adding a const on the holder and hot-reloading holder plus referencing file
+        /// together emits the exact new-const warning.
+        /// </summary>
+        [Test]
+        public async Task Run_HolderAndReferencingFiles_WhenConstIsAdded_WarnsNewConstExactLiteral()
+        {
+            using (MutateSiblingDefinitionsToAddConst())
+            {
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { ResolveSiblingConstDefinitionsPath(), ResolveSiblingConstUserPath() },
+                    null,
+                    CancellationToken.None);
+
+                AssertNoFileLevelFailure(result);
+                Assert.That(
+                    result.Warnings,
+                    Has.Some.EqualTo(ExpectedAddedSiblingTuningWarning),
+                    "Expected the new-const warning when the holder and referencing file reload together.\n"
+                    + string.Join("\n", result.Warnings));
+            }
+        }
+
+        /// <summary>
         /// What: passing the holder first, then the referencing file, still emits the sibling
         /// const-drift warning once (reversed input order of the holder+user case).
         /// </summary>
@@ -6076,7 +6099,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string ExpectedSiblingTuningDriftWarning =
-            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload. Run 'uloop compile' to apply this change.";
+            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value. Run 'uloop compile' to apply this change.";
+
+        private const string ExpectedAddedSiblingTuningWarning =
+            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.AddedSiblingTuning exists only in the edited source, not in the compiled assembly. A method body in this file patched in this same run has the new value folded in, but bodies in other files that reference it fail shim compilation. Run 'uloop compile' to add it to the assemblies.";
 
         private static IDisposable MutateSiblingTuningValue(int newValue)
         {
@@ -6093,6 +6119,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 original.Replace(
                     compiledDeclaration,
                     "public const int SiblingTuning = " + newValue + ";"));
+            return new FileRestoreScope(new[] { path }, new[] { original });
+        }
+
+        private static IDisposable MutateSiblingDefinitionsToAddConst()
+        {
+            string path = ResolveSiblingConstDefinitionsPath();
+            string original = File.ReadAllText(path);
+            string compiledDeclaration = "public const int SiblingTuning = 6;";
+            Assert.That(
+                original.Contains(compiledDeclaration),
+                Is.True,
+                "Precondition: compiled sibling const declaration must still be on disk.");
+            EditorApplication.LockReloadAssemblies();
+            File.WriteAllText(
+                path,
+                original.Replace(
+                    compiledDeclaration,
+                    compiledDeclaration + "\n        public const int AddedSiblingTuning = 9;"));
             return new FileRestoreScope(new[] { path }, new[] { original });
         }
 

@@ -17,11 +17,18 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class ConstDriftCollector
 {
+    internal const string NewConstWarningFormat =
+        "const {0} exists only in the edited source, not in the compiled assembly. A method body in this file patched in this same run has the new value folded in, but bodies in other files that reference it fail shim compilation. Run 'uloop compile' to add it to the assemblies.";
+
+    internal const string ChangedConstWarningFormat =
+        "const {0} is {1} in the edited source but {2} in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value. Run 'uloop compile' to apply this change.";
+
     /// <summary>
     /// Detects const declarations (including enum members) in the edited source whose values
-    /// differ from the compiled target assembly. C# inlines const values at compile time and
-    /// shims compile against the already-compiled assembly, so such edits silently keep the old
-    /// value at runtime; each drift becomes a response warning instead of a silent no-op.
+    /// differ from the compiled target assembly, and consts that exist only in the edited source.
+    /// C# inlines const values at compile time and shims compile against the already-compiled
+    /// assembly, so value edits silently keep the old value at runtime; new consts fold into
+    /// same-file patched bodies but fail shim compilation in other files.
     /// </summary>
     internal static List<string> CollectConstDriftWarnings(
         CompilationUnitSyntax root,
@@ -76,11 +83,14 @@ internal static class ConstDriftCollector
                     }
                 }
 
+                string constDisplayName = sourceType.ToDisplayString() + "." + sourceField.Name;
                 if (compiledField == null)
                 {
-                    // A const missing from the compiled assembly is a new declaration, not a
-                    // drift; bodies reading it already fail shim compilation with their own
-                    // actionable error.
+                    warnings.Add(
+                        string.Format(
+                            CultureInfo.InvariantCulture,
+                            NewConstWarningFormat,
+                            constDisplayName));
                     continue;
                 }
 
@@ -90,11 +100,12 @@ internal static class ConstDriftCollector
                 }
 
                 warnings.Add(
-                    "const " + sourceType.ToDisplayString() + "." + sourceField.Name
-                    + " is " + FormatConstValue(sourceField.ConstantValue)
-                    + " in the edited source but " + FormatConstValue(compiledField.ConstantValue)
-                    + " in the compiled assembly; edits outside method bodies never take effect "
-                    + "through hot reload. Run 'uloop compile' to apply this change.");
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        ChangedConstWarningFormat,
+                        constDisplayName,
+                        FormatConstValue(sourceField.ConstantValue),
+                        FormatConstValue(compiledField.ConstantValue)));
             }
         }
 
