@@ -805,13 +805,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.siblingConstDriftWarnings,
                 Has.Some.EqualTo(
-                    "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload. Run 'uloop compile' to apply this change."),
+                    "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value. Run 'uloop compile' to apply this change."),
                 "Sibling const drift must use the same warning text as an edited-file const drift.\n"
                 + string.Join("\n", result.Output.siblingConstDriftWarnings));
             Assert.That(
                 result.Output.declarationDriftWarnings,
                 Has.None.EqualTo(
-                    "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload. Run 'uloop compile' to apply this change."),
+                    "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value. Run 'uloop compile' to apply this change."),
                 "Sibling const-drift warnings must stay on siblingConstDriftWarnings, not declarationDriftWarnings.");
         }
 
