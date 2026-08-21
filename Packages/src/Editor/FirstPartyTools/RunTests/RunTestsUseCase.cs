@@ -199,7 +199,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     response.NoTestsFound,
                     parameters.TestMode,
                     parameters.FilterType));
-            await ApplyUnfilteredFilterEchoIfNeededAsync(response, parameters, ct);
+            await ApplyUnfilteredFilterEchoIfNeededAsync(response, parameters, ct)
+                .ConfigureAwait(false);
             return response;
         }
 
