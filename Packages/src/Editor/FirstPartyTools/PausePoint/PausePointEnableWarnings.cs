@@ -458,16 +458,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return genericCompiledLineMapWarning;
         }
 
-        internal static string BuildCompiledLineMapWarningOrEmpty(bool hasActiveHotReloadPatches, string file)
+        internal static string BuildCompiledLineMapWarningOrEmpty(
+            bool hasActiveHotReloadPatches,
+            string file,
+            string resolvedMethod)
         {
             if (!hasActiveHotReloadPatches)
             {
                 return string.Empty;
             }
 
+            Debug.Assert(!string.IsNullOrEmpty(resolvedMethod), "resolvedMethod must not be empty.");
             return string.Format(
                 SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat,
-                SourcePausePointPathNormalizer.ToForwardSlashes(file));
+                SourcePausePointPathNormalizer.ToForwardSlashes(file),
+                resolvedMethod);
         }
 
         internal static string BuildCompiledLineMapResolveFailureWarningOrEmpty(

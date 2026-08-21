@@ -228,12 +228,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "no longer resolves in the compiled assembly. Re-enable the marker after 'uloop compile'.";
 
         // Why: unpatched methods keep the compiled line map while the editor shows the edited
-        // file. Agents otherwise arm a different method with no signal (FB9).
+        // file. Naming the resolved method tells agents the marker is on an unpatched method
+        // without a ResolvedMethod comparison (FB9).
+        // Format: file, resolved method display name.
         public const string HotReloadCompiledLineMapWarningFormat =
-            "'{0}' has active hot-reload patches. For methods this reload did not patch, --line "
-            + "resolves against the last compiled source, not the edited file. Methods currently "
-            + "patched by hot reload resolve against the edited file instead. Verify "
-            + "ResolvedMethod and ResolvedLineText, or run 'uloop compile' and re-enable.";
+            "'{0}' has active hot-reload patches. The resolved method '{1}' is not patched by this reload, "
+            + "so --line resolved against the last compiled source, not the edited file. Verify "
+            + "ResolvedLineText matches the statement you meant, or run 'uloop compile' and re-enable.";
 
         // Why a separate failure string: resolve failure leaves ResolvedMethod and
         // ResolvedLineText empty, so pointing at those fields is a dead end.

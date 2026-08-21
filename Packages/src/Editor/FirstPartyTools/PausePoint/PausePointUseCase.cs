@@ -407,7 +407,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 patchedMethodPdbUnavailableWarning,
                 PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
                     compareCompiledLineDrift,
-                    parameters.File));
+                    parameters.File,
+                    resolvedMethod));
             enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, compiledLineMapWarning);
             if (compareCompiledLineDrift)
             {

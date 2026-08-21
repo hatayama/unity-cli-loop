@@ -24,12 +24,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadPausePointLineDriftFixture.cs";
 
-        private const string HotReloadCompiledLineMapWarning =
+        private const string HotReloadCompiledLineMapWarningPrefix =
             "'Assets/Tests/Editor/HotReload/HotReloadPausePointLineDriftFixture.cs' has active "
-            + "hot-reload patches. For methods this reload did not patch, --line resolves against "
-            + "the last compiled source, not the edited file. Methods currently patched by hot "
-            + "reload resolve against the edited file instead. Verify ResolvedMethod and "
-            + "ResolvedLineText, or run 'uloop compile' and re-enable.";
+            + "hot-reload patches. The resolved method '";
+
+        private const string HotReloadCompiledLineMapWarningSuffix =
+            "' is not patched by this reload, so --line resolved against the last compiled "
+            + "source, not the edited file. Verify ResolvedLineText matches the statement you "
+            + "meant, or run 'uloop compile' and re-enable.";
 
         private const string CompiledSnapshotSentinel = "SENTINEL_COMPILED_LINE_TEXT";
 
@@ -95,7 +97,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(enable.RetargetedToHotReloadPatch, Is.False);
             Assert.That(enable.ResolvedMethod, Does.Contain(nameof(HotReloadPausePointLineDriftFixture.AfterTarget)));
             Assert.That(enable.ResolvedMethod, Does.Not.Contain(nameof(HotReloadPausePointLineDriftFixture.UnpatchedTarget)));
-            Assert.That(enable.Warning, Does.Contain(HotReloadCompiledLineMapWarning));
+            string expectedCompiledLineMapWarning =
+                HotReloadCompiledLineMapWarningPrefix
+                + enable.ResolvedMethod
+                + HotReloadCompiledLineMapWarningSuffix;
+            Assert.That(enable.Warning, Does.Contain(expectedCompiledLineMapWarning));
             Assert.That(enable.ResolvedLineText, Is.EqualTo(CompiledSnapshotSentinel));
         }
 
