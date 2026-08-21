@@ -486,10 +486,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a self-snapshot of every .cs file under Assets/Tests/Editor/HotReload/ yields
-        /// Success, empty parseErrors/entries/declarationDriftWarnings, and at least one
-        /// unchanged or skipped method (proves the worker recognized the file). Permanent guard
-        /// that identical source never false-patches after the unannotated-baseline fix.
+        /// What: a self-snapshot of every method-bearing .cs file under
+        /// Assets/Tests/Editor/HotReload/ yields Success, empty
+        /// parseErrors/entries/declarationDriftWarnings, and at least one unchanged or skipped
+        /// method (proves the worker recognized the file). Permanent guard that identical source
+        /// never false-patches after the unannotated-baseline fix.
         /// </summary>
         [Test]
         public async Task Run_WithSelfSnapshotOnHotReloadTestSources_TreatsAllMethodsUnchanged()
@@ -513,6 +514,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 // Why skip: a global-using-only file has no methods to mark unchanged; the worker
                 // correctly emits empty entries/skipped/unchanged for it.
                 if (!ContainsTypeDeclaration(onDisk))
+                {
+                    continue;
+                }
+
+                // Why skip: a type-only file with no method, constructor, or property accessor
+                // (const holder, for example) is also correctly reported as unchanged=0/skipped=0.
+                // Including it would fail the "at least one recognized method" invariant even
+                // though the worker behaved correctly.
+                if (!ContainsMethodOrAccessorDeclaration(onDisk))
                 {
                     continue;
                 }
@@ -2286,6 +2296,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 || sourceText.IndexOf(" interface ", StringComparison.Ordinal) >= 0
                 || sourceText.IndexOf(" enum ", StringComparison.Ordinal) >= 0
                 || sourceText.IndexOf(" record ", StringComparison.Ordinal) >= 0;
+        }
+
+        private static bool ContainsMethodOrAccessorDeclaration(string sourceText)
+        {
+            if (sourceText.IndexOf('(') >= 0)
+            {
+                return true;
+            }
+
+            return sourceText.IndexOf(" get;", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" get ", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" set;", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" set ", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" init;", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" init ", StringComparison.Ordinal) >= 0
+                || sourceText.IndexOf(" =>", StringComparison.Ordinal) >= 0;
         }
 
         private static string ResolveE2EFixturePath()
