@@ -302,7 +302,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 useCaseSource,
                 Does.Contain(
-                    "return ScreenshotCaptureResults.CreateTimedOutResult(\"EditorWindow capture\", correlationId, screenshots);"));
+                    "ScreenshotResponse captureTimedOut = ScreenshotCaptureResults.CreateTimedOutResult(\n"
+                    + "                            \"EditorWindow capture\",\n"
+                    + "                            correlationId,\n"
+                    + "                            screenshots);"));
             Assert.That(resultsSource, Does.Contain("Screenshots = screenshots,"));
         }
 

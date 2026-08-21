@@ -25,6 +25,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ExpectedListEnumeratorFullName =
             "System.Collections.Generic.List`1/Enumerator<System.Int32>";
 
+        // Why: a method-less type is correctly reported as unchanged=0/skipped=0, so it
+        // cannot satisfy the "at least one recognized method" invariant. The allow-list
+        // waives only that count check; the worker still runs. A new method-less fixture
+        // must be added here rather than skipped silently by a heuristic.
+        private static readonly string[] SelfSnapshotMethodlessTypeAllowList =
+        {
+            "HotReloadSiblingConstDefinitions.cs",
+        };
+
         /// <summary>
         /// What: bootstrap compiles (or reuses a cached) worker.dll, then running the worker on the
         /// e2e fixture source returns shim entries and the expected skip reasons — including bare
@@ -488,7 +497,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: a self-snapshot of every .cs file under Assets/Tests/Editor/HotReload/ yields
         /// Success, empty parseErrors/entries/declarationDriftWarnings, and at least one
-        /// unchanged or skipped method (proves the worker recognized the file). Permanent guard
+        /// unchanged or skipped method (proves the worker recognized the file), except
+        /// global-using-only files and the reviewed method-less allow-list. Permanent guard
         /// that identical source never false-patches after the unannotated-baseline fix.
         /// </summary>
         [Test]
@@ -516,6 +526,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     continue;
                 }
+
+                bool isMethodlessTypeAllowListed =
+                    IsSelfSnapshotMethodlessTypeAllowListed(Path.GetFileName(fullPath));
 
                 TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
                     fullPath,
@@ -550,7 +563,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 int unchangedCount =
                     result.Output.unchangedMethods != null ? result.Output.unchangedMethods.Length : 0;
                 int skippedCount = result.Output.skipped != null ? result.Output.skipped.Length : 0;
-                if (unchangedCount + skippedCount < 1)
+                if (!isMethodlessTypeAllowListed && unchangedCount + skippedCount < 1)
                 {
                     fileFailures.Add(
                         "unchangedMethods+skipped < 1 (unchanged="
@@ -2286,6 +2299,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 || sourceText.IndexOf(" interface ", StringComparison.Ordinal) >= 0
                 || sourceText.IndexOf(" enum ", StringComparison.Ordinal) >= 0
                 || sourceText.IndexOf(" record ", StringComparison.Ordinal) >= 0;
+        }
+
+        private static bool IsSelfSnapshotMethodlessTypeAllowListed(string fileName)
+        {
+            return Array.IndexOf(SelfSnapshotMethodlessTypeAllowList, fileName) >= 0;
         }
 
         private static string ResolveE2EFixturePath()
