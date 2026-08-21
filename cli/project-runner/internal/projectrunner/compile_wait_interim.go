@@ -87,7 +87,7 @@ func formatCompileWaitProgressLine(elapsed time.Duration, status compileStatusRe
 
 func formatCompileWaitSilentLine(silentFor time.Duration) string {
 	return fmt.Sprintf(
-		"compile: Unity has not answered status polls for %ds. The Editor may be blocked by a modal dialog — commonly Unity's 'Script Updating Consent' or 'API Update Required' dialog, which uloop cannot click — or stuck. Check the Unity window, or restart Unity with 'uloop launch -r'.",
+		"compile: Unity has not answered status polls for %ds. The Editor may be blocked by a modal dialog — commonly Unity's 'Script Updating Consent' or 'API Update Required' dialog, which uloop cannot click — or stuck. Ask the user to answer the dialog in the Unity window. Restarting with 'uloop launch -r' helps only when no dialog is shown: the dialog reappears on every compile until the obsolete-API code is fixed or a person answers it.",
 		int(silentFor/time.Second),
 	)
 }
