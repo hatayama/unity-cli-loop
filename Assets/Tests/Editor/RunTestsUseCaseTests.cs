@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -685,6 +686,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(getterCalled, Is.False);
+        }
+
+        /// <summary>
+        /// What: the default getter path reads HotReloadPausePointCoordination.GetActiveHotReloadPatchCount
+        /// into the exact policy-form Warning (stubs keep this from nesting Test Runner).
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenDefaultCoordinationGetterReturnsThree_AssignsExactPolicyFormWarning()
+        {
+            Func<int> originalGetter = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
+            HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = () => 3;
+            try
+            {
+                StubTestExecutionService executionService = new StubTestExecutionService();
+                StubTestExecutionStateValidationService validationService =
+                    new StubTestExecutionStateValidationService(ValidationResult.Success());
+                RunTestsUseCase useCase = new RunTestsUseCase(
+                    new TestFilterCreationService(),
+                    executionService,
+                    validationService,
+                    waitForTestRunnerCleanupAsync: NoCleanupWait);
+                RunTestsSchema parameters = new RunTestsSchema();
+
+                RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+                Assert.That(
+                    response.Warning,
+                    Is.EqualTo(
+                        "3 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards active patches - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."));
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = originalGetter;
+            }
         }
 
         [Test]
