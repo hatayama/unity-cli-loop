@@ -223,7 +223,11 @@ func waitForCompileCompletionWithDeps(
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
 		observeCompileWaitInterim(&interim, deps, status, err)
-		maybeAttemptCompileStartStallFocus(ctx, startedAt, activityObserved, lastErr, focusController, deps)
+		// Why: queryCompileStatus can return after the wait deadline. Focusing then
+		// would steal window order for a wait that has already timed out.
+		if time.Now().Before(deadline) {
+			maybeAttemptCompileStartStallFocus(ctx, startedAt, activityObserved, lastErr, focusController, deps)
+		}
 
 		select {
 		case <-ctx.Done():

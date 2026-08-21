@@ -1092,6 +1092,32 @@ func TestWaitForCompileCompletionRestoresFocusOnCompletion(t *testing.T) {
 	}
 }
 
+// Verifies a status probe that returns after the wait deadline does not focus Unity.
+func TestWaitForCompileCompletionDoesNotFocusAfterDeadline(t *testing.T) {
+	connection := compileWaitTestConnection(t)
+	deps := compileWaitTestDeps(func(context.Context, unityipc.Connection, string) (compileStatusResponse, error) {
+		time.Sleep(250 * time.Millisecond)
+		return compileStatusResponse{}, nil
+	})
+	probe := attachCompileWaitFocusProbe(&deps)
+
+	_, completed, _, err := waitForCompileCompletionWithDeps(context.Background(), compileCompletionOptions{
+		connection:   connection,
+		requestID:    "compile_start_stall_after_deadline",
+		timeout:      200 * time.Millisecond,
+		pollInterval: 5 * time.Millisecond,
+	}, deps)
+	if err != nil {
+		t.Fatalf("waitForCompileCompletion failed: %v", err)
+	}
+	if completed {
+		t.Fatal("deadline-crossing probe should time out")
+	}
+	if probe.focusCount != 0 {
+		t.Fatalf("focus attempts mismatch: got %d want 0", probe.focusCount)
+	}
+}
+
 // Verifies compile activity is any of IsCompiling, IsUpdating, domain reload, or HasResult,
 // and that Ready alone does not count.
 func TestCompileActivityHasStarted(t *testing.T) {
