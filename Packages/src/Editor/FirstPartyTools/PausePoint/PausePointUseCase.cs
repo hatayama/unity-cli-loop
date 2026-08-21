@@ -81,6 +81,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return EnableBySourceLocation(parameters);
             }
 
+            string rearmWarning = PausePointEnableWarnings.BuildRearmDiscardWarningOrEmpty(
+                UloopPausePointRegistry.GetStatus(parameters.Id));
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(
                 parameters.Id,
                 parameters.TimeoutSeconds,
@@ -89,7 +91,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxPreviewElements,
                 parameters.MaxCallerFrames);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
-            response.Warning = PausePointEnableWarnings.CreateEnableWarning();
+            response.Warning = PausePointEnableWarnings.MergeWarnings(
+                PausePointEnableWarnings.CreateEnableWarning(),
+                rearmWarning);
+            response.RecommendedNextAction = PausePointEnableWarnings
+                .ResolveSuccessEnableRecommendedNextAction(response.RecommendedNextAction, response.Id);
             LogEnable(response.Id, resolvedMethod: string.Empty, fileLine: string.Empty, response.Mode, response.Warning);
             return response;
         }
@@ -361,6 +367,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int compiledMethodEndLine = 0,
             string patchedMethodPdbUnavailableWarning = "")
         {
+            string rearmWarning = PausePointEnableWarnings.BuildRearmDiscardWarningOrEmpty(
+                UloopPausePointRegistry.GetStatus(id));
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.Enable(
                 id,
                 parameters.TimeoutSeconds,
@@ -453,6 +461,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.Mode,
                     resolvedMethod,
                     snapshot.MaxHistory));
+            response.Warning = PausePointEnableWarnings.MergeWarnings(
+                PausePointEnableWarnings.MergeWarnings(response.Warning, rearmWarning),
+                PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(
+                    resolvedLineText,
+                    resolvedLine,
+                    resolvedMethod));
+            response.RecommendedNextAction = PausePointEnableWarnings
+                .ResolveSuccessEnableRecommendedNextAction(response.RecommendedNextAction, id);
             LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
 
             if (patchResult.HasPhysicsCallbackWarning)

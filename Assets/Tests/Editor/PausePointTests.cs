@@ -863,7 +863,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // An id-only marker has no resolved source line, so no pre-line timing note applies.
             Assert.That(response.SnapshotTiming, Is.Empty);
             Assert.That(response.EditorState.CapturedAt, Is.EqualTo(UloopPausePointEditorStateCapturedAt.Current));
-            Assert.That(response.RecommendedNextAction, Is.Empty);
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(
+                    "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time."));
         }
 
         [Test]

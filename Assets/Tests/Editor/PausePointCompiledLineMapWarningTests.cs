@@ -704,7 +704,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             true)),
                     SourcePausePointConstants.SmallMethodInliningRiskWarning);
                 Assert.That(response.Warning, Is.EqualTo(expectedWarning));
-                Assert.That(response.RecommendedNextAction, Is.EqualTo(string.Empty));
+                string expectedArming =
+                    "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \""
+                    + ResolveFailureFile
+                    + ":"
+                    + requestedLine
+                    + "\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time.";
+                Assert.That(response.RecommendedNextAction, Is.EqualTo(expectedArming));
             }
             finally
             {

@@ -359,5 +359,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Hot reload added {1} field(s) to '{0}' ({2}); their values live outside the compiled "
             + "assembly and never appear in CapturedVariables. Read them via a patched method body "
             + "or 'uloop execute-dynamic-code' instead.";
+
+        // Why fill on success: a successful enable currently leaves RecommendedNextAction empty,
+        // so agents arm a marker and then stall instead of running the path or using --await.
+        // Format: marker id.
+        public const string EnableSuccessArmingRecommendedNextActionFormat =
+            "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"{0}\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time.";
+
+        // Why warn: Registry.Enable replaces the entry and drops CapturedVariables,
+        // CapturedVariableHistory, and hit snapshots. The raw capture holder is kept on purpose.
+        // Format: previous generation number.
+        public const string RearmDiscardCapturedVariablesWarningFormat =
+            "Generation {0} of this pause point had already hit; this re-arm discarded its CapturedVariables and CapturedVariableHistory. Read results with pause-point-status before re-arming when you need them.";
+
+        // Why a new ungated path: existing compiled-line drift warnings only fire when hot-reload
+        // patches are active, but a closing-brace line is misleading even on compiled source.
+        // Format: resolved line, resolved method display name.
+        public const string ClosingBraceResolvedLineWarningFormat =
+            "--line resolved to the method's closing brace at line {0}. Every return path through {1} reaches this line, including early returns, so captured variables can reflect a different path than the one you meant. To observe one specific path, target a statement line inside that path.";
     }
 }
