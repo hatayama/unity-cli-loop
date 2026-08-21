@@ -455,12 +455,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.Warning = PausePointEnableWarnings.MergeWarnings(
                 response.Warning,
                 PausePointEnableWarnings.BuildAddedFieldsNotCapturedWarningOrEmpty(patchResult.DeclaringType));
-            response.Warning = PausePointEnableWarnings.MergeWarnings(
+            response.Warning = PausePointPerFrameEnableWarnings.MergePerFrameEnableWarnings(
                 response.Warning,
-                PausePointEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
-                    parameters.Mode,
-                    resolvedMethod,
-                    snapshot.MaxHistory));
+                parameters.Mode,
+                resolvedMethod,
+                snapshot.MaxHistory);
             response.Warning = PausePointEnableWarnings.MergeWarnings(
                 PausePointEnableWarnings.MergeWarnings(response.Warning, rearmWarning),
                 PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(

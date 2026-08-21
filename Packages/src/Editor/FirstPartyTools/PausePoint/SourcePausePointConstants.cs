@@ -162,6 +162,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string PerFrameTraceNoticeFormat =
             "'{0}' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max {1}) over within moments. Prefer a conditional line or a larger --max-history.";
 
+        // Why name-based, not a MonoBehaviour type check: a plain C# Update is often driven
+        // every frame by a MonoBehaviour delegate, and a type check would miss that case.
+        // Why conditional wording: the name match is not proof this is a Unity message, so
+        // "is a per-frame Unity message" would be false for non-MonoBehaviour types.
+        public const string PerFrameImmediateHitNoticeFormat =
+            "'{0}' matches a per-frame Unity message name; if the resolved line executes unconditionally, the marker hits on the next frame, before the input or event you meant to observe arrives. Prefer a line that only executes when that event happens (inside its guarding if), or hold the input down with simulate-keyboard KeyDown before arming.";
+
         // Callers have observed captured values that look like they belong to the line after
         // ResolvedLine; this makes the pre-line snapshot timing explicit in the response itself
         // instead of leaving it documented only in the skill.
