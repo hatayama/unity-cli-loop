@@ -222,8 +222,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why: patching does not re-run calls that already finished (e.g. one-time
         // initialization); InvocationCount 0 on --status is the only runtime signal,
         // so the row itself must explain what 0 means and what makes the patch take effect.
+        // The row must also say how to trigger the next call, because for
+        // initialization-only methods that is the non-obvious step.
         public const string ActivePatchNeverInvokedReason =
-            "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called.";
+            "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called. If this method only runs during initialization, trigger that path again — re-create the object that runs it, or run 'uloop compile' and enter Play Mode again.";
 
         // Format: count of Active rows whose InvocationCount is 0.
         public const string NeverInvokedActiveAggregatedMessageFormat =

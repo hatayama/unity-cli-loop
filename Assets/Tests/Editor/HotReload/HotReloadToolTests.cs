@@ -106,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     activeRow.Reason,
                     Is.EqualTo(
-                        "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called."));
+                        "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called. If this method only runs during initialization, trigger that path again — re-create the object that runs it, or run 'uloop compile' and enter Play Mode again."));
                 Assert.That(
                     activeRow.Reason,
                     Is.EqualTo(HotReloadConstants.ActivePatchNeverInvokedReason));
