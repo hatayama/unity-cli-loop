@@ -37,6 +37,10 @@ const (
 	compileWaitPollInterval      = clicore.ToolReadinessPoll
 	compileStatusProbeTimeout    = clicore.ToolReadinessProbeTimeout
 	compileResponseTimeout       = 2 * time.Second
+	// Why 10s: AutoTickPump keeps Unity ticking while idle, but cannot lift OS
+	// background throttling. After this long with no compile activity, focusing
+	// the Editor is the only recovery that has been observed to work.
+	compileStartStallFocusThreshold = 10 * time.Second
 )
 
 type compileCompletionOptions struct {
@@ -179,8 +183,19 @@ func waitForCompileCompletionWithDeps(
 	attempts := 0
 	var lastStatus compileStatusResponse
 	observedStatus := false
+	activityObserved := false
 	var lastErr error
 	lastObservationKey := ""
+	focusController := newConnectionRetryFocusController(
+		options.connection,
+		clicore.CompileCommandName,
+		compileWaitFocusDeps(deps),
+	)
+	defer func() {
+		restoreContext, cancel := context.WithTimeout(context.Background(), focusRestoreTimeout)
+		defer cancel()
+		focusController.restore(restoreContext)
+	}()
 
 	logCompileStatusPollStart(options, startedAt, deadline)
 	interim := newCompileWaitInterimState(compileWaitNow(deps))
@@ -196,6 +211,7 @@ func waitForCompileCompletionWithDeps(
 		attempts++
 		status, err := deps.queryCompileStatus(ctx, options.connection, options.requestID)
 		lastErr = err
+		activityObserved = noteCompileActivityStarted(status, err, activityObserved)
 		if err == nil && status.Ready && status.HasResult && len(status.Result) > 0 {
 			logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, nil, &lastObservationKey)
 			logCompileStatusPollComplete(options, startedAt, attempts, status)
@@ -207,6 +223,11 @@ func waitForCompileCompletionWithDeps(
 		}
 		logCompileStatusPollObservedIfChanged(options, startedAt, attempts, status, err, &lastObservationKey)
 		observeCompileWaitInterim(&interim, deps, status, err)
+		// Why: queryCompileStatus can return after the wait deadline. Focusing then
+		// would steal window order for a wait that has already timed out.
+		if time.Now().Before(deadline) {
+			maybeAttemptCompileStartStallFocus(ctx, startedAt, activityObserved, lastErr, focusController, deps)
+		}
 
 		select {
 		case <-ctx.Done():

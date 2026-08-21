@@ -47,6 +47,7 @@ const (
 	focusReasonHeartbeatSilenceTimeout       connectionRetryFocusReason = "heartbeat_silence_timeout"
 	focusReasonFinalResponseTimeout          connectionRetryFocusReason = "final_response_timeout"
 	focusReasonBusyStall                     connectionRetryFocusReason = "busy_stall"
+	focusReasonCompileStartStall             connectionRetryFocusReason = "compile_start_stall"
 )
 
 // Why: domain reload on large projects can keep the IPC endpoint down well past the
