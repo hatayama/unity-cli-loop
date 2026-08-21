@@ -374,5 +374,5 @@ Returns JSON with:
 - `UnchangedTotal` (number): Methods left untouched because their bodies match the source baseline from the last compile; `0` when no baseline was available
 - `ActivePatchTotal` (number): Active changes after this run — patched methods plus added members. `--revert-all` clears both and reports the combined count in `ClearedCount`
 - `ClearedCount` (number): Patches removed by `--revert-all` (0 on apply)
-- `Message` (string): Short summary
+- `Message` (string): Short summary. On `--status`, when any `Active` row has `InvocationCount` 0, Message also appends how many such rows there are and points at `Methods[].Reason`; added-member rows are not included in that count
 - `RecommendedNextAction` (string): Present when any method outcome is `Failed`. A partial apply (some methods patched or added) says to fix and rerun, run `uloop compile`, or `uloop hot-reload --revert-all`; a failure with nothing applied says to fix and rerun or compile. Omitted on success.
