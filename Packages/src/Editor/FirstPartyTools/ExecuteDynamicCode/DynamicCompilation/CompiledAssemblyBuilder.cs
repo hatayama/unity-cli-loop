@@ -38,7 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             public Dictionary<string, List<string>> AmbiguousTypeCandidates { get; }
 
-            public List<string> AutoInjectedNamespaces { get; }
+            public List<AutoInjectedNamespace> AutoInjectedNamespaces { get; }
 
             public byte[] AssemblyBytes { get; }
 
@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string updatedSource,
                 CompilerDiagnostics diagnostics,
                 Dictionary<string, List<string>> ambiguousTypeCandidates,
-                List<string> autoInjectedNamespaces,
+                List<AutoInjectedNamespace> autoInjectedNamespaces,
                 byte[] assemblyBytes,
                 byte[] pdbBytes)
             {
@@ -209,7 +209,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         }
                     }
 
-                    List<string> autoInjectedNamespaces = MergeAutoInjectedNamespaces(
+                    List<AutoInjectedNamespace> autoInjectedNamespaces = MergeAutoInjectedNamespaces(
                         preUsingRolledBack,
                         preUsingResult,
                         autoResult);
@@ -361,30 +361,46 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static List<string> MergeAutoInjectedNamespaces(
+        internal static List<AutoInjectedNamespace> MergeAutoInjectedNamespaces(
             bool preUsingRolledBack,
             PreUsingResult preUsingResult,
             AutoUsingResult autoResult)
         {
-            List<string> mergedNamespaces = new();
+            List<AutoInjectedNamespace> mergedNamespaces = new();
+            HashSet<string> seenNamespaces = new(System.StringComparer.Ordinal);
 
-            if (!preUsingRolledBack && preUsingResult != null && preUsingResult.AddedNamespaces.Count > 0)
+            if (!preUsingRolledBack && preUsingResult != null)
             {
-                foreach (string namespaceName in preUsingResult.AddedNamespaces)
-                {
-                    mergedNamespaces.Add(namespaceName);
-                }
+                AppendUniqueAttributions(
+                    mergedNamespaces,
+                    seenNamespaces,
+                    preUsingResult.AddedNamespaceAttributions);
             }
 
-            foreach (string namespaceName in autoResult.AddedNamespaces)
-            {
-                if (!mergedNamespaces.Contains(namespaceName))
-                {
-                    mergedNamespaces.Add(namespaceName);
-                }
-            }
-
+            AppendUniqueAttributions(
+                mergedNamespaces,
+                seenNamespaces,
+                autoResult.AddedNamespaceAttributions);
             return mergedNamespaces;
+        }
+
+        private static void AppendUniqueAttributions(
+            List<AutoInjectedNamespace> mergedNamespaces,
+            HashSet<string> seenNamespaces,
+            IReadOnlyList<AutoInjectedNamespace> attributions)
+        {
+            if (attributions == null)
+            {
+                return;
+            }
+
+            foreach (AutoInjectedNamespace attribution in attributions)
+            {
+                if (seenNamespaces.Add(attribution.Namespace))
+                {
+                    mergedNamespaces.Add(attribution);
+                }
+            }
         }
     }
 }

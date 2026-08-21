@@ -204,7 +204,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies exceptions and auto-injected namespaces append their wire-visible log details.
+        /// Verifies exceptions and mixed retry/speculative auto-injected namespaces append their log details.
         /// </summary>
         [Test]
         public void ConvertExecutionResultToResponse_WithExceptionAndInjectedNamespaces_AppendsLogDetails()
@@ -216,7 +216,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 Result = "ok",
                 Logs = new List<string> { "before" },
                 Exception = new InvalidOperationException("test exception"),
-                AutoInjectedNamespaces = new List<string> { "System.Linq", "UnityEngine" }
+                AutoInjectedNamespaces = new List<AutoInjectedNamespace>
+                {
+                    new AutoInjectedNamespace("System.Linq", "Enumerable", false),
+                    new AutoInjectedNamespace("UnityEngine", "GameObject", false),
+                    new AutoInjectedNamespace("System.Text", "StringBuilder", true)
+                }
             };
 
             ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result);
@@ -225,7 +230,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 response.Logs,
                 Contains.Item(
-                    "Performance hint: Auto-resolved 2 missing using directive(s): using System.Linq; using UnityEngine; — Include them in your code to skip auto-resolution and improve compilation speed."));
+                    "Performance hint: Auto-resolved 2 missing using directive(s) after compile errors: "
+                    + "using System.Linq; (for 'Enumerable') using UnityEngine; (for 'GameObject') "
+                    + "— Include them in your code to skip auto-resolution retries and improve compilation speed."));
+            Assert.That(
+                response.Logs,
+                Contains.Item(
+                    "Note: 1 using directive(s) were speculatively pre-injected from an identifier scan: "
+                    + "using System.Text; (for 'StringBuilder') "
+                    + "— No action needed. An attribution you do not recognize means the namespace was matched "
+                    + "only by a type's simple name and the directive may be unnecessary."));
         }
 
         /// <summary>

@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string currentSource = originalSource;
             Dictionary<string, List<string>> ambiguousCandidates = new();
             HashSet<string> addedNamespaces = new(System.StringComparer.Ordinal);
+            List<AutoInjectedNamespace> attributions = new();
             List<string> mutableReferences = currentReferences != null
                 ? new List<string>(currentReferences)
                 : new List<string>();
@@ -56,6 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ambiguousCandidates,
                         addedNamespaces,
                         addedAssemblyReferences.ToList(),
+                        attributions,
                         referenceResolutionMilliseconds);
                 }
 
@@ -68,15 +70,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     if (string.IsNullOrEmpty(typeName)) continue;
 
-                    List<string> candidates = index.FindNamespacesForType(typeName);
+                    if (!index.IsKnownNamespaceOrLeadingSegment(typeName))
+                    {
+                        List<string> candidates = index.FindNamespacesForType(typeName);
 
-                    if (candidates.Count == 1 && addedNamespaces.Add(candidates[0]))
-                    {
-                        namespacesToAdd.Add(candidates[0]);
-                    }
-                    else if (candidates.Count > 1)
-                    {
-                        ambiguousCandidates[typeName] = candidates;
+                        RecordFirstUniqueNamespace(
+                            typeName,
+                            candidates,
+                            addedNamespaces,
+                            namespacesToAdd,
+                            attributions);
+                        if (candidates.Count > 1)
+                        {
+                            ambiguousCandidates[typeName] = candidates;
+                        }
                     }
 
                     List<string> assemblyCandidates = index.FindAssemblyLocationsForIdentifier(typeName);
@@ -118,7 +125,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ambiguousCandidates,
                 addedNamespaces,
                 addedAssemblyReferences.ToList(),
+                attributions,
                 referenceResolutionMilliseconds);
+        }
+
+        internal static void RecordFirstUniqueNamespace(
+            string triggerIdentifier,
+            IReadOnlyList<string> candidates,
+            HashSet<string> addedNamespaces,
+            ICollection<string> namespacesToAdd,
+            List<AutoInjectedNamespace> attributions)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(triggerIdentifier), "triggerIdentifier must not be empty.");
+            Debug.Assert(candidates != null, "candidates must not be null.");
+            Debug.Assert(addedNamespaces != null, "addedNamespaces must not be null.");
+            Debug.Assert(namespacesToAdd != null, "namespacesToAdd must not be null.");
+            Debug.Assert(attributions != null, "attributions must not be null.");
+
+            if (candidates.Count != 1)
+            {
+                return;
+            }
+
+            string namespaceName = candidates[0];
+            if (!addedNamespaces.Add(namespaceName))
+            {
+                return;
+            }
+
+            namespacesToAdd.Add(namespaceName);
+            attributions.Add(new AutoInjectedNamespace(namespaceName, triggerIdentifier, false));
         }
 
         private static List<string> ExtractUnresolvedTypes(CompilerMessage[] messages)
@@ -227,6 +263,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public IReadOnlyCollection<string> AddedAssemblyReferences { get; }
 
+        public IReadOnlyList<AutoInjectedNamespace> AddedNamespaceAttributions { get; }
+
         public double ReferenceResolutionMilliseconds { get; }
 
         public AutoUsingResult(
@@ -235,6 +273,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, List<string>> ambiguousTypeCandidates,
             IReadOnlyCollection<string> addedNamespaces,
             IReadOnlyCollection<string> addedAssemblyReferences,
+            IReadOnlyList<AutoInjectedNamespace> addedNamespaceAttributions,
             double referenceResolutionMilliseconds)
         {
             UpdatedSource = updatedSource;
@@ -242,6 +281,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AmbiguousTypeCandidates = ambiguousTypeCandidates;
             AddedNamespaces = addedNamespaces;
             AddedAssemblyReferences = addedAssemblyReferences;
+            AddedNamespaceAttributions = addedNamespaceAttributions;
             ReferenceResolutionMilliseconds = referenceResolutionMilliseconds;
         }
     }

@@ -90,7 +90,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.UpdatedCode,
                 result.FailureReason,
                 CloneAmbiguousTypeCandidates(result.AmbiguousTypeCandidates),
-                CloneStrings(result.AutoInjectedNamespaces),
+                CloneAutoInjectedNamespaces(result.AutoInjectedNamespaces),
                 CloneStrings(result.Timings),
                 CloneStrings(result.AdvisoryLogs),
                 result.CompilationBackendKind);
@@ -107,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UpdatedCode = cachedResult.UpdatedCode,
                 FailureReason = cachedResult.FailureReason,
                 AmbiguousTypeCandidates = CloneAmbiguousTypeCandidates(cachedResult.AmbiguousTypeCandidates),
-                AutoInjectedNamespaces = CloneStrings(cachedResult.AutoInjectedNamespaces),
+                AutoInjectedNamespaces = CloneAutoInjectedNamespaces(cachedResult.AutoInjectedNamespaces),
                 Timings = BuildCachedCompilationTimings(cachedResult.CompilationBackendKind),
                 AdvisoryLogs = CloneStrings(cachedResult.AdvisoryLogs),
                 CompilationBackendKind = cachedResult.CompilationBackendKind
@@ -189,6 +189,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new List<string>(values);
         }
 
+        private static List<AutoInjectedNamespace> CloneAutoInjectedNamespaces(
+            List<AutoInjectedNamespace> values)
+        {
+            List<AutoInjectedNamespace> cloned = new();
+            if (values == null)
+            {
+                return cloned;
+            }
+
+            foreach (AutoInjectedNamespace item in values)
+            {
+                cloned.Add(new AutoInjectedNamespace(item.Namespace, item.TriggerIdentifier, item.IsSpeculative));
+            }
+
+            return cloned;
+        }
+
         /// <summary>
         /// Carries the result data produced by Cached Compilation behavior.
         /// </summary>
@@ -206,7 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             public Dictionary<string, List<string>> AmbiguousTypeCandidates { get; }
 
-            public List<string> AutoInjectedNamespaces { get; }
+            public List<AutoInjectedNamespace> AutoInjectedNamespaces { get; }
 
             public List<string> Timings { get; }
 
@@ -221,7 +238,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string updatedCode,
                 CompilationFailureReason failureReason,
                 Dictionary<string, List<string>> ambiguousTypeCandidates,
-                List<string> autoInjectedNamespaces,
+                List<AutoInjectedNamespace> autoInjectedNamespaces,
                 List<string> timings,
                 List<string> advisoryLogs,
                 DynamicCompilationBackendKind compilationBackendKind)

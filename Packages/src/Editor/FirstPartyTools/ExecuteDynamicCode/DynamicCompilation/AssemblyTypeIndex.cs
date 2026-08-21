@@ -15,6 +15,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Dictionary<string, HashSet<string>> _typeToAssemblyLocations = new(StringComparer.Ordinal);
         private readonly Dictionary<string, HashSet<string>> _qualifiedTypeToAssemblyLocations = new(StringComparer.Ordinal);
         private readonly Dictionary<string, HashSet<string>> _namespaceToAssemblyLocations = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _knownNamespaces = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _namespaceLeadingSegments = new(StringComparer.Ordinal);
 
         public static AssemblyTypeIndex Instance
         {
@@ -40,6 +42,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _typeToAssemblyLocations.Clear();
             _qualifiedTypeToAssemblyLocations.Clear();
             _namespaceToAssemblyLocations.Clear();
+            _knownNamespaces.Clear();
+            _namespaceLeadingSegments.Clear();
 
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
@@ -76,6 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         _typeToNamespaces[typeName] = namespaces;
                     }
                     namespaces.Add(type.Namespace);
+                    RegisterNamespaceClassification(type.Namespace);
 
                     if (!string.IsNullOrEmpty(assemblyLocation))
                     {
@@ -85,6 +90,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     }
                 }
             }
+        }
+
+        // Why skip same-named types: a unique simple-name match for System
+        // (VirtualTexturing) would inject an unrelated using. Write that type as a
+        // fully-qualified name instead. Why a dedicated leading-segment set:
+        // _namespaceToAssemblyLocations only records prefixes when the assembly has
+        // a location, so a root such as Cysharp can be missing even though types
+        // exist under Cysharp.* and would otherwise be treated as a type name.
+        internal bool IsKnownNamespaceOrLeadingSegment(string identifier)
+        {
+            return IsKnownNamespace(identifier) || IsNamespaceLeadingSegment(identifier);
+        }
+
+        internal bool IsKnownNamespace(string identifier)
+        {
+            return !string.IsNullOrEmpty(identifier) && _knownNamespaces.Contains(identifier);
+        }
+
+        internal bool IsNamespaceLeadingSegment(string identifier)
+        {
+            return !string.IsNullOrEmpty(identifier) && _namespaceLeadingSegments.Contains(identifier);
         }
 
         public List<string> FindNamespacesForType(string typeName)
@@ -190,6 +216,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             assemblyLocations.Add(assemblyLocation);
+        }
+
+        private void RegisterNamespaceClassification(string namespaceName)
+        {
+            _knownNamespaces.Add(namespaceName);
+
+            int separatorIndex = namespaceName.IndexOf('.');
+            string leadingSegment = separatorIndex < 0
+                ? namespaceName
+                : namespaceName.Substring(0, separatorIndex);
+            _namespaceLeadingSegments.Add(leadingSegment);
         }
 
         private void RegisterNamespaceAssemblyLocation(string namespaceName, string assemblyLocation)

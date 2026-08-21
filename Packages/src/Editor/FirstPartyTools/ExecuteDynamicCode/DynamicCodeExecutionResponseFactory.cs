@@ -111,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (result.AutoInjectedNamespaces != null && result.AutoInjectedNamespaces.Count > 0)
             {
-                AddAutoInjectedNamespaceHint(response, result.AutoInjectedNamespaces);
+                AddAutoInjectedNamespaceHints(response, result.AutoInjectedNamespaces);
             }
 
             return response;
@@ -230,15 +230,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return int.TryParse(match.Groups[1].Value, out lineNumber) && lineNumber > 0;
         }
 
-        private static void AddAutoInjectedNamespaceHint(
+        private static void AddAutoInjectedNamespaceHints(
             ExecuteDynamicCodeResponse response,
-            List<string> autoInjectedNamespaces)
+            List<AutoInjectedNamespace> autoInjectedNamespaces)
         {
             response.Logs ??= new List<string>();
-            string usingList = string.Join(" ", autoInjectedNamespaces.Select(ns => $"using {ns};"));
-            response.Logs.Add(
-                $"Performance hint: Auto-resolved {autoInjectedNamespaces.Count} missing using directive(s): "
-                + $"{usingList} — Include them in your code to skip auto-resolution and improve compilation speed.");
+            List<string> hints = AutoInjectedNamespaceHintBuilder.BuildHints(autoInjectedNamespaces);
+            foreach (string hint in hints)
+            {
+                response.Logs.Add(hint);
+            }
         }
 
         private static void AddFriendlyFailureDetails(

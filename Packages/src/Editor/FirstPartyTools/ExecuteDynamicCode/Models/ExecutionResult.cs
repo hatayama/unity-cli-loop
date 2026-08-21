@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Populated on both success and failure paths;
         /// without this the tool layer cannot emit performance hints about missing usings.
         /// </summary>
-        public List<string> AutoInjectedNamespaces { get; set; } = new();
+        public List<AutoInjectedNamespace> AutoInjectedNamespaces { get; set; } = new();
 
         /// <summary>
         /// Captures internal phase timings without forcing normal users to parse verbose logs.
