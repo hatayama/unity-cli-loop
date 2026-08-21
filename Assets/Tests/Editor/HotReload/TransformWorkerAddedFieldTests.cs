@@ -370,9 +370,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
             Assert.That(caller, Is.Not.Null);
             string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
-            Assert.That(slice, Does.Contain("GetOrInit<"));
-            Assert.That(slice, Does.Contain("__uloopInstance"));
-            Assert.That(slice, Does.Not.Contain("this."));
+            const string expectedReturn =
+                "return global::io.github.hatayama.UnityCliLoop.ToolContracts.HotReloadAddedFieldStore.GetOrInit<int>(__uloopInstance, \"io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadAddedMemberHost::AddedCount\", null) + global::io.github.hatayama.UnityCliLoop.ToolContracts.HotReloadAddedFieldStore.GetOrInit<int>(__uloopInstance, \"io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadAddedMemberHost::AddedCount\", null) + value;";
+            Assert.That(slice, Does.Contain(expectedReturn));
+            Assert.That(slice, Does.Not.Contain("(this"));
         }
 
         /// <summary>
@@ -399,9 +400,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
             Assert.That(caller, Is.Not.Null);
             string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
-            Assert.That(slice, Does.Contain("Set<"));
-            Assert.That(slice, Does.Contain("__uloopInstance"));
-            Assert.That(slice, Does.Not.Contain("this."));
+            Assert.That(
+                slice,
+                Does.Contain(
+                    "global::io.github.hatayama.UnityCliLoop.ToolContracts.HotReloadAddedFieldStore.Set<int>(__uloopInstance, \"io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadAddedMemberHost::AddedCount\", value)"));
+            Assert.That(slice, Does.Not.Contain("(this"));
         }
 
         /// <summary>
@@ -430,7 +433,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
             Assert.That(slice, Does.Contain("GetOrInitStatic<"));
             Assert.That(slice, Does.Not.Contain("GetOrInit<"));
-            Assert.That(slice, Does.Not.Contain("this."));
+            Assert.That(slice, Does.Not.Contain("(this"));
         }
 
         /// <summary>
