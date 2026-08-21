@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> _appendNoTestsDiagnostics;
         private readonly Func<string[]> _clearActivePausePoints;
         private readonly Func<CancellationToken, Task> _waitForTestRunnerCleanupAsync;
+        private readonly Func<int> _getActiveHotReloadChangeCount;
         private const int TestRunnerCleanupFallbackDelayMilliseconds = 3000;
 
         public RunTestsUseCase()
@@ -38,7 +39,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TestExecutionStateValidationService validationService,
             Func<string[]> clearActivePausePoints = null,
             Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null,
-            Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> appendNoTestsDiagnostics = null)
+            Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> appendNoTestsDiagnostics = null,
+            Func<int> getActiveHotReloadChangeCount = null)
         {
             Debug.Assert(filterService != null, "filterService must not be null");
             Debug.Assert(executionService != null, "executionService must not be null");
@@ -52,6 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     noTestsDiagnosticService.AppendDiagnosticsIfNeeded(message, noTestsFound, testMode, filterType));
             _clearActivePausePoints = clearActivePausePoints ?? ClearActivePausePointsDefault;
             _waitForTestRunnerCleanupAsync = waitForTestRunnerCleanupAsync ?? WaitForTestRunnerCleanupAsync;
+            _getActiveHotReloadChangeCount = getActiveHotReloadChangeCount ?? ReadActiveHotReloadChangeCount;
         }
 
         /// <summary>
@@ -103,6 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string[] clearedPausePointIds = _clearActivePausePoints();
+            int activeHotReloadChangeCountAtStart = _getActiveHotReloadChangeCount();
 
             // 2. Test execution
             // Why ConfigureAwait(false) is paired with SwitchToMainThread inside execution helpers:
@@ -172,6 +176,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 response.FailedTests = result.failedTests;
             }
 
+            response.Warning = RunTestsHotReloadDiscardWarningBuilder.Build(activeHotReloadChangeCountAtStart);
+
             if (result.failedCount > RunTestsConstants.FailedTestDetailsLimit)
             {
                 response.Message = response.Message
@@ -226,6 +232,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
             return result.ClearedIds;
+        }
+
+        private static int ReadActiveHotReloadChangeCount()
+        {
+            Func<int> getter = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
+            if (getter == null)
+            {
+                return 0;
+            }
+
+            return getter.Invoke();
         }
 
         private static async Task WaitForTestRunnerCleanupAsync(CancellationToken ct)
