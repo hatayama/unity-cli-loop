@@ -841,7 +841,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "No tests found matching the specified filter criteria No tests matched FilterType 'exact' with FilterValue 'Missing.Test'. 2 test(s) exist in this TestMode without the filter; compare UnfilteredTestNames against the filter value."));
+                    "No tests found matching the specified filter criteria. No tests matched FilterType 'exact' with FilterValue 'Missing.Test'. 2 test(s) exist in this TestMode without the filter; compare UnfilteredTestNames against the filter value."));
             Assert.That(response.FilterType, Is.EqualTo("exact"));
             Assert.That(response.FilterValue, Is.EqualTo("Missing.Test"));
             Assert.That(response.UnfilteredTestCount, Is.EqualTo(2));

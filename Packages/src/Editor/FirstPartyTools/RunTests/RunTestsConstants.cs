@@ -21,8 +21,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Format: FilterType, FilterValue, UnfilteredTestCount. Appended to the existing
         // NoTestsFound message so the original sentence stays unchanged.
+        // Why a leading period: NoTestsFoundMessage has no terminator, so a leading space
+        // would fuse the two sentences into one.
         public const string NoTestsFoundWithFilterMessageFormat =
-            " No tests matched FilterType '{0}' with FilterValue '{1}'. {2} test(s) exist in this TestMode without the filter; compare UnfilteredTestNames against the filter value.";
+            ". No tests matched FilterType '{0}' with FilterValue '{1}'. {2} test(s) exist in this TestMode without the filter; compare UnfilteredTestNames against the filter value.";
 
         // Format: active hot-reload change count at test-run start. Policy-form because
         // response construction was measured to run before any deferred domain reload.

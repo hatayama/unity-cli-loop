@@ -32,7 +32,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             "Packages/src/Editor/FirstPartyTools/RunTests/TestFramework/PlayModeTestExecuter.cs",
             "Packages/src/Editor/FirstPartyTools/RunTests/TestFramework/NUnitXmlResultExporter.cs",
-            "Packages/src/Editor/FirstPartyTools/RunTests/TestFramework/SerializableTestResultConverter.cs"
+            "Packages/src/Editor/FirstPartyTools/RunTests/TestFramework/SerializableTestResultConverter.cs",
+            "Packages/src/Editor/FirstPartyTools/RunTests/TestFramework/RunTestsUnfilteredTestListRetriever.cs"
         };
 
         [Test]

@@ -34,7 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "No tests found matching the specified filter criteria No tests matched FilterType 'regex' with FilterValue 'Missing.*'. 2 test(s) exist in this TestMode without the filter; compare UnfilteredTestNames against the filter value."));
+                    "No tests found matching the specified filter criteria. No tests matched FilterType 'regex' with FilterValue 'Missing.*'. 2 test(s) exist in this TestMode without the filter; compare UnfilteredTestNames against the filter value."));
             Assert.That(response.FilterType, Is.EqualTo("regex"));
             Assert.That(response.FilterValue, Is.EqualTo("Missing.*"));
             Assert.That(response.UnfilteredTestCount, Is.EqualTo(2));
@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "No tests found matching the specified filter criteria No tests matched FilterType 'exact' with FilterValue 'Missing.Test'. 21 test(s) exist in this TestMode without the filter; compare UnfilteredTestNames against the filter value."));
+                    "No tests found matching the specified filter criteria. No tests matched FilterType 'exact' with FilterValue 'Missing.Test'. 21 test(s) exist in this TestMode without the filter; compare UnfilteredTestNames against the filter value."));
         }
 
         /// <summary>
