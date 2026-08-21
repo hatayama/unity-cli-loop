@@ -71,11 +71,19 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 	clicore.WriteLine(stdout, "Options:")
 	clicore.WriteLine(stdout, "  -g, --global")
 	clicore.WriteLine(stdout, "      --flat")
+	if !isV3MigrationSkillSubcommand(command) {
+		clicore.WriteLine(stdout, "      --output-dir <path>")
+	}
 	printSkillTargetFlagLines(stdout, "      ")
 	clicore.WriteLine(stdout, "")
 	if command == "install" {
 		clicore.WriteLine(stdout, "Targets that already contain uloop skills are refreshed automatically,")
 		clicore.WriteLine(stdout, "even when their flag is omitted, so previously installed copies never go stale.")
+		clicore.WriteLine(stdout, "")
+	}
+	if !isV3MigrationSkillSubcommand(command) {
+		clicore.WriteLine(stdout, "With --output-dir, skills sync flat into <path>/<skill-name> with no target")
+		clicore.WriteLine(stdout, "subdirectories; files uloop does not manage there are left untouched.")
 		clicore.WriteLine(stdout, "")
 	}
 	if command == "install-v3-migration" {
@@ -93,6 +101,10 @@ func printSkillsTargetGuidance(command string, stdout io.Writer) {
 	clicore.WriteFormat(stdout, "\nPlease specify at least one target for '%s':\n\n", command)
 	clicore.WriteLine(stdout, "Available targets:")
 	printSkillTargetFlagLines(stdout, "  ")
+	if !isV3MigrationSkillSubcommand(command) {
+		clicore.WriteLine(stdout, "")
+		clicore.WriteLine(stdout, "Or pass --output-dir <path> to sync skills into a custom directory.")
+	}
 }
 
 // printSkillTargetFlagLines prints one --<id> line per target in the shared

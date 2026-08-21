@@ -43,6 +43,9 @@ func runSkillsSubcommand(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
+	if options.outputDir != "" {
+		return runSkillsDirSubcommand(subcommand, skills, options.outputDir, stdout, stderr)
+	}
 	switch subcommand {
 	case "list":
 		return runSkillsList(projectRoot, skills, options, stdout, stderr)
@@ -50,6 +53,25 @@ func runSkillsSubcommand(
 		return runSkillsInstallWithGuidance(projectRoot, skills, options, stdout, stderr)
 	case "uninstall":
 		return runSkillsUninstallWithGuidance(projectRoot, skills, options, stdout, stderr)
+	default:
+		return 1
+	}
+}
+
+func runSkillsDirSubcommand(
+	subcommand string,
+	skills []skillDefinition,
+	directory string,
+	stdout io.Writer,
+	stderr io.Writer,
+) int {
+	switch subcommand {
+	case "list":
+		return runSkillsDirList(directory, skills, stdout, stderr)
+	case "install":
+		return runSkillsDirInstall(directory, skills, stdout, stderr)
+	case "uninstall":
+		return runSkillsDirUninstall(directory, skills, stdout, stderr)
 	default:
 		return 1
 	}

@@ -85,9 +85,10 @@ type skillTarget struct {
 }
 
 type skillCommandOptions struct {
-	global  bool
-	flat    bool
-	targets []skillTarget
+	global    bool
+	flat      bool
+	outputDir string
+	targets   []skillTarget
 }
 
 type skillDefinition struct {
@@ -120,6 +121,15 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.SkillsCommandName})
 		return true, 1
 	}
+	if isV3MigrationSkillSubcommand(subcommand) && options.outputDir != "" {
+		clierrors.WriteClassifiedError(stderr, &clierrors.ArgumentError{
+			Message:     "The --output-dir option is not supported for " + subcommand + ".",
+			Option:      "--output-dir",
+			Command:     clicore.SkillsCommandName,
+			NextActions: []string{"Run the subcommand with target flags such as --claude instead."},
+		}, clierrors.ErrorContext{Command: clicore.SkillsCommandName})
+		return true, 1
+	}
 
 	projectRoot, err := resolveSkillsProjectRoot(startPath, globalProjectPath, options.global)
 	if err != nil {
@@ -138,49 +148,6 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 	}
 
 	return true, runSkillsSubcommand(subcommand, projectRoot, skills, options, stdout, stderr)
-}
-
-func parseSkillsOptions(args []string) (skillCommandOptions, error) {
-	options := skillCommandOptions{}
-	seenTargets := map[string]bool{}
-	for _, arg := range args {
-		switch arg {
-		case "-g", "--global":
-			options.global = true
-		case "--flat":
-			options.flat = true
-		default:
-			targetID, ok := skillTargetIDFromFlag(arg)
-			if !ok {
-				return skillCommandOptions{}, &clierrors.ArgumentError{
-					Message:     "Unknown skills option: " + arg,
-					Option:      arg,
-					Command:     clicore.SkillsCommandName,
-					NextActions: []string{"Run `uloop skills --help` to inspect supported skills options."},
-				}
-			}
-			if seenTargets[targetID] {
-				continue
-			}
-			options.targets = append(options.targets, targetConfigs[targetID])
-			seenTargets[targetID] = true
-		}
-	}
-	return options, nil
-}
-
-// skillTargetIDFromFlag reports the target id for a --<id> flag when it maps to
-// a known entry in targetConfigs. The lookup is driven by targetConfigs so the
-// set of accepted flags stays consistent with the help output.
-func skillTargetIDFromFlag(arg string) (string, bool) {
-	if !strings.HasPrefix(arg, "--") {
-		return "", false
-	}
-	id := strings.TrimPrefix(arg, "--")
-	if _, ok := targetConfigs[id]; !ok {
-		return "", false
-	}
-	return id, true
 }
 
 func isKnownSkillsSubcommand(subcommand string) bool {
