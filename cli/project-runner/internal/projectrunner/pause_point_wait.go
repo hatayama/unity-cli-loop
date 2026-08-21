@@ -165,6 +165,7 @@ func runWaitForPausePointCommand(
 	options.startPath = startPath
 
 	extendPausePointExpiryBeforeWait(ctx, connection, options, stderr)
+	announceAwaitPausePointWaitStart(stderr, options.id, options.timeoutSeconds)
 
 	return runWaitForPausePoint(ctx, connection, options, stdout, stderr)
 }
