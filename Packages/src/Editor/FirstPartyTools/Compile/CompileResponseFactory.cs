@@ -37,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 forceRecompile,
                 pausePointWarning);
             CompileApiUpdaterConsentResponseComposer.Apply(response, result.ApiUpdaterConsentDeclined);
+            CompileErrorNextActionsComposer.Apply(response, result.Errors);
             return response;
         }
 
