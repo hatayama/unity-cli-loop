@@ -20,6 +20,7 @@ type launchDeps struct {
 	waitForV2ServerReady       func(context.Context, string, string, time.Duration, time.Duration) error
 	waitForToolReadiness       func(context.Context, string, time.Duration) error
 	probeProjectIpcFallback    func(context.Context, string) error
+	sleep                      func(time.Duration)
 }
 
 func defaultLaunchDeps() launchDeps {
@@ -37,5 +38,6 @@ func defaultLaunchDeps() launchDeps {
 		},
 		waitForToolReadiness:    clicore.WaitForToolReadinessWithTimeout,
 		probeProjectIpcFallback: clicore.ProbeToolReadinessSequence,
+		sleep:                   time.Sleep,
 	}
 }

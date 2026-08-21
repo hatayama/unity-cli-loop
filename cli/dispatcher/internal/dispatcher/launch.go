@@ -29,10 +29,13 @@ const (
 	launchReadinessTimeout    = 10 * time.Minute
 	launchV2ServerReadyPoll   = 500 * time.Millisecond
 	launchV2ServerDialTimeout = 1 * time.Second
-	projectVersionFilePath    = "ProjectSettings/ProjectVersion.txt"
-	recoveryDirectoryPath     = "Assets/_Recovery"
-	launchTempDirectoryName   = "Temp"
-	unityLockfileName         = "UnityLockfile"
+	// Why 2s: the UnityLockfile can appear before System Events knows the process.
+	// One retry is enough; more retries would delay a launch that already succeeded.
+	launchFreshFocusRetryDelay = 2 * time.Second
+	projectVersionFilePath     = "ProjectSettings/ProjectVersion.txt"
+	recoveryDirectoryPath      = "Assets/_Recovery"
+	launchTempDirectoryName    = "Temp"
+	unityLockfileName          = "UnityLockfile"
 )
 
 var editorVersionPattern = regexp.MustCompile(`(?m)^m_EditorVersion:\s*(.+)$`)
@@ -293,6 +296,7 @@ func startUnityAndWaitForReadiness(
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})
 		return 1
 	}
+	logLaunchFreshFocusWithDeps(ctx, projectRoot, currentPid, deps)
 	writeLaunchReadinessWait(stdout, spinner)
 	if err := waitForLaunchReadinessWithDeps(ctx, projectRoot, deps); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: projectRoot, Command: clicore.LaunchCommandName})

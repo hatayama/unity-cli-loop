@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"context"
+	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/vibelog"
 
@@ -108,4 +109,71 @@ func logLaunchV2FocusFailure(projectRoot string, pid int, focusErr error, correl
 		},
 		CorrelationID: correlationID,
 	})
+}
+
+func logLaunchFreshFocusWithDeps(ctx context.Context, projectRoot string, pid int, deps launchDeps) {
+	if attemptLaunchFreshFocus(ctx, projectRoot, pid, deps) {
+		return
+	}
+	launchSleep(deps, launchFreshFocusRetryDelay)
+	_ = attemptLaunchFreshFocus(ctx, projectRoot, pid, deps)
+}
+
+func attemptLaunchFreshFocus(ctx context.Context, projectRoot string, pid int, deps launchDeps) bool {
+	correlationID := vibelog.NewCLIVibeCorrelationID()
+	logLaunchFreshFocusAttempt(projectRoot, pid, correlationID)
+	if err := deps.focusUnityProcess(ctx, pid); err != nil {
+		logLaunchFreshFocusFailure(projectRoot, pid, err, correlationID)
+		return false
+	}
+	logLaunchFreshFocusSuccess(projectRoot, pid, correlationID)
+	return true
+}
+
+func logLaunchFreshFocusAttempt(projectRoot string, pid int, correlationID string) {
+	_ = vibelog.WriteCLIVibeLog(projectRoot, vibelog.CLIVibeLogEntry{
+		Level:     "INFO",
+		Operation: "cli_launch_fresh_focus_attempt",
+		Message:   "Attempting to focus the newly launched Unity process.",
+		Context: map[string]any{
+			"command": "launch",
+			"pid":     pid,
+		},
+		CorrelationID: correlationID,
+	})
+}
+
+func logLaunchFreshFocusSuccess(projectRoot string, pid int, correlationID string) {
+	_ = vibelog.WriteCLIVibeLog(projectRoot, vibelog.CLIVibeLogEntry{
+		Level:     "INFO",
+		Operation: "cli_launch_fresh_focus_success",
+		Message:   "Focused the newly launched Unity process.",
+		Context: map[string]any{
+			"command": "launch",
+			"pid":     pid,
+		},
+		CorrelationID: correlationID,
+	})
+}
+
+func logLaunchFreshFocusFailure(projectRoot string, pid int, focusErr error, correlationID string) {
+	_ = vibelog.WriteCLIVibeLog(projectRoot, vibelog.CLIVibeLogEntry{
+		Level:     "WARNING",
+		Operation: "cli_launch_fresh_focus_failure",
+		Message:   "Failed to focus the newly launched Unity process.",
+		Context: map[string]any{
+			"command":    "launch",
+			"pid":        pid,
+			"focusError": clicore.ErrorMessage(focusErr),
+		},
+		CorrelationID: correlationID,
+	})
+}
+
+func launchSleep(deps launchDeps, delay time.Duration) {
+	if deps.sleep != nil {
+		deps.sleep(delay)
+		return
+	}
+	time.Sleep(delay)
 }
