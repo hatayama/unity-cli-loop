@@ -25,6 +25,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ExpectedListEnumeratorFullName =
             "System.Collections.Generic.List`1/Enumerator<System.Int32>";
 
+        // Why: a method-less type is correctly reported as unchanged=0/skipped=0, so it
+        // cannot satisfy the "at least one recognized method" invariant. Listing a file
+        // here is a deliberate review of that exception; a new method-less fixture must
+        // be added to this list rather than skipped silently by a heuristic.
+        private static readonly string[] SelfSnapshotMethodlessTypeAllowList =
+        {
+            "HotReloadSiblingConstDefinitions.cs",
+        };
+
         /// <summary>
         /// What: bootstrap compiles (or reuses a cached) worker.dll, then running the worker on the
         /// e2e fixture source returns shim entries and the expected skip reasons — including bare
@@ -486,11 +495,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a self-snapshot of every method-bearing .cs file under
-        /// Assets/Tests/Editor/HotReload/ yields Success, empty
-        /// parseErrors/entries/declarationDriftWarnings, and at least one unchanged or skipped
-        /// method (proves the worker recognized the file). Permanent guard that identical source
-        /// never false-patches after the unannotated-baseline fix.
+        /// What: a self-snapshot of every .cs file under Assets/Tests/Editor/HotReload/ yields
+        /// Success, empty parseErrors/entries/declarationDriftWarnings, and at least one
+        /// unchanged or skipped method (proves the worker recognized the file), except
+        /// global-using-only files and the reviewed method-less allow-list. Permanent guard
+        /// that identical source never false-patches after the unannotated-baseline fix.
         /// </summary>
         [Test]
         public async Task Run_WithSelfSnapshotOnHotReloadTestSources_TreatsAllMethodsUnchanged()
@@ -518,11 +527,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     continue;
                 }
 
-                // Why skip: a type-only file with no method, constructor, or property accessor
-                // (const holder, for example) is also correctly reported as unchanged=0/skipped=0.
-                // Including it would fail the "at least one recognized method" invariant even
-                // though the worker behaved correctly.
-                if (!ContainsMethodOrAccessorDeclaration(onDisk))
+                if (IsSelfSnapshotMethodlessTypeAllowListed(Path.GetFileName(fullPath)))
                 {
                     continue;
                 }
@@ -2298,20 +2303,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 || sourceText.IndexOf(" record ", StringComparison.Ordinal) >= 0;
         }
 
-        private static bool ContainsMethodOrAccessorDeclaration(string sourceText)
+        private static bool IsSelfSnapshotMethodlessTypeAllowListed(string fileName)
         {
-            if (sourceText.IndexOf('(') >= 0)
-            {
-                return true;
-            }
-
-            return sourceText.IndexOf(" get;", StringComparison.Ordinal) >= 0
-                || sourceText.IndexOf(" get ", StringComparison.Ordinal) >= 0
-                || sourceText.IndexOf(" set;", StringComparison.Ordinal) >= 0
-                || sourceText.IndexOf(" set ", StringComparison.Ordinal) >= 0
-                || sourceText.IndexOf(" init;", StringComparison.Ordinal) >= 0
-                || sourceText.IndexOf(" init ", StringComparison.Ordinal) >= 0
-                || sourceText.IndexOf(" =>", StringComparison.Ordinal) >= 0;
+            return Array.IndexOf(SelfSnapshotMethodlessTypeAllowList, fileName) >= 0;
         }
 
         private static string ResolveE2EFixturePath()
