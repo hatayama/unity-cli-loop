@@ -1039,6 +1039,7 @@ func TestRunLaunchFocusesFreshUnityAfterStartupMarker(t *testing.T) {
 	enableCliVibeLog(t)
 	deps := defaultLaunchDeps()
 	focusedPids := []int{}
+	events := []string{}
 	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
 		return nil, nil
 	}
@@ -1046,12 +1047,14 @@ func TestRunLaunchFocusesFreshUnityAfterStartupMarker(t *testing.T) {
 		return fakeUnityExecutablePath(t), nil
 	}
 	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
+		events = append(events, "startup_marker")
 		return nil
 	}
 	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
 		return nil
 	}
 	deps.focusUnityProcess = func(_ context.Context, pid int) error {
+		events = append(events, "focus")
 		focusedPids = append(focusedPids, pid)
 		return nil
 	}
@@ -1071,6 +1074,10 @@ func TestRunLaunchFocusesFreshUnityAfterStartupMarker(t *testing.T) {
 	}
 	if len(focusedPids) != 1 {
 		t.Fatalf("focus calls mismatch: got %d want 1 pids=%v", len(focusedPids), focusedPids)
+	}
+	expectedEvents := []string{"startup_marker", "focus"}
+	if !slices.Equal(events, expectedEvents) {
+		t.Fatalf("call order mismatch: got %v want %v", events, expectedEvents)
 	}
 	response := decodeLaunchResponseFromOutput(t, stdout.String())
 	if response.CurrentProcessId == nil || *response.CurrentProcessId != focusedPids[0] {
