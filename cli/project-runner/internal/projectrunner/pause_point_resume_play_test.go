@@ -299,6 +299,7 @@ func TestWaitForPausePointSkipsTriggerWhenResumePlayFails(t *testing.T) {
 	if triggerResult.Error != "trigger was not dispatched: --resume-play failed to resume play mode" {
 		t.Fatalf("TriggerResult.Error mismatch: %#v", triggerResult)
 	}
+	assertPausePointTriggerResultOmitsExplanation(t, triggerResult)
 }
 
 // Verifies --resume-play alone still confirms arm before resuming, and skips resume (and has no

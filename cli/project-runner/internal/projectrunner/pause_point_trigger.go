@@ -37,6 +37,12 @@ type pausePointTriggerResult struct {
 	// output, non-zero exit with no JSON) — not when the triggered command completed with its own
 	// Success:false, which is passed through in Response untouched.
 	Error string `json:"Error,omitempty"`
+
+	// Explanation is set only when join's grace window elapsed before the trigger goroutine
+	// reported. Why not reuse Error: Error means the trigger dispatch itself failed, and callers
+	// already treat that as "the trigger never ran"; this case is the opposite — the command may
+	// still be running inside Unity.
+	Explanation string `json:"Explanation,omitempty"`
 }
 
 // pausePointTriggerRejectedBeforeExecution reports whether the trigger command was permanently
@@ -247,7 +253,11 @@ func (h *pausePointTriggerHandle) join() *pausePointTriggerResult {
 	case result := <-h.done:
 		return result
 	case <-time.After(pausePointFinalStatusProbeTimeout):
-		return &pausePointTriggerResult{Command: h.command, Completed: false}
+		return &pausePointTriggerResult{
+			Command:     h.command,
+			Completed:   false,
+			Explanation: pausePointTriggerUnreportedExplanation,
+		}
 	}
 }
 
@@ -285,3 +295,8 @@ func pausePointTriggerCommandString(triggerCommand string, triggerArgs []string)
 	}
 	return triggerCommand + " " + strings.Join(triggerArgs, " ")
 }
+
+// pausePointTriggerUnreportedExplanation is attached when join's grace window elapsed before the
+// trigger goroutine reported. Why a dedicated field rather than Error: Error means dispatch
+// failed before execution, and this case is the opposite — the command may still be running.
+const pausePointTriggerUnreportedExplanation = "The pause-point wait settled (hit, expiry, or clear) before the trigger command reported its result. The triggered command keeps running inside Unity and its input may still have been delivered; judge by the wait outcome and captured state instead of re-running the trigger."

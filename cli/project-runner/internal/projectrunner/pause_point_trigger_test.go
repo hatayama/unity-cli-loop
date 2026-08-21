@@ -181,6 +181,7 @@ func TestRunPausePointTriggerSync(t *testing.T) {
 		if response["InterruptedByPausePoint"] != true {
 			t.Fatalf("response passthrough mismatch: %#v", response)
 		}
+		assertPausePointTriggerResultOmitsExplanation(t, result)
 	})
 
 	t.Run("reports the dispatched command's stderr on dispatch failure", func(t *testing.T) {
@@ -209,6 +210,7 @@ func TestRunPausePointTriggerSync(t *testing.T) {
 		if result.Error != "unknown command: bogus-command" {
 			t.Fatalf("error mismatch: %#v", result)
 		}
+		assertPausePointTriggerResultOmitsExplanation(t, result)
 	})
 
 	t.Run("synthesizes an error when the dispatched command wrote nothing at all", func(t *testing.T) {
@@ -230,6 +232,7 @@ func TestRunPausePointTriggerSync(t *testing.T) {
 		if result.Error == "" || !strings.Contains(result.Error, "exited with code 1") {
 			t.Fatalf("expected a synthesized error message, got %#v", result)
 		}
+		assertPausePointTriggerResultOmitsExplanation(t, result)
 	})
 }
 
@@ -288,6 +291,7 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 		if triggerResult.Command != "simulate-keyboard --action Press" {
 			t.Fatalf("command mismatch: %#v", triggerResult)
 		}
+		assertPausePointTriggerResultOmitsExplanation(t, triggerResult)
 	})
 
 	t.Run("trigger still running past the join grace window reports Completed=false", func(t *testing.T) {
@@ -323,6 +327,25 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 		}
 		if triggerResult.Command != "simulate-keyboard --action Press" {
 			t.Fatalf("command mismatch: %#v", triggerResult)
+		}
+		const wantExplanation = "The pause-point wait settled (hit, expiry, or clear) before the trigger command reported its result. The triggered command keeps running inside Unity and its input may still have been delivered; judge by the wait outcome and captured state instead of re-running the trigger."
+		if triggerResult.Explanation != wantExplanation {
+			t.Fatalf("Explanation mismatch:\nwant %q\ngot  %q", wantExplanation, triggerResult.Explanation)
+		}
+		encoded, err := json.Marshal(triggerResult)
+		if err != nil {
+			t.Fatalf("marshal trigger result: %v", err)
+		}
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(encoded, &raw); err != nil {
+			t.Fatalf("unmarshal trigger result JSON: %v", err)
+		}
+		var gotExplanation string
+		if err := json.Unmarshal(raw["Explanation"], &gotExplanation); err != nil {
+			t.Fatalf("Explanation is not a JSON string: %v (%s)", err, encoded)
+		}
+		if gotExplanation != wantExplanation {
+			t.Fatalf("JSON Explanation mismatch:\nwant %q\ngot  %q", wantExplanation, gotExplanation)
 		}
 	})
 }
@@ -391,6 +414,7 @@ func TestWaitForPausePointSkipsTriggerWhenNotArmed(t *testing.T) {
 	if triggerResult.Error == "" {
 		t.Fatalf("expected a non-empty Error explaining why the trigger was skipped, got %#v", triggerResult)
 	}
+	assertPausePointTriggerResultOmitsExplanation(t, triggerResult)
 }
 
 // Verifies a --trigger result is embedded in the timeout error envelope's Details, so a caller
@@ -558,6 +582,118 @@ func TestRunWaitForPausePointEmbedsTriggerResultOnExpired(t *testing.T) {
 	}
 }
 
+const wantPausePointTriggerUnreportedExplanation = "The pause-point wait settled (hit, expiry, or clear) before the trigger command reported its result. The triggered command keeps running inside Unity and its input may still have been delivered; judge by the wait outcome and captured state instead of re-running the trigger."
+
+// Verifies await-pause-point's public stdout JSON carries TriggerResult.Explanation when the
+// trigger stays blocked past the join grace window. Why command-level: marshaling the internal
+// DTO alone cannot catch a drop between waitForPausePoint and the printed envelope.
+func TestRunWaitForPausePointCommandExposesUnreportedTriggerExplanationOnHit(t *testing.T) {
+	originalExtend := extendPausePointExpiry
+	t.Cleanup(func() {
+		extendPausePointExpiry = originalExtend
+	})
+	extendPausePointExpiry = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+		minimumRemainingSeconds int,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusEnabled}, nil
+	}
+
+	stubPausePointHit(t, "")
+	stubPausePointMatchingLogs(t, nil)
+	blockPausePointTriggerDispatchUntilCleanup(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePointCommand(
+		context.Background(),
+		unityipc.Connection{},
+		[]string{"--id", "jump", "--timeout-seconds", "1", "--trigger", "simulate-keyboard --action Press"},
+		"",
+		&stdout,
+		&stderr,
+	)
+	if code != 0 {
+		t.Fatalf("expected hit success, got %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	payload := decodeJSONObject(t, stdout.Bytes())
+	assertPublicPausePointTriggerResultExplanation(t, payload["TriggerResult"], wantPausePointTriggerUnreportedExplanation)
+}
+
+// Verifies enable-pause-point --await's public stderr envelope carries
+// Error.Details.TriggerResult.Explanation on expiry when the trigger stays blocked past the join
+// grace window. Why this route: the enable --await writer is a second assignment site, so an
+// await-only hit test would miss a drop there.
+func TestRunPausePointWaitAfterEnableExposesUnreportedTriggerExplanationOnExpired(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+	})
+
+	statusQueryCount := 0
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		statusQueryCount++
+		if statusQueryCount == 1 {
+			return pausePointStatusResponse{
+				Id:          id,
+				Status:      pausePointStatusEnabled,
+				IsEnabled:   true,
+				EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+			}, nil
+		}
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusExpired,
+			Expired:     true,
+			IsEnabled:   false,
+			EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		}, nil
+	}
+	blockPausePointTriggerDispatchUntilCleanup(t)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointWaitAfterEnable(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		waitForPausePointOptions{
+			id:                   "jump",
+			timeoutSeconds:       1,
+			timeout:              time.Second,
+			matchingLogsMaxCount: 5,
+			markerJustEnabled:    true,
+			triggerCommand:       "simulate-keyboard",
+			triggerArgs:          []string{"--action", "Press"},
+		},
+		enablePausePointPropagatedFields{},
+		&stdout,
+		&stderr,
+	)
+	if code != 1 {
+		t.Fatalf("expected expired failure, got %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	if envelope.Error.ErrorCode != clierrors.ErrorCodePausePointExpired {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	assertPublicPausePointTriggerResultExplanation(
+		t,
+		envelope.Error.Details["TriggerResult"],
+		wantPausePointTriggerUnreportedExplanation,
+	)
+}
+
 // Verifies await-pause-point parses --trigger into the command/args pair and rejects a value that
 // targets another pause-point wait.
 func TestParseWaitForPausePointOptionsParsesTriggerFlag(t *testing.T) {
@@ -626,5 +762,77 @@ func TestExtractPausePointEnableAwaitFlagsRequiresAwaitForTrigger(t *testing.T) 
 	}
 	if !strings.Contains(err.Error(), "require --await") {
 		t.Fatalf("error message mismatch: %v", err)
+	}
+}
+
+func assertPausePointTriggerResultOmitsExplanation(t *testing.T, result *pausePointTriggerResult) {
+	t.Helper()
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal trigger result: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatalf("unmarshal trigger result JSON: %v (%s)", err, encoded)
+	}
+	if _, exists := raw["Explanation"]; exists {
+		t.Fatalf("Explanation key must be omitted, got %s", encoded)
+	}
+}
+
+// blockPausePointTriggerDispatchUntilCleanup holds the trigger goroutine past
+// pausePointFinalStatusProbeTimeout so join() takes the unreported-result path. Why not return
+// immediately: a fast dispatch completes inside the grace window and never sets Explanation.
+func blockPausePointTriggerDispatchUntilCleanup(t *testing.T) {
+	t.Helper()
+
+	release := make(chan struct{})
+	t.Cleanup(func() {
+		close(release)
+	})
+
+	originalDispatch := dispatchPausePointTriggerCommand
+	t.Cleanup(func() {
+		dispatchPausePointTriggerCommand = originalDispatch
+	})
+
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		<-release
+		_, _ = stdout.Write([]byte(`{"Success":true}`))
+		return 0
+	}
+}
+
+func decodeJSONObject(t *testing.T, payload []byte) map[string]any {
+	t.Helper()
+
+	var object map[string]any
+	if err := json.Unmarshal(payload, &object); err != nil {
+		t.Fatalf("JSON decode failed: %v from %s", err, payload)
+	}
+	return object
+}
+
+func assertPublicPausePointTriggerResultExplanation(t *testing.T, trigger any, want string) {
+	t.Helper()
+
+	object, ok := trigger.(map[string]any)
+	if !ok {
+		t.Fatalf("TriggerResult is not a JSON object: %#v", trigger)
+	}
+	got, ok := object["Explanation"].(string)
+	if !ok {
+		t.Fatalf("TriggerResult.Explanation missing or not a string: %#v", object)
+	}
+	if got != want {
+		t.Fatalf("TriggerResult.Explanation mismatch:\nwant %q\ngot  %q", want, got)
 	}
 }
