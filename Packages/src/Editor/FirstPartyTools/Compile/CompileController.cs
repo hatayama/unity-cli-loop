@@ -160,7 +160,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                // Execute asset refresh.
+                // Why before Refresh: AssetDatabase.Refresh() can start a script compile itself,
+                // and that compile can raise Script Updating Consent. Begin must be set first
+                // or the prefix lets the modal through on the typical "edit then uloop compile" path.
+                CompileApiUpdaterConsentState.BeginCliCompile();
                 AssetDatabase.Refresh();
 
                 AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
@@ -209,16 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ReferenceEquals(_currentCompileTask, compileTask) &&
                     !compileTask.Task.IsCompleted)
                 {
-                    if (eventsRegistered)
-                    {
-                        UnregisterCompilationEvents();
-                    }
-
-                    _currentCompileTask = null;
-                    _isCompiling = false;
-                    _isForceCompile = false;
-                    _compileStartedAtUtc = DateTime.MinValue;
-                    compileTask.TrySetCanceled();
+                    ClearUntransferredCompileState(compileTask, eventsRegistered);
                 }
             }
         }
@@ -326,11 +320,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             UnityEngine.Debug.Assert(result != null, "result must not be null");
 
+            CompileResult resultToComplete = CompileApiUpdaterConsentState.AttachDeclined(result);
             TaskCompletionSource<CompileResult> task = _currentCompileTask;
             // Completion subscribers are outside this controller, so state cleanup cannot depend on them returning.
             try
             {
-                RecordCompileResultIfNeeded(result, _pendingPausePointWarning);
+                RecordCompileResultIfNeeded(resultToComplete, _pendingPausePointWarning);
 
                 if (unregisterEvents)
                 {
@@ -339,7 +334,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 _isCompiling = false;
                 _isForceCompile = false;
-                OnCompileCompleted?.Invoke(result);
+                OnCompileCompleted?.Invoke(resultToComplete);
             }
             finally
             {
@@ -351,10 +346,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     _resultRecordingContext = CompileResultRecordingContext.Disabled();
                     _compileStartedAtUtc = DateTime.MinValue;
                     _pendingPausePointWarning = null;
+                    CompileApiUpdaterConsentState.EndCliCompile();
                 }
 
-                task?.TrySetResult(result);
+                task?.TrySetResult(resultToComplete);
             }
+        }
+
+        private void ClearUntransferredCompileState(
+            TaskCompletionSource<CompileResult> compileTask,
+            bool eventsRegistered)
+        {
+            if (eventsRegistered)
+            {
+                UnregisterCompilationEvents();
+            }
+
+            _currentCompileTask = null;
+            _isCompiling = false;
+            _isForceCompile = false;
+            _resultRecordingContext = CompileResultRecordingContext.Disabled();
+            _compileStartedAtUtc = DateTime.MinValue;
+            _pendingPausePointWarning = null;
+            CompileApiUpdaterConsentState.EndCliCompile();
+            compileTask.TrySetCanceled();
+        }
+
+        /// <summary>
+        /// Completes an in-flight compile for tests without invoking Unity's compilation pipeline.
+        /// </summary>
+        internal void CompleteCompileRequestForTesting(CompileResult result)
+        {
+            UnityEngine.Debug.Assert(result != null, "result must not be null");
+            _currentCompileTask = new TaskCompletionSource<CompileResult>();
+            CompleteCompileRequest(result, unregisterEvents: false);
+        }
+
+        /// <summary>
+        /// Runs the request-before-transfer cleanup path for tests.
+        /// </summary>
+        internal void ClearUntransferredCompileStateForTesting()
+        {
+            TaskCompletionSource<CompileResult> compileTask = new();
+            _currentCompileTask = compileTask;
+            ClearUntransferredCompileState(compileTask, eventsRegistered: false);
         }
 
         private void RecordCompileResultIfNeeded(CompileResult result, string pausePointWarning)
@@ -485,6 +520,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _resultRecordingContext = CompileResultRecordingContext.Disabled();
             _compileStartedAtUtc = DateTime.MinValue;
             _pendingPausePointWarning = null;
+            CompileApiUpdaterConsentState.EndCliCompile();
         }
 
         /// <summary>
