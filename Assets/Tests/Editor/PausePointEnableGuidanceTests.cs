@@ -25,8 +25,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string ExpectedRearmDiscardWarningGeneration1 =
             "Generation 1 of this pause point had already hit; this re-arm discarded its CapturedVariables and CapturedVariableHistory. Read results with pause-point-status before re-arming when you need them.";
 
+        private const string FixtureClosingBraceMethodDisplayName =
+            "System.Int32 io.github.hatayama.UnityCliLoop.Tests.PausePointToolsFixtures.EnableBySourceLocationFixture::Add(System.Int32,System.Int32)";
+
         private const string ExpectedClosingBraceWarningForPlayerMoveLine42 =
             "--line resolved to the method's closing brace at line 42. Every return path through Player.Move reaches this line, including early returns, so captured variables can reflect a different path than the one you meant. To observe one specific path, target a statement line inside that path.";
+
+        private const string ExpectedClosingBraceWarningForFixture =
+            "--line resolved to the method's closing brace at line 13. Every return path through "
+            + FixtureClosingBraceMethodDisplayName
+            + " reaches this line, including early returns, so captured variables can reflect a different path than the one you meant. To observe one specific path, target a statement line inside that path.";
 
         [SetUp]
         public void SetUp()
@@ -173,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a resolved line whose trimmed text is the closing brace uses the closing-brace warning literal.
+        /// What: a resolved closing brace at the compiled method end uses the closing-brace warning literal.
         /// </summary>
         [Test]
         public void BuildClosingBraceWarningOrEmpty_WhenResolvedLineIsClosingBrace_ReturnsWarning()
@@ -181,7 +189,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(
                 "}",
                 42,
-                "Player.Move");
+                "Player.Move",
+                42,
+                0);
+
+            Assert.That(warning, Is.EqualTo(ExpectedClosingBraceWarningForPlayerMoveLine42));
+        }
+
+        /// <summary>
+        /// What: a closing brace at the edited method end (shim path) uses the same warning literal.
+        /// </summary>
+        [Test]
+        public void BuildClosingBraceWarningOrEmpty_WhenResolvedLineIsEditedMethodEnd_ReturnsWarning()
+        {
+            string warning = PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(
+                "}",
+                42,
+                "Player.Move",
+                0,
+                42);
 
             Assert.That(warning, Is.EqualTo(ExpectedClosingBraceWarningForPlayerMoveLine42));
         }
@@ -195,13 +221,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(
                 "return sum;",
                 12,
-                "EnableBySourceLocationFixture.Add");
+                "EnableBySourceLocationFixture.Add",
+                13,
+                0);
 
             Assert.That(warning, Is.EqualTo(string.Empty));
         }
 
         /// <summary>
-        /// What: enabling on the fixture method's closing brace appends the ungated closing-brace warning.
+        /// What: a nested closing brace that is not the compiled or edited method end stays silent.
+        /// </summary>
+        [Test]
+        public void BuildClosingBraceWarningOrEmpty_WhenClosingBraceIsNotMethodEnd_ReturnsEmpty()
+        {
+            string warning = PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(
+                "}",
+                20,
+                "Player.Move",
+                42,
+                40);
+
+            Assert.That(warning, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: a closing brace with neither compiled nor edited method end available stays silent.
+        /// </summary>
+        [Test]
+        public void BuildClosingBraceWarningOrEmpty_WhenMethodEndIsUnknown_ReturnsEmpty()
+        {
+            string warning = PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(
+                "}",
+                42,
+                "Player.Move",
+                0,
+                0);
+
+            Assert.That(warning, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: enabling on the fixture method's closing brace appends the closing-brace warning.
         /// </summary>
         [Test]
         public void Enable_WhenResolvedLineIsMethodClosingBrace_AppendsClosingBraceWarning()
@@ -218,18 +278,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 response.Success,
                 Is.True,
                 response.ErrorCode + " / " + response.Message);
+            Assert.That(response.ResolvedLine, Is.EqualTo(FixtureClosingBraceLine));
             Assert.That(response.ResolvedLineText, Is.EqualTo("}"));
-            string expectedClosingBrace =
-                "--line resolved to the method's closing brace at line "
-                + response.ResolvedLine
-                + ". Every return path through "
-                + response.ResolvedMethod
-                + " reaches this line, including early returns, so captured variables can reflect a different path than the one you meant. To observe one specific path, target a statement line inside that path.";
+            Assert.That(response.ResolvedMethod, Is.EqualTo(FixtureClosingBraceMethodDisplayName));
             string expectedWarning = PausePointEnableWarnings.MergeWarnings(
                 PausePointEnableWarnings.MergeWarnings(
                     PausePointEnableWarnings.CreateEnableWarning(),
                     SourcePausePointConstants.SmallMethodInliningRiskWarning),
-                expectedClosingBrace);
+                ExpectedClosingBraceWarningForFixture);
             Assert.That(response.Warning, Is.EqualTo(expectedWarning));
         }
 

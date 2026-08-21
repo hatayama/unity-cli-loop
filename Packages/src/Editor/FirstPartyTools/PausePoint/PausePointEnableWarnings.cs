@@ -93,14 +93,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 previous.Generation);
         }
 
-        // Why not reuse drift warnings: those are gated on hot-reload patches; a closing brace
-        // is misleading even when the compiled and edited files match.
+        // Why also match method end: a using/lock Dispose nested "}" has a sequence point, so
+        // Trim()=="}" alone would claim every return path reaches an inner brace.
+        // Why fail-closed when both ends are 0: the "method's closing brace" wording would be a lie.
         internal static string BuildClosingBraceWarningOrEmpty(
             string resolvedLineText,
             int resolvedLine,
-            string resolvedMethod)
+            string resolvedMethod,
+            int compiledMethodEndLine,
+            int editedMethodEndLine)
         {
             if (string.IsNullOrEmpty(resolvedLineText) || resolvedLineText.Trim() != "}")
+            {
+                return string.Empty;
+            }
+
+            bool atCompiledMethodEnd = compiledMethodEndLine > 0 && resolvedLine == compiledMethodEndLine;
+            bool atEditedMethodEnd = editedMethodEndLine > 0 && resolvedLine == editedMethodEndLine;
+            if (!atCompiledMethodEnd && !atEditedMethodEnd)
             {
                 return string.Empty;
             }

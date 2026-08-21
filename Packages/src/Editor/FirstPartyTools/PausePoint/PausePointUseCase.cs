@@ -466,7 +466,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(
                     resolvedLineText,
                     resolvedLine,
-                    resolvedMethod));
+                    resolvedMethod,
+                    compiledMethodEndLine,
+                    editedMethodEndLine));
             response.RecommendedNextAction = PausePointEnableWarnings
                 .ResolveSuccessEnableRecommendedNextAction(response.RecommendedNextAction, id);
             LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
