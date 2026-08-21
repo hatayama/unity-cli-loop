@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"io"
+	"path/filepath"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
@@ -65,13 +66,20 @@ func runSkillsDirSubcommand(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
+	// Resolved once here so the three subcommand runners share one absolute
+	// path and one failure path instead of each repeating the resolution.
+	absDir, err := filepath.Abs(directory)
+	if err != nil {
+		clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
+		return 1
+	}
 	switch subcommand {
 	case "list":
-		return runSkillsDirList(directory, skills, stdout, stderr)
+		return runSkillsDirList(absDir, skills, stdout, stderr)
 	case "install":
-		return runSkillsDirInstall(directory, skills, stdout, stderr)
+		return runSkillsDirInstall(absDir, skills, stdout, stderr)
 	case "uninstall":
-		return runSkillsDirUninstall(directory, skills, stdout, stderr)
+		return runSkillsDirUninstall(absDir, skills, stdout, stderr)
 	default:
 		// Routing already rejects unknown and v3-migration subcommands, so this
 		// only fires when a new subcommand is added without dir-mode support.

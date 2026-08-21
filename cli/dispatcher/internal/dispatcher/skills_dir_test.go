@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -229,6 +230,120 @@ func TestRunSkillsDirUninstallRemovesOnlyOwnedFiles(t *testing.T) {
 		t.Fatalf("foreign file should survive uninstall: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(destinationDir, "uloop-clean")); !os.IsNotExist(err) {
+		t.Fatalf("emptied skill directory should be removed, stat err=%v", err)
+	}
+}
+
+// Tests that a skill directory holding owned files but no SKILL.md is reported
+// outdated, and that install repairs it as an update, so list, install, and
+// uninstall agree on the partially removed state.
+func TestGetDirSkillStatusReportsOrphanedOwnedFilesAsOutdated(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	installedDir := filepath.Join(destinationDir, "uloop-sample")
+	if err := os.Remove(filepath.Join(installedDir, "SKILL.md")); err != nil {
+		t.Fatalf("failed to remove installed skill file: %v", err)
+	}
+
+	status, err := getDirSkillStatus(destinationDir, skill)
+	if err != nil {
+		t.Fatalf("status check failed: %v", err)
+	}
+	if status != "outdated" {
+		t.Fatalf("orphaned owned files should read as outdated: %s", status)
+	}
+
+	stdout.Reset()
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("repair install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Updated: 1") {
+		t.Fatalf("repairing an orphaned skill should count as updated:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(installedDir, "SKILL.md")); err != nil {
+		t.Fatalf("repair should restore the skill file: %v", err)
+	}
+}
+
+// Tests that a foreign top-level file occupying a skill's name fails install
+// with a clear error on every platform instead of a raw ENOTDIR, and that
+// uninstall preserves the file and reports the skill as not found.
+func TestRunSkillsDirInstallRejectsFileOccupyingSkillName(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	if err := os.MkdirAll(destinationDir, 0o755); err != nil {
+		t.Fatalf("failed to create destination: %v", err)
+	}
+	occupyingFile := filepath.Join(destinationDir, "uloop-sample")
+	if err := os.WriteFile(occupyingFile, []byte("foreign\n"), 0o644); err != nil {
+		t.Fatalf("failed to write occupying file: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 1 {
+		t.Fatalf("install onto an occupying file should fail: code=%d", code)
+	}
+	if !strings.Contains(stderr.String(), "not a directory") {
+		t.Fatalf("error should explain the occupying file:\n%s", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("uninstall should not fail on an occupying file: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Not found: 1") {
+		t.Fatalf("occupying file should not count as an install:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(occupyingFile); err != nil {
+		t.Fatalf("occupying foreign file should be preserved: %v", err)
+	}
+}
+
+// Tests that uninstall removes a dangling symlink sitting at an owned entry
+// name instead of skipping it as missing.
+func TestRunSkillsDirUninstallRemovesDanglingSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on Windows")
+	}
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	installedDir := filepath.Join(destinationDir, "uloop-sample")
+	referencesPath := filepath.Join(installedDir, "references")
+	if err := os.RemoveAll(referencesPath); err != nil {
+		t.Fatalf("failed to remove references dir: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(root, "missing-target"), referencesPath); err != nil {
+		t.Fatalf("failed to create dangling symlink: %v", err)
+	}
+
+	stdout.Reset()
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Removed: 1") {
+		t.Fatalf("uninstall should count the skill as removed:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(installedDir); !os.IsNotExist(err) {
 		t.Fatalf("emptied skill directory should be removed, stat err=%v", err)
 	}
 }

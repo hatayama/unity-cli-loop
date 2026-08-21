@@ -120,13 +120,8 @@ func getSkillStatusWithStat(
 }
 
 func isInstalledSkillOutdated(installedDir string, skill skillDefinition) bool {
-	installedContent, err := os.ReadFile(filepath.Join(installedDir, skillscan.SkillFileName))
-	if err != nil {
-		return true
-	}
-	installedContent = normalizeSkillFileContent(skillscan.SkillFileName, installedContent)
-	expectedContent := normalizeSkillFileContent(skillscan.SkillFileName, skill.content)
-	if !bytes.Equal(installedContent, expectedContent) {
+	matches, err := installedSkillFileMatches(installedDir, skill)
+	if err != nil || !matches {
 		return true
 	}
 
@@ -142,6 +137,19 @@ func isInstalledSkillOutdated(installedDir string, skill skillDefinition) bool {
 		}
 	}
 	return false
+}
+
+// installedSkillFileMatches reports whether the installed SKILL.md equals the
+// source content after normalization. Target-mode and dir-mode status checks
+// both go through here so the comparison rule cannot drift between them.
+func installedSkillFileMatches(installedDir string, skill skillDefinition) (bool, error) {
+	installedContent, err := os.ReadFile(filepath.Join(installedDir, skillscan.SkillFileName))
+	if err != nil {
+		return false, err
+	}
+	installedContent = normalizeSkillFileContent(skillscan.SkillFileName, installedContent)
+	expectedContent := normalizeSkillFileContent(skillscan.SkillFileName, skill.content)
+	return bytes.Equal(installedContent, expectedContent), nil
 }
 
 func collectComparableSkillFiles(root string) map[string][]byte {

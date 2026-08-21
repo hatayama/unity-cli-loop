@@ -14,6 +14,7 @@ package dispatcher
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -25,12 +26,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/skillscan"
 )
 
-func runSkillsDirInstall(directory string, skills []skillDefinition, stdout io.Writer, stderr io.Writer) int {
-	absDir, err := filepath.Abs(directory)
-	if err != nil {
-		clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
-		return 1
-	}
+func runSkillsDirInstall(absDir string, skills []skillDefinition, stdout io.Writer, stderr io.Writer) int {
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "Installing uloop skills (directory)...")
 	clicore.WriteLine(stdout, "")
@@ -49,12 +45,7 @@ func runSkillsDirInstall(directory string, skills []skillDefinition, stdout io.W
 	return 0
 }
 
-func runSkillsDirUninstall(directory string, skills []skillDefinition, stdout io.Writer, stderr io.Writer) int {
-	absDir, err := filepath.Abs(directory)
-	if err != nil {
-		clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
-		return 1
-	}
+func runSkillsDirUninstall(absDir string, skills []skillDefinition, stdout io.Writer, stderr io.Writer) int {
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "Uninstalling uloop skills (directory)...")
 	clicore.WriteLine(stdout, "")
@@ -79,12 +70,7 @@ func runSkillsDirUninstall(directory string, skills []skillDefinition, stdout io
 	return 0
 }
 
-func runSkillsDirList(directory string, skills []skillDefinition, stdout io.Writer, stderr io.Writer) int {
-	absDir, err := filepath.Abs(directory)
-	if err != nil {
-		clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
-		return 1
-	}
+func runSkillsDirList(absDir string, skills []skillDefinition, stdout io.Writer, stderr io.Writer) int {
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "uloop Skills Status:")
 	clicore.WriteLine(stdout, "")
@@ -131,11 +117,17 @@ func installSkillIntoDir(baseDir string, skill skillDefinition, result *skillIns
 // cleaned up instead of being reported as not installed.
 func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) {
 	skillDir := filepath.Join(baseDir, skill.name)
-	if _, err := os.Stat(skillDir); err != nil {
+	info, err := os.Stat(skillDir)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
 		return false, err
+	}
+	// A foreign top-level file occupying the skill's name is not an install of
+	// ours, so it is preserved and the skill reported as not found.
+	if !info.IsDir() {
+		return false, nil
 	}
 	entryNames, err := sourceOwnedEntryNames(skill.sourceDirectory)
 	if err != nil {
@@ -144,7 +136,9 @@ func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) 
 	removedAny := false
 	for _, entryName := range entryNames {
 		entryPath := filepath.Join(skillDir, entryName)
-		if _, err := os.Stat(entryPath); err != nil {
+		// Lstat, not Stat: a dangling symlink at an owned entry name must still
+		// be detected and removed instead of being skipped as missing.
+		if _, err := os.Lstat(entryPath); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
@@ -164,16 +158,27 @@ func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) 
 // compared both ways because syncing replaces those directories wholly.
 func getDirSkillStatus(baseDir string, skill skillDefinition) (string, error) {
 	skillDir := filepath.Join(baseDir, skill.name)
-	installedContent, err := os.ReadFile(filepath.Join(skillDir, skillscan.SkillFileName))
+	info, err := os.Stat(skillDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "not_installed", nil
 		}
 		return "", err
 	}
-	installedContent = normalizeSkillFileContent(skillscan.SkillFileName, installedContent)
-	expectedContent := normalizeSkillFileContent(skillscan.SkillFileName, skill.content)
-	if !bytes.Equal(installedContent, expectedContent) {
+	// Checked explicitly because ReadFile below a file path fails with ENOTDIR
+	// on Unix but maps to IsNotExist on Windows — the platforms would otherwise
+	// diverge between an aborted run and a bogus install attempt.
+	if !info.IsDir() {
+		return "", fmt.Errorf("cannot manage skill %q: %s exists but is not a directory", skill.name, skillDir)
+	}
+	matches, err := installedSkillFileMatches(skillDir, skill)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return dirSkillStatusWithoutSkillFile(skillDir, skill)
+		}
+		return "", err
+	}
+	if !matches {
 		return "outdated", nil
 	}
 	filesOutdated, err := dirSkillFilesOutdated(skillDir, skill)
@@ -184,6 +189,27 @@ func getDirSkillStatus(baseDir string, skill skillDefinition) (string, error) {
 		return "outdated", nil
 	}
 	return "installed", nil
+}
+
+// dirSkillStatusWithoutSkillFile classifies a skill directory whose SKILL.md is
+// missing. Owned entries left behind mean a partial install worth repairing, so
+// the state reads as outdated; list, install, and uninstall then agree on it
+// instead of reporting not-installed, installed, and removed respectively.
+func dirSkillStatusWithoutSkillFile(skillDir string, skill skillDefinition) (string, error) {
+	entryNames, err := sourceOwnedEntryNames(skill.sourceDirectory)
+	if err != nil {
+		return "", err
+	}
+	for _, entryName := range entryNames {
+		if _, err := os.Lstat(filepath.Join(skillDir, entryName)); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return "", err
+		}
+		return "outdated", nil
+	}
+	return "not_installed", nil
 }
 
 func dirSkillFilesOutdated(skillDir string, skill skillDefinition) (bool, error) {
@@ -219,6 +245,9 @@ func dirSkillFilesOutdated(skillDir string, skill skillDefinition) (bool, error)
 // syncSkillDirectoryPreservingForeignFiles copies every source-owned entry into
 // destinationDir while leaving unknown files untouched. Source-owned
 // directories are replaced wholly so stale files inside them do not linger.
+// SKILL.md is written last: it is what the status check keys on, so a sync that
+// fails partway leaves the old SKILL.md in place and the skill keeps reporting
+// outdated instead of pairing new metadata with old files.
 func syncSkillDirectoryPreservingForeignFiles(sourceDir string, destinationDir string) error {
 	if err := os.MkdirAll(destinationDir, 0o755); err != nil {
 		return err
@@ -227,15 +256,23 @@ func syncSkillDirectoryPreservingForeignFiles(sourceDir string, destinationDir s
 	if err != nil {
 		return err
 	}
+	var skillFileEntry os.DirEntry
 	for _, entry := range entries {
 		if shouldSkipSkillFile(entry.Name()) {
+			continue
+		}
+		if !entry.IsDir() && entry.Name() == skillscan.SkillFileName {
+			skillFileEntry = entry
 			continue
 		}
 		if err := syncSkillEntry(sourceDir, destinationDir, entry); err != nil {
 			return err
 		}
 	}
-	return nil
+	if skillFileEntry == nil {
+		return nil
+	}
+	return syncSkillEntry(sourceDir, destinationDir, skillFileEntry)
 }
 
 func syncSkillEntry(sourceDir string, destinationDir string, entry os.DirEntry) error {
@@ -251,7 +288,38 @@ func syncSkillEntry(sourceDir string, destinationDir string, entry os.DirEntry) 
 		return err
 	}
 	content = normalizeSkillFileContent(entry.Name(), content)
-	return os.WriteFile(destinationPath, content, 0o644)
+	return writeSkillFileAtomically(destinationPath, content)
+}
+
+// writeSkillFileAtomically writes through a temp file plus rename so an
+// interrupted write cannot leave a truncated file at the destination.
+func writeSkillFileAtomically(destinationPath string, content []byte) error {
+	tempFile, err := os.CreateTemp(filepath.Dir(destinationPath), filepath.Base(destinationPath)+".tmp-")
+	if err != nil {
+		return err
+	}
+	tempPath := tempFile.Name()
+	renamed := false
+	defer func() {
+		_ = tempFile.Close()
+		if !renamed {
+			_ = os.Remove(tempPath)
+		}
+	}()
+	if _, err := tempFile.Write(content); err != nil {
+		return err
+	}
+	if err := tempFile.Chmod(0o644); err != nil {
+		return err
+	}
+	if err := tempFile.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tempPath, destinationPath); err != nil {
+		return err
+	}
+	renamed = true
+	return nil
 }
 
 // sourceOwnedEntryNames lists the top-level entries of a skill source, which is
