@@ -26,9 +26,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "System.Collections.Generic.List`1/Enumerator<System.Int32>";
 
         // Why: a method-less type is correctly reported as unchanged=0/skipped=0, so it
-        // cannot satisfy the "at least one recognized method" invariant. Listing a file
-        // here is a deliberate review of that exception; a new method-less fixture must
-        // be added to this list rather than skipped silently by a heuristic.
+        // cannot satisfy the "at least one recognized method" invariant. The allow-list
+        // waives only that count check; the worker still runs. A new method-less fixture
+        // must be added here rather than skipped silently by a heuristic.
         private static readonly string[] SelfSnapshotMethodlessTypeAllowList =
         {
             "HotReloadSiblingConstDefinitions.cs",
@@ -527,10 +527,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     continue;
                 }
 
-                if (IsSelfSnapshotMethodlessTypeAllowListed(Path.GetFileName(fullPath)))
-                {
-                    continue;
-                }
+                bool isMethodlessTypeAllowListed =
+                    IsSelfSnapshotMethodlessTypeAllowListed(Path.GetFileName(fullPath));
 
                 TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
                     fullPath,
@@ -565,7 +563,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 int unchangedCount =
                     result.Output.unchangedMethods != null ? result.Output.unchangedMethods.Length : 0;
                 int skippedCount = result.Output.skipped != null ? result.Output.skipped.Length : 0;
-                if (unchangedCount + skippedCount < 1)
+                if (!isMethodlessTypeAllowListed && unchangedCount + skippedCount < 1)
                 {
                     fileFailures.Add(
                         "unchangedMethods+skipped < 1 (unchanged="
