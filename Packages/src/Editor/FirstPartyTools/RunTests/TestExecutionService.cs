@@ -34,12 +34,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ct.ThrowIfCancellationRequested();
             return UnityTestFrameworkExecutionServiceRegistry.Current.ExecuteEditModeTestAsync(filter, ct);
         }
+
+        /// <summary>
+        /// Lists leaf test full names for a TestMode with no filter applied.
+        /// </summary>
+        internal virtual Task<RunTestsUnfilteredTestListResult> RetrieveUnfilteredTestNamesAsync(
+            UnityCliLoopTestMode testMode,
+            CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return UnityTestFrameworkExecutionServiceRegistry.Current.RetrieveUnfilteredTestNamesAsync(testMode, ct);
+        }
     }
 
     internal interface IUnityTestFrameworkExecutionService
     {
         Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct);
         Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct);
+        Task<RunTestsUnfilteredTestListResult> RetrieveUnfilteredTestNamesAsync(
+            UnityCliLoopTestMode testMode,
+            CancellationToken ct);
     }
 
     internal static class UnityTestFrameworkExecutionServiceRegistry
@@ -71,6 +85,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             ct.ThrowIfCancellationRequested();
             return Task.FromResult(SerializableTestResult.CreateTestFrameworkUnavailable());
+        }
+
+        public Task<RunTestsUnfilteredTestListResult> RetrieveUnfilteredTestNamesAsync(
+            UnityCliLoopTestMode testMode,
+            CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(RunTestsUnfilteredTestListResult.NotRetrieved());
         }
     }
 }

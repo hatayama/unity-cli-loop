@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -92,10 +93,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public string Warning { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Effective filter type echoed when NoTestsFound ran with a non-all filter.
+        /// </summary>
+        public string FilterType { get; set; }
+
+        /// <summary>
+        /// Effective filter value echoed when NoTestsFound ran with a non-all filter.
+        /// </summary>
+        public string FilterValue { get; set; }
+
+        /// <summary>
+        /// Leaf test full names discovered in the same TestMode with no filter, capped at
+        /// UnfilteredTestNamesLimit. Null when the unfiltered list was not retrieved.
+        /// </summary>
+        public List<string> UnfilteredTestNames { get; set; }
+
+        /// <summary>
+        /// Total leaf tests discovered without the filter, before the UnfilteredTestNames cap.
+        /// </summary>
+        public int UnfilteredTestCount { get; set; }
+
         // Why omit empty: a clean run with no live patches must not grow a Warning field.
         public bool ShouldSerializeWarning()
         {
             return !string.IsNullOrEmpty(Warning);
+        }
+
+        // Why UnfilteredTestNames != null: UnfilteredTestCount can be 0 after a successful
+        // retrieve, and that zero still needs to appear on the wire.
+        public bool ShouldSerializeFilterType()
+        {
+            return UnfilteredTestNames != null;
+        }
+
+        public bool ShouldSerializeFilterValue()
+        {
+            return UnfilteredTestNames != null;
+        }
+
+        public bool ShouldSerializeUnfilteredTestNames()
+        {
+            return UnfilteredTestNames != null;
+        }
+
+        public bool ShouldSerializeUnfilteredTestCount()
+        {
+            return UnfilteredTestNames != null;
         }
 
         /// <summary>

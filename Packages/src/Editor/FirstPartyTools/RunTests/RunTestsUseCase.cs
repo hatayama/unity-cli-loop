@@ -199,7 +199,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     response.NoTestsFound,
                     parameters.TestMode,
                     parameters.FilterType));
+            await ApplyUnfilteredFilterEchoIfNeededAsync(response, parameters, ct)
+                .ConfigureAwait(false);
             return response;
+        }
+
+        private async Task ApplyUnfilteredFilterEchoIfNeededAsync(
+            RunTestsResponse response,
+            RunTestsSchema parameters,
+            CancellationToken ct)
+        {
+            if (!response.NoTestsFound || parameters.FilterType == TestFilterType.all)
+            {
+                return;
+            }
+
+            RunTestsUnfilteredTestListResult unfiltered =
+                await _executionService.RetrieveUnfilteredTestNamesAsync(parameters.TestMode, ct)
+                    .ConfigureAwait(false);
+            RunTestsUnfilteredFilterEcho.ApplyIfRetrieved(
+                response,
+                parameters.FilterType,
+                parameters.FilterValue,
+                unfiltered);
         }
 
         private static bool IsSupportedTestMode(UnityCliLoopTestMode testMode)

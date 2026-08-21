@@ -34,6 +34,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             return PlayModeTestExecuter.ExecuteEditModeTest(filter, ct);
         }
+
+        public Task<RunTestsUnfilteredTestListResult> RetrieveUnfilteredTestNamesAsync(
+            UnityCliLoopTestMode testMode,
+            CancellationToken ct)
+        {
+            return RunTestsUnfilteredTestListRetriever.RetrieveAsync(testMode, ct);
+        }
     }
 
     public static class PlayModeTestExecuter

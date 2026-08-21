@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -228,6 +229,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
             Assert.That(response.TestCount, Is.EqualTo(0));
             Assert.That(response.FailedCount, Is.EqualTo(0));
+            Assert.That(response.ShouldSerializeFilterType(), Is.EqualTo(false));
+            Assert.That(response.ShouldSerializeFilterValue(), Is.EqualTo(false));
+            Assert.That(response.ShouldSerializeUnfilteredTestNames(), Is.EqualTo(false));
+            Assert.That(response.ShouldSerializeUnfilteredTestCount(), Is.EqualTo(false));
         }
 
         [Test]
@@ -802,6 +807,115 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(diagnosticCapture.ObservedIsMainThread, Is.True);
         }
 
+        /// <summary>
+        /// What: a filtered NoTestsFound run echoes the filter and stubbed unfiltered names on the response.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilteredNoTestsFound_EchoesUnfilteredNamesAndAppendsMessage()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult(),
+                UnfilteredTestListResult = RunTestsUnfilteredTestListResult.Success(
+                    new[]
+                    {
+                        "Example.Tests.Alpha",
+                        "Example.Tests.Beta"
+                    })
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.exact,
+                FilterValue = "Missing.Test"
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.NoTestsFound, Is.EqualTo(true));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "No tests found matching the specified filter criteria. No tests matched FilterType 'exact' with FilterValue 'Missing.Test'. 2 test(s) exist in this TestMode without the filter; compare UnfilteredTestNames against the filter value."));
+            Assert.That(response.FilterType, Is.EqualTo("exact"));
+            Assert.That(response.FilterValue, Is.EqualTo("Missing.Test"));
+            Assert.That(response.UnfilteredTestCount, Is.EqualTo(2));
+            Assert.That(
+                response.UnfilteredTestNames,
+                Is.EqualTo(new List<string> { "Example.Tests.Alpha", "Example.Tests.Beta" }));
+            Assert.That(response.ShouldSerializeFilterType(), Is.EqualTo(true));
+            Assert.That(response.ShouldSerializeFilterValue(), Is.EqualTo(true));
+            Assert.That(response.ShouldSerializeUnfilteredTestNames(), Is.EqualTo(true));
+            Assert.That(response.ShouldSerializeUnfilteredTestCount(), Is.EqualTo(true));
+        }
+
+        /// <summary>
+        /// What: filter-all NoTestsFound keeps the original message and omits unfiltered echo fields.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilterAllNoTestsFound_OmitsUnfilteredEchoFields()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult(),
+                UnfilteredTestListResult = RunTestsUnfilteredTestListResult.Success(
+                    new[] { "Example.Tests.Alpha" })
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
+            Assert.That(response.ShouldSerializeFilterType(), Is.EqualTo(false));
+            Assert.That(response.ShouldSerializeFilterValue(), Is.EqualTo(false));
+            Assert.That(response.ShouldSerializeUnfilteredTestNames(), Is.EqualTo(false));
+            Assert.That(response.ShouldSerializeUnfilteredTestCount(), Is.EqualTo(false));
+            Assert.That(response.UnfilteredTestNames, Is.Null);
+        }
+
+        private static SerializableTestResult CreateNoTestsFoundResult()
+        {
+            return new SerializableTestResult
+            {
+                success = false,
+                status = RunTestsExecutionStatus.NoTestsFound,
+                hasFailures = false,
+                noTestsFound = true,
+                noTestsFoundExplanation = RunTestsResponse.NoTestsFoundExplanationText,
+                message = RunTestsResponse.NoTestsFoundMessage,
+                completedAt = "2026-01-01T00:00:00.0000000Z",
+                testCount = 0,
+                passedCount = 0,
+                failedCount = 0,
+                skippedCount = 0,
+                xmlPath = null
+            };
+        }
+
+        private static string PassThroughNoTestsDiagnostics(
+            string message,
+            bool noTestsFound,
+            UnityCliLoopTestMode testMode,
+            TestFilterType filterType)
+        {
+            return message;
+        }
+
         private static Task NoCleanupWait(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -849,6 +963,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             public override bool IsTestFrameworkAvailable => TestFrameworkAvailable;
 
+            public RunTestsUnfilteredTestListResult UnfilteredTestListResult { get; set; } =
+                RunTestsUnfilteredTestListResult.NotRetrieved();
+
             public override Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
             {
                 ct.ThrowIfCancellationRequested();
@@ -861,6 +978,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ct.ThrowIfCancellationRequested();
                 WasCalled = true;
                 return Task.FromResult(NextResult);
+            }
+
+            internal override Task<RunTestsUnfilteredTestListResult> RetrieveUnfilteredTestNamesAsync(
+                UnityCliLoopTestMode testMode,
+                CancellationToken ct)
+            {
+                ct.ThrowIfCancellationRequested();
+                return Task.FromResult(UnfilteredTestListResult);
             }
         }
 
