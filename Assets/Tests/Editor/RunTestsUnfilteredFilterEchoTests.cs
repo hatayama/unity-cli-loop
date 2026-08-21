@@ -118,7 +118,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
             Assert.That(response.ShouldSerializeFilterType(), Is.EqualTo(false));
+            Assert.That(response.ShouldSerializeFilterValue(), Is.EqualTo(false));
             Assert.That(response.ShouldSerializeUnfilteredTestNames(), Is.EqualTo(false));
+            Assert.That(response.ShouldSerializeUnfilteredTestCount(), Is.EqualTo(false));
 
             string json = JsonConvert.SerializeObject(
                 response,
@@ -126,6 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 JsonRpcResponseSerializer.Settings);
             JObject parsed = JObject.Parse(json);
             Assert.That(parsed.Property("FilterType"), Is.EqualTo(null));
+            Assert.That(parsed.Property("FilterValue"), Is.EqualTo(null));
             Assert.That(parsed.Property("UnfilteredTestNames"), Is.EqualTo(null));
             Assert.That(parsed.Property("UnfilteredTestCount"), Is.EqualTo(null));
         }

@@ -882,7 +882,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
             Assert.That(response.ShouldSerializeFilterType(), Is.EqualTo(false));
+            Assert.That(response.ShouldSerializeFilterValue(), Is.EqualTo(false));
             Assert.That(response.ShouldSerializeUnfilteredTestNames(), Is.EqualTo(false));
+            Assert.That(response.ShouldSerializeUnfilteredTestCount(), Is.EqualTo(false));
             Assert.That(response.UnfilteredTestNames, Is.Null);
         }
 
