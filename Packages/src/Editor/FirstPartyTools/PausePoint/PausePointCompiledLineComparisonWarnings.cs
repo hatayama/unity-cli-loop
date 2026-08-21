@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // so comparing the requested line to the resolved line is a false drift.
         // Why readOk is distinct from empty text: a blank edited line is a real mismatch;
         // a failed read is not evidence of drift.
-        internal static string BuildCompiledLineDriftWarningOrEmpty(
+        internal static (string warning, bool comparedAndMatched) BuildCompiledLineDriftWarningOrEmpty(
             string compiledLineText,
             string editedLineText,
             string file,
@@ -26,31 +26,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (string.IsNullOrEmpty(compiledLineText) || !editedLineReadOk)
             {
-                return string.Empty;
+                return (string.Empty, false);
             }
 
             string compiledTrimmed = compiledLineText.Trim();
             string editedTrimmed = editedLineText == null ? string.Empty : editedLineText.Trim();
             if (editedTrimmed.Length == 0)
             {
-                return string.Format(
+                return (string.Format(
                     SourcePausePointConstants.HotReloadCompiledLineMapBlankEditedLineDriftWarningFormat,
                     SourcePausePointPathNormalizer.ToForwardSlashes(file),
                     resolvedLine,
-                    compiledTrimmed);
+                    compiledTrimmed), false);
             }
 
             if (string.Equals(compiledTrimmed, editedTrimmed, StringComparison.Ordinal))
             {
-                return string.Empty;
+                return (string.Empty, true);
             }
 
-            return string.Format(
+            return (string.Format(
                 SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
                 SourcePausePointPathNormalizer.ToForwardSlashes(file),
                 resolvedLine,
                 compiledTrimmed,
-                editedTrimmed);
+                editedTrimmed), false);
         }
 
         // Why resolvedLine != requestedLine only: the compiled resolver rounds empty and comment
@@ -109,7 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why still search requested-line text on a snap-only warning: the intended statement is
         // on --line, including when braces at the armed line happen to match.
         // Why skip the requested-line search when texts match: the suffix would duplicate.
-        internal static string ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+        internal static (string warning, bool comparedAndMatched) ComposeCompiledLineDriftAndSnapWarningOrEmpty(
             string file,
             int requestedLine,
             int resolvedLine,
@@ -130,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedMethod,
                 requestedEditedLineReadOk,
                 requestedEditedLineText);
-            string driftWarning = BuildCompiledLineDriftWarningOrEmpty(
+            (string driftWarning, bool comparedAndMatched) = BuildCompiledLineDriftWarningOrEmpty(
                 compiledResolvedLineText,
                 resolvedEditedLineText,
                 file,
@@ -165,7 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     compiledSourceLines);
             }
 
-            return combined;
+            return (combined, comparedAndMatched);
         }
 
         // Why not ReadLineTextFromSource: that helper returns empty for both a missing line
