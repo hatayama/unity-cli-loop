@@ -62,6 +62,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(merged[0].IsSpeculative, Is.True);
         }
 
+        /// <summary>
+        /// What: a rolled-back speculative using is omitted from the merge so the
+        /// response does not report a directive that is no longer in the source.
+        /// </summary>
+        [Test]
+        public void MergeAutoInjectedNamespaces_WhenPreUsingRolledBack_KeepsRetryOnly()
+        {
+            PreUsingResult preUsingResult = CreatePreUsingResult(
+                new AutoInjectedNamespace("System.Text", "StringBuilder", true));
+            AutoUsingResult autoResult = CreateAutoUsingResult(
+                new AutoInjectedNamespace("System.Linq", "Enumerable", false));
+
+            List<AutoInjectedNamespace> merged = CompiledAssemblyBuilder.MergeAutoInjectedNamespaces(
+                true,
+                preUsingResult,
+                autoResult);
+
+            Assert.That(merged.Count, Is.EqualTo(1));
+            Assert.That(merged[0].Namespace, Is.EqualTo("System.Linq"));
+            Assert.That(merged[0].TriggerIdentifier, Is.EqualTo("Enumerable"));
+            Assert.That(merged[0].IsSpeculative, Is.False);
+        }
+
         private static PreUsingResult CreatePreUsingResult(AutoInjectedNamespace attribution)
         {
             return new PreUsingResult(
