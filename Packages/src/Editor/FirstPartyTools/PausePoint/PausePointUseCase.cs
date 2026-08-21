@@ -403,13 +403,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.Line,
                     editedMethodStartLine,
                     editedMethodEndLine));
-            string compiledLineMapWarning = PausePointEnableWarnings.ChooseCompiledLineMapWarning(
-                patchedMethodPdbUnavailableWarning,
-                PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
-                    compareCompiledLineDrift,
-                    parameters.File,
-                    resolvedMethod));
-            enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, compiledLineMapWarning);
+            string comparisonWarning = string.Empty;
+            bool comparedAndMatched = false;
             if (compareCompiledLineDrift)
             {
                 (bool resolvedEditedReadOk, string resolvedEditedLineText) =
@@ -417,25 +412,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 (bool requestedEditedReadOk, string requestedEditedLineText) =
                     PausePointCompiledLineComparisonWarnings.ReadEditedLineText(parameters.File, parameters.Line);
                 string[] compiledSourceLines = SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
-                string driftWarning = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+                (comparisonWarning, comparedAndMatched) =
+                    PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+                        parameters.File,
+                        parameters.Line,
+                        resolvedLine,
+                        resolvedMethod,
+                        resolvedLineText,
+                        resolvedEditedReadOk,
+                        resolvedEditedLineText,
+                        requestedEditedReadOk,
+                        requestedEditedLineText,
+                        compiledMethodStartLine,
+                        compiledMethodEndLine,
+                        compiledSourceLines);
+            }
+
+            string compiledLineMapWarning = PausePointEnableWarnings.ChooseCompiledLineMapWarning(
+                patchedMethodPdbUnavailableWarning,
+                PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
+                    compareCompiledLineDrift,
                     parameters.File,
-                    parameters.Line,
-                    resolvedLine,
                     resolvedMethod,
-                    resolvedLineText,
-                    resolvedEditedReadOk,
-                    resolvedEditedLineText,
-                    requestedEditedReadOk,
-                    requestedEditedLineText,
-                    compiledMethodStartLine,
-                    compiledMethodEndLine,
-                    compiledSourceLines);
-                enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, driftWarning);
-                if (driftWarning.Length > 0)
-                {
-                    response.RecommendedNextAction =
-                        SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction;
-                }
+                    comparedAndMatched));
+            enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, compiledLineMapWarning);
+            enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, comparisonWarning);
+            if (comparisonWarning.Length > 0)
+            {
+                response.RecommendedNextAction =
+                    SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction;
             }
 
             response.Warning = PausePointEnableWarnings.MergeWarnings(enableWarning, patchResult.Warning);

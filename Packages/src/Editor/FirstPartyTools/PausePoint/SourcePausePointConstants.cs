@@ -236,6 +236,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "so --line resolved against the last compiled source, not the edited file. Verify "
             + "ResolvedLineText matches the statement you meant, or run 'uloop compile' and re-enable.";
 
+        // Why a distinct sentence: comparison already proved the resolved statement is identical,
+        // so asking the agent to Verify ResolvedLineText by hand is leftover work.
+        // Format: file, resolved method display name.
+        public const string HotReloadCompiledLineMapMatchedWarningFormat =
+            "'{0}' has active hot-reload patches. The resolved method '{1}' is not patched by this reload, "
+            + "so --line resolved against the last compiled source, not the edited file. The statement text "
+            + "at the resolved line is identical in the edited file, so no drift is visible at this line.";
+
         // Why a separate failure string: resolve failure leaves ResolvedMethod and
         // ResolvedLineText empty, so pointing at those fields is a dead end.
         public const string HotReloadCompiledLineMapResolveFailureWarningFormat =

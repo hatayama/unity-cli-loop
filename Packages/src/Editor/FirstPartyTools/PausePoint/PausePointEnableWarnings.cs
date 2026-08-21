@@ -461,7 +461,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static string BuildCompiledLineMapWarningOrEmpty(
             bool hasActiveHotReloadPatches,
             string file,
-            string resolvedMethod)
+            string resolvedMethod,
+            bool comparedAndMatched)
         {
             if (!hasActiveHotReloadPatches)
             {
@@ -469,8 +470,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Debug.Assert(!string.IsNullOrEmpty(resolvedMethod), "resolvedMethod must not be empty.");
+            string format = comparedAndMatched
+                ? SourcePausePointConstants.HotReloadCompiledLineMapMatchedWarningFormat
+                : SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat;
             return string.Format(
-                SourcePausePointConstants.HotReloadCompiledLineMapWarningFormat,
+                format,
                 SourcePausePointPathNormalizer.ToForwardSlashes(file),
                 resolvedMethod);
         }

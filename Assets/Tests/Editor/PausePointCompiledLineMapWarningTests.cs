@@ -26,6 +26,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             + "against the last compiled source, not the edited file. Verify ResolvedLineText "
             + "matches the statement you meant, or run 'uloop compile' and re-enable.";
 
+        private const string ExpectedCompiledLineMapMatchedWarning =
+            "'Assets/Scripts/Example.cs' has active hot-reload patches. The resolved method "
+            + "'ExampleType.ExampleMethod' is not patched by this reload, so --line resolved "
+            + "against the last compiled source, not the edited file. The statement text at "
+            + "the resolved line is identical in the edited file, so no drift is visible at this line.";
+
         private const string ExpectedCompiledLineMapResolveFailureWarning =
             "'Assets/Scripts/Example.cs' has active hot-reload patches. --line resolves against "
             + "the last compiled source, not the edited file, so a line number taken from the "
@@ -80,7 +86,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
                 true,
                 ForwardSlashFile,
-                ExampleResolvedMethod);
+                ExampleResolvedMethod,
+                false);
 
             Assert.That(warning, Is.EqualTo(ExpectedCompiledLineMapWarning));
         }
@@ -94,7 +101,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
                 true,
                 "Assets\\Scripts\\Example.cs",
-                ExampleResolvedMethod);
+                ExampleResolvedMethod,
+                false);
 
             Assert.That(warning, Is.EqualTo(ExpectedCompiledLineMapWarning));
         }
@@ -108,9 +116,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
                 false,
                 ForwardSlashFile,
-                ExampleResolvedMethod);
+                ExampleResolvedMethod,
+                false);
 
             Assert.That(warning, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: when compiled and edited statement text already match, the success warning
+        /// says so instead of asking the agent to verify ResolvedLineText by hand.
+        /// </summary>
+        [Test]
+        public void BuildCompiledLineMapWarningOrEmpty_WhenComparedAndMatched_ReturnsMatchedWarning()
+        {
+            string warning = PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
+                true,
+                ForwardSlashFile,
+                ExampleResolvedMethod,
+                true);
+
+            Assert.That(warning, Is.EqualTo(ExpectedCompiledLineMapMatchedWarning));
         }
 
         /// <summary>
@@ -161,12 +186,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineDriftWarningOrEmpty_WhenTextsDiffer_ReturnsFormattedWarning()
         {
-            string warning = PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
-                "  return 1;  ",
-                "return 2;",
-                ForwardSlashFile,
-                17,
-                true);
+            (string warning, bool comparedAndMatched) =
+                PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
+                    "  return 1;  ",
+                    "return 2;",
+                    ForwardSlashFile,
+                    17,
+                    true);
 
             Assert.That(
                 warning,
@@ -177,6 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         17,
                         "return 1;",
                         "return 2;")));
+            Assert.That(comparedAndMatched, Is.False);
         }
 
         /// <summary>
@@ -185,14 +212,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineDriftWarningOrEmpty_WhenTextsMatchAfterTrim_ReturnsEmpty()
         {
-            string warning = PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
-                "  return 1;  ",
-                "return 1;",
-                ForwardSlashFile,
-                17,
-                true);
+            (string warning, bool comparedAndMatched) =
+                PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
+                    "  return 1;  ",
+                    "return 1;",
+                    ForwardSlashFile,
+                    17,
+                    true);
 
             Assert.That(warning, Is.EqualTo(string.Empty));
+            Assert.That(comparedAndMatched, Is.True);
         }
 
         /// <summary>
@@ -201,22 +230,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineDriftWarningOrEmpty_WhenCompiledMissingOrEditedReadFails_ReturnsEmpty()
         {
-            Assert.That(
+            (string missingCompiledWarning, bool missingCompiledMatched) =
                 PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
                     string.Empty,
                     "return 1;",
                     ForwardSlashFile,
                     17,
-                    true),
-                Is.EqualTo(string.Empty));
-            Assert.That(
+                    true);
+            Assert.That(missingCompiledWarning, Is.EqualTo(string.Empty));
+            Assert.That(missingCompiledMatched, Is.False);
+
+            (string readFailedWarning, bool readFailedMatched) =
                 PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
                     "return 1;",
                     string.Empty,
                     ForwardSlashFile,
                     17,
-                    false),
-                Is.EqualTo(string.Empty));
+                    false);
+            Assert.That(readFailedWarning, Is.EqualTo(string.Empty));
+            Assert.That(readFailedMatched, Is.False);
         }
 
         /// <summary>
@@ -225,12 +257,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildCompiledLineDriftWarningOrEmpty_WhenEditedLineIsBlankAndReadSucceeded_ReturnsBlankDriftWarning()
         {
-            string warning = PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
-                "  {  ",
-                "   ",
-                ForwardSlashFile,
-                109,
-                true);
+            (string warning, bool comparedAndMatched) =
+                PausePointCompiledLineComparisonWarnings.BuildCompiledLineDriftWarningOrEmpty(
+                    "  {  ",
+                    "   ",
+                    ForwardSlashFile,
+                    109,
+                    true);
 
             Assert.That(
                 warning,
@@ -238,6 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     "'Assets/Scripts/Example.cs' line 109 is '{' in the last compiled source but blank in the edited file. "
                     + "The marker is armed on the compiled statement. If that is not the statement you meant, "
                     + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable."));
+            Assert.That(comparedAndMatched, Is.False);
         }
 
         /// <summary>
@@ -368,7 +402,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ComposeCompiledLineDriftAndSnapWarningOrEmpty_WhenSnapAndNonBlankDrift_PutsSnapBeforeDrift()
         {
-            string warning = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+            (string warning, bool comparedAndMatched) = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
                 ForwardSlashFile,
                 10,
                 17,
@@ -390,6 +424,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + "'Assets/Scripts/Example.cs' line 17 is 'return 1;' in the last compiled source but 'return 3;' in the edited file. "
                     + "The marker is armed on the compiled statement. If that is not the statement you meant, "
                     + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable."));
+            Assert.That(comparedAndMatched, Is.False);
         }
 
         /// <summary>
@@ -407,7 +442,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             compiledSourceLines[103] = "            LastRemainingBlocks = remainingBlocks;";
 
-            string warning = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+            (string warning, bool comparedAndMatched) = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
                 ForwardSlashFile,
                 107,
                 109,
@@ -431,6 +466,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable. "
                     + "In the last compiled source, 'GameDirector.ComputeScoreTarget' spans lines 100-120. "
                     + "Candidate: the text at --line 107 in the edited file appears at line 104 in the last compiled source."));
+            Assert.That(comparedAndMatched, Is.False);
         }
 
         /// <summary>
@@ -448,7 +484,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            {"
             };
 
-            string warning = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+            (string warning, bool comparedAndMatched) = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
                 ForwardSlashFile,
                 107,
                 109,
@@ -469,6 +505,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + "but the marker snapped forward to line 109 in 'GameDirector.ComputeScoreTarget'. "
                     + "In the last compiled source, 'GameDirector.ComputeScoreTarget' spans lines 100-120. "
                     + "Candidate: the text at --line 107 in the edited file appears at line 3 in the last compiled source."));
+            Assert.That(comparedAndMatched, Is.True);
         }
 
         /// <summary>
@@ -485,7 +522,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "            LastRemainingBlocks = remainingBlocks;"
             };
 
-            string warning = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+            (string warning, bool comparedAndMatched) = PausePointCompiledLineComparisonWarnings.ComposeCompiledLineDriftAndSnapWarningOrEmpty(
                 ForwardSlashFile,
                 107,
                 109,
@@ -509,6 +546,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + "recompute --line against the last compiled source, or run 'uloop compile' and re-enable. "
                     + "Candidate: the edited line's text appears at line 2 in the last compiled source. "
                     + "Candidate: the text at --line 107 in the edited file appears at line 3 in the last compiled source."));
+            Assert.That(comparedAndMatched, Is.False);
         }
 
         /// <summary>
@@ -592,13 +630,81 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
                                 true,
                                 ResolveFailureFile,
-                                response.ResolvedMethod)),
+                                response.ResolvedMethod,
+                                false)),
                         expectedDrift),
                     SourcePausePointConstants.SmallMethodInliningRiskWarning);
                 Assert.That(response.Warning, Is.EqualTo(expectedWarning));
                 Assert.That(
                     response.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction));
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.GetShimLookupForFile = previousLookup;
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousSnapshot;
+            }
+        }
+
+        /// <summary>
+        /// What: enable on an unpatched method whose compiled and edited statement text match
+        /// uses the matched compiled-line-map warning through PausePointUseCase.Enable.
+        /// </summary>
+        [Test]
+        public void Enable_WhenCompiledLineMatchesEditedFile_UsesMatchedCompiledLineMapWarning()
+        {
+            Func<string, HotReloadShimFileLookup> previousLookup =
+                HotReloadPausePointCoordination.GetShimLookupForFile;
+            Func<string, string> previousSnapshot =
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
+            HotReloadShimFileLookup stubLookup = new HotReloadShimFileLookup(
+                Array.Empty<byte>(),
+                Array.Empty<byte>(),
+                null,
+                Array.Empty<HotReloadShimMethodLookup>());
+
+            string absolutePath = Path.Combine(
+                UnityCliLoopPathResolver.GetProjectRoot(),
+                ResolveFailureFile);
+            string diskSource = File.ReadAllText(absolutePath);
+            int markerLine = FindLineNumberContaining(
+                diskSource,
+                "compiled-line-drift" + "-probe-unique");
+            Assert.That(markerLine, Is.GreaterThan(0));
+            int requestedLine = markerLine + 1;
+
+            try
+            {
+                HotReloadPausePointCoordination.GetShimLookupForFile = _ => stubLookup;
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => diskSource;
+
+                PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+                {
+                    File = ResolveFailureFile,
+                    Line = requestedLine,
+                    TimeoutSeconds = 30,
+                    Mode = UloopPausePointCaptureMode.SingleShot
+                });
+
+                Assert.That(
+                    response.Success,
+                    Is.True,
+                    response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
+                Assert.That(
+                    response.ResolvedMethod,
+                    Is.EqualTo(
+                        "System.Int32 io.github.hatayama.UnityCliLoop.Tests.Editor.PausePointCompiledLineMapWarningTests::CompiledLineDriftProbe()"));
+                string expectedWarning = PausePointEnableWarnings.MergeWarnings(
+                    PausePointEnableWarnings.MergeWarnings(
+                        PausePointEnableWarnings.CreateEnableWarning(),
+                        PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
+                            true,
+                            ResolveFailureFile,
+                            response.ResolvedMethod,
+                            true)),
+                    SourcePausePointConstants.SmallMethodInliningRiskWarning);
+                Assert.That(response.Warning, Is.EqualTo(expectedWarning));
+                Assert.That(response.RecommendedNextAction, Is.EqualTo(string.Empty));
             }
             finally
             {
@@ -678,7 +784,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                             PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
                                 true,
                                 ResolveFailureFile,
-                                response.ResolvedMethod)),
+                                response.ResolvedMethod,
+                                true)),
                         expectedSnap),
                     SourcePausePointConstants.SmallMethodInliningRiskWarning);
                 Assert.That(response.Warning, Is.EqualTo(expectedWarning));
