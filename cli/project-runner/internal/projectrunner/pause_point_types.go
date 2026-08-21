@@ -27,11 +27,25 @@ type pausePointStatusResponse struct {
 	LastHitSequence                 int                              `json:"LastHitSequence"`
 	Message                         string                           `json:"Message"`
 	RecommendedNextAction           string                           `json:"RecommendedNextAction"`
-	CapturedVariables               []pausePointCapturedVariable     `json:"CapturedVariables"`
-	CallerFrames                    []pausePointCallerFrame          `json:"CallerFrames"`
-	CapturedVariablesTruncated      bool                             `json:"CapturedVariablesTruncated"`
-	TruncatedVariableNames          []string                         `json:"TruncatedVariableNames"`
-	TruncatedVariableCount          int                              `json:"TruncatedVariableCount"`
+
+	// SnapshotTiming is still enable-only on the Unity status DTO today, so --await copies it
+	// from the enable response on both hit and Expired. Method-name arms leave it empty, so
+	// omitempty keeps the historical await schema unchanged for those cases.
+	// Why before CapturedVariables: JSON object key order follows this struct, and agents
+	// should read SnapshotTiming and StatusNote before the variable dump.
+	SnapshotTiming string `json:"SnapshotTiming,omitempty"`
+
+	// StatusNote is set by the CLI, not Unity, when Status is Hit. Trace mode explains
+	// that Play Mode was not paused; other modes explain the frame-boundary pause.
+	// omitempty keeps the field off non-Hit statuses so the shared status contract
+	// fixture stays unchanged.
+	StatusNote string `json:"StatusNote,omitempty"`
+
+	CapturedVariables          []pausePointCapturedVariable `json:"CapturedVariables"`
+	CallerFrames               []pausePointCallerFrame      `json:"CallerFrames"`
+	CapturedVariablesTruncated bool                         `json:"CapturedVariablesTruncated"`
+	TruncatedVariableNames     []string                     `json:"TruncatedVariableNames"`
+	TruncatedVariableCount     int                          `json:"TruncatedVariableCount"`
 
 	// CapturedVariablesTruncatedNote is set by the CLI, not Unity, when
 	// --captured-variable-names dropped every truncated variable so the remaining
@@ -62,14 +76,12 @@ type pausePointStatusResponse struct {
 	// ResolvedLine / ResolvedLineText are merged as a pair on the --await hit path and the
 	// --await Expired path: when status carries a non-zero ResolvedLine (retarget-updated),
 	// both fields come from status; otherwise both fall back to the enable-pause-point response.
-	// ResolvedMethod / SnapshotTiming are still enable-only on the Unity status DTO today, so
-	// --await copies them from the enable response on both hit and Expired. Method-name arms
-	// leave them empty on the Unity side, so omitempty keeps the historical await schema
-	// unchanged for those cases.
+	// ResolvedMethod is still enable-only on the Unity status DTO today, so --await copies it
+	// from the enable response on both hit and Expired. Method-name arms leave it empty on the
+	// Unity side, so omitempty keeps the historical await schema unchanged for those cases.
 	ResolvedLine     int    `json:"ResolvedLine,omitempty"`
 	ResolvedLineText string `json:"ResolvedLineText,omitempty"`
 	ResolvedMethod   string `json:"ResolvedMethod,omitempty"`
-	SnapshotTiming   string `json:"SnapshotTiming,omitempty"`
 
 	// CapturedVariableNameFilterNoMatch is set by the CLI, not Unity, when
 	// --captured-variable-names was passed but none of the requested names matched any
@@ -88,12 +100,6 @@ type pausePointStatusResponse struct {
 	// frame was dropped from CapturedVariableHistory because CapturedVariables already
 	// carries that hit. omitempty keeps the field off 0-hit and unfiltered responses.
 	CapturedVariableHistoryNote string `json:"CapturedVariableHistoryNote,omitempty"`
-
-	// StatusNote is set by the CLI, not Unity, when Status is Hit. Trace mode explains
-	// that Play Mode was not paused; other modes explain the frame-boundary pause.
-	// omitempty keeps the field off non-Hit statuses so the shared status contract
-	// fixture stays unchanged.
-	StatusNote string `json:"StatusNote,omitempty"`
 
 	// TriggerResult is set by the CLI, not Unity, only when --trigger was passed. It is omitted
 	// entirely otherwise, so callers that never use --trigger see no schema change at all.
