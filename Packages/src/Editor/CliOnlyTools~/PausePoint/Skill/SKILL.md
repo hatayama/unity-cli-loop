@@ -13,7 +13,7 @@ Use this small loop for one representative frame you care about. No source edit 
 2. Run one foreground command that arms the pause point, fires the input, and waits for the hit:
 
 ```bash
-uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 30 --await --trigger "simulate-keyboard --action Press --key Space"
+uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 60 --await --trigger "simulate-keyboard --action Press --key Space"
 ```
 
 Digit keys are `Digit0`-`Digit9` or `Numpad0`-`Numpad9` — bare `0`-`9` is rejected.
@@ -22,7 +22,7 @@ Before writing a `--trigger` command that differs from the example, load the ski
 
 When the game reaches the line on its own, omit `--trigger`. Fall back to split steps only when the triggering action is not a single uloop command (several inputs in sequence, an external event). `execute-dynamic-code` — whether `--code-file` or inline `--code` — is one command; do not split the wait just to run it. When you do need split steps: run `enable-pause-point` without `--await` in the foreground (its response returning is the arm confirmation), then start `uloop await-pause-point --id <id>` in the background, then send the inputs. Do not approximate arm-waiting with a fixed sleep after a backgrounded enable.
 
-`--timeout-seconds` on enable starts the marker lifetime clock at enable time and is also the deadline `--await` waits against, so size it to cover both the trigger and the wait.
+`--timeout-seconds` on enable starts the marker lifetime clock at enable time and is also the deadline `--await` waits against, so size it to cover both the trigger and the wait. Give any agent-shell timeout or yield window more room than `--timeout-seconds`, never the same value: the response prints only when the wait ends, so a wrapper that cuts off at the same boundary reports empty output even though the command completed and printed just past the cutoff. When that happens, do not re-run the enable blindly — read the outcome with `uloop pause-point-status --id <id>`; an expired marker's record stays readable there.
 
 The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the `ResolvedLine` that was actually patched, the `ResolvedMethod`, and `ResolvedLineText` — the actual source text at `ResolvedLine`. When a statement spans multiple physical lines, `ResolvedLineText` is that whole statement normalized onto one line. When the requested line has no executable statement, the pause point rounds forward to the next executable line — check `ResolvedLine`/`ResolvedLineText` when precision matters, and re-check them after every code edit — a rewritten file shifts line numbers. Use the returned `Id` for every follow-up command. On a hit, this same response already carries `CapturedVariables` and every other field `await-pause-point` would have returned — no separate `await-pause-point` call is needed. `EditorState` on a hit response is a snapshot from the moment of the hit. After `--resume-play`, a successful await response can still show `EditorState.IsPaused: true` from that hit — it is not the Editor's current pause flag. Read the live state with `control-play-mode --action Status`.
 
