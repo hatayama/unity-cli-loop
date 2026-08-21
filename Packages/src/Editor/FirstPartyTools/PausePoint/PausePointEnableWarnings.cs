@@ -64,6 +64,63 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return first + " " + second;
         }
 
+        // Why only when empty: drift and other success-path next-actions must keep their wording.
+        internal static string ResolveSuccessEnableRecommendedNextAction(string existing, string id)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(id), "id must not be empty");
+            if (!string.IsNullOrEmpty(existing))
+            {
+                return existing;
+            }
+
+            return string.Format(
+                SourcePausePointConstants.EnableSuccessArmingRecommendedNextActionFormat,
+                id);
+        }
+
+        // Why HitCount or Hit: Continuous/Trace stay Enabled after a hit, so Status==Hit alone
+        // would miss a re-arm that still discards capture history.
+        internal static string BuildRearmDiscardWarningOrEmpty(UloopPausePointSnapshot previous)
+        {
+            Debug.Assert(previous != null, "previous must not be null");
+            if (previous.HitCount <= 0 && previous.Status != UloopPausePointStatus.Hit)
+            {
+                return string.Empty;
+            }
+
+            return string.Format(
+                SourcePausePointConstants.RearmDiscardCapturedVariablesWarningFormat,
+                previous.Generation);
+        }
+
+        // Why also match method end: a using/lock Dispose nested "}" has a sequence point, so
+        // Trim()=="}" alone would claim every return path reaches an inner brace.
+        // Why fail-closed when both ends are 0: the "method's closing brace" wording would be a lie.
+        internal static string BuildClosingBraceWarningOrEmpty(
+            string resolvedLineText,
+            int resolvedLine,
+            string resolvedMethod,
+            int compiledMethodEndLine,
+            int editedMethodEndLine)
+        {
+            if (string.IsNullOrEmpty(resolvedLineText) || resolvedLineText.Trim() != "}")
+            {
+                return string.Empty;
+            }
+
+            bool atCompiledMethodEnd = compiledMethodEndLine > 0 && resolvedLine == compiledMethodEndLine;
+            bool atEditedMethodEnd = editedMethodEndLine > 0 && resolvedLine == editedMethodEndLine;
+            if (!atCompiledMethodEnd && !atEditedMethodEnd)
+            {
+                return string.Empty;
+            }
+
+            return string.Format(
+                SourcePausePointConstants.ClosingBraceResolvedLineWarningFormat,
+                resolvedLine,
+                resolvedMethod);
+        }
+
         // Why Type.Method in the notice: enable's resolved-method string is Cecil FullName, but
         // the warning should name the Unity message the same way agents already read caller frames.
         internal static string BuildPerFrameTraceWarningOrEmpty(
