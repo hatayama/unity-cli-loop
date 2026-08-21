@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -13,6 +14,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public string Message { get; set; } = "";
         public string Action { get; set; } = "";
+        // Why per-property Ignore: null optional diagnostics must not serialize as JSON null;
+        // agents treat missing vs null inconsistently. Do not change global serializer settings
+        // or every tool's wire contract changes. Matches Go omitempty.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string? KeyName { get; set; }
         public bool InterruptedByPausePoint { get; set; }
         /// <summary>
@@ -21,17 +26,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// no input was injected at all, so a caller reading only Success would miss that the action
         /// never happened. The CLI's --trigger diagnosis compares this against the marker it awaits.
         /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string? RejectedByActivePausePointId { get; set; }
 
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string? PausePointId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public int? PausePointHitCount { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public List<UnityCliLoopPausePointHit>? PausePointHits { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? PressEdgeObserved { get; set; }
 
         /// <summary>
         /// Extra observation frames spent holding the key after the normal duration window
         /// while waiting for wasPressedThisFrame. Null when release was not delayed.
         /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public int? PressHoldExtendedFrames { get; set; }
 
         // The following three PressEdge* fields are diagnostics set only when PressEdgeObserved
@@ -42,17 +53,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Which Input System update type (if any) consumed the key-down event, or null if it
         /// was never consumed.
         /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string? PressEdgeConsumedByUpdateType { get; set; }
 
         /// <summary>
         /// Whether any Dynamic update ran while waiting for the press edge to be observed.
         /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? PressEdgeAnyDynamicUpdateObserved { get; set; }
 
         /// <summary>
         /// Whether the key was already pressed before this action was queued, meaning no press
         /// transition could have occurred.
         /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? PressEdgeKeyAlreadyPressedBeforeQueue { get; set; }
 
         // KeyStateTrackedHeld / KeyStateDeviceIsPressed are set on KeyDown "already held"
@@ -63,17 +77,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Whether Unity CLI Loop's own key-hold tracker (not the Input System device) considered
         /// the key held at the moment of the diagnostic read.
         /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? KeyStateTrackedHeld { get; set; }
 
         /// <summary>
         /// Whether the Input System device (<c>keyboard[key].isPressed</c>) reported the key as
         /// pressed at the moment of the diagnostic read.
         /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? KeyStateDeviceIsPressed { get; set; }
 
         /// <summary>
         /// Key names released by the ReleaseAll action (bookkeeping and/or device). Null for other actions.
         /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public List<string>? ReleasedKeys { get; set; }
 
         /// <summary>
