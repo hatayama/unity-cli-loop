@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Without this, callers cannot tell which namespaces were auto-resolved
         /// and cannot advise users to include them for faster compilation.
         /// </summary>
-        public List<string> AutoInjectedNamespaces { get; set; } = new();
+        public List<AutoInjectedNamespace> AutoInjectedNamespaces { get; set; } = new();
 
         /// <summary>
         /// Keeps internal phase timings out of normal logs while allowing tests and

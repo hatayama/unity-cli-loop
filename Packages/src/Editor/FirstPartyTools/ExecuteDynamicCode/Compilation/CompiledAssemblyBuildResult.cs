@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public Dictionary<string, List<string>> AmbiguousTypeCandidates { get; }
 
-        public List<string> AutoInjectedNamespaces { get; }
+        public List<AutoInjectedNamespace> AutoInjectedNamespaces { get; }
 
         public byte[] AssemblyBytes { get; }
 
@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string updatedSource,
             CompilerDiagnostics diagnostics,
             Dictionary<string, List<string>> ambiguousTypeCandidates,
-            List<string> autoInjectedNamespaces,
+            List<AutoInjectedNamespace> autoInjectedNamespaces,
             byte[] assemblyBytes,
             byte[] pdbBytes,
             double referenceResolutionMilliseconds,

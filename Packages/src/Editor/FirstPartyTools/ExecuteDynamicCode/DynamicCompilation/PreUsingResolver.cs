@@ -41,13 +41,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> qualifiedTypeIdentifiers = ExtractQualifiedTypeIdentifiers(userCodeSection);
 
             HashSet<string> namespacesToAdd = new(System.StringComparer.Ordinal);
+            List<AutoInjectedNamespace> attributions = new();
             List<string> assemblyReferencesToAdd = new();
             foreach (string typeName in candidateTypes)
             {
-                List<string> namespaces = index.FindNamespacesForType(typeName);
-                if (namespaces.Count == 1 && !existingNamespaces.Contains(namespaces[0]))
+                if (!index.IsKnownNamespaceOrLeadingSegment(typeName))
                 {
-                    namespacesToAdd.Add(namespaces[0]);
+                    List<string> namespaces = index.FindNamespacesForType(typeName);
+                    if (namespaces.Count == 1
+                        && !existingNamespaces.Contains(namespaces[0])
+                        && namespacesToAdd.Add(namespaces[0]))
+                    {
+                        attributions.Add(new AutoInjectedNamespace(namespaces[0], typeName, true));
+                    }
                 }
 
                 List<string> assemblyReferences = index.FindAssemblyLocationsForType(typeName);
@@ -71,11 +77,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return new PreUsingResult(
                     wrappedSource,
                     System.Array.Empty<string>(),
-                    assemblyReferencesToAdd);
+                    assemblyReferencesToAdd,
+                    System.Array.Empty<AutoInjectedNamespace>());
             }
 
             string updatedSource = AutoUsingResolver.InsertUsingDirectives(wrappedSource, namespacesToAdd);
-            return new PreUsingResult(updatedSource, namespacesToAdd, assemblyReferencesToAdd);
+            return new PreUsingResult(updatedSource, namespacesToAdd, assemblyReferencesToAdd, attributions);
         }
 
         private static HashSet<string> ExtractExistingNamespaces(string source)
@@ -394,14 +401,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public IReadOnlyCollection<string> AddedAssemblyReferences { get; }
 
+        public IReadOnlyList<AutoInjectedNamespace> AddedNamespaceAttributions { get; }
+
         public PreUsingResult(
             string updatedSource,
             IReadOnlyCollection<string> addedNamespaces,
-            IReadOnlyCollection<string> addedAssemblyReferences)
+            IReadOnlyCollection<string> addedAssemblyReferences,
+            IReadOnlyList<AutoInjectedNamespace> addedNamespaceAttributions)
         {
             UpdatedSource = updatedSource;
             AddedNamespaces = addedNamespaces;
             AddedAssemblyReferences = addedAssemblyReferences;
+            AddedNamespaceAttributions = addedNamespaceAttributions;
         }
     }
 }

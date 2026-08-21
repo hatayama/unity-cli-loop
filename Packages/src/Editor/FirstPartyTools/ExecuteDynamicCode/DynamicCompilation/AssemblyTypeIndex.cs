@@ -87,6 +87,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        // Why: a type simple name like System (VirtualTexturing) must not win a unique
+        // using injection when the identifier is already a known namespace prefix.
+        internal bool IsKnownNamespaceOrLeadingSegment(string identifier)
+        {
+            if (string.IsNullOrEmpty(identifier))
+            {
+                return false;
+            }
+
+            return _namespaceToAssemblyLocations.ContainsKey(identifier);
+        }
+
         public List<string> FindNamespacesForType(string typeName)
         {
             if (string.IsNullOrEmpty(typeName)) return new List<string>();
