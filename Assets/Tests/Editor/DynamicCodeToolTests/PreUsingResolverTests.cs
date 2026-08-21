@@ -14,7 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenUppercaseTypeName_ShouldReturnIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "StringBuilder builder = new StringBuilder();");
 
             Assert.That(result, Does.Contain("StringBuilder"));
@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenExcludedBuiltInTypes_ShouldSkipThem()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "String x = null; Int32 y = 0; Boolean flag = true;");
 
             Assert.That(result, Does.Not.Contain("String"));
@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenIdentifierFollowsDot_ShouldSkipIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "System.Text.StringBuilder builder = null;");
 
             Assert.That(result, Does.Contain("System"));
@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenStringLiteral_ShouldNotExtractFromIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "string s = \"StringBuilder is great\";");
 
             Assert.That(result, Does.Not.Contain("StringBuilder"));
@@ -55,7 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenLineComment_ShouldNotExtractFromIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "int x = 1; // StringBuilder comment");
 
             Assert.That(result, Does.Not.Contain("StringBuilder"));
@@ -64,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenBlockComment_ShouldNotExtractFromIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "int x = 1; /* StringBuilder */ int y = 2;");
 
             Assert.That(result, Does.Not.Contain("StringBuilder"));
@@ -73,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenEmpty_ShouldReturnEmptySet()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers("");
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers("");
 
             Assert.That(result, Is.Empty);
         }
@@ -83,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             // AdvanceOneTokenPublic skips the entire $"..." including interpolation holes;
             // types inside holes are handled by AutoUsingResolver fallback if needed
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "string s = $\"value is {MyVar} and {\"nested\"}\";");
 
             Assert.That(result, Does.Not.Contain("MyVar"));
@@ -94,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenGenericTypes_ShouldExtractBothNames()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "HashSet<Regex> set = new HashSet<Regex>();");
 
             Assert.That(result, Does.Contain("HashSet"));
@@ -104,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenMemberInitializer_ShouldSkipIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "new Foo { Name = \"bar\", Count = 1 };");
 
             Assert.That(result, Does.Contain("Foo"));
@@ -115,7 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenNamedArgument_ShouldSkipIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "DoSomething(Name: \"bar\");");
 
             Assert.That(result, Does.Contain("DoSomething"));
@@ -125,10 +125,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenEqualityComparison_ShouldNotSkip()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "if (MyEnum == null) {}");
 
             Assert.That(result, Does.Contain("MyEnum"));
+        }
+
+        /// <summary>
+        /// What: identifiers are recorded in source appearance order, first occurrence only.
+        /// </summary>
+        [Test]
+        public void ExtractTypeIdentifiers_WhenMultipleTypes_PreservesSourceAppearanceOrder()
+        {
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+                "Encoding e = null; StringBuilder b = null; Encoding again = null;");
+
+            Assert.That(result, Is.EqualTo(new[] { "Encoding", "StringBuilder" }));
         }
 
         [Test]
@@ -251,6 +263,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
             Assert.That(result.AddedAssemblyReferences, Has.Count.GreaterThan(0));
+        }
+
+        /// <summary>
+        /// What: when several identifiers resolve to the same namespace, the first
+        /// identifier in source order is recorded as the trigger.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenMultipleIdentifiersShareNamespace_RecordsFirstSourceIdentifier()
+        {
+            string body = "Encoding e = null; StringBuilder b = null;\nreturn e.WebName;";
+            string wrappedSource = WrapperTemplate.Build(
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
+
+            PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
+
+            AutoInjectedNamespace attribution = null;
+            foreach (AutoInjectedNamespace item in result.AddedNamespaceAttributions)
+            {
+                if (item.Namespace == "System.Text")
+                {
+                    attribution = item;
+                    break;
+                }
+            }
+
+            Assert.That(attribution, Is.Not.Null);
+            Assert.That(attribution.TriggerIdentifier, Is.EqualTo("Encoding"));
+            Assert.That(attribution.IsSpeculative, Is.True);
         }
     }
 }

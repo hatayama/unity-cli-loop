@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HashSet<string> existingNamespaces = ExtractExistingNamespaces(wrappedSource);
             string userCodeSection = ExtractUserCodeSection(wrappedSource);
-            HashSet<string> candidateTypes = ExtractTypeIdentifiers(userCodeSection);
+            IReadOnlyList<string> candidateTypes = ExtractTypeIdentifiers(userCodeSection);
             HashSet<string> qualifiedTypeIdentifiers = ExtractQualifiedTypeIdentifiers(userCodeSection);
 
             HashSet<string> namespacesToAdd = new(System.StringComparer.Ordinal);
@@ -176,9 +176,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal static HashSet<string> ExtractTypeIdentifiers(string source)
+        internal static IReadOnlyList<string> ExtractTypeIdentifiers(string source)
         {
-            HashSet<string> identifiers = new(System.StringComparer.Ordinal);
+            List<string> identifiers = new();
+            HashSet<string> seen = new(System.StringComparer.Ordinal);
             int pos = 0;
             int length = source.Length;
             bool prevWasDot = false;
@@ -210,7 +211,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 if (char.IsLetter(c) || c == '_')
                 {
-                    pos = ConsumeTypeIdentifierCandidate(source, pos, length, prevWasDot, identifiers);
+                    pos = ConsumeTypeIdentifierCandidate(source, pos, length, prevWasDot, identifiers, seen);
                     prevWasDot = false;
                     continue;
                 }
@@ -232,7 +233,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int pos,
             int length,
             bool prevWasDot,
-            HashSet<string> identifiers)
+            List<string> identifiers,
+            HashSet<string> seen)
         {
             int start = pos;
             while (pos < length && (char.IsLetterOrDigit(source[pos]) || source[pos] == '_'))
@@ -242,7 +244,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!prevWasDot && char.IsUpper(source[start]))
             {
-                AddTypeIdentifierCandidate(source, start, pos, length, identifiers);
+                AddTypeIdentifierCandidate(source, start, pos, length, identifiers, seen);
             }
 
             return pos;
@@ -253,7 +255,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int start,
             int pos,
             int length,
-            HashSet<string> identifiers)
+            List<string> identifiers,
+            HashSet<string> seen)
         {
             string identifier = source.Substring(start, pos - start);
             if (LooksLikeMemberOrLabel(source, pos, length) || ExcludedIdentifiers.Contains(identifier))
@@ -261,7 +264,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            identifiers.Add(identifier);
+            if (seen.Add(identifier))
+            {
+                identifiers.Add(identifier);
+            }
         }
 
         private static bool LooksLikeMemberOrLabel(string source, int pos, int length)

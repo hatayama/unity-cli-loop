@@ -113,13 +113,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// What: System is classified as a known namespace or leading segment.
+        /// What: a full known namespace is classified as a known namespace, not only
+        /// as a leading segment.
         /// </summary>
         [Test]
-        public void IsKnownNamespaceOrLeadingSegment_WhenIdentifierIsSystem_ReturnsTrue()
+        public void IsKnownNamespace_WhenIdentifierIsSystemText_ReturnsTrue()
         {
-            Assert.That(AssemblyTypeIndex.Instance.IsKnownNamespaceOrLeadingSegment("System"), Is.True);
-            Assert.That(AssemblyTypeIndex.Instance.IsKnownNamespaceOrLeadingSegment("StringBuilder"), Is.False);
+            AssemblyTypeIndex index = AssemblyTypeIndex.Instance;
+
+            Assert.That(index.IsKnownNamespace("System.Text"), Is.True);
+            Assert.That(index.IsNamespaceLeadingSegment("System.Text"), Is.False);
+            Assert.That(index.IsKnownNamespaceOrLeadingSegment("System.Text"), Is.True);
+        }
+
+        /// <summary>
+        /// What: a namespace root that does not itself contain public types is still
+        /// classified as a leading segment.
+        /// </summary>
+        [Test]
+        public void IsNamespaceLeadingSegment_WhenIdentifierIsIo_ReturnsTrue()
+        {
+            AssemblyTypeIndex index = AssemblyTypeIndex.Instance;
+
+            Assert.That(index.IsKnownNamespace("io"), Is.False);
+            Assert.That(index.IsNamespaceLeadingSegment("io"), Is.True);
+            Assert.That(index.IsKnownNamespaceOrLeadingSegment("io"), Is.True);
+        }
+
+        /// <summary>
+        /// What: a type simple name is neither a known namespace nor a leading segment.
+        /// </summary>
+        [Test]
+        public void IsKnownNamespaceOrLeadingSegment_WhenIdentifierIsStringBuilder_ReturnsFalse()
+        {
+            AssemblyTypeIndex index = AssemblyTypeIndex.Instance;
+
+            Assert.That(index.IsKnownNamespace("StringBuilder"), Is.False);
+            Assert.That(index.IsNamespaceLeadingSegment("StringBuilder"), Is.False);
+            Assert.That(index.IsKnownNamespaceOrLeadingSegment("StringBuilder"), Is.False);
         }
 
         private static AutoInjectedNamespace FindAttribution(

@@ -1,5 +1,10 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using NUnit.Framework;
+using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -129,6 +134,109 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 AssemblyTypeIndex.Instance.FindNamespacesForType("System"),
                 Does.Contain("UnityEngine.Rendering.VirtualTexturing"));
+        }
+
+        /// <summary>
+        /// What: ResolveAsync does not inject a using or record an attribution when the
+        /// CS0246 identifier is a known namespace (the in-loop guard).
+        /// </summary>
+        [Test]
+        public async Task ResolveAsync_WhenCs0246IdentifierIsKnownNamespace_DoesNotInjectOrAttribute()
+        {
+            AutoUsingResolver resolver = new();
+            string sourcePath = Path.Combine(Path.GetTempPath(), "uloop-autousing-known-namespace.cs");
+            string dllPath = Path.Combine(Path.GetTempPath(), "uloop-autousing-known-namespace.dll");
+            CompilerMessage[] cs0246 = { CreateCs0246("System") };
+
+            try
+            {
+                AutoUsingResult result = await resolver.ResolveAsync(
+                    sourcePath,
+                    dllPath,
+                    "System.DateTime now = System.DateTime.UtcNow;",
+                    new List<string>(),
+                    (path, output, references, ct) => Task.FromResult(cs0246),
+                    CancellationToken.None);
+
+                Assert.That(result.AddedNamespaces, Is.Empty);
+                Assert.That(result.AddedNamespaceAttributions, Is.Empty);
+                Assert.That(result.AmbiguousTypeCandidates.ContainsKey("System"), Is.False);
+                Assert.That(result.UpdatedSource, Does.Not.Contain("using UnityEngine.Rendering.VirtualTexturing;"));
+            }
+            finally
+            {
+                if (File.Exists(sourcePath))
+                {
+                    File.Delete(sourcePath);
+                }
+
+                if (File.Exists(dllPath))
+                {
+                    File.Delete(dllPath);
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: ResolveAsync records retry attributions for a normal unresolved type
+        /// identifier and writes them to AddedNamespaceAttributions.
+        /// </summary>
+        [Test]
+        public async Task ResolveAsync_WhenCs0246IdentifierIsNormalType_RecordsAttribution()
+        {
+            AutoUsingResolver resolver = new();
+            string sourcePath = Path.Combine(Path.GetTempPath(), "uloop-autousing-normal-type.cs");
+            string dllPath = Path.Combine(Path.GetTempPath(), "uloop-autousing-normal-type.dll");
+            int buildCalls = 0;
+
+            try
+            {
+                AutoUsingResult result = await resolver.ResolveAsync(
+                    sourcePath,
+                    dllPath,
+                    "StringBuilder builder = new StringBuilder();",
+                    new List<string>(),
+                    (path, output, references, ct) =>
+                    {
+                        buildCalls++;
+                        if (buildCalls == 1)
+                        {
+                            return Task.FromResult(new[] { CreateCs0246("StringBuilder") });
+                        }
+
+                        return Task.FromResult(Array.Empty<CompilerMessage>());
+                    },
+                    CancellationToken.None);
+
+                Assert.That(result.AddedNamespaces, Does.Contain("System.Text"));
+                Assert.That(result.AddedNamespaceAttributions.Count, Is.EqualTo(1));
+                Assert.That(result.AddedNamespaceAttributions[0].Namespace, Is.EqualTo("System.Text"));
+                Assert.That(result.AddedNamespaceAttributions[0].TriggerIdentifier, Is.EqualTo("StringBuilder"));
+                Assert.That(result.AddedNamespaceAttributions[0].IsSpeculative, Is.False);
+                Assert.That(result.UpdatedSource, Does.StartWith("using System.Text;"));
+            }
+            finally
+            {
+                if (File.Exists(sourcePath))
+                {
+                    File.Delete(sourcePath);
+                }
+
+                if (File.Exists(dllPath))
+                {
+                    File.Delete(dllPath);
+                }
+            }
+        }
+
+        private static CompilerMessage CreateCs0246(string identifier)
+        {
+            return new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message = "error CS0246: The type or namespace name '" + identifier
+                    + "' could not be found (are you missing a using directive or an assembly reference?)"
+            };
         }
     }
 }

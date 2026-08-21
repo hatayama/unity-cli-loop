@@ -361,7 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static List<AutoInjectedNamespace> MergeAutoInjectedNamespaces(
+        internal static List<AutoInjectedNamespace> MergeAutoInjectedNamespaces(
             bool preUsingRolledBack,
             PreUsingResult preUsingResult,
             AutoUsingResult autoResult)
