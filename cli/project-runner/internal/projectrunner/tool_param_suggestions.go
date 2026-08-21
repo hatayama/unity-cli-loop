@@ -1,6 +1,7 @@
 package projectrunner
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -19,12 +20,21 @@ type visibleToolOption struct {
 	property clicore.ToolProperty
 }
 
-func unexpectedArgumentError(tool clicore.ToolDefinition, arg string) *clierrors.ArgumentError {
+func unexpectedArgumentError(tool clicore.ToolDefinition, arg string, lastConsumedArrayOption string) *clierrors.ArgumentError {
+	suggestions := enumValueOptionSuggestions(tool, arg)
+	if lastConsumedArrayOption != "" {
+		suggestions = append([]string{
+			fmt.Sprintf(
+				"Pass multiple values as one comma-separated list: %s value1,value2",
+				lastConsumedArrayOption,
+			),
+		}, suggestions...)
+	}
 	return &clierrors.ArgumentError{
 		Message:     "Unexpected argument: " + arg,
 		Received:    arg,
 		Command:     tool.Name,
-		NextActions: prependSuggestions(enumValueOptionSuggestions(tool, arg), "Pass tool inputs as `--option value` pairs."),
+		NextActions: prependSuggestions(suggestions, "Pass tool inputs as `--option value` pairs."),
 	}
 }
 

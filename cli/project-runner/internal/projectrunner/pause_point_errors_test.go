@@ -1,6 +1,9 @@
 package projectrunner
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // Verifies that a suppressed marker short-circuits timeout diagnosis even when the
 // response would otherwise look like an already-hit continuous wait or an enabled-but-never-hit marker.
@@ -188,5 +191,44 @@ func TestPausePointStateError_DetailsIncludeClearedReasonAndStatusBeforeClear(t 
 	}
 	if err.Details["StatusBeforeClear"] != pausePointStatusEnabled {
 		t.Fatalf("StatusBeforeClear mismatch: %#v", err.Details)
+	}
+}
+
+// Verifies file:line ids replace re-arm and confirm NextActions with --file/--line wording.
+func TestPausePointStateNextActionsReplacesFileLineGuidance(t *testing.T) {
+	got := pausePointStateNextActions("Assets/Scripts/Foo.cs:42", pausePointStatusResponse{})
+	want := []string{
+		"Re-arm it with uloop enable-pause-point --file \"Assets/Scripts/Foo.cs\" --line 42 before waiting.",
+		"Confirm the code path executes line 42 of Assets/Scripts/Foo.cs while the marker is armed.",
+		"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+		"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("NextActions mismatch:\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+// Verifies a code-marker id keeps the Pause(...) NextActions wording.
+func TestPausePointStateNextActionsKeepsCodeMarkerGuidance(t *testing.T) {
+	got := pausePointStateNextActions("jump", pausePointStatusResponse{})
+	want := []string{
+		"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
+		"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",
+		"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+		"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("NextActions mismatch:\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+// Verifies a code-marker id that contains a colon is not treated as file:line.
+func TestPausePointStateNextActionsKeepsCodeMarkerGuidanceWhenIdContainsColon(t *testing.T) {
+	got := pausePointStateNextActions("scene:jump", pausePointStatusResponse{})
+	if got[0] != "Run `uloop enable-pause-point --id <marker-id>` before waiting." {
+		t.Fatalf("re-arm NextAction mismatch: %#v", got[0])
+	}
+	if got[1] != "Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id." {
+		t.Fatalf("confirm NextAction mismatch: %#v", got[1])
 	}
 }

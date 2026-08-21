@@ -15,11 +15,12 @@ import (
 func buildToolParams(args []string, tool clicore.ToolDefinition) (map[string]any, string, error) {
 	params := map[string]any{}
 	projectPath := ""
+	lastConsumedArrayOption := ""
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
 		if !strings.HasPrefix(arg, "--") {
-			return nil, "", unexpectedArgumentError(tool, arg)
+			return nil, "", unexpectedArgumentError(tool, arg, lastConsumedArrayOption)
 		}
 
 		flag, err := parseToolFlag(arg)
@@ -33,6 +34,7 @@ func buildToolParams(args []string, tool clicore.ToolDefinition) (map[string]any
 				return nil, "", err
 			}
 			projectPath = value
+			lastConsumedArrayOption = ""
 			if consumedNext {
 				index++
 			}
@@ -53,6 +55,7 @@ func buildToolParams(args []string, tool clicore.ToolDefinition) (map[string]any
 				return nil, "", booleanValueArgumentError(option, args[index+1])
 			}
 			params[propertyName] = !negated
+			lastConsumedArrayOption = ""
 			continue
 		}
 
@@ -69,6 +72,7 @@ func buildToolParams(args []string, tool clicore.ToolDefinition) (map[string]any
 			return nil, "", err
 		}
 		params[propertyName] = converted
+		lastConsumedArrayOption = consumedArrayOptionName(option, property)
 	}
 
 	return params, projectPath, nil
@@ -201,6 +205,13 @@ func convertObjectValue(value string, option string) (map[string]any, error) {
 		return nil, clierrors.InvalidValueArgumentError(option, value, "object")
 	}
 	return parsed, nil
+}
+
+func consumedArrayOptionName(option string, property clicore.ToolProperty) string {
+	if strings.EqualFold(property.Type, "array") {
+		return option
+	}
+	return ""
 }
 
 func booleanValueArgumentError(option string, received string) *clierrors.ArgumentError {

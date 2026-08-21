@@ -163,6 +163,32 @@ func TestBuildToolParamsUnexpectedArgumentWithoutEnumMatchKeepsOriginalNextActio
 	})
 }
 
+// Verifies a leftover token after an array option suggests a comma-separated list for that option.
+func TestBuildToolParamsUnexpectedArgumentAfterArraySuggestsCommaSeparatedList(t *testing.T) {
+	tool := clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Tags": {Type: "array"},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--tags", "alpha", "beta"}, tool)
+	requireNextActions(t, err, []string{
+		"Pass multiple values as one comma-separated list: --tags value1,value2",
+		"Pass tool inputs as `--option value` pairs.",
+	})
+}
+
+// Verifies a leftover token after a non-array option does not suggest a comma-separated list.
+func TestBuildToolParamsUnexpectedArgumentAfterStringOmitsCommaSeparatedList(t *testing.T) {
+	_, _, err := buildToolParams([]string{"--output-directory", "out", "extra"}, toolParamsSuggestionTool())
+	requireNextActions(t, err, []string{
+		"Pass tool inputs as `--option value` pairs.",
+	})
+}
+
 // Verifies an unknown flag whose name matches an option enum value suggests that option and value.
 func TestBuildToolParamsUnknownOptionSuggestsMatchingEnumValue(t *testing.T) {
 	_, _, err := buildToolParams([]string{"--status"}, toolParamsSuggestionTool())

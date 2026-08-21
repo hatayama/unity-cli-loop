@@ -39,6 +39,11 @@ const (
 	// pause are already post-frame; agents otherwise treat them as at-line evidence.
 	pausePointHitFrameBoundaryStatusNote = "Unity pauses at the next frame boundary; the rest of the hit frame already ran. Read at-line values from CapturedVariables; live reads via execute-dynamic-code reflect post-frame state."
 
+	// Shared by await-pause-point and pause-point-status when --id is missing. Why one
+	// constant: the two parsers used to copy the same sentence, and a file:line id is a
+	// valid answer that the old wording never mentioned.
+	pausePointMissingIDNextAction = "Pass --id <marker-id> matching UloopPausePoint.Pause(\"<marker-id>\"), or the Id returned by enable-pause-point (file:line markers use <project-relative path>:<line>, e.g. Assets/Scripts/Foo.cs:42)."
+
 	// Mode strings mirror UloopPausePointCaptureMode on the Unity side. Await uses an allowlist
 	// (continuous/trace) for the new-hit baseline — never `Mode != "single-shot"` — so an empty
 	// Mode from an older package keeps the historical immediate-Hit success path.
@@ -374,7 +379,7 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 			Option:       "--" + PausePointIDFlagName,
 			ExpectedType: "value",
 			Command:      clicore.PausePointAwaitCommandName,
-			NextActions:  []string{"Pass `--id <marker-id>` matching UloopPausePoint.Pause(\"<marker-id>\")."},
+			NextActions:  []string{pausePointMissingIDNextAction},
 		}
 	}
 
@@ -423,7 +428,7 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 			Option:       "--" + PausePointIDFlagName,
 			ExpectedType: "value",
 			Command:      clicore.PausePointStatusUserCommandName,
-			NextActions:  []string{"Pass `--id <marker-id>` matching UloopPausePoint.Pause(\"<marker-id>\")."},
+			NextActions:  []string{pausePointMissingIDNextAction},
 		}
 	}
 
