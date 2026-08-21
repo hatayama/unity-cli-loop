@@ -363,7 +363,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _currentCompileTask = null;
             _isCompiling = false;
             _isForceCompile = false;
+            _resultRecordingContext = CompileResultRecordingContext.Disabled();
             _compileStartedAtUtc = DateTime.MinValue;
+            _pendingPausePointWarning = null;
             CompileApiUpdaterConsentState.EndCliCompile();
             compileTask.TrySetCanceled();
         }

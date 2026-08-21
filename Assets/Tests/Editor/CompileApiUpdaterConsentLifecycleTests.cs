@@ -2,7 +2,9 @@ using System;
 using NUnit.Framework;
 using UnityEditor.Compilation;
 
+using io.github.hatayama.UnityCliLoop.Domain;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -44,6 +46,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             controller.ClearUntransferredCompileStateForTesting();
 
             Assert.That(CompileApiUpdaterConsentState.IsCliCompileInFlight, Is.False);
+        }
+
+        /// <summary>
+        /// What: failing before transfer also drops the request-scoped recording context
+        /// so a later completion cannot store a result under the abandoned request id.
+        /// </summary>
+        [Test]
+        public void ClearUntransferredCompileState_WhenRecordingWasEnabled_DoesNotStoreLaterResult()
+        {
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+
+            try
+            {
+                using CompileController controller = new(
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+                controller.SetResultRecordingContext(
+                    CompileResultRecordingContext.Create(
+                        new CompileSchema
+                        {
+                            WaitForDomainReload = true,
+                            RequestId = "abandoned_compile_request",
+                            ForceRecompile = false
+                        }));
+                CompileApiUpdaterConsentState.BeginCliCompile();
+
+                controller.ClearUntransferredCompileStateForTesting();
+                controller.CompleteCompileRequestForTesting(CreateSuccessfulResult());
+
+                UnityCliLoopStoredCompileResult storedResult =
+                    compileResultSessionRepository.GetCompileResult("abandoned_compile_request");
+                Assert.That(storedResult.HasResult, Is.False);
+            }
+            finally
+            {
+                originalSnapshot.Restore();
+            }
         }
 
         /// <summary>
