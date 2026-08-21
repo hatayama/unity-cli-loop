@@ -59,6 +59,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal bool PreserveDetailsWhenForceRecompile { get; }
 
         /// <summary>
+        /// Whether this compile declined Unity's Script Updating Consent dialog at least once.
+        /// </summary>
+        internal bool ApiUpdaterConsentDeclined { get; }
+
+        /// <summary>
         /// Initializes the compilation result.
         /// </summary>
         /// <param name="success">The compilation success flag. Null indicates indeterminate status.</param>
@@ -79,7 +84,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CompilerMessage[] warnings,
             bool isIndeterminate = false,
             string message = null,
-            bool preserveDetailsWhenForceRecompile = false
+            bool preserveDetailsWhenForceRecompile = false,
+            bool apiUpdaterConsentDeclined = false
         )
         {
             Success = success;
@@ -92,6 +98,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IsIndeterminate = isIndeterminate;
             Message = message;
             PreserveDetailsWhenForceRecompile = preserveDetailsWhenForceRecompile;
+            ApiUpdaterConsentDeclined = apiUpdaterConsentDeclined;
+        }
+
+        /// <summary>
+        /// Returns a copy that records a Script Updating Consent decline for response shaping.
+        /// </summary>
+        internal CompileResult WithApiUpdaterConsentDeclined()
+        {
+            return new CompileResult(
+                Success,
+                ErrorCount,
+                WarningCount,
+                CompletedAt,
+                Messages,
+                Errors,
+                Warnings,
+                IsIndeterminate,
+                Message,
+                PreserveDetailsWhenForceRecompile,
+                apiUpdaterConsentDeclined: true);
         }
     }
 }

@@ -52,4 +52,4 @@ Returns JSON:
 
 ## Troubleshooting
 
-If compile times out or Unity stops responding to uloop while the Editor looks idle, check whether Unity is showing **API Update Required** / **Script Updating Consent**. Ask the user to choose Go Ahead or No — never auto-dismiss that modal. Interactive Editors have no public uloop/Unity API to suppress it.
+When Unity's API Updater asks for consent to rewrite source files during a CLI compile (the 'Script Updating Consent' dialog), uloop declines automatically — source files are never rewritten without explicit user consent — and the response's Warning discloses the decline. The obsolete-API errors the updater would have fixed appear in Errors; fix them in code, or have the user accept the dialog in an interactive Unity session. Outside CLI compiles, and for the separate 'API Update Required' dialog, the modal can still appear and uloop cannot click it: if compile times out while the Editor looks idle, ask the user to answer the dialog — never auto-dismiss it.

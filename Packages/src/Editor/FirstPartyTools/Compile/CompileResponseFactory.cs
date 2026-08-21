@@ -32,6 +32,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(result != null, "result must not be null");
 
+            CompileResponse response = CreateResponseWithoutApiUpdaterConsent(
+                result,
+                forceRecompile,
+                pausePointWarning);
+            CompileApiUpdaterConsentResponseComposer.Apply(response, result.ApiUpdaterConsentDeclined);
+            return response;
+        }
+
+        private static CompileResponse CreateResponseWithoutApiUpdaterConsent(
+            CompileResult result,
+            bool forceRecompile,
+            string pausePointWarning)
+        {
             if (forceRecompile && !result.PreserveDetailsWhenForceRecompile)
             {
                 return CreateForceCompileResult(result, pausePointWarning);
