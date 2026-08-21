@@ -59,35 +59,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedReason.cs";
             const string methodKey = "Host.NewHelper(System.Int32)";
-            MethodInfo shim = typeof(HotReloadAddedMemberHost).GetMethod(
-                nameof(HotReloadAddedMemberHost.ExistingCaller),
-                BindingFlags.Instance | BindingFlags.Public);
-            Assert.That(shim, Is.Not.Null);
-
-            HotReloadAddedMemberRegistry.BeginFileGeneration(filePath);
-            HotReloadAddedMemberRegistry.Register(filePath, methodKey, shim, filePath);
+            RegisterAddedMemberForStatus(filePath, methodKey);
             try
             {
-                HotReloadTool tool = new HotReloadTool();
-                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
-                    new JObject { ["Status"] = true },
-                    CancellationToken.None);
-                HotReloadResponse response = baseResponse as HotReloadResponse;
+                HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+                HotReloadMethodResult addedRow = FindStatusRow(
+                    response,
+                    HotReloadConstants.AddedMemberStatusKind,
+                    methodKey);
 
-                Assert.That(response, Is.Not.Null);
-                Assert.That(response.Success, Is.True);
-                HotReloadMethodResult addedRow = null;
-                for (int index = 0; index < response.Methods.Count; index++)
-                {
-                    HotReloadMethodResult row = response.Methods[index];
-                    if (row.Kind == HotReloadConstants.AddedMemberStatusKind && row.Method == methodKey)
-                    {
-                        addedRow = row;
-                        break;
-                    }
-                }
-
-                Assert.That(addedRow, Is.Not.Null);
                 Assert.That(
                     addedRow.Reason,
                     Is.EqualTo(
@@ -97,6 +77,126 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 HotReloadAddedMemberRegistry.Clear();
+            }
+        }
+
+        /// <summary>
+        /// What: --status Active rows with InvocationCount 0 explain that finished calls do
+        /// not re-run, and Message aggregates that count.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_NeverInvokedActiveRow_SetsNeverInvokedReason()
+        {
+            HotReloadPatcher.RevertAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+
+                HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+                HotReloadMethodResult activeRow = FindStatusRow(
+                    response,
+                    "Active",
+                    nameof(HotReloadCoreFixture.ReplaceableCompute));
+
+                Assert.That(activeRow.Kind, Is.EqualTo("Active"));
+                Assert.That(activeRow.InvocationCount, Is.EqualTo(0L));
+                Assert.That(
+                    activeRow.Reason,
+                    Is.EqualTo(
+                        "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called."));
+                Assert.That(
+                    activeRow.Reason,
+                    Is.EqualTo(HotReloadConstants.ActivePatchNeverInvokedReason));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        "1 change(s) currently active. 1 change(s) have not been invoked since their patch was applied; see Methods[].Reason."));
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
+        /// What: --status Active rows that have run since the patch leave Reason empty and
+        /// keep Message as the active-count sentence only.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_InvokedActiveRow_LeavesReasonEmpty()
+        {
+            HotReloadPatcher.RevertAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+
+                HotReloadCoreFixture fixture = new HotReloadCoreFixture();
+                Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
+
+                HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+                HotReloadMethodResult activeRow = FindStatusRow(
+                    response,
+                    "Active",
+                    nameof(HotReloadCoreFixture.ReplaceableCompute));
+
+                Assert.That(activeRow.InvocationCount, Is.GreaterThanOrEqualTo(1L));
+                Assert.That(activeRow.Reason, Is.EqualTo(string.Empty));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo("1 change(s) currently active."));
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
+        /// What: --status Message counts never-invoked Active rows only, not added-member
+        /// rows, when both kinds are present.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_MixedActiveAndAdded_CountsOnlyNeverInvokedActiveInAggregate()
+        {
+            const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedReason.cs";
+            const string methodKey = "Host.NewHelper(System.Int32)";
+            HotReloadPatcher.RevertAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.StaticPing),
+                    BindingFlags.Static | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.StaticPing__shim0));
+                RegisterAddedMemberForStatus(filePath, methodKey);
+
+                HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+                HotReloadMethodResult addedRow = FindStatusRow(
+                    response,
+                    HotReloadConstants.AddedMemberStatusKind,
+                    methodKey);
+
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        "3 change(s) currently active. 2 change(s) have not been invoked since their patch was applied; see Methods[].Reason."));
+                Assert.That(
+                    addedRow.Reason,
+                    Is.EqualTo(
+                        "Added-member calls are not instrumented, so InvocationCount is always 0 for this row."));
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
             }
         }
 
@@ -1011,6 +1111,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Message,
                 Is.EqualTo(HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage));
+        }
+
+        // Applies a handwritten transplant to a HotReloadCoreFixture method without invoking it.
+        private static void ApplyCoreFixtureTransplant(
+            string originalName,
+            BindingFlags originalFlags,
+            string shimName)
+        {
+            MethodInfo original = typeof(HotReloadCoreFixture).GetMethod(originalName, originalFlags);
+            MethodInfo shim = typeof(HotReloadHandwrittenShims).GetMethod(
+                shimName,
+                BindingFlags.Static | BindingFlags.Public);
+            Assert.That(original, Is.Not.Null);
+            Assert.That(shim, Is.Not.Null);
+
+            HotReloadPatchResult applyResult = HotReloadPatcher.Apply(
+                original,
+                shim,
+                HotReloadPatchShape.Transplant,
+                "Assets/Tests/Fixture.cs");
+            Assert.That(applyResult.Success, Is.True, applyResult.ErrorMessage);
+        }
+
+        // Registers one added-member ledger row the same way the added-row status test does.
+        private static void RegisterAddedMemberForStatus(string filePath, string methodKey)
+        {
+            MethodInfo shim = typeof(HotReloadAddedMemberHost).GetMethod(
+                nameof(HotReloadAddedMemberHost.ExistingCaller),
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(shim, Is.Not.Null);
+            HotReloadAddedMemberRegistry.BeginFileGeneration(filePath);
+            HotReloadAddedMemberRegistry.Register(filePath, methodKey, shim, filePath);
+        }
+
+        private static async Task<HotReloadResponse> ExecuteStatusAsync(CancellationToken ct)
+        {
+            HotReloadTool tool = new HotReloadTool();
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                new JObject { ["Status"] = true },
+                ct);
+            HotReloadResponse response = baseResponse as HotReloadResponse;
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response.Success, Is.True);
+            return response;
+        }
+
+        private static HotReloadMethodResult FindStatusRow(
+            HotReloadResponse response,
+            string kind,
+            string methodToken)
+        {
+            HotReloadMethodResult found = null;
+            for (int index = 0; index < response.Methods.Count; index++)
+            {
+                HotReloadMethodResult row = response.Methods[index];
+                if (row.Kind == kind && row.Method.Contains(methodToken))
+                {
+                    found = row;
+                    break;
+                }
+            }
+
+            Assert.That(found, Is.Not.Null, $"No {kind} row containing '{methodToken}'.");
+            return found;
         }
 
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController

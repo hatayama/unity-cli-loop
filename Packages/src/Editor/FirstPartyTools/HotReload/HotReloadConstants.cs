@@ -219,6 +219,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Source is unchanged since the last applied hot reload; the existing added member stays available. "
             + AddedMemberNotInstrumentedReason;
 
+        // Why: patching does not re-run calls that already finished (e.g. one-time
+        // initialization); InvocationCount 0 on --status is the only runtime signal,
+        // so the row itself must explain what 0 means and what makes the patch take effect.
+        public const string ActivePatchNeverInvokedReason =
+            "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called.";
+
+        // Format: count of Active rows whose InvocationCount is 0.
+        public const string NeverInvokedActiveAggregatedMessageFormat =
+            "{0} change(s) have not been invoked since their patch was applied; see Methods[].Reason.";
+
         public const string MultiWarningSingleCompileResolutionMessage =
             "A single 'uloop compile' clears all of them at once.";
 

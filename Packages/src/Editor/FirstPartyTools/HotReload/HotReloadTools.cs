@@ -154,17 +154,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadAddedMemberInfo> addedMembers = HotReloadAddedMemberRegistry.Describe();
             List<HotReloadMethodResult> methods =
                 new List<HotReloadMethodResult>(active.Count + addedMembers.Count);
+            int neverInvokedCount = 0;
             for (int index = 0; index < active.Count; index++)
             {
                 HotReloadActivePatchInfo patch = active[index];
-                methods.Add(
-                    new HotReloadMethodResult
-                    {
-                        Kind = "Active",
-                        Method = patch.MethodKey,
-                        FilePath = patch.FilePath,
-                        InvocationCount = HotReloadInvocationRegistry.GetCount(patch.MethodKey)
-                    });
+                long invocationCount = HotReloadInvocationRegistry.GetCount(patch.MethodKey);
+                HotReloadMethodResult row = new HotReloadMethodResult
+                {
+                    Kind = "Active",
+                    Method = patch.MethodKey,
+                    FilePath = patch.FilePath,
+                    InvocationCount = invocationCount
+                };
+                if (invocationCount == 0L)
+                {
+                    row.Reason = HotReloadConstants.ActivePatchNeverInvokedReason;
+                    neverInvokedCount++;
+                }
+
+                methods.Add(row);
             }
 
             for (int index = 0; index < addedMembers.Count; index++)
@@ -184,12 +192,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             int count = methods.Count;
+            string message = $"{count} change(s) currently active.";
+            if (neverInvokedCount > 0)
+            {
+                message += " " + string.Format(
+                    HotReloadConstants.NeverInvokedActiveAggregatedMessageFormat,
+                    neverInvokedCount);
+            }
+
             return new HotReloadResponse
             {
                 Success = true,
                 Methods = methods,
                 ActivePatchTotal = count,
-                Message = $"{count} change(s) currently active."
+                Message = message
             };
         }
 
