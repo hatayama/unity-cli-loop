@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 using UnityEngine;
 
@@ -18,7 +19,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return message;
             }
 
-            return message + FormatNotice(findings);
+            string terminator = string.Empty;
+            if (!message.EndsWith(".", StringComparison.Ordinal))
+            {
+                terminator = ".";
+            }
+
+            return message + terminator + FormatNotice(findings);
         }
 
         internal static string FormatNotice(RunTestsPredefinedAssemblyTestFindings findings)

@@ -922,7 +922,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "No tests found matching the specified filter criteria Additionally, 2 NUnit test method(s) are compiled into predefined assemblies rather than any test assembly: Assembly-CSharp: Game.Foo.Alpha, Assembly-CSharp-Editor: Editor.Bar.Beta. Unity Test Runner does not discover tests that live outside a test assembly; move these scripts into a folder whose .asmdef has Test Assemblies enabled (EditMode tests target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests."));
+                    "No tests found matching the specified filter criteria. Additionally, 2 NUnit test method(s) are compiled into predefined assemblies rather than any test assembly, so this run could not discover them: Assembly-CSharp: Game.Foo.Alpha, Assembly-CSharp-Editor: Editor.Bar.Beta. Move these scripts into a folder whose .asmdef has Test Assemblies enabled (EditMode tests target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests."));
+        }
+
+        /// <summary>
+        /// What: filter-all NoTestsFound appends the predefined-assembly notice after a period-terminated asmdef hint without a second period.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilterAllNoTestsFoundWithAsmdefHintAndPredefinedAssemblyTests_AppendsNoticeAfterPeriod()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult(),
+                PredefinedAssemblyTestFindings = RunTestsPredefinedAssemblyTestFindings.Create(
+                    1,
+                    new[] { "Assembly-CSharp: Game.Foo.Alpha" })
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                appendNoTestsDiagnostics: AppendPeriodTerminatedAsmdefHint);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "No tests found matching the specified filter criteria Possible asmdef issues: Assets/Tests/EditMode/Sample.Tests.asmdef: sample finding. Additionally, 1 NUnit test method(s) are compiled into predefined assemblies rather than any test assembly, so this run could not discover them: Assembly-CSharp: Game.Foo.Alpha. Move these scripts into a folder whose .asmdef has Test Assemblies enabled (EditMode tests target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests."));
         }
 
         /// <summary>
@@ -970,6 +1003,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 skippedCount = 0,
                 xmlPath = null
             };
+        }
+
+        private static string AppendPeriodTerminatedAsmdefHint(
+            string message,
+            bool noTestsFound,
+            UnityCliLoopTestMode testMode,
+            TestFilterType filterType)
+        {
+            return message + " Possible asmdef issues: Assets/Tests/EditMode/Sample.Tests.asmdef: sample finding.";
         }
 
         private static string PassThroughNoTestsDiagnostics(

@@ -21,6 +21,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 MainThreadSwitcher.IsMainThread,
                 "TypeCache.GetMethodsWithAttribute must run on the main thread because TypeCache is a Unity Editor API.");
 
+            // Why scan all four predefined assemblies without TestMode: during an
+            // EditMode run the common accident is a test script landing in runtime
+            // Assembly-CSharp. Filtering by TestMode would hide that case.
+            // Editor-predefined tests are discovered by EditMode, so they do not
+            // share a zero-discovery notice on an EditMode run.
             List<(string AssemblyName, string TypeFullName, string MethodName)> methods =
                 new List<(string AssemblyName, string TypeFullName, string MethodName)>();
             // Why TypeCache instead of Assembly.GetTypes(): GetTypes() throws
