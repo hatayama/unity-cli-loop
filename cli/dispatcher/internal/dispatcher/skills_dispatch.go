@@ -1,7 +1,9 @@
 package dispatcher
 
 import (
+	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -73,6 +75,18 @@ func runSkillsDirSubcommand(
 		clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
 		return 1
 	}
+	// The destination must be a directory or absent (install creates it).
+	// Checked up front because a file here would otherwise surface as a raw
+	// ENOTDIR on Unix but as bogus not-installed statuses on Windows.
+	info, err := os.Stat(absDir)
+	if err != nil && !os.IsNotExist(err) {
+		clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
+		return 1
+	}
+	if err == nil && !info.IsDir() {
+		clierrors.WriteClassifiedError(stderr, fmt.Errorf("the %s path %s exists but is not a directory", skillsOutputDirFlagName, absDir), skillsDirErrorContext())
+		return 1
+	}
 	switch subcommand {
 	case "list":
 		return runSkillsDirList(absDir, skills, stdout, stderr)
@@ -84,11 +98,11 @@ func runSkillsDirSubcommand(
 		// Routing already rejects unknown and v3-migration subcommands, so this
 		// only fires when a new subcommand is added without dir-mode support.
 		clierrors.WriteClassifiedError(stderr, &clierrors.ArgumentError{
-			Message:     "The " + subcommand + " subcommand does not support --output-dir.",
-			Option:      "--output-dir",
+			Message:     "The " + subcommand + " subcommand does not support " + skillsOutputDirFlagName + ".",
+			Option:      skillsOutputDirFlagName,
 			Command:     clicore.SkillsCommandName,
-			NextActions: []string{"Use --output-dir with the install, uninstall, or list subcommand."},
-		}, clierrors.ErrorContext{Command: clicore.SkillsCommandName})
+			NextActions: []string{"Use " + skillsOutputDirFlagName + " with the install, uninstall, or list subcommand."},
+		}, skillsDirErrorContext())
 		return 1
 	}
 }

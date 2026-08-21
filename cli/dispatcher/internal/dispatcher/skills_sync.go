@@ -130,13 +130,20 @@ func isInstalledSkillOutdated(installedDir string, skill skillDefinition) bool {
 	if len(expectedFiles) != len(installedFiles) {
 		return true
 	}
+	return !comparableFilesMatch(expectedFiles, installedFiles)
+}
+
+// comparableFilesMatch reports whether every expected file exists in installed
+// with equal normalized content. Target-mode and dir-mode staleness checks both
+// go through here so the comparison rule cannot drift between them.
+func comparableFilesMatch(expectedFiles map[string][]byte, installedFiles map[string][]byte) bool {
 	for relativePath, expectedContent := range expectedFiles {
 		installedContent, ok := installedFiles[relativePath]
 		if !ok || !bytes.Equal(expectedContent, installedContent) {
-			return true
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 // installedSkillFileMatches reports whether the installed SKILL.md equals the

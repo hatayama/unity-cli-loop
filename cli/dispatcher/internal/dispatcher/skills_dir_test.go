@@ -311,6 +311,144 @@ func TestRunSkillsDirInstallRejectsFileOccupyingSkillName(t *testing.T) {
 	}
 }
 
+// Tests that a symlink occupying a skill's name is never followed: install
+// fails with a clear error and uninstall preserves the symlink target's
+// contents, so operations cannot reach outside the store.
+func TestRunSkillsDirDoesNotFollowSymlinkAtSkillName(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on Windows")
+	}
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	if err := os.MkdirAll(destinationDir, 0o755); err != nil {
+		t.Fatalf("failed to create destination: %v", err)
+	}
+	curatedDir := filepath.Join(root, "curated", "uloop-sample")
+	curatedFile := filepath.Join(curatedDir, "SKILL.md")
+	if err := os.MkdirAll(curatedDir, 0o755); err != nil {
+		t.Fatalf("failed to create curated dir: %v", err)
+	}
+	if err := os.WriteFile(curatedFile, []byte("user content\n"), 0o644); err != nil {
+		t.Fatalf("failed to write curated file: %v", err)
+	}
+	if err := os.Symlink(curatedDir, filepath.Join(destinationDir, "uloop-sample")); err != nil {
+		t.Fatalf("failed to create symlink: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 1 {
+		t.Fatalf("install through a symlink should fail: code=%d", code)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Not found: 1") {
+		t.Fatalf("symlinked skill name should not count as an install:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(curatedFile); err != nil {
+		t.Fatalf("symlink target contents must survive uninstall: %v", err)
+	}
+}
+
+// Tests that an --output-dir destination that exists as a regular file is
+// rejected with a clear error on every platform instead of diverging between
+// a raw ENOTDIR and bogus not-installed statuses.
+func TestRunSkillsDirSubcommandRejectsFileDestination(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationPath := filepath.Join(root, "apm-skills")
+	if err := os.WriteFile(destinationPath, []byte("not a directory\n"), 0o644); err != nil {
+		t.Fatalf("failed to write destination file: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirSubcommand("install", []skillDefinition{skill}, destinationPath, stdout, stderr)
+
+	if code != 1 {
+		t.Fatalf("file destination should fail: code=%d", code)
+	}
+	if !strings.Contains(stderr.String(), "not a directory") {
+		t.Fatalf("error should explain the file destination:\n%s", stderr.String())
+	}
+}
+
+// Tests that uninstall leaves a user-created empty directory bearing a skill
+// name in place when nothing owned was found inside it.
+func TestRunSkillsDirUninstallPreservesEmptyForeignDir(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	scaffoldDir := filepath.Join(destinationDir, "uloop-sample")
+	if err := os.MkdirAll(scaffoldDir, 0o755); err != nil {
+		t.Fatalf("failed to create scaffold dir: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Not found: 1") {
+		t.Fatalf("empty foreign directory should not count as an install:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(scaffoldDir); err != nil {
+		t.Fatalf("empty foreign directory should be preserved: %v", err)
+	}
+}
+
+// Tests that leftover temp and backup artifacts from an interrupted sync are
+// cleaned up by install and uninstall instead of lingering as foreign files.
+func TestRunSkillsDirCleansStaleSyncArtifacts(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	installedDir := filepath.Join(destinationDir, "uloop-sample")
+	staleTemp := filepath.Join(installedDir, "SKILL.md.tmp-1234")
+	staleBackup := filepath.Join(installedDir, "references.backup-5678")
+	if err := os.WriteFile(staleTemp, []byte("partial\n"), 0o644); err != nil {
+		t.Fatalf("failed to write stale temp file: %v", err)
+	}
+	if err := os.MkdirAll(staleBackup, 0o755); err != nil {
+		t.Fatalf("failed to create stale backup dir: %v", err)
+	}
+
+	stdout.Reset()
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("dir install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(staleTemp); !os.IsNotExist(err) {
+		t.Fatalf("stale temp file should be cleaned by install, stat err=%v", err)
+	}
+	if _, err := os.Stat(staleBackup); !os.IsNotExist(err) {
+		t.Fatalf("stale backup dir should be cleaned by install, stat err=%v", err)
+	}
+
+	if err := os.MkdirAll(staleBackup, 0o755); err != nil {
+		t.Fatalf("failed to recreate stale backup dir: %v", err)
+	}
+	stdout.Reset()
+	if code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(installedDir); !os.IsNotExist(err) {
+		t.Fatalf("skill directory should be fully removed after cleanup, stat err=%v", err)
+	}
+}
+
 // Tests that uninstall removes a dangling symlink sitting at an owned entry
 // name instead of skipping it as missing.
 func TestRunSkillsDirUninstallRemovesDanglingSymlink(t *testing.T) {

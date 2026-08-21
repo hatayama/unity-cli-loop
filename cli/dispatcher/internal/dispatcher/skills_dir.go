@@ -13,7 +13,6 @@ package dispatcher
 // break the guarantee that only source-owned entries are ever removed.
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -91,6 +90,13 @@ func runSkillsDirList(absDir string, skills []skillDefinition, stdout io.Writer,
 }
 
 func installSkillIntoDir(baseDir string, skill skillDefinition, result *skillInstallResult) error {
+	ownedNames, err := sourceOwnedEntryNames(skill.sourceDirectory)
+	if err != nil {
+		return err
+	}
+	if _, err := removeStaleSyncArtifacts(filepath.Join(baseDir, skill.name), ownedNames); err != nil {
+		return err
+	}
 	status, err := getDirSkillStatus(baseDir, skill)
 	if err != nil {
 		return err
@@ -117,19 +123,25 @@ func installSkillIntoDir(baseDir string, skill skillDefinition, result *skillIns
 // cleaned up instead of being reported as not installed.
 func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) {
 	skillDir := filepath.Join(baseDir, skill.name)
-	info, err := os.Stat(skillDir)
+	// Lstat, not Stat: a symlink occupying the skill's name must not be
+	// followed, or the removals below would destroy data outside the store.
+	info, err := os.Lstat(skillDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
 		return false, err
 	}
-	// A foreign top-level file occupying the skill's name is not an install of
-	// ours, so it is preserved and the skill reported as not found.
+	// A foreign top-level file or symlink occupying the skill's name is not an
+	// install of ours, so it is preserved and the skill reported as not found.
 	if !info.IsDir() {
 		return false, nil
 	}
 	entryNames, err := sourceOwnedEntryNames(skill.sourceDirectory)
+	if err != nil {
+		return false, err
+	}
+	artifactsRemoved, err := removeStaleSyncArtifacts(skillDir, entryNames)
 	if err != nil {
 		return false, err
 	}
@@ -149,6 +161,11 @@ func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) 
 		}
 		removedAny = true
 	}
+	// Nothing of ours was found: leave the directory alone, even when empty —
+	// a user-created scaffold directory bearing a skill name is foreign.
+	if !removedAny && !artifactsRemoved {
+		return false, nil
+	}
 	return removedAny, removeEmptyDir(skillDir)
 }
 
@@ -158,7 +175,10 @@ func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) 
 // compared both ways because syncing replaces those directories wholly.
 func getDirSkillStatus(baseDir string, skill skillDefinition) (string, error) {
 	skillDir := filepath.Join(baseDir, skill.name)
-	info, err := os.Stat(skillDir)
+	// Lstat, not Stat: a symlink occupying the skill's name must not be
+	// followed, or install would write through it into a directory outside the
+	// store that uninstall would then delete from.
+	info, err := os.Lstat(skillDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "not_installed", nil
@@ -176,7 +196,11 @@ func getDirSkillStatus(baseDir string, skill skillDefinition) (string, error) {
 		if os.IsNotExist(err) {
 			return dirSkillStatusWithoutSkillFile(skillDir, skill)
 		}
-		return "", err
+		// Wrapped so an unreadable SKILL.md (permissions, or a directory with
+		// that name) surfaces with the affected skill instead of a bare OS
+		// error; dir mode surfaces such states rather than rewriting an
+		// external store whose files cannot even be read.
+		return "", fmt.Errorf("cannot read %s for skill %q: %w", skillscan.SkillFileName, skill.name, err)
 	}
 	if !matches {
 		return "outdated", nil
@@ -215,24 +239,25 @@ func dirSkillStatusWithoutSkillFile(skillDir string, skill skillDefinition) (str
 func dirSkillFilesOutdated(skillDir string, skill skillDefinition) (bool, error) {
 	expectedFiles := collectComparableSkillFiles(skill.sourceDirectory)
 	installedFiles := collectComparableSkillFiles(skillDir)
-	for relativePath, expectedContent := range expectedFiles {
-		installedContent, ok := installedFiles[relativePath]
-		if !ok || !bytes.Equal(expectedContent, installedContent) {
-			return true, nil
-		}
+	if !comparableFilesMatch(expectedFiles, installedFiles) {
+		return true, nil
 	}
-	ownedDirs, err := sourceOwnedDirNames(skill.sourceDirectory)
+	ownedEntries, err := sourceOwnedEntries(skill.sourceDirectory)
 	if err != nil {
 		return false, err
 	}
-	for relativePath := range installedFiles {
-		topLevel := topLevelPathSegment(relativePath)
-		// Top-level files absent from the source are foreign files and stay
-		// untouched, so they must not flag the skill as outdated.
-		if topLevel == relativePath {
-			continue
+	ownedDirs := map[string]bool{}
+	for _, entry := range ownedEntries {
+		if entry.IsDir() {
+			ownedDirs[entry.Name()] = true
 		}
-		if !ownedDirs[topLevel] {
+	}
+	for relativePath := range installedFiles {
+		// Only files inside source-owned directories count as stale: a
+		// top-level foreign file's own name never appears in ownedDirs, and a
+		// file shadowing an owned directory name is already reported outdated
+		// by the expected-files comparison above.
+		if !ownedDirs[topLevelPathSegment(relativePath)] {
 			continue
 		}
 		if _, ok := expectedFiles[relativePath]; !ok {
@@ -252,15 +277,12 @@ func syncSkillDirectoryPreservingForeignFiles(sourceDir string, destinationDir s
 	if err := os.MkdirAll(destinationDir, 0o755); err != nil {
 		return err
 	}
-	entries, err := os.ReadDir(sourceDir)
+	entries, err := sourceOwnedEntries(sourceDir)
 	if err != nil {
 		return err
 	}
 	var skillFileEntry os.DirEntry
 	for _, entry := range entries {
-		if shouldSkipSkillFile(entry.Name()) {
-			continue
-		}
 		if !entry.IsDir() && entry.Name() == skillscan.SkillFileName {
 			skillFileEntry = entry
 			continue
@@ -322,35 +344,72 @@ func writeSkillFileAtomically(destinationPath string, content []byte) error {
 	return nil
 }
 
-// sourceOwnedEntryNames lists the top-level entries of a skill source, which is
-// exactly the set of paths uloop owns inside an installed skill directory.
-func sourceOwnedEntryNames(sourceDir string) ([]string, error) {
+// sourceOwnedEntries lists the top-level entries of a skill source after the
+// skip rules — exactly the set of entries uloop owns inside an installed skill
+// directory. Every consumer of the ownership rule derives from this one
+// listing so status, sync, and uninstall cannot disagree on what is owned.
+func sourceOwnedEntries(sourceDir string) ([]os.DirEntry, error) {
 	entries, err := os.ReadDir(sourceDir)
+	if err != nil {
+		return nil, err
+	}
+	owned := []os.DirEntry{}
+	for _, entry := range entries {
+		if shouldSkipSkillFile(entry.Name()) {
+			continue
+		}
+		owned = append(owned, entry)
+	}
+	return owned, nil
+}
+
+func sourceOwnedEntryNames(sourceDir string) ([]string, error) {
+	entries, err := sourceOwnedEntries(sourceDir)
 	if err != nil {
 		return nil, err
 	}
 	names := []string{}
 	for _, entry := range entries {
-		if shouldSkipSkillFile(entry.Name()) {
-			continue
-		}
 		names = append(names, entry.Name())
 	}
 	return names, nil
 }
 
-func sourceOwnedDirNames(sourceDir string) (map[string]bool, error) {
-	entries, err := os.ReadDir(sourceDir)
+// removeStaleSyncArtifacts deletes leftover temp and backup entries that an
+// interrupted sync can leave behind (SKILL.md.tmp-*, references.backup-*, ...).
+// They are uloop's own artifacts, so removing them keeps the foreign-file
+// guarantee intact; left alone they would be treated as foreign forever and
+// keep the skill directory from ever being removed on uninstall.
+func removeStaleSyncArtifacts(skillDir string, ownedNames []string) (bool, error) {
+	entries, err := os.ReadDir(skillDir)
 	if err != nil {
-		return nil, err
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
 	}
-	ownedDirs := map[string]bool{}
+	removedAny := false
 	for _, entry := range entries {
-		if entry.IsDir() && !shouldSkipSkillFile(entry.Name()) {
-			ownedDirs[entry.Name()] = true
+		if !isStaleSyncArtifactName(entry.Name(), ownedNames) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(skillDir, entry.Name())); err != nil {
+			return false, err
+		}
+		removedAny = true
+	}
+	return removedAny, nil
+}
+
+// isStaleSyncArtifactName matches the names os.CreateTemp and os.MkdirTemp
+// produce for the temp and backup copies of source-owned entries.
+func isStaleSyncArtifactName(name string, ownedNames []string) bool {
+	for _, ownedName := range ownedNames {
+		if strings.HasPrefix(name, ownedName+".tmp-") || strings.HasPrefix(name, ownedName+".backup-") {
+			return true
 		}
 	}
-	return ownedDirs, nil
+	return false
 }
 
 func topLevelPathSegment(relativePath string) string {

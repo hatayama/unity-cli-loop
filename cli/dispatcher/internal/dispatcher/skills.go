@@ -121,10 +121,10 @@ func tryHandleSkillsRequest(args []string, startPath string, globalProjectPath s
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.SkillsCommandName})
 		return true, 1
 	}
-	if isV3MigrationSkillSubcommand(subcommand) && options.outputDir != "" {
+	if !skillsSubcommandSupportsOutputDir(subcommand) && options.outputDir != "" {
 		clierrors.WriteClassifiedError(stderr, &clierrors.ArgumentError{
-			Message:     "The --output-dir option is not supported for " + subcommand + ".",
-			Option:      "--output-dir",
+			Message:     "The " + skillsOutputDirFlagName + " option is not supported for " + subcommand + ".",
+			Option:      skillsOutputDirFlagName,
 			Command:     clicore.SkillsCommandName,
 			NextActions: []string{"Run the subcommand with target flags such as --claude instead."},
 		}, clierrors.ErrorContext{Command: clicore.SkillsCommandName})
@@ -157,6 +157,13 @@ func isKnownSkillsSubcommand(subcommand string) bool {
 	default:
 		return false
 	}
+}
+
+// skillsSubcommandSupportsOutputDir reports whether a known skills subcommand
+// accepts --output-dir. Help, guidance, and the routing rejection all consult
+// this one predicate so their notion of support cannot drift.
+func skillsSubcommandSupportsOutputDir(subcommand string) bool {
+	return !isV3MigrationSkillSubcommand(subcommand)
 }
 
 func isV3MigrationSkillSubcommand(subcommand string) bool {

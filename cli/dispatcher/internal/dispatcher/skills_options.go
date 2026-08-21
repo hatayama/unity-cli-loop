@@ -10,6 +10,11 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 )
 
+// skillsOutputDirFlagName is the single definition of the --output-dir token.
+// Parsing, error construction, routing, and the help option line all reference
+// it so a rename cannot silently miss one of the comparison sites.
+const skillsOutputDirFlagName = "--output-dir"
+
 func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 	options := skillCommandOptions{}
 	seenTargets := map[string]bool{}
@@ -20,7 +25,7 @@ func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 			options.global = true
 		case arg == "--flat":
 			options.flat = true
-		case arg == "--output-dir":
+		case arg == skillsOutputDirFlagName:
 			// A flag-like next token (e.g. --global) must not be swallowed as the
 			// destination, or the mutual-exclusion validation silently misses it.
 			// Paths that genuinely start with a dash go through --output-dir=<path>.
@@ -29,8 +34,8 @@ func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 			}
 			index++
 			options.outputDir = args[index]
-		case strings.HasPrefix(arg, "--output-dir="):
-			options.outputDir = strings.TrimPrefix(arg, "--output-dir=")
+		case strings.HasPrefix(arg, skillsOutputDirFlagName+"="):
+			options.outputDir = strings.TrimPrefix(arg, skillsOutputDirFlagName+"=")
 			if options.outputDir == "" {
 				return skillCommandOptions{}, missingSkillsOutputDirValueError()
 			}
@@ -66,8 +71,8 @@ func appendSkillTarget(options *skillCommandOptions, seenTargets map[string]bool
 
 func missingSkillsOutputDirValueError() error {
 	return &clierrors.ArgumentError{
-		Message: "The --output-dir option requires a directory path value.",
-		Option:  "--output-dir",
+		Message: "The " + skillsOutputDirFlagName + " option requires a directory path value.",
+		Option:  skillsOutputDirFlagName,
 		Command: clicore.SkillsCommandName,
 		NextActions: []string{
 			"Pass the destination directory, e.g. `uloop skills install --output-dir path/to/skills`.",
@@ -98,8 +103,8 @@ func validateSkillsOptions(options skillCommandOptions) error {
 
 func skillsOutputDirConflictError(conflicting string) error {
 	return &clierrors.ArgumentError{
-		Message:     "The --output-dir option cannot be combined with " + conflicting + ".",
-		Option:      "--output-dir",
+		Message:     "The " + skillsOutputDirFlagName + " option cannot be combined with " + conflicting + ".",
+		Option:      skillsOutputDirFlagName,
 		Command:     clicore.SkillsCommandName,
 		NextActions: []string{"Use --output-dir alone, or drop it to install into target directories."},
 	}
