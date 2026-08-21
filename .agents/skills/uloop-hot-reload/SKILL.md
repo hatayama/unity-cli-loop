@@ -24,6 +24,10 @@ uloop hot-reload --revert-all
 Multiple files are passed as one comma-separated value (or a JSON array); array options
 consume exactly one value token.
 
+A brand-new script — or any script under a brand-new `.asmdef` — cannot be hot-reloaded
+before its first import: Unity has not compiled it into any assembly yet. Run
+`uloop compile` once to import new files, then iterate on them with hot reload.
+
 ## Parameters
 
 | Parameter | Type | Default | Description |
