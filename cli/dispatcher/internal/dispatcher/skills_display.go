@@ -84,6 +84,8 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 	if !isV3MigrationSkillSubcommand(command) {
 		clicore.WriteLine(stdout, "With --output-dir, skills sync flat into <path>/<skill-name> with no target")
 		clicore.WriteLine(stdout, "subdirectories; files uloop does not manage there are left untouched.")
+		clicore.WriteLine(stdout, "Skills are sourced from the Unity project, so run this inside a Unity")
+		clicore.WriteLine(stdout, "project or pass --project-path.")
 		clicore.WriteLine(stdout, "")
 	}
 	if command == "install-v3-migration" {
