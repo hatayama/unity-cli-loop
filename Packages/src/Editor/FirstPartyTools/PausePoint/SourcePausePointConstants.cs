@@ -237,19 +237,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why: unpatched methods keep the compiled line map while the editor shows the edited
         // file. Naming the resolved method tells agents the marker is on an unpatched method
         // without a ResolvedMethod comparison (FB9).
+        // Why conclusion first: the first sentence is the conclusion; usability rounds
+        // showed readers stop at sentence one, so do not restore the explanation-first order.
         // Format: file, resolved method display name.
         public const string HotReloadCompiledLineMapWarningFormat =
-            "'{0}' has active hot-reload patches. The resolved method '{1}' is not patched by this reload, "
-            + "so --line resolved against the last compiled source, not the edited file. Verify "
-            + "ResolvedLineText matches the statement you meant, or run 'uloop compile' and re-enable.";
+            "--line resolved against the last compiled source, not the edited file: '{0}' has "
+            + "active hot-reload patches and the resolved method '{1}' is not patched by this "
+            + "reload. Verify ResolvedLineText matches the statement you meant, or run "
+            + "'uloop compile' and re-enable.";
 
         // Why a distinct sentence: comparison already proved the resolved statement is identical,
         // so asking the agent to Verify ResolvedLineText by hand is leftover work.
+        // Why conclusion first: the first sentence is the conclusion; usability rounds
+        // showed readers stop at sentence one, so do not restore the explanation-first order.
         // Format: file, resolved method display name.
         public const string HotReloadCompiledLineMapMatchedWarningFormat =
-            "'{0}' has active hot-reload patches. The resolved method '{1}' is not patched by this reload, "
-            + "so --line resolved against the last compiled source, not the edited file. The statement text "
-            + "at the resolved line is identical in the edited file, so no drift is visible at this line.";
+            "No drift is visible at this line: the statement text at the resolved line is "
+            + "identical in the edited file. '{0}' has active hot-reload patches and the "
+            + "resolved method '{1}' is not patched by this reload, so --line resolved against "
+            + "the last compiled source, not the edited file.";
 
         // Why a separate failure string: resolve failure leaves ResolvedMethod and
         // ResolvedLineText empty, so pointing at those fields is a dead end.

@@ -21,16 +21,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string ExampleResolvedMethod = "ExampleType.ExampleMethod";
 
         private const string ExpectedCompiledLineMapWarning =
-            "'Assets/Scripts/Example.cs' has active hot-reload patches. The resolved method "
-            + "'ExampleType.ExampleMethod' is not patched by this reload, so --line resolved "
-            + "against the last compiled source, not the edited file. Verify ResolvedLineText "
+            "--line resolved against the last compiled source, not the edited file: "
+            + "'Assets/Scripts/Example.cs' has active hot-reload patches and the resolved method "
+            + "'ExampleType.ExampleMethod' is not patched by this reload. Verify ResolvedLineText "
             + "matches the statement you meant, or run 'uloop compile' and re-enable.";
 
         private const string ExpectedCompiledLineMapMatchedWarning =
-            "'Assets/Scripts/Example.cs' has active hot-reload patches. The resolved method "
-            + "'ExampleType.ExampleMethod' is not patched by this reload, so --line resolved "
-            + "against the last compiled source, not the edited file. The statement text at "
-            + "the resolved line is identical in the edited file, so no drift is visible at this line.";
+            "No drift is visible at this line: the statement text at the resolved line is "
+            + "identical in the edited file. 'Assets/Scripts/Example.cs' has active hot-reload "
+            + "patches and the resolved method 'ExampleType.ExampleMethod' is not patched by "
+            + "this reload, so --line resolved against the last compiled source, not the edited file.";
 
         private const string ExpectedCompiledLineMapResolveFailureWarning =
             "'Assets/Scripts/Example.cs' has active hot-reload patches. --line resolves against "

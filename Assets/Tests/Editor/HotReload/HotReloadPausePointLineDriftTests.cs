@@ -25,12 +25,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Assets/Tests/Editor/HotReload/HotReloadPausePointLineDriftFixture.cs";
 
         private const string HotReloadCompiledLineMapWarningPrefix =
-            "'Assets/Tests/Editor/HotReload/HotReloadPausePointLineDriftFixture.cs' has active "
-            + "hot-reload patches. The resolved method '";
+            "--line resolved against the last compiled source, not the edited file: "
+            + "'Assets/Tests/Editor/HotReload/HotReloadPausePointLineDriftFixture.cs' has active "
+            + "hot-reload patches and the resolved method '";
 
         private const string HotReloadCompiledLineMapWarningSuffix =
-            "' is not patched by this reload, so --line resolved against the last compiled "
-            + "source, not the edited file. Verify ResolvedLineText matches the statement you "
+            "' is not patched by this reload. Verify ResolvedLineText matches the statement you "
             + "meant, or run 'uloop compile' and re-enable.";
 
         private const string CompiledSnapshotSentinel = "SENTINEL_COMPILED_LINE_TEXT";
