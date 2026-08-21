@@ -84,19 +84,19 @@ func validateSkillsOptions(options skillCommandOptions) error {
 	if options.outputDir == "" {
 		return nil
 	}
-	conflicting := ""
-	if options.flat {
-		conflicting = "--flat"
+	if len(options.targets) > 0 {
+		return skillsOutputDirConflictError("--" + options.targets[0].id)
 	}
 	if options.global {
-		conflicting = "--global"
+		return skillsOutputDirConflictError("--global")
 	}
-	if len(options.targets) > 0 {
-		conflicting = "--" + options.targets[0].id
+	if options.flat {
+		return skillsOutputDirConflictError("--flat")
 	}
-	if conflicting == "" {
-		return nil
-	}
+	return nil
+}
+
+func skillsOutputDirConflictError(conflicting string) error {
 	return &clierrors.ArgumentError{
 		Message:     "The --output-dir option cannot be combined with " + conflicting + ".",
 		Option:      "--output-dir",
