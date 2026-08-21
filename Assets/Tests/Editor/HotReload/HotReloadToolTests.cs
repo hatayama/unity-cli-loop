@@ -101,6 +101,135 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: --status Active rows with InvocationCount 0 explain that finished calls do
+        /// not re-run, and Message aggregates that count.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_NeverInvokedActiveRow_SetsNeverInvokedReason()
+        {
+            HotReloadPatcher.RevertAll();
+            MethodInfo original = typeof(HotReloadCoreFixture).GetMethod(
+                nameof(HotReloadCoreFixture.ReplaceableCompute),
+                BindingFlags.Instance | BindingFlags.Public);
+            MethodInfo shim = typeof(HotReloadHandwrittenShims).GetMethod(
+                nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0),
+                BindingFlags.Static | BindingFlags.Public);
+            Assert.That(original, Is.Not.Null);
+            Assert.That(shim, Is.Not.Null);
+
+            try
+            {
+                HotReloadPatchResult applyResult = HotReloadPatcher.Apply(
+                    original,
+                    shim,
+                    HotReloadPatchShape.Transplant,
+                    "Assets/Tests/Fixture.cs");
+                Assert.That(applyResult.Success, Is.True, applyResult.ErrorMessage);
+
+                HotReloadTool tool = new HotReloadTool();
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                    new JObject { ["Status"] = true },
+                    CancellationToken.None);
+                HotReloadResponse response = baseResponse as HotReloadResponse;
+
+                Assert.That(response, Is.Not.Null);
+                Assert.That(response.Success, Is.True);
+                HotReloadMethodResult activeRow = null;
+                for (int index = 0; index < response.Methods.Count; index++)
+                {
+                    HotReloadMethodResult row = response.Methods[index];
+                    if (row.Kind == "Active"
+                        && row.Method.Contains(nameof(HotReloadCoreFixture.ReplaceableCompute)))
+                    {
+                        activeRow = row;
+                        break;
+                    }
+                }
+
+                Assert.That(activeRow, Is.Not.Null);
+                Assert.That(activeRow.Kind, Is.EqualTo("Active"));
+                Assert.That(activeRow.InvocationCount, Is.EqualTo(0L));
+                Assert.That(
+                    activeRow.Reason,
+                    Is.EqualTo(
+                        "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called."));
+                Assert.That(
+                    activeRow.Reason,
+                    Is.EqualTo(HotReloadConstants.ActivePatchNeverInvokedReason));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        "1 change(s) currently active. 1 change(s) have not been invoked since their patch was applied; see Methods[].Reason."));
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
+        /// What: --status Active rows that have run since the patch leave Reason empty and
+        /// keep Message as the active-count sentence only.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_InvokedActiveRow_LeavesReasonEmpty()
+        {
+            HotReloadPatcher.RevertAll();
+            MethodInfo original = typeof(HotReloadCoreFixture).GetMethod(
+                nameof(HotReloadCoreFixture.ReplaceableCompute),
+                BindingFlags.Instance | BindingFlags.Public);
+            MethodInfo shim = typeof(HotReloadHandwrittenShims).GetMethod(
+                nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0),
+                BindingFlags.Static | BindingFlags.Public);
+            Assert.That(original, Is.Not.Null);
+            Assert.That(shim, Is.Not.Null);
+
+            try
+            {
+                HotReloadPatchResult applyResult = HotReloadPatcher.Apply(
+                    original,
+                    shim,
+                    HotReloadPatchShape.Transplant,
+                    "Assets/Tests/Fixture.cs");
+                Assert.That(applyResult.Success, Is.True, applyResult.ErrorMessage);
+
+                HotReloadCoreFixture fixture = new HotReloadCoreFixture();
+                Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
+
+                HotReloadTool tool = new HotReloadTool();
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                    new JObject { ["Status"] = true },
+                    CancellationToken.None);
+                HotReloadResponse response = baseResponse as HotReloadResponse;
+
+                Assert.That(response, Is.Not.Null);
+                Assert.That(response.Success, Is.True);
+                HotReloadMethodResult activeRow = null;
+                for (int index = 0; index < response.Methods.Count; index++)
+                {
+                    HotReloadMethodResult row = response.Methods[index];
+                    if (row.Kind == "Active"
+                        && row.Method.Contains(nameof(HotReloadCoreFixture.ReplaceableCompute)))
+                    {
+                        activeRow = row;
+                        break;
+                    }
+                }
+
+                Assert.That(activeRow, Is.Not.Null);
+                Assert.That(activeRow.InvocationCount, Is.GreaterThanOrEqualTo(1L));
+                Assert.That(activeRow.Reason, Is.EqualTo(string.Empty));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo("1 change(s) currently active."));
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
         /// What: composing AlreadyActiveAddedMemberReason from the not-instrumented constant
         /// keeps the historical AlreadyActive added-member sentence byte-identical.
         /// </summary>
