@@ -62,13 +62,16 @@ func TestParseSkillsOptionsRejectsDirWithoutValue(t *testing.T) {
 	}
 }
 
-// Tests that --output-dir cannot be combined with --global or target flags.
+// Tests that --output-dir cannot be combined with --global, target flags, or --flat.
 func TestParseSkillsOptionsRejectsDirWithGlobalOrTargets(t *testing.T) {
 	if _, err := parseSkillsOptions([]string{"--output-dir", "/custom", "--global"}); err == nil {
 		t.Fatal("expected error for --output-dir with --global")
 	}
 	if _, err := parseSkillsOptions([]string{"--claude", "--output-dir", "/custom"}); err == nil {
 		t.Fatal("expected error for --output-dir with a target flag")
+	}
+	if _, err := parseSkillsOptions([]string{"--output-dir", "/custom", "--flat"}); err == nil {
+		t.Fatal("expected error for --output-dir with --flat")
 	}
 }
 

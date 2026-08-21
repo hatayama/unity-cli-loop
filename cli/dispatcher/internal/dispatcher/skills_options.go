@@ -77,13 +77,17 @@ func missingSkillsOutputDirValueError() error {
 }
 
 // validateSkillsOptions rejects flag combinations whose destinations conflict:
-// --output-dir already names one exact destination, so combining it with the location
-// flags (--global or a target flag) would make the request ambiguous.
+// --output-dir already names one exact destination and always installs flat, so
+// combining it with the location flags (--global or a target flag) or the layout
+// flag (--flat) would make the request ambiguous.
 func validateSkillsOptions(options skillCommandOptions) error {
 	if options.outputDir == "" {
 		return nil
 	}
 	conflicting := ""
+	if options.flat {
+		conflicting = "--flat"
+	}
 	if options.global {
 		conflicting = "--global"
 	}
