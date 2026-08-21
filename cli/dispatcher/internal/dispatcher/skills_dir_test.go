@@ -44,13 +44,21 @@ func TestParseSkillsOptionsParsesDirFlag(t *testing.T) {
 	}
 }
 
-// Tests that --output-dir without a value is rejected as an argument error.
+// Tests that --output-dir without a value is rejected as an argument error,
+// including when the next token is another flag that must not be swallowed
+// as the destination path.
 func TestParseSkillsOptionsRejectsDirWithoutValue(t *testing.T) {
 	if _, err := parseSkillsOptions([]string{"--output-dir"}); err == nil {
 		t.Fatal("expected error for --output-dir without value")
 	}
 	if _, err := parseSkillsOptions([]string{"--output-dir="}); err == nil {
 		t.Fatal("expected error for --output-dir= without value")
+	}
+	if _, err := parseSkillsOptions([]string{"--output-dir", "--global"}); err == nil {
+		t.Fatal("expected error when --output-dir is followed by --global instead of a path")
+	}
+	if _, err := parseSkillsOptions([]string{"--output-dir", "--claude"}); err == nil {
+		t.Fatal("expected error when --output-dir is followed by a target flag instead of a path")
 	}
 }
 

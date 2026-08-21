@@ -21,7 +21,10 @@ func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 		case arg == "--flat":
 			options.flat = true
 		case arg == "--output-dir":
-			if index+1 >= len(args) || args[index+1] == "" {
+			// A flag-like next token (e.g. --global) must not be swallowed as the
+			// destination, or the mutual-exclusion validation silently misses it.
+			// Paths that genuinely start with a dash go through --output-dir=<path>.
+			if index+1 >= len(args) || args[index+1] == "" || strings.HasPrefix(args[index+1], "-") {
 				return skillCommandOptions{}, missingSkillsOutputDirValueError()
 			}
 			index++
@@ -63,10 +66,13 @@ func appendSkillTarget(options *skillCommandOptions, seenTargets map[string]bool
 
 func missingSkillsOutputDirValueError() error {
 	return &clierrors.ArgumentError{
-		Message:     "The --output-dir option requires a directory path value.",
-		Option:      "--output-dir",
-		Command:     clicore.SkillsCommandName,
-		NextActions: []string{"Pass the destination directory, e.g. `uloop skills install --output-dir path/to/skills`."},
+		Message: "The --output-dir option requires a directory path value.",
+		Option:  "--output-dir",
+		Command: clicore.SkillsCommandName,
+		NextActions: []string{
+			"Pass the destination directory, e.g. `uloop skills install --output-dir path/to/skills`.",
+			"Use the --output-dir=<path> form when the destination path starts with a dash.",
+		},
 	}
 }
 
