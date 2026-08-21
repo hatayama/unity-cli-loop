@@ -181,6 +181,7 @@ func TestRunPausePointTriggerSync(t *testing.T) {
 		if response["InterruptedByPausePoint"] != true {
 			t.Fatalf("response passthrough mismatch: %#v", response)
 		}
+		assertPausePointTriggerResultOmitsExplanation(t, result)
 	})
 
 	t.Run("reports the dispatched command's stderr on dispatch failure", func(t *testing.T) {
@@ -209,6 +210,7 @@ func TestRunPausePointTriggerSync(t *testing.T) {
 		if result.Error != "unknown command: bogus-command" {
 			t.Fatalf("error mismatch: %#v", result)
 		}
+		assertPausePointTriggerResultOmitsExplanation(t, result)
 	})
 
 	t.Run("synthesizes an error when the dispatched command wrote nothing at all", func(t *testing.T) {
@@ -288,6 +290,7 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 		if triggerResult.Command != "simulate-keyboard --action Press" {
 			t.Fatalf("command mismatch: %#v", triggerResult)
 		}
+		assertPausePointTriggerResultOmitsExplanation(t, triggerResult)
 	})
 
 	t.Run("trigger still running past the join grace window reports Completed=false", func(t *testing.T) {
@@ -323,6 +326,25 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 		}
 		if triggerResult.Command != "simulate-keyboard --action Press" {
 			t.Fatalf("command mismatch: %#v", triggerResult)
+		}
+		const wantExplanation = "The pause-point wait settled (hit, expiry, or clear) before the trigger command reported its result. The triggered command keeps running inside Unity and its input may still have been delivered; judge by the wait outcome and captured state instead of re-running the trigger."
+		if triggerResult.Explanation != wantExplanation {
+			t.Fatalf("Explanation mismatch:\nwant %q\ngot  %q", wantExplanation, triggerResult.Explanation)
+		}
+		encoded, err := json.Marshal(triggerResult)
+		if err != nil {
+			t.Fatalf("marshal trigger result: %v", err)
+		}
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(encoded, &raw); err != nil {
+			t.Fatalf("unmarshal trigger result JSON: %v", err)
+		}
+		var gotExplanation string
+		if err := json.Unmarshal(raw["Explanation"], &gotExplanation); err != nil {
+			t.Fatalf("Explanation is not a JSON string: %v (%s)", err, encoded)
+		}
+		if gotExplanation != wantExplanation {
+			t.Fatalf("JSON Explanation mismatch:\nwant %q\ngot  %q", wantExplanation, gotExplanation)
 		}
 	})
 }
@@ -626,5 +648,20 @@ func TestExtractPausePointEnableAwaitFlagsRequiresAwaitForTrigger(t *testing.T) 
 	}
 	if !strings.Contains(err.Error(), "require --await") {
 		t.Fatalf("error message mismatch: %v", err)
+	}
+}
+
+func assertPausePointTriggerResultOmitsExplanation(t *testing.T, result *pausePointTriggerResult) {
+	t.Helper()
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal trigger result: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatalf("unmarshal trigger result JSON: %v (%s)", err, encoded)
+	}
+	if _, exists := raw["Explanation"]; exists {
+		t.Fatalf("Explanation key must be omitted, got %s", encoded)
 	}
 }
