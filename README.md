@@ -139,7 +139,7 @@ REPOSITORY=hatayama/unity-cli-loop
 RELEASE_TAG=dispatcher-v<RELEASE_VERSION>
 SOURCE_REF=refs/heads/v3-beta
 tmp_dir=$(mktemp -d)
-gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sigstore.json' --output-dir "$tmp_dir" && \
+gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sigstore.json' --dir "$tmp_dir" && \
 tag_sha=$(gh api "repos/$REPOSITORY/commits/$RELEASE_TAG" --jq .sha) && \
 gh attestation verify "$tmp_dir/install.sh" --bundle "$tmp_dir/install.sh.sigstore.json" --repo "$REPOSITORY" --signer-workflow "$REPOSITORY/.github/workflows/dispatcher-publish.yml" --source-ref "$SOURCE_REF" --source-digest "$tag_sha" && \
 manifest=$(jq -r '.dsseEnvelope.payload | @base64d | fromjson | .subject[] | "\(.digest.sha256)  \(.name)"' "$tmp_dir/install.sh.sigstore.json" | LC_ALL=C sort) && \
@@ -153,7 +153,7 @@ $repository = 'hatayama/unity-cli-loop'
 $releaseTag = 'dispatcher-v<RELEASE_VERSION>'
 $sourceRef = 'refs/heads/v3-beta'
 $temporaryDirectory = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
-gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --output-dir $temporaryDirectory.FullName
+gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --dir $temporaryDirectory.FullName
 if ($LASTEXITCODE -ne 0) { throw 'Installer download failed.' }
 $tagSha = gh api "repos/$repository/commits/$releaseTag" --jq .sha
 if ($LASTEXITCODE -ne 0) { throw 'Release tag resolution failed.' }
