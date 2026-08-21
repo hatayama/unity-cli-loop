@@ -21,6 +21,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: CompleteCompileRequest copies a live decline onto the stored compile response.
+        /// </summary>
+        [Test]
+        public void CompleteCompileRequest_WhenConsentWasDeclined_PersistsDisclosure()
+        {
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+
+            try
+            {
+                using CompileController controller = new(
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+                controller.SetResultRecordingContext(
+                    CompileResultRecordingContext.Create(
+                        new CompileSchema
+                        {
+                            WaitForDomainReload = true,
+                            RequestId = "compile_consent_controller",
+                            ForceRecompile = false
+                        }));
+                CompileApiUpdaterConsentState.BeginCliCompile();
+                CompileApiUpdaterConsentState.MarkDeclined();
+
+                controller.CompleteCompileRequestForTesting(CreateSuccessfulResult());
+
+                UnityCliLoopStoredCompileResult storedResult =
+                    compileResultSessionRepository.GetCompileResult("compile_consent_controller");
+                Assert.That(storedResult.HasResult, Is.True);
+                Assert.That(
+                    storedResult.ResultJson,
+                    Does.Contain(
+                        "Unity's API Updater requested consent to rewrite source files ('Script Updating Consent' dialog). uloop declines this automatically: source files are not rewritten without explicit user consent. The obsolete-API compile errors it would have fixed are reported in Errors."));
+            }
+            finally
+            {
+                originalSnapshot.Restore();
+            }
+        }
+
+        /// <summary>
         /// What: the normal completion path leaves the in-flight flag false.
         /// </summary>
         [Test]

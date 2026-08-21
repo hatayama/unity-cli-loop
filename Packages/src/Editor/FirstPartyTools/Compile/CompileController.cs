@@ -160,7 +160,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             try
             {
-                // Execute asset refresh.
+                // Why before Refresh: AssetDatabase.Refresh() can start a script compile itself,
+                // and that compile can raise Script Updating Consent. Begin must be set first
+                // or the prefix lets the modal through on the typical "edit then uloop compile" path.
+                CompileApiUpdaterConsentState.BeginCliCompile();
                 AssetDatabase.Refresh();
 
                 AssemblyDefinitionConsoleErrorValidationService assemblyDefinitionValidationService = new();
@@ -190,7 +193,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string startMessage = forceRecompile ? "Forced recompile started after asset refresh..." : "Compilation started after asset refresh...";
                 OnCompileStarted?.Invoke(startMessage);
 
-                CompileApiUpdaterConsentState.BeginCliCompile();
                 if (forceRecompile)
                 {
                     CompilationPipeline.RequestScriptCompilation(RequestScriptCompilationOptions.CleanBuildCache);
