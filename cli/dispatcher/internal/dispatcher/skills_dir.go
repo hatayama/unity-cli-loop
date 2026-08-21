@@ -5,6 +5,12 @@ package dispatcher
 // destination may hold files uloop does not own (package manifests placed next
 // to SKILL.md), so every operation here touches only entries that exist in the
 // skill source directory.
+//
+// Deliberate omissions compared to target installs: disabled-tool filtering and
+// deprecated-skill cleanup do not run here. An external store is not scoped to
+// one Unity project, so one project's tool settings must not hide skills from
+// it, and deleting directories whose names uloop merely used in the past would
+// break the guarantee that only source-owned entries are ever removed.
 
 import (
 	"bytes"
@@ -120,9 +126,12 @@ func installSkillIntoDir(baseDir string, skill skillDefinition, result *skillIns
 
 // uninstallSkillFromDir deletes only entries that exist in the skill source, so
 // foreign files survive; the skill directory itself is removed only once empty.
+// Presence is keyed on the owned entries rather than SKILL.md alone, so a
+// partially removed install (references/ left behind without SKILL.md) is still
+// cleaned up instead of being reported as not installed.
 func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) {
 	skillDir := filepath.Join(baseDir, skill.name)
-	if _, err := os.Stat(filepath.Join(skillDir, skillscan.SkillFileName)); err != nil {
+	if _, err := os.Stat(skillDir); err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
@@ -132,12 +141,21 @@ func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) 
 	if err != nil {
 		return false, err
 	}
+	removedAny := false
 	for _, entryName := range entryNames {
-		if err := os.RemoveAll(filepath.Join(skillDir, entryName)); err != nil {
+		entryPath := filepath.Join(skillDir, entryName)
+		if _, err := os.Stat(entryPath); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
 			return false, err
 		}
+		if err := os.RemoveAll(entryPath); err != nil {
+			return false, err
+		}
+		removedAny = true
 	}
-	return true, removeEmptyDir(skillDir)
+	return removedAny, removeEmptyDir(skillDir)
 }
 
 // getDirSkillStatus reports install status for the --output-dir layout. It compares
@@ -158,22 +176,29 @@ func getDirSkillStatus(baseDir string, skill skillDefinition) (string, error) {
 	if !bytes.Equal(installedContent, expectedContent) {
 		return "outdated", nil
 	}
-	if dirSkillFilesOutdated(skillDir, skill) {
+	filesOutdated, err := dirSkillFilesOutdated(skillDir, skill)
+	if err != nil {
+		return "", err
+	}
+	if filesOutdated {
 		return "outdated", nil
 	}
 	return "installed", nil
 }
 
-func dirSkillFilesOutdated(skillDir string, skill skillDefinition) bool {
+func dirSkillFilesOutdated(skillDir string, skill skillDefinition) (bool, error) {
 	expectedFiles := collectComparableSkillFiles(skill.sourceDirectory)
 	installedFiles := collectComparableSkillFiles(skillDir)
 	for relativePath, expectedContent := range expectedFiles {
 		installedContent, ok := installedFiles[relativePath]
 		if !ok || !bytes.Equal(expectedContent, installedContent) {
-			return true
+			return true, nil
 		}
 	}
-	ownedDirs := sourceOwnedDirNames(skill.sourceDirectory)
+	ownedDirs, err := sourceOwnedDirNames(skill.sourceDirectory)
+	if err != nil {
+		return false, err
+	}
 	for relativePath := range installedFiles {
 		topLevel := topLevelPathSegment(relativePath)
 		// Top-level files absent from the source are foreign files and stay
@@ -185,10 +210,10 @@ func dirSkillFilesOutdated(skillDir string, skill skillDefinition) bool {
 			continue
 		}
 		if _, ok := expectedFiles[relativePath]; !ok {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // syncSkillDirectoryPreservingForeignFiles copies every source-owned entry into
@@ -217,10 +242,9 @@ func syncSkillEntry(sourceDir string, destinationDir string, entry os.DirEntry) 
 	sourcePath := filepath.Join(sourceDir, entry.Name())
 	destinationPath := filepath.Join(destinationDir, entry.Name())
 	if entry.IsDir() {
-		if err := os.RemoveAll(destinationPath); err != nil {
-			return err
-		}
-		return copySkillDirectory(sourcePath, destinationPath)
+		// Replace through a temp copy plus rename so a mid-copy failure (disk
+		// full, permission) cannot leave the installed directory half-deleted.
+		return syncSkillDirectory(sourcePath, destinationPath)
 	}
 	content, err := os.ReadFile(sourcePath)
 	if err != nil {
@@ -247,18 +271,18 @@ func sourceOwnedEntryNames(sourceDir string) ([]string, error) {
 	return names, nil
 }
 
-func sourceOwnedDirNames(sourceDir string) map[string]bool {
-	ownedDirs := map[string]bool{}
+func sourceOwnedDirNames(sourceDir string) (map[string]bool, error) {
 	entries, err := os.ReadDir(sourceDir)
 	if err != nil {
-		return ownedDirs
+		return nil, err
 	}
+	ownedDirs := map[string]bool{}
 	for _, entry := range entries {
 		if entry.IsDir() && !shouldSkipSkillFile(entry.Name()) {
 			ownedDirs[entry.Name()] = true
 		}
 	}
-	return ownedDirs
+	return ownedDirs, nil
 }
 
 func topLevelPathSegment(relativePath string) string {

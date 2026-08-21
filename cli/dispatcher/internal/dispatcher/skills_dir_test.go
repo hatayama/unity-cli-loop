@@ -230,6 +230,36 @@ func TestRunSkillsDirUninstallRemovesOnlyOwnedFiles(t *testing.T) {
 	}
 }
 
+// Tests that dir-mode uninstall cleans up owned files left behind after
+// SKILL.md was removed, instead of reporting the skill as not found.
+func TestRunSkillsDirUninstallRemovesOrphanedOwnedFiles(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	installedDir := filepath.Join(destinationDir, "uloop-sample")
+	if err := os.Remove(filepath.Join(installedDir, "SKILL.md")); err != nil {
+		t.Fatalf("failed to remove installed skill file: %v", err)
+	}
+
+	stdout.Reset()
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Removed: 1") {
+		t.Fatalf("orphaned owned files should count as removed:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(installedDir); !os.IsNotExist(err) {
+		t.Fatalf("emptied skill directory should be removed, stat err=%v", err)
+	}
+}
+
 // Tests that dir-mode uninstall counts skills that were never installed.
 func TestRunSkillsDirUninstallCountsMissingSkills(t *testing.T) {
 	root := t.TempDir()

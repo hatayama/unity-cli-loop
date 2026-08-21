@@ -73,6 +73,14 @@ func runSkillsDirSubcommand(
 	case "uninstall":
 		return runSkillsDirUninstall(directory, skills, stdout, stderr)
 	default:
+		// Routing already rejects unknown and v3-migration subcommands, so this
+		// only fires when a new subcommand is added without dir-mode support.
+		clierrors.WriteClassifiedError(stderr, &clierrors.ArgumentError{
+			Message:     "The " + subcommand + " subcommand does not support --output-dir.",
+			Option:      "--output-dir",
+			Command:     clicore.SkillsCommandName,
+			NextActions: []string{"Use --output-dir with the install, uninstall, or list subcommand."},
+		}, clierrors.ErrorContext{Command: clicore.SkillsCommandName})
 		return 1
 	}
 }
