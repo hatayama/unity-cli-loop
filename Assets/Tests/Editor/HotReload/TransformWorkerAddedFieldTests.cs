@@ -347,6 +347,93 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a method that reads an added field as both this.field and bare field is rewritten
+        /// so both store reads use the instance parameter, not this.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_ThisAndBareAddedFieldRead_BothUseInstanceParameter()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int AddedCount;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return this.AddedCount + AddedCount + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("ThisAndBareAddedFieldRead.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null);
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("GetOrInit<"));
+            Assert.That(slice, Does.Contain("__uloopInstance"));
+            Assert.That(slice, Does.Not.Contain("this."));
+        }
+
+        /// <summary>
+        /// What: assigning this.field on an added instance field still rewrites to Set with the
+        /// instance parameter.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_ThisQualifiedAddedFieldAssignment_UsesInstanceParameter()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public int AddedCount;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            this.AddedCount = value;\n            return value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("ThisQualifiedAddedFieldAssignment.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null);
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("Set<"));
+            Assert.That(slice, Does.Contain("__uloopInstance"));
+            Assert.That(slice, Does.Not.Contain("this."));
+        }
+
+        /// <summary>
+        /// What: reading a static added field as TypeName.field still uses the static store,
+        /// not an instance receiver.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_TypeQualifiedStaticAddedFieldRead_UsesStaticStore()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public static int AddedStatic;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return HotReloadAddedMemberHost.AddedStatic + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("TypeQualifiedStaticAddedFieldRead.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null);
+            string slice = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
+            Assert.That(slice, Does.Contain("GetOrInitStatic<"));
+            Assert.That(slice, Does.Not.Contain("GetOrInit<"));
+            Assert.That(slice, Does.Not.Contain("this."));
+        }
+
+        /// <summary>
         /// What: compound assignment and increment on an added field expand to Get then Set.
         /// </summary>
         [Test]
