@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string resolvedMethod,
             string expectedNotice)
         {
-            string warning = PausePointEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
+            string warning = PausePointPerFrameEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
                 UloopPausePointCaptureMode.Trace,
                 resolvedMethod,
                 8);
@@ -66,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void BuildPerFrameTraceWarningOrEmpty_WhenResolvedMethodIsCecilFullName_FormatsTypeMethod()
         {
-            string warning = PausePointEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
+            string warning = PausePointPerFrameEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
                 UloopPausePointCaptureMode.Trace,
                 "System.Void Ns.Player::Update()",
                 8);
@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(UloopPausePointCaptureMode.Continuous)]
         public void BuildPerFrameTraceWarningOrEmpty_WhenModeIsNotTrace_ReturnsEmpty(string captureMode)
         {
-            string warning = PausePointEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
+            string warning = PausePointPerFrameEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
                 captureMode,
                 "Player.Update",
                 8);
@@ -97,7 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase("Player.OnGUILayout")]
         public void BuildPerFrameTraceWarningOrEmpty_WhenSimpleNameIsNotPerFrame_ReturnsEmpty(string resolvedMethod)
         {
-            string warning = PausePointEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
+            string warning = PausePointPerFrameEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
                 UloopPausePointCaptureMode.Trace,
                 resolvedMethod,
                 8);
@@ -112,7 +112,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void MergeWarnings_WhenPriorWarningAndPerFrameNotice_AppendsNoticeAfterPrior()
         {
             string prior = "Pause point was enabled before PlayMode while Domain Reload is enabled. Entering PlayMode may clear this marker; keep Domain Reload disabled for this workflow or enable the marker after PlayMode starts.";
-            string notice = PausePointEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
+            string notice = PausePointPerFrameEnableWarnings.BuildPerFrameTraceWarningOrEmpty(
                 UloopPausePointCaptureMode.Trace,
                 "Player.Update",
                 8);
