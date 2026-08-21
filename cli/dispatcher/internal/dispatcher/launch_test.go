@@ -366,6 +366,9 @@ func TestRunLaunchWritesReadyResponseAfterToolReadiness(t *testing.T) {
 	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
 		return nil
 	}
+	deps.focusUnityProcess = func(context.Context, int) error {
+		return nil
+	}
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
@@ -813,6 +816,9 @@ func TestRunLaunchRestartWritesProcessTransitionResponse(t *testing.T) {
 	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
 		return nil
 	}
+	deps.focusUnityProcess = func(context.Context, int) error {
+		return nil
+	}
 
 	projectRoot := createLaunchTestProject(t)
 	var stdout bytes.Buffer
@@ -979,6 +985,9 @@ func TestRunLaunchWritesExistingFocusSuccessVibeLog(t *testing.T) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
 		}
 	}
+	if strings.Contains(logContent, `"operation":"cli_launch_fresh_focus_attempt"`) {
+		t.Fatalf("existing launch must not write a fresh-focus vibe log:\n%s", logContent)
+	}
 }
 
 // Verifies launch logs focus failures without changing its existing success behavior.
@@ -1023,6 +1032,109 @@ func TestRunLaunchWritesExistingFocusFailureVibeLog(t *testing.T) {
 		if !strings.Contains(logContent, expected) {
 			t.Fatalf("CLI Vibe log missing %q:\n%s", expected, logContent)
 		}
+	}
+}
+
+func TestRunLaunchFocusesFreshUnityAfterStartupMarker(t *testing.T) {
+	enableCliVibeLog(t)
+	deps := defaultLaunchDeps()
+	focusedPids := []int{}
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return nil, nil
+	}
+	deps.resolveUnityExecutablePath = func(string) (string, error) {
+		return fakeUnityExecutablePath(t), nil
+	}
+	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
+		return nil
+	}
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
+		return nil
+	}
+	deps.focusUnityProcess = func(_ context.Context, pid int) error {
+		focusedPids = append(focusedPids, pid)
+		return nil
+	}
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	code := runLaunchWithDeps(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"},
+		projectRoot,
+		&stdout,
+		io.Discard,
+		deps,
+	)
+	if code != 0 {
+		t.Fatalf("exit code mismatch: %d", code)
+	}
+	if len(focusedPids) != 1 {
+		t.Fatalf("focus calls mismatch: got %d want 1 pids=%v", len(focusedPids), focusedPids)
+	}
+	response := decodeLaunchResponseFromOutput(t, stdout.String())
+	if response.CurrentProcessId == nil || *response.CurrentProcessId != focusedPids[0] {
+		t.Fatalf("focused pid mismatch: focused=%v current=%#v", focusedPids, response.CurrentProcessId)
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	expectedAttempt := `"operation":"cli_launch_fresh_focus_attempt"`
+	expectedSuccess := `"operation":"cli_launch_fresh_focus_success"`
+	if !strings.Contains(logContent, expectedAttempt) {
+		t.Fatalf("CLI Vibe log missing %q:\n%s", expectedAttempt, logContent)
+	}
+	if !strings.Contains(logContent, expectedSuccess) {
+		t.Fatalf("CLI Vibe log missing %q:\n%s", expectedSuccess, logContent)
+	}
+}
+
+func TestRunLaunchSucceedsWhenFreshFocusFails(t *testing.T) {
+	enableCliVibeLog(t)
+	deps := defaultLaunchDeps()
+	focusCount := 0
+	var slept time.Duration
+	deps.findRunningUnityProcess = func(context.Context, string) (*clicore.UnityProcess, error) {
+		return nil, nil
+	}
+	deps.resolveUnityExecutablePath = func(string) (string, error) {
+		return fakeUnityExecutablePath(t), nil
+	}
+	deps.waitForUnityStartupMarker = func(context.Context, string, time.Duration, time.Duration) error {
+		return nil
+	}
+	deps.waitForToolReadiness = func(context.Context, string, time.Duration) error {
+		return nil
+	}
+	deps.focusUnityProcess = func(context.Context, int) error {
+		focusCount++
+		return errors.New("system events not ready")
+	}
+	deps.sleep = func(d time.Duration) {
+		slept = d
+	}
+
+	projectRoot := createLaunchTestProject(t)
+	var stdout bytes.Buffer
+	code := runLaunchWithDeps(
+		context.Background(),
+		launchOptions{projectPath: projectRoot, editorVersion: "6000.0.0f1"},
+		projectRoot,
+		&stdout,
+		io.Discard,
+		deps,
+	)
+	if code != 0 {
+		t.Fatalf("fresh focus failure must not fail launch: code=%d", code)
+	}
+	if focusCount != 2 {
+		t.Fatalf("focus attempts mismatch: got %d want 2", focusCount)
+	}
+	if slept != launchFreshFocusRetryDelay {
+		t.Fatalf("retry delay mismatch: got %s want %s", slept, launchFreshFocusRetryDelay)
+	}
+	logContent := readOnlyCliVibeLog(t, projectRoot)
+	expectedFailure := `"operation":"cli_launch_fresh_focus_failure"`
+	if !strings.Contains(logContent, expectedFailure) {
+		t.Fatalf("CLI Vibe log missing %q:\n%s", expectedFailure, logContent)
 	}
 }
 
