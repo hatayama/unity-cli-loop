@@ -888,6 +888,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.UnfilteredTestNames, Is.Null);
         }
 
+        /// <summary>
+        /// What: filter-all NoTestsFound appends the predefined-assembly notice after the original message when findings exist.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilterAllNoTestsFoundWithPredefinedAssemblyTests_AppendsNotice()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult(),
+                PredefinedAssemblyTestFindings = RunTestsPredefinedAssemblyTestFindings.Create(
+                    2,
+                    new[]
+                    {
+                        "Assembly-CSharp: Game.Foo.Alpha",
+                        "Assembly-CSharp-Editor: Editor.Bar.Beta"
+                    })
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "No tests found matching the specified filter criteria Additionally, 2 NUnit test method(s) are compiled into predefined assemblies rather than any test assembly: Assembly-CSharp: Game.Foo.Alpha, Assembly-CSharp-Editor: Editor.Bar.Beta. Unity Test Runner does not discover tests that live outside a test assembly; move these scripts into a folder whose .asmdef has Test Assemblies enabled (EditMode tests target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests."));
+        }
+
+        /// <summary>
+        /// What: filter-all NoTestsFound keeps the original message when predefined-assembly findings are empty.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilterAllNoTestsFoundWithNoPredefinedAssemblyTests_KeepsOriginalMessage()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult(),
+                PredefinedAssemblyTestFindings = RunTestsPredefinedAssemblyTestFindings.None()
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
+        }
+
         private static SerializableTestResult CreateNoTestsFoundResult()
         {
             return new SerializableTestResult
@@ -966,6 +1031,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public RunTestsUnfilteredTestListResult UnfilteredTestListResult { get; set; } =
                 RunTestsUnfilteredTestListResult.NotRetrieved();
 
+            public RunTestsPredefinedAssemblyTestFindings PredefinedAssemblyTestFindings { get; set; } =
+                RunTestsPredefinedAssemblyTestFindings.None();
+
             public override Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
             {
                 ct.ThrowIfCancellationRequested();
@@ -986,6 +1054,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 ct.ThrowIfCancellationRequested();
                 return Task.FromResult(UnfilteredTestListResult);
+            }
+
+            internal override RunTestsPredefinedAssemblyTestFindings ScanPredefinedAssemblyTests()
+            {
+                return PredefinedAssemblyTestFindings;
             }
         }
 

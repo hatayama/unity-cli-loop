@@ -41,6 +41,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             return RunTestsUnfilteredTestListRetriever.RetrieveAsync(testMode, ct);
         }
+
+        public RunTestsPredefinedAssemblyTestFindings ScanPredefinedAssemblyTests()
+        {
+            return RunTestsPredefinedAssemblyTestScanner.Scan();
+        }
     }
 
     public static class PlayModeTestExecuter

@@ -9,6 +9,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const int UnfilteredTestNamesLimit = 20;
 
+        public const int PredefinedAssemblyTestSampleLimit = 5;
+
+        // Why these four names: Unity compiles scripts with no .asmdef into these
+        // predefined assemblies, and Test Runner never discovers tests that land there.
+        internal const string PredefinedAssemblyCSharpName = "Assembly-CSharp";
+        internal const string PredefinedAssemblyCSharpEditorName = "Assembly-CSharp-Editor";
+        internal const string PredefinedAssemblyCSharpFirstpassName = "Assembly-CSharp-firstpass";
+        internal const string PredefinedAssemblyCSharpEditorFirstpassName = "Assembly-CSharp-Editor-firstpass";
+
+        // Why a leading space: appended after the existing no-tests Message, which
+        // matches NoTestsFoundExplanationText's period-terminated follow-on style
+        // (and the existing asmdef HintPrefix). Why this notice can say Test Runner
+        // does not discover these methods: it is emitted only on zero-discovery
+        // runs. If the runner had found tests, the notice would not appear.
+        internal const string PredefinedAssemblyTestNoticeFormat =
+            " Additionally, {0} NUnit test method(s) are compiled into predefined assemblies rather than any test assembly: {1}. Unity Test Runner does not discover tests that live outside a test assembly; move these scripts into a folder whose .asmdef has Test Assemblies enabled (EditMode tests target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests.";
+
         // Why a listing timeout instead of --timeout-seconds: RetrieveTestList is a catalog
         // callback, not a test run. Waiting the full run timeout would stall a no-tests
         // response for minutes when the callback never arrives.
