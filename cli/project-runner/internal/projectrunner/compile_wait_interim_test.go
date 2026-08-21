@@ -56,7 +56,7 @@ func TestCompileWaitInterimSwitchesToSilentLineAfterThirtySecondsWithoutSuccess(
 	if !due {
 		t.Fatal("expected a silent line after 30s without a successful poll")
 	}
-	expected := "compile: Unity has not answered status polls for 30s. The Editor may be blocked by a modal dialog or stuck; if this persists, restart Unity with 'uloop launch -r'."
+	expected := "compile: Unity has not answered status polls for 30s. The Editor may be blocked by a modal dialog — commonly Unity's 'Script Updating Consent' or 'API Update Required' dialog, which uloop cannot click — or stuck. Check the Unity window, or restart Unity with 'uloop launch -r'."
 	if line != expected {
 		t.Fatalf("silent line mismatch:\n got: %q\nwant: %q", line, expected)
 	}
@@ -76,7 +76,7 @@ func TestCompileWaitInterimReportsSilentLineWhenNoSuccessfulPolls(t *testing.T) 
 	if !due {
 		t.Fatal("expected a silent line at 30s with zero successful polls")
 	}
-	expected := "compile: Unity has not answered status polls for 30s. The Editor may be blocked by a modal dialog or stuck; if this persists, restart Unity with 'uloop launch -r'."
+	expected := "compile: Unity has not answered status polls for 30s. The Editor may be blocked by a modal dialog — commonly Unity's 'Script Updating Consent' or 'API Update Required' dialog, which uloop cannot click — or stuck. Check the Unity window, or restart Unity with 'uloop launch -r'."
 	if line != expected {
 		t.Fatalf("silent line mismatch:\n got: %q\nwant: %q", line, expected)
 	}
@@ -140,7 +140,7 @@ func TestWaitForAttachedCompileCompletionReportsInterimSilentLine(t *testing.T) 
 	if outcome != attachWaitTimedOut {
 		t.Fatalf("expected attach timeout: %v", outcome)
 	}
-	expected := "compile: Unity has not answered status polls for 30s. The Editor may be blocked by a modal dialog or stuck; if this persists, restart Unity with 'uloop launch -r'."
+	expected := "compile: Unity has not answered status polls for 30s. The Editor may be blocked by a modal dialog — commonly Unity's 'Script Updating Consent' or 'API Update Required' dialog, which uloop cannot click — or stuck. Check the Unity window, or restart Unity with 'uloop launch -r'."
 	if len(lines) == 0 || lines[0] != expected {
 		t.Fatalf("attach wait silent line mismatch: %#v", lines)
 	}
