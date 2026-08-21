@@ -17,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why "line count differs" not "line numbers have shifted": a trailing newline changes
         // the split count without moving statements. Why "patched methods with debug symbols":
         // PatchedMethodPdbUnavailable still falls through to the compiled line map.
+        // Why conclusion first: the first sentence is the conclusion; usability rounds
+        // showed readers stop at sentence one, so do not restore the explanation-first order.
         public static string Build(string file, string editedSource, string compiledSource)
         {
             if (string.IsNullOrEmpty(file) || editedSource == null || string.IsNullOrEmpty(compiledSource))
@@ -34,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string normalizedFile = HotReloadSourcePathNormalizer.ToForwardSlashes(file);
             return string.Format(
                 CultureInfo.InvariantCulture,
-                "{0}: line count differs from the last compiled source (edited {1} lines vs compiled {2}). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file.",
+                "{0}: line count differs from the last compiled source (edited {1} lines vs compiled {2}). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line.",
                 normalizedFile,
                 editedLineCount,
                 compiledLineCount);

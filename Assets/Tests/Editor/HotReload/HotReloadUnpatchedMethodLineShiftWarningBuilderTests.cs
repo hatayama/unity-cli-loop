@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 warning,
                 Is.EqualTo(
-                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
         }
 
         /// <summary>
@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 warning,
                 Is.EqualTo(
-                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 2 lines vs compiled 3). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 2 lines vs compiled 3). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
         }
 
         /// <summary>
@@ -93,7 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 warning,
                 Is.EqualTo(
-                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
         }
 
         /// <summary>
@@ -133,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 warnings[0],
                 Is.EqualTo(
-                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
         }
 
         /// <summary>
@@ -166,7 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 warnings[0],
                 Is.EqualTo(
-                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
         }
 
         /// <summary>
@@ -196,7 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 warnings[0],
                 Is.EqualTo(
-                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
         }
 
         /// <summary>
@@ -226,11 +226,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 warnings[0],
                 Is.EqualTo(
-                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
             Assert.That(
                 warnings[1],
                 Is.EqualTo(
-                    "Assets/Scripts/Enemy.cs: line count differs from the last compiled source (edited 4 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+                    "Assets/Scripts/Enemy.cs: line count differs from the last compiled source (edited 4 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
         }
 
         /// <summary>
@@ -268,7 +268,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     response.Warnings[1],
                     Is.EqualTo(
-                        "Library/UloopHotReload/TestSources/line-shift-warning-probe.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). enable-pause-point --line on methods NOT patched in this run still resolves against the last compiled source; patched methods with debug symbols resolve against the edited file."));
+                        "Library/UloopHotReload/TestSources/line-shift-warning-probe.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
                 Assert.That(
                     response.Message,
                     Is.EqualTo(
