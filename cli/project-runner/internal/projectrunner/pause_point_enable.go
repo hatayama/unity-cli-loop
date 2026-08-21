@@ -343,6 +343,8 @@ func runEnablePausePointAndAwait(
 		markerJustEnabled:     true,
 	}
 
+	announceEnablePausePointAwaitStart(stderr, waitOptions.id, waitOptions.timeoutSeconds)
+
 	return runPausePointWaitAfterEnable(
 		ctx,
 		connection,
