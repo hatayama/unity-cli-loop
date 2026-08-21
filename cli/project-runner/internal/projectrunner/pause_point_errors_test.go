@@ -232,3 +232,18 @@ func TestPausePointStateNextActionsKeepsCodeMarkerGuidanceWhenIdContainsColon(t 
 		t.Fatalf("confirm NextAction mismatch: %#v", got[1])
 	}
 }
+
+// Verifies a `.cs:0` suffix is not treated as a file:line id, because enable-pause-point
+// rejects --line 0 and C# never emits that id.
+func TestPausePointStateNextActionsKeepsCodeMarkerGuidanceForZeroLine(t *testing.T) {
+	got := pausePointStateNextActions("scene.cs:0", pausePointStatusResponse{})
+	want := []string{
+		"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
+		"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",
+		"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+		"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("NextActions mismatch:\n got: %#v\nwant: %#v", got, want)
+	}
+}

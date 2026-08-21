@@ -281,6 +281,11 @@ func parsePausePointFileLineID(id string) (string, int, bool) {
 	if err != nil {
 		return "", 0, false
 	}
+	// Why reject 0: C# only builds file:line ids from Line > 0, so `--line 0` is always
+	// rejected by enable-pause-point. Digits-only parsing makes this a zero check.
+	if line <= 0 {
+		return "", 0, false
+	}
 	return path, line, true
 }
 
