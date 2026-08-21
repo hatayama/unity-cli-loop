@@ -2890,6 +2890,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: reading an added instance field as this.field patches the existing method
+        /// instead of failing shim compile with CS0026.
+        /// </summary>
+        [Test]
+        public async Task Run_ThisQualifiedAddedFieldRead_PatchesExistingMethod()
+        {
+            string fixturePath = ResolveAddedFieldApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithThisQualifiedAddedFieldRead(onDisk);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("ThisQualifiedAddedFieldRead.cs", edited),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.WriteAdded));
+
+            HotReloadAddedFieldApplyFixture host = new HotReloadAddedFieldApplyFixture();
+            host.WriteAdded(7);
+            Assert.That(host.ReadAdded(), Is.EqualTo(7));
+        }
+
+        /// <summary>
         /// What: a shim-compile failure after a successful added-field apply leaves the added-field
         /// ledger intact, even though the failed run reports empty AddedFields.
         /// </summary>
@@ -5922,6 +5947,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return source.Replace(
                 "        private int _secret = 10;",
                 "        private int _secret = 10;\n        public int " + fieldName + ";",
+                StringComparison.Ordinal);
+        }
+
+        private static string WithThisQualifiedAddedFieldRead(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n        }",
+                "        public int AddedCount;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadAdded()\n        {\n            return this.AddedCount;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n            AddedCount = value;\n        }",
                 StringComparison.Ordinal);
         }
 

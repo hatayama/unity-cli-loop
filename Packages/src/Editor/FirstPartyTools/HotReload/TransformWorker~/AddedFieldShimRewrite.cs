@@ -82,7 +82,15 @@ internal sealed class AddedFieldShimRewrite
             return null;
         }
 
-        return CreateAddedFieldGetOrInit(binding, receiverSyntax).WithTriviaFrom(triviaSource);
+        ExpressionSyntax rewrittenReceiver = receiverSyntax;
+        if (!binding.IsStatic)
+        {
+            // Why: CSharpSyntaxRewriter does not re-visit children of a replacement node, so a
+            // raw ThisExpression left in the store call would survive as `this` in the static shim.
+            rewrittenReceiver = _rewriter.VisitReceiver(receiverSyntax);
+        }
+
+        return CreateAddedFieldGetOrInit(binding, rewrittenReceiver).WithTriviaFrom(triviaSource);
     }
 
     internal SyntaxNode RewriteAddedFieldAssignment(
