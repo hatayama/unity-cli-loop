@@ -626,6 +626,33 @@ func TestPausePointExpiredErrorOmitsEmptyRecommendedNextAction(t *testing.T) {
 	}
 }
 
+// Verifies an Expired error for a file:line id uses --file/--line NextActions, not Pause(...) wording.
+func TestPausePointExpiredErrorUsesFileLineNextActions(t *testing.T) {
+	response := pausePointStatusResponse{
+		Id:          "Assets/Scripts/Foo.cs:42",
+		Status:      pausePointStatusExpired,
+		Expired:     true,
+		EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		Message:     "Pause point expired before it was hit.",
+	}
+
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "Assets/Scripts/Foo.cs:42",
+		timeoutSeconds: 1,
+	}, response, pausePointWaitStateExpired, false, false)
+
+	wantNextActions := []string{
+		"Re-arm it with uloop enable-pause-point --file \"Assets/Scripts/Foo.cs\" --line 42 before waiting.",
+		"Confirm the code path executes line 42 of Assets/Scripts/Foo.cs while the marker is armed.",
+		"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
+		"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
+	}
+	if !reflect.DeepEqual(cliErr.NextActions, wantNextActions) {
+		t.Fatalf("NextActions mismatch:\n got: %#v\nwant: %#v",
+			cliErr.NextActions, wantNextActions)
+	}
+}
+
 // Verifies recovery details use the marker lifetime instead of the wait deadline.
 func TestPausePointExpiredErrorReportsMarkerTimeoutSeconds(t *testing.T) {
 	response := pausePointStatusResponse{
@@ -1777,6 +1804,14 @@ func TestParseWaitForPausePointOptionsRequiresID(t *testing.T) {
 	}
 }
 
+// Verifies the missing --id NextAction names both Pause ids and file:line ids.
+func TestParseWaitForPausePointOptionsMissingIDNextActionMentionsFileLineIds(t *testing.T) {
+	_, err := parseWaitForPausePointOptions([]string{"--timeout-seconds", "1"})
+	requireNextActions(t, err, []string{
+		"Pass --id <marker-id> matching UloopPausePoint.Pause(\"<marker-id>\"), or the Id returned by enable-pause-point (file:line markers use <project-relative path>:<line>, e.g. Assets/Scripts/Foo.cs:42).",
+	})
+}
+
 // Verifies pause-point-status reports the current marker state without waiting for a hit.
 func TestRunPausePointStatusReturnsCurrentStatus(t *testing.T) {
 	originalQuery := queryPausePointStatus
@@ -2513,6 +2548,14 @@ func TestParsePausePointStatusOptionsRequiresID(t *testing.T) {
 	if !strings.Contains(err.Error(), "Missing required option") {
 		t.Fatalf("error mismatch: %v", err)
 	}
+}
+
+// Verifies pause-point-status missing --id uses the same file:line NextAction as await.
+func TestParsePausePointStatusOptionsMissingIDNextActionMentionsFileLineIds(t *testing.T) {
+	_, err := parsePausePointStatusOptions([]string{})
+	requireNextActions(t, err, []string{
+		"Pass --id <marker-id> matching UloopPausePoint.Pause(\"<marker-id>\"), or the Id returned by enable-pause-point (file:line markers use <project-relative path>:<line>, e.g. Assets/Scripts/Foo.cs:42).",
+	})
 }
 
 func parsePausePointErrorEnvelope(t *testing.T, payload []byte) clierrors.CLIErrorEnvelope {

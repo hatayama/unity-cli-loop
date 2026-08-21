@@ -2,6 +2,8 @@ package projectrunner
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -231,15 +233,23 @@ func pausePointStateError(
 		SafeToRetry: retryable,
 		ProjectRoot: projectRoot,
 		Command:     clicore.PausePointAwaitCommandName,
-		NextActions: pausePointStateNextActions(response),
+		NextActions: pausePointStateNextActions(options.id, response),
 		Details:     pausePointStateErrorDetails(options, response),
 	}
 }
 
-func pausePointStateNextActions(response pausePointStatusResponse) []string {
+func pausePointStateNextActions(id string, response pausePointStatusResponse) []string {
+	rearmAction := "Run `uloop enable-pause-point --id <marker-id>` before waiting."
+	confirmAction := "Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id."
+	if path, line, ok := parsePausePointFileLineID(id); ok {
+		rearmAction = fmt.Sprintf(
+			"Re-arm it with uloop enable-pause-point --file %q --line %d before waiting.", path, line)
+		confirmAction = fmt.Sprintf(
+			"Confirm the code path executes line %d of %s while the marker is armed.", line, path)
+	}
 	nextActions := []string{
-		"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
-		"Confirm the code path calls `UloopPausePoint.Pause(\"<marker-id>\")` with the same id.",
+		rearmAction,
+		confirmAction,
 		"Check `Details.Status`, `Details.EditorState`, `Details.ElapsedSinceEnabledMilliseconds`, and `Details.RemainingMilliseconds` to distinguish a missed code path from an already-paused Editor.",
 		"If the marker is inside a custom asmdef, add a reference to `UnityCLILoop.PausePoints.Runtime`.",
 	}
@@ -247,6 +257,36 @@ func pausePointStateNextActions(response pausePointStatusResponse) []string {
 		return nextActions
 	}
 	return append([]string{response.RecommendedNextAction}, nextActions...)
+}
+
+// parsePausePointFileLineID reports a file:line marker id that ends in `.cs:<digits>`.
+// Why this suffix only: code-marker ids can contain colons, so a generic last-colon split
+// would rewrite Pause("scene:jump") guidance into a --file/--line command that cannot arm it.
+func parsePausePointFileLineID(id string) (string, int, bool) {
+	suffixIndex := strings.LastIndex(id, ".cs:")
+	if suffixIndex < 0 {
+		return "", 0, false
+	}
+	path := id[:suffixIndex+len(".cs")]
+	lineText := id[suffixIndex+len(".cs:"):]
+	if lineText == "" {
+		return "", 0, false
+	}
+	for _, r := range lineText {
+		if r < '0' || r > '9' {
+			return "", 0, false
+		}
+	}
+	line, err := strconv.Atoi(lineText)
+	if err != nil {
+		return "", 0, false
+	}
+	// Why reject 0: C# only builds file:line ids from Line > 0, so `--line 0` is always
+	// rejected by enable-pause-point. Digits-only parsing makes this a zero check.
+	if line <= 0 {
+		return "", 0, false
+	}
+	return path, line, true
 }
 
 func pausePointStateErrorDetails(

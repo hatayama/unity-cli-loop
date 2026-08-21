@@ -163,6 +163,82 @@ func TestBuildToolParamsUnexpectedArgumentWithoutEnumMatchKeepsOriginalNextActio
 	})
 }
 
+// Verifies a leftover token after an array option suggests a comma-separated list for that option.
+func TestBuildToolParamsUnexpectedArgumentAfterArraySuggestsCommaSeparatedList(t *testing.T) {
+	tool := clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Tags": {Type: "array"},
+			},
+		},
+	}
+
+	_, _, err := buildToolParams([]string{"--tags", "alpha", "beta"}, tool)
+	requireNextActions(t, err, []string{
+		"Pass multiple values as one comma-separated list: --tags value1,value2",
+		"Pass tool inputs as `--option value` pairs.",
+	})
+}
+
+// Verifies a leftover token after a non-array option does not suggest a comma-separated list.
+func TestBuildToolParamsUnexpectedArgumentAfterStringOmitsCommaSeparatedList(t *testing.T) {
+	_, _, err := buildToolParams([]string{"--output-directory", "out", "extra"}, toolParamsSuggestionTool())
+	requireNextActions(t, err, []string{
+		"Pass tool inputs as `--option value` pairs.",
+	})
+}
+
+func arrayResetContractTool() clicore.ToolDefinition {
+	return clicore.ToolDefinition{
+		Name: "sample-tool",
+		InputSchema: clicore.InputSchema{
+			Properties: map[string]clicore.ToolProperty{
+				"Tags":            {Type: "array"},
+				"OutputDirectory": {Type: "string"},
+				"Enabled":         {Type: "boolean"},
+			},
+		},
+	}
+}
+
+// Verifies an array option's comma-list NextAction is cleared by each later non-array
+// consumption path (valued option, boolean, --project-path). Why a later option is
+// required: tests that start from a blank lastConsumedArrayOption cannot catch a
+// mutation that skips the overwrite and keeps a previous array option.
+func TestBuildToolParamsUnexpectedArgumentAfterArrayThenLaterOptionOmitsCommaSeparatedList(t *testing.T) {
+	tool := arrayResetContractTool()
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "non-array value",
+			args: []string{"--tags", "alpha", "--output-directory", "out", "extra"},
+		},
+		{
+			// Why -extra: a bare positional after a boolean is rejected as a boolean
+			// value before the reset assignment runs, so that error cannot observe it.
+			name: "boolean",
+			args: []string{"--tags", "alpha", "--enabled", "-extra"},
+		},
+		{
+			name: "project-path",
+			args: []string{"--tags", "alpha", "--project-path", "/tmp/project", "extra"},
+		},
+	}
+
+	want := []string{
+		"Pass tool inputs as `--option value` pairs.",
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, _, err := buildToolParams(testCase.args, tool)
+			requireNextActions(t, err, want)
+		})
+	}
+}
+
 // Verifies an unknown flag whose name matches an option enum value suggests that option and value.
 func TestBuildToolParamsUnknownOptionSuggestsMatchingEnumValue(t *testing.T) {
 	_, _, err := buildToolParams([]string{"--status"}, toolParamsSuggestionTool())
