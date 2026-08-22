@@ -37,7 +37,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 forceRecompile,
                 pausePointWarning);
             CompileApiUpdaterConsentResponseComposer.Apply(response, result.ApiUpdaterConsentDeclined);
+            if (ShouldApplyErrorNextActions(result, forceRecompile))
+            {
+                CompileErrorNextActionsComposer.Apply(response, result.Errors);
+            }
+
             return response;
+        }
+
+        /// <summary>
+        /// Why: force-compile and indeterminate results withhold reliable issue lists.
+        /// Appending a rewrite action from those errors would misdirect agents again.
+        /// </summary>
+        private static bool ShouldApplyErrorNextActions(CompileResult result, bool forceRecompile)
+        {
+            if (result.IsIndeterminate)
+            {
+                return false;
+            }
+
+            if (forceRecompile && !result.PreserveDetailsWhenForceRecompile)
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private static CompileResponse CreateResponseWithoutApiUpdaterConsent(
