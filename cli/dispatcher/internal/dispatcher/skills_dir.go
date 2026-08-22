@@ -307,6 +307,9 @@ func syncSkillDirectoryPreservingForeignFiles(sourceDir string, destinationDir s
 func syncSkillEntry(sourceDir string, destinationDir string, entry os.DirEntry) error {
 	sourcePath := filepath.Join(sourceDir, entry.Name())
 	destinationPath := filepath.Join(destinationDir, entry.Name())
+	if err := removeEntryOfWrongType(destinationPath, entry.IsDir()); err != nil {
+		return err
+	}
 	if entry.IsDir() {
 		// Replace through a temp copy plus rename so a mid-copy failure (disk
 		// full, permission) cannot leave the installed directory half-deleted.
@@ -318,6 +321,32 @@ func syncSkillEntry(sourceDir string, destinationDir string, entry os.DirEntry) 
 	}
 	content = normalizeSkillFileContent(entry.Name(), content)
 	return writeSkillFileAtomically(destinationPath, content)
+}
+
+// removeEntryOfWrongType clears a destination entry whose type does not match
+// the source-owned entry about to be written. Ownership is name-scoped, so
+// whatever occupies an owned name is uloop's to replace — but the replace paths
+// cannot do it themselves: replaceSkillDirectory resolves the occupant with
+// os.Stat, which misclassifies a dangling symlink as absent and then fails the
+// rename with a raw ENOTDIR (and would follow a live symlink), and a plain
+// rename over a directory fails the same way for file entries.
+func removeEntryOfWrongType(destinationPath string, wantDir bool) error {
+	// Lstat, not Stat: the occupant itself is what must be examined and
+	// removed; a symlink must never be followed into data outside the store.
+	info, err := os.Lstat(destinationPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.IsDir() == wantDir {
+		return nil
+	}
+	if info.IsDir() {
+		return os.RemoveAll(destinationPath)
+	}
+	return os.Remove(destinationPath)
 }
 
 // writeSkillFileAtomically writes through a temp file plus rename so an
@@ -383,10 +412,11 @@ func sourceOwnedEntryNames(sourceDir string) ([]string, error) {
 }
 
 // removeStaleSyncArtifacts deletes leftover temp and backup entries that an
-// interrupted sync can leave behind (SKILL.md.tmp-*, references.backup-*, ...).
-// They are uloop's own artifacts, so removing them keeps the foreign-file
-// guarantee intact; left alone they would be treated as foreign forever and
-// keep the skill directory from ever being removed on uninstall.
+// interrupted sync can leave behind (SKILL.md.uloop-tmp-*, ...). They carry
+// the uloop namespace marker, so they are uloop's own artifacts by
+// construction and removing them keeps the foreign-file guarantee intact;
+// left alone they would be treated as foreign forever and keep the skill
+// directory from ever being removed on uninstall.
 func removeStaleSyncArtifacts(skillDir string, ownedNames []string) (bool, error) {
 	entries, err := os.ReadDir(skillDir)
 	if err != nil {
@@ -408,35 +438,18 @@ func removeStaleSyncArtifacts(skillDir string, ownedNames []string) (bool, error
 	return removedAny, nil
 }
 
-// isStaleSyncArtifactName matches the names os.CreateTemp and os.MkdirTemp
-// produce for the temp and backup copies of source-owned entries.
+// isStaleSyncArtifactName matches the namespaced names the sync helpers mint
+// for temp and backup copies of source-owned entries. The uloop marker in the
+// suffix constants is what makes name-based matching safe: a user file would
+// have to deliberately adopt uloop's namespace to be captured.
 func isStaleSyncArtifactName(name string, ownedNames []string) bool {
 	for _, ownedName := range ownedNames {
-		if hasSyncArtifactSuffix(name, ownedName+skillSyncTempSuffix) ||
-			hasSyncArtifactSuffix(name, ownedName+skillSyncBackupSuffix) {
+		if strings.HasPrefix(name, ownedName+skillSyncTempSuffix) ||
+			strings.HasPrefix(name, ownedName+skillSyncBackupSuffix) {
 			return true
 		}
 	}
 	return false
-}
-
-// hasSyncArtifactSuffix requires the digits-only random suffix os.CreateTemp
-// and os.MkdirTemp append, so human-named files like references.backup-manual
-// stay classified as foreign instead of being deleted as uloop's own debris.
-func hasSyncArtifactSuffix(name string, prefix string) bool {
-	if !strings.HasPrefix(name, prefix) {
-		return false
-	}
-	suffix := name[len(prefix):]
-	if suffix == "" {
-		return false
-	}
-	for _, character := range suffix {
-		if character < '0' || character > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 func topLevelPathSegment(relativePath string) string {

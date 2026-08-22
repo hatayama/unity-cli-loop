@@ -10,12 +10,14 @@ import (
 )
 
 // Suffixes appended (before the random digits os.CreateTemp and os.MkdirTemp
-// add) to temp and backup copies created during a sync. The stale-artifact
-// cleanup in dir mode matches these same constants, so the producers and the
-// matcher cannot drift apart.
+// add) to temp and backup copies created during a sync. The uloop marker
+// claims a namespace no user file lands in by accident, so dir-mode
+// stale-artifact cleanup can identify uloop's own debris by name alone without
+// risking human-named backups such as references.backup-2024; the cleanup
+// matches these same constants, so the producers and the matcher cannot drift.
 const (
-	skillSyncTempSuffix   = ".tmp-"
-	skillSyncBackupSuffix = ".backup-"
+	skillSyncTempSuffix   = ".uloop-tmp-"
+	skillSyncBackupSuffix = ".uloop-backup-"
 )
 
 func syncSkillDirectory(sourceDir string, destinationDir string) error {
