@@ -243,6 +243,10 @@ func dirSkillStatusWithoutSkillFile(skillDir string, skill skillDefinition) (str
 	return "not_installed", nil
 }
 
+// dirSkillFilesOutdated reports whether the installed copies of source-owned
+// files differ from the source. Extra installed files count as stale only when
+// they sit inside a source-owned directory; top-level foreign files are the
+// mode's design point and never mark the skill outdated.
 func dirSkillFilesOutdated(skillDir string, skill skillDefinition) (bool, error) {
 	expectedFiles := collectComparableSkillFiles(skill.sourceDirectory)
 	installedFiles := collectComparableSkillFiles(skillDir)

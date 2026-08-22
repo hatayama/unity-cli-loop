@@ -227,6 +227,11 @@ uloop skills install --codex
 
 # または、グローバルにインストール
 uloop skills install --claude --global
+
+# または、任意のディレクトリ（外部のスキルパッケージストアなど）へ
+# <path>/<skill-name> のフラット構成で同期。uloopが管理しないトップレベルの
+# ファイルはそのまま残る（references/ などスキル所有のディレクトリは丸ごと置換）
+uloop skills install --output-dir path/to/skills
 ```
 </details>
 
