@@ -106,8 +106,7 @@ When a native CLI release has a tag commit that differs from the `sourceReposito
 asset attestations, the dispatcher refuses to download it. Roll forward to the next version —
 never retag, rerun, or otherwise revive the broken one; a new run can only attest its own head
 commit. Diagnosis commands, the narrow conditions under which rerunning *is* valid, and the
-deliberately preserved mismatch specimen (`uloop-project-runner-v3.0.0-beta.48`, which must not
-be deleted): `docs/release-recovery-runbook.md`.
+roll-forward procedure are documented in `docs/release-recovery-runbook.md`.
 
 ## Windows Compatibility Guardrails
 
