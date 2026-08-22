@@ -159,11 +159,18 @@ func isKnownSkillsSubcommand(subcommand string) bool {
 	}
 }
 
-// skillsSubcommandSupportsOutputDir reports whether a known skills subcommand
-// accepts --output-dir. Help, guidance, and the routing rejection all consult
-// this one predicate so their notion of support cannot drift.
+// skillsSubcommandSupportsOutputDir reports whether a skills subcommand runs
+// in --output-dir mode. Help, guidance, and the routing rejection all consult
+// this one predicate; it is a positive list matching the dir-mode dispatch, so
+// a future subcommand is not advertised as supporting the flag until dir mode
+// is actually wired for it.
 func skillsSubcommandSupportsOutputDir(subcommand string) bool {
-	return !isV3MigrationSkillSubcommand(subcommand)
+	switch subcommand {
+	case "list", "install", "uninstall":
+		return true
+	default:
+		return false
+	}
 }
 
 func isV3MigrationSkillSubcommand(subcommand string) bool {
