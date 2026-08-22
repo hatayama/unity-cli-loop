@@ -10,7 +10,10 @@ package dispatcher
 // deprecated-skill cleanup do not run here. An external store is not scoped to
 // one Unity project, so one project's tool settings must not hide skills from
 // it, and deleting directories whose names uloop merely used in the past would
-// break the guarantee that only source-owned entries are ever removed.
+// break the guarantee that only source-owned entries are ever removed. The same
+// trade-off applies within a skill: ownership derives from the current source
+// and no manifest is written into the store, so a top-level entry that a newer
+// skill version dropped or renamed is left behind rather than cleaned up.
 
 import (
 	"fmt"
