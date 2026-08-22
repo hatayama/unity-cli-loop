@@ -82,8 +82,8 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 		clicore.WriteLine(stdout, "")
 	}
 	if skillsSubcommandSupportsOutputDir(command) {
-		clicore.WriteLine(stdout, "With --output-dir, skills sync flat into <path>/<skill-name> with no target")
-		clicore.WriteLine(stdout, "subdirectories. Top-level files uloop does not manage are left untouched,")
+		clicore.WriteLine(stdout, "With --output-dir, skills are managed flat as <path>/<skill-name> with no")
+		clicore.WriteLine(stdout, "target subdirectories. Top-level files uloop does not manage are left untouched,")
 		clicore.WriteLine(stdout, "while source-owned directories such as references/ are replaced wholly on")
 		clicore.WriteLine(stdout, "update. Skills are sourced from the Unity project, so run this inside a")
 		clicore.WriteLine(stdout, "Unity project or pass --project-path.")

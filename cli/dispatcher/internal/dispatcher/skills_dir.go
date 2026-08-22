@@ -215,6 +215,11 @@ func getDirSkillStatus(baseDir string, skill skillDefinition) (string, error) {
 	// on Unix but maps to IsNotExist on Windows — the platforms would otherwise
 	// diverge between an aborted run and a bogus install attempt.
 	if !info.IsDir() {
+		// A symlink gets its own message: "not a directory" would mislead when
+		// the link points at one — it is the refusal to follow that matters.
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("cannot manage skill %q: %s is a symlink, which uloop never follows", skill.name, skillDir)
+		}
 		return "", fmt.Errorf("cannot manage skill %q: %s exists but is not a directory", skill.name, skillDir)
 	}
 	matches, err := installedSkillFileMatches(skillDir, skill)
