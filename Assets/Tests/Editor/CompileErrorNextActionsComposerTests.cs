@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -46,6 +48,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private const string ApiUpdaterNextAction =
             "Fix the obsolete API usages reported in Errors, or ask the user to accept the Script Updating Consent dialog in an interactive Unity session.";
+
+        private const string InputSystemCs0234Error =
+            "error CS0234: The type or namespace name 'InputSystem' does not exist in the namespace 'UnityEngine' (are you missing an assembly reference?)";
+
+        private const string PrefixlessInputSystemCs0234Error =
+            "CS0234: The type or namespace name 'InputSystem' does not exist in the namespace 'UnityEngine' (are you missing an assembly reference?)";
+
+        private const string InputSystemNextAction =
+            "error CS0234: 'UnityEngine.InputSystem' is declared in assembly 'Unity.InputSystem'. Add the assembly to the failing script's .asmdef references and run 'uloop compile' again. If the failing script has no .asmdef, the declaring assembly may have Auto Referenced disabled or its package may not be installed.";
+
+        private const string DualAssemblyNextAction =
+            "error CS0234: 'UnityEngine.InputSystem' is declared in assemblies 'Alpha.Assembly', 'Zebra.Assembly'. Add the assembly to the failing script's .asmdef references and run 'uloop compile' again. If the failing script has no .asmdef, the declaring assembly may have Auto Referenced disabled or its package may not be installed.";
+
+        private const string TripleAssemblyNextAction =
+            "error CS0234: 'UnityEngine.InputSystem' is declared in assemblies 'A.Assembly', 'B.Assembly', 'C.Assembly'. Add the assembly to the failing script's .asmdef references and run 'uloop compile' again. If the failing script has no .asmdef, the declaring assembly may have Auto Referenced disabled or its package may not be installed.";
+
+        private const string Cs0246Error =
+            "error CS0246: The type or namespace name 'InputSystem' could not be found (are you missing a using directive or an assembly reference?)";
+
+        private const string NUnitCs0234Error =
+            "error CS0234: The type or namespace name 'Framework' does not exist in the namespace 'NUnit' (are you missing an assembly reference?)";
+
+        private const string UnknownCs0234Error =
+            "error CS0234: The type or namespace name 'NoSuchInner' does not exist in the namespace 'NoSuchOuter' (are you missing an assembly reference?)";
 
         /// <summary>
         /// What: a language-version error produces the pinned-rewrite NextAction as an exact literal.
@@ -296,6 +322,252 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.NextActions,
                 Is.EqualTo(new[] { ApiUpdaterNextAction, FileScopedNamespaceNextAction }));
+        }
+
+        /// <summary>
+        /// What: a CS0234 error produces the declaring-assembly NextAction from the injected lookup.
+        /// </summary>
+        [Test]
+        public void Build_WhenCs0234Error_ReturnsDeclaringAssemblyAction()
+        {
+            string[] nextActions = CompileErrorNextActionsBuilder.Build(
+                new[] { InputSystemCs0234Error },
+                searchName => searchName == "UnityEngine.InputSystem"
+                    ? new[] { "Unity.InputSystem" }
+                    : Array.Empty<string>());
+
+            Assert.That(nextActions, Is.EqualTo(new[] { InputSystemNextAction }));
+        }
+
+        /// <summary>
+        /// What: a prefix-less CS0234 message still produces the declaring-assembly NextAction.
+        /// </summary>
+        [Test]
+        public void Build_WhenPrefixlessCs0234Error_ReturnsDeclaringAssemblyAction()
+        {
+            string[] nextActions = CompileErrorNextActionsBuilder.Build(
+                new[] { PrefixlessInputSystemCs0234Error },
+                searchName => new[] { "Unity.InputSystem" });
+
+            Assert.That(nextActions, Is.EqualTo(new[] { InputSystemNextAction }));
+        }
+
+        /// <summary>
+        /// What: CS0246 never produces a missing-reference NextAction.
+        /// </summary>
+        [Test]
+        public void Build_WhenCs0246Error_ReturnsEmpty()
+        {
+            int lookupCalls = 0;
+            string[] nextActions = CompileErrorNextActionsBuilder.Build(
+                new[] { Cs0246Error },
+                searchName =>
+                {
+                    lookupCalls++;
+                    return new[] { "Unity.InputSystem" };
+                });
+
+            Assert.That(nextActions, Is.EqualTo(Array.Empty<string>()));
+            Assert.That(lookupCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a CS0234 match with zero declaring assemblies stays fail-open.
+        /// </summary>
+        [Test]
+        public void Build_WhenCs0234LookupReturnsEmpty_ReturnsEmpty()
+        {
+            string[] nextActions = CompileErrorNextActionsBuilder.Build(
+                new[] { InputSystemCs0234Error },
+                searchName => Array.Empty<string>());
+
+            Assert.That(nextActions, Is.EqualTo(Array.Empty<string>()));
+        }
+
+        /// <summary>
+        /// What: multiple declaring assemblies are named in ordinal order.
+        /// </summary>
+        [Test]
+        public void Build_WhenCs0234HasMultipleAssemblies_NamesThemInOrdinalOrder()
+        {
+            string[] nextActions = CompileErrorNextActionsBuilder.Build(
+                new[] { InputSystemCs0234Error },
+                searchName => new[] { "Zebra.Assembly", "Alpha.Assembly" });
+
+            Assert.That(nextActions, Is.EqualTo(new[] { DualAssemblyNextAction }));
+        }
+
+        /// <summary>
+        /// What: more than three declaring assemblies are truncated after the first three sorted names.
+        /// </summary>
+        [Test]
+        public void Build_WhenCs0234HasMoreThanThreeAssemblies_NamesAtMostThree()
+        {
+            string[] nextActions = CompileErrorNextActionsBuilder.Build(
+                new[] { InputSystemCs0234Error },
+                searchName => new[] { "D.Assembly", "C.Assembly", "B.Assembly", "A.Assembly" });
+
+            Assert.That(nextActions, Is.EqualTo(new[] { TripleAssemblyNextAction }));
+        }
+
+        /// <summary>
+        /// What: identical CS0234 NextActions are appended only once.
+        /// </summary>
+        [Test]
+        public void Build_WhenDuplicateCs0234Actions_Dedups()
+        {
+            string[] nextActions = CompileErrorNextActionsBuilder.Build(
+                new[] { InputSystemCs0234Error, PrefixlessInputSystemCs0234Error },
+                searchName => new[] { "Unity.InputSystem" });
+
+            Assert.That(nextActions, Is.EqualTo(new[] { InputSystemNextAction }));
+        }
+
+        /// <summary>
+        /// What: language-version and CS0234 actions are appended in B-then-A order.
+        /// </summary>
+        [Test]
+        public void Build_WhenLanguageVersionAndCs0234_AppendsLanguageVersionFirst()
+        {
+            string[] nextActions = CompileErrorNextActionsBuilder.Build(
+                new[] { FileScopedNamespaceError, InputSystemCs0234Error },
+                searchName => new[] { "Unity.InputSystem" });
+
+            Assert.That(nextActions, Is.EqualTo(new[] { FileScopedNamespaceNextAction, InputSystemNextAction }));
+        }
+
+        /// <summary>
+        /// What: a CS0234 with no declaring assembly leaves existing NextActions unchanged.
+        /// </summary>
+        [Test]
+        public void Apply_WhenCs0234HasNoDeclaringAssembly_LeavesExistingNextActionsUnchanged()
+        {
+            CompileResponse response = CreateResponse(success: false);
+            response.NextActions = new[] { ExistingNextAction };
+
+            CompileErrorNextActionsComposer.Apply(response, new[] { CreateError(UnknownCs0234Error) });
+
+            Assert.That(response.NextActions, Is.EqualTo(new[] { ExistingNextAction }));
+        }
+
+        /// <summary>
+        /// What: existing NextActions are kept and a resolved CS0234 action is appended at the end.
+        /// </summary>
+        [Test]
+        public void Apply_WhenExistingNextActionsAndResolvedCs0234_AppendsDeclaringAssemblyAction()
+        {
+            CompileResponse response = CreateResponse(success: false);
+            response.NextActions = new[] { ExistingNextAction };
+
+            CompileErrorNextActionsComposer.Apply(response, new[] { CreateError(NUnitCs0234Error) });
+
+            Assert.That(response.NextActions, Is.Not.Null);
+            Assert.That(response.NextActions, Has.Length.EqualTo(2));
+            Assert.That(response.NextActions[0], Is.EqualTo(ExistingNextAction));
+            Assert.That(response.NextActions[1], Does.Contain("nunit.framework"));
+        }
+
+        /// <summary>
+        /// What: CreateResponse names nunit.framework for a real CS0234 against NUnit.Framework.
+        /// </summary>
+        [Test]
+        public void CreateResponse_WhenCs0234ForNUnitFramework_IncludesNunitFrameworkAssembly()
+        {
+            CompileResult result = CreateFailedResult(CreateError(NUnitCs0234Error));
+
+            CompileResponse response = CompileResponseFactory.CreateResponse(
+                result,
+                forceRecompile: false,
+                pausePointWarning: null);
+
+            Assert.That(response.NextActions, Is.Not.Null);
+            Assert.That(response.NextActions, Has.Length.EqualTo(1));
+            Assert.That(response.NextActions[0], Does.Contain("nunit.framework"));
+        }
+
+        /// <summary>
+        /// What: CreateResponse stays fail-open when CS0234 names a namespace TypeCache does not declare.
+        /// </summary>
+        [Test]
+        public void CreateResponse_WhenCs0234HasNoDeclaringAssembly_ReturnsNoNextActions()
+        {
+            CompileResult result = CreateFailedResult(CreateError(UnknownCs0234Error));
+
+            CompileResponse response = CompileResponseFactory.CreateResponse(
+                result,
+                forceRecompile: false,
+                pausePointWarning: null);
+
+            Assert.That(response.NextActions, Is.Null);
+        }
+
+        /// <summary>
+        /// What: CreateResponse does not add a missing-reference NextAction for CS0246.
+        /// </summary>
+        [Test]
+        public void CreateResponse_WhenCs0246Error_ReturnsNoNextActions()
+        {
+            CompileResult result = CreateFailedResult(CreateError(Cs0246Error));
+
+            CompileResponse response = CompileResponseFactory.CreateResponse(
+                result,
+                forceRecompile: false,
+                pausePointWarning: null);
+
+            Assert.That(response.NextActions, Is.Null);
+        }
+
+        /// <summary>
+        /// What: CreateResponse appends the TypeCache CS0234 action after the API Updater action.
+        /// </summary>
+        [Test]
+        public void CreateResponse_WhenCs0234AndConsentDeclined_AppendsAfterExistingNextActions()
+        {
+            CompileResult result = new CompileResult(
+                success: false,
+                errorCount: 1,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: Array.Empty<CompilerMessage>(),
+                errors: new[] { CreateError(NUnitCs0234Error) },
+                warnings: Array.Empty<CompilerMessage>(),
+                apiUpdaterConsentDeclined: true);
+
+            CompileResponse response = CompileResponseFactory.CreateResponse(
+                result,
+                forceRecompile: false,
+                pausePointWarning: null);
+
+            Assert.That(response.NextActions, Is.Not.Null);
+            Assert.That(response.NextActions, Has.Length.EqualTo(2));
+            Assert.That(response.NextActions[0], Is.EqualTo(ApiUpdaterNextAction));
+            Assert.That(response.NextActions[1], Does.Contain("nunit.framework"));
+        }
+
+        /// <summary>
+        /// What: TypeCache.GetTypesDerivedFrom(typeof(object)) lists NUnit.Framework types in nunit.framework.
+        /// </summary>
+        [Test]
+        public void TypeCache_GetTypesDerivedFromObject_IncludesNunitFrameworkForNUnitFrameworkNamespace()
+        {
+            List<string> assemblyNames = new List<string>();
+            foreach (Type type in TypeCache.GetTypesDerivedFrom(typeof(object)))
+            {
+                if (type.Namespace != "NUnit.Framework")
+                {
+                    continue;
+                }
+
+                string assemblyName = type.Assembly.GetName().Name;
+                if (assemblyNames.Contains(assemblyName))
+                {
+                    continue;
+                }
+
+                assemblyNames.Add(assemblyName);
+            }
+
+            Assert.That(assemblyNames, Does.Contain("nunit.framework"));
         }
 
         private static CompileResponse CreateResponse(bool success)

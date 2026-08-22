@@ -175,6 +175,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 activePausePointCountAtRequestStart);
             ct.ThrowIfCancellationRequested();
             CompileResult result = await _executeCompilationAsync(request, pausePointWarning, ct).ConfigureAwait(false);
+            // Why: CreateResponse may query TypeCache for missing-reference NextActions, and
+            // TypeCache is a Unity Editor API that must run on the main thread.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
 
             // 4. Result formatting
             CompileResponse successResponse =
