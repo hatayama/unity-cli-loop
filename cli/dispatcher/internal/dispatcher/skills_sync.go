@@ -9,12 +9,21 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/skillscan"
 )
 
+// Suffixes appended (before the random digits os.CreateTemp and os.MkdirTemp
+// add) to temp and backup copies created during a sync. The stale-artifact
+// cleanup in dir mode matches these same constants, so the producers and the
+// matcher cannot drift apart.
+const (
+	skillSyncTempSuffix   = ".tmp-"
+	skillSyncBackupSuffix = ".backup-"
+)
+
 func syncSkillDirectory(sourceDir string, destinationDir string) error {
 	parentDir := filepath.Dir(destinationDir)
 	if err := os.MkdirAll(parentDir, 0o755); err != nil {
 		return err
 	}
-	tempDir, err := os.MkdirTemp(parentDir, filepath.Base(destinationDir)+".tmp-")
+	tempDir, err := os.MkdirTemp(parentDir, filepath.Base(destinationDir)+skillSyncTempSuffix)
 	if err != nil {
 		return err
 	}
@@ -44,7 +53,7 @@ func replaceSkillDirectory(sourceDir string, destinationDir string) error {
 	}
 
 	parentDir := filepath.Dir(destinationDir)
-	backupDir, err := os.MkdirTemp(parentDir, filepath.Base(destinationDir)+".backup-")
+	backupDir, err := os.MkdirTemp(parentDir, filepath.Base(destinationDir)+skillSyncBackupSuffix)
 	if err != nil {
 		return err
 	}

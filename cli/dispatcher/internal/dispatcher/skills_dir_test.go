@@ -293,8 +293,8 @@ func TestRunSkillsDirInstallRejectsFileOccupyingSkillName(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("install onto an occupying file should fail: code=%d", code)
 	}
-	if !strings.Contains(stderr.String(), "not a directory") {
-		t.Fatalf("error should explain the occupying file:\n%s", stderr.String())
+	if !strings.Contains(stderr.String(), "cannot manage skill") || !strings.Contains(stderr.String(), "not a directory") {
+		t.Fatalf("error should be the crafted cross-platform message, not a raw readdir error:\n%s", stderr.String())
 	}
 
 	stdout.Reset()
@@ -332,6 +332,12 @@ func TestRunSkillsDirDoesNotFollowSymlinkAtSkillName(t *testing.T) {
 	if err := os.WriteFile(curatedFile, []byte("user content\n"), 0o644); err != nil {
 		t.Fatalf("failed to write curated file: %v", err)
 	}
+	// An artifact-named entry inside the symlink target guards against cleanup
+	// reading through the symlink and deleting outside the store.
+	curatedArtifact := filepath.Join(curatedDir, "SKILL.md.tmp-1234")
+	if err := os.WriteFile(curatedArtifact, []byte("theirs\n"), 0o644); err != nil {
+		t.Fatalf("failed to write curated artifact-named file: %v", err)
+	}
 	if err := os.Symlink(curatedDir, filepath.Join(destinationDir, "uloop-sample")); err != nil {
 		t.Fatalf("failed to create symlink: %v", err)
 	}
@@ -353,6 +359,9 @@ func TestRunSkillsDirDoesNotFollowSymlinkAtSkillName(t *testing.T) {
 	}
 	if _, err := os.Stat(curatedFile); err != nil {
 		t.Fatalf("symlink target contents must survive uninstall: %v", err)
+	}
+	if _, err := os.Stat(curatedArtifact); err != nil {
+		t.Fatalf("artifact-named file inside the symlink target must survive: %v", err)
 	}
 }
 
@@ -446,6 +455,51 @@ func TestRunSkillsDirCleansStaleSyncArtifacts(t *testing.T) {
 	}
 	if _, err := os.Stat(installedDir); !os.IsNotExist(err) {
 		t.Fatalf("skill directory should be fully removed after cleanup, stat err=%v", err)
+	}
+}
+
+// Tests that user files whose names merely resemble sync artifacts (a temp or
+// backup prefix without the digits-only random suffix) are preserved as
+// foreign by install and uninstall instead of being deleted as uloop debris.
+func TestRunSkillsDirPreservesHumanNamedArtifactLookalikes(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	installedDir := filepath.Join(destinationDir, "uloop-sample")
+	manualBackup := filepath.Join(installedDir, "references.backup-manual")
+	draftNote := filepath.Join(installedDir, "SKILL.md.tmp-notes")
+	if err := os.MkdirAll(manualBackup, 0o755); err != nil {
+		t.Fatalf("failed to create manual backup dir: %v", err)
+	}
+	if err := os.WriteFile(draftNote, []byte("draft\n"), 0o644); err != nil {
+		t.Fatalf("failed to write draft note: %v", err)
+	}
+
+	stdout.Reset()
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("dir install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(manualBackup); err != nil {
+		t.Fatalf("human-named backup dir should survive install: %v", err)
+	}
+	if _, err := os.Stat(draftNote); err != nil {
+		t.Fatalf("human-named draft file should survive install: %v", err)
+	}
+
+	stdout.Reset()
+	if code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(manualBackup); err != nil {
+		t.Fatalf("human-named backup dir should survive uninstall: %v", err)
+	}
+	if _, err := os.Stat(draftNote); err != nil {
+		t.Fatalf("human-named draft file should survive uninstall: %v", err)
 	}
 }
 

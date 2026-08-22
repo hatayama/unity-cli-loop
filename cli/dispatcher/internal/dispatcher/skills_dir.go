@@ -90,15 +90,19 @@ func runSkillsDirList(absDir string, skills []skillDefinition, stdout io.Writer,
 }
 
 func installSkillIntoDir(baseDir string, skill skillDefinition, result *skillInstallResult) error {
+	// Status first: its Lstat guard rejects a symlink or file occupying the
+	// skill's name before artifact cleanup runs, whose ReadDir would follow the
+	// symlink and delete matching entries outside the store (and surface a raw
+	// platform-divergent error for a plain file).
+	status, err := getDirSkillStatus(baseDir, skill)
+	if err != nil {
+		return err
+	}
 	ownedNames, err := sourceOwnedEntryNames(skill.sourceDirectory)
 	if err != nil {
 		return err
 	}
 	if _, err := removeStaleSyncArtifacts(filepath.Join(baseDir, skill.name), ownedNames); err != nil {
-		return err
-	}
-	status, err := getDirSkillStatus(baseDir, skill)
-	if err != nil {
 		return err
 	}
 	if status == "installed" {
@@ -316,7 +320,7 @@ func syncSkillEntry(sourceDir string, destinationDir string, entry os.DirEntry) 
 // writeSkillFileAtomically writes through a temp file plus rename so an
 // interrupted write cannot leave a truncated file at the destination.
 func writeSkillFileAtomically(destinationPath string, content []byte) error {
-	tempFile, err := os.CreateTemp(filepath.Dir(destinationPath), filepath.Base(destinationPath)+".tmp-")
+	tempFile, err := os.CreateTemp(filepath.Dir(destinationPath), filepath.Base(destinationPath)+skillSyncTempSuffix)
 	if err != nil {
 		return err
 	}
@@ -405,11 +409,31 @@ func removeStaleSyncArtifacts(skillDir string, ownedNames []string) (bool, error
 // produce for the temp and backup copies of source-owned entries.
 func isStaleSyncArtifactName(name string, ownedNames []string) bool {
 	for _, ownedName := range ownedNames {
-		if strings.HasPrefix(name, ownedName+".tmp-") || strings.HasPrefix(name, ownedName+".backup-") {
+		if hasSyncArtifactSuffix(name, ownedName+skillSyncTempSuffix) ||
+			hasSyncArtifactSuffix(name, ownedName+skillSyncBackupSuffix) {
 			return true
 		}
 	}
 	return false
+}
+
+// hasSyncArtifactSuffix requires the digits-only random suffix os.CreateTemp
+// and os.MkdirTemp append, so human-named files like references.backup-manual
+// stay classified as foreign instead of being deleted as uloop's own debris.
+func hasSyncArtifactSuffix(name string, prefix string) bool {
+	if !strings.HasPrefix(name, prefix) {
+		return false
+	}
+	suffix := name[len(prefix):]
+	if suffix == "" {
+		return false
+	}
+	for _, character := range suffix {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func topLevelPathSegment(relativePath string) string {
