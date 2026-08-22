@@ -244,12 +244,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 forceRecompile: true,
                 pausePointWarning: null);
 
-            Assert.That(
-                response.NextActions,
-                Is.EqualTo(new[]
-                {
-                    "Wait for domain reload to complete, then run `uloop compile` without --force-recompile to obtain a definitive result."
-                }));
+            Assert.That(response.NextActions, Is.EqualTo(new[] { ExistingNextAction }));
         }
 
         /// <summary>
