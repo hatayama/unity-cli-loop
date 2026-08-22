@@ -101,11 +101,7 @@ func installSkillIntoDir(baseDir string, skill skillDefinition, result *skillIns
 	if err != nil {
 		return err
 	}
-	ownedNames, err := sourceOwnedEntryNames(skill.sourceDirectory)
-	if err != nil {
-		return err
-	}
-	if _, err := removeStaleSyncArtifacts(filepath.Join(baseDir, skill.name), ownedNames); err != nil {
+	if _, err := removeStaleSyncArtifacts(filepath.Join(baseDir, skill.name)); err != nil {
 		return err
 	}
 	if status == "installed" {
@@ -124,7 +120,8 @@ func installSkillIntoDir(baseDir string, skill skillDefinition, result *skillIns
 }
 
 // uninstallSkillFromDir deletes only entries that exist in the skill source, so
-// foreign files survive; the skill directory itself is removed only once empty.
+// foreign files survive; the skill directory itself is removed only once
+// nothing but ignorable OS/tool debris (.DS_Store, *.meta) remains in it.
 // Presence is keyed on the owned entries rather than SKILL.md alone, so a
 // partially removed install (references/ left behind without SKILL.md) is still
 // cleaned up instead of being reported as not installed.
@@ -148,7 +145,7 @@ func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) 
 	if err != nil {
 		return false, err
 	}
-	artifactsRemoved, err := removeStaleSyncArtifacts(skillDir, entryNames)
+	artifactsRemoved, err := removeStaleSyncArtifacts(skillDir)
 	if err != nil {
 		return false, err
 	}
@@ -173,7 +170,29 @@ func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) 
 	if !removedAny && !artifactsRemoved {
 		return false, nil
 	}
-	return removedAny, removeEmptyDir(skillDir)
+	return removedAny, removeSkillDirWithIgnorableDebris(skillDir)
+}
+
+// removeSkillDirWithIgnorableDebris removes an uninstalled skill's directory
+// when the only entries left are names uloop itself never installs (.DS_Store,
+// Unity *.meta, per shouldSkipSkillFile). Leaving them would ghost the
+// directory in the store forever — and orphaned .meta files make Unity warn —
+// while removing them deletes nothing a skill install could have provided. Any
+// other remaining entry is genuinely foreign and keeps the directory in place.
+func removeSkillDirWithIgnorableDebris(skillDir string) error {
+	entries, err := os.ReadDir(skillDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if !shouldSkipSkillFile(entry.Name()) {
+			return nil
+		}
+	}
+	return os.RemoveAll(skillDir)
 }
 
 // getDirSkillStatus reports install status for the --output-dir layout. It compares
@@ -421,7 +440,7 @@ func sourceOwnedEntryNames(sourceDir string) ([]string, error) {
 // construction and removing them keeps the foreign-file guarantee intact;
 // left alone they would be treated as foreign forever and keep the skill
 // directory from ever being removed on uninstall.
-func removeStaleSyncArtifacts(skillDir string, ownedNames []string) (bool, error) {
+func removeStaleSyncArtifacts(skillDir string) (bool, error) {
 	entries, err := os.ReadDir(skillDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -431,7 +450,7 @@ func removeStaleSyncArtifacts(skillDir string, ownedNames []string) (bool, error
 	}
 	removedAny := false
 	for _, entry := range entries {
-		if !isStaleSyncArtifactName(entry.Name(), ownedNames) {
+		if !isStaleSyncArtifactName(entry.Name()) {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(skillDir, entry.Name())); err != nil {
@@ -444,16 +463,13 @@ func removeStaleSyncArtifacts(skillDir string, ownedNames []string) (bool, error
 
 // isStaleSyncArtifactName matches the namespaced names the sync helpers mint
 // for temp and backup copies of source-owned entries. The uloop marker in the
-// suffix constants is what makes name-based matching safe: a user file would
-// have to deliberately adopt uloop's namespace to be captured.
-func isStaleSyncArtifactName(name string, ownedNames []string) bool {
-	for _, ownedName := range ownedNames {
-		if strings.HasPrefix(name, ownedName+skillSyncTempSuffix) ||
-			strings.HasPrefix(name, ownedName+skillSyncBackupSuffix) {
-			return true
-		}
-	}
-	return false
+// suffix constants is the whole safety argument — a user file would have to
+// deliberately adopt uloop's namespace to be captured — so matching is not
+// restricted to currently owned entry names: debris minted for an entry a
+// newer skill version dropped or renamed must still be cleaned up.
+func isStaleSyncArtifactName(name string) bool {
+	return strings.Contains(name, skillSyncTempSuffix) ||
+		strings.Contains(name, skillSyncBackupSuffix)
 }
 
 func topLevelPathSegment(relativePath string) string {

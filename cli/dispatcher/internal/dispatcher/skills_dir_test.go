@@ -458,6 +458,78 @@ func TestRunSkillsDirCleansStaleSyncArtifacts(t *testing.T) {
 	}
 }
 
+// Tests that a leftover artifact minted for an entry the current skill source
+// no longer owns (a renamed or dropped directory) is still cleaned up: the
+// uloop namespace marker alone identifies the debris.
+func TestRunSkillsDirCleansArtifactsOfFormerlyOwnedEntries(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	installedDir := filepath.Join(destinationDir, "uloop-sample")
+	formerBackup := filepath.Join(installedDir, "docs.uloop-backup-1234")
+	if err := os.MkdirAll(formerBackup, 0o755); err != nil {
+		t.Fatalf("failed to create former-entry backup dir: %v", err)
+	}
+
+	stdout.Reset()
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("dir install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(formerBackup); !os.IsNotExist(err) {
+		t.Fatalf("artifact of a formerly owned entry should be cleaned, stat err=%v", err)
+	}
+}
+
+// Tests that uninstall removes the skill directory when only ignorable OS/tool
+// debris (.DS_Store) remains after the owned entries are deleted, but keeps
+// the directory when genuinely foreign content is also present.
+func TestRunSkillsDirUninstallRemovesIgnorableDebrisWithSkillDir(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	installedDir := filepath.Join(destinationDir, "uloop-sample")
+	if err := os.WriteFile(filepath.Join(installedDir, ".DS_Store"), []byte("junk"), 0o644); err != nil {
+		t.Fatalf("failed to write debris file: %v", err)
+	}
+
+	stdout.Reset()
+	if code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(installedDir); !os.IsNotExist(err) {
+		t.Fatalf("debris-only skill directory should be removed, stat err=%v", err)
+	}
+
+	stdout.Reset()
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("reinstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	foreignFile := filepath.Join(installedDir, "apm.yml")
+	if err := os.WriteFile(foreignFile, []byte("manifest\n"), 0o644); err != nil {
+		t.Fatalf("failed to write foreign file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(installedDir, ".DS_Store"), []byte("junk"), 0o644); err != nil {
+		t.Fatalf("failed to write debris file again: %v", err)
+	}
+	stdout.Reset()
+	if code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(foreignFile); err != nil {
+		t.Fatalf("foreign file should keep the directory and survive: %v", err)
+	}
+}
+
 // Tests that user files whose names merely resemble sync artifacts (temp or
 // backup naming without the uloop namespace marker, digit-suffixed dated
 // backups included) are preserved as foreign by install and uninstall instead
