@@ -223,6 +223,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a determinate force-compile result keeps only the wait NextAction even when errors match.
+        /// </summary>
+        [Test]
+        public void CreateResponse_WhenForceCompileWithLanguageVersionError_DoesNotAddRewriteAction()
+        {
+            CompileResult result = new CompileResult(
+                success: false,
+                errorCount: 1,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: new[] { CreateError(FileScopedNamespaceError) },
+                errors: new[] { CreateError(FileScopedNamespaceError) },
+                warnings: Array.Empty<CompilerMessage>(),
+                isIndeterminate: false,
+                message: null);
+
+            CompileResponse response = CompileResponseFactory.CreateResponse(
+                result,
+                forceRecompile: true,
+                pausePointWarning: null);
+
+            Assert.That(
+                response.NextActions,
+                Is.EqualTo(new[]
+                {
+                    "Wait for domain reload to complete, then run `uloop compile` without --force-recompile to obtain a definitive result."
+                }));
+        }
+
+        /// <summary>
+        /// What: indeterminate non-force results do not append a language-version rewrite NextAction.
+        /// </summary>
+        [Test]
+        public void CreateResponse_WhenIndeterminateWithLanguageVersionError_DoesNotAddRewriteAction()
+        {
+            CompileResult result = new CompileResult(
+                success: null,
+                errorCount: 1,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: new[] { CreateError(FileScopedNamespaceError) },
+                errors: new[] { CreateError(FileScopedNamespaceError) },
+                warnings: Array.Empty<CompilerMessage>(),
+                isIndeterminate: true,
+                message: null);
+
+            CompileResponse response = CompileResponseFactory.CreateResponse(
+                result,
+                forceRecompile: false,
+                pausePointWarning: null);
+
+            Assert.That(response.NextActions, Is.Null);
+        }
+
+        /// <summary>
         /// What: CreateResponse appends the language-version NextAction after the API Updater action.
         /// </summary>
         [Test]
