@@ -3,6 +3,9 @@ using System.Collections.Generic;
 
 using NUnit.Framework;
 
+using UnityEngine;
+using UnityEngine.TestTools;
+
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Runtime;
 
@@ -35,15 +38,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: count-cap overflow alone keeps 20 reported names and the exact discarded count.
+        /// What: count-cap overflow alone reports count 25 and local50 through local69 in order.
         /// </summary>
         [Test]
         public void CaptureFrame_WhenOnlyCountCapDropsVariables_ReportsTwentyNamesAndExactCount()
         {
-            int discarded = SourcePausePointConstants.MaxTruncatedVariableNamesReported + 5;
-            int localCount = SourcePausePointConstants.MaxCapturedVariableCount + discarded;
-            object[] locals = new object[localCount * 2];
-            for (int index = 0; index < localCount; index++)
+            object[] locals = new object[150];
+            for (int index = 0; index < 75; index++)
             {
                 locals[index * 2] = $"local{index}";
                 locals[index * 2 + 1] = index;
@@ -53,13 +54,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), locals);
 
             Assert.That(truncated, Is.True);
-            Assert.That(frame.TruncatedVariableCount, Is.EqualTo(discarded));
+            Assert.That(frame.TruncatedVariableCount, Is.EqualTo(25));
             Assert.That(
-                frame.TruncatedVariableNames.Count,
-                Is.EqualTo(SourcePausePointConstants.MaxTruncatedVariableNamesReported));
-            Assert.That(
-                frame.TruncatedVariableNames[0],
-                Is.EqualTo($"local{SourcePausePointConstants.MaxCapturedVariableCount}"));
+                frame.TruncatedVariableNames,
+                Is.EqualTo(new[]
+                {
+                    "local50",
+                    "local51",
+                    "local52",
+                    "local53",
+                    "local54",
+                    "local55",
+                    "local56",
+                    "local57",
+                    "local58",
+                    "local59",
+                    "local60",
+                    "local61",
+                    "local62",
+                    "local63",
+                    "local64",
+                    "local65",
+                    "local66",
+                    "local67",
+                    "local68",
+                    "local69"
+                }));
         }
 
         /// <summary>
@@ -68,12 +88,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void CaptureFrame_WhenPreviewClipAndCountCapCombine_UnionsNamesInCaptureOrder()
         {
-            int discarded = 3;
-            int localCount = SourcePausePointConstants.MaxCapturedVariableCount + discarded;
-            object[] locals = new object[localCount * 2];
+            object[] locals = new object[106];
             locals[0] = "longText";
             locals[1] = new string('a', SourcePausePointConstants.MaxCapturedVariableValueLength + 10);
-            for (int index = 1; index < localCount; index++)
+            for (int index = 1; index < 53; index++)
             {
                 locals[index * 2] = $"local{index}";
                 locals[index * 2 + 1] = index;
@@ -83,16 +101,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), locals);
 
             Assert.That(truncated, Is.True);
-            Assert.That(frame.TruncatedVariableCount, Is.EqualTo(1 + discarded));
+            Assert.That(frame.TruncatedVariableCount, Is.EqualTo(4));
             Assert.That(
                 frame.TruncatedVariableNames,
-                Is.EqualTo(new[]
-                {
-                    "longText",
-                    $"local{SourcePausePointConstants.MaxCapturedVariableCount}",
-                    $"local{SourcePausePointConstants.MaxCapturedVariableCount + 1}",
-                    $"local{SourcePausePointConstants.MaxCapturedVariableCount + 2}"
-                }));
+                Is.EqualTo(new[] { "longText", "local50", "local51", "local52" }));
         }
 
         /// <summary>
@@ -110,6 +122,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(frame.Truncated, Is.False);
             Assert.That(frame.TruncatedVariableCount, Is.EqualTo(0));
             Assert.That(frame.TruncatedVariableNames, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a clipped value with an empty name still increments the aggregate count.
+        /// </summary>
+        [Test]
+        public void CaptureFrame_WhenClippedValueHasEmptyName_CountsItWithoutReportingAName()
+        {
+            string longValue = new string('a', SourcePausePointConstants.MaxCapturedVariableValueLength + 10);
+            object[] locals = { "", longValue };
+
+            LogAssert.Expect(LogType.Assert, "name must not be null or empty");
+
+            (UloopPausePointCapturedVariableFrame frame, _, bool truncated) =
+                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), locals);
+
+            Assert.That(truncated, Is.True);
+            Assert.That(frame.Truncated, Is.True);
+            Assert.That(frame.TruncatedVariableCount, Is.EqualTo(1));
+            Assert.That(frame.TruncatedVariableNames, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: more than 20 preview clips keep the first 20 names and the exact total count.
+        /// </summary>
+        [Test]
+        public void CaptureFrame_WhenPreviewClipsExceedNameCap_ReportsFirstTwentyNamesAndExactCount()
+        {
+            string longValue = new string('a', SourcePausePointConstants.MaxCapturedVariableValueLength + 10);
+            object[] locals = new object[42];
+            for (int index = 0; index < 21; index++)
+            {
+                locals[index * 2] = $"clip{index}";
+                locals[index * 2 + 1] = longValue;
+            }
+
+            (UloopPausePointCapturedVariableFrame frame, _, bool truncated) =
+                SourcePausePointCapture.CaptureFrame(null, Array.Empty<object>(), locals);
+
+            Assert.That(truncated, Is.True);
+            Assert.That(frame.TruncatedVariableCount, Is.EqualTo(21));
+            Assert.That(
+                frame.TruncatedVariableNames,
+                Is.EqualTo(new[]
+                {
+                    "clip0",
+                    "clip1",
+                    "clip2",
+                    "clip3",
+                    "clip4",
+                    "clip5",
+                    "clip6",
+                    "clip7",
+                    "clip8",
+                    "clip9",
+                    "clip10",
+                    "clip11",
+                    "clip12",
+                    "clip13",
+                    "clip14",
+                    "clip15",
+                    "clip16",
+                    "clip17",
+                    "clip18",
+                    "clip19"
+                }));
         }
     }
 }

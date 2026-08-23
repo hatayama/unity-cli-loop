@@ -27,12 +27,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < variables.Count; index++)
             {
                 UloopCapturedVariable variable = variables[index];
-                if (!variable.Truncated || string.IsNullOrEmpty(variable.Name) || !seen.Add(variable.Name))
+                if (!variable.Truncated)
                 {
                     continue;
                 }
 
+                // Why count before name checks: CapturedVariablesTruncated==(Count>0) must
+                // stay true even when a clipped entry has a null or empty name.
                 previewClippedCount++;
+                if (string.IsNullOrEmpty(variable.Name) || !seen.Add(variable.Name))
+                {
+                    continue;
+                }
+
                 TryAddReportedName(names, variable.Name);
             }
 

@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
@@ -15,9 +17,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IReadOnlyList<string> truncatedVariableNames,
             int truncatedVariableCount)
         {
+            IReadOnlyList<string> names = truncatedVariableNames ?? Array.Empty<string>();
+            Debug.Assert(truncated == (truncatedVariableCount > 0), "truncated must match a positive count");
+            Debug.Assert(
+                truncatedVariableCount >= names.Count,
+                "truncatedVariableCount must be at least the reported name count");
+
             Entries = entries;
             Truncated = truncated;
-            TruncatedVariableNames = truncatedVariableNames ?? Array.Empty<string>();
+            TruncatedVariableNames = names;
             TruncatedVariableCount = truncatedVariableCount;
         }
 

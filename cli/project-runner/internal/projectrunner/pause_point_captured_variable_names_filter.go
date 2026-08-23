@@ -46,7 +46,10 @@ func filterPausePointCapturedVariablesByName(
 	// marker has empty CapturedVariables/history, which would otherwise look like a name miss
 	// and a Warning blaming the requested names would misdiagnose "not hit yet".
 	hadCapturedVariables := pausePointResponseHasCapturedVariables(response)
-	hadListedTruncated := pausePointResponseHasTruncatedCapturedVariable(response)
+	// Why current only: top-level CapturedVariablesTruncated/Count/Names come from the
+	// latest hit. A clipped variable that lives only in history must not make the CLI
+	// describe a count-cap flag as a name-filter drop.
+	hadListedTruncated := pausePointCurrentCapturedVariablesHaveTruncated(response)
 
 	nameSet := make(map[string]struct{}, len(names))
 	for _, name := range names {
@@ -162,19 +165,30 @@ func applyPausePointCapturedVariablesTruncatedNote(
 	return response
 }
 
+// pausePointCurrentCapturedVariablesHaveTruncated reports whether the latest-hit
+// CapturedVariables list (not history) already contains a Truncated entry.
+func pausePointCurrentCapturedVariablesHaveTruncated(response pausePointStatusResponse) bool {
+	return capturedVariablesHaveTruncated(response.CapturedVariables)
+}
+
 // pausePointResponseHasTruncatedCapturedVariable reports whether any remaining
 // captured variable (current or history) still has Truncated set.
 func pausePointResponseHasTruncatedCapturedVariable(response pausePointStatusResponse) bool {
-	for _, variable := range response.CapturedVariables {
-		if variable.Truncated {
+	if capturedVariablesHaveTruncated(response.CapturedVariables) {
+		return true
+	}
+	for _, frame := range response.CapturedVariableHistory {
+		if capturedVariablesHaveTruncated(frame.CapturedVariables) {
 			return true
 		}
 	}
-	for _, frame := range response.CapturedVariableHistory {
-		for _, variable := range frame.CapturedVariables {
-			if variable.Truncated {
-				return true
-			}
+	return false
+}
+
+func capturedVariablesHaveTruncated(variables []pausePointCapturedVariable) bool {
+	for _, variable := range variables {
+		if variable.Truncated {
+			return true
 		}
 	}
 	return false

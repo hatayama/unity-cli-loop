@@ -267,6 +267,29 @@ func TestFilterPausePointCapturedVariablesByNameSetsTruncatedNote(t *testing.T) 
 // TestFilterPausePointCapturedVariablesByNameOmitsTruncatedNote verifies additional
 // negative cases where the CLI must not attach CapturedVariablesTruncatedNote.
 func TestFilterPausePointCapturedVariablesByNameOmitsTruncatedNote(t *testing.T) {
+	t.Run("note is omitted when latest hit is count-cap only and history clip is excluded", func(t *testing.T) {
+		response := pausePointStatusResponse{
+			CapturedVariablesTruncated: true,
+			TruncatedVariableCount:     1,
+			TruncatedVariableNames:     []string{"extraField"},
+			CapturedVariables: []pausePointCapturedVariable{
+				{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
+			},
+			CapturedVariableHistory: []pausePointCapturedHistoryFrame{
+				{
+					HitSequence: 1,
+					CapturedVariables: []pausePointCapturedVariable{
+						{Name: "board", Scope: "Local", TypeName: "Boolean[,]", Value: pausePointVariableValue("[...]"), Truncated: true},
+					},
+				},
+			},
+		}
+		result := filterPausePointCapturedVariablesByName(response, []string{"health"})
+		if result.CapturedVariablesTruncatedNote != "" {
+			t.Fatalf("count-cap latest hit must not inherit a history-clip note: %q", result.CapturedVariablesTruncatedNote)
+		}
+	})
+
 	t.Run("note is omitted when only count-cap drops remain", func(t *testing.T) {
 		response := pausePointStatusResponse{
 			CapturedVariablesTruncated: true,
