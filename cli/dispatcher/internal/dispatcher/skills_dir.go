@@ -213,11 +213,11 @@ func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) 
 }
 
 // removeSkillDirWithIgnorableDebris removes an uninstalled skill's directory
-// when the only entries left are names uloop itself never installs (.DS_Store,
-// Unity *.meta, per shouldSkipSkillFile). Leaving them would ghost the
-// directory in the store forever — and orphaned .meta files make Unity warn —
-// while removing them deletes nothing a skill install could have provided. Any
-// other remaining entry is genuinely foreign and keeps the directory in place.
+// when the only entries left are ignorable OS/tool debris. Leaving them would
+// ghost the directory in the store forever — and orphaned .meta files make
+// Unity warn — while removing them deletes nothing a skill install could have
+// provided. Any other remaining entry is genuinely foreign and keeps the
+// directory in place.
 func removeSkillDirWithIgnorableDebris(skillDir string) error {
 	entries, err := os.ReadDir(skillDir)
 	if err != nil {
@@ -227,11 +227,19 @@ func removeSkillDirWithIgnorableDebris(skillDir string) error {
 		return err
 	}
 	for _, entry := range entries {
-		if !shouldSkipSkillFile(entry.Name()) {
+		if !isIgnorableStoreDebris(entry.Name()) {
 			return nil
 		}
 	}
 	return os.RemoveAll(skillDir)
+}
+
+// isIgnorableStoreDebris authorizes deleting a leftover entry along with its
+// skill directory. Deliberately separate from shouldSkipSkillFile even though
+// the patterns coincide today: that one filters what a sync copies, and
+// widening a copy filter must never silently widen what uninstall may delete.
+func isIgnorableStoreDebris(name string) bool {
+	return name == ".DS_Store" || strings.HasSuffix(name, ".meta")
 }
 
 // syncSkillDirectoryPreservingForeignFiles copies every source-owned entry into
