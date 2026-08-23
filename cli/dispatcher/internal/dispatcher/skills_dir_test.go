@@ -547,6 +547,9 @@ func TestRunSkillsDirPreservesHumanNamedArtifactLookalikes(t *testing.T) {
 	manualBackup := filepath.Join(installedDir, "references.backup-manual")
 	datedBackup := filepath.Join(installedDir, "references.backup-20240115")
 	draftNote := filepath.Join(installedDir, "SKILL.md.tmp-notes")
+	// Carries the artifact marker but a human-chosen tail: only the all-digit
+	// tails that os.CreateTemp/MkdirTemp mint may be cleaned up.
+	markerLookalike := filepath.Join(installedDir, "my-archive.uloop-tmp-keepme")
 	if err := os.MkdirAll(manualBackup, 0o755); err != nil {
 		t.Fatalf("failed to create manual backup dir: %v", err)
 	}
@@ -555,6 +558,9 @@ func TestRunSkillsDirPreservesHumanNamedArtifactLookalikes(t *testing.T) {
 	}
 	if err := os.WriteFile(draftNote, []byte("draft\n"), 0o644); err != nil {
 		t.Fatalf("failed to write draft note: %v", err)
+	}
+	if err := os.WriteFile(markerLookalike, []byte("keep\n"), 0o644); err != nil {
+		t.Fatalf("failed to write marker lookalike: %v", err)
 	}
 
 	stdout.Reset()
@@ -569,6 +575,9 @@ func TestRunSkillsDirPreservesHumanNamedArtifactLookalikes(t *testing.T) {
 	}
 	if _, err := os.Stat(draftNote); err != nil {
 		t.Fatalf("human-named draft file should survive install: %v", err)
+	}
+	if _, err := os.Stat(markerLookalike); err != nil {
+		t.Fatalf("marker file with a non-digit tail should survive install: %v", err)
 	}
 
 	stdout.Reset()
@@ -872,8 +881,8 @@ func TestRunSkillsDirPreservesNeverInstalledOwnedNames(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("install onto never-installed owned names should report a failure: code=%d", code)
 	}
-	if !strings.Contains(stderr.String(), "did not install") {
-		t.Fatalf("error should state the content is not a uloop install:\n%s", stderr.String())
+	if !strings.Contains(stderr.String(), "cannot confirm it installed") {
+		t.Fatalf("error should state the content is not a confirmed uloop install:\n%s", stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "Blocked: 1") || !strings.Contains(stdout.String(), "Installed: 0") {
 		t.Fatalf("summary should count the skill as blocked:\n%s", stdout.String())
@@ -943,6 +952,9 @@ func TestRunSkillsDirListReportsConflict(t *testing.T) {
 	output := stdout.String()
 	if !strings.Contains(output, "uloop-blocked (conflict)") {
 		t.Fatalf("list should show the conflict status:\n%s", output)
+	}
+	if !strings.Contains(output, "exists but is not a directory") {
+		t.Fatalf("list should print the conflict reason under the status row:\n%s", output)
 	}
 	if !strings.Contains(output, "uloop-installed (installed)") {
 		t.Fatalf("list should keep reporting the skills after a conflict:\n%s", output)
@@ -1090,5 +1102,260 @@ func TestPosixStyleOutputDirError(t *testing.T) {
 	}
 	if err := posixStyleOutputDirError("linux", "/tmp/skills"); err != nil {
 		t.Fatalf("a POSIX path should be accepted on non-Windows platforms: %v", err)
+	}
+}
+
+// Tests that a store directory matching the skill name only by letter case is
+// never adopted: list reports a conflict, install blocks, and uninstall
+// preserves the directory, uniformly on every filesystem.
+func TestRunSkillsDirRejectsCaseVariantSkillDirectory(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	variantDir := filepath.Join(destinationDir, "Uloop-Sample")
+	if err := os.MkdirAll(filepath.Join(variantDir, "references"), 0o755); err != nil {
+		t.Fatalf("failed to create case-variant dir: %v", err)
+	}
+	userNotes := filepath.Join(variantDir, "references", "mynotes.md")
+	if err := os.WriteFile(userNotes, []byte("my curated notes\n"), 0o644); err != nil {
+		t.Fatalf("failed to write user notes: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(variantDir, "SKILL.md"), []byte("hand-authored\n"), 0o644); err != nil {
+		t.Fatalf("failed to write hand-authored skill file: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirList(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("dir list failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "uloop-sample (conflict)") {
+		t.Fatalf("a case-variant store directory should read as a conflict:\n%s", stdout.String())
+	}
+
+	stdout.Reset()
+	code = runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	if code != 1 {
+		t.Fatalf("install onto a case-variant store directory should be blocked: code=%d", code)
+	}
+	if !strings.Contains(stderr.String(), "only by letter case") {
+		t.Fatalf("error should call out the case mismatch:\n%s", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Not found: 1") {
+		t.Fatalf("a case-variant store directory should not count as an install:\n%s", stdout.String())
+	}
+	content, err := os.ReadFile(userNotes)
+	if err != nil || string(content) != "my curated notes\n" {
+		t.Fatalf("the case-variant directory content must survive untouched: content=%q err=%v", content, err)
+	}
+}
+
+// Tests that an orphan whose source was updated after the partial removal is
+// preserved as a recoverable conflict: the message explains the manual remedy
+// and uninstall does not delete the drifted content.
+func TestRunSkillsDirReportsDriftedOrphanAsRecoverableConflict(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	installedDir := filepath.Join(destinationDir, "uloop-sample")
+	if err := os.Remove(filepath.Join(installedDir, "SKILL.md")); err != nil {
+		t.Fatalf("failed to remove installed skill file: %v", err)
+	}
+	// Simulates a uloop upgrade between the partial removal and the next run.
+	if err := os.WriteFile(filepath.Join(skill.sourceDirectory, "references", "note.md"), []byte("note v2\n"), 0o644); err != nil {
+		t.Fatalf("failed to update source reference: %v", err)
+	}
+
+	state, err := getDirSkillState(destinationDir, skill)
+	if err != nil {
+		t.Fatalf("status check failed: %v", err)
+	}
+	if state.status != "conflict" {
+		t.Fatalf("a drifted orphan should read as a conflict, got: %s", state.status)
+	}
+	if !strings.Contains(state.conflictReason, "remove or rename them") {
+		t.Fatalf("the conflict must explain the manual remedy: %s", state.conflictReason)
+	}
+
+	stdout.Reset()
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Not found: 1") {
+		t.Fatalf("a drifted orphan should not count as removed:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(installedDir, "references", "note.md")); err != nil {
+		t.Fatalf("drifted orphan content must be preserved: %v", err)
+	}
+}
+
+// Tests that an owned directory holding no comparable files grants no install
+// evidence: an empty match proves nothing, so a user's directory of the same
+// name is preserved instead of being claimed and removed.
+func TestRunSkillsDirEmptyOwnedDirGrantsNoEvidence(t *testing.T) {
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source", "uloop-sample", "Skill")
+	content := "---\nname: uloop-sample\n---\n\n# uloop-sample\n"
+	writeSkillFile(t, sourceDir, content)
+	// The owned directory contains only skipped names, so the comparable set
+	// is empty on the source side.
+	if err := os.MkdirAll(filepath.Join(sourceDir, "references"), 0o755); err != nil {
+		t.Fatalf("failed to create source references dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "references", "note.md.meta"), []byte("meta\n"), 0o644); err != nil {
+		t.Fatalf("failed to write skipped source file: %v", err)
+	}
+	skill := skillDefinition{name: "uloop-sample", content: []byte(content), sourceDirectory: sourceDir}
+	destinationDir := filepath.Join(root, "apm-skills")
+	userDir := filepath.Join(destinationDir, "uloop-sample")
+	if err := os.MkdirAll(filepath.Join(userDir, "references"), 0o755); err != nil {
+		t.Fatalf("failed to create user dir: %v", err)
+	}
+	userNotes := filepath.Join(userDir, "notes.md")
+	if err := os.WriteFile(userNotes, []byte("mine\n"), 0o644); err != nil {
+		t.Fatalf("failed to write user notes: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Not found: 1") {
+		t.Fatalf("an empty owned directory should not count as an install:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(userNotes); err != nil {
+		t.Fatalf("user content must survive: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(userDir, "references")); err != nil {
+		t.Fatalf("the user's empty references dir must survive: %v", err)
+	}
+}
+
+// Tests that a working symlink inside a source-owned directory does not wedge
+// dir mode: the sync copies the target's content as a regular file, and the
+// status check compares the same content, so the skill reads as installed.
+func TestRunSkillsDirHandlesSymlinkedSourceReference(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on Windows")
+	}
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	sharedFile := filepath.Join(root, "shared.md")
+	if err := os.WriteFile(sharedFile, []byte("shared\n"), 0o644); err != nil {
+		t.Fatalf("failed to write shared file: %v", err)
+	}
+	if err := os.Symlink(sharedFile, filepath.Join(skill.sourceDirectory, "references", "linked.md")); err != nil {
+		t.Fatalf("failed to create source symlink: %v", err)
+	}
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("dir install failed: code=%d stderr=%s", code, stderr.String())
+	}
+
+	stdout.Reset()
+	code := runSkillsDirList(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir list failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "uloop-sample (installed)") {
+		t.Fatalf("a symlinked source reference should not wedge the status:\n%s", stdout.String())
+	}
+}
+
+// Tests that uninstall in a directory without install evidence removes only
+// uloop's own artifacts: a user's .meta file neither authorizes deleting the
+// directory nor is deleted itself.
+func TestRunSkillsDirUninstallKeepsNoEvidenceDirWithUserMeta(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	skillDir := filepath.Join(destinationDir, "uloop-sample")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	artifact := filepath.Join(skillDir, "leftover.uloop-backup-1234")
+	if err := os.WriteFile(artifact, []byte("partial\n"), 0o644); err != nil {
+		t.Fatalf("failed to write artifact: %v", err)
+	}
+	userMeta := filepath.Join(skillDir, "dataset.meta")
+	if err := os.WriteFile(userMeta, []byte("guid: 1\n"), 0o644); err != nil {
+		t.Fatalf("failed to write user meta file: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(artifact); !os.IsNotExist(err) {
+		t.Fatalf("uloop's artifact should be cleaned, stat err=%v", err)
+	}
+	if _, err := os.Stat(userMeta); err != nil {
+		t.Fatalf("the user's .meta file must survive: %v", err)
+	}
+	if _, err := os.Stat(skillDir); err != nil {
+		t.Fatalf("a directory holding user content must not be removed: %v", err)
+	}
+}
+
+// Tests that uninstall of a real install removes .meta stubs of owned entries
+// along with the directory but keeps a directory holding a user's own .meta
+// data file.
+func TestRunSkillsDirUninstallDistinguishesMetaDebrisFromUserMeta(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	installedDir := filepath.Join(destinationDir, "uloop-sample")
+	// Unity mints .meta stubs for the entries uloop installed; those are
+	// debris, while dataset.meta is the user's own data file.
+	if err := os.WriteFile(filepath.Join(installedDir, "references.meta"), []byte("guid: 1\n"), 0o644); err != nil {
+		t.Fatalf("failed to write owned-entry meta stub: %v", err)
+	}
+	userMeta := filepath.Join(installedDir, "dataset.meta")
+	if err := os.WriteFile(userMeta, []byte("guid: 2\n"), 0o644); err != nil {
+		t.Fatalf("failed to write user meta file: %v", err)
+	}
+
+	stdout.Reset()
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Removed: 1") {
+		t.Fatalf("the installed skill should be removed:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(userMeta); err != nil {
+		t.Fatalf("the user's .meta data file must survive: %v", err)
+	}
+	if _, err := os.Stat(installedDir); err != nil {
+		t.Fatalf("a directory holding a user's .meta file must be kept: %v", err)
 	}
 }

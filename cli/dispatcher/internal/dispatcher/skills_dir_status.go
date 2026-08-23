@@ -3,9 +3,10 @@ package dispatcher
 // Status classification for --output-dir mode. The rules here decide when a
 // destination entry may be replaced or deleted, so they are deliberately
 // conservative: uloop acts on a skill directory only when it holds evidence of
-// a uloop install (see dirSkillHasInstallEvidence), and every name lookup is
-// exact — on a case-insensitive filesystem a user's skill.md or References/
-// must never be claimed as the source-owned SKILL.md or references/.
+// a uloop install (see dirSkillHasInstallEvidence), and every name lookup —
+// the skill directory itself included — is exact against ReadDir listings: on
+// a case-insensitive filesystem a path probe would resolve a user's
+// Uloop-Sample/ or skill.md as uloop's own names and claim foreign content.
 
 import (
 	"bytes"
@@ -32,25 +33,11 @@ func conflictDirSkillState(reason string) dirSkillState {
 }
 
 func getDirSkillState(baseDir string, skill skillDefinition) (dirSkillState, error) {
+	state, done, err := storeLevelDirSkillState(baseDir, skill)
+	if err != nil || done {
+		return state, err
+	}
 	skillDir := filepath.Join(baseDir, skill.name)
-	// Lstat, not Stat: a symlink occupying the skill's name must not be
-	// followed, or install would write through it into a directory outside the
-	// store that uninstall would then delete from.
-	info, err := os.Lstat(skillDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return dirSkillState{status: "not_installed"}, nil
-		}
-		return dirSkillState{}, err
-	}
-	if !info.IsDir() {
-		// A symlink gets its own message: "not a directory" would mislead when
-		// the link points at one — it is the refusal to follow that matters.
-		if info.Mode()&os.ModeSymlink != 0 {
-			return conflictDirSkillState(fmt.Sprintf("cannot manage skill %q: %s is a symlink, which uloop never follows", skill.name, skillDir)), nil
-		}
-		return conflictDirSkillState(fmt.Sprintf("cannot manage skill %q: %s exists but is not a directory", skill.name, skillDir)), nil
-	}
 	ownedEntries, err := sourceOwnedEntries(skill.sourceDirectory)
 	if err != nil {
 		return dirSkillState{}, err
@@ -86,11 +73,50 @@ func getDirSkillState(baseDir string, skill skillDefinition) (dirSkillState, err
 	return dirSkillState{status: "installed"}, nil
 }
 
+// storeLevelDirSkillState classifies what occupies the skill's name in the
+// store itself. done=false means a directory exists at the exact name and the
+// caller must inspect its contents. The name is resolved from the ReadDir
+// listing, not a path probe: on a case-insensitive filesystem Lstat would
+// resolve a user's differently-cased directory as the skill's name and adopt
+// it, so a case variant without the exact name is a conflict on every
+// platform.
+func storeLevelDirSkillState(baseDir string, skill skillDefinition) (dirSkillState, bool, error) {
+	baseEntries, err := os.ReadDir(baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return dirSkillState{status: "not_installed"}, true, nil
+		}
+		return dirSkillState{}, true, err
+	}
+	skillDirEntry := findExactDirEntry(baseEntries, skill.name)
+	if skillDirEntry == nil {
+		if variant := findCaseVariantDirEntry(baseEntries, skill.name); variant != nil {
+			return conflictDirSkillState(fmt.Sprintf(
+				"cannot manage skill %q: the store contains %q, which matches the skill name only by letter case",
+				skill.name, variant.Name())), true, nil
+		}
+		return dirSkillState{status: "not_installed"}, true, nil
+	}
+	skillDir := filepath.Join(baseDir, skill.name)
+	if !skillDirEntry.IsDir() {
+		// A symlink gets its own message: "not a directory" would mislead when
+		// the link points at one — it is the refusal to follow that matters.
+		if skillDirEntry.Type()&os.ModeSymlink != 0 {
+			return conflictDirSkillState(fmt.Sprintf("cannot manage skill %q: %s is a symlink, which uloop never follows", skill.name, skillDir)), true, nil
+		}
+		return conflictDirSkillState(fmt.Sprintf("cannot manage skill %q: %s exists but is not a directory", skill.name, skillDir)), true, nil
+	}
+	return dirSkillState{}, false, nil
+}
+
 // classifyDirSkillWithoutSkillFile classifies a skill directory that has no
 // regular SKILL.md at its exact name. Owned entries backed by install evidence
 // mean a partial install worth repairing (outdated); owned names occupied by
-// content uloop never wrote are a conflict — replacing or deleting them would
-// destroy user data in a store uloop may never have installed into.
+// content uloop cannot confirm it installed are a conflict — replacing or
+// deleting them could destroy user data in a store uloop may never have
+// installed into. Accepted limitation of the no-manifest design: an orphan of
+// a partial removal whose source has since been updated no longer matches and
+// lands here too, so the message tells the user how to resolve either case.
 func classifyDirSkillWithoutSkillFile(skillDir string, skill skillDefinition, ownedEntries []os.DirEntry, dirEntries []os.DirEntry) (dirSkillState, error) {
 	occupied := ownedNamesPresent(ownedEntries, dirEntries)
 	if len(occupied) == 0 {
@@ -104,7 +130,7 @@ func classifyDirSkillWithoutSkillFile(skillDir string, skill skillDefinition, ow
 		return dirSkillState{status: "outdated"}, nil
 	}
 	return conflictDirSkillState(fmt.Sprintf(
-		"cannot manage skill %q: %s holds entries at source-owned names (%s) that uloop did not install",
+		"cannot manage skill %q: %s holds entries at source-owned names (%s) that uloop cannot confirm it installed; remove or rename them to let uloop manage this skill",
 		skill.name, skillDir, strings.Join(occupied, ", "))), nil
 }
 
@@ -115,56 +141,26 @@ func classifyDirSkillWithoutSkillFile(skillDir string, skill skillDefinition, ow
 // directory that happens to use a skill's name must stay untouched.
 func dirSkillHasInstallEvidence(skillDir string, skill skillDefinition, ownedEntries []os.DirEntry, dirEntries []os.DirEntry) (bool, error) {
 	for _, owned := range ownedEntries {
-		installed := findExactDirEntry(dirEntries, owned.Name())
-		if installed == nil || installed.IsDir() != owned.IsDir() {
-			continue
-		}
-		if !owned.IsDir() {
-			if installed.Type().IsRegular() && owned.Name() == skillscan.SkillFileName {
-				return true, nil
-			}
-			matches, err := installedOwnedFileMatchesSource(skillDir, skill.sourceDirectory, installed)
-			if err != nil {
-				return false, err
-			}
-			if matches {
+		if !owned.IsDir() && owned.Name() == skillscan.SkillFileName {
+			installed := findExactDirEntry(dirEntries, owned.Name())
+			if installed != nil && installed.Type().IsRegular() {
 				return true, nil
 			}
 			continue
 		}
-		expected, err := collectOwnedDirFiles(filepath.Join(skill.sourceDirectory, owned.Name()))
+		comparison, err := compareOwnedEntry(skillDir, skill.sourceDirectory, owned, dirEntries)
 		if err != nil {
 			return false, err
 		}
-		installedFiles, err := collectOwnedDirFiles(filepath.Join(skillDir, owned.Name()))
-		// Unreadable content is not evidence of anything; the entry stays
-		// foreign and therefore untouched.
-		if err != nil {
-			continue
-		}
-		if len(expected) == len(installedFiles) && comparableFilesMatch(expected, installedFiles) {
+		// Only a full content match proves the entry came from uloop; an
+		// empty match (ownedEntryEqualEmpty) proves nothing, and unreadable
+		// content is not evidence of anything — the entry stays foreign and
+		// therefore untouched.
+		if comparison == ownedEntryEqual {
 			return true, nil
 		}
 	}
 	return false, nil
-}
-
-func installedOwnedFileMatchesSource(skillDir string, sourceDir string, installed os.DirEntry) (bool, error) {
-	if !installed.Type().IsRegular() {
-		return false, nil
-	}
-	sourceContent, err := os.ReadFile(filepath.Join(sourceDir, installed.Name()))
-	if err != nil {
-		return false, err
-	}
-	installedContent, err := os.ReadFile(filepath.Join(skillDir, installed.Name()))
-	if err != nil {
-		return false, nil
-	}
-	return bytes.Equal(
-		normalizeSkillFileContent(installed.Name(), sourceContent),
-		normalizeSkillFileContent(installed.Name(), installedContent),
-	), nil
 }
 
 // dirSkillCaseConflictReason reports a conflict when an entry matches a
@@ -197,40 +193,126 @@ func dirSkillFilesOutdated(skillDir string, skill skillDefinition, ownedEntries 
 		if owned.Name() == skillscan.SkillFileName {
 			continue
 		}
-		installed := findExactDirEntry(dirEntries, owned.Name())
-		if installed == nil || installed.IsDir() != owned.IsDir() {
-			return true, nil
-		}
-		if !owned.IsDir() {
-			matches, err := installedOwnedFileMatchesSource(skillDir, skill.sourceDirectory, installed)
-			if err != nil {
-				return false, err
-			}
-			if !matches {
-				return true, nil
-			}
-			continue
-		}
-		expected, err := collectOwnedDirFiles(filepath.Join(skill.sourceDirectory, owned.Name()))
+		comparison, err := compareOwnedEntry(skillDir, skill.sourceDirectory, owned, dirEntries)
 		if err != nil {
 			return false, err
 		}
-		installedFiles, err := collectOwnedDirFiles(filepath.Join(skillDir, owned.Name()))
-		if err != nil {
-			return true, nil
-		}
-		if len(expected) != len(installedFiles) || !comparableFilesMatch(expected, installedFiles) {
+		if comparison != ownedEntryEqual && comparison != ownedEntryEqualEmpty {
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
-// collectOwnedDirFiles is the error-surfacing counterpart of
-// collectComparableSkillFiles, for content uloop owns: inside an owned
-// directory an unreadable file or a non-regular entry (dangling symlink,
-// FIFO) is a broken copy the caller must react to, not something to silently
-// treat as matching.
+// ownedEntryComparison is the outcome of comparing one installed owned entry
+// against its source counterpart.
+type ownedEntryComparison int
+
+const (
+	// ownedEntryAbsent: no entry at the exact owned name.
+	ownedEntryAbsent ownedEntryComparison = iota
+	// ownedEntryEqual: the installed content fully matches the source.
+	ownedEntryEqual
+	// ownedEntryEqualEmpty: both sides hold no comparable files, so the match
+	// is vacuous — it must not count as install evidence.
+	ownedEntryEqualEmpty
+	// ownedEntryDiffers: an entry exists but its type or content differs.
+	ownedEntryDiffers
+	// ownedEntryUnreadable: the installed side cannot be read or contains a
+	// non-regular entry (dangling symlink, FIFO).
+	ownedEntryUnreadable
+)
+
+// compareOwnedEntry is the single definition of "the installed owned entry
+// equals the source entry". Install evidence (may this directory be managed
+// at all?) and staleness (does it need a sync?) both derive from it, so the
+// two authorizations for destructive replacement and deletion cannot drift
+// apart. Source-side read failures are real errors; installed-side failures
+// are a state (ownedEntryUnreadable) for the caller to interpret.
+func compareOwnedEntry(skillDir string, sourceDir string, owned os.DirEntry, dirEntries []os.DirEntry) (ownedEntryComparison, error) {
+	installed := findExactDirEntry(dirEntries, owned.Name())
+	if installed == nil {
+		return ownedEntryAbsent, nil
+	}
+	if installed.IsDir() != owned.IsDir() {
+		return ownedEntryDiffers, nil
+	}
+	if !owned.IsDir() {
+		return compareOwnedFile(skillDir, sourceDir, owned.Name(), installed)
+	}
+	expected, err := collectSourceDirFiles(filepath.Join(sourceDir, owned.Name()))
+	if err != nil {
+		return ownedEntryAbsent, err
+	}
+	installedFiles, err := collectOwnedDirFiles(filepath.Join(skillDir, owned.Name()))
+	if err != nil {
+		return ownedEntryUnreadable, nil
+	}
+	if len(expected) != len(installedFiles) || !comparableFilesMatch(expected, installedFiles) {
+		return ownedEntryDiffers, nil
+	}
+	if len(expected) == 0 {
+		return ownedEntryEqualEmpty, nil
+	}
+	return ownedEntryEqual, nil
+}
+
+func compareOwnedFile(skillDir string, sourceDir string, name string, installed os.DirEntry) (ownedEntryComparison, error) {
+	if !installed.Type().IsRegular() {
+		return ownedEntryDiffers, nil
+	}
+	sourceContent, err := os.ReadFile(filepath.Join(sourceDir, name))
+	if err != nil {
+		return ownedEntryAbsent, err
+	}
+	installedContent, err := os.ReadFile(filepath.Join(skillDir, name))
+	if err != nil {
+		return ownedEntryUnreadable, nil
+	}
+	if bytes.Equal(
+		normalizeSkillFileContent(name, sourceContent),
+		normalizeSkillFileContent(name, installedContent),
+	) {
+		return ownedEntryEqual, nil
+	}
+	return ownedEntryDiffers, nil
+}
+
+// collectSourceDirFiles gathers comparable files from a source-owned
+// directory. Unlike collectOwnedDirFiles it reads through symlinks, because
+// copySkillDirectory does the same when installing: a working symlink in the
+// source is copied as a regular file, so the comparison must see the same
+// content on both sides or the skill would report outdated forever.
+func collectSourceDirFiles(root string) (map[string][]byte, error) {
+	files := map[string][]byte{}
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || shouldSkipSkillFile(entry.Name()) {
+			return nil
+		}
+		relativePath, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files[relativePath] = normalizeSkillFileContent(relativePath, content)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+// collectOwnedDirFiles is the error-surfacing collector for installed content
+// uloop owns: inside an owned directory an unreadable file or a non-regular
+// entry (dangling symlink, FIFO) is a broken copy the caller must react to,
+// not something to silently treat as matching.
 func collectOwnedDirFiles(root string) (map[string][]byte, error) {
 	files := map[string][]byte{}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
