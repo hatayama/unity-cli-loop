@@ -4,7 +4,12 @@ package dispatcher
 // external skill-package store such as APM). Unlike target installs, the
 // destination may hold files uloop does not own (package manifests placed next
 // to SKILL.md), so every operation here touches only entries that exist in the
-// skill source directory.
+// skill source directory — and only inside skill directories that carry
+// evidence of a uloop install (see dirSkillHasInstallEvidence): a name match
+// alone never authorizes replacing or deleting anything. A skill whose name is
+// occupied by content uloop cannot manage is reported as a per-skill conflict
+// and the run continues, so one occupied name cannot leave the rest of the
+// store half-synced with no summary.
 //
 // Deliberate omissions compared to target installs: disabled-tool filtering and
 // deprecated-skill cleanup do not run here. An external store is not scoped to
@@ -16,7 +21,6 @@ package dispatcher
 // skill version dropped or renamed is left behind rather than cleaned up.
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -33,17 +37,32 @@ func runSkillsDirInstall(absDir string, skills []skillDefinition, stdout io.Writ
 	clicore.WriteLine(stdout, "Installing uloop skills (directory)...")
 	clicore.WriteLine(stdout, "")
 	result := skillInstallResult{}
+	blocked := 0
 	for _, skill := range skills {
-		if err := installSkillIntoDir(absDir, skill, &result); err != nil {
+		conflictReason, err := installSkillIntoDir(absDir, skill, &result)
+		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
 			return 1
+		}
+		// A conflict blocks only its own skill: the remaining skills still
+		// sync, and the summary below still prints, so an interrupted-looking
+		// half-synced store cannot result from one occupied name.
+		if conflictReason != "" {
+			blocked++
+			clicore.WriteLine(stderr, conflictReason)
 		}
 	}
 	clicore.WriteLine(stdout, "Directory:")
 	clicore.WriteFormat(stdout, "  Installed: %d\n", result.installed)
 	clicore.WriteFormat(stdout, "  Updated: %d\n", result.updated)
 	clicore.WriteFormat(stdout, "  Skipped: %d\n", result.skipped)
+	if blocked > 0 {
+		clicore.WriteFormat(stdout, "  Blocked: %d\n", blocked)
+	}
 	clicore.WriteFormat(stdout, "  Location: %s\n\n", absDir)
+	if blocked > 0 {
+		return 1
+	}
 	return 0
 }
 
@@ -80,51 +99,61 @@ func runSkillsDirList(absDir string, skills []skillDefinition, stdout io.Writer,
 	clicore.WriteFormat(stdout, "Location: %s\n", absDir)
 	clicore.WriteLine(stdout, strings.Repeat("=", 50))
 	for _, skill := range skills {
-		status, err := getDirSkillStatus(absDir, skill)
+		state, err := getDirSkillState(absDir, skill)
 		if err != nil {
 			clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
 			return 1
 		}
-		clicore.WriteFormat(stdout, "  %s %s (%s)\n", statusIcon(status), skill.name, statusText(status))
+		clicore.WriteFormat(stdout, "  %s %s (%s)\n", statusIcon(state.status), skill.name, statusText(state.status))
 	}
 	clicore.WriteLine(stdout, "")
 	clicore.WriteFormat(stdout, "Total: %d skills\n", len(skills))
 	return 0
 }
 
-func installSkillIntoDir(baseDir string, skill skillDefinition, result *skillInstallResult) error {
-	// Status first: its Lstat guard rejects a symlink or file occupying the
-	// skill's name before artifact cleanup runs, whose ReadDir would follow the
-	// symlink and delete matching entries outside the store (and surface a raw
-	// platform-divergent error for a plain file).
-	status, err := getDirSkillStatus(baseDir, skill)
+// installSkillIntoDir syncs one skill and returns the conflict reason when the
+// skill's name is occupied by content uloop cannot manage; the caller reports
+// it and continues with the remaining skills.
+func installSkillIntoDir(baseDir string, skill skillDefinition, result *skillInstallResult) (string, error) {
+	// State first: its Lstat guard classifies a symlink or file occupying the
+	// skill's name as a conflict before artifact cleanup runs, whose ReadDir
+	// would follow the symlink and delete matching entries outside the store
+	// (and surface a raw platform-divergent error for a plain file).
+	state, err := getDirSkillState(baseDir, skill)
 	if err != nil {
-		return err
+		return "", err
+	}
+	if state.status == "conflict" {
+		return state.conflictReason, nil
 	}
 	if _, err := removeStaleSyncArtifacts(filepath.Join(baseDir, skill.name)); err != nil {
-		return err
+		return "", err
 	}
-	if status == "installed" {
+	if state.status == "installed" {
 		result.skipped++
-		return nil
+		return "", nil
 	}
 	if err := syncSkillDirectoryPreservingForeignFiles(skill.sourceDirectory, filepath.Join(baseDir, skill.name)); err != nil {
-		return err
+		return "", err
 	}
-	if status == "outdated" {
+	if state.status == "outdated" {
 		result.updated++
-		return nil
+		return "", nil
 	}
 	result.installed++
-	return nil
+	return "", nil
 }
 
 // uninstallSkillFromDir deletes only entries that exist in the skill source, so
 // foreign files survive; the skill directory itself is removed only once
 // nothing but ignorable OS/tool debris (.DS_Store, *.meta) remains in it.
-// Presence is keyed on the owned entries rather than SKILL.md alone, so a
-// partially removed install (references/ left behind without SKILL.md) is still
-// cleaned up instead of being reported as not installed.
+// Removal requires install evidence (SKILL.md, or owned content matching the
+// source): a partially removed install (references/ left behind without
+// SKILL.md) is still cleaned up, while a hand-authored directory that merely
+// uses a skill's name — possibly in a store uloop never installed into — is
+// preserved and reported as not found. Entries are matched by their exact
+// on-disk names, so a case-insensitive filesystem cannot make uloop delete a
+// user's skill.md or References/ as if they were the source-owned entries.
 func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) {
 	skillDir := filepath.Join(baseDir, skill.name)
 	// Lstat, not Stat: a symlink occupying the skill's name must not be
@@ -141,32 +170,42 @@ func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) 
 	if !info.IsDir() {
 		return false, nil
 	}
-	entryNames, err := sourceOwnedEntryNames(skill.sourceDirectory)
+	ownedEntries, err := sourceOwnedEntries(skill.sourceDirectory)
 	if err != nil {
 		return false, err
 	}
+	// Artifacts carry the uloop namespace marker, so they are uloop's own
+	// debris by construction and are cleaned up regardless of install evidence.
 	artifactsRemoved, err := removeStaleSyncArtifacts(skillDir)
 	if err != nil {
 		return false, err
 	}
-	removedAny := false
-	for _, entryName := range entryNames {
-		entryPath := filepath.Join(skillDir, entryName)
-		// Lstat, not Stat: a dangling symlink at an owned entry name must still
-		// be detected and removed instead of being skipped as missing.
-		if _, err := os.Lstat(entryPath); err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return false, err
+	dirEntries, err := os.ReadDir(skillDir)
+	if err != nil {
+		return false, err
+	}
+	evidence, err := dirSkillHasInstallEvidence(skillDir, skill, ownedEntries, dirEntries)
+	if err != nil {
+		return false, err
+	}
+	if !evidence {
+		if !artifactsRemoved {
+			return false, nil
 		}
-		if err := os.RemoveAll(entryPath); err != nil {
+		return false, removeSkillDirWithIgnorableDebris(skillDir)
+	}
+	removedAny := false
+	for _, owned := range ownedEntries {
+		// Exact-name lookup from the ReadDir listing (dangling symlinks
+		// included), never a path probe the filesystem could case-fold.
+		if findExactDirEntry(dirEntries, owned.Name()) == nil {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(skillDir, owned.Name())); err != nil {
 			return false, err
 		}
 		removedAny = true
 	}
-	// Nothing of ours was found: leave the directory alone, even when empty —
-	// a user-created scaffold directory bearing a skill name is foreign.
 	if !removedAny && !artifactsRemoved {
 		return false, nil
 	}
@@ -193,113 +232,6 @@ func removeSkillDirWithIgnorableDebris(skillDir string) error {
 		}
 	}
 	return os.RemoveAll(skillDir)
-}
-
-// getDirSkillStatus reports install status for the --output-dir layout. It compares
-// only source-owned paths, so foreign files kept next to SKILL.md never mark
-// the skill outdated; files inside source-owned directories (references/) are
-// compared both ways because syncing replaces those directories wholly.
-func getDirSkillStatus(baseDir string, skill skillDefinition) (string, error) {
-	skillDir := filepath.Join(baseDir, skill.name)
-	// Lstat, not Stat: a symlink occupying the skill's name must not be
-	// followed, or install would write through it into a directory outside the
-	// store that uninstall would then delete from.
-	info, err := os.Lstat(skillDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "not_installed", nil
-		}
-		return "", err
-	}
-	// Checked explicitly because ReadFile below a file path fails with ENOTDIR
-	// on Unix but maps to IsNotExist on Windows — the platforms would otherwise
-	// diverge between an aborted run and a bogus install attempt.
-	if !info.IsDir() {
-		// A symlink gets its own message: "not a directory" would mislead when
-		// the link points at one — it is the refusal to follow that matters.
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("cannot manage skill %q: %s is a symlink, which uloop never follows", skill.name, skillDir)
-		}
-		return "", fmt.Errorf("cannot manage skill %q: %s exists but is not a directory", skill.name, skillDir)
-	}
-	matches, err := installedSkillFileMatches(skillDir, skill)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return dirSkillStatusWithoutSkillFile(skillDir, skill)
-		}
-		// Wrapped so an unreadable SKILL.md (permissions, or a directory with
-		// that name) surfaces with the affected skill instead of a bare OS
-		// error; dir mode surfaces such states rather than rewriting an
-		// external store whose files cannot even be read.
-		return "", fmt.Errorf("cannot read %s for skill %q: %w", skillscan.SkillFileName, skill.name, err)
-	}
-	if !matches {
-		return "outdated", nil
-	}
-	filesOutdated, err := dirSkillFilesOutdated(skillDir, skill)
-	if err != nil {
-		return "", err
-	}
-	if filesOutdated {
-		return "outdated", nil
-	}
-	return "installed", nil
-}
-
-// dirSkillStatusWithoutSkillFile classifies a skill directory whose SKILL.md is
-// missing. Owned entries left behind mean a partial install worth repairing, so
-// the state reads as outdated; list, install, and uninstall then agree on it
-// instead of reporting not-installed, installed, and removed respectively.
-func dirSkillStatusWithoutSkillFile(skillDir string, skill skillDefinition) (string, error) {
-	entryNames, err := sourceOwnedEntryNames(skill.sourceDirectory)
-	if err != nil {
-		return "", err
-	}
-	for _, entryName := range entryNames {
-		if _, err := os.Lstat(filepath.Join(skillDir, entryName)); err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return "", err
-		}
-		return "outdated", nil
-	}
-	return "not_installed", nil
-}
-
-// dirSkillFilesOutdated reports whether the installed copies of source-owned
-// files differ from the source. Extra installed files count as stale only when
-// they sit inside a source-owned directory; top-level foreign files are the
-// mode's design point and never mark the skill outdated.
-func dirSkillFilesOutdated(skillDir string, skill skillDefinition) (bool, error) {
-	expectedFiles := collectComparableSkillFiles(skill.sourceDirectory)
-	installedFiles := collectComparableSkillFiles(skillDir)
-	if !comparableFilesMatch(expectedFiles, installedFiles) {
-		return true, nil
-	}
-	ownedEntries, err := sourceOwnedEntries(skill.sourceDirectory)
-	if err != nil {
-		return false, err
-	}
-	ownedDirs := map[string]bool{}
-	for _, entry := range ownedEntries {
-		if entry.IsDir() {
-			ownedDirs[entry.Name()] = true
-		}
-	}
-	for relativePath := range installedFiles {
-		// Only files inside source-owned directories count as stale: a
-		// top-level foreign file's own name never appears in ownedDirs, and a
-		// file shadowing an owned directory name is already reported outdated
-		// by the expected-files comparison above.
-		if !ownedDirs[topLevelPathSegment(relativePath)] {
-			continue
-		}
-		if _, ok := expectedFiles[relativePath]; !ok {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // syncSkillDirectoryPreservingForeignFiles copies every source-owned entry into
@@ -352,12 +284,13 @@ func syncSkillEntry(sourceDir string, destinationDir string, entry os.DirEntry) 
 }
 
 // removeEntryOfWrongType clears a destination entry whose type does not match
-// the source-owned entry about to be written. Ownership is name-scoped, so
-// whatever occupies an owned name is uloop's to replace — but the replace paths
-// cannot do it themselves: replaceSkillDirectory resolves the occupant with
-// os.Stat, which misclassifies a dangling symlink as absent and then fails the
-// rename with a raw ENOTDIR (and would follow a live symlink), and a plain
-// rename over a directory fails the same way for file entries.
+// the source-owned entry about to be written. Syncs only reach here for skill
+// directories with install evidence, so the occupant is uloop's to replace —
+// but the replace paths cannot do it themselves: replaceSkillDirectory
+// resolves the occupant with os.Stat, which misclassifies a dangling symlink
+// as absent and then fails the rename with a raw ENOTDIR (and would follow a
+// live symlink), and a plain rename over a directory fails the same way for
+// file entries.
 func removeEntryOfWrongType(destinationPath string, wantDir bool) error {
 	// Lstat, not Stat: the occupant itself is what must be examined and
 	// removed; a symlink must never be followed into data outside the store.
@@ -427,18 +360,6 @@ func sourceOwnedEntries(sourceDir string) ([]os.DirEntry, error) {
 	return owned, nil
 }
 
-func sourceOwnedEntryNames(sourceDir string) ([]string, error) {
-	entries, err := sourceOwnedEntries(sourceDir)
-	if err != nil {
-		return nil, err
-	}
-	names := []string{}
-	for _, entry := range entries {
-		names = append(names, entry.Name())
-	}
-	return names, nil
-}
-
 // removeStaleSyncArtifacts deletes leftover temp and backup entries that an
 // interrupted sync can leave behind (SKILL.md.uloop-tmp-*, ...). They carry
 // the uloop namespace marker, so they are uloop's own artifacts by
@@ -475,14 +396,6 @@ func removeStaleSyncArtifacts(skillDir string) (bool, error) {
 func isStaleSyncArtifactName(name string) bool {
 	return strings.Contains(name, skillSyncTempSuffix) ||
 		strings.Contains(name, skillSyncBackupSuffix)
-}
-
-func topLevelPathSegment(relativePath string) string {
-	separatorIndex := strings.IndexRune(relativePath, filepath.Separator)
-	if separatorIndex < 0 {
-		return relativePath
-	}
-	return relativePath[:separatorIndex]
 }
 
 func skillsDirErrorContext() clierrors.ErrorContext {

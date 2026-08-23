@@ -176,23 +176,23 @@ func TestGetDirSkillStatusIgnoresForeignFiles(t *testing.T) {
 		t.Fatalf("failed to write foreign file: %v", err)
 	}
 
-	status, err := getDirSkillStatus(destinationDir, skill)
+	state, err := getDirSkillState(destinationDir, skill)
 	if err != nil {
 		t.Fatalf("status check failed: %v", err)
 	}
-	if status != "installed" {
-		t.Fatalf("foreign file should not mark the skill outdated: %s", status)
+	if state.status != "installed" {
+		t.Fatalf("foreign file should not mark the skill outdated: %s", state.status)
 	}
 
 	if err := os.WriteFile(filepath.Join(installedDir, "references", "stale.md"), []byte("stale\n"), 0o644); err != nil {
 		t.Fatalf("failed to write stale reference: %v", err)
 	}
-	status, err = getDirSkillStatus(destinationDir, skill)
+	state, err = getDirSkillState(destinationDir, skill)
 	if err != nil {
 		t.Fatalf("status check failed: %v", err)
 	}
-	if status != "outdated" {
-		t.Fatalf("stale file in a source-owned directory should mark the skill outdated: %s", status)
+	if state.status != "outdated" {
+		t.Fatalf("stale file in a source-owned directory should mark the skill outdated: %s", state.status)
 	}
 }
 
@@ -251,12 +251,12 @@ func TestGetDirSkillStatusReportsOrphanedOwnedFilesAsOutdated(t *testing.T) {
 		t.Fatalf("failed to remove installed skill file: %v", err)
 	}
 
-	status, err := getDirSkillStatus(destinationDir, skill)
+	state, err := getDirSkillState(destinationDir, skill)
 	if err != nil {
 		t.Fatalf("status check failed: %v", err)
 	}
-	if status != "outdated" {
-		t.Fatalf("orphaned owned files should read as outdated: %s", status)
+	if state.status != "outdated" {
+		t.Fatalf("orphaned owned files should read as outdated: %s", state.status)
 	}
 
 	stdout.Reset()
@@ -828,5 +828,234 @@ func TestPrintSkillsSubcommandHelpShowsDirOptionForStandardSubcommands(t *testin
 	printSkillsSubcommandHelp("install-v3-migration", stdout)
 	if strings.Contains(stdout.String(), "--output-dir") {
 		t.Fatalf("v3 migration help should not list --output-dir:\n%s", stdout.String())
+	}
+}
+
+// Tests that a hand-authored directory using a skill's name and an owned entry
+// name, in a store uloop never installed into, is preserved: uninstall reports
+// not found and install blocks the skill instead of replacing the content.
+func TestRunSkillsDirPreservesNeverInstalledOwnedNames(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	handAuthoredDir := filepath.Join(destinationDir, "uloop-sample", "references")
+	if err := os.MkdirAll(handAuthoredDir, 0o755); err != nil {
+		t.Fatalf("failed to create hand-authored dir: %v", err)
+	}
+	userNotes := filepath.Join(handAuthoredDir, "mynotes.md")
+	if err := os.WriteFile(userNotes, []byte("my curated notes\n"), 0o644); err != nil {
+		t.Fatalf("failed to write user notes: %v", err)
+	}
+	manifest := filepath.Join(destinationDir, "uloop-sample", "package.json")
+	if err := os.WriteFile(manifest, []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Not found: 1") {
+		t.Fatalf("never-installed content should not count as removed:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(userNotes); err != nil {
+		t.Fatalf("hand-authored notes must survive uninstall: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 1 {
+		t.Fatalf("install onto never-installed owned names should report a failure: code=%d", code)
+	}
+	if !strings.Contains(stderr.String(), "did not install") {
+		t.Fatalf("error should state the content is not a uloop install:\n%s", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Blocked: 1") || !strings.Contains(stdout.String(), "Installed: 0") {
+		t.Fatalf("summary should count the skill as blocked:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(userNotes); err != nil {
+		t.Fatalf("hand-authored notes must survive install: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(destinationDir, "uloop-sample", "SKILL.md")); !os.IsNotExist(err) {
+		t.Fatalf("blocked skill must not be written, stat err=%v", err)
+	}
+}
+
+// Tests that one skill blocked by a conflict does not abort the run: the
+// remaining skills still install and the summary still prints.
+func TestRunSkillsDirInstallContinuesPastBlockedSkill(t *testing.T) {
+	root := t.TempDir()
+	blockedSkill := writeDirModeSkillSource(t, root, "uloop-blocked")
+	healthySkill := writeDirModeSkillSource(t, root, "uloop-healthy")
+	destinationDir := filepath.Join(root, "apm-skills")
+	if err := os.MkdirAll(destinationDir, 0o755); err != nil {
+		t.Fatalf("failed to create destination: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(destinationDir, "uloop-blocked"), []byte("foreign\n"), 0o644); err != nil {
+		t.Fatalf("failed to write occupying file: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirInstall(destinationDir, []skillDefinition{blockedSkill, healthySkill}, stdout, stderr)
+
+	if code != 1 {
+		t.Fatalf("a blocked skill should fail the run: code=%d", code)
+	}
+	if !strings.Contains(stdout.String(), "Installed: 1") || !strings.Contains(stdout.String(), "Blocked: 1") {
+		t.Fatalf("summary should show the healthy skill installed and the conflict counted:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(destinationDir, "uloop-healthy", "SKILL.md")); err != nil {
+		t.Fatalf("the healthy skill should still be installed: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "cannot manage skill") {
+		t.Fatalf("the conflict should be reported per skill:\n%s", stderr.String())
+	}
+}
+
+// Tests that dir-mode list reports a conflicted skill as a status row and
+// completes the listing instead of aborting midway.
+func TestRunSkillsDirListReportsConflict(t *testing.T) {
+	root := t.TempDir()
+	blockedSkill := writeDirModeSkillSource(t, root, "uloop-blocked")
+	installedSkill := writeDirModeSkillSource(t, root, "uloop-installed")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{installedSkill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if err := os.WriteFile(filepath.Join(destinationDir, "uloop-blocked"), []byte("foreign\n"), 0o644); err != nil {
+		t.Fatalf("failed to write occupying file: %v", err)
+	}
+
+	stdout.Reset()
+	code := runSkillsDirList(destinationDir, []skillDefinition{blockedSkill, installedSkill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir list failed: code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "uloop-blocked (conflict)") {
+		t.Fatalf("list should show the conflict status:\n%s", output)
+	}
+	if !strings.Contains(output, "uloop-installed (installed)") {
+		t.Fatalf("list should keep reporting the skills after a conflict:\n%s", output)
+	}
+	if !strings.Contains(output, "Total: 2 skills") {
+		t.Fatalf("list should complete instead of aborting midway:\n%s", output)
+	}
+}
+
+// Tests that an entry differing from SKILL.md only by letter case is never
+// claimed: uninstall preserves it and reports not found on every filesystem,
+// case-insensitive ones (where a path probe would resolve it) included.
+func TestRunSkillsDirUninstallPreservesCaseVariantSkillFile(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	skillDir := filepath.Join(destinationDir, "uloop-sample")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("failed to create skill dir: %v", err)
+	}
+	lowercaseSkillFile := filepath.Join(skillDir, "skill.md")
+	if err := os.WriteFile(lowercaseSkillFile, []byte("hand-authored\n"), 0o644); err != nil {
+		t.Fatalf("failed to write lowercase skill file: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Not found: 1") {
+		t.Fatalf("a case-variant file should not count as an install:\n%s", stdout.String())
+	}
+	content, err := os.ReadFile(lowercaseSkillFile)
+	if err != nil || string(content) != "hand-authored\n" {
+		t.Fatalf("the case-variant file must survive untouched: content=%q err=%v", content, err)
+	}
+}
+
+// Tests that install blocks a skill whose owned entry name is present only as
+// a case variant (References/), instead of letting a case-insensitive
+// filesystem replace the foreign entry; the refusal is uniform across
+// platforms so store behavior does not depend on where it is synced.
+func TestRunSkillsDirInstallBlocksCaseVariantOwnedEntry(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	installedDir := filepath.Join(destinationDir, "uloop-sample")
+	if err := os.Rename(filepath.Join(installedDir, "references"), filepath.Join(installedDir, "References")); err != nil {
+		t.Fatalf("failed to rename references dir: %v", err)
+	}
+
+	stdout.Reset()
+	code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 1 {
+		t.Fatalf("a case-variant owned entry should block the skill: code=%d", code)
+	}
+	if !strings.Contains(stderr.String(), "only by letter case") {
+		t.Fatalf("error should call out the case mismatch:\n%s", stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(installedDir, "References", "note.md")); err != nil {
+		t.Fatalf("the case-variant directory must survive untouched: %v", err)
+	}
+}
+
+// Tests that a broken entry inside an owned directory (a dangling symlink
+// where a reference file should be) marks the skill outdated instead of
+// installed, and that install repairs it.
+func TestRunSkillsDirDetectsBrokenOwnedEntryAsOutdated(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on Windows")
+	}
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	notePath := filepath.Join(destinationDir, "uloop-sample", "references", "note.md")
+	if err := os.Remove(notePath); err != nil {
+		t.Fatalf("failed to remove reference: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(root, "missing-target"), notePath); err != nil {
+		t.Fatalf("failed to create dangling symlink: %v", err)
+	}
+
+	state, err := getDirSkillState(destinationDir, skill)
+	if err != nil {
+		t.Fatalf("status check failed: %v", err)
+	}
+	if state.status != "outdated" {
+		t.Fatalf("a broken owned entry should read as outdated, got: %s", state.status)
+	}
+
+	stdout.Reset()
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("repair install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Updated: 1") {
+		t.Fatalf("repairing a broken owned entry should count as updated:\n%s", stdout.String())
+	}
+	content, err := os.ReadFile(notePath)
+	if err != nil || string(content) != "note\n" {
+		t.Fatalf("repair should restore the reference file: content=%q err=%v", content, err)
 	}
 }
