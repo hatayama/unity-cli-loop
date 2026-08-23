@@ -317,6 +317,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: FindCompiledMethodSpans returns the named method's compiled span, not a neighbor.
+        /// </summary>
+        [Test]
+        public void FindCompiledMethodSpans_WhenMethodFilterMatches_ReturnsThatMethodSpan()
+        {
+            string file = FixturesDirectory + "CompiledMethodSpanFixture.cs";
+            SourcePausePointResolveResult expected = SourcePausePointResolver.Resolve(file, 9, "Target");
+            Assert.That(expected.Success, Is.True, expected.ErrorMessage);
+
+            IReadOnlyList<SourcePausePointCompiledMethodSpan> spans =
+                SourcePausePointResolver.FindCompiledMethodSpans(file, "Target");
+
+            Assert.That(spans.Count, Is.EqualTo(1));
+            Assert.That(spans[0].StartLine, Is.EqualTo(expected.Resolution.CompiledMethodStartLine));
+            Assert.That(spans[0].EndLine, Is.EqualTo(expected.Resolution.CompiledMethodEndLine));
+        }
+
+        /// <summary>
+        /// What: FindCompiledMethodSpans with no --method returns no spans.
+        /// </summary>
+        [Test]
+        public void FindCompiledMethodSpans_WhenMethodFilterIsEmpty_ReturnsNoSpans()
+        {
+            string file = FixturesDirectory + "CompiledMethodSpanFixture.cs";
+
+            IReadOnlyList<SourcePausePointCompiledMethodSpan> spans =
+                SourcePausePointResolver.FindCompiledMethodSpans(file, string.Empty);
+
+            Assert.That(spans, Is.Empty);
+        }
+
+        /// <summary>
         /// What: an empty method filter accepts every compiled method name.
         /// </summary>
         [Test]

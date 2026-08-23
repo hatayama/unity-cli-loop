@@ -294,6 +294,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (startLine, endLine);
         }
 
+        // Why a dedicated API: FindNearbyCompiledMethods does not take methodFilter and cannot
+        // promise the named method's compiled span.
+        internal static IReadOnlyList<SourcePausePointCompiledMethodSpan> FindCompiledMethodSpans(
+            string projectRelativeFilePath,
+            string methodFilter)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
+            if (string.IsNullOrEmpty(methodFilter))
+            {
+                return Array.Empty<SourcePausePointCompiledMethodSpan>();
+            }
+
+            return WithCompiledModuleOrDefault(
+                projectRelativeFilePath,
+                (module, normalizedInputPath) =>
+                    CollectCompiledMethodSpans(module, normalizedInputPath, methodFilter),
+                Array.Empty<SourcePausePointCompiledMethodSpan>());
+        }
+
+        private static IReadOnlyList<SourcePausePointCompiledMethodSpan> CollectCompiledMethodSpans(
+            ModuleDefinition module,
+            string normalizedInputPath,
+            string methodFilter)
+        {
+            List<SourcePausePointCompiledMethodSpan> spans = new List<SourcePausePointCompiledMethodSpan>();
+            foreach (MethodDefinition method in EnumerateMethodsInModule(module))
+            {
+                if (!method.HasBody || !CompiledMethodMatchesFilter(methodFilter, method))
+                {
+                    continue;
+                }
+
+                (int startLine, int endLine) = CollectCompiledMethodSpan(method, normalizedInputPath);
+                if (startLine <= 0 || endLine <= 0)
+                {
+                    continue;
+                }
+
+                spans.Add(new SourcePausePointCompiledMethodSpan(startLine, endLine));
+            }
+
+            return spans;
+        }
+
         // Why a file:line entry: the resolver test assembly cannot take a Cecil
         // ModuleDefinition dependency, but TakeAtMostTwo only runs on this walk.
         internal static IReadOnlyList<SourcePausePointNearbyCompiledMethod> FindNearbyCompiledMethodsInFile(
@@ -303,11 +347,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
             Debug.Assert(line > 0, "line must be a positive 1-based line number.");
 
+            return WithCompiledModuleOrDefault(
+                projectRelativeFilePath,
+                (module, normalizedInputPath) =>
+                    FindNearbyCompiledMethods(module, normalizedInputPath, line),
+                Array.Empty<SourcePausePointNearbyCompiledMethod>());
+        }
+
+        private static TResult WithCompiledModuleOrDefault<TResult>(
+            string projectRelativeFilePath,
+            Func<ModuleDefinition, string, TResult> read,
+            TResult fallback)
+        {
+            Debug.Assert(read != null, "read must not be null.");
+
             string normalizedInputPath = SourcePausePointPathNormalizer.ToForwardSlashes(projectRelativeFilePath);
             string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(normalizedInputPath);
             if (string.IsNullOrEmpty(rawAssemblyName))
             {
-                return Array.Empty<SourcePausePointNearbyCompiledMethod>();
+                return fallback;
             }
 
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
@@ -322,7 +380,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblyName + SourcePausePointConstants.DebugSymbolsExtension);
             if (!File.Exists(dllPath) || !File.Exists(pdbPath))
             {
-                return Array.Empty<SourcePausePointNearbyCompiledMethod>();
+                return fallback;
             }
 
             using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -336,7 +394,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
             using AssemblyDefinition assemblyDefinition =
                 AssemblyDefinition.ReadAssembly(dllStream, readerParameters);
-            return FindNearbyCompiledMethods(assemblyDefinition.MainModule, normalizedInputPath, line);
+            return read(assemblyDefinition.MainModule, normalizedInputPath);
         }
 
         // Why a separate walk from FindClosestSequencePointOnOrAfterLine: that search only

@@ -476,6 +476,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SourcePausePointPathNormalizer.ToForwardSlashes(file));
         }
 
+        internal static string BuildEditedLineRemapWarning(
+            int originalLine,
+            string methodName,
+            int remappedLine)
+        {
+            Debug.Assert(originalLine > 0, "originalLine must be a positive 1-based line number.");
+            Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be empty.");
+            Debug.Assert(remappedLine > 0, "remappedLine must be a positive 1-based line number.");
+            return string.Format(
+                SourcePausePointConstants.EditedLineRemapWarningFormat,
+                originalLine,
+                methodName,
+                remappedLine);
+        }
+
         internal static string CreateEnableWarning()
         {
             if (EditorApplication.isPlaying)
