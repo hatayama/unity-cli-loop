@@ -30,7 +30,7 @@ const (
 
 	// pausePointCapturedVariableHistoryNote explains why the latest hit is absent from
 	// CapturedVariableHistory: repeating it would duplicate CapturedVariables.
-	pausePointCapturedVariableHistoryNote = "CapturedVariableHistory lists hits before the latest one; the latest hit's variables are in CapturedVariables."
+	pausePointCapturedVariableHistoryNote = "CapturedVariableHistory lists hits before the latest one; the latest hit's variables are in CapturedVariables. HitSequence numbers come from a sequence shared by all pause points in the current Editor domain (it resets on domain reload); they order hits across markers and are not 1..HitCount for this marker."
 
 	// pausePointTraceStatusNote explains that a trace-mode Hit did not pause Play Mode.
 	pausePointTraceStatusNote = "Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running."
