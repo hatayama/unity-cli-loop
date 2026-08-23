@@ -206,11 +206,12 @@ func TestFilterPausePointCapturedVariablesByNameReportsNotFound(t *testing.T) {
 }
 
 // truncatedNameFilterResponse is a Unity snapshot where preview clipping set
-// CapturedVariablesTruncated without a variable-count drop (Count==0).
+// CapturedVariablesTruncated and counted the clipped variable.
 func truncatedNameFilterResponse() pausePointStatusResponse {
 	return pausePointStatusResponse{
 		CapturedVariablesTruncated: true,
-		TruncatedVariableCount:     0,
+		TruncatedVariableCount:     1,
+		TruncatedVariableNames:     []string{"board"},
 		CapturedVariables: []pausePointCapturedVariable{
 			{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
 			{Name: "board", Scope: "Local", TypeName: "Boolean[,]", Value: pausePointVariableValue("[...]"), Truncated: true},
@@ -266,10 +267,15 @@ func TestFilterPausePointCapturedVariablesByNameSetsTruncatedNote(t *testing.T) 
 // TestFilterPausePointCapturedVariablesByNameOmitsTruncatedNote verifies additional
 // negative cases where the CLI must not attach CapturedVariablesTruncatedNote.
 func TestFilterPausePointCapturedVariablesByNameOmitsTruncatedNote(t *testing.T) {
-	t.Run("note is omitted when TruncatedVariableCount is already non-zero", func(t *testing.T) {
-		response := truncatedNameFilterResponse()
-		response.TruncatedVariableCount = 1
-		response.TruncatedVariableNames = []string{"extraField"}
+	t.Run("note is omitted when only count-cap drops remain", func(t *testing.T) {
+		response := pausePointStatusResponse{
+			CapturedVariablesTruncated: true,
+			TruncatedVariableCount:     1,
+			TruncatedVariableNames:     []string{"extraField"},
+			CapturedVariables: []pausePointCapturedVariable{
+				{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
+			},
+		}
 		result := filterPausePointCapturedVariablesByName(response, []string{"health"})
 		if result.CapturedVariablesTruncatedNote != "" {
 			t.Fatalf("count-cap truncation must not be described as a name-filter drop: %q", result.CapturedVariablesTruncatedNote)
@@ -288,7 +294,8 @@ func TestFilterPausePointCapturedVariablesByNameOmitsTruncatedNote(t *testing.T)
 	t.Run("note is omitted when only a history variable remains truncated", func(t *testing.T) {
 		response := pausePointStatusResponse{
 			CapturedVariablesTruncated: true,
-			TruncatedVariableCount:     0,
+			TruncatedVariableCount:     1,
+			TruncatedVariableNames:     []string{"board"},
 			CapturedVariables: []pausePointCapturedVariable{
 				{Name: "health", Scope: "Local", TypeName: "Int32", Value: pausePointVariableValue("100")},
 				{Name: "velocity", Scope: "Local", TypeName: "Vector3", Value: pausePointVariableValue("(1,0,0)")},

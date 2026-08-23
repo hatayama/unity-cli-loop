@@ -46,6 +46,7 @@ func filterPausePointCapturedVariablesByName(
 	// marker has empty CapturedVariables/history, which would otherwise look like a name miss
 	// and a Warning blaming the requested names would misdiagnose "not hit yet".
 	hadCapturedVariables := pausePointResponseHasCapturedVariables(response)
+	hadListedTruncated := pausePointResponseHasTruncatedCapturedVariable(response)
 
 	nameSet := make(map[string]struct{}, len(names))
 	for _, name := range names {
@@ -80,7 +81,7 @@ func filterPausePointCapturedVariablesByName(
 			"No captured variable matched the requested names; the hit captured other variables. Check CapturedVariableNamesNotFound for the names that were absent.")
 	}
 
-	return applyPausePointCapturedVariablesTruncatedNote(response)
+	return applyPausePointCapturedVariablesTruncatedNote(response, hadListedTruncated)
 }
 
 // pausePointResponseHasCapturedVariables reports whether the snapshot already holds any
@@ -141,16 +142,19 @@ func filterCapturedVariablesByNameSet(
 // applyPausePointCapturedVariablesTruncatedNote records that the Unity truncation
 // flag is about a variable the name filter excluded. The flag itself is left
 // unchanged: clearing it would hide that a captured value was clipped.
+// Count is no longer a preview-clip signal: Unity now counts clipped previews
+// in TruncatedVariableCount, so a non-zero count must not suppress the note.
 func applyPausePointCapturedVariablesTruncatedNote(
 	response pausePointStatusResponse,
+	hadListedTruncatedBeforeFilter bool,
 ) pausePointStatusResponse {
 	if !response.CapturedVariablesTruncated {
 		return response
 	}
-	if response.TruncatedVariableCount != 0 {
+	if pausePointResponseHasTruncatedCapturedVariable(response) {
 		return response
 	}
-	if pausePointResponseHasTruncatedCapturedVariable(response) {
+	if !hadListedTruncatedBeforeFilter {
 		return response
 	}
 

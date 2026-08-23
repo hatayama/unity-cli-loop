@@ -24,10 +24,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public IReadOnlyList<UloopPausePointCapturedVariableEntry> Entries { get; }
         public bool Truncated { get; }
 
-        // Names dropped by the variable-count cap (at most MaxTruncatedVariableNamesReported).
+        // Names dropped by the variable-count cap or whose preview was clipped
+        // (at most MaxTruncatedVariableNamesReported), in capture order.
         public IReadOnlyList<string> TruncatedVariableNames { get; }
 
-        // Exact number of variables dropped by the count cap (not capped at the names list length).
+        // Exact number of variables dropped by the count cap or whose preview was
+        // clipped (not capped at the names list length).
         public int TruncatedVariableCount { get; }
     }
 }
