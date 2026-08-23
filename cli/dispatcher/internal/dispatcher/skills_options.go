@@ -26,6 +26,12 @@ func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 		case arg == "--flat":
 			options.flat = true
 		case arg == skillsOutputDirFlagName:
+			// Rejected rather than letting the last occurrence win, matching
+			// `uloop install --dir`: two destinations in one invocation is
+			// ambiguous, and silently syncing only one of them would hide it.
+			if options.outputDir != "" {
+				return skillCommandOptions{}, duplicateSkillsOutputDirError()
+			}
 			// A flag-like next token (e.g. --global) must not be swallowed as the
 			// destination, or the mutual-exclusion validation silently misses it.
 			// Paths that genuinely start with a dash go through --output-dir=<path>.
@@ -35,6 +41,9 @@ func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 			index++
 			options.outputDir = args[index]
 		case strings.HasPrefix(arg, skillsOutputDirFlagName+"="):
+			if options.outputDir != "" {
+				return skillCommandOptions{}, duplicateSkillsOutputDirError()
+			}
 			options.outputDir = strings.TrimPrefix(arg, skillsOutputDirFlagName+"=")
 			if options.outputDir == "" {
 				return skillCommandOptions{}, missingSkillsOutputDirValueError()
@@ -67,6 +76,15 @@ func appendSkillTarget(options *skillCommandOptions, seenTargets map[string]bool
 	options.targets = append(options.targets, targetConfigs[targetID])
 	seenTargets[targetID] = true
 	return nil
+}
+
+func duplicateSkillsOutputDirError() error {
+	return &clierrors.ArgumentError{
+		Message:     "Duplicate skills option: " + skillsOutputDirFlagName,
+		Option:      skillsOutputDirFlagName,
+		Command:     clicore.SkillsCommandName,
+		NextActions: []string{"Pass the destination directory only once."},
+	}
 }
 
 func missingSkillsOutputDirValueError() error {

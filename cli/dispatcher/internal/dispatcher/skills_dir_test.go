@@ -1059,3 +1059,21 @@ func TestRunSkillsDirDetectsBrokenOwnedEntryAsOutdated(t *testing.T) {
 		t.Fatalf("repair should restore the reference file: content=%q err=%v", content, err)
 	}
 }
+
+// Tests that passing --output-dir more than once is rejected instead of
+// silently letting the last destination win, matching `uloop install --dir`.
+func TestParseSkillsOptionsRejectsDuplicateOutputDir(t *testing.T) {
+	if _, err := parseSkillsOptions([]string{"--output-dir", "/first", "--output-dir", "/second"}); err == nil {
+		t.Fatal("expected error for repeated --output-dir")
+	}
+	if _, err := parseSkillsOptions([]string{"--output-dir=/first", "--output-dir=/second"}); err == nil {
+		t.Fatal("expected error for repeated --output-dir=<path>")
+	}
+	_, err := parseSkillsOptions([]string{"--output-dir", "/first", "--output-dir=/second"})
+	if err == nil {
+		t.Fatal("expected error for mixed-form repeated --output-dir")
+	}
+	if !strings.Contains(err.Error(), "Duplicate") {
+		t.Fatalf("error should call out the duplicate option: %v", err)
+	}
+}
