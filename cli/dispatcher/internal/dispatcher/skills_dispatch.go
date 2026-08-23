@@ -99,6 +99,10 @@ func runSkillsDirSubcommand(
 		}, skillsDirErrorContext())
 		return 1
 	}
+	if err := outputDirOverlapsSkillSource(absDir, skills); err != nil {
+		clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
+		return 1
+	}
 	switch subcommand {
 	case "list":
 		return runSkillsDirList(absDir, skills, stdout, stderr)
@@ -117,6 +121,42 @@ func runSkillsDirSubcommand(
 		}, skillsDirErrorContext())
 		return 1
 	}
+}
+
+// outputDirOverlapsSkillSource rejects --output-dir when it sits inside a
+// skill source directory or contains one: install would then copy into the
+// tree WalkDir is enumerating (or treat the source as the store).
+func outputDirOverlapsSkillSource(absDir string, skills []skillDefinition) error {
+	for _, skill := range skills {
+		absSource, err := filepath.Abs(skill.sourceDirectory)
+		if err != nil {
+			return err
+		}
+		if pathContains(absSource, absDir) || pathContains(absDir, absSource) {
+			return &clierrors.ArgumentError{
+				Message:     "The " + skillsOutputDirFlagName + " path " + absDir + " overlaps the skill source directory " + absSource + ".",
+				Option:      skillsOutputDirFlagName,
+				Command:     clicore.SkillsCommandName,
+				NextActions: []string{"Pass a directory that is outside every skill source directory to " + skillsOutputDirFlagName + "."},
+			}
+		}
+	}
+	return nil
+}
+
+// pathContains reports whether parent contains child, including when the two
+// paths are the same. Rel distinguishes a real descendant from a sibling that
+// merely shares a prefix (/a/b vs /a/bc).
+func pathContains(parent string, child string) bool {
+	relative, err := filepath.Rel(parent, child)
+	if err != nil {
+		return false
+	}
+	if relative == "." {
+		return true
+	}
+	// Rel of an ancestor is ".." (no separator); that is not containment.
+	return relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator))
 }
 
 // posixStyleOutputDirError rejects a POSIX-style absolute path on Windows

@@ -1511,3 +1511,77 @@ func TestRunSkillsDirInstallPreservesSourceOwnedArtifactNamedFile(t *testing.T) 
 		t.Fatalf("second install changed the store file: %q", secondContent)
 	}
 }
+
+// Tests that --output-dir inside a skill source directory is rejected before
+// install can create a destination that WalkDir would then re-enter.
+func TestRunSkillsDirSubcommandRejectsOutputDirInsideSkillSource(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	outputDir := filepath.Join(skill.sourceDirectory, "nested-store")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirSubcommand("install", []skillDefinition{skill}, outputDir, stdout, stderr)
+
+	if code != 1 {
+		t.Fatalf("output dir inside a skill source should fail: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), skillsOutputDirFlagName) {
+		t.Fatalf("error should name --output-dir:\n%s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), skill.sourceDirectory) && !strings.Contains(stderr.String(), outputDir) {
+		t.Fatalf("error should name the conflicting path:\n%s", stderr.String())
+	}
+	if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
+		t.Fatalf("install must not create a directory inside the skill source, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(skill.sourceDirectory, "uloop-sample")); !os.IsNotExist(err) {
+		t.Fatalf("install must not create a skill directory inside the source, stat err=%v", err)
+	}
+}
+
+// Tests that --output-dir which contains a skill source directory is rejected
+// the same way as the reverse containment.
+func TestRunSkillsDirSubcommandRejectsOutputDirContainingSkillSource(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirSubcommand("install", []skillDefinition{skill}, root, stdout, stderr)
+
+	if code != 1 {
+		t.Fatalf("output dir containing a skill source should fail: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), skillsOutputDirFlagName) {
+		t.Fatalf("error should name --output-dir:\n%s", stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, "uloop-sample")); !os.IsNotExist(err) {
+		t.Fatalf("install must not create a skill directory in the overlapping dest, stat err=%v", err)
+	}
+}
+
+// Tests that pathContains treats identical and descendant paths as contained
+// and does not treat sibling prefixes such as /a/b versus /a/bc as contained.
+func TestPathContainsDistinguishesDescendantFromSiblingPrefix(t *testing.T) {
+	root := t.TempDir()
+	parent := filepath.Join(root, "b")
+	sibling := filepath.Join(root, "bc")
+	child := filepath.Join(parent, "c")
+
+	if !pathContains(parent, parent) {
+		t.Fatal("identical paths should be contained")
+	}
+	if !pathContains(parent, child) {
+		t.Fatal("a descendant path should be contained")
+	}
+	if pathContains(parent, sibling) {
+		t.Fatal("a sibling prefix path must not be treated as contained")
+	}
+	if pathContains(sibling, parent) {
+		t.Fatal("the reverse sibling prefix must not be treated as contained")
+	}
+	if pathContains(child, parent) {
+		t.Fatal("an ancestor path must not be treated as contained")
+	}
+}
