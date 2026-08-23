@@ -37,6 +37,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return (failedResult, string.Empty);
             }
 
+            // Why snapshot-only: the on-disk file can already include uncompiled edits, so
+            // scanning it against the last PDB span can unique-match a later statement onto
+            // an old sequence-point line and still pass the exact-line pin.
+            string compiledSnapshotSource = PausePointCompiledSourceReader.LoadSnapshotOrEmpty(file);
+            if (string.IsNullOrEmpty(compiledSnapshotSource))
+            {
+                return (failedResult, string.Empty);
+            }
+
             IReadOnlyList<SourcePausePointCompiledMethodSpan> spans =
                 SourcePausePointResolver.FindCompiledMethodSpans(file, method);
             if (spans.Count == 0)
@@ -51,8 +60,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return (failedResult, string.Empty);
             }
 
-            string[] compiledSourceLines = SourcePausePointSourceLineReader.SplitSourceLines(
-                PausePointCompiledSourceReader.LoadSnapshotOrDiskOrEmpty(file));
+            string[] compiledSourceLines =
+                SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
             int remappedLine = FindUniqueMatchingCompiledLineOrZero(
                 method,
                 editedLineText,
@@ -126,11 +135,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         continue;
                     }
 
-                    if (matchingLine != compiledLine)
-                    {
-                        matchCount++;
-                        matchingLine = compiledLine;
-                    }
+                    matchCount++;
+                    matchingLine = compiledLine;
                 }
             }
 
