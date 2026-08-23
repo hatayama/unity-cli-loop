@@ -1,7 +1,7 @@
 ---
 name: uloop-hot-reload
 toolName: hot-reload
-description: "Apply method-body hot reload to edited C# sources in a running Unity Editor without domain reload. Use after small method edits when you need PlayMode/EditMode feedback without uloop compile."
+description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible only to edited code in the same file); new types, signature changes to existing methods, or members other files must reference require 'uloop compile'."
 ---
 
 # uloop hot-reload

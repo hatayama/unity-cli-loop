@@ -1315,7 +1315,7 @@ func TestPausePointStatusResponseIncludesCapturedVariableHistoryNote(t *testing.
 	if err := json.Unmarshal(rawNote, &note); err != nil {
 		t.Fatalf("unmarshal note failed: %v", err)
 	}
-	if note != pausePointCapturedVariableHistoryNote {
+	if note != "CapturedVariableHistory lists hits before the latest one; the latest hit's variables are in CapturedVariables. HitSequence numbers come from a session-wide sequence shared by all pause points (they order hits across markers); they are not 1..HitCount for this marker." {
 		t.Fatalf("CapturedVariableHistoryNote mismatch: got %#v, want %#v",
 			note, pausePointCapturedVariableHistoryNote)
 	}
@@ -1925,7 +1925,7 @@ func TestRunPausePointStatusIncludesCapturedVariableHistoryNoteWhenLatestHitIsFi
 	if err := json.Unmarshal(rawNote, &note); err != nil {
 		t.Fatalf("unmarshal note failed: %v", err)
 	}
-	if note != pausePointCapturedVariableHistoryNote {
+	if note != "CapturedVariableHistory lists hits before the latest one; the latest hit's variables are in CapturedVariables. HitSequence numbers come from a session-wide sequence shared by all pause points (they order hits across markers); they are not 1..HitCount for this marker." {
 		t.Fatalf("CapturedVariableHistoryNote mismatch: got %#v, want %#v",
 			note, pausePointCapturedVariableHistoryNote)
 	}
