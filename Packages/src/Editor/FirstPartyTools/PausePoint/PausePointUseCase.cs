@@ -268,8 +268,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // map; only the warning text differs.
             }
 
-            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
-                parameters.File, parameters.Line, parameters.Method);
+            (SourcePausePointResolveResult resolveResult, string editedLineRemapWarning) =
+                PausePointEditedLineRemap.ResolveWithEditedLineRemap(
+                    parameters.File, parameters.Line, parameters.Method);
             if (!resolveResult.Success)
             {
                 bool hasActiveHotReloadPatches = shimLookup != null;
@@ -286,7 +287,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // path, so those reads would change the historical no-patch failure for no gain.
                 if (hasActiveHotReloadPatches)
                 {
-                    string compiledSnapshotSource = LoadCompiledSnapshotSourceOrEmpty(parameters.File);
+                    string compiledSnapshotSource = PausePointCompiledSourceReader.LoadSnapshotOrEmpty(parameters.File);
                     compiledSourceLinesOrNull = string.IsNullOrEmpty(compiledSnapshotSource)
                         ? null
                         : SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
@@ -349,7 +350,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasActiveHotReloadPatches: shimLookup != null,
                 compiledMethodStartLine: resolveResult.Resolution.CompiledMethodStartLine,
                 compiledMethodEndLine: resolveResult.Resolution.CompiledMethodEndLine,
-                patchedMethodPdbUnavailableWarning: patchedMethodPdbUnavailableWarning);
+                patchedMethodPdbUnavailableWarning: patchedMethodPdbUnavailableWarning,
+                editedLineRemapWarning: editedLineRemapWarning);
         }
 
         private static PausePointResponse FinishEnableBySourceLocation(
@@ -365,7 +367,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int editedMethodEndLine = 0,
             int compiledMethodStartLine = 0,
             int compiledMethodEndLine = 0,
-            string patchedMethodPdbUnavailableWarning = "")
+            string patchedMethodPdbUnavailableWarning = "",
+            string editedLineRemapWarning = "")
         {
             string rearmWarning = PausePointEnableWarnings.BuildRearmDiscardWarningOrEmpty(
                 UloopPausePointRegistry.GetStatus(id));
@@ -384,7 +387,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             bool compareCompiledLineDrift = hasActiveHotReloadPatches && !retargetedToHotReloadPatch;
             string compiledSnapshotSource = compareCompiledLineDrift
-                ? LoadCompiledSnapshotSourceOrEmpty(parameters.File)
+                ? PausePointCompiledSourceReader.LoadSnapshotOrEmpty(parameters.File)
                 : string.Empty;
             // Why snapshot over disk: the editor file may already include unpatched-line drift, so
             // reading disk at the compiled ResolvedLine shows the wrong statement (FB9 empty/mismatch).
@@ -402,7 +405,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedLineText = resolvedLineText;
             response.ResolvedMethod = resolvedMethod;
             response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
-            string enableWarning = PausePointEnableWarnings.CreateEnableWarning();
+            string enableWarning = PausePointEnableWarnings.MergeWarnings(
+                PausePointEnableWarnings.CreateEnableWarning(),
+                editedLineRemapWarning);
             enableWarning = PausePointEnableWarnings.MergeWarnings(
                 enableWarning,
                 PausePointEnableWarnings.BuildRetargetedToHotReloadPatchWarningOrEmpty(
@@ -529,14 +534,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     InstanceCount = instanceCount,
                     StatusBeforeClear = statusBeforeClear
                 });
-        }
-
-        private static string LoadCompiledSnapshotSourceOrEmpty(string requestedFile)
-        {
-            string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
-            string snapshotSource =
-                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile?.Invoke(normalizedFile);
-            return snapshotSource ?? string.Empty;
         }
 
         // The derived id must use the originally requested file/line (not the resolved/rounded

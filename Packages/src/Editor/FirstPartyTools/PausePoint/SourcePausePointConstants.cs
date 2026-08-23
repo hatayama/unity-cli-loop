@@ -390,5 +390,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: resolved line, resolved method display name.
         public const string ClosingBraceResolvedLineWarningFormat =
             "--line resolved to the method's closing brace at line {0}. Every return path through {1} reaches this line, including early returns, so captured variables can reflect a different path than the one you meant. To observe one specific path, target a statement line inside that path.";
+
+        // Format: original --line, --method name, remapped compiled line.
+        public const string EditedLineRemapWarningFormat =
+            "--line {0} did not resolve in method '{1}' against the last compiled source; the edited line's text was found at line {2} inside that method's compiled span, so the marker was placed there. Verify ResolvedLocation, or run 'uloop compile' and re-enable to use edited-file line numbers.";
     }
 }
