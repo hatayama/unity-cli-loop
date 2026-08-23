@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
         private Func<CompileSchema, string, CancellationToken, Task<CompileResult>> _executeCompilationAsync;
         private Func<ValidationResult> _validateCompilationState;
+        private Func<(bool WasPlayingAtRequestStart, int ActivePausePointCount)> _capturePlayModeStopWarningInputs;
 
         public CompileUseCase(
             UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService,
@@ -42,6 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(pendingCompileSessionRepository));
             _executeCompilationAsync = ExecuteCompilationWithDefaultServiceAsync;
             _validateCompilationState = () => new CompilationStateValidationService().ValidateCompilationState();
+            _capturePlayModeStopWarningInputs = CaptureLivePlayModeStopWarningInputs;
         }
 
         /// <summary>
@@ -64,6 +66,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Replaces Play-at-request-start capture so tests can exercise the Play-stop Warning
+        /// without entering Play Mode.
+        /// </summary>
+        internal void SetPlayModeStopWarningInputsForTesting(bool wasPlayingAtRequestStart, int activePausePointCount)
+        {
+            _capturePlayModeStopWarningInputs = () => (wasPlayingAtRequestStart, activePausePointCount);
+        }
+
+        /// <summary>
         /// Executes compilation processing
         /// </summary>
         /// <param name="request">Compilation parameters</param>
@@ -82,8 +93,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Captured before PlayMode preparation can stop Play Mode, so the warning reflects
             // the state compile was actually requested in, not the state after this method mutates it.
-            bool wasPlayingAtRequestStart = EditorApplication.isPlaying;
-            int activePausePointCountAtRequestStart = UloopPausePointRegistry.GetActiveCount();
+            (bool WasPlayingAtRequestStart, int ActivePausePointCount) playModeStopWarningInputs =
+                _capturePlayModeStopWarningInputs();
+            bool wasPlayingAtRequestStart = playModeStopWarningInputs.WasPlayingAtRequestStart;
+            int activePausePointCountAtRequestStart = playModeStopWarningInputs.ActivePausePointCount;
 
             DateTime utcNow = DateTime.UtcNow;
             _compileSessionLifecycleService.ClearExpiredCompileResult(utcNow);
@@ -147,6 +160,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            // Built after a successful Play stop (or when stop was unnecessary). The did-not-exit
+            // path above must not carry this Warning: Play is still running, so "discarded" would be false.
+            string playModeStopWarning = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart,
+                activePausePointCountAtRequestStart);
+
             // 2. Compilation state validation
             ValidationResult validation = _validateCompilationState();
 
@@ -164,24 +183,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     errors: new[] { new CompileIssue(validation.ErrorMessage, "", 0) },
                     warnings: Array.Empty<CompileIssue>());
                 response.ErrorCode = validation.ErrorCode;
+                response.Warning = playModeStopWarning;
                 CompileResponse persistedResponse =
                     StorePreControllerResponseIfNeeded(request, response, correlationId);
                 return persistedResponse;
             }
 
             // 3. Compilation execution
-            string pausePointWarning = CompilePlayModeStopWarningBuilder.BuildWarning(
-                wasPlayingAtRequestStart,
-                activePausePointCountAtRequestStart);
             ct.ThrowIfCancellationRequested();
-            CompileResult result = await _executeCompilationAsync(request, pausePointWarning, ct).ConfigureAwait(false);
+            CompileResult result = await _executeCompilationAsync(request, playModeStopWarning, ct).ConfigureAwait(false);
             // Why: CreateResponse may query TypeCache for missing-reference NextActions, and
             // TypeCache is a Unity Editor API that must run on the main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
 
             // 4. Result formatting
             CompileResponse successResponse =
-                CompileResponseFactory.CreateResponse(result, request.ForceRecompile, pausePointWarning);
+                CompileResponseFactory.CreateResponse(result, request.ForceRecompile, playModeStopWarning);
             StampProjectRootForDelayedResponseIfNeeded(request, successResponse);
             return successResponse;
         }
@@ -338,6 +355,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId);
         }
 
+        private static (bool WasPlayingAtRequestStart, int ActivePausePointCount) CaptureLivePlayModeStopWarningInputs()
+        {
+            return (EditorApplication.isPlaying, UloopPausePointRegistry.GetActiveCount());
+        }
+
         private static string ResolveCorrelationId(CompileSchema request)
         {
             Debug.Assert(request != null, "request must not be null");
@@ -370,14 +392,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return $"compile_{unixTimeMilliseconds}_{correlationId}";
         }
 
-        private Task<CompileResult> ExecuteCompilationWithDefaultServiceAsync(CompileSchema request, string pausePointWarning, CancellationToken ct)
+        private Task<CompileResult> ExecuteCompilationWithDefaultServiceAsync(CompileSchema request, string playModeStopWarning, CancellationToken ct)
         {
             Debug.Assert(request != null, "request must not be null");
 
             CompilationExecutionService executionService = new(
                 _compileResultSessionRepository,
                 _pendingCompileSessionRepository);
-            return executionService.ExecuteCompilationAsync(request, pausePointWarning, ct);
+            return executionService.ExecuteCompilationAsync(request, playModeStopWarning, ct);
         }
     }
 }

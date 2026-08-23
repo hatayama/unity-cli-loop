@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using NUnit.Framework;
 using UnityEditor.Compilation;
 
@@ -50,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     compileSessionLifecycleService,
                     compileResultSessionRepository,
                     pendingCompileSessionRepository);
-                useCase.SetCompilationExecutionForTesting((compileRequest, pausePointWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
                 {
                     ct.ThrowIfCancellationRequested();
                     CompileResultSessionRecorder.RecordCompileResult(
@@ -68,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(compileResultSessionRepository.StoreCount, Is.EqualTo(1));
                 Assert.That(response.Success, Is.True);
                 Assert.That(response.ProjectRoot, Is.Not.Empty);
-                // Verifies no pause-point Warning appears outside Play Mode (the only state an EditMode test can exercise).
+                // Verifies no Play-stop Warning appears outside Play Mode (the only state an EditMode test can exercise).
                 Assert.That(response.Warning, Is.Null);
                 UnityCliLoopStoredCompileResult storedResult =
                     compileResultSessionRepository.GetCompileResult("compile_test_request");
@@ -109,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     ValidationResult.FailureWithErrorCode(
                         "Compilation is already in progress. Please wait for the current compilation to finish.",
                         CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
-                useCase.SetCompilationExecutionForTesting((compileRequest, pausePointWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
                 {
                     throw new InvalidOperationException("validation failure must not start compilation");
                 });
@@ -128,6 +129,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(
                     response.ErrorCode,
                     Is.EqualTo(CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
+            }
+            finally
+            {
+                originalSnapshot.Restore();
+            }
+        }
+
+        /// <summary>
+        /// What: a validation failure after Play was active still returns and stores the Play-stop Warning.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_WhenValidationFailsAfterPlayWasActive_SetsPlayModeStopWarningOnImmediateAndStoredResponses()
+        {
+            const string expectedWarning =
+                "Play Mode was active when this compile was requested. The compile stops Play Mode and the domain reload discards the Play session state — re-establish your runtime state before continuing verification.";
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService =
+                new(
+                    UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository(),
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+
+            try
+            {
+                CompileUseCase useCase = new(
+                    compileSessionLifecycleService,
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+                useCase.SetPlayModeStopWarningInputsForTesting(
+                    wasPlayingAtRequestStart: true,
+                    activePausePointCount: 0);
+                useCase.SetCompilationStateValidationForTesting(() =>
+                    ValidationResult.FailureWithErrorCode(
+                        "Compilation is already in progress. Please wait for the current compilation to finish.",
+                        CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                {
+                    throw new InvalidOperationException("validation failure must not start compilation");
+                });
+
+                CompileResponse response = await useCase.CompileAsync(
+                    new CompileSchema
+                    {
+                        WaitForDomainReload = true,
+                        RequestId = "compile_validation_play_stop_warning",
+                        ForceRecompile = false,
+                        ReloadExternalSceneChanges = true
+                    },
+                    CancellationToken.None);
+
+                UnityCliLoopStoredCompileResult storedResult =
+                    compileResultSessionRepository.GetCompileResult("compile_validation_play_stop_warning");
+                CompileResponse storedResponse = JsonConvert.DeserializeObject<CompileResponse>(
+                    storedResult.ResultJson,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings);
+
+                Assert.That(response.Warning, Is.EqualTo(expectedWarning));
+                Assert.That(storedResult.HasResult, Is.True);
+                Assert.That(storedResponse.Warning, Is.EqualTo(expectedWarning));
             }
             finally
             {

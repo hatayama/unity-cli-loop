@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warnings: new[] { warning });
 
             CompileResponse response =
-                CompileResponseFactory.CreateResponse(result, forceRecompile: false, pausePointWarning: null);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false, playModeStopWarning: null);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.EqualTo(1));
@@ -75,7 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: null);
 
             CompileResponse response =
-                CompileResponseFactory.CreateResponse(result, forceRecompile: true, pausePointWarning: null);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: true, playModeStopWarning: null);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.Null);
@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: "Internal force compile status message.");
 
             CompileResponse response =
-                CompileResponseFactory.CreateResponse(result, forceRecompile: true, pausePointWarning: null);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: true, playModeStopWarning: null);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.Null);
@@ -144,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: null);
 
             CompileResponse response =
-                CompileResponseFactory.CreateResponse(result, forceRecompile: false, pausePointWarning: null);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false, playModeStopWarning: null);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.EqualTo(1));
@@ -179,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 preserveDetailsWhenForceRecompile: true);
 
             CompileResponse response =
-                CompileResponseFactory.CreateResponse(result, forceRecompile: true, pausePointWarning: null);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: true, playModeStopWarning: null);
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.ErrorCount, Is.EqualTo(1));
@@ -210,7 +210,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: error.message);
 
             CompileResponse response =
-                CompileResponseFactory.CreateResponse(result, forceRecompile: false, pausePointWarning: null);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false, playModeStopWarning: null);
 
             Assert.That(response.NextActions, Is.Not.Null);
             Assert.That(response.NextActions, Has.Length.EqualTo(2));
@@ -245,7 +245,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: error.message);
 
             CompileResponse response =
-                CompileResponseFactory.CreateResponse(result, forceRecompile: false, pausePointWarning: null);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false, playModeStopWarning: null);
 
             Assert.That(response.NextActions, Is.Not.Null);
             Assert.That(response.NextActions, Has.Length.EqualTo(2));
@@ -275,7 +275,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 message: error.message);
 
             CompileResponse response =
-                CompileResponseFactory.CreateResponse(result, forceRecompile: false, pausePointWarning: null);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false, playModeStopWarning: null);
 
             Assert.That(response.NextActions, Is.Null);
         }
@@ -301,7 +301,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warnings: Array.Empty<CompilerMessage>());
 
             CompileResponse response =
-                CompileResponseFactory.CreateResponse(result, forceRecompile: false, pausePointWarning: null);
+                CompileResponseFactory.CreateResponse(result, forceRecompile: false, playModeStopWarning: null);
 
             Assert.That(response.Message, Does.Contain("TestAssemblies"));
             Assert.That(response.Message, Does.Contain("com.unity.test-framework"));

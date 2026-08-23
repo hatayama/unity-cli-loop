@@ -28,14 +28,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static CompileResponse CreateResponse(
             CompileResult result,
             bool forceRecompile,
-            string pausePointWarning)
+            string playModeStopWarning)
         {
             Debug.Assert(result != null, "result must not be null");
 
             CompileResponse response = CreateResponseWithoutApiUpdaterConsent(
                 result,
                 forceRecompile,
-                pausePointWarning);
+                playModeStopWarning);
             CompileApiUpdaterConsentResponseComposer.Apply(response, result.ApiUpdaterConsentDeclined);
             if (ShouldApplyErrorNextActions(result, forceRecompile))
             {
@@ -67,11 +67,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static CompileResponse CreateResponseWithoutApiUpdaterConsent(
             CompileResult result,
             bool forceRecompile,
-            string pausePointWarning)
+            string playModeStopWarning)
         {
             if (forceRecompile && !result.PreserveDetailsWhenForceRecompile)
             {
-                return CreateForceCompileResult(result, pausePointWarning);
+                return CreateForceCompileResult(result, playModeStopWarning);
             }
 
             if (result.IsIndeterminate)
@@ -83,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     errors: null,
                     warnings: null,
                     message: result.Message ?? "Compilation status is unknown. Use get-logs to inspect the compiler output.");
-                indeterminateResponse.Warning = pausePointWarning;
+                indeterminateResponse.Warning = playModeStopWarning;
                 return indeterminateResponse;
             }
 
@@ -95,7 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings: ToIssues(result.Warnings),
                 message: AddMissingTestFrameworkReferenceHint(result.Message, result.Errors));
             response.NextActions = CreateExternalSceneChangeNextActions(result.Message);
-            response.Warning = pausePointWarning;
+            response.Warning = playModeStopWarning;
             return response;
         }
 
@@ -114,7 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ExternalSceneChangeNextActions;
         }
 
-        private static CompileResponse CreateForceCompileResult(CompileResult result, string pausePointWarning)
+        private static CompileResponse CreateForceCompileResult(CompileResult result, string playModeStopWarning)
         {
             ForceCompileUnknownResult unknownResult = ForceCompileUnknownResult.Create();
             CompileResponse response = new CompileResponse(
@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message: unknownResult.Message);
             response.ErrorCode = ForceCompileUnknownResult.ErrorCodeText;
             response.NextActions = new[] { ForceCompileUnknownResult.NextActionText };
-            response.Warning = pausePointWarning;
+            response.Warning = playModeStopWarning;
             return response;
         }
 

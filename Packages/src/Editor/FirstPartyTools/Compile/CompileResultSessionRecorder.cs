@@ -17,14 +17,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool forceRecompile,
             CompileResult result,
             string correlationId,
-            string pausePointWarning = null)
+            string playModeStopWarning = null)
         {
             Debug.Assert(compileResultSessionRepository != null, "compileResultSessionRepository must not be null");
             Debug.Assert(pendingCompileSessionRepository != null, "pendingCompileSessionRepository must not be null");
             Debug.Assert(!string.IsNullOrWhiteSpace(requestId), "requestId must not be null or whitespace");
             Debug.Assert(result != null, "result must not be null");
 
-            CompileResponse response = CompileResponseFactory.CreateResponse(result, forceRecompile, pausePointWarning);
+            CompileResponse response = CompileResponseFactory.CreateResponse(result, forceRecompile, playModeStopWarning);
             return RecordCompileResponse(
                 compileResultSessionRepository,
                 pendingCompileSessionRepository,

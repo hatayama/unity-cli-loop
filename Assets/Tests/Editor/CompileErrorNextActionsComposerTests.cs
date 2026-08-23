@@ -246,7 +246,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response = CompileResponseFactory.CreateResponse(
                 result,
                 forceRecompile: false,
-                pausePointWarning: null);
+                playModeStopWarning: null);
 
             Assert.That(response.NextActions, Is.EqualTo(new[] { FileScopedNamespaceNextAction }));
         }
@@ -271,7 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response = CompileResponseFactory.CreateResponse(
                 result,
                 forceRecompile: true,
-                pausePointWarning: null);
+                playModeStopWarning: null);
 
             Assert.That(response.NextActions, Is.EqualTo(new[] { ExistingNextAction }));
         }
@@ -296,7 +296,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response = CompileResponseFactory.CreateResponse(
                 result,
                 forceRecompile: false,
-                pausePointWarning: null);
+                playModeStopWarning: null);
 
             Assert.That(response.NextActions, Is.Null);
         }
@@ -320,7 +320,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response = CompileResponseFactory.CreateResponse(
                 result,
                 forceRecompile: false,
-                pausePointWarning: null);
+                playModeStopWarning: null);
 
             Assert.That(
                 response.NextActions,
@@ -480,7 +480,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response = CompileResponseFactory.CreateResponse(
                 result,
                 forceRecompile: false,
-                pausePointWarning: null);
+                playModeStopWarning: null);
 
             Assert.That(response.NextActions, Is.EqualTo(new[] { NUnitFrameworkNextAction }));
         }
@@ -496,7 +496,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response = CompileResponseFactory.CreateResponse(
                 result,
                 forceRecompile: false,
-                pausePointWarning: null);
+                playModeStopWarning: null);
 
             Assert.That(response.NextActions, Is.Null);
         }
@@ -512,7 +512,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response = CompileResponseFactory.CreateResponse(
                 result,
                 forceRecompile: false,
-                pausePointWarning: null);
+                playModeStopWarning: null);
 
             Assert.That(response.NextActions, Is.Null);
         }
@@ -536,7 +536,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response = CompileResponseFactory.CreateResponse(
                 result,
                 forceRecompile: false,
-                pausePointWarning: null);
+                playModeStopWarning: null);
 
             Assert.That(
                 response.NextActions,
