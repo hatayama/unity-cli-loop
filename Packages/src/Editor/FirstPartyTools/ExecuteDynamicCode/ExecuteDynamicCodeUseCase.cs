@@ -4,8 +4,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-using UnityEditor;
-
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
@@ -19,11 +17,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private readonly IDynamicCodeExecutionRuntime _runtime;
         private readonly DynamicCodeExecutionResponseFactory _responseFactory;
+        private readonly IDynamicCodeEditorStateReader _editorStateReader;
 
-        public ExecuteDynamicCodeUseCase(IDynamicCodeExecutionRuntime runtime)
+        public ExecuteDynamicCodeUseCase(
+            IDynamicCodeExecutionRuntime runtime,
+            IDynamicCodeEditorStateReader editorStateReader = null)
         {
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             _responseFactory = new DynamicCodeExecutionResponseFactory();
+            _editorStateReader = editorStateReader ?? new DynamicCodeEditorStateReader();
         }
 
         public async Task<ExecuteDynamicCodeResponse> ExecuteAsync(
@@ -136,8 +138,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // always written so a stopped versus playing Editor is visible after ShouldSerialize
         // omits EditorPaused=false.
         // Why async: the preceding ConfigureAwait(false) continuations may resume this method on a
-        // thread-pool thread, and EditorApplication.isPaused throws when read off the main thread.
-        private static async Task ApplyPauseStateAsync(
+        // thread-pool thread, and the default reader reads EditorApplication off the main thread.
+        private async Task ApplyPauseStateAsync(
             ExecuteDynamicCodeResponse response,
             CancellationToken cancellationToken)
         {
@@ -146,9 +148,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // MainThreadSwitcher itself, so the code below always runs there regardless.
             await MainThreadSwitcher.SwitchToMainThread(cancellationToken);
 
-            response.EditorPlaying = EditorApplication.isPlaying;
+            response.EditorPlaying = _editorStateReader.IsPlaying;
             (bool editorPaused, string activePausePointId) = ExecuteDynamicCodePauseStateResolver.Resolve(
-                EditorApplication.isPaused, UloopPausePointRegistry.GetActivePausePointId());
+                _editorStateReader.IsPaused, UloopPausePointRegistry.GetActivePausePointId());
             response.EditorPaused = editorPaused;
             response.ActivePausePointId = activePausePointId;
         }
