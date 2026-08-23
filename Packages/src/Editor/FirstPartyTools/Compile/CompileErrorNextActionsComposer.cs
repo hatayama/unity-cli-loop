@@ -31,7 +31,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 messages[index] = errors[index].message;
             }
 
-            string[] additions = CompileErrorNextActionsBuilder.Build(messages);
+            string[] additions = CompileErrorNextActionsBuilder.Build(
+                messages,
+                CompileMissingReferenceAssemblyLookup.CreateLazyFinder());
             if (additions.Length == 0)
             {
                 return;
