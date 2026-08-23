@@ -132,7 +132,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Lets an agent recognize a post-interrupt state (e.g. a pause point hit mid-execution)
         // instead of mistaking a stale-looking result for a bug. ActivePausePointId stays empty
-        // when the Editor is paused for a reason unrelated to a pause point.
+        // when the Editor is paused for a reason unrelated to a pause point. EditorPlaying is
+        // always written so a stopped versus playing Editor is visible after ShouldSerialize
+        // omits EditorPaused=false.
         // Why async: the preceding ConfigureAwait(false) continuations may resume this method on a
         // thread-pool thread, and EditorApplication.isPaused throws when read off the main thread.
         private static async Task ApplyPauseStateAsync(
@@ -144,6 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // MainThreadSwitcher itself, so the code below always runs there regardless.
             await MainThreadSwitcher.SwitchToMainThread(cancellationToken);
 
+            response.EditorPlaying = EditorApplication.isPlaying;
             (bool editorPaused, string activePausePointId) = ExecuteDynamicCodePauseStateResolver.Resolve(
                 EditorApplication.isPaused, UloopPausePointRegistry.GetActivePausePointId());
             response.EditorPaused = editorPaused;
