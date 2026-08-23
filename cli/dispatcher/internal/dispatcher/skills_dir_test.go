@@ -1077,3 +1077,18 @@ func TestParseSkillsOptionsRejectsDuplicateOutputDir(t *testing.T) {
 		t.Fatalf("error should call out the duplicate option: %v", err)
 	}
 }
+
+// Tests that a POSIX-style absolute --output-dir is rejected on Windows, where
+// filepath.Abs would silently anchor it under the current drive, and accepted
+// on other platforms and for Windows-style paths.
+func TestPosixStyleOutputDirError(t *testing.T) {
+	if err := posixStyleOutputDirError("windows", "/c/apm/skills"); err == nil {
+		t.Fatal("a POSIX-style path should be rejected on Windows")
+	}
+	if err := posixStyleOutputDirError("windows", `C:\apm\skills`); err != nil {
+		t.Fatalf("a Windows path should be accepted on Windows: %v", err)
+	}
+	if err := posixStyleOutputDirError("linux", "/tmp/skills"); err != nil {
+		t.Fatalf("a POSIX path should be accepted on non-Windows platforms: %v", err)
+	}
+}

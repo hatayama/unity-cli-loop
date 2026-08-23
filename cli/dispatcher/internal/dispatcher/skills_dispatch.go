@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 
@@ -68,6 +70,10 @@ func runSkillsDirSubcommand(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
+	if err := posixStyleOutputDirError(runtime.GOOS, directory); err != nil {
+		clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
+		return 1
+	}
 	// Resolved once here so the three subcommand runners share one absolute
 	// path and one failure path instead of each repeating the resolution.
 	absDir, err := filepath.Abs(directory)
@@ -104,6 +110,24 @@ func runSkillsDirSubcommand(
 			NextActions: []string{"Use " + skillsOutputDirFlagName + " with the install, uninstall, or list subcommand."},
 		}, skillsDirErrorContext())
 		return 1
+	}
+}
+
+// posixStyleOutputDirError rejects a POSIX-style absolute path on Windows
+// (Git Bash's /c/apm or /tmp/skills). Such a path has no volume name, so
+// filepath.Abs would silently anchor it under the current drive and the sync
+// would write to an unintended directory. Rejected rather than normalized:
+// the dispatcher cannot know which drive the shell meant. The goos parameter
+// exists so the rule is testable on every platform.
+func posixStyleOutputDirError(goos string, directory string) error {
+	if goos != "windows" || !strings.HasPrefix(directory, "/") {
+		return nil
+	}
+	return &clierrors.ArgumentError{
+		Message:     "The " + skillsOutputDirFlagName + " path " + directory + " is a POSIX-style path, which is ambiguous on Windows.",
+		Option:      skillsOutputDirFlagName,
+		Command:     clicore.SkillsCommandName,
+		NextActions: []string{"Pass a Windows path such as C:\\path\\to\\skills."},
 	}
 }
 
