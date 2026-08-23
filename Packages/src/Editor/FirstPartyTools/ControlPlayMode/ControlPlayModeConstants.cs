@@ -10,5 +10,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal const string StoppedByCliRunTestsCancel = "cli-run-tests-cancel";
         internal const string StoppedByScriptCompilation = "script-compilation";
         internal const string StoppedByUnknown = "unknown";
+
+        internal const string AlreadyRunningPlayMessage =
+            "Play mode was already running; nothing to start or resume.";
     }
 }

@@ -173,6 +173,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     true);
             }
 
+            // Why: already-running Play used to report "Play mode started" even when Changed
+            // was false, which made a no-op look like a new session.
+            if (wasPlaying && !wasPaused)
+            {
+                return ControlPlayModeActionResult.FromState(
+                    ControlPlayModeConstants.AlreadyRunningPlayMessage,
+                    false,
+                    false);
+            }
+
             // Why only when entering Play from Edit: SaveScene does not work while already playing,
             // and resume-from-pause must not rewrite Scene assets.
             if (!wasPlaying)
