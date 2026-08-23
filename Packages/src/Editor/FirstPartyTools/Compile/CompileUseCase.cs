@@ -170,7 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // 3. Compilation execution
-            string pausePointWarning = CompilePausePointWarningBuilder.BuildWarning(
+            string pausePointWarning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart,
                 activePausePointCountAtRequestStart);
             ct.ThrowIfCancellationRequested();
