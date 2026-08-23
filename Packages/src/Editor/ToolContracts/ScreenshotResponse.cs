@@ -38,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public bool TimedOut { get; set; }
         public string Message { get; set; } = "";
         public string Warning { get; set; } = "";
+        public string ResolvedCaptureMode { get; set; } = "";
         public string[] NextActions { get; set; } = new string[0];
 
         public int ScreenshotCount => Screenshots.Count;

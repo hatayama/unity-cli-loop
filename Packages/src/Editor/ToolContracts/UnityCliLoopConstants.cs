@@ -104,6 +104,8 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             "unavailable: window screenshots include Unity Editor chrome; use capture-mode rendering for mouse input coordinates";
         public const string SCREENSHOT_DEFAULT_WINDOW_NAME = "Game";
         public const string SCREENSHOT_SIMULATOR_WINDOW_NAME = "Simulator";
+        public const string SCREENSHOT_RESOLVED_CAPTURE_MODE_WINDOW = "window";
+        public const string SCREENSHOT_RESOLVED_CAPTURE_MODE_RENDERING = "rendering";
 
         public const int CORRELATION_ID_LENGTH = 8;
         public const string GUID_FORMAT_NO_HYPHENS = "N";

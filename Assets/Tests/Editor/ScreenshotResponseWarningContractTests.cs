@@ -57,5 +57,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(
                     "This window capture includes Unity Editor chrome. If you wanted the Game View image (typical during Play Mode), re-run with --capture-mode rendering."));
         }
+
+        /// <summary>
+        /// What: ResolvedCaptureMode is always present on the wire as window or rendering.
+        /// </summary>
+        [Test]
+        public void ScreenshotResponse_WhenResolvedCaptureModeIsSet_SerializesExactWireName()
+        {
+            ScreenshotResponse response = new ScreenshotResponse
+            {
+                ResolvedCaptureMode = "rendering"
+            };
+
+            string json = JsonConvert.SerializeObject(
+                response,
+                Formatting.None,
+                JsonRpcResponseSerializer.Settings);
+            JObject parsed = JObject.Parse(json);
+
+            Assert.That(json, Does.Contain("\"ResolvedCaptureMode\":\"rendering\""));
+            Assert.That(parsed.Value<string>("ResolvedCaptureMode"), Is.EqualTo("rendering"));
+        }
     }
 }

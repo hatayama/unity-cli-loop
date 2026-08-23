@@ -9,7 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public float ResolutionScale { get; set; } = 1.0f;
         public WindowMatchMode MatchMode { get; set; } = WindowMatchMode.exact;
         public string OutputDirectory { get; set; } = "";
-        public CaptureMode CaptureMode { get; set; } = CaptureMode.window;
+        public CaptureMode CaptureMode { get; set; } = CaptureMode.auto;
         public bool AnnotateElements { get; set; } = false;
         public bool ElementsOnly { get; set; } = false;
         public bool AnnotateRaycastGrid { get; set; } = false;

@@ -262,13 +262,14 @@
           },
           "CaptureMode": {
             "type": "string",
-            "description": "window - capture EditorWindow including toolbar, rendering - capture game rendering only (PlayMode required), GameView - alias for rendering. Rendering screenshots return ScreenshotToInputFormula for converting raw image pixels before calling simulate-mouse-input (including --dry-run) or simulate-mouse-ui.",
+            "description": "auto - rendering in PlayMode and window otherwise, window - capture EditorWindow including toolbar, rendering - capture game rendering only (PlayMode required), GameView - alias for rendering. Rendering screenshots return ScreenshotToInputFormula for converting raw image pixels before calling simulate-mouse-input (including --dry-run) or simulate-mouse-ui.",
             "enum": [
+              "auto",
               "window",
               "rendering",
               "GameView"
             ],
-            "default": "window"
+            "default": "auto"
           },
           "AnnotateElements": {
             "type": "boolean",

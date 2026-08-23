@@ -17,11 +17,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const int ANNOTATION_OVERLAY_RENDER_WAIT_FRAMES = 2;
 
+        private readonly IScreenshotEditorStateReader _editorStateReader;
+
+        internal ScreenshotUseCase(IScreenshotEditorStateReader editorStateReader = null)
+        {
+            _editorStateReader = editorStateReader ?? new ScreenshotEditorStateReader();
+        }
+
         public async Task<ScreenshotResponse> CaptureAsync(
             ScreenshotSchema request,
             CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
+
+            // Why resolve before Validate: annotation flags are rejected unless CaptureMode is
+            // rendering. Leaving auto unresolved would reject Play Mode annotate-elements.
+            request.CaptureMode = ScreenshotCaptureModeResolver.Resolve(
+                request.CaptureMode,
+                _editorStateReader.IsPlaying);
+            string resolvedCaptureMode = ScreenshotCaptureModeResolver.ToWireName(request.CaptureMode);
 
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
@@ -36,12 +50,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             ScreenshotParameterValidator.Validate(request);
 
+            ScreenshotResponse response;
             if (request.CaptureMode == CaptureMode.rendering)
             {
-                return await CaptureRenderingAsync(request, correlationId, ct).ConfigureAwait(false);
+                response = await CaptureRenderingAsync(request, correlationId, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                response = await CaptureWindowsAsync(request, correlationId, ct).ConfigureAwait(false);
             }
 
-            return await CaptureWindowsAsync(request, correlationId, ct).ConfigureAwait(false);
+            response.ResolvedCaptureMode = resolvedCaptureMode;
+            return response;
         }
 
         private async Task<ScreenshotResponse> CaptureRenderingAsync(
