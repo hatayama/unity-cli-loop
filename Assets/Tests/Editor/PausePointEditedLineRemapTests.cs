@@ -16,10 +16,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private const string RemapFixtureFile =
             "Assets/Tests/Editor/SourcePausePointResolver/Fixtures/EditedLineRemapFixture.cs";
+        private const string RoundForwardFixtureFile =
+            "Assets/Tests/Editor/SourcePausePointResolver/Fixtures/EditedLineRemapRoundForwardFixture.cs";
         private const int UniqueTargetStatementLine = 10;
         private const int UniqueOtherStatementLine = 16;
         private const int DuplicateOtherStatementLine = 30;
         private const int ZeroMatchOtherStatementLine = 36;
+        private const int CommentOtherCommentLine = 16;
 
         private const string ExpectedRemapWarning =
             "--line 16 did not resolve in method 'UniqueTarget' against the last compiled source; the edited line's text was found at line 10 inside that method's compiled span, so the marker was placed there. Verify ResolvedLocation, or run 'uloop compile' and re-enable to use edited-file line numbers.";
@@ -258,6 +261,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 failed.NearbyCompiledMethods,
                 hasActiveHotReloadPatches: false,
                 DuplicateOtherStatementLine,
+                requestedLineReadOk: false,
+                requestedLineEditedText: string.Empty,
+                compiledSourceLinesOrNull: null);
+            Assert.That(response.Message, Is.EqualTo(expectedMessage));
+        }
+
+        /// <summary>
+        /// What: a unique span match that only rounds forward on re-resolve keeps the original failure.
+        /// </summary>
+        [Test]
+        public void Enable_WhenRemappedLineRoundsForward_KeepsResolveFailure()
+        {
+            SourcePausePointResolveResult failed = SourcePausePointResolver.Resolve(
+                RoundForwardFixtureFile,
+                CommentOtherCommentLine,
+                "CommentTarget");
+            Assert.That(failed.Success, Is.False, failed.ErrorMessage);
+            SourcePausePointResolveResult rounded = SourcePausePointResolver.Resolve(
+                RoundForwardFixtureFile,
+                9,
+                "CommentTarget");
+            Assert.That(rounded.Success, Is.True, rounded.ErrorMessage);
+            Assert.That(rounded.Resolution.ResolvedLine, Is.Not.EqualTo(9));
+
+            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = RoundForwardFixtureFile,
+                Line = CommentOtherCommentLine,
+                Method = "CommentTarget",
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
+            string expectedMessage = PausePointEnableWarnings.BuildResolveFailureMessage(
+                failed.ErrorMessage,
+                failed.NearbyCompiledMethods,
+                hasActiveHotReloadPatches: false,
+                CommentOtherCommentLine,
                 requestedLineReadOk: false,
                 requestedLineEditedText: string.Empty,
                 compiledSourceLinesOrNull: null);

@@ -64,7 +64,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             SourcePausePointResolveResult retry = SourcePausePointResolver.Resolve(file, remappedLine, method);
-            if (!retry.Success)
+            // Why exact line: Resolve rounds a comment or continuation forward, and the
+            // remap warning claims the marker was placed at remappedLine.
+            if (!retry.Success || retry.Resolution.ResolvedLine != remappedLine)
             {
                 return (failedResult, string.Empty);
             }
