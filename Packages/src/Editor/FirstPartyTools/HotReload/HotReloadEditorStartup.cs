@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             EditorApplication.update += CaptureOnFirstUpdateTick;
+            HotReloadPlayModeEntryDropRecorder.Initialize();
         }
     }
 }
