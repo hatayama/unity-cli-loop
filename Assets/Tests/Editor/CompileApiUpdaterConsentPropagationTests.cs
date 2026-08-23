@@ -95,7 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     compileResultSessionRepository,
                     pendingCompileSessionRepository);
                 useCase.SetCompilationStateValidationForTesting(() => ValidationResult.Success());
-                useCase.SetCompilationExecutionForTesting((compileRequest, pausePointWarning, ct) =>
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
                 {
                     ct.ThrowIfCancellationRequested();
                     return Task.FromResult(executionResult);
@@ -131,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response = CompileResponseFactory.CreateResponse(
                 result,
                 forceRecompile: false,
-                pausePointWarning: "Play Mode was active with 2 enabled pause point(s).");
+                playModeStopWarning: "Play Mode was active with 2 enabled pause point(s).");
 
             Assert.That(
                 response.Warning,
@@ -160,7 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResponse response = CompileResponseFactory.CreateResponse(
                 result,
                 forceRecompile: true,
-                pausePointWarning: null);
+                playModeStopWarning: null);
 
             Assert.That(response.Warning, Is.EqualTo(WarningText));
             Assert.That(

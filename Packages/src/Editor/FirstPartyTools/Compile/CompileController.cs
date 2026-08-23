@@ -22,8 +22,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private List<CompilerMessage> _compileMessages = new();
         private TaskCompletionSource<CompileResult> _currentCompileTask;
         private bool _isForceCompile = false;
-        private string _pendingPausePointWarning;
+        private string _pendingPlayModeStopWarning;
         private bool _reloadExternalSceneChanges = true;
+        private Func<bool, (bool CanProceed, string Message, string[] ScenePaths)> _resolveExternalSceneChangesForTesting;
         private CompileResultRecordingContext _resultRecordingContext = CompileResultRecordingContext.Disabled();
         private DateTime _compileStartedAtUtc = DateTime.MinValue;
         private int _assemblyFinishedCount;
@@ -99,10 +100,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Replaces external Scene-change resolution so tests can exercise the early-return
+        /// recording path without mutating open Scenes.
+        /// </summary>
+        internal void SetExternalSceneChangeResolutionForTesting(
+            Func<bool, (bool CanProceed, string Message, string[] ScenePaths)> resolveExternalSceneChanges)
+        {
+            UnityEngine.Debug.Assert(resolveExternalSceneChanges != null, "resolveExternalSceneChanges must not be null");
+            _resolveExternalSceneChangesForTesting = resolveExternalSceneChanges ??
+                throw new ArgumentNullException(nameof(resolveExternalSceneChanges));
+        }
+
+        private (bool CanProceed, string Message, string[] ScenePaths) ResolveExternalSceneChanges()
+        {
+            if (_resolveExternalSceneChangesForTesting != null)
+            {
+                return _resolveExternalSceneChangesForTesting(_reloadExternalSceneChanges);
+            }
+
+            return ExternalSceneChangeTracker.ResolveForCompile(_reloadExternalSceneChanges);
+        }
+
+        /// <summary>
         /// Executes compilation asynchronously.
         /// </summary>
         /// <param name="forceRecompile">Whether to force a recompile.</param>
-        /// <param name="pausePointWarning">Optional Warning to carry onto the shaped response, e.g. when Play Mode was active with enabled pause points.</param>
+        /// <param name="playModeStopWarning">Optional Warning to carry onto the shaped response when compile was requested during Play Mode.</param>
         /// <param name="ct">Cancellation token for the compile execution.</param>
         /// <returns>The compilation result.</returns>
         /// <exception cref="InvalidOperationException">Thrown when the task is not found during compilation.</exception>
@@ -110,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Callers must validate editor compilation state before invoking compile execution;
         /// the production pipeline does this in CompileUseCase.
         /// </remarks>
-        public async Task<CompileResult> TryCompileAsync(bool forceRecompile, string pausePointWarning, CancellationToken ct)
+        public async Task<CompileResult> TryCompileAsync(bool forceRecompile, string playModeStopWarning, CancellationToken ct)
         {
             if (_isCompiling)
             {
@@ -130,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             (bool CanProceed, string Message, string[] ScenePaths) sceneChangeResult =
-                ExternalSceneChangeTracker.ResolveForCompile(_reloadExternalSceneChanges);
+                ResolveExternalSceneChanges();
             if (!sceneChangeResult.CanProceed)
             {
                 VibeLogger.LogWarning(
@@ -143,11 +166,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     });
                 CompileResult result =
                     CompileResultFactory.CreateExternalSceneChangeFailureResult(sceneChangeResult);
-                RecordCompileResultIfNeeded(result, pausePointWarning: null);
+                RecordCompileResultIfNeeded(result, playModeStopWarning);
                 return result;
             }
 
-            _pendingPausePointWarning = pausePointWarning;
+            _pendingPlayModeStopWarning = playModeStopWarning;
             _isCompiling = true;
             _compileMessages.Clear();
             _assemblyFinishedCount = 0;
@@ -325,7 +348,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Completion subscribers are outside this controller, so state cleanup cannot depend on them returning.
             try
             {
-                RecordCompileResultIfNeeded(resultToComplete, _pendingPausePointWarning);
+                RecordCompileResultIfNeeded(resultToComplete, _pendingPlayModeStopWarning);
 
                 if (unregisterEvents)
                 {
@@ -345,7 +368,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     _isForceCompile = false;
                     _resultRecordingContext = CompileResultRecordingContext.Disabled();
                     _compileStartedAtUtc = DateTime.MinValue;
-                    _pendingPausePointWarning = null;
+                    _pendingPlayModeStopWarning = null;
                     CompileApiUpdaterConsentState.EndCliCompile();
                 }
 
@@ -367,7 +390,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _isForceCompile = false;
             _resultRecordingContext = CompileResultRecordingContext.Disabled();
             _compileStartedAtUtc = DateTime.MinValue;
-            _pendingPausePointWarning = null;
+            _pendingPlayModeStopWarning = null;
             CompileApiUpdaterConsentState.EndCliCompile();
             compileTask.TrySetCanceled();
         }
@@ -392,7 +415,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ClearUntransferredCompileState(compileTask, eventsRegistered: false);
         }
 
-        private void RecordCompileResultIfNeeded(CompileResult result, string pausePointWarning)
+        private void RecordCompileResultIfNeeded(CompileResult result, string playModeStopWarning)
         {
             UnityEngine.Debug.Assert(result != null, "result must not be null");
 
@@ -408,7 +431,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _resultRecordingContext.ForceRecompile,
                 result,
                 _resultRecordingContext.RequestId,
-                pausePointWarning);
+                playModeStopWarning);
         }
 
         /// <summary>
@@ -519,7 +542,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _reloadExternalSceneChanges = true;
             _resultRecordingContext = CompileResultRecordingContext.Disabled();
             _compileStartedAtUtc = DateTime.MinValue;
-            _pendingPausePointWarning = null;
+            _pendingPlayModeStopWarning = null;
             CompileApiUpdaterConsentState.EndCliCompile();
         }
 

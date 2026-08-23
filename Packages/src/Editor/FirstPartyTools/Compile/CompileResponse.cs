@@ -75,7 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Optional warning about a condition compile does not block on, e.g. Play Mode being
-        /// active with enabled pause points whose patches the domain reload will discard.
+        /// active when compile was requested so the domain reload discards Play session state.
         /// </summary>
         public string Warning { get; set; }
 

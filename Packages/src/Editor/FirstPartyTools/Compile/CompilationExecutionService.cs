@@ -34,9 +34,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Execute compilation asynchronously
         /// </summary>
         /// <param name="request">Compile request with force and delayed-result settings.</param>
-        /// <param name="pausePointWarning">Optional Warning to carry onto the shaped response, e.g. when Play Mode was active with enabled pause points.</param>
+        /// <param name="playModeStopWarning">Optional Warning to carry onto the shaped response when compile was requested during Play Mode.</param>
         /// <returns>Compilation result</returns>
-        public async Task<CompileResult> ExecuteCompilationAsync(CompileSchema request, string pausePointWarning, CancellationToken ct)
+        public async Task<CompileResult> ExecuteCompilationAsync(CompileSchema request, string playModeStopWarning, CancellationToken ct)
         {
             if (request == null)
             {
@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _pendingCompileSessionRepository);
             compileController.SetResultRecordingContext(CompileResultRecordingContext.Create(request));
             compileController.SetExternalSceneChangePolicy(request.ReloadExternalSceneChanges);
-            return await compileController.TryCompileAsync(request.ForceRecompile, pausePointWarning, ct).ConfigureAwait(false);
+            return await compileController.TryCompileAsync(request.ForceRecompile, playModeStopWarning, ct).ConfigureAwait(false);
         }
     }
 }
