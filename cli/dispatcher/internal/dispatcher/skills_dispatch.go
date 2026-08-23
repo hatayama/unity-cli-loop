@@ -1,7 +1,6 @@
 package dispatcher
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -89,8 +88,15 @@ func runSkillsDirSubcommand(
 		clierrors.WriteClassifiedError(stderr, err, skillsDirErrorContext())
 		return 1
 	}
+	// An ArgumentError, not a bare error: a file at the destination is a
+	// caller mistake and must not surface as a retryable INTERNAL_ERROR.
 	if err == nil && !info.IsDir() {
-		clierrors.WriteClassifiedError(stderr, fmt.Errorf("the %s path %s exists but is not a directory", skillsOutputDirFlagName, absDir), skillsDirErrorContext())
+		clierrors.WriteClassifiedError(stderr, &clierrors.ArgumentError{
+			Message:     "The " + skillsOutputDirFlagName + " path " + absDir + " exists but is not a directory.",
+			Option:      skillsOutputDirFlagName,
+			Command:     clicore.SkillsCommandName,
+			NextActions: []string{"Pass an existing directory or a creatable path to " + skillsOutputDirFlagName + "."},
+		}, skillsDirErrorContext())
 		return 1
 	}
 	switch subcommand {
@@ -116,11 +122,13 @@ func runSkillsDirSubcommand(
 // posixStyleOutputDirError rejects a POSIX-style absolute path on Windows
 // (Git Bash's /c/apm or /tmp/skills). Such a path has no volume name, so
 // filepath.Abs would silently anchor it under the current drive and the sync
-// would write to an unintended directory. Rejected rather than normalized:
+// would write to an unintended directory. A double-slash prefix is exempt:
+// //server/share is a valid UNC path on Windows (forward slashes are accepted
+// separators) and carries its own volume. Rejected rather than normalized:
 // the dispatcher cannot know which drive the shell meant. The goos parameter
 // exists so the rule is testable on every platform.
 func posixStyleOutputDirError(goos string, directory string) error {
-	if goos != "windows" || !strings.HasPrefix(directory, "/") {
+	if goos != "windows" || !strings.HasPrefix(directory, "/") || strings.HasPrefix(directory, "//") {
 		return nil
 	}
 	return &clierrors.ArgumentError{

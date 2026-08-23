@@ -1103,6 +1103,11 @@ func TestPosixStyleOutputDirError(t *testing.T) {
 	if err := posixStyleOutputDirError("linux", "/tmp/skills"); err != nil {
 		t.Fatalf("a POSIX path should be accepted on non-Windows platforms: %v", err)
 	}
+	// A double-slash prefix is a UNC path on Windows, which carries its own
+	// volume and is therefore not ambiguous.
+	if err := posixStyleOutputDirError("windows", "//server/share/skills"); err != nil {
+		t.Fatalf("a UNC path should be accepted on Windows: %v", err)
+	}
 }
 
 // Tests that a store directory matching the skill name only by letter case is
@@ -1357,5 +1362,16 @@ func TestRunSkillsDirUninstallDistinguishesMetaDebrisFromUserMeta(t *testing.T) 
 	}
 	if _, err := os.Stat(installedDir); err != nil {
 		t.Fatalf("a directory holding a user's .meta file must be kept: %v", err)
+	}
+}
+
+// Tests that a whitespace-only --output-dir value (a typical unset shell
+// variable) is rejected as a missing value in both option forms.
+func TestParseSkillsOptionsRejectsWhitespaceOutputDir(t *testing.T) {
+	if _, err := parseSkillsOptions([]string{"--output-dir", " "}); err == nil {
+		t.Fatal("expected error for a whitespace-only --output-dir value")
+	}
+	if _, err := parseSkillsOptions([]string{"--output-dir= "}); err == nil {
+		t.Fatal("expected error for a whitespace-only --output-dir= value")
 	}
 }

@@ -25,29 +25,12 @@ func parseSkillsOptions(args []string) (skillCommandOptions, error) {
 			options.global = true
 		case arg == "--flat":
 			options.flat = true
-		case arg == skillsOutputDirFlagName:
-			// Rejected rather than letting the last occurrence win, matching
-			// `uloop install --dir`: two destinations in one invocation is
-			// ambiguous, and silently syncing only one of them would hide it.
-			if options.outputDir != "" {
-				return skillCommandOptions{}, duplicateSkillsOutputDirError()
+		case arg == skillsOutputDirFlagName || strings.HasPrefix(arg, skillsOutputDirFlagName+"="):
+			nextIndex, err := parseOutputDirOption(&options, args, index)
+			if err != nil {
+				return skillCommandOptions{}, err
 			}
-			// A flag-like next token (e.g. --global) must not be swallowed as the
-			// destination, or the mutual-exclusion validation silently misses it.
-			// Paths that genuinely start with a dash go through --output-dir=<path>.
-			if index+1 >= len(args) || args[index+1] == "" || strings.HasPrefix(args[index+1], "-") {
-				return skillCommandOptions{}, missingSkillsOutputDirValueError()
-			}
-			index++
-			options.outputDir = args[index]
-		case strings.HasPrefix(arg, skillsOutputDirFlagName+"="):
-			if options.outputDir != "" {
-				return skillCommandOptions{}, duplicateSkillsOutputDirError()
-			}
-			options.outputDir = strings.TrimPrefix(arg, skillsOutputDirFlagName+"=")
-			if options.outputDir == "" {
-				return skillCommandOptions{}, missingSkillsOutputDirValueError()
-			}
+			index = nextIndex
 		default:
 			if err := appendSkillTarget(&options, seenTargets, arg); err != nil {
 				return skillCommandOptions{}, err
@@ -76,6 +59,34 @@ func appendSkillTarget(options *skillCommandOptions, seenTargets map[string]bool
 	options.targets = append(options.targets, targetConfigs[targetID])
 	seenTargets[targetID] = true
 	return nil
+}
+
+// parseOutputDirOption consumes the --output-dir option at args[index] in
+// either value form and returns the index of the last consumed token.
+func parseOutputDirOption(options *skillCommandOptions, args []string, index int) (int, error) {
+	// Rejected rather than letting the last occurrence win, matching
+	// `uloop install --dir`: two destinations in one invocation is
+	// ambiguous, and silently syncing only one of them would hide it.
+	if options.outputDir != "" {
+		return index, duplicateSkillsOutputDirError()
+	}
+	if value, found := strings.CutPrefix(args[index], skillsOutputDirFlagName+"="); found {
+		if strings.TrimSpace(value) == "" {
+			return index, missingSkillsOutputDirValueError()
+		}
+		options.outputDir = value
+		return index, nil
+	}
+	// A flag-like next token (e.g. --global) must not be swallowed as the
+	// destination, or the mutual-exclusion validation silently misses it, and a
+	// whitespace-only token (an unset shell variable) must not become a
+	// directory literally named after it. Paths that genuinely start with a
+	// dash go through --output-dir=<path>.
+	if index+1 >= len(args) || strings.TrimSpace(args[index+1]) == "" || strings.HasPrefix(args[index+1], "-") {
+		return index, missingSkillsOutputDirValueError()
+	}
+	options.outputDir = args[index+1]
+	return index + 1, nil
 }
 
 func duplicateSkillsOutputDirError() error {
