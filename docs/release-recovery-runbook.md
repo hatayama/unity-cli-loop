@@ -34,11 +34,6 @@ do not try to repair the broken release in place.
      | jq -r '.[].verificationResult.signature.certificate.sourceRepositoryDigest'
    ```
 
-The 2026-07-17 recovery followed this procedure: runner beta.48 was left
-broken, the next release-please PR produced runner beta.49, and the following
-package release pinned beta.49. The normal publish run, tag, and attestations
-all resolved to the same commit.
-
 ## Why a broken release cannot be revived
 
 Do not create a new tag, draft, or publish run for the historical version.
@@ -53,9 +48,9 @@ Revival is structurally impossible for three independent reasons:
    approved event commit. A new run for a historical version therefore fails
    before it can create a tag or publish assets.
 
-For example, beta.48's tag pointed at `2d8d1b94` while its published asset
-attestations carried `2c73c6ac`. Reusing that version would preserve the same
-invariant violation.
+Reusing an affected version cannot repair this invariant: its tag and asset
+attestations would still identify different commits. Recovery must move to a
+new version whose release data agrees.
 
 ## When rerun recovery is valid
 
@@ -102,18 +97,6 @@ that version. Recovery is limited to two paths:
   this change.
 
 ## Operational notes
-
-### Preserved negative attestation specimen
-
-Do not delete `uloop-project-runner-v3.0.0-beta.48`. It is an intentionally
-preserved broken release: its tag commit is `2d8d1b94`, while its asset
-attestations carry `2c73c6ac`.
-
-This is the only current production specimen that can prove attestation
-mismatches fail against real release data. Use it to verify each of the
-following rejects a mismatched release: the publish workflow digest check,
-sync's `verify_cli_release_attestations`, and the dispatcher download-time
-verification. Do not pin this version; use beta.49 or later.
 
 - Do not start a new workflow run to publish a historical release. A later run
   cannot produce valid attestations for an earlier commit.
