@@ -70,6 +70,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string NUnitCs0234Error =
             "error CS0234: The type or namespace name 'Framework' does not exist in the namespace 'NUnit' (are you missing an assembly reference?)";
 
+        private const string NUnitFrameworkNextAction =
+            "error CS0234: 'NUnit.Framework' is declared in assembly 'nunit.framework'. Add the assembly to the failing script's .asmdef references and run 'uloop compile' again. If the failing script has no .asmdef, the declaring assembly may have Auto Referenced disabled or its package may not be installed.";
+
         private const string UnknownCs0234Error =
             "error CS0234: The type or namespace name 'NoSuchInner' does not exist in the namespace 'NoSuchOuter' (are you missing an assembly reference?)";
 
@@ -461,10 +464,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             CompileErrorNextActionsComposer.Apply(response, new[] { CreateError(NUnitCs0234Error) });
 
-            Assert.That(response.NextActions, Is.Not.Null);
-            Assert.That(response.NextActions, Has.Length.EqualTo(2));
-            Assert.That(response.NextActions[0], Is.EqualTo(ExistingNextAction));
-            Assert.That(response.NextActions[1], Does.Contain("nunit.framework"));
+            Assert.That(
+                response.NextActions,
+                Is.EqualTo(new[] { ExistingNextAction, NUnitFrameworkNextAction }));
         }
 
         /// <summary>
@@ -480,9 +482,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 forceRecompile: false,
                 pausePointWarning: null);
 
-            Assert.That(response.NextActions, Is.Not.Null);
-            Assert.That(response.NextActions, Has.Length.EqualTo(1));
-            Assert.That(response.NextActions[0], Does.Contain("nunit.framework"));
+            Assert.That(response.NextActions, Is.EqualTo(new[] { NUnitFrameworkNextAction }));
         }
 
         /// <summary>
@@ -538,10 +538,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 forceRecompile: false,
                 pausePointWarning: null);
 
-            Assert.That(response.NextActions, Is.Not.Null);
-            Assert.That(response.NextActions, Has.Length.EqualTo(2));
-            Assert.That(response.NextActions[0], Is.EqualTo(ApiUpdaterNextAction));
-            Assert.That(response.NextActions[1], Does.Contain("nunit.framework"));
+            Assert.That(
+                response.NextActions,
+                Is.EqualTo(new[] { ApiUpdaterNextAction, NUnitFrameworkNextAction }));
         }
 
         /// <summary>
