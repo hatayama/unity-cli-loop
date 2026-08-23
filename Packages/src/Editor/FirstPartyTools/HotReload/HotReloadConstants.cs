@@ -281,6 +281,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string FailedWithNoApplyRecommendedNextAction =
             "Fix the failed methods and rerun, or run 'uloop compile'.";
 
+        // SessionState key for method identities discarded by the Play-entry domain reload.
+        // SessionState survives that reload and is cleared when the Editor process exits.
+        public const string PlayModeEntryDropSessionStateKey =
+            "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIdentities";
+
+        // Format: remaining discarded identity count. Used only when --status active count is 0.
+        public const string PlayModeEntryDropStatusMessageFormat =
+            "0 change(s) currently active. {0} change(s) were discarded by the domain reload when Play Mode was entered — hot-reloaded edits that were never compiled are not in effect. Re-apply 'uloop hot-reload', or edit the files and run 'uloop compile'.";
+
         public const int SiblingConstDriftScanFileLimit = 50;
 
         // Format: scan file limit, total changed sibling count. Emitted when the scan

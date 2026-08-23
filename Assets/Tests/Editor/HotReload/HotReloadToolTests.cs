@@ -20,6 +20,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadToolTests
     {
+        private HotReloadPlayModeEntryDropLedgerSessionScope _ledgerSessionScope;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _ledgerSessionScope.Restore();
+        }
+
         [Test]
         public void ToolName_ReturnsHotReload()
         {

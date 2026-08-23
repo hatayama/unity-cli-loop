@@ -80,11 +80,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string RecommendedNextAction { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Remaining method identities discarded by the last Play-entry domain reload
+        /// that have not been recovered by apply, revert-all, or a successful compile.
+        /// </summary>
+        public int DroppedByPlayModeEntryCount { get; set; }
+
         // Why omit empty: success and validation-only payloads must not grow a next-action
         // field that PausePoint-style responses leave blank on the wire.
         public bool ShouldSerializeRecommendedNextAction()
         {
             return !string.IsNullOrEmpty(RecommendedNextAction);
+        }
+
+        public bool ShouldSerializeDroppedByPlayModeEntryCount()
+        {
+            return DroppedByPlayModeEntryCount > 0;
         }
     }
 
@@ -129,6 +140,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOrchestratorResult result = await HotReloadOrchestrator
                 .RunAsync(parameters.Files, contentPathOverride: null, ct)
                 .ConfigureAwait(false);
+            // Why switch back: SessionState for Play-entry drop recovery is a Unity Editor API.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(result.Methods);
 
             return BuildApplyResponse(result);
         }
@@ -137,6 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             int clearedCount = HotReloadPatcher.ActiveChangeCount;
             HotReloadPatcher.RevertAll();
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
             return new HotReloadResponse
             {
                 Success = true,
@@ -200,12 +215,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     neverInvokedCount);
             }
 
+            int droppedCount = HotReloadPlayModeEntryDropLedger.Count;
+            string dropMessage = HotReloadPlayModeEntryDropStatusMessageBuilder.Build(
+                count,
+                droppedCount);
+            if (dropMessage != null)
+            {
+                message = dropMessage;
+            }
+
             return new HotReloadResponse
             {
                 Success = true,
                 Methods = methods,
                 ActivePatchTotal = count,
-                Message = message
+                Message = message,
+                DroppedByPlayModeEntryCount = droppedCount
             };
         }
 
