@@ -48,10 +48,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             // Tests that every enum a first-party schema exposes can be resolved by its ordinal.
             // The schema cache stores an enum default as a number while listing the members by name,
             // so the CLI recovers the name shown in `--help` / `uloop list` by indexing that name
-            // list (Go enumValueAtIndex). Same-value aliases are allowed only after the canonical
-            // name: names[ordinal] must be the first declaration of that value (MetadataToken
-            // order). Gaps, negative values, and a [Flags] enum would make the CLI print the wrong
-            // default member name.
+            // list (Go enumValueAtIndex). Enum.GetNames sorts by value, so a same-value alias
+            // occupies the next index and displaces later canonical names. Members must therefore
+            // have distinct values. Gaps, negative values, and a [Flags] enum would make the CLI
+            // print the wrong default member name.
             Type[] schemaTypes = FirstPartySchemaTypes();
 
             Assert.That(schemaTypes, Is.Not.Empty);
@@ -80,8 +80,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                         $"{location} is a [Flags] enum, which cannot be resolved by ordinal");
 
                     // Why MetadataToken order: GetFields does not guarantee declaration order, and
-                    // the CLI indexes Enum.GetNames by the numeric default. The first same-value
-                    // member in declaration order is the canonical name that must occupy that index.
+                    // the CLI indexes Enum.GetNames by the numeric default. Distinct values keep
+                    // names[ordinal] equal to the only member declared at that value.
                     FieldInfo[] memberFields = propertyType.GetFields(
                             BindingFlags.Public | BindingFlags.Static)
                         .OrderBy(field => field.MetadataToken)
@@ -98,11 +98,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                             value,
                             Is.GreaterThanOrEqualTo(0),
                             $"{location} has a negative member value {value}");
-                        distinctValues.Add(value);
-                        if (!canonicalNamesByValue.ContainsKey(value))
-                        {
-                            canonicalNamesByValue[value] = memberField.Name;
-                        }
+                        bool added = distinctValues.Add(value);
+                        Assert.That(
+                            added,
+                            Is.True,
+                            $"{location} reuses value {value} for '{memberField.Name}'; same-value aliases displace later names in Enum.GetNames");
+                        canonicalNamesByValue[value] = memberField.Name;
 
                         if (value > maxValue)
                         {
@@ -110,6 +111,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                         }
                     }
 
+                    Assert.That(
+                        distinctValues.Count,
+                        Is.EqualTo(memberFields.Length),
+                        $"{location} has same-value aliases");
                     Assert.That(
                         distinctValues.Count,
                         Is.EqualTo(maxValue + 1),
@@ -140,9 +145,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         private static Type[] FirstPartySchemaTypes()
         {
             return TypeCache.GetTypesDerivedFrom<UnityCliLoopToolSchema>()
-                .Where(type => type.Assembly.GetName().Name.StartsWith(
-                    "UnityCLILoop.FirstPartyTools",
-                    StringComparison.Ordinal))
+                .Where(type =>
+                {
+                    string assemblyName = type.Assembly.GetName().Name;
+                    return assemblyName.StartsWith(
+                            "UnityCLILoop.FirstPartyTools",
+                            StringComparison.Ordinal)
+                        || string.Equals(
+                            assemblyName,
+                            "UnityCLILoop.ToolContracts",
+                            StringComparison.Ordinal);
+                })
                 .ToArray();
         }
 

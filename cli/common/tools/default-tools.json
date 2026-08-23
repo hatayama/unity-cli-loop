@@ -237,7 +237,7 @@
         "properties": {
           "WindowName": {
             "type": "string",
-            "description": "Window name to capture (for example Game, Scene, Console, Inspector). Ignored when --capture-mode rendering. When the Game tab is Device Simulator and the title is Simulator, default Game falls back to Simulator.",
+            "description": "Window name to capture (for example Game, Scene, Console, Inspector). Ignored when the resolved capture mode is rendering (auto during Play Mode resolves to rendering). When the Game tab is Device Simulator and the title is Simulator, default Game falls back to Simulator.",
             "default": "Game"
           },
           "ResolutionScale": {
@@ -247,7 +247,7 @@
           },
           "MatchMode": {
             "type": "string",
-            "description": "Window name matching mode: exact, prefix, or contains. Ignored when --capture-mode rendering.",
+            "description": "Window name matching mode: exact, prefix, or contains. Ignored when the resolved capture mode is rendering (auto during Play Mode resolves to rendering).",
             "enum": [
               "exact",
               "prefix",
@@ -262,27 +262,28 @@
           },
           "CaptureMode": {
             "type": "string",
-            "description": "window - capture EditorWindow including toolbar, rendering - capture game rendering only (PlayMode required), GameView - alias for rendering. Rendering screenshots return ScreenshotToInputFormula for converting raw image pixels before calling simulate-mouse-input (including --dry-run) or simulate-mouse-ui.",
+            "description": "auto - rendering in PlayMode and window otherwise, window - capture EditorWindow including toolbar, rendering - capture game rendering only (PlayMode required), GameView - alias for rendering. Rendering screenshots return ScreenshotToInputFormula for converting raw image pixels before calling simulate-mouse-input (including --dry-run) or simulate-mouse-ui.",
             "enum": [
               "window",
               "rendering",
+              "auto",
               "GameView"
             ],
-            "default": "window"
+            "default": "auto"
           },
           "AnnotateElements": {
             "type": "boolean",
-            "description": "Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). The response includes an AnnotatedElements array with element metadata sorted by z-order. Only works with --capture-mode rendering in PlayMode.",
+            "description": "Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). The response includes an AnnotatedElements array with element metadata sorted by z-order. Only works when the resolved capture mode is rendering (auto during Play Mode resolves to rendering) in PlayMode.",
             "default": false
           },
           "ElementsOnly": {
             "type": "boolean",
-            "description": "Return only annotated element JSON without capturing a screenshot image. Requires --annotate-elements or --annotate-raycast-grid, and --capture-mode rendering in PlayMode.",
+            "description": "Return only annotated element JSON without capturing a screenshot image. Requires --annotate-elements or --annotate-raycast-grid, and the resolved capture mode to be rendering (auto during Play Mode resolves to rendering) in PlayMode.",
             "default": false
           },
           "AnnotateRaycastGrid": {
             "type": "boolean",
-            "description": "Annotate clustered 3D physics collider candidates as PhysicsCollider entries in AnnotatedElements. Uses Camera.main visibility and the same top-left Game View coordinates as simulate-mouse-input. Only works with --capture-mode rendering in PlayMode.",
+            "description": "Annotate clustered 3D physics collider candidates as PhysicsCollider entries in AnnotatedElements. Uses Camera.main visibility and the same top-left Game View coordinates as simulate-mouse-input. Only works when the resolved capture mode is rendering (auto during Play Mode resolves to rendering) in PlayMode.",
             "default": false
           },
           "RaycastLayerMask": {
