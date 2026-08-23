@@ -150,7 +150,11 @@ func installSkillIntoDir(baseDir string, skill skillDefinition, result *skillIns
 	if state.status == "conflict" {
 		return state.conflictReason, nil
 	}
-	if _, err := removeStaleSyncArtifacts(filepath.Join(baseDir, skill.name)); err != nil {
+	ownedEntries, err := sourceOwnedEntries(skill.sourceDirectory)
+	if err != nil {
+		return "", err
+	}
+	if _, err := removeStaleSyncArtifacts(filepath.Join(baseDir, skill.name), ownedEntries); err != nil {
 		return "", err
 	}
 	if state.status == "installed" {
@@ -201,7 +205,7 @@ func uninstallSkillFromDir(baseDir string, skill skillDefinition) (bool, error) 
 	}
 	// Artifacts carry the uloop namespace marker, so they are uloop's own
 	// debris by construction and are cleaned up regardless of install evidence.
-	artifactsRemoved, err := removeStaleSyncArtifacts(skillDir)
+	artifactsRemoved, err := removeStaleSyncArtifacts(skillDir, ownedEntries)
 	if err != nil {
 		return false, err
 	}
@@ -443,7 +447,7 @@ func sourceOwnedEntries(sourceDir string) ([]os.DirEntry, error) {
 // construction and removing them keeps the foreign-file guarantee intact;
 // left alone they would be treated as foreign forever and keep the skill
 // directory from ever being removed on uninstall.
-func removeStaleSyncArtifacts(skillDir string) (bool, error) {
+func removeStaleSyncArtifacts(skillDir string, ownedEntries []os.DirEntry) (bool, error) {
 	entries, err := os.ReadDir(skillDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -454,6 +458,11 @@ func removeStaleSyncArtifacts(skillDir string) (bool, error) {
 	removedAny := false
 	for _, entry := range entries {
 		if !isStaleSyncArtifactName(entry.Name()) {
+			continue
+		}
+		// Current source-owned names are live managed content, not leftovers,
+		// even when they resemble artifact names.
+		if findExactDirEntry(ownedEntries, entry.Name()) != nil {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(skillDir, entry.Name())); err != nil {

@@ -1472,3 +1472,42 @@ func TestParseSkillsOptionsRejectsWhitespaceOutputDir(t *testing.T) {
 		t.Fatal("expected error for a whitespace-only --output-dir= value")
 	}
 }
+
+// Tests that a source-owned file whose name matches the stale-artifact pattern
+// survives a second install: the first sync copies it, and cleanup must not
+// treat that live managed name as leftover debris and skip the skill.
+func TestRunSkillsDirInstallPreservesSourceOwnedArtifactNamedFile(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	artifactNamedFile := filepath.Join(skill.sourceDirectory, "data.uloop-tmp-123")
+	if err := os.WriteFile(artifactNamedFile, []byte("owned payload\n"), 0o644); err != nil {
+		t.Fatalf("failed to write source-owned artifact-named file: %v", err)
+	}
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("first dir install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	storeFile := filepath.Join(destinationDir, "uloop-sample", "data.uloop-tmp-123")
+	firstContent, err := os.ReadFile(storeFile)
+	if err != nil {
+		t.Fatalf("first install should copy the source-owned artifact-named file: %v", err)
+	}
+	if string(firstContent) != "owned payload\n" {
+		t.Fatalf("store file content = %q, want owned payload", firstContent)
+	}
+
+	stdout.Reset()
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("second dir install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	secondContent, err := os.ReadFile(storeFile)
+	if err != nil {
+		t.Fatalf("second install must keep the source-owned artifact-named file: %v", err)
+	}
+	if string(secondContent) != "owned payload\n" {
+		t.Fatalf("second install changed the store file: %q", secondContent)
+	}
+}
