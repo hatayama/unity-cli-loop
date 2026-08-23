@@ -13,16 +13,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     [TestFixture]
     public sealed class HotReloadPlayModeEntryDropRecorderTests
     {
+        private HotReloadPlayModeEntryDropLedgerSessionScope _ledgerSessionScope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadPlayModeEntryDropLedger.Clear();
+            _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPlayModeEntryDropLedger.Clear();
+            _ledgerSessionScope.Restore();
         }
 
         /// <summary>
@@ -119,6 +121,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
 
             Assert.That(HotReloadPlayModeEntryDropLedger.Count, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a same-domain EnteredEditMode after ExitingEditMode means Play entry
+        /// was cancelled, so the just-recorded identities leave the ledger and older
+        /// leftovers stay.
+        /// </summary>
+        [Test]
+        public void NotifyPlayModeStateChanged_WhenEnteredEditModeFollowsExitingEditModeInSameDomain_RemovesOnlyPendingIdentities()
+        {
+            HotReloadPlayModeEntryDropLedger.Record(new[] { "Type.Old()" });
+
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.ExitingEditMode,
+                new[] { "Type.Active()" },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            Assert.That(
+                HotReloadPlayModeEntryDropLedger.GetIdentities(),
+                Is.EqualTo(new[] { "Type.Active()", "Type.Old()" }));
+
+            HotReloadPlayModeEntryDropRecorder.NotifyPlayModeStateChanged(
+                PlayModeStateChange.EnteredEditMode,
+                new[] { "Type.Active()" },
+                isDomainReloadDisabledOnEnterPlayMode: false);
+
+            Assert.That(
+                HotReloadPlayModeEntryDropLedger.GetIdentities(),
+                Is.EqualTo(new[] { "Type.Old()" }));
         }
     }
 }

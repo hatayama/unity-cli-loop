@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -16,18 +17,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     [TestFixture]
     public sealed class HotReloadPlayModeEntryDropStatusTests
     {
+        private HotReloadPlayModeEntryDropLedgerSessionScope _ledgerSessionScope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadPlayModeEntryDropLedger.Clear();
+            _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
             HotReloadPatcher.RevertAll();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPlayModeEntryDropLedger.Clear();
             HotReloadPatcher.RevertAll();
+            _ledgerSessionScope.Restore();
         }
 
         /// <summary>
@@ -39,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadPlayModeEntryDropLedger.Record(new[] { "Type.A()", "Type.B()" });
 
-            HotReloadResponse response = await ExecuteStatusAsync();
+            HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
             JObject json = JObject.Parse(
                 JsonConvert.SerializeObject(
                     response,
@@ -62,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ExecuteAsync_Status_WhenNoDropsRemain_OmitsDroppedCountAndKeepsActiveMessage()
         {
-            HotReloadResponse response = await ExecuteStatusAsync();
+            HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
             JObject json = JObject.Parse(
                 JsonConvert.SerializeObject(
                     response,
@@ -75,15 +78,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(json.Property("DroppedByPlayModeEntryCount"), Is.Null);
         }
 
-        private static async Task<HotReloadResponse> ExecuteStatusAsync()
+        /// <summary>
+        /// What: --status with one never-invoked active change and leftover identities
+        /// keeps the existing active Message and still serializes DroppedByPlayModeEntryCount.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_WhenActiveNeverInvokedAndDropsRemain_KeepsActiveMessageAndSerializesDroppedCount()
+        {
+            ApplyCoreFixtureTransplant();
+            HotReloadPlayModeEntryDropLedger.Record(new[] { "Type.Dropped()" });
+
+            HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+            JObject json = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    response,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "1 change(s) currently active. 1 change(s) have not been invoked since their patch was applied; see Methods[].Reason."));
+            Assert.That(response.DroppedByPlayModeEntryCount, Is.EqualTo(1));
+            Assert.That(response.ShouldSerializeDroppedByPlayModeEntryCount(), Is.True);
+            Assert.That(json.Value<int>("DroppedByPlayModeEntryCount"), Is.EqualTo(1));
+        }
+
+        private static async Task<HotReloadResponse> ExecuteStatusAsync(CancellationToken ct)
         {
             HotReloadTool tool = new HotReloadTool();
             UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
                 new JObject { ["Status"] = true },
-                CancellationToken.None);
+                ct);
             HotReloadResponse response = baseResponse as HotReloadResponse;
             Assert.That(response, Is.Not.Null);
             return response;
+        }
+
+        // Applies a handwritten transplant to ReplaceableCompute without invoking it.
+        private static void ApplyCoreFixtureTransplant()
+        {
+            MethodInfo original = typeof(HotReloadCoreFixture).GetMethod(
+                nameof(HotReloadCoreFixture.ReplaceableCompute),
+                BindingFlags.Instance | BindingFlags.Public);
+            MethodInfo shim = typeof(HotReloadHandwrittenShims).GetMethod(
+                nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0),
+                BindingFlags.Static | BindingFlags.Public);
+            Assert.That(original, Is.Not.Null);
+            Assert.That(shim, Is.Not.Null);
+
+            HotReloadPatchResult applyResult = HotReloadPatcher.Apply(
+                original,
+                shim,
+                HotReloadPatchShape.Transplant,
+                "Assets/Tests/Fixture.cs");
+            Assert.That(applyResult.Success, Is.True, applyResult.ErrorMessage);
         }
     }
 }

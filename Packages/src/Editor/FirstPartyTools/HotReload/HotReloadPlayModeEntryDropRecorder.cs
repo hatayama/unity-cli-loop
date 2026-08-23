@@ -15,6 +15,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private static int _currentCompilationErrorCount;
 
+        // Why static: a domain reload wipes this list. The next playModeStateChanged
+        // in the same domain therefore means Play entry was cancelled and the just-recorded
+        // identities must leave the ledger so live patches are not reported as dropped.
+        private static List<string> _pendingIdentitiesRecordedInThisDomain;
+
         public static void Initialize()
         {
             EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
@@ -84,15 +89,62 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPlayModeEntryDropLedger.Clear();
         }
 
-        private static void HandlePlayModeStateChanged(PlayModeStateChange state)
+        internal static void ResetPendingForTesting()
         {
-            IReadOnlyList<string> identities = CollectActiveIdentities();
-            if (!ShouldRecord(state, IsDomainReloadDisabledOnEnterPlayMode(), identities.Count))
+            _pendingIdentitiesRecordedInThisDomain = null;
+        }
+
+        internal static void NotifyPlayModeStateChanged(
+            PlayModeStateChange state,
+            IReadOnlyList<string> identities,
+            bool isDomainReloadDisabledOnEnterPlayMode)
+        {
+            Debug.Assert(identities != null, "identities must not be null");
+            DiscardPendingIfSameDomainSurvived();
+            if (!ShouldRecord(state, isDomainReloadDisabledOnEnterPlayMode, identities.Count))
             {
                 return;
             }
 
             HotReloadPlayModeEntryDropLedger.Record(identities);
+            RememberPending(identities);
+        }
+
+        private static void HandlePlayModeStateChanged(PlayModeStateChange state)
+        {
+            NotifyPlayModeStateChanged(
+                state,
+                CollectActiveIdentities(),
+                IsDomainReloadDisabledOnEnterPlayMode());
+        }
+
+        private static void DiscardPendingIfSameDomainSurvived()
+        {
+            if (_pendingIdentitiesRecordedInThisDomain == null
+                || _pendingIdentitiesRecordedInThisDomain.Count == 0)
+            {
+                return;
+            }
+
+            HotReloadPlayModeEntryDropLedger.Remove(_pendingIdentitiesRecordedInThisDomain);
+            _pendingIdentitiesRecordedInThisDomain = null;
+        }
+
+        private static void RememberPending(IReadOnlyList<string> identities)
+        {
+            List<string> pending = new List<string>();
+            for (int index = 0; index < identities.Count; index++)
+            {
+                string identity = identities[index];
+                if (string.IsNullOrEmpty(identity))
+                {
+                    continue;
+                }
+
+                pending.Add(identity);
+            }
+
+            _pendingIdentitiesRecordedInThisDomain = pending;
         }
 
         private static void HandleCompilationStarted(object context)

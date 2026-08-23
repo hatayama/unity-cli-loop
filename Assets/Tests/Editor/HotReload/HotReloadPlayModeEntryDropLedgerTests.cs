@@ -13,16 +13,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     [TestFixture]
     public sealed class HotReloadPlayModeEntryDropLedgerTests
     {
+        private HotReloadPlayModeEntryDropLedgerSessionScope _ledgerSessionScope;
+
         [SetUp]
         public void SetUp()
         {
-            HotReloadPlayModeEntryDropLedger.Clear();
+            _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
         }
 
         [TearDown]
         public void TearDown()
         {
-            HotReloadPlayModeEntryDropLedger.Clear();
+            _ledgerSessionScope.Restore();
         }
 
         /// <summary>
