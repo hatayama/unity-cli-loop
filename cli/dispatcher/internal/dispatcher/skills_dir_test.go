@@ -2,11 +2,14 @@ package dispatcher
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 )
 
 // writeDirModeSkillSource seeds a skill source directory with a SKILL.md and one
@@ -896,7 +899,8 @@ func TestRunSkillsDirPreservesNeverInstalledOwnedNames(t *testing.T) {
 }
 
 // Tests that one skill blocked by a conflict does not abort the run: the
-// remaining skills still install and the summary still prints.
+// remaining skills still install, the summary still prints, and stderr is the
+// SKILL_STORE_CONFLICT envelope callers parse (SafeToRetry, BlockedCount).
 func TestRunSkillsDirInstallContinuesPastBlockedSkill(t *testing.T) {
 	root := t.TempDir()
 	blockedSkill := writeDirModeSkillSource(t, root, "uloop-blocked")
@@ -924,6 +928,19 @@ func TestRunSkillsDirInstallContinuesPastBlockedSkill(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "cannot manage skill") {
 		t.Fatalf("the conflict should be reported per skill:\n%s", stderr.String())
+	}
+	envelope := clierrors.CLIErrorEnvelope{}
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("parse error envelope: %v; stderr=%s", err, stderr.String())
+	}
+	if envelope.Error.ErrorCode != "SKILL_STORE_CONFLICT" {
+		t.Fatalf("error code = %q, want SKILL_STORE_CONFLICT", envelope.Error.ErrorCode)
+	}
+	if !envelope.Error.SafeToRetry {
+		t.Fatal("SafeToRetry = false, want true")
+	}
+	if envelope.Error.Details["BlockedCount"] != float64(1) {
+		t.Fatalf("BlockedCount = %#v, want 1", envelope.Error.Details["BlockedCount"])
 	}
 }
 
