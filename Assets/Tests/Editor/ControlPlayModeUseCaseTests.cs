@@ -493,6 +493,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// What: Play while already running and not paused is a no-op with the already-running message.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayWhileAlreadyRunning_ReportsNoOpWithoutSideEffects()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider());
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Play mode was already running; nothing to start or resume."));
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.ResumedFromPause, Is.False);
+            Assert.That(response.Warning, Is.Empty);
+            Assert.That(editorState.IsPlaying, Is.True);
+            Assert.That(editorState.IsPaused, Is.False);
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(editorState.IsPausedSetCount, Is.EqualTo(0));
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+        }
+
         [Test]
         public async Task ExecuteAsync_WhenPlayStartsFreshSession_SetsPlayingAndReportsWarning()
         {
