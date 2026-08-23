@@ -1253,6 +1253,47 @@ func TestRunSkillsDirEmptyOwnedDirGrantsNoEvidence(t *testing.T) {
 	}
 }
 
+// Tests that an empty owned top-level file grants no install evidence: a
+// vacuous empty-file match must not authorize uninstall to delete the skill
+// directory or the user's files.
+func TestRunSkillsDirEmptyOwnedFileGrantsNoEvidence(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	if err := os.WriteFile(filepath.Join(skill.sourceDirectory, "notes.md"), []byte{}, 0o644); err != nil {
+		t.Fatalf("failed to write empty source file: %v", err)
+	}
+	destinationDir := filepath.Join(root, "apm-skills")
+	storeDir := filepath.Join(destinationDir, "uloop-sample")
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatalf("failed to create store skill dir: %v", err)
+	}
+	emptyNotes := filepath.Join(storeDir, "notes.md")
+	if err := os.WriteFile(emptyNotes, []byte{}, 0o644); err != nil {
+		t.Fatalf("failed to write empty store file: %v", err)
+	}
+	userFile := filepath.Join(storeDir, "mine.md")
+	if err := os.WriteFile(userFile, []byte("mine\n"), 0o644); err != nil {
+		t.Fatalf("failed to write user file: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Not found: 1") {
+		t.Fatalf("an empty owned file should not count as an install:\n%s", stdout.String())
+	}
+	if _, err := os.Stat(emptyNotes); err != nil {
+		t.Fatalf("the matching empty file must survive: %v", err)
+	}
+	if _, err := os.Stat(userFile); err != nil {
+		t.Fatalf("user content must survive: %v", err)
+	}
+}
+
 // Tests that a working symlink inside a source-owned directory does not wedge
 // dir mode: the sync copies the target's content as a regular file, and the
 // status check compares the same content, so the skill reads as installed.

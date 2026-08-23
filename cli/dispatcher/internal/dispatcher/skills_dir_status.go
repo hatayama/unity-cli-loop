@@ -213,8 +213,9 @@ const (
 	ownedEntryAbsent ownedEntryComparison = iota
 	// ownedEntryEqual: the installed content fully matches the source.
 	ownedEntryEqual
-	// ownedEntryEqualEmpty: both sides hold no comparable files, so the match
-	// is vacuous — it must not count as install evidence.
+	// ownedEntryEqualEmpty: both sides hold no comparable content (an empty
+	// file, or a directory with no comparable files), so the match is
+	// vacuous — it must not count as install evidence.
 	ownedEntryEqualEmpty
 	// ownedEntryDiffers: an entry exists but its type or content differs.
 	ownedEntryDiffers
@@ -269,10 +270,13 @@ func compareOwnedFile(skillDir string, sourceDir string, name string, installed 
 	if err != nil {
 		return ownedEntryUnreadable, nil
 	}
-	if bytes.Equal(
-		normalizeSkillFileContent(name, sourceContent),
-		normalizeSkillFileContent(name, installedContent),
-	) {
+	normalizedSource := normalizeSkillFileContent(name, sourceContent)
+	if bytes.Equal(normalizedSource, normalizeSkillFileContent(name, installedContent)) {
+		// An empty match proves nothing, mirroring the directory branch:
+		// two empty files of the same name must not count as install evidence.
+		if len(normalizedSource) == 0 {
+			return ownedEntryEqualEmpty, nil
+		}
 		return ownedEntryEqual, nil
 	}
 	return ownedEntryDiffers, nil
