@@ -1365,6 +1365,45 @@ func TestRunSkillsDirUninstallDistinguishesMetaDebrisFromUserMeta(t *testing.T) 
 	}
 }
 
+// Tests that uninstall does not treat a user directory named like ignorable
+// debris (references.meta) as deletable: only regular files qualify, so the
+// directory, its contents, and the skill directory itself survive.
+func TestRunSkillsDirUninstallPreservesUserDirectoryNamedAsDebris(t *testing.T) {
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	destinationDir := filepath.Join(root, "apm-skills")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if code := runSkillsDirInstall(destinationDir, []skillDefinition{skill}, stdout, stderr); code != 0 {
+		t.Fatalf("setup install failed: code=%d stderr=%s", code, stderr.String())
+	}
+	installedDir := filepath.Join(destinationDir, "uloop-sample")
+	userDebrisDir := filepath.Join(installedDir, "references.meta")
+	if err := os.MkdirAll(userDebrisDir, 0o755); err != nil {
+		t.Fatalf("failed to create user debris-named dir: %v", err)
+	}
+	keptFile := filepath.Join(userDebrisDir, "keep.txt")
+	if err := os.WriteFile(keptFile, []byte("keep me\n"), 0o644); err != nil {
+		t.Fatalf("failed to write file inside debris-named dir: %v", err)
+	}
+
+	stdout.Reset()
+	code := runSkillsDirUninstall(destinationDir, []skillDefinition{skill}, stdout, stderr)
+
+	if code != 0 {
+		t.Fatalf("dir uninstall failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(userDebrisDir); err != nil {
+		t.Fatalf("user directory named like debris must survive: %v", err)
+	}
+	if _, err := os.Stat(keptFile); err != nil {
+		t.Fatalf("contents of the debris-named directory must survive: %v", err)
+	}
+	if _, err := os.Stat(installedDir); err != nil {
+		t.Fatalf("skill directory holding a user directory must be kept: %v", err)
+	}
+}
+
 // Tests that a whitespace-only --output-dir value (a typical unset shell
 // variable) is rejected as a missing value in both option forms.
 func TestParseSkillsOptionsRejectsWhitespaceOutputDir(t *testing.T) {

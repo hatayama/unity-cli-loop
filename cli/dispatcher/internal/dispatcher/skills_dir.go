@@ -263,7 +263,7 @@ func removeSkillDirWithIgnorableDebris(skillDir string, ownedEntries []os.DirEnt
 		return err
 	}
 	for _, entry := range entries {
-		if !isIgnorableStoreDebris(entry.Name(), ownedEntries) {
+		if !isIgnorableStoreDebris(entry, ownedEntries) {
 			return nil
 		}
 	}
@@ -272,11 +272,17 @@ func removeSkillDirWithIgnorableDebris(skillDir string, ownedEntries []os.DirEnt
 
 // isIgnorableStoreDebris authorizes deleting a leftover entry along with its
 // skill directory: OS junk, plus the Unity .meta stubs minted for entries
-// uloop itself installed. A user's own .meta data file (dataset.meta) keeps
-// the directory alive. Deliberately separate from shouldSkipSkillFile even
-// though the patterns overlap: that one filters what a sync copies, and
-// widening a copy filter must never silently widen what uninstall may delete.
-func isIgnorableStoreDebris(name string, ownedEntries []os.DirEntry) bool {
+// uloop itself installed. Only regular files qualify — a directory bearing a
+// debris name is user data whose contents uloop never wrote. A user's own
+// .meta data file (dataset.meta) keeps the directory alive. Deliberately
+// separate from shouldSkipSkillFile even though the patterns overlap: that
+// one filters what a sync copies, and widening a copy filter must never
+// silently widen what uninstall may delete.
+func isIgnorableStoreDebris(entry os.DirEntry, ownedEntries []os.DirEntry) bool {
+	if !entry.Type().IsRegular() {
+		return false
+	}
+	name := entry.Name()
 	if name == ".DS_Store" || name == "Thumbs.db" || name == "desktop.ini" {
 		return true
 	}
