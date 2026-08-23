@@ -83,18 +83,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: GameView stays the rendering alias and reports rendering on the wire.
+        /// What: explicit GameView is a rendering request even while Play Mode is running.
         /// </summary>
         [Test]
-        public void Resolve_WhenGameViewSpecified_ReturnsRenderingWireName()
+        public void Resolve_WhenGameViewAndPlaying_ReturnsRendering()
         {
-            CaptureMode resolvedWhilePlaying = ScreenshotCaptureModeResolver.Resolve(CaptureMode.GameView, true);
-            CaptureMode resolvedWhileStopped = ScreenshotCaptureModeResolver.Resolve(CaptureMode.GameView, false);
+            CaptureMode resolved = ScreenshotCaptureModeResolver.Resolve(CaptureMode.GameView, true);
 
-            Assert.That(resolvedWhilePlaying, Is.EqualTo(CaptureMode.rendering));
-            Assert.That(resolvedWhileStopped, Is.EqualTo(CaptureMode.rendering));
-            Assert.That(ScreenshotCaptureModeResolver.ToWireName(resolvedWhilePlaying), Is.EqualTo("rendering"));
-            Assert.That(ScreenshotCaptureModeResolver.ToWireName(resolvedWhileStopped), Is.EqualTo("rendering"));
+            Assert.That(resolved, Is.EqualTo(CaptureMode.rendering));
+            Assert.That(ScreenshotCaptureModeResolver.ToWireName(resolved), Is.EqualTo("rendering"));
+        }
+
+        /// <summary>
+        /// What: explicit GameView is a rendering request even while Play Mode is stopped.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenGameViewAndNotPlaying_ReturnsRendering()
+        {
+            CaptureMode resolved = ScreenshotCaptureModeResolver.Resolve(CaptureMode.GameView, false);
+
+            Assert.That(resolved, Is.EqualTo(CaptureMode.rendering));
+            Assert.That(ScreenshotCaptureModeResolver.ToWireName(resolved), Is.EqualTo("rendering"));
         }
     }
 }

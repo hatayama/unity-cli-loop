@@ -18,15 +18,15 @@ uloop screenshot [--window-name <name>] [--resolution-scale <scale>] [--match-mo
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--window-name` | string | `Game` | Window name to capture (for example `Game`, `Scene`, `Console`, `Inspector`). Ignored when `--capture-mode rendering`. When the Game tab is Device Simulator and the title is Simulator, default Game falls back to Simulator. |
+| `--window-name` | string | `Game` | Window name to capture (for example `Game`, `Scene`, `Console`, `Inspector`). Ignored when the resolved capture mode is rendering (auto during Play Mode resolves to rendering). When the Game tab is Device Simulator and the title is Simulator, default Game falls back to Simulator. |
 | `--resolution-scale` | number | `1.0` | Resolution scale (0.1 to 1.0) |
-| `--match-mode` | enum | `exact` | Window name matching mode: `exact`, `prefix`, or `contains`. Ignored when `--capture-mode rendering`. |
+| `--match-mode` | enum | `exact` | Window name matching mode: `exact`, `prefix`, or `contains`. Ignored when the resolved capture mode is rendering (auto during Play Mode resolves to rendering). |
 | `--capture-mode` | enum | `auto` | `auto` - rendering in PlayMode and window otherwise, `window` - capture EditorWindow including toolbar, `rendering` - capture game rendering only (PlayMode required), `GameView` - alias for `rendering`. Rendering screenshots return `ScreenshotToInputFormula` for converting raw image pixels before calling simulate-mouse-input (including `--dry-run`) or simulate-mouse-ui. |
 | `--output-directory` | string | `""` | Output directory path for saving screenshots. When empty, uses default path (.uloop/outputs/Screenshots/). Accepts absolute paths. |
-| `--annotate-elements` | flag | - | Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). The response includes an `AnnotatedElements` array with element metadata sorted by z-order. Only works with `--capture-mode rendering` in PlayMode. |
-| `--annotate-raycast-grid` | flag | - | Annotate clustered 3D physics collider candidates as `PhysicsCollider` entries in `AnnotatedElements`. Uses `Camera.main` visibility and the same top-left Game View coordinates as `simulate-mouse-input`. Only works with `--capture-mode rendering` in PlayMode. |
+| `--annotate-elements` | flag | - | Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). The response includes an `AnnotatedElements` array with element metadata sorted by z-order. Only works when the resolved capture mode is rendering (auto during Play Mode resolves to rendering) in PlayMode. |
+| `--annotate-raycast-grid` | flag | - | Annotate clustered 3D physics collider candidates as `PhysicsCollider` entries in `AnnotatedElements`. Uses `Camera.main` visibility and the same top-left Game View coordinates as `simulate-mouse-input`. Only works when the resolved capture mode is rendering (auto during Play Mode resolves to rendering) in PlayMode. |
 | `--raycast-layer-mask` | string | `""` | Comma-separated physics layer names to narrow which layers `--annotate-raycast-grid` clusters. Hits are limited to layers also visible to `Camera.main.cullingMask`. When omitted, clusters against `Physics.DefaultRaycastLayers`. |
-| `--elements-only` | flag | - | Return only annotated element JSON without capturing a screenshot image. Requires `--annotate-elements` or `--annotate-raycast-grid`, and `--capture-mode rendering` in PlayMode. |
+| `--elements-only` | flag | - | Return only annotated element JSON without capturing a screenshot image. Requires `--annotate-elements` or `--annotate-raycast-grid`, and the resolved capture mode to be rendering (auto during Play Mode resolves to rendering) in PlayMode. |
 
 ## Match Modes
 

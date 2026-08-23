@@ -12,11 +12,9 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         window = 0,
         rendering = 1,
         auto = 2,
-        // Alias for rendering: agents commonly pass GameView when they mean Game View pixels.
-        // Same underlying value so CaptureMode comparisons against rendering keep working.
-        // Why after auto: Unity serializes the schema default as the enum ordinal, and the
-        // CLI maps that number onto Enum.GetNames by index. Declaring GameView (value 1)
-        // before auto (value 2) would make default 2 display as GameView in help.
-        GameView = 1
+        // Why a distinct value: Enum.GetNames sorts by value, so a shared ordinal with
+        // rendering would occupy the next help index and make default auto display as GameView.
+        // Alias semantics live in ScreenshotCaptureModeResolver, not in a shared value.
+        GameView = 3
     }
 }

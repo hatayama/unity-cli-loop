@@ -10,10 +10,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class ScreenshotCaptureModeResolver
     {
         /// <summary>
-        /// Returns the requested mode unchanged, or rendering in Play Mode and window otherwise.
+        /// Returns window or rendering. auto follows Play Mode; GameView is an explicit rendering alias.
         /// </summary>
         internal static CaptureMode Resolve(CaptureMode requested, bool isPlaying)
         {
+            if (requested == CaptureMode.GameView)
+            {
+                return CaptureMode.rendering;
+            }
+
             if (requested != CaptureMode.auto)
             {
                 return requested;
@@ -33,8 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static string ToWireName(CaptureMode resolved)
         {
             Debug.Assert(
-                resolved != CaptureMode.auto,
-                "ToWireName requires a resolved capture mode; auto must be resolved first.");
+                resolved == CaptureMode.window || resolved == CaptureMode.rendering,
+                "ToWireName requires a resolved capture mode; auto and GameView must be resolved first.");
             if (resolved == CaptureMode.window)
             {
                 return UnityCliLoopConstants.SCREENSHOT_RESOLVED_CAPTURE_MODE_WINDOW;

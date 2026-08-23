@@ -75,7 +75,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 JsonRpcResponseSerializer.Settings);
             JObject parsed = JObject.Parse(json);
 
-            Assert.That(json, Does.Contain("\"ResolvedCaptureMode\":\"rendering\""));
             Assert.That(parsed.Value<string>("ResolvedCaptureMode"), Is.EqualTo("rendering"));
         }
     }
