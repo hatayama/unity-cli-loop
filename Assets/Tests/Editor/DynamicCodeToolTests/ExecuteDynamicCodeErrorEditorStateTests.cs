@@ -121,6 +121,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// What: EditorPlaying=false still appears in JSON instead of being omitted.
+        /// </summary>
+        [Test]
+        public void ExecuteDynamicCodeResponse_WhenNotPlaying_StillSerializesEditorPlayingFalse()
+        {
+            ExecuteDynamicCodeResponse response = new()
+            {
+                Success = false,
+                EditorPlaying = false
+            };
+
+            Assert.That(SerializedEditorState(response), Is.EqualTo("{\"EditorPlaying\":false}"));
+        }
+
+        /// <summary>
         /// What: a paused response still serializes EditorPaused and ActivePausePointId next to EditorPlaying.
         /// </summary>
         [Test]
