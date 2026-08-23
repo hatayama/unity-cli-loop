@@ -1315,9 +1315,10 @@ func TestPausePointStatusResponseIncludesCapturedVariableHistoryNote(t *testing.
 	if err := json.Unmarshal(rawNote, &note); err != nil {
 		t.Fatalf("unmarshal note failed: %v", err)
 	}
-	if note != "CapturedVariableHistory lists hits before the latest one; the latest hit's variables are in CapturedVariables. HitSequence numbers come from a session-wide sequence shared by all pause points (they order hits across markers); they are not 1..HitCount for this marker." {
+	wantNote := "CapturedVariableHistory lists hits before the latest one; the latest hit's variables are in CapturedVariables. HitSequence numbers come from a sequence shared by all pause points in the current Editor domain (it resets on domain reload); they order hits across markers and are not 1..HitCount for this marker."
+	if note != wantNote {
 		t.Fatalf("CapturedVariableHistoryNote mismatch: got %#v, want %#v",
-			note, pausePointCapturedVariableHistoryNote)
+			note, wantNote)
 	}
 }
 
@@ -1925,9 +1926,10 @@ func TestRunPausePointStatusIncludesCapturedVariableHistoryNoteWhenLatestHitIsFi
 	if err := json.Unmarshal(rawNote, &note); err != nil {
 		t.Fatalf("unmarshal note failed: %v", err)
 	}
-	if note != "CapturedVariableHistory lists hits before the latest one; the latest hit's variables are in CapturedVariables. HitSequence numbers come from a session-wide sequence shared by all pause points (they order hits across markers); they are not 1..HitCount for this marker." {
+	wantNote := "CapturedVariableHistory lists hits before the latest one; the latest hit's variables are in CapturedVariables. HitSequence numbers come from a sequence shared by all pause points in the current Editor domain (it resets on domain reload); they order hits across markers and are not 1..HitCount for this marker."
+	if note != wantNote {
 		t.Fatalf("CapturedVariableHistoryNote mismatch: got %#v, want %#v",
-			note, pausePointCapturedVariableHistoryNote)
+			note, wantNote)
 	}
 }
 

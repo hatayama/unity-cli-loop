@@ -92,7 +92,7 @@ For a self-progressing game, arranging a scenario through real input alone is a 
 
 `await-pause-point`'s hit response also carries a top-level `Warning` (omitted when empty): it flags multiple hits, multiple matching logs, or truncated matching logs, so you can tell a single clean hit apart from evidence that needs closer inspection. Enable-time patch diagnostics (for example physics-callback cached dispatch) are not in `Warning`; on `enable-pause-point --await` they appear as `EnableTimeWarning` instead. `MatchingLogs` (log entries whose text contains the marker id) is still embedded, but source-derived ids rarely appear in log text, so treat `CapturedVariables` as the primary variable evidence.
 
-Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or status response to tell a fresh marker from stale evidence with the same id. `RemainingMilliseconds` and `Expired` are returned directly so you do not need to infer marker lifetime from elapsed time. HitSequence numbers come from a session-wide sequence shared by all pause points (they order hits across markers); they are not 1..HitCount for this marker.
+Use `Generation`, `EnabledAtUtc`, and the hit sequence fields from the hit or status response to tell a fresh marker from stale evidence with the same id. `RemainingMilliseconds` and `Expired` are returned directly so you do not need to infer marker lifetime from elapsed time. HitSequence numbers come from a sequence shared by all pause points in the current Editor domain (it resets on domain reload); they order hits across markers and are not 1..HitCount for this marker.
 
 ## Caller frames
 
