@@ -63,6 +63,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] NextActions { get; set; }
 
         /// <summary>
+        /// Whether Play Mode is running as this response is returned. Always serialized so a
+        /// stopped versus playing Editor is visible even when EditorPaused is omitted.
+        /// </summary>
+        public bool EditorPlaying { get; set; }
+
+        /// <summary>
         /// Whether the Editor is paused as this response is returned. Lets an agent recognize a
         /// post-interrupt state (e.g. a pause point hit during this execution) instead of mistaking
         /// stale-looking results for a bug.
