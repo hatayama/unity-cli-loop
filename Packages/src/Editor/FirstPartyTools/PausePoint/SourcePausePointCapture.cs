@@ -71,7 +71,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 instance, parameterNamesAndValues, localNamesAndValues);
             (List<UloopCapturedVariable> variables, bool truncated) =
                 SourcePausePointVariableFormatter.FormatFrame(frame, maxPreviewElements);
-            return (frame, variables, truncated);
+            frame = SourcePausePointTruncationAggregate.Merge(frame, variables);
+            return (frame, variables, truncated || frame.Truncated);
         }
     }
 }
