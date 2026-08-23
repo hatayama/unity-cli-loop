@@ -1512,6 +1512,52 @@ func TestRunSkillsDirInstallPreservesSourceOwnedArtifactNamedFile(t *testing.T) 
 	}
 }
 
+// Tests that --output-dir which is a symlink into a skill source (or a
+// not-yet-created path under such a symlink) is rejected, so install cannot
+// write into the source tree through a lexical alias.
+func TestRunSkillsDirSubcommandRejectsOutputDirSymlinkedIntoSkillSource(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on Windows")
+	}
+	root := t.TempDir()
+	skill := writeDirModeSkillSource(t, root, "uloop-sample")
+	nestedStore := filepath.Join(skill.sourceDirectory, "nested-store")
+	if err := os.MkdirAll(nestedStore, 0o755); err != nil {
+		t.Fatalf("failed to create nested store: %v", err)
+	}
+	storeLink := filepath.Join(root, "store-link")
+	if err := os.Symlink(nestedStore, storeLink); err != nil {
+		t.Fatalf("failed to create symlink: %v", err)
+	}
+	installedInsideSource := filepath.Join(skill.sourceDirectory, "nested-store", "uloop-sample")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code := runSkillsDirSubcommand("install", []skillDefinition{skill}, storeLink, stdout, stderr)
+	if code != 1 {
+		t.Fatalf("symlink into a skill source should fail: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), skillsOutputDirFlagName) {
+		t.Fatalf("error should name --output-dir:\n%s", stderr.String())
+	}
+	if _, err := os.Stat(installedInsideSource); !os.IsNotExist(err) {
+		t.Fatalf("install must not create a skill directory inside the source, stat err=%v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = runSkillsDirSubcommand("install", []skillDefinition{skill}, filepath.Join(storeLink, "sub"), stdout, stderr)
+	if code != 1 {
+		t.Fatalf("non-existing path under a source-pointing symlink should fail: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), skillsOutputDirFlagName) {
+		t.Fatalf("error should name --output-dir:\n%s", stderr.String())
+	}
+	if _, err := os.Stat(installedInsideSource); !os.IsNotExist(err) {
+		t.Fatalf("install must not create a skill directory inside the source, stat err=%v", err)
+	}
+}
+
 // Tests that --output-dir inside a skill source directory is rejected before
 // install can create a destination that WalkDir would then re-enter.
 func TestRunSkillsDirSubcommandRejectsOutputDirInsideSkillSource(t *testing.T) {

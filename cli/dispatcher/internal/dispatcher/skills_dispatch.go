@@ -127,12 +127,14 @@ func runSkillsDirSubcommand(
 // skill source directory or contains one: install would then copy into the
 // tree WalkDir is enumerating (or treat the source as the store).
 func outputDirOverlapsSkillSource(absDir string, skills []skillDefinition) error {
+	resolvedDir := resolveSymlinkedPath(absDir)
 	for _, skill := range skills {
 		absSource, err := filepath.Abs(skill.sourceDirectory)
 		if err != nil {
 			return err
 		}
-		if pathContains(absSource, absDir) || pathContains(absDir, absSource) {
+		resolvedSource := resolveSymlinkedPath(absSource)
+		if pathContains(resolvedSource, resolvedDir) || pathContains(resolvedDir, resolvedSource) {
 			return &clierrors.ArgumentError{
 				Message:     "The " + skillsOutputDirFlagName + " path " + absDir + " overlaps the skill source directory " + absSource + ".",
 				Option:      skillsOutputDirFlagName,
@@ -142,6 +144,26 @@ func outputDirOverlapsSkillSource(absDir string, skills []skillDefinition) error
 		}
 	}
 	return nil
+}
+
+// resolveSymlinkedPath resolves path through symlinks even when the full
+// path does not exist yet. The overlap guard must compare real locations;
+// Abs alone keeps symlink aliases distinct.
+func resolveSymlinkedPath(path string) string {
+	current := path
+	remainder := ""
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			return filepath.Join(resolved, remainder)
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return path
+		}
+		remainder = filepath.Join(filepath.Base(current), remainder)
+		current = parent
+	}
 }
 
 // pathContains reports whether parent contains child, including when the two
