@@ -572,12 +572,21 @@ tmp_dir=$(mktemp -d)
 staged_uloop_path=""
 replaced_uloop_backup_path=""
 final_uloop_path=""
+install_completed=0
 
 # Why: if the install failed after the old binary was moved aside, put it
 # back so a failed update never leaves the user without a working uloop.
+# That includes post-place failures such as --version: the new binary is
+# already at the destination, so remove it first and only then restore.
+# If the new binary cannot be removed, leave the backup in place.
 cleanup_install() {
-  if [ -n "$replaced_uloop_backup_path" ] && [ -n "$final_uloop_path" ] && [ -f "$replaced_uloop_backup_path" ] && [ ! -e "$final_uloop_path" ]; then
-    mv "$replaced_uloop_backup_path" "$final_uloop_path"
+  if [ "$install_completed" -eq 0 ] && [ -n "$replaced_uloop_backup_path" ] && [ -f "$replaced_uloop_backup_path" ]; then
+    if [ -n "$final_uloop_path" ]; then
+      rm -f "$final_uloop_path" 2>/dev/null || true
+    fi
+    if [ -n "$final_uloop_path" ] && [ ! -e "$final_uloop_path" ]; then
+      mv "$replaced_uloop_backup_path" "$final_uloop_path"
+    fi
   fi
   if [ -n "$staged_uloop_path" ]; then
     rm -f "$staged_uloop_path"
@@ -585,6 +594,9 @@ cleanup_install() {
   rm -rf "$tmp_dir"
 }
 trap cleanup_install EXIT
+# Why: POSIX does not run the EXIT trap on INT/HUP/TERM unless the handler
+# exits. Between move-aside and place that would leave uloop missing.
+trap "exit 129" INT HUP TERM
 
 compute_asset_sha256() {
   # Why: install.sh runs on macOS (shasum) and MINGW/MSYS (sha256sum). We do the
@@ -712,3 +724,4 @@ fi
 
 "$INSTALL_DIR/$installed_command_name" --version
 report_path_shadowing
+install_completed=1
