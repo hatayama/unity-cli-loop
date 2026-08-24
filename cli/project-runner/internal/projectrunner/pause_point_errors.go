@@ -18,12 +18,14 @@ func pausePointWaitError(
 	state pausePointWaitState,
 	hasNewHitBaseline bool,
 	markerClearedByThisCommand bool,
+	triggerResult *pausePointTriggerResult,
 ) clierrors.CLIError {
 	response = normalizePausePointStatusResponse(response)
 
+	waitErr := clierrors.CLIError{}
 	switch state {
 	case pausePointWaitStateNotEnabled:
-		return pausePointStateError(
+		waitErr = pausePointStateError(
 			clierrors.ErrorCodePausePointNotEnabled,
 			"Pause point is not enabled.",
 			projectRoot,
@@ -31,24 +33,23 @@ func pausePointWaitError(
 			response,
 			false)
 	case pausePointWaitStateExpired:
-		expiredError := pausePointStateError(
+		waitErr = pausePointStateError(
 			clierrors.ErrorCodePausePointExpired,
 			"Pause point expired before it was hit.",
 			projectRoot,
 			options,
 			response,
 			true)
-		hint := pausePointExpiredHint(response)
+		hint := pausePointExpiredHint(response, triggerResult)
 		if hint != "" {
-			expiredError.Details["Hint"] = hint
+			waitErr.Details["Hint"] = hint
 		}
-		applyPausePointExpiredResolvedFieldDetails(expiredError.Details, response)
+		applyPausePointExpiredResolvedFieldDetails(waitErr.Details, response)
 		if note := pausePointExpiredResolvedFieldsNote(response); note != "" {
-			expiredError.Message = expiredError.Message + " " + note
+			waitErr.Message = waitErr.Message + " " + note
 		}
-		return expiredError
 	case pausePointWaitStateTriggerFailed:
-		triggerFailedError := pausePointStateError(
+		waitErr = pausePointStateError(
 			clierrors.ErrorCodePausePointTriggerFailed,
 			"The --trigger command was rejected before it ran (argument parsing or an unknown command "+
 				"name), so the wait was abandoned instead of waiting out the remaining timeout. This "+
@@ -63,10 +64,9 @@ func pausePointWaitError(
 			// change first. Reporting a permanent failure as retryable is what made the original
 			// incident waste a full timeout window on it.
 			false)
-		triggerFailedError.NextActions = pausePointTriggerFailedNextActions(options.id)
-		return triggerFailedError
+		waitErr.NextActions = pausePointTriggerFailedNextActions(options.id)
 	case pausePointWaitStateCleared:
-		return pausePointStateError(
+		waitErr = pausePointStateError(
 			clierrors.ErrorCodePausePointCleared,
 			"Pause point was cleared before it was hit.",
 			projectRoot,
@@ -74,22 +74,25 @@ func pausePointWaitError(
 			response,
 			true)
 	default:
-		timeoutError := pausePointStateError(
+		waitErr = pausePointStateError(
 			clierrors.ErrorCodePausePointWaitTimeout,
 			fmt.Sprintf("Pause point was not hit within %ds.", options.timeoutSeconds),
 			projectRoot,
 			options,
 			response,
 			true)
-		hint := pausePointTimeoutHint(response, hasNewHitBaseline, markerClearedByThisCommand)
+		hint := pausePointTimeoutHint(response, hasNewHitBaseline, markerClearedByThisCommand, triggerResult)
 		if hint != "" {
-			timeoutError.Details["Hint"] = hint
+			waitErr.Details["Hint"] = hint
 		}
 		if markerClearedByThisCommand {
-			timeoutError.Details["MarkerClearedByThisCommand"] = true
+			waitErr.Details["MarkerClearedByThisCommand"] = true
 		}
-		return timeoutError
 	}
+	if pausePointTriggerFailed(triggerResult) {
+		waitErr.Details["TriggerFailed"] = true
+	}
+	return waitErr
 }
 
 // pausePointTriggerFailedNextActions replaces the generic enable/id-mismatch guidance, which does
@@ -119,6 +122,12 @@ func pausePointTriggerFailedNextActions(id string) []string {
 const (
 	pausePointHintPlayModeNotRunning  = "PlayMode is not running. Start PlayMode (or trigger the marker code path in Edit Mode), then wait again."
 	pausePointHintEditorAlreadyPaused = "Unity is already paused, so gameplay cannot reach the marker. Resume PlayMode before waiting again."
+
+	// Diagnoses a completed --trigger that Unity rejected (Success:false) or whose dispatch
+	// failed (Error). Why before the IsPaused / auto-cleared / non-firing branches: those assume
+	// the trigger fired and the marker still missed, which is the opposite of this case and is
+	// what sent agents into execute-dynamic-code loops on a paused-PlayMode input rejection.
+	pausePointHintTriggerRejected = "The trigger command ran but was rejected. Read Details.TriggerResult (Response.Message, or Error when the command failed to dispatch) for the reason (for example, input commands are rejected while PlayMode is paused by an earlier pause-point hit). Resume PlayMode with 'clear-pause-point --all' (which releases a pause owned by any marker) or 'control-play-mode --action Play', then re-enable the marker and retry."
 
 	// Returned when await timed out while waiting for a new hit on an already-hit continuous/trace
 	// marker. Why not reuse pausePointHintEditorAlreadyPaused: that hint diagnoses a marker that
@@ -170,9 +179,13 @@ func pausePointTimeoutHint(
 	response pausePointStatusResponse,
 	hasNewHitBaseline bool,
 	markerClearedByThisCommand bool,
+	triggerResult *pausePointTriggerResult,
 ) string {
 	if response.SuppressedByHotReload {
 		return pausePointSuppressedByHotReloadHint(response)
+	}
+	if pausePointTriggerFailed(triggerResult) {
+		return pausePointHintTriggerRejected
 	}
 	if hasNewHitBaseline {
 		return pausePointHintAlreadyHitWaitingForNew
@@ -199,9 +212,12 @@ func pausePointTimeoutHint(
 // pausePointExpiredHint mirrors the timeout diagnosis for expired markers, because a marker
 // whose enable window ends before the wait deadline surfaces as PAUSE_POINT_EXPIRED instead
 // of a timeout and would otherwise carry no hint at all.
-func pausePointExpiredHint(response pausePointStatusResponse) string {
+func pausePointExpiredHint(response pausePointStatusResponse, triggerResult *pausePointTriggerResult) string {
 	if response.SuppressedByHotReload {
 		return pausePointSuppressedByHotReloadHint(response)
+	}
+	if pausePointTriggerFailed(triggerResult) {
+		return pausePointHintTriggerRejected
 	}
 	if !response.EditorState.IsPlaying {
 		return pausePointHintPlayModeNotRunning
