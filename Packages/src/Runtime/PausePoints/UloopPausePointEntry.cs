@@ -104,10 +104,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             IsEnabled = false;
             Status = UloopPausePointStatus.Expired;
+            // Increments are gated on IsEnabled, which is false here. An in-flight increment that
+            // already passed that gate can still reach the snapshot after this message is composed.
+            int methodEntryCount = MethodEntryCount;
             Message = HitCount == 0
-                ? MethodEntryCount == 0
+                ? methodEntryCount == 0
                     ? "Pause point expired before it was hit. The armed method was never invoked."
-                    : $"Pause point expired before it was hit. The armed method ran {MethodEntryCount} time(s) but the armed line was never reached (branch not taken)."
+                    : $"Pause point expired before it was hit. The armed method ran {methodEntryCount} time(s) but the armed line was never reached (branch not taken)."
                 : $"Pause point capture window expired after {HitCount} hit(s); capture history is preserved.";
             return true;
         }
