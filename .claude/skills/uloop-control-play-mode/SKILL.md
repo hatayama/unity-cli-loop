@@ -31,7 +31,7 @@ Returns JSON with the current play mode state:
 - `WasAlreadyStopped`: Whether `Stop` was requested while Play Mode was already stopped
 - `ResumedFromPause`: Whether `Play` resumed a paused Play Mode session instead of starting a new one
 - `Message`: Description of the action performed
-- `Warning`: Set when the action carries a caveat. A fresh `Play` start always notes that the session started from Edit-time scene state; additionally, when active hot-reload patches or enabled pause points exist and Domain Reload is enabled, it reports how many of them the Play-entry domain reload will discard.
+- `Warning` (string, optional): Set when the action carries a caveat. A fresh `Play` start always notes that the session started from Edit-time scene state; additionally, when active hot-reload patches or enabled pause points exist and Domain Reload is enabled, it reports how many of them the Play-entry domain reload will discard. `Status` also reports when Play Mode is running while the Unity Editor is unfocused, because progress may be throttled; run `uloop focus-window`, or use the `pause-point --await`/`--trigger` flow instead of polling for progress.
 - `StoppedBy` (string, optional): Why Play Mode last stopped: `cli-control-play-mode`, `cli-compile-stop-setting`, `cli-run-tests-cancel`, `script-compilation`, or `unknown`. Present on `Stop` when Play Mode was already stopped, and on `Status` when Play Mode is not running. Omitted when this Editor session has no confirmed stop.
 - `StoppedAt` (string, optional): UTC ISO 8601 timestamp of that stop. Omitted together with `StoppedBy` when no stop is recorded.
 

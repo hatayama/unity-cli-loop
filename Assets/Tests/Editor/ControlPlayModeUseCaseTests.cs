@@ -790,6 +790,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(editorState.StepCallCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// What: Status returns the exact unfocused Editor hint when Play Mode is active.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenStatusIsPlayingAndEditorIsUnfocused_ReturnsExactHint()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                editorStateService: editorState,
+                editorFocusStateProvider: new FakeEditorFocusStateProvider(false));
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(
+                new ControlPlayModeSchema { Action = PlayModeAction.Status },
+                CancellationToken.None);
+
+            Assert.That(response.Warning, Is.EqualTo("The Unity Editor is unfocused while Play Mode is running, so Play Mode progress may be throttled. Run `uloop focus-window`, or use the `pause-point --await`/`--trigger` flow instead of polling for progress."));
+        }
+
+        /// <summary>
+        /// What: Status does not return the unfocused Editor hint when the Editor is focused.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenStatusEditorIsFocused_ReturnsNoHint()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                editorStateService: editorState,
+                editorFocusStateProvider: new FakeEditorFocusStateProvider(true));
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(
+                new ControlPlayModeSchema { Action = PlayModeAction.Status },
+                CancellationToken.None);
+
+            Assert.That(response.Warning, Is.Empty);
+        }
+
+        private sealed class FakeEditorFocusStateProvider : IEditorFocusStateProvider
+        {
+            public FakeEditorFocusStateProvider(bool isFocused)
+            {
+                IsFocused = isFocused;
+            }
+
+            public bool IsFocused { get; }
+        }
+
         private sealed class FakeControlPlayModeEditorStateService : IControlPlayModeEditorStateService
         {
             private bool _isPlaying;

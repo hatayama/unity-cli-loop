@@ -18,6 +18,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         // Wire-visible fragment of the paused preflight message; tests pin the composed string.
         public const string PausedActionDescription = "simulating keyboard input";
+        private readonly IEditorFocusStateProvider _editorFocusStateProvider;
+
+        public SimulateKeyboardUseCase(IEditorFocusStateProvider? editorFocusStateProvider = null)
+        {
+            _editorFocusStateProvider = editorFocusStateProvider ?? new EditorFocusStateProvider();
+        }
 
 #if !ULOOP_HAS_INPUT_SYSTEM
 #pragma warning disable CS1998
@@ -166,6 +172,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new { Action = parameters.Action.ToString(), Success = response.Success },
                     correlationId: correlationId
                 );
+
+                await InputSystemUpdateHelper.SwitchToMainThreadIfNeeded(CancellationToken.None);
+                bool isPressAction = parameters.Action == UnityCliLoopKeyboardAction.Press
+                    || parameters.Action == UnityCliLoopKeyboardAction.KeyDown;
+                response.Warning = EditorUnfocusedWarningBuilder.BuildKeyboardInputWarning(
+                    _editorFocusStateProvider.IsFocused,
+                    isPressAction,
+                    response.PressEdgeObserved,
+                    response.Success);
 
                 return response;
             }

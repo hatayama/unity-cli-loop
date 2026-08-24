@@ -154,6 +154,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 Is.EqualTo("{\"EditorPlaying\":true,\"EditorPaused\":true,\"ActivePausePointId\":\"jump\"}"));
         }
 
+        /// <summary>
+        /// What: the dynamic-code Warning is omitted when empty and serialized when present.
+        /// </summary>
+        [Test]
+        public void ExecuteDynamicCodeResponse_WhenWarningChanges_UsesOptionalJsonContract()
+        {
+            ExecuteDynamicCodeResponse response = new();
+            JObject omitted = JObject.Parse(JsonConvert.SerializeObject(response, JsonRpcResponseSerializer.Settings));
+            Assert.That(omitted.Property("Warning"), Is.Null);
+
+            response.Warning = "focus editor";
+            JObject populated = JObject.Parse(JsonConvert.SerializeObject(response, JsonRpcResponseSerializer.Settings));
+            Assert.That(populated["Warning"]?.Value<string>(), Is.EqualTo("focus editor"));
+        }
+
+        /// <summary>
+        /// What: an injected unfocused provider adds the exact hint to a Play Mode response.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayingAndEditorIsUnfocused_ReturnsExactHint()
+        {
+            MarkForegroundWarmupCompleted();
+            ExecuteDynamicCodeUseCase useCase = new ExecuteDynamicCodeUseCase(
+                new FakeDynamicCodeExecutionRuntime(new ExecutionResult { Success = true, Result = "ok" }),
+                new FakeDynamicCodeEditorStateReader(isPlaying: true, isPaused: false),
+                new FakeEditorFocusStateProvider(false));
+
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema { Code = "return 1;" },
+                CancellationToken.None);
+
+            Assert.That(response.Warning, Is.EqualTo("The Unity Editor is unfocused while Play Mode is running, so Play Mode progress may be throttled. Run `uloop focus-window`, or use the `pause-point --await`/`--trigger` flow instead of polling for progress."));
+        }
+
         private static ExecuteDynamicCodeUseCase CreateUseCase(IDynamicCodeExecutionRuntime runtime)
         {
             return new ExecuteDynamicCodeUseCase(
@@ -206,6 +240,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             public bool IsPlaying { get; }
 
             public bool IsPaused { get; }
+        }
+
+        private sealed class FakeEditorFocusStateProvider : IEditorFocusStateProvider
+        {
+            public FakeEditorFocusStateProvider(bool isFocused)
+            {
+                IsFocused = isFocused;
+            }
+
+            public bool IsFocused { get; }
         }
 
         private sealed class FakeDynamicCodeExecutionRuntime : IDynamicCodeExecutionRuntime

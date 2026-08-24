@@ -74,5 +74,6 @@ Returns JSON:
 - `UpdatedCode`: string|null — the wrapped form actually compiled (handy when debugging using-statement reordering)
 - `DiagnosticsSummary`: string|null — compact summary when diagnostics are available
 - `Diagnostics`: object[] — structured diagnostics; same shape as `CompilationErrors`, usually populated together with it
+- `Warning` (string, optional): Set when Play Mode is running while the Unity Editor is unfocused. Progress may be throttled; run `uloop focus-window`, or use the `pause-point --await`/`--trigger` flow instead of polling for progress.
 
 On `Success: false`, inspect `CompilationErrors` first. If empty, read `ErrorMessage` (and `Logs` for extra context) — the failure may be a runtime exception, cancellation, or an "execution in progress" rejection, all of which return empty `CompilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
