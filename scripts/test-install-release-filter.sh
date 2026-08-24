@@ -973,6 +973,127 @@ test_git_bash_latest_installs_windows_zip_asset() {
   assert_contains "$work_dir/output.txt" "uloop mock version"
 }
 
+# Verifies install.sh moves an existing destination aside, reclaims stale
+# leftovers, and leaves the backup after a successful replace.
+test_posix_replaces_existing_uloop_by_moving_it_aside() {
+  work_dir="$TMP_DIR/posix-move-aside"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  mkdir -p "$work_dir" "$install_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  printf '%s\n' 'old-binary' > "$install_dir/uloop"
+  chmod +x "$install_dir/uloop"
+  printf '%s\n' 'stale-backup' > "$install_dir/uloop.old-stale"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  PATH="$mock_bin:$ORIGINAL_PATH" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt"
+
+  if [ ! -x "$install_dir/uloop" ]; then
+    echo "Expected replace install to keep an executable uloop: $install_dir/uloop" >&2
+    exit 1
+  fi
+  assert_contains "$work_dir/output.txt" "uloop mock version"
+  if [ -e "$install_dir/uloop.old-stale" ]; then
+    echo "Expected stale leftover $install_dir/uloop.old-stale to be reclaimed" >&2
+    exit 1
+  fi
+  leftover_count=0
+  leftover_path=""
+  for leftover in "$install_dir"/uloop.old-*; do
+    if [ ! -e "$leftover" ]; then
+      continue
+    fi
+    leftover_count=$((leftover_count + 1))
+    leftover_path=$leftover
+  done
+  if [ "$leftover_count" -ne 1 ]; then
+    echo "Expected one leftover backup after a successful replace, found $leftover_count" >&2
+    ls -l "$install_dir" >&2
+    exit 1
+  fi
+  assert_contains "$leftover_path" "old-binary"
+}
+
+# Verifies the EXIT trap restores the aside backup when placing the staged
+# binary fails.
+test_posix_restores_uloop_backup_when_replace_fails() {
+  work_dir="$TMP_DIR/posix-restore-aside"
+  mock_bin="$work_dir/bin"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  mkdir -p "$work_dir" "$install_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  printf '%s\n' 'old-binary' > "$install_dir/uloop"
+  chmod +x "$install_dir/uloop"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+
+  real_mv=$(command -v mv)
+  cat > "$mock_bin/mv" <<MOCK_MV
+#!/bin/sh
+set -eu
+src=\$1
+dest=\$2
+case \$dest in
+  *.old-*)
+    exec $real_mv "\$src" "\$dest"
+    ;;
+esac
+case \$src in
+  */.uloop-install*)
+    echo "mock mv refusing to place staged binary" >&2
+    exit 1
+    ;;
+esac
+exec $real_mv "\$src" "\$dest"
+MOCK_MV
+  chmod +x "$mock_bin/mv"
+
+  status=0
+  PATH="$mock_bin:$ORIGINAL_PATH" \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    MOCK_NATIVE_INSTALL_UNSUPPORTED=1 \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt" || status=$?
+  if [ "$status" -eq 0 ]; then
+    echo "Expected replace install to fail when placing the staged binary is refused" >&2
+    exit 1
+  fi
+  assert_contains "$install_dir/uloop" "old-binary"
+}
+
+# Verifies install.sh uses move-aside + restore instead of mv -f onto the
+# running destination, without $RANDOM.
+test_posix_installer_moves_existing_uloop_aside() {
+  assert_contains "$ROOT_DIR/scripts/install.sh" 'replaced_uloop_backup_path="$final_uloop_path.old-$$-$(date +%s)"'
+  assert_contains "$ROOT_DIR/scripts/install.sh" 'mv "$final_uloop_path" "$replaced_uloop_backup_path"'
+  assert_contains "$ROOT_DIR/scripts/install.sh" 'mv "$staged_uloop_path" "$final_uloop_path"'
+  assert_not_contains "$ROOT_DIR/scripts/install.sh" 'mv -f "$staged_uloop_path" "$final_uloop_path"'
+  assert_not_contains "$ROOT_DIR/scripts/install.sh" '$RANDOM'
+  assert_contains "$ROOT_DIR/scripts/install.sh" '`uloop update` runs this'
+  assert_contains "$ROOT_DIR/scripts/install.sh" '[ ! -e "$final_uloop_path" ]'
+}
+
 # Verifies -UseBasicParsing on the two payload downloads, that the TLS 1.2
 # -bor assignment sits inside the PS 5.1 Major -lt 6 guard, and that that
 # assignment appears before the first Invoke-WebRequest in install.ps1.
@@ -1291,6 +1412,9 @@ test_posix_silences_legacy_cleanup_when_npm_prefix_cannot_be_inferred
 test_posix_removes_npm_package_before_replacing_same_bin_path
 test_powershell_latest_skips_prerelease_assets
 test_git_bash_latest_installs_windows_zip_asset
+test_posix_replaces_existing_uloop_by_moving_it_aside
+test_posix_restores_uloop_backup_when_replace_fails
+test_posix_installer_moves_existing_uloop_aside
 test_powershell_installer_enables_tls12_and_basic_parsing
 test_powershell_installer_avoids_optional_archive_cmdlets
 test_powershell_installer_uses_non_installer_staged_executable_name
