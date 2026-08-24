@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 IsEnabled = true,
                 IsHit = true,
                 HitCount = 1,
+                MethodEntryCount = 1,
                 TimeoutSeconds = 30,
                 Mode = "continuous",
                 MaxHistory = 20,

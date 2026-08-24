@@ -105,7 +105,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IsEnabled = false;
             Status = UloopPausePointStatus.Expired;
             Message = HitCount == 0
-                ? "Pause point expired before it was hit."
+                ? MethodEntryCount == 0
+                    ? "Pause point expired before it was hit. The armed method was never invoked."
+                    : $"Pause point expired before it was hit. The armed method ran {MethodEntryCount} time(s) but the armed line was never reached (branch not taken)."
                 : $"Pause point capture window expired after {HitCount} hit(s); capture history is preserved.";
             return true;
         }
