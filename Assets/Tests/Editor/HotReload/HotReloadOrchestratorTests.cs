@@ -6146,6 +6146,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return new HotReloadCallSiteScanner.CallSiteHit
             {
                 CallerMethodKey = callerMethodKey,
+                CallerGenericArity = 0,
                 TargetMethodKey = targetMethodKey
             };
         }

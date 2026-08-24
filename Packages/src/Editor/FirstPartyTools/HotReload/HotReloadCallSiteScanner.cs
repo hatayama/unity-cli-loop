@@ -75,6 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public string CallerTypeMetadataName;
             public string CallerMethodName;
             public string[] CallerParameterTypeFullNames;
+            public int CallerGenericArity;
             public string CallerMethodKey;
             public string TargetMethodKey;
             public bool IsFunctionPointerLoad;
@@ -518,6 +519,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CallerTypeMetadataName = typeMetadataName,
                 CallerMethodName = caller.Name,
                 CallerParameterTypeFullNames = parameterTypeFullNames,
+                CallerGenericArity = caller.GenericParameters.Count,
                 CallerMethodKey = FormatWireMethodKey(
                     typeMetadataName,
                     caller.Name,

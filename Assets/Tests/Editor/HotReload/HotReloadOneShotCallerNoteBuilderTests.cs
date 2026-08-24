@@ -41,6 +41,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a parameterized caller does not match a separate parameterless lifecycle-named method.
+        /// </summary>
+        [Test]
+        public void IsOneShotLifecycleCaller_ParameterizedCallerWithMatchingName_ReturnsFalse()
+        {
+            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(typeof(OverloadedLifecycleFixture), "Awake");
+            hit.CallerParameterTypeFullNames = new[] { "System.Int32" };
+
+            bool result = HotReloadOneShotCallerNoteEnricher.IsOneShotLifecycleCaller(hit);
+
+            Assert.That(result, Is.False);
+        }
+
+        /// <summary>
+        /// What: a generic caller does not match a separate non-generic lifecycle-named method.
+        /// </summary>
+        [Test]
+        public void IsOneShotLifecycleCaller_GenericCallerWithMatchingName_ReturnsFalse()
+        {
+            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(typeof(OverloadedLifecycleFixture), "Awake");
+            hit.CallerGenericArity = 1;
+
+            bool result = HotReloadOneShotCallerNoteEnricher.IsOneShotLifecycleCaller(hit);
+
+            Assert.That(result, Is.False);
+        }
+
+        /// <summary>
         /// What: an unresolvable caller type is not classified.
         /// </summary>
         [Test]
@@ -457,7 +485,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 CallerAssemblyName = typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name,
                 CallerTypeMetadataName = typeMetadataName,
-                CallerMethodName = methodName
+                CallerMethodName = methodName,
+                CallerParameterTypeFullNames = Array.Empty<string>(),
+                CallerGenericArity = 0
             };
         }
 
@@ -495,6 +525,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private sealed class ValidLifecycleFixture : MonoBehaviour
         {
             private void Awake()
+            {
+            }
+        }
+
+        /// <summary>
+        /// Models user code shapes the classifier must reject; fixture overloads prove the production overload ban does not apply.
+        /// </summary>
+        private sealed class OverloadedLifecycleFixture : MonoBehaviour
+        {
+            private void Awake()
+            {
+            }
+
+            private void Awake(int value)
             {
             }
         }

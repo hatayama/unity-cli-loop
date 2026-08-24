@@ -47,6 +47,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
+            if (hit.CallerParameterTypeFullNames == null
+                || hit.CallerParameterTypeFullNames.Length != 0
+                || hit.CallerGenericArity != 0)
+            {
+                return false;
+            }
+
             Assembly assembly = FindLoadedAssemblyByName(hit.CallerAssemblyName);
             if (assembly == null)
             {
