@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "{\"Message\":\"\",\"Action\":\"\",\"InterruptedByPausePoint\":false,\"Success\":true}";
 
         private const string PopulatedOptionalFieldsJson =
-            "{\"Message\":\"ok\",\"Action\":\"Press\",\"KeyName\":\"Space\","
+            "{\"Message\":\"ok\",\"Action\":\"Press\",\"Warning\":\"focus editor\",\"KeyName\":\"Space\","
             + "\"InterruptedByPausePoint\":false,\"RejectedByActivePausePointId\":\"marker\","
             + "\"PausePointId\":\"hit\",\"PausePointHitCount\":1,"
             + "\"PausePointHits\":[{\"Id\":\"hit\",\"HitCount\":1}],"
@@ -70,7 +70,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 PressEdgeKeyAlreadyPressedBeforeQueue = false,
                 KeyStateTrackedHeld = true,
                 KeyStateDeviceIsPressed = false,
-                ReleasedKeys = new List<string> { "Space" }
+                ReleasedKeys = new List<string> { "Space" },
+                Warning = "focus editor"
             };
 
             string json = JsonConvert.SerializeObject(

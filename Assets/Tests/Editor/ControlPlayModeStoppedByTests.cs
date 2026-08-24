@@ -118,6 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     UnityCliLoopJsonResponseSerializerSettings.Settings));
             Assert.That(omittedJson.Property("StoppedBy"), Is.Null);
             Assert.That(omittedJson.Property("StoppedAt"), Is.Null);
+            Assert.That(omittedJson.Property("Warning"), Is.Null);
 
             ControlPlayModeResponse populated = new ControlPlayModeResponse
             {
@@ -134,6 +135,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     UnityCliLoopJsonResponseSerializerSettings.Settings));
             Assert.That(populatedJson["StoppedBy"]?.Value<string>(), Is.EqualTo("cli-control-play-mode"));
             Assert.That(populatedJson["StoppedAt"]?.Value<string>(), Is.EqualTo("2026-01-01T00:00:00.0000000Z"));
+
+            populated.Warning = "focus editor";
+            JObject warningJson = LoadJsonWithoutDateParsing(
+                JsonConvert.SerializeObject(
+                    populated,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+            Assert.That(warningJson["Warning"]?.Value<string>(), Is.EqualTo("focus editor"));
         }
 
         /// <summary>
