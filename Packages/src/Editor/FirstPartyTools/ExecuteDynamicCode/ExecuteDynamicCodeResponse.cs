@@ -25,6 +25,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string ErrorMessage { get; set; }
 
         /// <summary>
+        /// Optional guidance when the current Editor focus state can affect execution progress.
+        /// </summary>
+        public string Warning { get; set; } = string.Empty;
+
+        /// <summary>
         /// Error message alias for ErrorMessage.
         /// Why keep: documented tool-response JSON field (Skill/SKILL.md); agents and CLI read it.
         /// </summary>
@@ -131,6 +136,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeActivePausePointId()
         {
             return !string.IsNullOrEmpty(ActivePausePointId);
+        }
+
+        public bool ShouldSerializeWarning()
+        {
+            return !string.IsNullOrEmpty(Warning);
         }
     }
     

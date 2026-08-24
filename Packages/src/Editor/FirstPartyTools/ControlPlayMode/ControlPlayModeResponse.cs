@@ -21,6 +21,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Message { get; set; }
         public string Warning { get; set; } = string.Empty;
 
+        public bool ShouldSerializeWarning()
+        {
+            return !string.IsNullOrEmpty(Warning);
+        }
+
         /// <summary>
         /// Why Play Mode last stopped. Omitted when this Editor session has no confirmed stop.
         /// </summary>

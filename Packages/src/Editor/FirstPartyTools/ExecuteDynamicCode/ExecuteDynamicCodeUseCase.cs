@@ -18,14 +18,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly IDynamicCodeExecutionRuntime _runtime;
         private readonly DynamicCodeExecutionResponseFactory _responseFactory;
         private readonly IDynamicCodeEditorStateReader _editorStateReader;
+        private readonly IEditorFocusStateProvider _editorFocusStateProvider;
 
         public ExecuteDynamicCodeUseCase(
             IDynamicCodeExecutionRuntime runtime,
-            IDynamicCodeEditorStateReader editorStateReader = null)
+            IDynamicCodeEditorStateReader editorStateReader = null,
+            IEditorFocusStateProvider editorFocusStateProvider = null)
         {
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             _responseFactory = new DynamicCodeExecutionResponseFactory();
             _editorStateReader = editorStateReader ?? new DynamicCodeEditorStateReader();
+            _editorFocusStateProvider = editorFocusStateProvider ?? new EditorFocusStateProvider();
         }
 
         public async Task<ExecuteDynamicCodeResponse> ExecuteAsync(
@@ -153,6 +156,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _editorStateReader.IsPaused, UloopPausePointRegistry.GetActivePausePointId());
             response.EditorPaused = editorPaused;
             response.ActivePausePointId = activePausePointId;
+            response.Warning = EditorUnfocusedWarningBuilder.BuildPlayModeProgressHint(
+                response.EditorPlaying,
+                _editorFocusStateProvider.IsFocused);
         }
 
         private static void LogExecutionStart(

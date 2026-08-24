@@ -14,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public string Message { get; set; } = "";
         public string Action { get; set; } = "";
+        public string Warning { get; set; } = "";
         // Why per-property Ignore: null optional diagnostics must not serialize as JSON null;
         // agents treat missing vs null inconsistently. Do not change global serializer settings
         // or every tool's wire contract changes. Matches Go omitempty.
@@ -122,6 +123,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeDeferredLatchSyncScheduled()
         {
             return DeferredLatchSyncScheduled;
+        }
+
+        public bool ShouldSerializeWarning()
+        {
+            return !string.IsNullOrEmpty(Warning);
         }
 
         public SimulateKeyboardResponse()

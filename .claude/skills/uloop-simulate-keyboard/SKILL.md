@@ -90,6 +90,7 @@ Returns JSON with:
 - `Success` (boolean): Whether the action succeeded (e.g. `KeyDown` on a not-yet-held key, `KeyUp` on a currently-held key, or `Press` round-trip)
 - `Message` (string): Description of what happened or why it failed
 - `Action` (string): The `--action` value that was applied (`Press`, `KeyDown`, `KeyUp`, or `ReleaseAll`)
+- `Warning` (string, optional): Set for a successful `Press` or `KeyDown` whose press edge was not observed while the Unity Editor is unfocused. Run `uloop focus-window` before retrying; queued input may be delivered all at once when the Editor regains focus.
 - `KeyName` (string, nullable): The key that was acted on; may be `null` when the action could not resolve a key
 - `ReleasedKeys` (string list, nullable): Set only for `ReleaseAll`; the key names that were force-released (empty when nothing was held)
 - `ReleasedKeyStates` (list, nullable): Set only for `ReleaseAll`. Each entry is `{ Key, DeviceIsPressedAfterRelease }` from a device readback after the release injection. Empty when nothing was held, or when no keyboard device is present (`KeyStateReadUpdateType` is also omitted then). If tracked keys remain with no keyboard device, `ReleasedKeys` is non-empty while `ReleasedKeyStates` is empty. Omitted (`null`) for other actions. `DeviceIsPressedAfterRelease: true` means the Input System view still reports pressed — do not treat `Success: true` as proof that gameplay polling already sees the key as up

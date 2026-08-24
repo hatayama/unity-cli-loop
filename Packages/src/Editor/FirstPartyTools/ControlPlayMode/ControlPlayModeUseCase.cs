@@ -31,13 +31,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly IEditorUnsavedChangesQuietSaver _unsavedChangesQuietSaver;
         private readonly IControlPlayModeEditorStateService _editorStateService;
         private readonly IControlPlayModeDomainReloadDropStateProvider _domainReloadDropStateProvider;
+        private readonly IEditorFocusStateProvider _editorFocusStateProvider;
 
         public ControlPlayModeUseCase(
             IControlPlayModeCompilationFailureProvider compilationFailureProvider = null,
             IControlPlayModeCompilationFailureGate compilationFailureGate = null,
             IEditorUnsavedChangesQuietSaver unsavedChangesQuietSaver = null,
             IControlPlayModeEditorStateService editorStateService = null,
-            IControlPlayModeDomainReloadDropStateProvider domainReloadDropStateProvider = null)
+            IControlPlayModeDomainReloadDropStateProvider domainReloadDropStateProvider = null,
+            IEditorFocusStateProvider editorFocusStateProvider = null)
         {
             _compilationFailureProvider =
                 compilationFailureProvider ?? ControlPlayModeServices.CompilationFailureProvider;
@@ -49,6 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editorStateService ?? ControlPlayModeServices.EditorStateService;
             _domainReloadDropStateProvider =
                 domainReloadDropStateProvider ?? ControlPlayModeServices.DomainReloadDropStateProvider;
+            _editorFocusStateProvider = editorFocusStateProvider ?? new EditorFocusStateProvider();
         }
 
         public Task<ControlPlayModeResponse> ExecuteAsync(ControlPlayModeSchema parameters, CancellationToken ct)
@@ -306,7 +309,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ResumedFromPause = resumedFromPause,
                 CompileErrors = Array.Empty<ControlPlayModeCompileError>(),
                 Message = message,
-                Warning = warning
+                Warning = JoinWarnings(
+                    warning,
+                    action == PlayModeAction.Status
+                        ? EditorUnfocusedWarningBuilder.BuildPlayModeProgressHint(
+                            _editorStateService.IsPlaying,
+                            _editorFocusStateProvider.IsFocused)
+                        : string.Empty)
             };
             PlayModeStopReasonResponseFiller.CopyConfirmedIfNeeded(response, action, wasAlreadyStopped);
 
