@@ -25,6 +25,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string GenericHostTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.GenericHost`1";
 
+        private const string CrossAssemblyTargetTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCallSiteScannerCrossAssemblyTarget";
+
         /// <summary>
         /// What: a method called from an ordinary method is reported with that caller's method key.
         /// </summary>
@@ -240,8 +243,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void FindCallSites_CrossAssemblyCaller_ReportsReferencedAssemblyHit()
         {
             List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
-                FixtureTypeMetadataName,
-                nameof(HotReloadCallSiteScannerFixture.CalledFromCrossAssembly),
+                CrossAssemblyTargetTypeMetadataName,
+                nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
                 Array.Empty<string>(),
                 0);
 
@@ -254,6 +257,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                     + ".HotReloadCallSiteCrossAssemblyCaller::Call()"));
+        }
+
+        /// <summary>
+        /// What: a same-name method in a different assembly is not attributed to the main target.
+        /// </summary>
+        [Test]
+        public void FindCallSites_SameFullNameForeignAssemblyTarget_ExcludesForeignCallSite()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.CalledFromCrossAssembly),
+                Array.Empty<string>(),
+                0);
+
+            Assert.That(hits, Is.Empty);
         }
 
         /// <summary>

@@ -181,14 +181,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // InMemory + no resolver: operand FullName comparison does not require type resolution.
             ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
             using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(dllPath, readerParameters);
-            Dictionary<string, MethodDefinition> logicalOwners =
-                BuildLogicalOwnerIndex(assemblyDefinition.MainModule);
+            ModuleDefinition module = assemblyDefinition.MainModule;
+            Dictionary<string, MethodDefinition> logicalOwners = BuildLogicalOwnerIndex(module);
 
-            foreach (TypeDefinition type in assemblyDefinition.MainModule.GetTypes())
+            foreach (TypeDefinition type in module.GetTypes())
             {
                 foreach (MethodDefinition method in type.Methods)
                 {
-                    CollectHitsFromMethod(assemblyName, method, targets, logicalOwners, hits);
+                    CollectHitsFromMethod(assemblyName, module, method, targets, logicalOwners, hits);
                 }
             }
         }
@@ -242,6 +242,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void CollectHitsFromMethod(
             string assemblyName,
+            ModuleDefinition module,
             MethodDefinition method,
             CompiledMethodIdentity[] targets,
             Dictionary<string, MethodDefinition> logicalOwners,
@@ -265,7 +266,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                (bool matched, CompiledMethodIdentity target) = FindMatchingTarget(operand, targets);
+                (bool matched, CompiledMethodIdentity target) = FindMatchingTarget(
+                    operand,
+                    assemblyName,
+                    module,
+                    targets);
                 if (!matched)
                 {
                     continue;
@@ -276,7 +281,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why resolve first: async/iterator self-recursion lives in MoveNext. Matching
                 // the physical caller would miss it, then reporting the logical owner would look
                 // like an external caller of the old method.
-                if (IsSelfCall(assemblyName, reportedCaller, target))
+                if (IsSelfCall(assemblyName, module, reportedCaller, target))
                 {
                     continue;
                 }
@@ -305,16 +310,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static (bool matched, CompiledMethodIdentity target) FindMatchingTarget(
             MethodReference methodReference,
+            string scannedAssemblyName,
+            ModuleDefinition scannedModule,
             CompiledMethodIdentity[] targets)
         {
             foreach (CompiledMethodIdentity target in targets)
             {
                 if (MatchesIdentity(
                         methodReference,
-                        target.TypeMetadataName,
-                        target.MethodName,
-                        target.ParameterTypeFullNames,
-                        target.GenericArity))
+                        target,
+                        scannedAssemblyName,
+                        scannedModule))
                 {
                     return (true, target);
                 }
@@ -325,6 +331,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static bool IsSelfCall(
             string callerAssemblyName,
+            ModuleDefinition callerModule,
             MethodDefinition caller,
             CompiledMethodIdentity target)
         {
@@ -333,20 +340,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            return MatchesIdentity(
-                caller,
-                target.TypeMetadataName,
-                target.MethodName,
-                target.ParameterTypeFullNames,
-                target.GenericArity);
+            return MatchesIdentity(caller, target, callerAssemblyName, callerModule);
         }
 
         private static bool MatchesIdentity(
             MethodReference methodReference,
-            string typeMetadataName,
-            string methodName,
-            string[] parameterTypeFullNames,
-            int genericArity)
+            CompiledMethodIdentity target,
+            string scannedAssemblyName,
+            ModuleDefinition scannedModule)
         {
             MethodReference openMethod = methodReference.GetElementMethod();
             if (openMethod.DeclaringType == null)
@@ -354,38 +355,70 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            // Why not normalize '/' → '+': Cecil FullName and worker typeMetadataName both use
-            // '/' for nested types, and BuildMethodKey keeps that form. Converting here would
-            // desync CallerMethodKey from the orchestrator key space on nested types.
-            if (ToOpenDeclaringTypeFullName(openMethod.DeclaringType) != typeMetadataName)
+            TypeReference openDeclaringType = GetOpenDeclaringType(openMethod.DeclaringType);
+            if (!DeclaringTypeScopeMatchesTarget(
+                    openDeclaringType,
+                    target.AssemblyName,
+                    scannedAssemblyName,
+                    scannedModule))
             {
                 return false;
             }
 
-            if (openMethod.Name != methodName)
+            // Why not normalize '/' → '+': Cecil FullName and worker typeMetadataName both use
+            // '/' for nested types, and BuildMethodKey keeps that form. Converting here would
+            // desync CallerMethodKey from the orchestrator key space on nested types.
+            if (openDeclaringType.FullName != target.TypeMetadataName)
+            {
+                return false;
+            }
+
+            if (openMethod.Name != target.MethodName)
             {
                 return false;
             }
 
             // Why compare arity: Caller(int) and Caller<T>(int) share name and parameters.
             // Treating them as the same identity fail-opens the signature-change gate.
-            if (openMethod.GenericParameters.Count != genericArity)
+            if (openMethod.GenericParameters.Count != target.GenericArity)
             {
                 return false;
             }
 
-            return ParametersMatch(openMethod, parameterTypeFullNames);
+            return ParametersMatch(openMethod, target.ParameterTypeFullNames);
         }
 
-        private static string ToOpenDeclaringTypeFullName(TypeReference declaringType)
+        private static TypeReference GetOpenDeclaringType(TypeReference declaringType)
         {
             GenericInstanceType genericInstance = declaringType as GenericInstanceType;
             if (genericInstance != null)
             {
-                return genericInstance.GetElementType().FullName;
+                return genericInstance.GetElementType();
             }
 
-            return declaringType.FullName;
+            return declaringType;
+        }
+
+        private static bool DeclaringTypeScopeMatchesTarget(
+            TypeReference declaringType,
+            string targetAssemblyName,
+            string scannedAssemblyName,
+            ModuleDefinition scannedModule)
+        {
+            AssemblyNameReference assemblyReference = declaringType.Scope as AssemblyNameReference;
+            if (assemblyReference != null)
+            {
+                return assemblyReference.Name == targetAssemblyName;
+            }
+
+            // A non-assembly scope could name a same-shaped type from another module. Treating it
+            // as the target would overstate caller coverage and lifecycle certainty.
+            if (!ReferenceEquals(declaringType.Scope, scannedModule))
+            {
+                return false;
+            }
+
+            return scannedAssemblyName == targetAssemblyName;
         }
 
         private static bool ParametersMatch(MethodReference methodReference, string[] parameterTypeFullNames)

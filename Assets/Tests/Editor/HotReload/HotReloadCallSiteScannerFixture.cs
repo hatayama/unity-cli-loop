@@ -112,6 +112,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Gives cross-assembly coverage a target type whose name cannot collide with its foreign fixture.
+    /// </summary>
+    public static class HotReloadCallSiteScannerCrossAssemblyTarget
+    {
+        public static int Called()
+        {
+            return 7;
+        }
+    }
+
+    /// <summary>
     /// Open generic host so call sites go through a constructed <c>GenericHost&lt;int&gt;</c>.
     /// </summary>
     public class GenericHost<T>
