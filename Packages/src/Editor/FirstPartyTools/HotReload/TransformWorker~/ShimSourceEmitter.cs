@@ -90,10 +90,11 @@ internal static class ShimSourceEmitter
                         .GetAnnotations(TransformWorkerProgram.UloopLineAnnotationKind)
                         .First();
                     // Why leading trivia starts/ends with newline: #line must occupy its own line.
+                    // Why after comments/regions: those trivia consume mapped lines if they sit
+                    // under the directive, so a later statement inherits the earlier line number.
                     string directiveText =
                         "\n#line " + annotation.Data + " \"" + projectRelativePath + "\"\n";
-                    SyntaxTriviaList leading = SyntaxFactory.ParseLeadingTrivia(directiveText);
-                    return rewritten.WithLeadingTrivia(leading.AddRange(rewritten.GetLeadingTrivia()));
+                    return LineDirectiveTriviaInjector.Attach(rewritten, directiveText);
                 });
         }
 

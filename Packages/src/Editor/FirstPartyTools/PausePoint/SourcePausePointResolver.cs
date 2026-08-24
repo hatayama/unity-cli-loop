@@ -157,29 +157,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                MethodDebugInformation debugInformation = method.DebugInformation;
-                if (debugInformation == null || !debugInformation.HasSequencePoints)
+                SequencePoint sequencePoint = SourcePausePointCecilSequencePointSelector.SelectInMethod(
+                    method,
+                    normalizedInputPath,
+                    line,
+                    int.MaxValue);
+                if (sequencePoint == null)
                 {
                     continue;
                 }
 
-                foreach (SequencePoint sequencePoint in debugInformation.SequencePoints)
+                if (bestSequencePoint == null || sequencePoint.StartLine < bestSequencePoint.StartLine)
                 {
-                    if (sequencePoint.IsHidden || sequencePoint.StartLine < line)
-                    {
-                        continue;
-                    }
-
-                    if (!SourcePausePointPathNormalizer.PathsReferToSameFile(sequencePoint.Document.Url, normalizedInputPath))
-                    {
-                        continue;
-                    }
-
-                    if (bestSequencePoint == null || sequencePoint.StartLine < bestSequencePoint.StartLine)
-                    {
-                        bestMethod = method;
-                        bestSequencePoint = sequencePoint;
-                    }
+                    bestMethod = method;
+                    bestSequencePoint = sequencePoint;
                 }
             }
 

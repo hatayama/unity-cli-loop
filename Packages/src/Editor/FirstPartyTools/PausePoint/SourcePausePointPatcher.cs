@@ -169,9 +169,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             bool isStatic = !shim.InstanceFromFirstArgument && method.IsStatic;
-            // Why physical DeclaringType: shim compiles with -optimize+, so async MoveNext state
-            // machines are structs even when the user type is a class. Boxing decisions must
-            // follow the method we actually patch, not the logical owner.
+            // Why physical DeclaringType: async MoveNext state machines are structs even when
+            // the user type is a class. Boxing decisions must follow the method we actually
+            // patch, not the logical owner.
             bool isDeclaringTypeValueType =
                 method.DeclaringType != null && method.DeclaringType.IsValueType;
 

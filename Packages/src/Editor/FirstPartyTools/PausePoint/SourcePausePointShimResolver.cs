@@ -188,45 +188,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (MethodDefinition method in SourcePausePointResolver.EnumerateMethodsInModule(module))
             {
-                if (!method.HasBody)
+                SequencePoint sequencePoint = SourcePausePointCecilSequencePointSelector.SelectInMethod(
+                    method,
+                    normalizedFilePath,
+                    line,
+                    sourceEndLine);
+                if (sequencePoint == null)
                 {
                     continue;
                 }
 
-                MethodDebugInformation debugInformation = method.DebugInformation;
-                if (debugInformation == null || !debugInformation.HasSequencePoints)
+                if (bestSequencePoint == null || sequencePoint.StartLine < bestSequencePoint.StartLine)
                 {
-                    continue;
-                }
-
-                foreach (SequencePoint sequencePoint in debugInformation.SequencePoints)
-                {
-                    if (sequencePoint.IsHidden
-                        || sequencePoint.StartLine < line
-                        || sequencePoint.StartLine > sourceEndLine)
-                    {
-                        continue;
-                    }
-
-                    // Why request-first remains valid: PathsReferToSameFile is now symmetric.
-                    // Either argument may be the absolute side: shim compiles route through the
-                    // shared worker (relative literal documents) or the one-shot csc
-                    // (project-rooted absolute documents), while the pause-point request may
-                    // arrive relative or absolute.
-                    string documentUrl = SourcePausePointPathNormalizer.ToForwardSlashes(
-                        sequencePoint.Document.Url);
-                    if (!SourcePausePointPathNormalizer.PathsReferToSameFile(
-                            normalizedFilePath,
-                            documentUrl))
-                    {
-                        continue;
-                    }
-
-                    if (bestSequencePoint == null || sequencePoint.StartLine < bestSequencePoint.StartLine)
-                    {
-                        bestMethod = method;
-                        bestSequencePoint = sequencePoint;
-                    }
+                    bestMethod = method;
+                    bestSequencePoint = sequencePoint;
                 }
             }
 
