@@ -294,6 +294,20 @@ func TestBuildToolParamsUnknownOptionSuggestsTestModeFromSharedLaterToken(t *tes
 	})
 }
 
+// Verifies enable-pause-point suggests its CLI-only trigger option when a supplied flag is a close typo.
+func TestBuildToolParamsUnknownOptionSuggestsPausePointTrigger(t *testing.T) {
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), pausePointEnableCommandName)
+	if !ok {
+		t.Fatal("enable-pause-point was not found in default tools")
+	}
+
+	_, _, err := buildToolParams([]string{"--triger"}, tool)
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop enable-pause-point --trigger",
+		"Run `uloop enable-pause-point --help` to inspect supported options.",
+	})
+}
+
 // Verifies an unrelated unknown flag keeps only the --help NextAction.
 func TestBuildToolParamsUnknownOptionWithoutSuggestionKeepsHelpNextAction(t *testing.T) {
 	_, _, err := buildToolParams([]string{"--zzzzzzzz"}, toolParamsSuggestionTool())

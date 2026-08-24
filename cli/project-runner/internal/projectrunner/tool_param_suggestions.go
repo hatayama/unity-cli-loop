@@ -152,19 +152,34 @@ func visibleToolOptions(tool clicore.ToolDefinition) []visibleToolOption {
 			property: property,
 		})
 	}
-	return appendDynamicCodeFileSuggestionOption(tool, options)
+	options = appendDynamicCodeFileSuggestionOption(tool, options)
+	return appendPausePointEnableSuggestionOptions(tool, options)
 }
 
 func appendDynamicCodeFileSuggestionOption(tool clicore.ToolDefinition, options []visibleToolOption) []visibleToolOption {
 	if tool.Name != clicore.ExecuteDynamicCodeCommandName {
 		return options
 	}
+	return appendSuggestionOption(options, tooldocs.DynamicCodeFileFlagName)
+}
+
+func appendPausePointEnableSuggestionOptions(tool clicore.ToolDefinition, options []visibleToolOption) []visibleToolOption {
+	if tool.Name != pausePointEnableCommandName {
+		return options
+	}
+	for _, option := range tooldocs.PausePointEnableCLIOnlyOptions() {
+		options = appendSuggestionOption(options, option.FlagName)
+	}
+	return options
+}
+
+func appendSuggestionOption(options []visibleToolOption, name string) []visibleToolOption {
 	for _, option := range options {
-		if option.name == tooldocs.DynamicCodeFileFlagName {
+		if option.name == name {
 			return options
 		}
 	}
-	return append(options, visibleToolOption{name: tooldocs.DynamicCodeFileFlagName})
+	return append(options, visibleToolOption{name: name})
 }
 
 func hasSharedKebabToken(left string, right string) bool {
