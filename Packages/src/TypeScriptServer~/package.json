@@ -67,7 +67,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
     "launch-unity": "0.17.1",
-    "uuid": "14.0.1",
+    "uuid": "14.0.2",
     "zod": "4.4.3"
   },
   "devDependencies": {
