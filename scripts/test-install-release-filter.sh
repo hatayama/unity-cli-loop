@@ -973,6 +973,45 @@ test_git_bash_latest_installs_windows_zip_asset() {
   assert_contains "$work_dir/output.txt" "uloop mock version"
 }
 
+# Verifies -UseBasicParsing on the two payload downloads, that the TLS 1.2
+# -bor assignment sits inside the PS 5.1 Major -lt 6 guard, and that that
+# assignment appears before the first Invoke-WebRequest in install.ps1.
+test_powershell_installer_enables_tls12_and_basic_parsing() {
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -UseBasicParsing -Uri $DownloadUrl -OutFile $ArchivePath'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -UseBasicParsing -Uri $ChecksumUrl -OutFile $ChecksumPath'
+  assert_not_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -Uri'
+
+  tls_assignment='[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12'
+  tls_guard_block=$(awk '
+    index($0, "if ($PSVersionTable.PSVersion.Major -lt 6) {") {
+      capture = 1
+    }
+    capture {
+      print
+    }
+    capture && index($0, "}") {
+      exit
+    }
+  ' "$ROOT_DIR/scripts/install.ps1")
+  if [ -z "$tls_guard_block" ]; then
+    echo "Expected a PS 5.1 Major -lt 6 guard in install.ps1" >&2
+    exit 1
+  fi
+  printf '%s\n' "$tls_guard_block" > "$TMP_DIR/tls-guard.ps1"
+  assert_contains "$TMP_DIR/tls-guard.ps1" "$tls_assignment"
+
+  tls_line=$(grep -n -F "$tls_assignment" "$ROOT_DIR/scripts/install.ps1" | head -n 1 | cut -d: -f1)
+  first_web_request_line=$(grep -n -F 'Invoke-WebRequest' "$ROOT_DIR/scripts/install.ps1" | head -n 1 | cut -d: -f1)
+  if [ -z "$tls_line" ] || [ -z "$first_web_request_line" ]; then
+    echo "Expected TLS 1.2 assignment and Invoke-WebRequest line numbers in install.ps1" >&2
+    exit 1
+  fi
+  if [ "$tls_line" -ge "$first_web_request_line" ]; then
+    echo "Expected TLS 1.2 assignment at line $tls_line to precede first Invoke-WebRequest at line $first_web_request_line" >&2
+    exit 1
+  fi
+}
+
 test_powershell_installer_avoids_optional_archive_cmdlets() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Get-UloopSha256Hash'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '[System.Security.Cryptography.SHA256]::Create()'
@@ -1252,6 +1291,7 @@ test_posix_silences_legacy_cleanup_when_npm_prefix_cannot_be_inferred
 test_posix_removes_npm_package_before_replacing_same_bin_path
 test_powershell_latest_skips_prerelease_assets
 test_git_bash_latest_installs_windows_zip_asset
+test_powershell_installer_enables_tls12_and_basic_parsing
 test_powershell_installer_avoids_optional_archive_cmdlets
 test_powershell_installer_uses_non_installer_staged_executable_name
 test_powershell_native_probe_restores_error_action_preference
