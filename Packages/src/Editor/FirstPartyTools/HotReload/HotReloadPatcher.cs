@@ -214,8 +214,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadPatchResult.Failure(
                     HotReloadPatchFailureReason.ApplyFailed,
                     $"Applying the patch to '{method}' failed: " +
-                    $"{exception.GetType().Name}: {exception.Message}{rootCauseSuffix} " +
-                    "Other methods in this run are unaffected.");
+                    $"{exception.GetType().Name}: {exception.Message}{rootCauseSuffix}");
             }
             finally
             {
@@ -533,7 +532,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return _pendingShimMethod;
         }
 
-        private static HotReloadPatchResult CheckPatchable(MethodBase method)
+        // Why internal: preflight validation must run these five checks before any
+        // registry write or Harmony Patch. The method itself has no side effects.
+        internal static HotReloadPatchResult CheckPatchable(MethodBase method)
         {
             if (method.IsAbstract)
             {

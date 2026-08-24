@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -2484,6 +2485,351 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadAddedFieldRegistry.GetFieldsForType(
                     typeof(HotReloadAtomicFileApplyFixture).FullName),
                 Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a match failure among multiple apply entries fails that entry, skips the rest
+        /// with AtomicFileSkipReason, and does not begin a shim / added-member / added-field
+        /// generation for the file.
+        /// </summary>
+        [Test]
+        public void ApplyEntries_MatchFailureAmongMultipleEntries_SkipsRestWithoutRegistryGeneration()
+        {
+            const string projectRelativePath = "Assets/Tests/Editor/HotReload/PreflightMatchFailure.cs";
+            const string missingMethodName = "DoesNotExistInCompiledAssembly";
+            string typeName = typeof(HotReloadE2EFixture).FullName;
+            string expectedFailedLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeName,
+                missingMethodName,
+                new[] { typeof(int).FullName },
+                genericArity: 0);
+            string expectedFailedReason =
+                "No method '" + missingMethodName
+                + "' with the given parameter types was found on '" + typeName + "'.";
+            string[] addedFieldNames =
+            {
+                typeName + ".PreflightScratch"
+            };
+            TransformWorkerEntryDto[] entries =
+            {
+                new TransformWorkerEntryDto
+                {
+                    typeMetadataName = typeName,
+                    methodName = missingMethodName,
+                    parameterTypeFullNames = new[] { typeof(int).FullName },
+                    genericArity = 0,
+                    shimTypeName = "UnusedShim",
+                    shimMethodName = "Unused",
+                    patchKind = string.Empty
+                },
+                new TransformWorkerEntryDto
+                {
+                    typeMetadataName = typeName,
+                    methodName = nameof(HotReloadE2EFixture.ComputeWithPrivate),
+                    parameterTypeFullNames = new[] { typeof(int).FullName },
+                    genericArity = 0,
+                    shimTypeName = "UnusedShim",
+                    shimMethodName = "Unused",
+                    patchKind = string.Empty
+                }
+            };
+            TransformWorkerOutputDto workerOutput = new TransformWorkerOutputDto
+            {
+                entries = entries,
+                addedFieldNames = addedFieldNames,
+                sourceContentSha256 = "preflight-match-failure"
+            };
+
+            HotReloadOrchestrator.HotReloadFileProcessResult fileResult =
+                HotReloadEntryApplier.ApplyEntriesAndBuildResult(
+                    typeof(HotReloadE2EFixture).Assembly.GetName().Name,
+                    projectRelativePath,
+                    projectRelativePath,
+                    HotReloadShimCompileResult.SuccessResult(
+                        typeof(HotReloadEntryApplier).Assembly,
+                        new byte[] { 1 },
+                        Array.Empty<byte>()),
+                    entries,
+                    addedFieldNames,
+                    workerOutput,
+                    new HashSet<string>(),
+                    new HashSet<string>(),
+                    new List<HotReloadMethodOutcome>(),
+                    new List<string>(),
+                    new List<string>(),
+                    new List<string>(),
+                    unchangedMethodCount: 0);
+
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                fileResult.Outcomes,
+                fileResult.Warnings,
+                fileResult.PatchedCount,
+                activePatchTotal: 0);
+            Assert.That(fileResult.Outcomes.Count, Is.EqualTo(2));
+            Assert.That(fileResult.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+            Assert.That(fileResult.Outcomes[0].Method, Is.EqualTo(expectedFailedLabel));
+            Assert.That(fileResult.Outcomes[0].Reason, Is.EqualTo(expectedFailedReason));
+            AssertHasAtomicFileSkip(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertNoPatchedOrAddedOutcomes(result);
+            Assert.That(HotReloadShimRegistry.HasGeneration(projectRelativePath), Is.False);
+            Assert.That(HotReloadAddedMemberRegistry.HasGeneration(projectRelativePath), Is.False);
+            Assert.That(HotReloadAddedFieldRegistry.GetFieldsForType(typeName), Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a match failure at a non-leading entry still reports every entry: earlier
+        /// resolved methods become Skipped with AtomicFileSkipReason, the failed entry stays
+        /// Failed, later entries are Skipped, and outcomes.Count equals the entry count.
+        /// </summary>
+        [Test]
+        public void ApplyEntries_MatchFailureAfterResolvedEntry_SkipsPriorAndRestWithoutRegistryGeneration()
+        {
+            const string projectRelativePath = "Assets/Tests/Editor/HotReload/PreflightMatchFailureMid.cs";
+            const string missingMethodName = "DoesNotExistInCompiledAssembly";
+            string typeName = typeof(HotReloadCoreFixture).FullName;
+            string expectedPriorLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeName,
+                nameof(HotReloadCoreFixture.ReplaceableCompute),
+                new[] { typeof(int).FullName },
+                genericArity: 0);
+            string expectedFailedLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeName,
+                missingMethodName,
+                new[] { typeof(int).FullName },
+                genericArity: 0);
+            string expectedTrailingLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeName,
+                nameof(HotReloadCoreFixture.StaticPing),
+                Array.Empty<string>(),
+                genericArity: 0);
+            string expectedFailedReason =
+                "No method '" + missingMethodName
+                + "' with the given parameter types was found on '" + typeName + "'.";
+            TransformWorkerEntryDto[] entries =
+            {
+                CreateExistingMethodEntry(
+                    typeName,
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    new[] { typeof(int).FullName },
+                    nameof(HotReloadHandwrittenShims),
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0)),
+                CreateExistingMethodEntry(
+                    typeName,
+                    missingMethodName,
+                    new[] { typeof(int).FullName },
+                    nameof(HotReloadHandwrittenShims),
+                    nameof(HotReloadHandwrittenShims.StaticPing__shim0)),
+                CreateExistingMethodEntry(
+                    typeName,
+                    nameof(HotReloadCoreFixture.StaticPing),
+                    Array.Empty<string>(),
+                    nameof(HotReloadHandwrittenShims),
+                    nameof(HotReloadHandwrittenShims.StaticPing__shim0))
+            };
+
+            HotReloadOrchestrator.HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
+                projectRelativePath,
+                entries);
+            HotReloadOrchestratorResult result = ToOrchestratorResult(fileResult);
+
+            Assert.That(fileResult.Outcomes.Count, Is.EqualTo(entries.Length));
+            Assert.That(fileResult.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped));
+            Assert.That(fileResult.Outcomes[0].Method, Is.EqualTo(expectedPriorLabel));
+            Assert.That(fileResult.Outcomes[0].Reason, Is.EqualTo(HotReloadConstants.AtomicFileSkipReason));
+            Assert.That(fileResult.Outcomes[1].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+            Assert.That(fileResult.Outcomes[1].Method, Is.EqualTo(expectedFailedLabel));
+            Assert.That(fileResult.Outcomes[1].Reason, Is.EqualTo(expectedFailedReason));
+            Assert.That(fileResult.Outcomes[2].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Skipped));
+            Assert.That(fileResult.Outcomes[2].Method, Is.EqualTo(expectedTrailingLabel));
+            Assert.That(fileResult.Outcomes[2].Reason, Is.EqualTo(HotReloadConstants.AtomicFileSkipReason));
+            AssertNoPatchedOrAddedOutcomes(result);
+            Assert.That(HotReloadShimRegistry.HasGeneration(projectRelativePath), Is.False);
+            Assert.That(HotReloadAddedMemberRegistry.HasGeneration(projectRelativePath), Is.False);
+        }
+
+        /// <summary>
+        /// What: a Harmony apply-engine failure after Added and Patched stops the file, skips
+        /// the trailing entry with AtomicFileSkipReason, and warns with applied count 2.
+        /// </summary>
+        [Test]
+        public void ApplyEntries_HarmonyEngineFailureAfterAddedAndPatched_WarnsWithAppliedCountTwo()
+        {
+            const string projectRelativePath = "Assets/Tests/Editor/HotReload/ApplyEngineFailurePartial.cs";
+            string typeName = typeof(HotReloadCoreFixture).FullName;
+            const string addedMethodName = "AddedPing";
+            string expectedWarning = string.Format(
+                HotReloadConstants.PartialApplyAfterPatchEngineFailureWarningFormat,
+                2);
+            TransformWorkerEntryDto[] entries =
+            {
+                CreateAddedMethodEntry(
+                    typeName,
+                    addedMethodName,
+                    nameof(HotReloadHandwrittenShims),
+                    nameof(HotReloadHandwrittenShims.StaticPing__shim0)),
+                CreateExistingMethodEntry(
+                    typeName,
+                    nameof(HotReloadCoreFixture.VoidBump),
+                    Array.Empty<string>(),
+                    nameof(HotReloadHandwrittenShims),
+                    nameof(HotReloadHandwrittenShims.VoidBump__shim0)),
+                CreateExistingMethodEntry(
+                    typeName,
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    new[] { typeof(int).FullName },
+                    nameof(HotReloadOrchestratorTests),
+                    nameof(ApplyEngineFailureExternShim)),
+                CreateExistingMethodEntry(
+                    typeName,
+                    nameof(HotReloadCoreFixture.StaticPing),
+                    Array.Empty<string>(),
+                    nameof(HotReloadHandwrittenShims),
+                    nameof(HotReloadHandwrittenShims.StaticPing__shim0))
+            };
+
+            try
+            {
+                HotReloadOrchestrator.HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
+                    projectRelativePath,
+                    entries);
+                HotReloadOrchestratorResult result = ToOrchestratorResult(fileResult);
+
+                Assert.That(fileResult.Outcomes.Count, Is.EqualTo(entries.Length));
+                Assert.That(fileResult.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Added));
+                Assert.That(fileResult.Outcomes[1].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched));
+                Assert.That(fileResult.Outcomes[2].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+                AssertHasAtomicFileSkip(result, nameof(HotReloadCoreFixture.StaticPing));
+                Assert.That(fileResult.Warnings.Count, Is.EqualTo(1));
+                Assert.That(fileResult.Warnings[0], Is.EqualTo(expectedWarning));
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
+        /// What: a Harmony apply-engine failure on the first entry skips the rest with
+        /// AtomicFileSkipReason and does not emit the partial-apply warning.
+        /// </summary>
+        [Test]
+        public void ApplyEntries_HarmonyEngineFailureOnFirstEntry_SkipsRestWithoutPartialWarning()
+        {
+            const string projectRelativePath = "Assets/Tests/Editor/HotReload/ApplyEngineFailureFirst.cs";
+            string typeName = typeof(HotReloadCoreFixture).FullName;
+            TransformWorkerEntryDto[] entries =
+            {
+                CreateExistingMethodEntry(
+                    typeName,
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    new[] { typeof(int).FullName },
+                    nameof(HotReloadOrchestratorTests),
+                    nameof(ApplyEngineFailureExternShim)),
+                CreateExistingMethodEntry(
+                    typeName,
+                    nameof(HotReloadCoreFixture.VoidBump),
+                    Array.Empty<string>(),
+                    nameof(HotReloadHandwrittenShims),
+                    nameof(HotReloadHandwrittenShims.VoidBump__shim0))
+            };
+
+            try
+            {
+                HotReloadOrchestrator.HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
+                    projectRelativePath,
+                    entries);
+                HotReloadOrchestratorResult result = ToOrchestratorResult(fileResult);
+
+                Assert.That(fileResult.Outcomes.Count, Is.EqualTo(entries.Length));
+                Assert.That(fileResult.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+                AssertHasAtomicFileSkip(result, nameof(HotReloadCoreFixture.VoidBump));
+                AssertNoPatchedOrAddedOutcomes(result);
+                Assert.That(fileResult.Warnings, Is.Empty);
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        [DllImport("__Internal")]
+        public static extern int ApplyEngineFailureExternShim(int value);
+
+        private static TransformWorkerEntryDto CreateExistingMethodEntry(
+            string typeMetadataName,
+            string methodName,
+            string[] parameterTypeFullNames,
+            string shimTypeName,
+            string shimMethodName)
+        {
+            return new TransformWorkerEntryDto
+            {
+                typeMetadataName = typeMetadataName,
+                methodName = methodName,
+                parameterTypeFullNames = parameterTypeFullNames,
+                genericArity = 0,
+                shimTypeName = shimTypeName,
+                shimMethodName = shimMethodName,
+                patchKind = string.Empty
+            };
+        }
+
+        private static TransformWorkerEntryDto CreateAddedMethodEntry(
+            string typeMetadataName,
+            string methodName,
+            string shimTypeName,
+            string shimMethodName)
+        {
+            return new TransformWorkerEntryDto
+            {
+                typeMetadataName = typeMetadataName,
+                methodName = methodName,
+                parameterTypeFullNames = Array.Empty<string>(),
+                genericArity = 0,
+                shimTypeName = shimTypeName,
+                shimMethodName = shimMethodName,
+                patchKind = HotReloadConstants.PatchKindAddedMethod
+            };
+        }
+
+        private static HotReloadOrchestrator.HotReloadFileProcessResult ApplyEntriesDirect(
+            string projectRelativePath,
+            TransformWorkerEntryDto[] entries)
+        {
+            TransformWorkerOutputDto workerOutput = new TransformWorkerOutputDto
+            {
+                entries = entries,
+                addedFieldNames = Array.Empty<string>(),
+                sourceContentSha256 = "direct-apply-preflight"
+            };
+            return HotReloadEntryApplier.ApplyEntriesAndBuildResult(
+                typeof(HotReloadCoreFixture).Assembly.GetName().Name,
+                projectRelativePath,
+                projectRelativePath,
+                HotReloadShimCompileResult.SuccessResult(
+                    typeof(HotReloadOrchestratorTests).Assembly,
+                    new byte[] { 1 },
+                    Array.Empty<byte>()),
+                entries,
+                Array.Empty<string>(),
+                workerOutput,
+                new HashSet<string>(),
+                new HashSet<string>(),
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                new List<string>(),
+                new List<string>(),
+                unchangedMethodCount: 0);
+        }
+
+        private static HotReloadOrchestratorResult ToOrchestratorResult(
+            HotReloadOrchestrator.HotReloadFileProcessResult fileResult)
+        {
+            return new HotReloadOrchestratorResult(
+                fileResult.Outcomes,
+                fileResult.Warnings,
+                fileResult.PatchedCount,
+                activePatchTotal: 0);
         }
 
         /// <summary>

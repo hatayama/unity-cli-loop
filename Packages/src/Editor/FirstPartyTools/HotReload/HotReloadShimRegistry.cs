@@ -82,6 +82,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             GenerationsByPath.Clear();
         }
 
+        // Why a generation probe: BeginFileGeneration writes an empty map, so method-list
+        // emptiness cannot tell a preflight skip from an applied-then-empty generation.
+        internal static bool HasGeneration(string projectRelativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            return FindGenerationForPath(projectRelativePath) != null;
+        }
+
         private static string LoadVerifiedSnapshotSourceForFile(string requestedPath)
         {
             if (string.IsNullOrEmpty(requestedPath))

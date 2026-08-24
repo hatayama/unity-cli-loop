@@ -61,6 +61,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return generation.Members.ContainsKey(methodKey);
         }
 
+        // Why a generation probe: BeginFileGeneration writes an empty map, so an empty
+        // key list cannot tell a preflight skip from an applied-then-empty generation.
+        internal static bool HasGeneration(string projectRelativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
+            return GenerationsByPath.ContainsKey(projectRelativePath);
+        }
+
         public static IReadOnlyList<string> ListActiveMethodKeys(string projectRelativePath)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
