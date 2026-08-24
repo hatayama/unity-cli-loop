@@ -570,7 +570,33 @@ set_download_urls
 
 tmp_dir=$(mktemp -d)
 staged_uloop_path=""
-trap 'rm -rf "$tmp_dir"; if [ -n "$staged_uloop_path" ]; then rm -f "$staged_uloop_path"; fi' EXIT
+replaced_uloop_backup_path=""
+final_uloop_path=""
+install_completed=0
+
+# Why: if the install failed after the old binary was moved aside, put it
+# back so a failed update never leaves the user without a working uloop.
+# That includes post-place failures such as --version: the new binary is
+# already at the destination, so remove it first and only then restore.
+# If the new binary cannot be removed, leave the backup in place.
+cleanup_install() {
+  if [ "$install_completed" -eq 0 ] && [ -n "$replaced_uloop_backup_path" ] && [ -f "$replaced_uloop_backup_path" ]; then
+    if [ -n "$final_uloop_path" ]; then
+      rm -f "$final_uloop_path" 2>/dev/null || true
+    fi
+    if [ -n "$final_uloop_path" ] && [ ! -e "$final_uloop_path" ]; then
+      mv "$replaced_uloop_backup_path" "$final_uloop_path"
+    fi
+  fi
+  if [ -n "$staged_uloop_path" ]; then
+    rm -f "$staged_uloop_path"
+  fi
+  rm -rf "$tmp_dir"
+}
+trap cleanup_install EXIT
+# Why: POSIX does not run the EXIT trap on INT/HUP/TERM unless the handler
+# exits. Between move-aside and place that would leave uloop missing.
+trap "exit 129" INT HUP TERM
 
 compute_asset_sha256() {
   # Why: install.sh runs on macOS (shasum) and MINGW/MSYS (sha256sum). We do the
@@ -661,7 +687,28 @@ if [ "$legacy_uloop_before_install" = "$final_uloop_path" ] || [ "$legacy_uloop_
   fi
   legacy_uloop_before_install=""
 fi
-mv -f "$staged_uloop_path" "$final_uloop_path"
+
+# Why: earlier installs rename the then-running binary aside; those
+# processes have exited by now, so reclaim the leftovers. A backup whose
+# process is still running stays locked and is skipped silently until a
+# later install can remove it.
+for leftover in "$INSTALL_DIR/$installed_command_name".old-*; do
+  if [ ! -e "$leftover" ]; then
+    continue
+  fi
+  rm -f "$leftover" 2>/dev/null || true
+done
+
+# Why: Windows locks the image file of a running executable against
+# overwrite and delete but still allows rename. `uloop update` runs this
+# script as a child of the running uloop.exe, so overwriting the target
+# in place can never succeed there. Move the existing binary aside first;
+# the EXIT trap restores it if the new binary was not placed.
+if [ -e "$final_uloop_path" ]; then
+  replaced_uloop_backup_path="$final_uloop_path.old-$$-$(date +%s)"
+  mv "$final_uloop_path" "$replaced_uloop_backup_path"
+fi
+mv "$staged_uloop_path" "$final_uloop_path"
 staged_uloop_path=""
 if [ "$native_install_supported" -eq 1 ]; then
   if invoke_uloop_native_install "$final_uloop_path"; then
@@ -677,3 +724,4 @@ fi
 
 "$INSTALL_DIR/$installed_command_name" --version
 report_path_shadowing
+install_completed=1
