@@ -123,10 +123,10 @@ const (
 	pausePointHintPlayModeNotRunning  = "PlayMode is not running. Start PlayMode (or trigger the marker code path in Edit Mode), then wait again."
 	pausePointHintEditorAlreadyPaused = "Unity is already paused, so gameplay cannot reach the marker. Resume PlayMode before waiting again."
 
-	// Diagnoses a completed --trigger that Unity rejected (Success:false). Why before the
-	// IsPaused / auto-cleared / non-firing branches: those assume the trigger fired and the
-	// marker still missed, which is the opposite of this case and is what sent agents into
-	// execute-dynamic-code loops on a paused-PlayMode input rejection.
+	// Diagnoses a completed --trigger that Unity rejected (Success:false) or whose dispatch
+	// failed (Error). Why before the IsPaused / auto-cleared / non-firing branches: those assume
+	// the trigger fired and the marker still missed, which is the opposite of this case and is
+	// what sent agents into execute-dynamic-code loops on a paused-PlayMode input rejection.
 	pausePointHintTriggerRejected = "The trigger command ran but was rejected. Read Details.TriggerResult (Response.Message, or Error when the command failed to dispatch) for the reason (for example, input commands are rejected while PlayMode is paused by an earlier pause-point hit). Resume PlayMode with 'clear-pause-point --all' (which releases a pause owned by any marker) or 'control-play-mode --action Play', then re-enable the marker and retry."
 
 	// Returned when await timed out while waiting for a new hit on an already-hit continuous/trace
