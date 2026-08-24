@@ -82,6 +82,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.HitCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// Verifies recording an entry for an unknown marker does not create pause point state.
+        /// </summary>
+        [Test]
+        public void RecordMethodEntry_WhenPausePointIsNotEnabled_DoesNothing()
+        {
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.NotEnabled));
+            Assert.That(snapshot.MethodEntryCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies each entry recording increments the armed pause point's counter.
+        /// </summary>
+        [Test]
+        public void RecordMethodEntry_WhenPausePointIsEnabled_IncrementsEntryCount()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(snapshot.MethodEntryCount, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// Verifies re-enabling an id replaces its entry counter with a new zero-valued entry.
+        /// </summary>
+        [Test]
+        public void Enable_WhenPausePointIsReenabled_ResetsMethodEntryCount()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(snapshot.MethodEntryCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies recording after a pause point is disarmed leaves its counter unchanged.
+        /// </summary>
+        [Test]
+        public void RecordMethodEntry_WhenPausePointIsDisarmed_DoesNotIncrementEntryCount()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Clear("jump");
+
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(snapshot.MethodEntryCount, Is.EqualTo(0));
+        }
+
         [Test]
         public void Pause_WhenPausePointIsEnabled_RecordsHitEvidence()
         {
@@ -211,6 +270,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePoint.Pause("jump");
 
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit."));
             Assert.That(snapshot.Expired, Is.True);
             Assert.That(snapshot.RemainingMilliseconds, Is.EqualTo(0));
             Assert.That(
@@ -218,6 +278,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo("Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required."));
             Assert.That(snapshot.IsEnabled, Is.False);
             Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies expiration explains that an invoked method did not reach its armed line.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenEnteredMethodDoesNotHit_ReportsBranchNotTaken()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1);
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit. The armed method ran 2 time(s) but the armed line was never reached (branch not taken)."));
+        }
+
+        /// <summary>
+        /// Verifies an instrumented method that never runs reports the method-entry diagnostic.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenInstrumentedMethodNeverRuns_ReportsNeverInvoked()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit. The armed method was never invoked."));
         }
 
         [Test]

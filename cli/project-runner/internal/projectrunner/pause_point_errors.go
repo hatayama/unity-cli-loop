@@ -313,6 +313,7 @@ func pausePointStateErrorDetails(
 		"Status":                          response.Status,
 		"Expired":                         response.Expired,
 		"HitCount":                        response.HitCount,
+		"MethodEntryCount":                response.MethodEntryCount,
 		"TimeoutSeconds":                  pausePointMarkerTimeoutSeconds(options, response),
 		"EnabledAtUtc":                    response.EnabledAtUtc,
 		"ElapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,

@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void FromSnapshot_WhenExpiredAndActionEmpty_FillsExpiredRecommendedNextAction()
         {
-            UloopPausePointSnapshot snapshot = CreateExpiredSnapshot(string.Empty);
+            UloopPausePointSnapshot snapshot = CreateExpiredSnapshot(string.Empty, 0);
 
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
 
@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void StatusFromSnapshot_WhenExpiredAndActionEmpty_FillsExpiredRecommendedNextAction()
         {
-            UloopPausePointSnapshot snapshot = CreateExpiredSnapshot(string.Empty);
+            UloopPausePointSnapshot snapshot = CreateExpiredSnapshot(string.Empty, 0);
 
             PausePointStatusResponse response = PausePointStatusResponse.FromSnapshot(snapshot);
 
@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void FromSnapshot_WhenExpiredAndActionPresent_KeepsSnapshotAction()
         {
             const string existingAction = "Custom action preserved by test.";
-            UloopPausePointSnapshot snapshot = CreateExpiredSnapshot(existingAction);
+            UloopPausePointSnapshot snapshot = CreateExpiredSnapshot(existingAction, 0);
 
             PausePointResponse toolResponse = PausePointResponse.FromSnapshot(snapshot);
             PausePointStatusResponse statusResponse = PausePointStatusResponse.FromSnapshot(snapshot);
@@ -61,7 +61,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(statusResponse.RecommendedNextAction, Is.EqualTo(existingAction));
         }
 
-        private static UloopPausePointSnapshot CreateExpiredSnapshot(string recommendedNextAction)
+        /// <summary>
+        /// What: PausePointResponse preserves MethodEntryCount from the runtime snapshot.
+        /// </summary>
+        [Test]
+        public void FromSnapshot_WhenMethodEntryCountIsNonzero_PropagatesMethodEntryCount()
+        {
+            UloopPausePointSnapshot snapshot = CreateExpiredSnapshot(string.Empty, 3);
+
+            PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
+
+            Assert.That(response.MethodEntryCount, Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: PausePointStatusResponse preserves MethodEntryCount from the runtime snapshot.
+        /// </summary>
+        [Test]
+        public void StatusFromSnapshot_WhenMethodEntryCountIsNonzero_PropagatesMethodEntryCount()
+        {
+            UloopPausePointSnapshot snapshot = CreateExpiredSnapshot(string.Empty, 3);
+
+            PausePointStatusResponse response = PausePointStatusResponse.FromSnapshot(snapshot);
+
+            Assert.That(response.MethodEntryCount, Is.EqualTo(3));
+        }
+
+        private static UloopPausePointSnapshot CreateExpiredSnapshot(string recommendedNextAction, int methodEntryCount)
         {
             return new UloopPausePointSnapshot(
                 "jump",
@@ -69,6 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 false,
                 false,
                 0,
+                methodEntryCount,
                 30,
                 UloopPausePointCaptureMode.SingleShot,
                 20,

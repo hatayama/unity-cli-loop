@@ -9,9 +9,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
     /// Stores enabled pause point state for the current Editor domain. All members except
-    /// IsArmed and ResumeEditorPauseForClientDisconnect are main-thread-only by convention;
-    /// IsArmed is the Harmony Capture entry point, and the disconnect resume path only sets a
-    /// pending flag so thread-pool callers never touch EditorApplication.isPaused.
+    /// IsArmed, RecordMethodEntry, and ResumeEditorPauseForClientDisconnect are main-thread-only
+    /// by convention; IsArmed and RecordMethodEntry are Harmony entry points, and the disconnect
+    /// resume path only sets a pending flag so thread-pool callers never touch EditorApplication.isPaused.
     /// </summary>
     internal static class UloopPausePointRegistry
     {
@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public const int MaxCallerFramesLimit = 8;
 
         private static readonly ConcurrentDictionary<string, UloopPausePointEntry> Entries = new();
+        private static readonly HashSet<string> MethodEntryInstrumentedIds = new();
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
         private static Func<DateTime> _nowProvider = () => DateTime.UtcNow;
         private static int _nextGeneration;
@@ -98,7 +99,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             DateTime now = NowUtc();
             int generation = ++_nextGeneration;
             UloopPausePointEntry entry = new(
-                id, timeoutSeconds, mode, maxHistory, maxPreviewElements, maxCallerFrames, now, generation);
+                id, timeoutSeconds, mode, maxHistory, maxPreviewElements, maxCallerFrames, now, generation,
+                MethodEntryInstrumentedIds.Contains(id));
             Entries[id] = entry;
             // Why not clear the raw capture holder here: a re-enable does not resume Unity, so the
             // paused-window constraint (see UloopPausePointRawCaptureHolder's class comment) is not
@@ -327,6 +329,28 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             return Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled;
+        }
+
+        // Called from injected IL at method entry on whatever thread invokes the method. Entries
+        // is a ConcurrentDictionary and the increment is Interlocked, so this is safe off the
+        // main thread, like IsArmed. A concurrent clear may permit a few extra entries to be
+        // recorded, which is acceptable because strict synchronization is not required here.
+        public static void RecordMethodEntry(string id)
+        {
+            if (Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled)
+            {
+                entry.IncrementMethodEntryCount();
+            }
+        }
+
+        internal static void SetMethodEntryInstrumented(string id)
+        {
+            MethodEntryInstrumentedIds.Add(id);
+        }
+
+        internal static void ClearMethodEntryInstrumented(string id)
+        {
+            MethodEntryInstrumentedIds.Remove(id);
         }
 
         // Called from the Harmony Capture entry point right after IsArmed confirms the id is
@@ -657,6 +681,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public static void ResetForTests()
         {
             Entries.Clear();
+            MethodEntryInstrumentedIds.Clear();
             _nextGeneration = 0;
             _nextHitSequence = 0;
             _latestHitSnapshot = null;

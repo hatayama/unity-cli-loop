@@ -115,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 RememberRequest(id, normalizedFile, requestedLine);
                 LogicalOwnerById[id] = logicalOwner;
+                UloopPausePointRegistry.SetMethodEntryInstrumented(id);
                 return SourcePausePointPatchResult.SuccessResult();
             }
 
@@ -165,6 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (TryReuseExistingPatch(id, targetKind, method, shim.DonorShim))
             {
                 RememberRequest(id, normalizedFile, requestedLine);
+                UloopPausePointRegistry.SetMethodEntryInstrumented(id);
                 return SourcePausePointPatchResult.SuccessResult();
             }
 
@@ -319,6 +321,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             (string warning, bool hasPhysicsCallbackWarning) = BuildPatchWarning(method);
+            UloopPausePointRegistry.SetMethodEntryInstrumented(id);
             return SourcePausePointPatchResult.SuccessResult(warning, method.DeclaringType, hasPhysicsCallbackWarning);
         }
 
@@ -333,6 +336,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void UnpatchInstrumentationOnly(string id)
         {
             Debug.Assert(!string.IsNullOrEmpty(id), "id must not be null or empty.");
+            UloopPausePointRegistry.ClearMethodEntryInstrumented(id);
 
             // Why before MethodById guard: ReanchorMarkerWithoutInjection leaves MethodById
             // empty while LogicalOwnerById/RequestById still hold the id; clear must scrub
@@ -383,6 +387,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public static void UnpatchAll()
         {
+            foreach (string id in MethodById.Keys)
+            {
+                UloopPausePointRegistry.ClearMethodEntryInstrumented(id);
+            }
             HarmonyInstance.UnpatchAll(SourcePausePointConstants.HarmonyId);
             InjectionsByMethod.Clear();
             MethodById.Clear();
