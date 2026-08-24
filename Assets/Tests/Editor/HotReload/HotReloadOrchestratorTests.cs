@@ -1969,7 +1969,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 editedPath,
                 CancellationToken.None);
 
-            AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasAtomicFileSkip(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
             AssertHasFailed(first, nameof(HotReloadE2EFixture.CallsMissingHelper));
 
             HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
@@ -1977,7 +1977,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 editedPath,
                 CancellationToken.None);
 
-            AssertHasPatched(second, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasAtomicFileSkip(second, nameof(HotReloadE2EFixture.ComputeWithPrivate));
             AssertHasFailed(second, nameof(HotReloadE2EFixture.CallsMissingHelper));
             AssertNoAlreadyActive(second);
             AssertHasUnchangedSourceNonBaselineWarning(second);
@@ -2387,13 +2387,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a shim compile error in one method no longer kills the file — the failing method
-        /// reports Failed with its own compiler error (and the new-member hint) while the other
-        /// methods still patch and take effect. Attribution uses original-file line numbers from
-        /// #line-mapped diagnostics.
+        /// What: a shim compile error in one method isolates that failure (Failed with its own
+        /// compiler error, new-member hint, and original-file line) and skips every survivor
+        /// in the file instead of patching them.
         /// </summary>
         [Test]
-        public async Task Run_OneMethodFailingShimCompile_IsolatesFailureAndPatchesRest()
+        public async Task Run_OneMethodFailingShimCompile_IsolatesFailureAndSkipsRest()
         {
             string fixturePath = ResolveE2EFixturePath();
             string editedSource = BuildFixtureSource(
@@ -2412,7 +2411,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
-            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasAtomicFileSkip(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertNoPatchedOrAddedOutcomes(result);
 
             bool missingHelperFailed = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
@@ -2431,12 +2431,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + expectedOriginalLine + ".\n" + FormatOutcomes(result));
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
-            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(15));
+        }
+
+        /// <summary>
+        /// What: adding a field while InitField fails shim compile and ReadField would otherwise
+        /// patch leaves the file unapplied — ReadField is Skipped with AtomicFileSkipReason,
+        /// PatchedTotal is 0, and the added-field registry stays empty for that file.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedFieldWithFailingInitAndHealthyRead_AppliesNothingFromFile()
+        {
+            string fixturePath = ResolveAtomicFileApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public void InitField()\n        {\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadField()\n        {\n            return 0;\n        }",
+                "        public int BlockLayerMask;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void InitField()\n        {\n            BlockLayerMask = MissingHelperAddedByEdit(1);\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadField()\n        {\n            return BlockLayerMask;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AtomicFileAddedField.cs", edited),
+                CancellationToken.None);
+
+            bool initFailedWithCsError = false;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Method.Contains(nameof(HotReloadAtomicFileApplyFixture.InitField))
+                    && outcome.Reason.Contains("CS"))
+                {
+                    initFailedWithCsError = true;
+                }
+            }
+
+            Assert.That(
+                initFailedWithCsError,
+                Is.True,
+                "InitField must fail with a C# compiler diagnostic.\n" + FormatOutcomes(result));
+            AssertHasAtomicFileSkip(result, nameof(HotReloadAtomicFileApplyFixture.ReadField));
+            AssertNoPatchedOrAddedOutcomes(result);
+            Assert.That(result.AddedFields, Is.Empty);
+            AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
+            Assert.That(
+                HotReloadAddedFieldRegistry.GetFieldsForType(
+                    typeof(HotReloadAtomicFileApplyFixture).FullName),
+                Is.Empty);
         }
 
         /// <summary>
         /// What: an added method plus its caller plus an unrelated shim-compile failure still
-        /// isolates per-method (the file is not collapsed to a single (shim-compile) Failed).
+        /// isolates per-method (the file is not collapsed to a single (shim-compile) Failed)
+        /// and skips survivors instead of patching them.
         /// </summary>
         [Test]
         public async Task Run_AddedMethodCallerAndUnrelatedShimFailure_IsolatesWithoutWipingFile()
@@ -2469,9 +2522,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
-            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingValue));
-            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
-            AssertHasAdded(result, "AddedPing");
+            AssertHasAtomicFileSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            AssertHasAtomicFileSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            AssertHasAtomicFileSkip(result, "AddedPing");
+            AssertNoPatchedOrAddedOutcomes(result);
 
             bool failIsolated = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
@@ -2489,8 +2543,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "ExistingFail must isolate as a per-method Failed.\n" + FormatOutcomes(result));
 
             HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
-            Assert.That(host.ExistingValue(), Is.EqualTo(10));
-            Assert.That(host.ExistingCaller(3), Is.EqualTo(4));
+            Assert.That(host.ExistingValue(), Is.EqualTo(1));
+            Assert.That(host.ExistingCaller(3), Is.EqualTo(3));
         }
 
         /// <summary>
@@ -3047,7 +3101,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: when only the failing isolated method uses an added field, retry output
-        /// replaces first-pass names and AddedFields stays empty.
+        /// replaces first-pass names and AddedFields stays empty because the file is not applied.
         /// </summary>
         [Test]
         public async Task Run_IsolatedFailureUsingAddedField_ReportsEmptyAddedFields()
@@ -3066,7 +3120,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("AddedFieldIsolatedFailure.cs", edited),
                 CancellationToken.None);
 
-            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasAtomicFileSkip(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
             bool foundFailure = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
@@ -3204,10 +3258,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: after an added method applies, a later run that breaks that added body while
-        /// still patching an unrelated method drops the added member and warns with its label.
+        /// also editing an unrelated method applies nothing from the file; the previous
+        /// added-member registry entry and patches stay.
         /// </summary>
         [Test]
-        public async Task Run_BrokenAddedMethodAfterSuccess_ObservesRegistryWhenUnrelatedStillPatches()
+        public async Task Run_BrokenAddedMethodAfterSuccess_KeepsRegistryWhenUnrelatedIsAtomicSkipped()
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
@@ -3227,16 +3282,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("BrokenAddedUnrelated2.cs", later),
                 CancellationToken.None);
 
+            AssertHasFailed(second, "AddedPing");
+            AssertHasAtomicFileSkip(second, nameof(HotReloadAddedMethodApplyFixture.Unrelated));
             int remaining = CountAddedMembersContaining("AddedPing");
             Assert.That(
                 remaining,
-                Is.EqualTo(0),
+                Is.EqualTo(1),
                 "Observation: AddedPing remaining=" + remaining
                 + " ActivePatchTotal=" + second.ActivePatchTotal
                 + "\n" + FormatOutcomes(second));
-            AssertDeactivatedPatchesWarningsEqual(
-                second,
-                ExpectedDeactivatedAddedMembersWarning(AddedPingMethodLabel()));
+            Assert.That(second.ActivePatchTotal, Is.EqualTo(2));
+            AssertNoDeactivatedPatchesWarning(second);
         }
 
         /// <summary>
@@ -3382,11 +3438,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: two added methods deactivated in one run are listed in ordinal order,
-        /// comma-space separated, in the deactivated-patches warning.
+        /// What: after two added methods apply, a later run that breaks both bodies while
+        /// editing an unrelated method applies nothing from the file; previous members stay
+        /// and no deactivated-patches warning is emitted.
         /// </summary>
         [Test]
-        public async Task Run_BrokenAddedMethodsAfterSuccess_WarnsOrdinalJoinedLabels()
+        public async Task Run_BrokenAddedMethodsAfterSuccess_KeepsRegistryAndSkipsUnrelated()
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
@@ -3406,10 +3463,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("BrokenAddedMulti2.cs", later),
                 CancellationToken.None);
 
-            AssertDeactivatedPatchesWarningsEqual(
-                second,
-                ExpectedDeactivatedAddedMembersWarning(
-                    AddedPingMethodLabel() + ", " + AddedPongMethodLabel()));
+            AssertHasFailed(second, "AddedPing");
+            AssertHasFailed(second, "AddedPong");
+            AssertHasAtomicFileSkip(second, nameof(HotReloadAddedMethodApplyFixture.Unrelated));
+            Assert.That(CountAddedMembersContaining("AddedPing"), Is.EqualTo(1));
+            Assert.That(CountAddedMembersContaining("AddedPong"), Is.EqualTo(1));
+            AssertNoDeactivatedPatchesWarning(second);
         }
 
         /// <summary>
@@ -4483,11 +4542,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: after the gate passes because the same-file caller is an entry, a shim compile
-        /// failure on only that caller drops it from the retry set and the coverage recheck
-        /// fails the file instead of applying the replacement.
+        /// failure on that caller fails the file atomically — the replacement is skipped, not
+        /// applied, and coverage recheck is not reached.
         /// </summary>
         [Test]
-        public async Task Run_ReturnTypeChange_CallerShimCompileFailure_FailsCoverageRecheck()
+        public async Task Run_ReturnTypeChange_CallerShimCompileFailure_AppliesNothingFromFile()
         {
             string fixturePath = ResolveSignatureChangeSameFileFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
@@ -4507,40 +4566,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("SignatureChangeCallerCompileFailure.cs", edited),
                 CancellationToken.None);
 
-            string expectedReplacementKey =
-                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
-                + ".HotReloadSignatureChangeSameFileFixture::Target(System.Int32)";
-            string expectedReason = string.Format(
-                HotReloadConstants.SignatureChangeCoverageLostFailureFormat,
-                expectedReplacementKey);
-            bool foundGateFailure = false;
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
-                    && outcome.Method == "(signature-change-gate)"
-                    && outcome.Reason == expectedReason)
-                {
-                    foundGateFailure = true;
-                }
-
-                Assert.That(
-                    outcome.Kind,
-                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Added),
-                    "Coverage loss must not apply the replacement.\n" + FormatOutcomes(result));
-            }
-
-            Assert.That(
-                foundGateFailure,
-                Is.True,
-                "Expected file Failed (signature-change-gate).\n" + FormatOutcomes(result));
+            AssertHasFailed(result, nameof(HotReloadSignatureChangeSameFileFixture.ExistingCaller));
+            AssertHasAtomicFileSkip(result, nameof(HotReloadSignatureChangeSameFileFixture.Target));
+            AssertNoPatchedOrAddedOutcomes(result);
         }
 
         /// <summary>
         /// What: the gate-retry FileFailed path (HotReloadOrchestrator ~267-278) reports a
         /// single (signature-change-gate) Failed when an external caller gates a return-type
         /// change and the isolation retry shim compile fails. This is not the coverage
-        /// recheck path (~349-370) covered by
-        /// Run_ReturnTypeChange_CallerShimCompileFailure_FailsCoverageRecheck.
+        /// recheck path (~349-370). First-pass isolation now fails the file atomically
+        /// (see Run_ReturnTypeChange_CallerShimCompileFailure_AppliesNothingFromFile).
         /// </summary>
         [Test]
         public async Task Run_ReturnTypeChange_GateRetryShimCompileFailure_FailsFileWithoutApplying()
@@ -4972,7 +5008,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a broken added-method body isolates that added method (and its callers) without
-        /// collapsing the file; an unrelated edited method still patches.
+        /// collapsing the file; an unrelated edited method is skipped because the file is atomic.
         /// </summary>
         [Test]
         public async Task Run_AddedMethodBodyFailure_IsolatesWithoutWipingFile()
@@ -5001,7 +5037,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
-            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            AssertHasAtomicFileSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            AssertNoPatchedOrAddedOutcomes(result);
 
             bool addedFailed = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
@@ -5023,14 +5060,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadConstants.IsolatedAddedMethodCallerSkipReason);
 
             HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
-            Assert.That(host.ExistingValue(), Is.EqualTo(10));
+            Assert.That(host.ExistingValue(), Is.EqualTo(1));
         }
 
         /// <summary>
         /// What: when isolation excludes a failed added method A and its direct added caller B,
         /// the retry worker skip for transitive caller C (C calls B, not A) appears in the
         /// response as Skipped with IsolatedAddedMethodCallerSkipReason, while independent
-        /// edited method D still patches.
+        /// edited method D is skipped because the file is atomic.
         /// </summary>
         [Test]
         public async Task Run_IsolationRetry_ReportsTransitiveCallerOfExcludedAddedMethodAsSkipped()
@@ -5063,7 +5100,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindSkippedReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
                 Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
-            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            AssertHasAtomicFileSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            AssertNoPatchedOrAddedOutcomes(result);
         }
 
         /// <summary>
@@ -5105,7 +5143,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindSkippedReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
                 Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
-            AssertHasPatched(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            AssertHasAtomicFileSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            AssertNoPatchedOrAddedOutcomes(result);
         }
 
         /// <summary>
@@ -5231,7 +5270,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("VibeLogIsolation.cs", editedSource),
                 CancellationToken.None);
 
-            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertHasAtomicFileSkip(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
             List<JObject> logs = ReadHotReloadVibeLogs();
             JObject fileStart = FindVibeLog(logs, HotReloadConstants.VibeLogFileStart);
             JObject shimCompileFailed = FindVibeLog(logs, HotReloadConstants.VibeLogShimCompileFailed);
@@ -5384,6 +5423,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail("Expected a Skipped outcome for " + methodName + ".\n" + FormatOutcomes(result));
             return null;
+        }
+
+        private static void AssertHasAtomicFileSkip(HotReloadOrchestratorResult result, string methodName)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
+                    && outcome.Method.Contains(methodName))
+                {
+                    Assert.That(outcome.Reason, Is.EqualTo(HotReloadConstants.AtomicFileSkipReason));
+                    return;
+                }
+            }
+
+            Assert.Fail(
+                "Expected Skipped outcome for " + methodName
+                + " with AtomicFileSkipReason.\n" + FormatOutcomes(result));
+        }
+
+        private static void AssertNoPatchedOrAddedOutcomes(HotReloadOrchestratorResult result)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Patched),
+                    "Shim-compile file failure must not patch survivors.\n" + FormatOutcomes(result));
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Added),
+                    "Shim-compile file failure must not add survivors.\n" + FormatOutcomes(result));
+            }
+
+            Assert.That(result.PatchedTotal, Is.EqualTo(0));
         }
 
         private static void AssertHasSkipped(
@@ -5939,6 +6012,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "HotReload",
                 "HotReloadAddedFieldApplyFixture.cs");
             Assert.That(File.Exists(path), Is.True, "Added-field apply fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveAtomicFileApplyFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadAtomicFileApplyFixture.cs");
+            Assert.That(File.Exists(path), Is.True, "Atomic-file apply fixture source missing: " + path);
             return Path.GetFullPath(path);
         }
 
