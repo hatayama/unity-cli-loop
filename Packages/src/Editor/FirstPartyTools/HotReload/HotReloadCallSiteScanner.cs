@@ -18,6 +18,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadCallSiteScanner
     {
         /// <summary>
+        /// Compiled call-site findings and assemblies whose absence makes the findings incomplete.
+        /// </summary>
+        internal sealed class HotReloadCallSiteScanResult
+        {
+            public List<CallSiteHit> Hits;
+            public List<string> MissingScanAssemblyNames;
+
+            public HotReloadCallSiteScanResult(
+                List<CallSiteHit> hits,
+                List<string> missingScanAssemblyNames)
+            {
+                Hits = hits;
+                MissingScanAssemblyNames = missingScanAssemblyNames;
+            }
+        }
+
+        /// <summary>
         /// Identity of a compiled method to search for (assembly + type + name + arity + parameter types).
         /// </summary>
         public readonly struct CompiledMethodIdentity
@@ -65,15 +82,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Finds compiled call / ldftn sites that reference any of <paramref name="targets"/>.
         /// </summary>
-        public static List<CallSiteHit> FindCallSites(string projectRoot, CompiledMethodIdentity[] targets)
+        public static HotReloadCallSiteScanResult FindCallSites(
+            string projectRoot,
+            CompiledMethodIdentity[] targets)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(targets != null, "targets must not be null.");
 
             List<CallSiteHit> hits = new List<CallSiteHit>();
+            List<string> missingScanAssemblyNames = new List<string>();
             if (targets.Length == 0)
             {
-                return hits;
+                return new HotReloadCallSiteScanResult(hits, missingScanAssemblyNames);
             }
 
             HashSet<string> scanAssemblyNames = CollectScanAssemblyNames(targets);
@@ -89,13 +109,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // yet", not a broken invariant.
                 if (!File.Exists(dllPath))
                 {
+                    missingScanAssemblyNames.Add(assemblyName);
                     continue;
                 }
 
                 CollectHitsFromAssembly(assemblyName, dllPath, targets, hits);
             }
 
-            return hits;
+            return new HotReloadCallSiteScanResult(hits, missingScanAssemblyNames);
         }
 
         private static HashSet<string> CollectScanAssemblyNames(CompiledMethodIdentity[] targets)
@@ -109,6 +130,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HashSet<string> scanNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string targetAssemblyName in targetAssemblyNames)
+            {
+                scanNames.Add(targetAssemblyName);
+            }
             foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
             {
                 if (targetAssemblyNames.Contains(assembly.name)

@@ -48,7 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 replacementEntries,
                 removedSignatures);
             List<HotReloadCallSiteScanner.CallSiteHit> hits =
-                HotReloadCallSiteScanner.FindCallSites(projectRoot, targets);
+                HotReloadCallSiteScanner.FindCallSites(projectRoot, targets).Hits;
             HashSet<string> coveredKeys = HotReloadSignatureChangeCoverage.CollectCoveredMethodKeys(entries, targets);
             Dictionary<string, List<string>> uncoveredCallersByTarget =
                 HotReloadSignatureChangeCoverage.CollectUncoveredCallersByTarget(hits, coveredKeys);

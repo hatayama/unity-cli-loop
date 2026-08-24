@@ -62,6 +62,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a selected assembly with no compiled dll is reported so callers cannot be assumed complete.
+        /// </summary>
+        [Test]
+        public void FindCallSites_MissingSelectedAssembly_ReportsAssemblyName()
+        {
+            const string missingAssemblyName = "MissingCompiledAssembly";
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadCallSiteScanner.CompiledMethodIdentity target =
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    missingAssemblyName,
+                    FixtureTypeMetadataName,
+                    nameof(HotReloadCallSiteScannerFixture.NeverCalled),
+                    Array.Empty<string>(),
+                    0);
+
+            HotReloadCallSiteScanner.HotReloadCallSiteScanResult result =
+                HotReloadCallSiteScanner.FindCallSites(projectRoot, new[] { target });
+
+            Assert.That(result.MissingScanAssemblyNames, Is.EqualTo(new[] { missingAssemblyName }));
+        }
+
+        /// <summary>
         /// What: a method referenced only by delegate assignment is found via Ldftn.
         /// </summary>
         [Test]
@@ -181,7 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         nameof(HotReloadCallSiteScannerFixture.CalledOnlyViaDelegate),
                         Array.Empty<string>(),
                         0)
-                });
+                }).Hits;
 
             Assert.That(hits.Count, Is.EqualTo(2));
             HotReloadCallSiteScanner.CallSiteHit ordinaryHit = null;
@@ -291,7 +313,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             return HotReloadCallSiteScanner.FindCallSites(
                 projectRoot,
-                new[] { target });
+                new[] { target }).Hits;
         }
     }
 }
