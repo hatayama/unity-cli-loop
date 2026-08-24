@@ -156,7 +156,11 @@ case "$url" in
     printf '%s  uloop-dispatcher-darwin-arm64.tar.gz\n' "${MOCK_ASSET_DIGEST:-fakehash}" > "$output_file"
     ;;
   *dispatcher-v2.0.0/uloop-dispatcher-windows-amd64.zip)
-    : > "$output_file"
+    if [ -n "${MOCK_REAL_ZIP:-}" ]; then
+      cat "$MOCK_REAL_ZIP" > "$output_file"
+    else
+      : > "$output_file"
+    fi
     ;;
   *dispatcher-v2.0.0/uloop-dispatcher-windows-amd64.zip.sha256)
     printf '%s  uloop-dispatcher-windows-amd64.zip\n' "${MOCK_ASSET_DIGEST:-fakehash}" > "$output_file"
@@ -407,6 +411,44 @@ write_required_tool_links() {
     } > "$tool_bin/$command_name"
     chmod +x "$tool_bin/$command_name"
   done
+}
+
+# Writes a real zip whose root entry is uloop.exe so tar/bsdtar can extract
+# it without a mock unzip.
+write_real_windows_dispatcher_zip() {
+  zip_path=$1
+  payload_dir=$(mktemp -d)
+  cat > "$payload_dir/uloop.exe" <<'ULOOP'
+#!/bin/sh
+set -eu
+if [ "${1:-}" = "install" ]; then
+  exit 1
+fi
+echo "uloop mock version"
+ULOOP
+  python3 -c "import zipfile, sys; archive = zipfile.ZipFile(sys.argv[1], 'w'); archive.write(sys.argv[2], 'uloop.exe')" "$zip_path" "$payload_dir/uloop.exe"
+  rm -rf "$payload_dir"
+}
+
+write_isolated_command_link() {
+  tool_bin=$1
+  command_name=$2
+  command_path=$(command -v "$command_name")
+  case $command_path in
+    /*) ;;
+    *)
+      if [ -x "/bin/$command_name" ]; then
+        command_path="/bin/$command_name"
+      elif [ -x "/usr/bin/$command_name" ]; then
+        command_path="/usr/bin/$command_name"
+      fi
+      ;;
+  esac
+  {
+    printf '%s\n' '#!/bin/sh'
+    printf 'exec %s "$@"\n' "$command_path"
+  } > "$tool_bin/$command_name"
+  chmod +x "$tool_bin/$command_name"
 }
 
 test_posix_latest_skips_prerelease_assets() {
@@ -995,6 +1037,126 @@ test_git_bash_latest_installs_windows_zip_asset() {
   assert_contains "$work_dir/output.txt" "uloop mock version"
 }
 
+# Verifies a Windows zip install succeeds when unzip is absent from PATH and
+# tar extracts a real zip (not a mock unzip that hides the hole).
+test_git_bash_extracts_windows_zip_without_unzip() {
+  work_dir="$TMP_DIR/git-bash-no-unzip"
+  mock_bin="$work_dir/bin"
+  tool_bin="$work_dir/tools"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  real_zip="$work_dir/uloop-dispatcher-windows-amd64.zip"
+  mkdir -p "$work_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+  write_required_tool_links "$tool_bin"
+  write_isolated_command_link "$tool_bin" tar
+  write_isolated_command_link "$tool_bin" date
+  write_isolated_command_link "$tool_bin" true
+  rm -f "$mock_bin/unzip" "$mock_bin/tar"
+  write_real_windows_dispatcher_zip "$real_zip"
+
+  isolated_path="$mock_bin:$tool_bin"
+  if PATH="$isolated_path" command -v unzip >/dev/null 2>&1; then
+    echo "Expected unzip to be absent from the isolated PATH" >&2
+    exit 1
+  fi
+
+  status=0
+  PATH="$isolated_path" \
+    MOCK_UNAME_OS=MINGW64_NT-10.0-26100 \
+    MOCK_UNAME_ARCH=x86_64 \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    MOCK_REAL_ZIP="$real_zip" \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt" || status=$?
+  if [ "$status" -ne 0 ]; then
+    echo "Expected unzip-less zip install to succeed" >&2
+    cat "$work_dir/stderr.txt" >&2
+    exit 1
+  fi
+
+  if [ ! -x "$install_dir/uloop.exe" ]; then
+    echo "Expected unzip-less zip install to create executable uloop.exe: $install_dir/uloop.exe" >&2
+    cat "$work_dir/stderr.txt" >&2
+    exit 1
+  fi
+  assert_contains "$work_dir/output.txt" "uloop mock version"
+}
+
+# Verifies zip extract fail-fasts when unzip, tar, and powershell.exe are all
+# absent from PATH.
+test_git_bash_zip_extract_fails_without_extractors() {
+  work_dir="$TMP_DIR/git-bash-no-extractors"
+  mock_bin="$work_dir/bin"
+  tool_bin="$work_dir/tools"
+  install_dir="$work_dir/install"
+  releases_json="$work_dir/releases.json"
+  curl_log="$work_dir/curl.log"
+  npm_log="$work_dir/npm.log"
+  real_zip="$work_dir/uloop-dispatcher-windows-amd64.zip"
+  mkdir -p "$work_dir"
+  : > "$curl_log"
+  : > "$npm_log"
+  write_releases_json "$releases_json"
+  write_mock_commands "$mock_bin"
+  write_required_tool_links "$tool_bin"
+  write_isolated_command_link "$tool_bin" date
+  write_isolated_command_link "$tool_bin" true
+  rm -f "$mock_bin/unzip" "$mock_bin/tar"
+  write_real_windows_dispatcher_zip "$real_zip"
+
+  isolated_path="$mock_bin:$tool_bin"
+  if PATH="$isolated_path" command -v unzip >/dev/null 2>&1; then
+    echo "Expected unzip to be absent from the isolated PATH" >&2
+    exit 1
+  fi
+  if PATH="$isolated_path" command -v tar >/dev/null 2>&1; then
+    echo "Expected tar to be absent from the isolated PATH" >&2
+    exit 1
+  fi
+  if PATH="$isolated_path" command -v powershell.exe >/dev/null 2>&1; then
+    echo "Expected powershell.exe to be absent from the isolated PATH" >&2
+    exit 1
+  fi
+
+  status=0
+  PATH="$isolated_path" \
+    MOCK_UNAME_OS=MINGW64_NT-10.0-26100 \
+    MOCK_UNAME_ARCH=x86_64 \
+    ULOOP_VERSION=latest \
+    ULOOP_INSTALL_DIR="$install_dir" \
+    RELEASES_JSON="$releases_json" \
+    CURL_LOG="$curl_log" \
+    NPM_LOG="$npm_log" \
+    MOCK_REAL_ZIP="$real_zip" \
+    LEGACY_ULOOP="" \
+    "$ROOT_DIR/scripts/install.sh" > "$work_dir/output.txt" 2> "$work_dir/stderr.txt" || status=$?
+  if [ "$status" -eq 0 ]; then
+    echo "Expected zip extract to fail when no extractor is on PATH" >&2
+    exit 1
+  fi
+  assert_contains "$work_dir/stderr.txt" "Unable to extract uloop-dispatcher-windows-amd64.zip"
+}
+
+# Verifies zip extract tries unzip, then tar, then Windows Expand-Archive.
+test_posix_installer_extracts_zip_with_fallback_chain() {
+  assert_contains "$ROOT_DIR/scripts/install.sh" 'try_extract_zip_with_unzip'
+  assert_contains "$ROOT_DIR/scripts/install.sh" 'try_extract_zip_with_tar'
+  assert_contains "$ROOT_DIR/scripts/install.sh" 'try_extract_zip_with_powershell'
+  assert_contains "$ROOT_DIR/scripts/install.sh" 'tar -xf "$tmp_dir/$asset_name" -C "$tmp_dir"'
+  assert_contains "$ROOT_DIR/scripts/install.sh" "powershell.exe -NoProfile -Command 'Expand-Archive -LiteralPath \$env:ULOOP_ZIP_PATH -DestinationPath \$env:ULOOP_ZIP_DEST -Force'"
+  assert_not_contains "$ROOT_DIR/scripts/install.sh" "unzip is required to extract"
+}
+
 # Verifies install.sh moves an existing destination aside, reclaims stale
 # leftovers, and leaves the backup after a successful replace.
 test_posix_replaces_existing_uloop_by_moving_it_aside() {
@@ -1473,6 +1635,9 @@ test_posix_silences_legacy_cleanup_when_npm_prefix_cannot_be_inferred
 test_posix_removes_npm_package_before_replacing_same_bin_path
 test_powershell_latest_skips_prerelease_assets
 test_git_bash_latest_installs_windows_zip_asset
+test_git_bash_extracts_windows_zip_without_unzip
+test_git_bash_zip_extract_fails_without_extractors
+test_posix_installer_extracts_zip_with_fallback_chain
 test_posix_replaces_existing_uloop_by_moving_it_aside
 test_posix_restores_uloop_backup_when_replace_fails
 test_posix_restores_uloop_backup_when_final_version_fails

@@ -477,18 +477,66 @@ resolve_manifest_from_pin_if_needed() {
   ULOOP_ARCHIVE_MANIFEST=$pin_manifest
 }
 
+zip_extracted_uloop_present() {
+  [ -f "$tmp_dir/$installed_command_name" ]
+}
+
+try_extract_zip_with_unzip() {
+  command -v unzip >/dev/null 2>&1 || return 1
+  unzip -q "$tmp_dir/$asset_name" -d "$tmp_dir" || return 1
+  zip_extracted_uloop_present
+}
+
+try_extract_zip_with_tar() {
+  command -v tar >/dev/null 2>&1 || return 1
+  # Why: omit -z. A zip is not gzip, and a failed extract must fall
+  # through so GNU tar (which may reject zip) can yield to the next tool.
+  tar -xf "$tmp_dir/$asset_name" -C "$tmp_dir" || return 1
+  zip_extracted_uloop_present
+}
+
+try_extract_zip_with_powershell() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*) ;;
+    *) return 1 ;;
+  esac
+  command -v powershell.exe >/dev/null 2>&1 || return 1
+
+  zip_win=$tmp_dir/$asset_name
+  dest_win=$tmp_dir
+  if command -v cygpath >/dev/null 2>&1; then
+    zip_win=$(cygpath -w "$tmp_dir/$asset_name")
+    dest_win=$(cygpath -w "$tmp_dir")
+  fi
+  ULOOP_ZIP_PATH=$zip_win
+  ULOOP_ZIP_DEST=$dest_win
+  export ULOOP_ZIP_PATH ULOOP_ZIP_DEST
+  powershell.exe -NoProfile -Command 'Expand-Archive -LiteralPath $env:ULOOP_ZIP_PATH -DestinationPath $env:ULOOP_ZIP_DEST -Force' || return 1
+  zip_extracted_uloop_present
+}
+
+extract_zip_asset() {
+  # Why: Git Bash and some Windows hosts have no unzip. Prefer unzip, then
+  # tar (macOS/Windows 10+ bsdtar extracts zip; GNU tar often does not),
+  # then PowerShell Expand-Archive on Windows. Try the next tool when the
+  # current one is missing or the extract does not produce uloop.exe.
+  if try_extract_zip_with_unzip; then
+    return
+  fi
+  if try_extract_zip_with_tar; then
+    return
+  fi
+  if try_extract_zip_with_powershell; then
+    return
+  fi
+  echo "Unable to extract $asset_name: need unzip, a tar that can read zip, or powershell.exe Expand-Archive." >&2
+  exit 1
+}
+
 extract_asset() {
   case "$asset_name" in
     *.zip)
-      if ! command -v unzip >/dev/null 2>&1; then
-        echo "unzip is required to extract $asset_name" >&2
-        exit 1
-      fi
-      unzip -q "$tmp_dir/$asset_name" -d "$tmp_dir"
-      if [ ! -f "$tmp_dir/$installed_command_name" ]; then
-        echo "Expected $installed_command_name at archive root after extracting $asset_name." >&2
-        exit 1
-      fi
+      extract_zip_asset
       return
       ;;
     *)

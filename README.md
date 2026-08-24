@@ -120,6 +120,8 @@ On macOS or Windows Git Bash:
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
 ```
 
+On Windows Git Bash the installer extracts the dispatcher zip with `unzip`, then `tar` (bsdtar / Windows tar.exe), then PowerShell `Expand-Archive`. `unzip` is not required when a fallback is available.
+
 On Windows PowerShell:
 
 ```powershell
