@@ -23,6 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             typeof(SourcePausePointCapture).GetMethod(nameof(SourcePausePointCapture.Capture));
         private static readonly MethodInfo IsArmedMethodInfo =
             typeof(UloopPausePointRegistry).GetMethod(nameof(UloopPausePointRegistry.IsArmed));
+        private static readonly MethodInfo RecordMethodEntryMethodInfo =
+            typeof(UloopPausePointRegistry).GetMethod(nameof(UloopPausePointRegistry.RecordMethodEntry));
 
         internal static bool IsByRefLikeType(Type type)
         {
@@ -78,7 +80,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 list.InsertRange(injection.InstructionIndex, emitted);
             }
 
+            List<string> countedIds = new List<string>();
+            foreach (SourcePausePointPatchInjection injection in injections)
+            {
+                if (!ShouldInject(injection, activeShim))
+                {
+                    continue;
+                }
+
+                countedIds.Add(injection.Id);
+            }
+
+            InsertMethodEntryCounters(list, countedIds);
+
             return list;
+        }
+
+        // Inserts one counter block for each id at the method head. Deliberately does not move
+        // labels or blocks from the displaced instruction: branches targeting the old first
+        // instruction, including loop back-edges and whole-body exception starts, must keep
+        // targeting it. The counter therefore runs once per method entry and stays outside
+        // existing exception regions.
+        internal static void InsertMethodEntryCounters(List<CodeInstruction> instructions, IReadOnlyList<string> ids)
+        {
+            List<string> countedIds = new List<string>();
+            foreach (string id in ids)
+            {
+                if (countedIds.Contains(id))
+                {
+                    continue;
+                }
+
+                countedIds.Add(id);
+                List<CodeInstruction> counter = new List<CodeInstruction>
+                {
+                    new CodeInstruction(OpCodes.Ldstr, id),
+                    new CodeInstruction(OpCodes.Call, RecordMethodEntryMethodInfo),
+                };
+                instructions.InsertRange(0, counter);
+            }
         }
 
         private static bool ShouldInject(SourcePausePointPatchInjection injection, MethodBase activeShim)

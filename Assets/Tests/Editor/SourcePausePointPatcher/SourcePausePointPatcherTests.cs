@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 
+using HarmonyLib;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -363,6 +366,121 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.CapturedVariables.First(v => v.Name == "i").Value, Is.EqualTo("0"));
             Assert.That(snapshot.CapturedVariables.First(v => v.Name == "total").Value, Is.EqualTo("0"));
             Assert.That(snapshot.CapturedVariables.First(v => v.Name == "count").Value, Is.EqualTo("4"));
+        }
+
+        /// <summary>
+        /// Verifies an armed method entry is counted even when execution returns before its marker.
+        /// </summary>
+        [Test]
+        public void Patch_WhenBranchSkipsArmedLine_RecordsMethodEntryWithoutHit()
+        {
+            const string id = "patcher-entry-branch-skip";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherMethodEntryCountFixture.cs", 11);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+            Assert.That(patchResult.Success, Is.True);
+
+            int result = PatcherMethodEntryCountFixture.ReturnBeforeArmedLine(true);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(id);
+            Assert.That(result, Is.EqualTo(-1));
+            Assert.That(snapshot.HitCount, Is.EqualTo(0));
+            Assert.That(snapshot.MethodEntryCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies a do-while back-edge targeting the original first instruction does not re-count entry.
+        /// </summary>
+        [Test]
+        public void Patch_WhenLoopBackEdgeTargetsOriginalFirstInstruction_RecordsOneMethodEntry()
+        {
+            const string id = "patcher-entry-loop-back-edge";
+            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherMethodEntryCountFixture.cs", 26);
+            Assert.That(resolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(id, 30);
+            SourcePausePointPatchResult patchResult = SourcePausePointPatcher.Patch(id, resolveResult.Resolution);
+            Assert.That(patchResult.Success, Is.True);
+
+            int result = PatcherMethodEntryCountFixture.CountDownBeforeArmedLine(4);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(id);
+            Assert.That(result, Is.EqualTo(0));
+            Assert.That(snapshot.HitCount, Is.EqualTo(0));
+            Assert.That(snapshot.MethodEntryCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies independently armed markers in one method each receive its entry count.
+        /// </summary>
+        [Test]
+        public void Patch_WhenTwoMarkersArmOneMethod_RecordsEachMethodEntryCount()
+        {
+            const string firstId = "patcher-entry-first-marker";
+            const string secondId = "patcher-entry-second-marker";
+            SourcePausePointResolveResult firstResolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherMethodEntryCountFixture.cs", 35);
+            SourcePausePointResolveResult secondResolveResult = SourcePausePointResolver.Resolve(
+                FixturesDirectory + "PatcherMethodEntryCountFixture.cs", 36);
+            Assert.That(firstResolveResult.Success, Is.True);
+            Assert.That(secondResolveResult.Success, Is.True);
+
+            UloopPausePointRegistry.Enable(firstId, 30);
+            UloopPausePointRegistry.Enable(secondId, 30);
+            SourcePausePointPatchResult firstPatchResult = SourcePausePointPatcher.Patch(firstId, firstResolveResult.Resolution);
+            SourcePausePointPatchResult secondPatchResult = SourcePausePointPatcher.Patch(secondId, secondResolveResult.Resolution);
+            Assert.That(firstPatchResult.Success, Is.True);
+            Assert.That(secondPatchResult.Success, Is.True);
+
+            int result = PatcherMethodEntryCountFixture.AddWithTwoArmedLines(3);
+
+            UloopPausePointSnapshot firstSnapshot = UloopPausePointRegistry.GetStatus(firstId);
+            UloopPausePointSnapshot secondSnapshot = UloopPausePointRegistry.GetStatus(secondId);
+            Assert.That(result, Is.EqualTo(7));
+            Assert.That(firstSnapshot.MethodEntryCount, Is.EqualTo(1));
+            Assert.That(secondSnapshot.MethodEntryCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies method entry counter insertion leaves the original first instruction's label and exception block in place.
+        /// </summary>
+        [Test]
+        public void InsertMethodEntryCounters_WhenFirstInstructionOwnsControlFlowMetadata_DoesNotMoveMetadata()
+        {
+            DynamicMethod method = new DynamicMethod("CounterMetadata", null, Type.EmptyTypes);
+            ILGenerator generator = method.GetILGenerator();
+            Label originalLabel = generator.DefineLabel();
+            ExceptionBlock originalBlock = new ExceptionBlock(ExceptionBlockType.BeginExceptionBlock);
+            CodeInstruction originalFirstInstruction = new CodeInstruction(OpCodes.Nop);
+            originalFirstInstruction.labels.Add(originalLabel);
+            originalFirstInstruction.blocks.Add(originalBlock);
+            List<CodeInstruction> instructions = new List<CodeInstruction>
+            {
+                originalFirstInstruction,
+                new CodeInstruction(OpCodes.Ret),
+            };
+
+            SourcePausePointInjectionEmitter.InsertMethodEntryCounters(
+                instructions,
+                new List<string> { "first", "first", "second" });
+
+            Assert.That(instructions[0].opcode, Is.EqualTo(OpCodes.Ldstr));
+            Assert.That(instructions[0].operand, Is.EqualTo("second"));
+            Assert.That(instructions[0].labels, Is.Empty);
+            Assert.That(instructions[0].blocks, Is.Empty);
+            Assert.That(instructions[1].opcode, Is.EqualTo(OpCodes.Call));
+            Assert.That(instructions[1].labels, Is.Empty);
+            Assert.That(instructions[1].blocks, Is.Empty);
+            Assert.That(instructions[2].opcode, Is.EqualTo(OpCodes.Ldstr));
+            Assert.That(instructions[2].operand, Is.EqualTo("first"));
+            Assert.That(instructions[3].opcode, Is.EqualTo(OpCodes.Call));
+            Assert.That(instructions[4], Is.SameAs(originalFirstInstruction));
+            Assert.That(originalFirstInstruction.labels, Is.EquivalentTo(new[] { originalLabel }));
+            Assert.That(originalFirstInstruction.blocks, Is.EquivalentTo(new[] { originalBlock }));
         }
 
         [Test]
