@@ -164,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             if (_literalKind == UloopPausePointHitWhenLiteralKind.Null)
             {
-                return EvaluateEquality(entry.Value == null);
+                return EvaluateEquality(IsNullValue(entry.Value));
             }
 
             if (_literalKind == UloopPausePointHitWhenLiteralKind.Boolean)
@@ -246,8 +246,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 || comparisonOperator == UloopPausePointHitWhenOperator.LessThanOrEqual;
         }
 
-        // Quoted strings intentionally have no escape syntax, keeping this arm-time filter small
-        // and avoiding a second language with string interpolation or member access semantics.
+        // Quoted strings intentionally have no escape syntax, so embedded delimiters are rejected
+        // instead of being silently interpreted as a second unmodelled literal language.
         private static bool IsQuotedString(string literalText)
         {
             if (literalText.Length < 2)
@@ -257,7 +257,25 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             char firstCharacter = literalText[0];
             char lastCharacter = literalText[literalText.Length - 1];
-            return (firstCharacter == '\'' || firstCharacter == '"') && firstCharacter == lastCharacter;
+            if ((firstCharacter != '\'' && firstCharacter != '"') || firstCharacter != lastCharacter)
+            {
+                return false;
+            }
+
+            string content = literalText.Substring(1, literalText.Length - 2);
+            return content.IndexOf(firstCharacter) < 0;
+        }
+
+        // UnityEngine.Object overloads equality to report destroyed objects as null, while the
+        // object-typed captured value would otherwise use reference equality and invert that result.
+        private static bool IsNullValue(object value)
+        {
+            if (value is UnityEngine.Object unityObject)
+            {
+                return unityObject == null;
+            }
+
+            return value == null;
         }
 
         // Convert.ToDouble is safe only after this exact primitive whitelist, so enums, chars,

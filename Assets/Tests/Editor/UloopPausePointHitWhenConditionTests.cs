@@ -2,6 +2,8 @@ using System.Collections.Generic;
 
 using NUnit.Framework;
 
+using UnityEngine;
+
 using io.github.hatayama.UnityCliLoop.Runtime;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -59,6 +61,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Parse_WhenLiteralIsNotSupported_ReturnsLiteralError()
         {
             UloopPausePointHitWhenParseResult result = UloopPausePointHitWhenCondition.Parse("speed == fast");
+
+            Assert.That(result.Condition, Is.Null);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("--hit-when literal must be null, true, false, an invariant number, or a quoted string."));
+        }
+
+        /// <summary>
+        /// Verifies unescaped delimiter characters inside quoted literals are rejected.
+        /// </summary>
+        [TestCase("label == \"a\" \"b\"")]
+        [TestCase("label == 'a' 'b'")]
+        public void Parse_WhenQuotedLiteralContainsItsDelimiter_ReturnsLiteralError(string expression)
+        {
+            UloopPausePointHitWhenParseResult result = UloopPausePointHitWhenCondition.Parse(expression);
 
             Assert.That(result.Condition, Is.Null);
             Assert.That(
@@ -141,6 +158,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(evaluation.Matched, Is.True);
             Assert.That(evaluation.ErrorMessage, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// Verifies destroyed Unity objects use Unity fake-null semantics for null conditions.
+        /// </summary>
+        [Test]
+        public void Evaluate_WhenUnityObjectWasDestroyed_MatchesNullLiteral()
+        {
+            ScriptableObject destroyedObject = ScriptableObject.CreateInstance<ScriptableObject>();
+            Object.DestroyImmediate(destroyedObject);
+            UloopPausePointHitWhenCondition condition = ParseCondition("value == null");
+            UloopPausePointHitWhenEvaluation evaluation = condition.Evaluate(CreateEntries("value", destroyedObject));
+
+            Assert.That(evaluation.Matched, Is.True);
+            Assert.That(evaluation.ErrorMessage, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// Verifies every numeric comparison operator distinguishes matching and non-matching values.
+        /// </summary>
+        [TestCase("value == 5", 5, true, 4, false)]
+        [TestCase("value != 5", 4, true, 5, false)]
+        [TestCase("value > 5", 6, true, 5, false)]
+        [TestCase("value >= 5", 5, true, 4, false)]
+        [TestCase("value < 5", 4, true, 5, false)]
+        [TestCase("value <= 5", 5, true, 6, false)]
+        public void Evaluate_WhenNumericOperatorIsUsed_ReturnsExpectedMatchStates(
+            string expression,
+            int matchingValue,
+            bool expectedMatch,
+            int nonMatchingValue,
+            bool expectedNonMatch)
+        {
+            UloopPausePointHitWhenCondition condition = ParseCondition(expression);
+            UloopPausePointHitWhenEvaluation matchingEvaluation = condition.Evaluate(CreateEntries("value", matchingValue));
+            UloopPausePointHitWhenEvaluation nonMatchingEvaluation = condition.Evaluate(CreateEntries("value", nonMatchingValue));
+
+            Assert.That(matchingEvaluation.Matched, Is.EqualTo(expectedMatch));
+            Assert.That(matchingEvaluation.ErrorMessage, Is.EqualTo(string.Empty));
+            Assert.That(nonMatchingEvaluation.Matched, Is.EqualTo(expectedNonMatch));
+            Assert.That(nonMatchingEvaluation.ErrorMessage, Is.EqualTo(string.Empty));
         }
 
         /// <summary>
