@@ -150,13 +150,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             entry.MarkCleared(clearedReason, message);
             OnClearResolved?.Invoke(id, entry.HitCount, entry.StatusBeforeClear);
             ClearHitSnapshotAndRawCaptureForId(id);
-            // Why only when pause-point-owned: a clear must not steal ownership of a manual pause
-            // the user set outside the pause-point workflow (control-play-mode --action Pause or
-            // the Editor pause button). It resumes only while a pause window is open - i.e. while
-            // a pause-point hit is what is holding the Editor paused. Manual pauses leave no open
-            // window, so they are left untouched. (Client disconnect and expiry still resume
-            // unconditionally: those paths must guarantee release even for a manual pause.)
-            bool resumedFromPause = ResumeEditorPauseIfOwnedByPausePoint();
+            // Why only when this marker owns the pause: a clear must not steal a pause that a
+            // different marker's hit is holding (timeout auto-clear of a never-hit second marker
+            // used to resume the first marker's inspection pause). It also must not steal a
+            // manual pause the user set outside the pause-point workflow (control-play-mode
+            // --action Pause or the Editor pause button). Manual pauses leave no open window, so
+            // they are left untouched. ClearAll still resumes any pause-point-owned pause.
+            // (Client disconnect and expiry still resume unconditionally: those paths must
+            // guarantee release even for a manual pause.)
+            bool resumedFromPause = ResumeEditorPauseIfOwnedByMarker(id);
             return (entry.ToSnapshot(now, _pauseController), resumedFromPause, clearedCount);
         }
 
@@ -550,6 +552,19 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
             ResumeEditorPause();
             return true;
+        }
+
+        // Clear(id) must resume only when this id is the pause-window owner. Clearing a different
+        // marker (including AwaitTimeoutAutoClear of a never-hit wait) must leave the owner's
+        // inspection pause in place.
+        private static bool ResumeEditorPauseIfOwnedByMarker(string id)
+        {
+            if (_pauseWindowOwnerId != id)
+            {
+                return false;
+            }
+
+            return ResumeEditorPauseIfOwnedByPausePoint();
         }
 
         /// <summary>

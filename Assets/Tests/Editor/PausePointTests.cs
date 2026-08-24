@@ -357,6 +357,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_pauseController.IsPaused, Is.False);
         }
 
+        /// <summary>
+        /// What: clearing a marker that does not own the open pause window leaves that pause in place.
+        /// </summary>
+        [Test]
+        public void Clear_WhenDifferentMarkerOwnsThePause_LeavesPauseAndReportsNotResumed()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            UloopPausePointRegistry.Enable("other", 30);
+            Assert.That(_pauseController.IsPaused, Is.True);
+
+            (UloopPausePointSnapshot _, bool resumedFromPause, _) = UloopPausePointRegistry.Clear("other");
+
+            Assert.That(resumedFromPause, Is.False);
+            Assert.That(_pauseController.IsPaused, Is.True);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: Clear of the marker that owns the pause window still resumes Play Mode.
+        /// </summary>
+        [Test]
+        public void Clear_WhenThisMarkerOwnsThePause_ResumesAndReportsResumed()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            UloopPausePointRegistry.Enable("other", 30);
+
+            (UloopPausePointSnapshot _, bool resumedFromPause, _) = UloopPausePointRegistry.Clear("jump");
+
+            Assert.That(resumedFromPause, Is.True);
+            Assert.That(_pauseController.IsPaused, Is.False);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: ClearAll still resumes a pause-point-owned pause even when multiple markers exist.
+        /// </summary>
+        [Test]
+        public void ClearAll_WhenOneMarkerOwnsThePause_ResumesAndReportsResumed()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            UloopPausePointRegistry.Enable("other", 30);
+
+            UloopPausePointClearAllResult result = UloopPausePointRegistry.ClearAll();
+
+            Assert.That(result.ResumedFromPause, Is.True);
+            Assert.That(_pauseController.IsPaused, Is.False);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(1));
+        }
+
         [Test]
         public void Clear_WhenEditorManuallyPaused_LeavesPauseUntouchedAndReportsNotResumed()
         {
@@ -803,6 +855,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Warning, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: clearing a non-owner marker does not emit the "this clear resumed Play Mode" warning.
+        /// </summary>
+        [Test]
+        public async Task Clear_WhenDifferentMarkerOwnsThePause_SetsNoWarning()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+            UloopPausePointRegistry.Enable("other", 30);
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "other" };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Warning, Is.Empty);
+            Assert.That(_pauseController.IsPaused, Is.True);
         }
 
         /// <summary>
