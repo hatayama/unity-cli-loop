@@ -25,6 +25,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string GenericHostTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.GenericHost`1";
 
+        private const string CrossAssemblyTargetTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCallSiteScannerCrossAssemblyTarget";
+
         /// <summary>
         /// What: a method called from an ordinary method is reported with that caller's method key.
         /// </summary>
@@ -62,6 +65,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a selected assembly with no compiled dll is reported so callers cannot be assumed complete.
+        /// </summary>
+        [Test]
+        public void FindCallSites_MissingSelectedAssembly_ReportsAssemblyName()
+        {
+            const string missingAssemblyName = "MissingCompiledAssembly";
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadCallSiteScanner.CompiledMethodIdentity target =
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    missingAssemblyName,
+                    FixtureTypeMetadataName,
+                    nameof(HotReloadCallSiteScannerFixture.NeverCalled),
+                    Array.Empty<string>(),
+                    0);
+
+            HotReloadCallSiteScanner.HotReloadCallSiteScanResult result =
+                HotReloadCallSiteScanner.FindCallSites(projectRoot, new[] { target });
+
+            Assert.That(result.MissingScanAssemblyNames, Is.EqualTo(new[] { missingAssemblyName }));
+        }
+
+        /// <summary>
         /// What: a method referenced only by delegate assignment is found via Ldftn.
         /// </summary>
         [Test]
@@ -77,6 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 hits[0].CallerMethodKey,
                 Is.EqualTo(FixtureTypeMetadataName + "::CaptureDelegate()"));
+            Assert.That(hits[0].IsFunctionPointerLoad, Is.True);
         }
 
         /// <summary>
@@ -181,7 +207,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         nameof(HotReloadCallSiteScannerFixture.CalledOnlyViaDelegate),
                         Array.Empty<string>(),
                         0)
-                });
+                }).Hits;
 
             Assert.That(hits.Count, Is.EqualTo(2));
             HotReloadCallSiteScanner.CallSiteHit ordinaryHit = null;
@@ -217,8 +243,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void FindCallSites_CrossAssemblyCaller_ReportsReferencedAssemblyHit()
         {
             List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
-                FixtureTypeMetadataName,
-                nameof(HotReloadCallSiteScannerFixture.CalledFromCrossAssembly),
+                CrossAssemblyTargetTypeMetadataName,
+                nameof(HotReloadCallSiteScannerCrossAssemblyTarget.Called),
                 Array.Empty<string>(),
                 0);
 
@@ -231,6 +257,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                     + ".HotReloadCallSiteCrossAssemblyCaller::Call()"));
+        }
+
+        /// <summary>
+        /// What: a same-name method in a different assembly is not attributed to the main target.
+        /// </summary>
+        [Test]
+        public void FindCallSites_SameFullNameForeignAssemblyTarget_ExcludesForeignCallSite()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                FixtureTypeMetadataName,
+                nameof(HotReloadCallSiteScannerFixture.CalledFromCrossAssembly),
+                Array.Empty<string>(),
+                0);
+
+            Assert.That(hits, Is.Empty);
         }
 
         /// <summary>
@@ -291,7 +332,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             return HotReloadCallSiteScanner.FindCallSites(
                 projectRoot,
-                new[] { target });
+                new[] { target }).Hits;
         }
     }
 }

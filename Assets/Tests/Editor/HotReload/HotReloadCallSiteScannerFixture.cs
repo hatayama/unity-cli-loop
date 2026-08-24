@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
@@ -110,6 +112,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Gives cross-assembly coverage a target type whose name cannot collide with its foreign fixture.
+    /// </summary>
+    public static class HotReloadCallSiteScannerCrossAssemblyTarget
+    {
+        public static int Called()
+        {
+            return 7;
+        }
+    }
+
+    /// <summary>
     /// Open generic host so call sites go through a constructed <c>GenericHost&lt;int&gt;</c>.
     /// </summary>
     public class GenericHost<T>
@@ -117,6 +130,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int Target()
         {
             return 1;
+        }
+    }
+
+    /// <summary>
+    /// Supplies compiled MonoBehaviour caller shapes for caller-aware lifecycle note tests.
+    /// </summary>
+    public sealed class OneShotCallerScannerFixture : MonoBehaviour
+    {
+        private event Action RepeatedEvent;
+
+        private void Awake()
+        {
+            AwakeOnlyTarget();
+            MixedTarget();
+            RepeatedEvent += DelegateAssignedTarget;
+        }
+
+        private void Update()
+        {
+            RepeatedEvent?.Invoke();
+        }
+
+        private void AwakeOnlyTarget()
+        {
+        }
+
+        private void MixedTarget()
+        {
+        }
+
+        private void DelegateAssignedTarget()
+        {
+        }
+
+        public void OrdinaryCaller()
+        {
+            MixedTarget();
         }
     }
 }

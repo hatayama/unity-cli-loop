@@ -42,6 +42,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> inlineRiskMethodLabels = new List<string>();
             List<string> addedFields = new List<string>();
             List<string> siblingDerivedWarnings = new List<string>();
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>();
             int patchedTotal = 0;
             int unchangedTotal = 0;
             // Why after the file loop (not inside ProcessFileAsync): duplicate paths in one
@@ -69,6 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     workerSourcePath,
                     correlationId,
                     siblingDerivedWarnings,
+                    oneShotCallerNoteCandidates,
                     ct).ConfigureAwait(false);
 
                 outcomes.AddRange(fileResult.Outcomes);
@@ -90,6 +93,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 HotReloadAppliedSourceLedger.Record(pair.Key, pair.Value.Hash, pair.Value.IsFullyApplied);
             }
+
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                projectRoot,
+                outcomes,
+                oneShotCallerNoteCandidates,
+                (ignoredAssemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
 
             if (inlineRiskMethodLabels.Count > 0)
             {
@@ -141,6 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string workerSourcePath,
             string correlationId,
             List<string> siblingDerivedWarnings,
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates,
             CancellationToken ct)
         {
             Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
@@ -363,7 +375,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings,
                 suppressedPausePointIds,
                 retargetedPausePointIds,
-                unchangedMethodCount);
+                unchangedMethodCount,
+                oneShotCallerNoteCandidates);
         }
 
         // Why after the worker: const-only / empty files have no patch candidates, so the

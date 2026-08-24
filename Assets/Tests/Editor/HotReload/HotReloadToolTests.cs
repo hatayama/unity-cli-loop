@@ -696,6 +696,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an indirect caller lifecycle note is returned per method and counted in the aggregate.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithIndirectLifecycleNote_ExposesAndAggregatesIt()
+        {
+            const string indirectNote =
+                "SetUp is called only from one-shot lifecycle method(s) (Awake) in the compiled assemblies; "
+                + "objects that already ran them will not run the patched body. It takes effect only for "
+                + "newly created objects, or run `uloop compile` and re-enter Play Mode.";
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/A.cs", indirectNote)
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Methods[0].LifecycleNote, Is.EqualTo(indirectNote));
+            Assert.That(
+                response.Message,
+                Does.Contain("1 patched method(s) have one-shot lifecycle notes"));
+        }
+
+        /// <summary>
         /// What: a skipped-only run uses the no-patch message that also names AlreadyActive.
         /// </summary>
         [Test]

@@ -123,6 +123,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 filePath,
                 string.Empty);
         }
+
+        public HotReloadMethodOutcome WithLifecycleNote(string lifecycleNote)
+        {
+            return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, lifecycleNote);
+        }
     }
 
     internal enum HotReloadMethodOutcomeKind
