@@ -1038,7 +1038,8 @@ test_git_bash_latest_installs_windows_zip_asset() {
 }
 
 # Verifies a Windows zip install succeeds when unzip is absent from PATH and
-# tar extracts a real zip (not a mock unzip that hides the hole).
+# a real fallback (zip-capable tar, or powershell.exe) extracts a real zip.
+# GNU tar cannot read zip, so hosts with only GNU tar and no PowerShell skip.
 test_git_bash_extracts_windows_zip_without_unzip() {
   work_dir="$TMP_DIR/git-bash-no-unzip"
   mock_bin="$work_dir/bin"
@@ -1054,14 +1055,24 @@ test_git_bash_extracts_windows_zip_without_unzip() {
   write_releases_json "$releases_json"
   write_mock_commands "$mock_bin"
   write_required_tool_links "$tool_bin"
-  write_isolated_command_link "$tool_bin" tar
   write_isolated_command_link "$tool_bin" date
   write_isolated_command_link "$tool_bin" true
   rm -f "$mock_bin/unzip" "$mock_bin/tar"
   write_real_windows_dispatcher_zip "$real_zip"
+  if tar -tf "$real_zip" >/dev/null 2>&1; then
+    write_isolated_command_link "$tool_bin" tar
+  elif command -v powershell.exe >/dev/null 2>&1; then
+    write_isolated_command_link "$tool_bin" powershell.exe
+    if command -v cygpath >/dev/null 2>&1; then
+      write_isolated_command_link "$tool_bin" cygpath
+    fi
+  else
+    echo "SKIP test_git_bash_extracts_windows_zip_without_unzip: host has no zip-capable tar or powershell.exe"
+    return 0
+  fi
 
   isolated_path="$mock_bin:$tool_bin"
-  if PATH="$isolated_path" command -v unzip >/dev/null 2>&1; then
+  if [ -e "$mock_bin/unzip" ] || [ -e "$tool_bin/unzip" ]; then
     echo "Expected unzip to be absent from the isolated PATH" >&2
     exit 1
   fi
@@ -1115,15 +1126,15 @@ test_git_bash_zip_extract_fails_without_extractors() {
   write_real_windows_dispatcher_zip "$real_zip"
 
   isolated_path="$mock_bin:$tool_bin"
-  if PATH="$isolated_path" command -v unzip >/dev/null 2>&1; then
+  if [ -e "$mock_bin/unzip" ] || [ -e "$tool_bin/unzip" ]; then
     echo "Expected unzip to be absent from the isolated PATH" >&2
     exit 1
   fi
-  if PATH="$isolated_path" command -v tar >/dev/null 2>&1; then
+  if [ -e "$mock_bin/tar" ] || [ -e "$tool_bin/tar" ]; then
     echo "Expected tar to be absent from the isolated PATH" >&2
     exit 1
   fi
-  if PATH="$isolated_path" command -v powershell.exe >/dev/null 2>&1; then
+  if [ -e "$mock_bin/powershell.exe" ] || [ -e "$tool_bin/powershell.exe" ]; then
     echo "Expected powershell.exe to be absent from the isolated PATH" >&2
     exit 1
   fi
