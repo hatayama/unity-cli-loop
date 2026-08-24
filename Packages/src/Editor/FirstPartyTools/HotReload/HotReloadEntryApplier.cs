@@ -31,7 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> warnings,
             List<string> suppressedPausePointIds,
             List<string> retargetedPausePointIds,
-            int unchangedMethodCount)
+            int unchangedMethodCount,
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates = null)
         {
             HotReloadEntryResolution.Result resolution = HotReloadEntryResolution.ResolveEntries(
                 assemblyName,
@@ -75,7 +76,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings,
                 inlineRiskMethodLabels,
                 suppressedPausePointIds,
-                retargetedPausePointIds);
+                retargetedPausePointIds,
+                assemblyName,
+                oneShotCallerNoteCandidates);
 
             return FinishFileResult(
                 outcomes,
@@ -136,7 +139,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> warnings,
             List<string> inlineRiskMethodLabels,
             List<string> suppressedPausePointIds,
-            List<string> retargetedPausePointIds)
+            List<string> retargetedPausePointIds,
+            string assemblyName,
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates)
         {
             int patchedCount = 0;
             int appliedThisRun = 0;
@@ -149,6 +154,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     suppressedPausePointIds,
                     retargetedPausePointIds);
                 outcomes.Add(outcome);
+                AppendOneShotCallerNoteCandidate(
+                    resolvedEntries[index],
+                    outcome,
+                    assemblyName,
+                    oneShotCallerNoteCandidates);
                 if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
                     || outcome.Kind == HotReloadMethodOutcomeKind.Added)
                 {
@@ -183,6 +193,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return patchedCount;
+        }
+
+        private static void AppendOneShotCallerNoteCandidate(
+            HotReloadEntryResolution.ResolvedEntry resolved,
+            HotReloadMethodOutcome outcome,
+            string assemblyName,
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates)
+        {
+            if (candidates == null)
+            {
+                return;
+            }
+
+            if ((outcome.Kind != HotReloadMethodOutcomeKind.Patched
+                    && outcome.Kind != HotReloadMethodOutcomeKind.Added)
+                || !string.IsNullOrEmpty(outcome.LifecycleNote))
+            {
+                return;
+            }
+
+            HotReloadCallSiteScanner.CompiledMethodIdentity identity =
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    assemblyName,
+                    resolved.Entry.typeMetadataName,
+                    resolved.Entry.methodName,
+                    resolved.Entry.parameterTypeFullNames ?? Array.Empty<string>(),
+                    resolved.Entry.genericArity);
+            candidates.Add(new HotReloadOneShotCallerNoteEnricher.Candidate(identity, outcome));
         }
 
         // Why only here and the empty-entries deactivation: a failed worker or shim compile
