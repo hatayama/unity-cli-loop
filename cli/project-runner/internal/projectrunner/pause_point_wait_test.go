@@ -527,7 +527,7 @@ func TestRunWaitForPausePointTimeoutDoesNotClaimClearWhenClearIpcFails(t *testin
 	if _, exists := envelope.Error.Details["MarkerClearedByThisCommand"]; exists {
 		t.Fatalf("failed clear must not claim this command cleared the marker: %#v", envelope.Error.Details)
 	}
-	wantHint := pausePointTimeoutHint(enabledResponse, false, false)
+	wantHint := pausePointTimeoutHint(enabledResponse, false, false, nil)
 	if envelope.Error.Details["Hint"] != wantHint {
 		t.Fatalf("hint mismatch:\n got: %#v\nwant: %#v", envelope.Error.Details["Hint"], wantHint)
 	}
@@ -552,7 +552,7 @@ func TestPausePointExpiredErrorReportsRecoveryFields(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired, false, false)
+	}, response, pausePointWaitStateExpired, false, false, nil)
 
 	if cliErr.Details["Expired"] != true {
 		t.Fatalf("expired detail mismatch: %#v", cliErr.Details)
@@ -584,7 +584,7 @@ func TestPausePointExpiredErrorPrependsRecommendedNextAction(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired, false, false)
+	}, response, pausePointWaitStateExpired, false, false, nil)
 
 	wantNextActions := []string{
 		expiredNextAction,
@@ -612,7 +612,7 @@ func TestPausePointExpiredErrorOmitsEmptyRecommendedNextAction(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired, false, false)
+	}, response, pausePointWaitStateExpired, false, false, nil)
 
 	wantNextActions := []string{
 		"Run `uloop enable-pause-point --id <marker-id>` before waiting.",
@@ -639,7 +639,7 @@ func TestPausePointExpiredErrorUsesFileLineNextActions(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "Assets/Scripts/Foo.cs:42",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired, false, false)
+	}, response, pausePointWaitStateExpired, false, false, nil)
 
 	wantNextActions := []string{
 		"Re-arm it with uloop enable-pause-point --file \"Assets/Scripts/Foo.cs\" --line 42 before waiting.",
@@ -666,7 +666,7 @@ func TestPausePointExpiredErrorReportsMarkerTimeoutSeconds(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 5,
-	}, response, pausePointWaitStateExpired, false, false)
+	}, response, pausePointWaitStateExpired, false, false, nil)
 
 	if cliErr.Details["TimeoutSeconds"] != 30 {
 		t.Fatalf("timeoutSeconds detail mismatch: %#v", cliErr.Details)
@@ -685,7 +685,7 @@ func TestPausePointExpiredErrorDerivesExpiredFromStatus(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired, false, false)
+	}, response, pausePointWaitStateExpired, false, false, nil)
 
 	if cliErr.Details["Expired"] != true {
 		t.Fatalf("expired detail mismatch: %#v", cliErr.Details)
@@ -1485,7 +1485,7 @@ func TestPausePointTimeoutErrorIncludesDiagnosisHint(t *testing.T) {
 			cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 				id:             "jump",
 				timeoutSeconds: 1,
-			}, testCase.response, pausePointWaitStateTimeout, false, false)
+			}, testCase.response, pausePointWaitStateTimeout, false, false, nil)
 
 			if cliErr.Details["Hint"] != testCase.wantHint {
 				t.Fatalf("hint mismatch: %#v", cliErr.Details)
@@ -1534,7 +1534,7 @@ func TestPausePointExpiredErrorIncludesDiagnosisHint(t *testing.T) {
 			cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 				id:             "jump",
 				timeoutSeconds: 1,
-			}, testCase.response, pausePointWaitStateExpired, false, false)
+			}, testCase.response, pausePointWaitStateExpired, false, false, nil)
 
 			if cliErr.Details["Hint"] != testCase.wantHint {
 				t.Fatalf("hint mismatch: %#v", cliErr.Details)
@@ -1553,7 +1553,7 @@ func TestPausePointExpiredHintIncludesHotReloadLineDriftCandidate(t *testing.T) 
 		Status:      pausePointStatusExpired,
 		EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
 		HitCount:    0,
-	}, pausePointWaitStateExpired, false, false)
+	}, pausePointWaitStateExpired, false, false, nil)
 
 	hint, _ := cliErr.Details["Hint"].(string)
 	const candidateFour = "(4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable."
@@ -1578,7 +1578,7 @@ func TestPausePointHintIsOmittedOutsideDiagnosableStates(t *testing.T) {
 	timeoutErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, hitResponse, pausePointWaitStateTimeout, false, false)
+	}, hitResponse, pausePointWaitStateTimeout, false, false, nil)
 	if _, exists := timeoutErr.Details["Hint"]; exists {
 		t.Fatalf("hint should be omitted when no diagnosis applies: %#v", timeoutErr.Details)
 	}
@@ -1591,7 +1591,7 @@ func TestPausePointHintIsOmittedOutsideDiagnosableStates(t *testing.T) {
 	clearedErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, clearedResponse, pausePointWaitStateCleared, false, false)
+	}, clearedResponse, pausePointWaitStateCleared, false, false, nil)
 	if _, exists := clearedErr.Details["Hint"]; exists {
 		t.Fatalf("hint should be omitted for cleared markers: %#v", clearedErr.Details)
 	}
@@ -1611,7 +1611,7 @@ func TestPausePointExpiredErrorReportsNoRemainingTime(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired, false, false)
+	}, response, pausePointWaitStateExpired, false, false, nil)
 
 	if cliErr.ErrorCode != clierrors.ErrorCodePausePointExpired {
 		t.Fatalf("error code mismatch: %#v", cliErr)
@@ -1639,7 +1639,7 @@ func TestPausePointExpiredErrorOmitsResolvedNoteWhenHitCountPositive(t *testing.
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired, false, false)
+	}, response, pausePointWaitStateExpired, false, false, nil)
 
 	if cliErr.Message != "Pause point expired before it was hit." {
 		t.Fatalf("Message mismatch: %q", cliErr.Message)
@@ -1673,7 +1673,7 @@ func TestPausePointExpiredErrorNotesResolvedLineWhenTextEmpty(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateExpired, false, false)
+	}, response, pausePointWaitStateExpired, false, false, nil)
 
 	if cliErr.Details["ResolvedLine"] != 55 {
 		t.Fatalf("ResolvedLine mismatch: %#v", cliErr.Details["ResolvedLine"])
@@ -1705,7 +1705,7 @@ func TestPausePointTimeoutErrorOmitsResolvedFieldDetails(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateTimeout, false, false)
+	}, response, pausePointWaitStateTimeout, false, false, nil)
 
 	if cliErr.Message != "Pause point was not hit within 1s." {
 		t.Fatalf("Message mismatch: %q", cliErr.Message)

@@ -443,6 +443,7 @@ func runPausePointWaitAfterEnable(
 		state,
 		hasNewHitBaseline,
 		markerClearedByThisCommand,
+		triggerResult,
 	)
 	waitErr.Command = pausePointEnableCommandName
 	if enableFields.Warning != "" {

@@ -321,6 +321,7 @@ func runWaitForPausePoint(
 		state,
 		hasNewHitBaseline,
 		markerClearedByThisCommand,
+		triggerResult,
 	)
 	if triggerResult != nil {
 		waitErr.Details["TriggerResult"] = triggerResult

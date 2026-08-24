@@ -333,7 +333,7 @@ func TestPausePointTimeoutHintForNewHitBaseline(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
 		id:             "jump",
 		timeoutSeconds: 1,
-	}, response, pausePointWaitStateTimeout, true, false)
+	}, response, pausePointWaitStateTimeout, true, false, nil)
 
 	if cliErr.ErrorCode != clierrors.ErrorCodePausePointWaitTimeout {
 		t.Fatalf("error code mismatch: %s", cliErr.ErrorCode)
