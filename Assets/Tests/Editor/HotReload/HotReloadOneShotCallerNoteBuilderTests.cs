@@ -89,6 +89,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a generic lifecycle-named method is not classified because Unity cannot dispatch it.
+        /// </summary>
+        [Test]
+        public void IsOneShotLifecycleCaller_GenericMethod_ReturnsFalse()
+        {
+            bool result = HotReloadOneShotCallerNoteEnricher.IsOneShotLifecycleCaller(
+                CreateHit(typeof(GenericLifecycleFixture), "Awake"));
+
+            Assert.That(result, Is.False);
+        }
+
+        /// <summary>
+        /// What: multiple generic lifecycle-named methods are rejected without throwing.
+        /// </summary>
+        [Test]
+        public void IsOneShotLifecycleCaller_MultipleGenericMethods_ReturnsFalseWithoutThrowing()
+        {
+            Assert.DoesNotThrow(() =>
+            {
+                bool result = HotReloadOneShotCallerNoteEnricher.IsOneShotLifecycleCaller(
+                    CreateHit(typeof(MultipleGenericLifecycleFixture), "Awake"));
+
+                Assert.That(result, Is.False);
+            });
+        }
+
+        /// <summary>
         /// What: an incomplete scan does not add caller-aware notes to its candidates.
         /// </summary>
         [Test]
@@ -484,6 +511,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             private int Awake()
             {
                 return 1;
+            }
+        }
+
+        /// <summary>
+        /// Models arbitrary user code shapes the classifier must reject without throwing.
+        /// </summary>
+        private sealed class GenericLifecycleFixture : MonoBehaviour
+        {
+            private void Awake<T>()
+            {
+            }
+        }
+
+        /// <summary>
+        /// Models arbitrary user code shapes the classifier must reject without throwing.
+        /// </summary>
+        private sealed class MultipleGenericLifecycleFixture : MonoBehaviour
+        {
+            private void Awake<T>()
+            {
+            }
+
+            private void Awake<T, U>()
+            {
             }
         }
 

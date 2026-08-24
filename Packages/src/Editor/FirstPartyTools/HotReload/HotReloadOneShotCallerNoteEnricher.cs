@@ -59,13 +59,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            MethodInfo method = callerType.GetMethod(
-                hit.CallerMethodName,
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly,
-                null,
-                Type.EmptyTypes,
-                null);
-            return method != null && method.ReturnType == typeof(void);
+            MethodInfo[] methods = callerType.GetMethods(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            foreach (MethodInfo method in methods)
+            {
+                if (method.Name != hit.CallerMethodName
+                    || method.IsGenericMethodDefinition
+                    || method.GetParameters().Length != 0
+                    || method.ReturnType != typeof(void))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
         }
 
         internal static void ApplyNotes(
