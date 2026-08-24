@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
 
-            Assert.That(response.MethodEntryCount, Is.EqualTo(snapshot.MethodEntryCount));
+            Assert.That(response.MethodEntryCount, Is.EqualTo(3));
         }
 
         /// <summary>
@@ -84,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             PausePointStatusResponse response = PausePointStatusResponse.FromSnapshot(snapshot);
 
-            Assert.That(response.MethodEntryCount, Is.EqualTo(snapshot.MethodEntryCount));
+            Assert.That(response.MethodEntryCount, Is.EqualTo(3));
         }
 
         private static UloopPausePointSnapshot CreateExpiredSnapshot(string recommendedNextAction, int methodEntryCount)
@@ -94,8 +94,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UloopPausePointStatus.Expired,
                 false,
                 false,
-                methodEntryCount,
                 0,
+                methodEntryCount,
                 30,
                 UloopPausePointCaptureMode.SingleShot,
                 20,
