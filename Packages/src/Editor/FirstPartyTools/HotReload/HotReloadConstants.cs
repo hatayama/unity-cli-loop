@@ -281,6 +281,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AtomicFileSkipReason =
             "Skipped: hot reload applies each file all-or-nothing, and another method in this file failed. Nothing from this file was applied; patches from earlier reloads are untouched. Fix the failed methods and rerun, or run 'uloop compile'.";
 
+        // Format: count of Patched + Added entries already applied in this file before a
+        // Harmony patch-engine failure. Used only when that count is at least 1.
+        public const string PartialApplyAfterPatchEngineFailureWarningFormat =
+            "A Harmony patch failed after {0} method(s) in this file were already applied by this run; the file is partially applied. Run 'uloop hot-reload --revert-all' and re-apply your edits, or run 'uloop compile'.";
+
         public const string FailedWithNoApplyRecommendedNextAction =
             "Fix the failed methods and rerun, or run 'uloop compile'.";
 

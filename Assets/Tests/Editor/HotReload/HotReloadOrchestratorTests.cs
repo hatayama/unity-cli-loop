@@ -2487,6 +2487,95 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a match failure among multiple apply entries fails that entry, skips the rest
+        /// with AtomicFileSkipReason, and does not begin a shim / added-member / added-field
+        /// generation for the file.
+        /// </summary>
+        [Test]
+        public void ApplyEntries_MatchFailureAmongMultipleEntries_SkipsRestWithoutRegistryGeneration()
+        {
+            const string projectRelativePath = "Assets/Tests/Editor/HotReload/PreflightMatchFailure.cs";
+            const string missingMethodName = "DoesNotExistInCompiledAssembly";
+            string typeName = typeof(HotReloadE2EFixture).FullName;
+            string expectedFailedLabel = HotReloadPatcher.FormatMethodKeyParts(
+                typeName,
+                missingMethodName,
+                new[] { typeof(int).FullName },
+                genericArity: 0);
+            string expectedFailedReason =
+                "No method '" + missingMethodName
+                + "' with the given parameter types was found on '" + typeName + "'.";
+            string[] addedFieldNames =
+            {
+                typeName + ".PreflightScratch"
+            };
+            TransformWorkerEntryDto[] entries =
+            {
+                new TransformWorkerEntryDto
+                {
+                    typeMetadataName = typeName,
+                    methodName = missingMethodName,
+                    parameterTypeFullNames = new[] { typeof(int).FullName },
+                    genericArity = 0,
+                    shimTypeName = "UnusedShim",
+                    shimMethodName = "Unused",
+                    patchKind = string.Empty
+                },
+                new TransformWorkerEntryDto
+                {
+                    typeMetadataName = typeName,
+                    methodName = nameof(HotReloadE2EFixture.ComputeWithPrivate),
+                    parameterTypeFullNames = new[] { typeof(int).FullName },
+                    genericArity = 0,
+                    shimTypeName = "UnusedShim",
+                    shimMethodName = "Unused",
+                    patchKind = string.Empty
+                }
+            };
+            TransformWorkerOutputDto workerOutput = new TransformWorkerOutputDto
+            {
+                entries = entries,
+                addedFieldNames = addedFieldNames,
+                sourceContentSha256 = "preflight-match-failure"
+            };
+
+            HotReloadOrchestrator.HotReloadFileProcessResult fileResult =
+                HotReloadEntryApplier.ApplyEntriesAndBuildResult(
+                    typeof(HotReloadE2EFixture).Assembly.GetName().Name,
+                    projectRelativePath,
+                    projectRelativePath,
+                    HotReloadShimCompileResult.SuccessResult(
+                        typeof(HotReloadEntryApplier).Assembly,
+                        new byte[] { 1 },
+                        Array.Empty<byte>()),
+                    entries,
+                    addedFieldNames,
+                    workerOutput,
+                    new HashSet<string>(),
+                    new HashSet<string>(),
+                    new List<HotReloadMethodOutcome>(),
+                    new List<string>(),
+                    new List<string>(),
+                    new List<string>(),
+                    unchangedMethodCount: 0);
+
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                fileResult.Outcomes,
+                fileResult.Warnings,
+                fileResult.PatchedCount,
+                activePatchTotal: 0);
+            Assert.That(fileResult.Outcomes.Count, Is.EqualTo(2));
+            Assert.That(fileResult.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+            Assert.That(fileResult.Outcomes[0].Method, Is.EqualTo(expectedFailedLabel));
+            Assert.That(fileResult.Outcomes[0].Reason, Is.EqualTo(expectedFailedReason));
+            AssertHasAtomicFileSkip(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            AssertNoPatchedOrAddedOutcomes(result);
+            Assert.That(HotReloadShimRegistry.HasGeneration(projectRelativePath), Is.False);
+            Assert.That(HotReloadAddedMemberRegistry.HasGeneration(projectRelativePath), Is.False);
+            Assert.That(HotReloadAddedFieldRegistry.GetFieldsForType(typeName), Is.Empty);
+        }
+
+        /// <summary>
         /// What: an added method plus its caller plus an unrelated shim-compile failure still
         /// isolates per-method (the file is not collapsed to a single (shim-compile) Failed)
         /// and skips survivors instead of patching them.
