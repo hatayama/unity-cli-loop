@@ -276,6 +276,14 @@ func failedPausePointTriggerResult() *pausePointTriggerResult {
 	}
 }
 
+func dispatchFailedPausePointTriggerResult() *pausePointTriggerResult {
+	return &pausePointTriggerResult{
+		Command:   "simulate-mouse-input --action Click --button Right",
+		Completed: true,
+		Error:     `{"Error":{"ErrorCode":"UNITY_NOT_REACHABLE"}}`,
+	}
+}
+
 func succeededPausePointTriggerResult() *pausePointTriggerResult {
 	return &pausePointTriggerResult{
 		Command:   "simulate-keyboard --action Press --key Space",
@@ -289,7 +297,8 @@ func playingPausedEditorState() pausePointEditorState {
 }
 
 // Verifies a rejected trigger on timeout replaces the auto-cleared non-firing hint and sets
-// TriggerFailed, including when the Editor is still paused.
+// TriggerFailed, including when the Editor is still paused. The want string is a full literal
+// so a wording change cannot pass by moving with the constant.
 func TestPausePointTimeoutError_TriggerRejected_SetsHintAndTriggerFailed(t *testing.T) {
 	response := pausePointStatusResponse{
 		Status:      pausePointStatusCleared,
@@ -299,6 +308,27 @@ func TestPausePointTimeoutError_TriggerRejected_SetsHintAndTriggerFailed(t *test
 		id:             "Assets/Scripts/Foo.cs:2",
 		timeoutSeconds: 25,
 	}, response, pausePointWaitStateTimeout, false, true, failedPausePointTriggerResult())
+
+	const wantHint = "The trigger command ran but was rejected. Read Details.TriggerResult (Response.Message, or Error when the command failed to dispatch) for the reason (for example, input commands are rejected while PlayMode is paused by an earlier pause-point hit). Resume PlayMode with 'clear-pause-point --all' (which releases a pause owned by any marker) or 'control-play-mode --action Play', then re-enable the marker and retry."
+	if cliErr.Details["Hint"] != wantHint {
+		t.Fatalf("hint mismatch:\n got: %#v\nwant: %q", cliErr.Details["Hint"], wantHint)
+	}
+	if cliErr.Details["TriggerFailed"] != true {
+		t.Fatalf("TriggerFailed mismatch: %#v", cliErr.Details["TriggerFailed"])
+	}
+}
+
+// Verifies a trigger dispatch failure on timeout uses the same rejected Hint (which names Error
+// as well as Response.Message) and still sets TriggerFailed.
+func TestPausePointTimeoutError_TriggerDispatchFailed_SetsErrorHintAndTriggerFailed(t *testing.T) {
+	response := pausePointStatusResponse{
+		Status:      pausePointStatusCleared,
+		EditorState: playingPausedEditorState(),
+	}
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "Assets/Scripts/Foo.cs:2",
+		timeoutSeconds: 25,
+	}, response, pausePointWaitStateTimeout, false, true, dispatchFailedPausePointTriggerResult())
 
 	if cliErr.Details["Hint"] != pausePointHintTriggerRejected {
 		t.Fatalf("hint mismatch:\n got: %#v\nwant: %q", cliErr.Details["Hint"], pausePointHintTriggerRejected)
@@ -411,5 +441,26 @@ func TestPausePointTimeoutHint_SuppressedByHotReload_WinsOverTriggerRejected(t *
 	}
 	if cliErr.Details["TriggerFailed"] != true {
 		t.Fatalf("TriggerFailed must still be set when the trigger failed: %#v", cliErr.Details["TriggerFailed"])
+	}
+}
+
+// Verifies a rejected trigger wins over the already-hit new-hit-baseline diagnosis.
+func TestPausePointTimeoutError_TriggerRejected_WinsOverNewHitBaseline(t *testing.T) {
+	response := pausePointStatusResponse{
+		Status:      pausePointStatusHit,
+		HitCount:    1,
+		EditorState: playingPausedEditorState(),
+	}
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 25,
+	}, response, pausePointWaitStateTimeout, true, false, failedPausePointTriggerResult())
+
+	const wantHint = "The trigger command ran but was rejected. Read Details.TriggerResult (Response.Message, or Error when the command failed to dispatch) for the reason (for example, input commands are rejected while PlayMode is paused by an earlier pause-point hit). Resume PlayMode with 'clear-pause-point --all' (which releases a pause owned by any marker) or 'control-play-mode --action Play', then re-enable the marker and retry."
+	if cliErr.Details["Hint"] != wantHint {
+		t.Fatalf("hint mismatch:\n got: %#v\nwant: %q", cliErr.Details["Hint"], wantHint)
+	}
+	if cliErr.Details["TriggerFailed"] != true {
+		t.Fatalf("TriggerFailed mismatch: %#v", cliErr.Details["TriggerFailed"])
 	}
 }
