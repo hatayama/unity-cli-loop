@@ -973,17 +973,34 @@ test_git_bash_latest_installs_windows_zip_asset() {
   assert_contains "$work_dir/output.txt" "uloop mock version"
 }
 
-# Verifies -UseBasicParsing on the two payload downloads, the PS 5.1-only
-# TLS 1.2 -bor assignment, and that that assignment appears before the first
-# Invoke-WebRequest in install.ps1.
+# Verifies -UseBasicParsing on the two payload downloads, that the TLS 1.2
+# -bor assignment sits inside the PS 5.1 Major -lt 6 guard, and that that
+# assignment appears before the first Invoke-WebRequest in install.ps1.
 test_powershell_installer_enables_tls12_and_basic_parsing() {
-  assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($PSVersionTable.PSVersion.Major -lt 6) {'
-  assert_contains "$ROOT_DIR/scripts/install.ps1" '[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -UseBasicParsing -Uri $DownloadUrl -OutFile $ArchivePath'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -UseBasicParsing -Uri $ChecksumUrl -OutFile $ChecksumPath'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -Uri'
 
-  tls_line=$(grep -n -F '[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12' "$ROOT_DIR/scripts/install.ps1" | head -n 1 | cut -d: -f1)
+  tls_assignment='[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12'
+  tls_guard_block=$(awk '
+    index($0, "if ($PSVersionTable.PSVersion.Major -lt 6) {") {
+      capture = 1
+    }
+    capture {
+      print
+    }
+    capture && index($0, "}") {
+      exit
+    }
+  ' "$ROOT_DIR/scripts/install.ps1")
+  if [ -z "$tls_guard_block" ]; then
+    echo "Expected a PS 5.1 Major -lt 6 guard in install.ps1" >&2
+    exit 1
+  fi
+  printf '%s\n' "$tls_guard_block" > "$TMP_DIR/tls-guard.ps1"
+  assert_contains "$TMP_DIR/tls-guard.ps1" "$tls_assignment"
+
+  tls_line=$(grep -n -F "$tls_assignment" "$ROOT_DIR/scripts/install.ps1" | head -n 1 | cut -d: -f1)
   first_web_request_line=$(grep -n -F 'Invoke-WebRequest' "$ROOT_DIR/scripts/install.ps1" | head -n 1 | cut -d: -f1)
   if [ -z "$tls_line" ] || [ -z "$first_web_request_line" ]; then
     echo "Expected TLS 1.2 assignment and Invoke-WebRequest line numbers in install.ps1" >&2
