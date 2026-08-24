@@ -9,9 +9,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
     /// Stores enabled pause point state for the current Editor domain. All members except
-    /// IsArmed and ResumeEditorPauseForClientDisconnect are main-thread-only by convention;
-    /// IsArmed is the Harmony Capture entry point, and the disconnect resume path only sets a
-    /// pending flag so thread-pool callers never touch EditorApplication.isPaused.
+    /// IsArmed, RecordMethodEntry, and ResumeEditorPauseForClientDisconnect are main-thread-only
+    /// by convention; IsArmed and RecordMethodEntry are Harmony entry points, and the disconnect
+    /// resume path only sets a pending flag so thread-pool callers never touch EditorApplication.isPaused.
     /// </summary>
     internal static class UloopPausePointRegistry
     {
@@ -327,6 +327,18 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             }
 
             return Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled;
+        }
+
+        // Called from injected IL at method entry on whatever thread invokes the method. Entries
+        // is a ConcurrentDictionary and the increment is Interlocked, so this is safe off the
+        // main thread, like IsArmed. A concurrent clear may permit a few extra entries to be
+        // recorded, which is acceptable because strict synchronization is not required here.
+        public static void RecordMethodEntry(string id)
+        {
+            if (Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled)
+            {
+                entry.IncrementMethodEntryCount();
+            }
         }
 
         // Called from the Harmony Capture entry point right after IsArmed confirms the id is

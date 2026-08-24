@@ -10,6 +10,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     /// </summary>
     internal sealed class UloopPausePointEntry
     {
+        // Incremented from patched method bodies on arbitrary threads, so this field is the only
+        // entry state mutated outside the main thread; use Interlocked only.
+        private int _methodEntryCount;
+
         public UloopPausePointEntry(
             string id,
             int timeoutSeconds,
@@ -50,6 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string Status { get; private set; }
         public bool IsEnabled { get; private set; }
         public int HitCount { get; private set; }
+        public int MethodEntryCount => System.Threading.Volatile.Read(ref _methodEntryCount);
         public DateTime FirstHitAtUtc { get; private set; }
         public DateTime HitAtUtc { get; private set; }
         public int FirstHitSequence { get; private set; }
@@ -72,6 +77,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // 0 / null-or-empty means unresolved (not yet written by enable or retarget).
         public int ResolvedLine { get; set; }
         public string ResolvedLineText { get; set; }
+
+        public void IncrementMethodEntryCount()
+        {
+            System.Threading.Interlocked.Increment(ref _methodEntryCount);
+        }
 
         public bool ExpireIfNeeded(DateTime nowUtc)
         {
@@ -258,6 +268,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 IsEnabled,
                 isHit,
                 HitCount,
+                MethodEntryCount,
                 TimeoutSeconds,
                 Mode,
                 MaxHistory,

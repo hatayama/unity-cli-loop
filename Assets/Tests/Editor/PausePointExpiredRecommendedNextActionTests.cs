@@ -69,6 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 false,
                 false,
                 0,
+                0,
                 30,
                 UloopPausePointCaptureMode.SingleShot,
                 20,

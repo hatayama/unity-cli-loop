@@ -82,6 +82,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.HitCount, Is.EqualTo(1));
         }
 
+        /// <summary>
+        /// Verifies recording an entry for an unknown marker does not create pause point state.
+        /// </summary>
+        [Test]
+        public void RecordMethodEntry_WhenPausePointIsNotEnabled_DoesNothing()
+        {
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.NotEnabled));
+            Assert.That(snapshot.MethodEntryCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies each entry recording increments the armed pause point's counter.
+        /// </summary>
+        [Test]
+        public void RecordMethodEntry_WhenPausePointIsEnabled_IncrementsEntryCount()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(snapshot.MethodEntryCount, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// Verifies re-enabling an id replaces its entry counter with a new zero-valued entry.
+        /// </summary>
+        [Test]
+        public void Enable_WhenPausePointIsReenabled_ResetsMethodEntryCount()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(snapshot.MethodEntryCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies recording after a pause point is disarmed leaves its counter unchanged.
+        /// </summary>
+        [Test]
+        public void RecordMethodEntry_WhenPausePointIsDisarmed_DoesNotIncrementEntryCount()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePointRegistry.Clear("jump");
+
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+            Assert.That(snapshot.MethodEntryCount, Is.EqualTo(0));
+        }
+
         [Test]
         public void Pause_WhenPausePointIsEnabled_RecordsHitEvidence()
         {

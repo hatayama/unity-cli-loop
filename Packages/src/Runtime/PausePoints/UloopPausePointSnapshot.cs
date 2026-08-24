@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             bool isEnabled,
             bool isHit,
             int hitCount,
+            int methodEntryCount,
             int timeoutSeconds,
             string mode,
             int maxHistory,
@@ -57,6 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             IsEnabled = isEnabled;
             IsHit = isHit;
             HitCount = hitCount;
+            MethodEntryCount = methodEntryCount;
             TimeoutSeconds = timeoutSeconds;
             Mode = mode ?? UloopPausePointCaptureMode.SingleShot;
             MaxHistory = maxHistory;
@@ -96,6 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool IsEnabled { get; }
         public bool IsHit { get; }
         public int HitCount { get; }
+        public int MethodEntryCount { get; }
         public int TimeoutSeconds { get; }
         public string Mode { get; }
         public int MaxHistory { get; }
@@ -138,6 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 UloopPausePointStatus.NotEnabled,
                 false,
                 false,
+                0,
                 0,
                 0,
                 UloopPausePointCaptureMode.SingleShot,
