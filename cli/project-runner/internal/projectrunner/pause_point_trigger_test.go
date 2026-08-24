@@ -178,6 +178,26 @@ func TestParsePausePointTriggerCommandRejectsLeadingUloop(t *testing.T) {
 			value:          `uloop simulate-mouse-input --action Move --position "10 20"`,
 			wantNextAction: wantPausePointTriggerLeadingUloopQuotedCorrection,
 		},
+		{
+			name:           "empty quoted token falls back to the format example",
+			value:          "uloop compile --flag ''",
+			wantNextAction: wantPausePointTriggerLeadingUloopExample,
+		},
+		{
+			name:           "quote-bearing token falls back to the format example",
+			value:          `uloop compile --value '{"name":"x"}'`,
+			wantNextAction: wantPausePointTriggerLeadingUloopExample,
+		},
+		{
+			name:           "nested pause-point wait after uloop falls back to the format example",
+			value:          "uloop await-pause-point --id other",
+			wantNextAction: wantPausePointTriggerLeadingUloopExample,
+		},
+		{
+			name:           "project-path after uloop falls back to the format example",
+			value:          "uloop simulate-keyboard --project-path /x",
+			wantNextAction: wantPausePointTriggerLeadingUloopExample,
+		},
 	}
 
 	for _, testCase := range cases {
@@ -195,6 +215,25 @@ func TestParsePausePointTriggerCommandRejectsLeadingUloop(t *testing.T) {
 			}
 			requireNextActions(t, err, []string{testCase.wantNextAction})
 		})
+	}
+}
+
+// Verifies formatPausePointTriggerTokens round-trips through the tokenizer for a safe argv
+// that only needs whitespace quoting, so a presented correction can be pasted back unchanged.
+func TestFormatPausePointTriggerTokensRoundTripsSafeTokens(t *testing.T) {
+	tokens := []string{"simulate-mouse-input", "--action", "Move", "--position", "10 20"}
+	formatted := formatPausePointTriggerTokens(tokens)
+	got, err := tokenizePausePointTriggerValue(formatted)
+	if err != nil {
+		t.Fatalf("tokenize(%q) failed: %v", formatted, err)
+	}
+	if len(got) != len(tokens) {
+		t.Fatalf("token count mismatch: got %#v, want %#v", got, tokens)
+	}
+	for index, token := range tokens {
+		if got[index] != token {
+			t.Fatalf("token[%d] mismatch: got %q, want %q", index, got[index], token)
+		}
 	}
 }
 

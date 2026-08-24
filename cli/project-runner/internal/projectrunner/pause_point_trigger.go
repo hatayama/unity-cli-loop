@@ -152,7 +152,10 @@ const (
 func rejectLeadingUloopTrigger(command string, triggerArgs []string) error {
 	corrected := pausePointTriggerExampleWithoutDispatcher
 	if len(triggerArgs) > 0 {
-		corrected = formatPausePointTriggerTokens(triggerArgs)
+		candidate := formatPausePointTriggerTokens(triggerArgs)
+		if pausePointTriggerCorrectionIsReusable(command, triggerArgs, candidate) {
+			corrected = candidate
+		}
 	}
 	return &clierrors.ArgumentError{
 		Message: pausePointTriggerLeadingUloopMessage,
@@ -162,6 +165,38 @@ func rejectLeadingUloopTrigger(command string, triggerArgs []string) error {
 			"Re-run with --trigger " + quotePausePointTriggerFlagValue(corrected),
 		},
 	}
+}
+
+// pausePointTriggerCorrectionIsReusable reports whether a reconstructed --trigger value can be
+// pasted back as-is. Why not present every remainder: empty or quote-bearing tokens do not
+// round-trip through the tokenizer, and nested-wait / --project-path remainders are rejected
+// on the next parse. Why refuse a remainder that still starts with uloop: re-parsing it would
+// re-enter rejectLeadingUloopTrigger; a leftover prefix is already an unusable correction.
+func pausePointTriggerCorrectionIsReusable(command string, original []string, corrected string) bool {
+	tokens, err := tokenizePausePointTriggerValue(corrected)
+	if err != nil {
+		return false
+	}
+	if !pausePointTriggerTokensEqual(tokens, original) {
+		return false
+	}
+	if tokens[0] == pausePointTriggerLeadingDispatcherToken {
+		return false
+	}
+	_, _, err = parsePausePointTriggerCommand(command, corrected)
+	return err == nil
+}
+
+func pausePointTriggerTokensEqual(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index, token := range left {
+		if token != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 // formatPausePointTriggerTokens joins tokens and re-quotes any token that contains whitespace
