@@ -108,16 +108,11 @@ func closestOptionNameSuggestion(tool clicore.ToolDefinition, flagName string) (
 }
 
 func sharedTokenOptionSuggestions(tool clicore.ToolDefinition, flagName string) []string {
-	unknownToken := firstKebabToken(flagName)
-	if len(unknownToken) < minSharedKebabTokenLength {
-		return nil
-	}
-
 	unknown := strings.ToLower(flagName)
 	matches := make([]visibleToolOption, 0)
 	bestDistance := -1
 	for _, option := range visibleToolOptions(tool) {
-		if firstKebabToken(option.name) != unknownToken {
+		if !hasSharedKebabToken(flagName, option.name) {
 			continue
 		}
 		distance := levenshteinDistance(unknown, strings.ToLower(option.name))
@@ -157,12 +152,33 @@ func visibleToolOptions(tool clicore.ToolDefinition) []visibleToolOption {
 			property: property,
 		})
 	}
-	return options
+	return appendDynamicCodeFileSuggestionOption(tool, options)
 }
 
-func firstKebabToken(name string) string {
-	token, _, _ := strings.Cut(strings.ToLower(name), "-")
-	return token
+func appendDynamicCodeFileSuggestionOption(tool clicore.ToolDefinition, options []visibleToolOption) []visibleToolOption {
+	if tool.Name != clicore.ExecuteDynamicCodeCommandName {
+		return options
+	}
+	for _, option := range options {
+		if option.name == tooldocs.DynamicCodeFileFlagName {
+			return options
+		}
+	}
+	return append(options, visibleToolOption{name: tooldocs.DynamicCodeFileFlagName})
+}
+
+func hasSharedKebabToken(left string, right string) bool {
+	for _, leftToken := range strings.Split(strings.ToLower(left), "-") {
+		if len(leftToken) < minSharedKebabTokenLength {
+			continue
+		}
+		for _, rightToken := range strings.Split(strings.ToLower(right), "-") {
+			if leftToken == rightToken {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func prependSuggestions(suggestions []string, fallback string) []string {

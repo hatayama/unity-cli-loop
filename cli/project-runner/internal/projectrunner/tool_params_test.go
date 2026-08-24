@@ -266,6 +266,34 @@ func TestBuildToolParamsUnknownOptionSuggestsSharedKebabToken(t *testing.T) {
 	})
 }
 
+// Verifies execute-dynamic-code suggests its CLI-only code-file option when a supplied flag shares a later kebab token.
+func TestBuildToolParamsUnknownOptionSuggestsDynamicCodeFileFromSharedLaterToken(t *testing.T) {
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), clicore.ExecuteDynamicCodeCommandName)
+	if !ok {
+		t.Fatal("execute-dynamic-code was not found in default tools")
+	}
+
+	_, _, err := buildToolParams([]string{"--file"}, tool)
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop execute-dynamic-code --code-file",
+		"Run `uloop execute-dynamic-code --help` to inspect supported options.",
+	})
+}
+
+// Verifies run-tests suggests test-mode when a supplied flag shares a later kebab token.
+func TestBuildToolParamsUnknownOptionSuggestsTestModeFromSharedLaterToken(t *testing.T) {
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), "run-tests")
+	if !ok {
+		t.Fatal("run-tests was not found in default tools")
+	}
+
+	_, _, err := buildToolParams([]string{"--mode"}, tool)
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop run-tests --test-mode",
+		"Run `uloop run-tests --help` to inspect supported options.",
+	})
+}
+
 // Verifies an unrelated unknown flag keeps only the --help NextAction.
 func TestBuildToolParamsUnknownOptionWithoutSuggestionKeepsHelpNextAction(t *testing.T) {
 	_, _, err := buildToolParams([]string{"--zzzzzzzz"}, toolParamsSuggestionTool())
