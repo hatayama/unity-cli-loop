@@ -233,6 +233,25 @@ func TestPausePointStateNextActionsKeepsCodeMarkerGuidanceWhenIdContainsColon(t 
 	}
 }
 
+const wantPausePointTriggerFailedUnknownCommandNextAction = "For an INVALID_ARGUMENT rejection, check the rejected value against the triggered command's own --help; for UNKNOWN_COMMAND, the first token must be a uloop subcommand name written without the leading 'uloop'."
+
+// Verifies the trigger-failed third NextAction distinguishes INVALID_ARGUMENT help-checking
+// from UNKNOWN_COMMAND's leading-uloop format mistake, so a prefixed value is not sent to
+// the triggered command's --help.
+func TestPausePointTriggerFailedNextActionsDiagnosesUnknownCommandPrefix(t *testing.T) {
+	got := pausePointTriggerFailedNextActions("jump")
+	want := []string{
+		"Fix the --trigger value in the command you just ran and run that command again. Re-running " +
+			"`enable-pause-point --await` is safe and is the cleanest reset: it restarts the marker's " +
+			"HitCount and --timeout-seconds countdown, and re-patching an already patched id is a no-op.",
+		`The marker is still armed, so you can also wait on it directly: uloop await-pause-point --id "jump" --trigger "<corrected trigger command>"`,
+		wantPausePointTriggerFailedUnknownCommandNextAction,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("NextActions mismatch:\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
 // Verifies a `.cs:0` suffix is not treated as a file:line id, because enable-pause-point
 // rejects --line 0 and C# never emits that id.
 func TestPausePointStateNextActionsKeepsCodeMarkerGuidanceForZeroLine(t *testing.T) {

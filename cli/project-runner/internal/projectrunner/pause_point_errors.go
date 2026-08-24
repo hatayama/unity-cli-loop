@@ -112,8 +112,7 @@ func pausePointTriggerFailedNextActions(id string) []string {
 		fmt.Sprintf(
 			"The marker is still armed, so you can also wait on it directly: "+
 				"uloop await-pause-point --id %q --trigger \"<corrected trigger command>\"", id),
-		"Check the rejected value against the triggered command's own `--help` before retrying, so the " +
-			"same value is not retried twice.",
+		"For an INVALID_ARGUMENT rejection, check the rejected value against the triggered command's own --help; for UNKNOWN_COMMAND, the first token must be a uloop subcommand name written without the leading 'uloop'.",
 	}
 }
 

@@ -110,6 +110,12 @@ func TestParsePausePointTriggerCommand(t *testing.T) {
 			value:       "simulate-keyboard --action Press --project-path=/tmp/OtherProject",
 			wantErrText: "cannot include --project-path",
 		},
+		{
+			name:        "accepts a trigger without a leading uloop token",
+			value:       "simulate-keyboard --action Press --key space",
+			wantCommand: "simulate-keyboard",
+			wantArgs:    []string{"--action", "Press", "--key", "space"},
+		},
 	}
 
 	for _, testCase := range cases {
@@ -139,6 +145,95 @@ func TestParsePausePointTriggerCommand(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+const (
+	wantPausePointTriggerLeadingUloopMessage          = `--trigger must name the uloop subcommand without the leading "uloop": the value runs in-process, not through a shell.`
+	wantPausePointTriggerLeadingUloopCorrection       = `Re-run with --trigger "simulate-keyboard --action Press --key space"`
+	wantPausePointTriggerLeadingUloopExample          = `Re-run with --trigger "simulate-keyboard --action Press --key Space"`
+	wantPausePointTriggerLeadingUloopQuotedCorrection = `Re-run with --trigger 'simulate-mouse-input --action Move --position "10 20"'`
+)
+
+// Verifies a leading uloop token is rejected at parse time, before dispatch, and NextActions
+// carries the corrected command — including re-quoting tokens that contain whitespace.
+func TestParsePausePointTriggerCommandRejectsLeadingUloop(t *testing.T) {
+	cases := []struct {
+		name           string
+		value          string
+		wantNextAction string
+	}{
+		{
+			name:           "strips a leading uloop token and restates the remaining command",
+			value:          "uloop simulate-keyboard --action Press --key space",
+			wantNextAction: wantPausePointTriggerLeadingUloopCorrection,
+		},
+		{
+			name:           "uloop alone points at the subcommand format example",
+			value:          "uloop",
+			wantNextAction: wantPausePointTriggerLeadingUloopExample,
+		},
+		{
+			name:           "re-quotes a remaining token that contains whitespace",
+			value:          `uloop simulate-mouse-input --action Move --position "10 20"`,
+			wantNextAction: wantPausePointTriggerLeadingUloopQuotedCorrection,
+		},
+		{
+			name:           "empty quoted token falls back to the format example",
+			value:          "uloop compile --flag ''",
+			wantNextAction: wantPausePointTriggerLeadingUloopExample,
+		},
+		{
+			name:           "quote-bearing token falls back to the format example",
+			value:          `uloop compile --value '{"name":"x"}'`,
+			wantNextAction: wantPausePointTriggerLeadingUloopExample,
+		},
+		{
+			name:           "nested pause-point wait after uloop falls back to the format example",
+			value:          "uloop await-pause-point --id other",
+			wantNextAction: wantPausePointTriggerLeadingUloopExample,
+		},
+		{
+			name:           "project-path after uloop falls back to the format example",
+			value:          "uloop simulate-keyboard --project-path /x",
+			wantNextAction: wantPausePointTriggerLeadingUloopExample,
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, _, err := parsePausePointTriggerCommand("await-pause-point", testCase.value)
+			argumentError := requireArgumentError(t, err)
+			if argumentError.Message != wantPausePointTriggerLeadingUloopMessage {
+				t.Fatalf("Message mismatch:\nwant %q\ngot  %q", wantPausePointTriggerLeadingUloopMessage, argumentError.Message)
+			}
+			if argumentError.Option != "--trigger" {
+				t.Fatalf("Option mismatch: got %q, want %q", argumentError.Option, "--trigger")
+			}
+			if argumentError.Command != "await-pause-point" {
+				t.Fatalf("Command mismatch: got %q, want %q", argumentError.Command, "await-pause-point")
+			}
+			requireNextActions(t, err, []string{testCase.wantNextAction})
+		})
+	}
+}
+
+// Verifies formatPausePointTriggerTokens round-trips through the tokenizer for a safe argv
+// that only needs whitespace quoting, so a presented correction can be pasted back unchanged.
+func TestFormatPausePointTriggerTokensRoundTripsSafeTokens(t *testing.T) {
+	tokens := []string{"simulate-mouse-input", "--action", "Move", "--position", "10 20"}
+	formatted := formatPausePointTriggerTokens(tokens)
+	got, err := tokenizePausePointTriggerValue(formatted)
+	if err != nil {
+		t.Fatalf("tokenize(%q) failed: %v", formatted, err)
+	}
+	if len(got) != len(tokens) {
+		t.Fatalf("token count mismatch: got %#v, want %#v", got, tokens)
+	}
+	for index, token := range tokens {
+		if got[index] != token {
+			t.Fatalf("token[%d] mismatch: got %q, want %q", index, got[index], token)
+		}
 	}
 }
 

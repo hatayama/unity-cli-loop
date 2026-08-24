@@ -100,6 +100,37 @@ func TestVisibleOptionHelpEntriesOmitPausePointCLIOnlyOptionsForOtherTools(t *te
 	}
 }
 
+const (
+	wantPausePointAwaitTriggerDescription  = "Runs a single uloop subcommand in-process right after arming/registration. Pass the subcommand without the leading 'uloop', e.g. \"simulate-keyboard --action Press --key Space\""
+	wantPausePointEnableTriggerDescription = "Requires --await. Same as await-pause-point's --trigger: a uloop subcommand without the leading 'uloop', e.g. \"simulate-keyboard --action Press --key Space\""
+)
+
+// Verifies both --trigger help rows state the in-process subcommand form and include an
+// example without a leading uloop token.
+func TestPausePointTriggerDescriptionsDocumentSubcommandForm(t *testing.T) {
+	var awaitDescription string
+	for _, option := range PausePointAwaitCLIOnlyOptions() {
+		if option.FlagName == PausePointTriggerFlagName {
+			awaitDescription = option.Description
+			break
+		}
+	}
+	if awaitDescription != wantPausePointAwaitTriggerDescription {
+		t.Fatalf("await --trigger description mismatch:\nwant %q\ngot  %q", wantPausePointAwaitTriggerDescription, awaitDescription)
+	}
+
+	var enableDescription string
+	for _, option := range PausePointEnableCLIOnlyOptions() {
+		if option.FlagName == PausePointTriggerFlagName {
+			enableDescription = option.Description
+			break
+		}
+	}
+	if enableDescription != wantPausePointEnableTriggerDescription {
+		t.Fatalf("enable --trigger description mismatch:\nwant %q\ngot  %q", wantPausePointEnableTriggerDescription, enableDescription)
+	}
+}
+
 func findOptionHelpEntry(entries []OptionHelpEntry, name string) (OptionHelpEntry, bool) {
 	for _, entry := range entries {
 		if entry.Name == name {

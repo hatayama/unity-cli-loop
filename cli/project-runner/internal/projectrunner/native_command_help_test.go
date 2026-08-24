@@ -42,7 +42,7 @@ func TestRunProjectLocalAwaitPausePointHelpOptionsSection(t *testing.T) {
   --matching-logs-max-count <value>  Maximum Console logs matching the marker id to include on a hit
   --resume-play                      After confirming the marker is armed, resume PlayMode if paused (before --trigger), so a paused-arm workflow can fire input in one call
   --timeout-seconds <value>          Seconds to wait for a hit before timing out
-  --trigger <value>                  Runs a single uloop subcommand in-process right after arming/registration
+  --trigger <value>                  Runs a single uloop subcommand in-process right after arming/registration. Pass the subcommand without the leading 'uloop', e.g. "simulate-keyboard --action Press --key Space"
 `
 	assertNativeCommandHelpOptionsSection(t, "await-pause-point", expectedOptions)
 }
