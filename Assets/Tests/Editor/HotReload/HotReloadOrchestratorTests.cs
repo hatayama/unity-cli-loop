@@ -2461,21 +2461,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("AtomicFileAddedField.cs", edited),
                 CancellationToken.None);
 
-            bool initFailedWithCsError = false;
+            bool initFailedWithHint = false;
             foreach (HotReloadMethodOutcome outcome in result.Methods)
             {
                 if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
                     && outcome.Method.Contains(nameof(HotReloadAtomicFileApplyFixture.InitField))
-                    && outcome.Reason.Contains("CS"))
+                    && outcome.Reason.Contains(HotReloadConstants.NewMemberCompileHint))
                 {
-                    initFailedWithCsError = true;
+                    initFailedWithHint = true;
                 }
             }
 
             Assert.That(
-                initFailedWithCsError,
+                initFailedWithHint,
                 Is.True,
-                "InitField must fail with a C# compiler diagnostic.\n" + FormatOutcomes(result));
+                "InitField must fail with the new-member compile hint.\n" + FormatOutcomes(result));
             AssertHasAtomicFileSkip(result, nameof(HotReloadAtomicFileApplyFixture.ReadField));
             AssertNoPatchedOrAddedOutcomes(result);
             Assert.That(result.AddedFields, Is.Empty);

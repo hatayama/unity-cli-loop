@@ -275,7 +275,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         // Why survivors stay Skipped: applying them after a sibling Failed would leave
-        // the file half-applied (R22). Isolation still attributes the Failed methods.
+        // the file half-applied. Isolation still attributes the Failed methods.
         private static void AppendAtomicFileSkipOutcomes(
             List<HotReloadMethodOutcome> outcomes,
             TransformWorkerEntryDto[] retryEntries,
