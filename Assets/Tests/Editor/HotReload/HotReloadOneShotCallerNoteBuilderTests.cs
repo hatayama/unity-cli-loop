@@ -85,6 +85,102 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result, Is.False);
         }
+
+        /// <summary>
+        /// What: an incomplete scan does not add caller-aware notes to its candidates.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_MissingScanAssembly_SuppressesNotes()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateCandidate("Assembly.One", outcome)
+                };
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                "project",
+                outcomes,
+                candidates,
+                (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                    new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                    new List<string> { assemblyName }));
+
+            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: candidates with separate target assemblies are scanned in separate fake calls.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_DifferentTargetAssemblies_ScansEachAssemblySeparately()
+        {
+            HotReloadMethodOutcome first = HotReloadMethodOutcome.Patched("Type.First", "Assets/First.cs");
+            HotReloadMethodOutcome second = HotReloadMethodOutcome.Patched("Type.Second", "Assets/Second.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { first, second };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateCandidate("Assembly.One", first),
+                    CreateCandidate("Assembly.Two", second)
+                };
+            List<HotReloadCallSiteScanner.CompiledMethodIdentity[]> calls =
+                new List<HotReloadCallSiteScanner.CompiledMethodIdentity[]>();
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                "project",
+                outcomes,
+                candidates,
+                (assemblyName, identities) =>
+                {
+                    calls.Add(identities);
+                    return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                        new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                        new List<string>());
+                });
+
+            Assert.That(calls.Count, Is.EqualTo(2));
+            Assert.That(calls[0].Length, Is.EqualTo(1));
+            Assert.That(calls[1].Length, Is.EqualTo(1));
+            Assert.That(calls[0][0].AssemblyName, Is.Not.EqualTo(calls[1][0].AssemblyName));
+        }
+
+        /// <summary>
+        /// What: a worker lifecycle note remains authoritative and skips the caller scan.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_WorkerLifecycleNoteCandidate_SkipsScanAndKeepsNote()
+        {
+            const string workerNote = "Worker lifecycle note.";
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
+                "Type.SetUp",
+                "Assets/Test.cs",
+                workerNote);
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateCandidate("Assembly.One", outcome)
+                };
+            int scanCount = 0;
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                "project",
+                outcomes,
+                candidates,
+                (assemblyName, identities) =>
+                {
+                    scanCount++;
+                    return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                        new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                        new List<string>());
+                });
+
+            Assert.That(scanCount, Is.EqualTo(0));
+            Assert.That(outcomes[0].LifecycleNote, Is.EqualTo(workerNote));
+        }
         /// <summary>
         /// What: one Awake caller produces the caller-aware lifecycle note.
         /// </summary>
@@ -176,6 +272,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CallerTypeMetadataName = typeMetadataName,
                 CallerMethodName = methodName
             };
+        }
+
+        private static HotReloadOneShotCallerNoteEnricher.Candidate CreateCandidate(
+            string assemblyName,
+            HotReloadMethodOutcome outcome)
+        {
+            HotReloadCallSiteScanner.CompiledMethodIdentity identity =
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    assemblyName,
+                    "Type",
+                    "SetUp",
+                    Array.Empty<string>(),
+                    0);
+            return new HotReloadOneShotCallerNoteEnricher.Candidate(identity, outcome);
         }
 
         private sealed class ValidLifecycleFixture : MonoBehaviour

@@ -78,6 +78,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new Dictionary<string, List<Candidate>>(StringComparer.Ordinal);
             foreach (Candidate candidate in candidates)
             {
+                if (!string.IsNullOrEmpty(candidate.Outcome.LifecycleNote))
+                {
+                    continue;
+                }
+
                 if (!candidatesByAssembly.TryGetValue(candidate.Identity.AssemblyName, out List<Candidate> group))
                 {
                     group = new List<Candidate>();
