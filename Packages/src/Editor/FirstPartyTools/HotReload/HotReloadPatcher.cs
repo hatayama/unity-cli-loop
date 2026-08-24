@@ -214,8 +214,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadPatchResult.Failure(
                     HotReloadPatchFailureReason.ApplyFailed,
                     $"Applying the patch to '{method}' failed: " +
-                    $"{exception.GetType().Name}: {exception.Message}{rootCauseSuffix} " +
-                    "Other methods in this run are unaffected.");
+                    $"{exception.GetType().Name}: {exception.Message}{rootCauseSuffix}");
             }
             finally
             {

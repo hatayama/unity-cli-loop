@@ -37,16 +37,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     filePath);
                 if (failure != null)
                 {
-                    List<HotReloadMethodOutcome> failureOutcomes = new List<HotReloadMethodOutcome>();
-                    failureOutcomes.Add(failure);
-                    AppendAtomicSkipOutcomes(failureOutcomes, entriesToPatch, index + 1, filePath);
-                    return Result.Failed(failureOutcomes);
+                    return Result.Failed(
+                        BuildAtomicFailureOutcomes(entriesToPatch, index, failure, filePath));
                 }
 
                 resolvedEntries.Add(resolved);
             }
 
             return Result.Succeeded(resolvedEntries);
+        }
+
+        // Why every non-failed entry, including those already resolved: a later
+        // preflight failure must not drop earlier methods from the response.
+        private static List<HotReloadMethodOutcome> BuildAtomicFailureOutcomes(
+            TransformWorkerEntryDto[] entries,
+            int failedIndex,
+            HotReloadMethodOutcome failure,
+            string filePath)
+        {
+            Debug.Assert(entries != null, "entries must not be null.");
+            Debug.Assert(failedIndex >= 0, "failedIndex must not be negative.");
+            Debug.Assert(failedIndex < entries.Length, "failedIndex must be inside entries.");
+            Debug.Assert(failure != null, "failure must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be empty.");
+
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
+            for (int index = 0; index < failedIndex; index++)
+            {
+                outcomes.Add(CreateAtomicSkipOutcome(entries[index], filePath));
+            }
+
+            outcomes.Add(failure);
+            AppendAtomicSkipOutcomes(outcomes, entries, failedIndex + 1, filePath);
+            return outcomes;
         }
 
         internal static void AppendAtomicSkipOutcomes(
@@ -62,12 +85,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             for (int index = startIndex; index < entries.Length; index++)
             {
-                outcomes.Add(
-                    HotReloadMethodOutcome.Skipped(
-                        FormatEntryLabel(entries[index]),
-                        HotReloadConstants.AtomicFileSkipReason,
-                        filePath));
+                outcomes.Add(CreateAtomicSkipOutcome(entries[index], filePath));
             }
+        }
+
+        private static HotReloadMethodOutcome CreateAtomicSkipOutcome(
+            TransformWorkerEntryDto entry,
+            string filePath)
+        {
+            return HotReloadMethodOutcome.Skipped(
+                FormatEntryLabel(entry),
+                HotReloadConstants.AtomicFileSkipReason,
+                filePath);
         }
 
         private static (ResolvedEntry Resolved, HotReloadMethodOutcome Failure) TryResolveEntry(
