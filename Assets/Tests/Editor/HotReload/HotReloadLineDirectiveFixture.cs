@@ -56,5 +56,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             #endregion
             return regionWrapped;
         }
+
+        public float CommentThenBlankLine()
+        {
+            // comment then a blank line
+
+            float commentThenBlankLine = 1.000f;
+            return commentThenBlankLine;
+        }
     }
 }

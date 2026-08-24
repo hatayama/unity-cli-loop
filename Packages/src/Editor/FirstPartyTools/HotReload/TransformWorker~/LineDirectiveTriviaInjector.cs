@@ -41,35 +41,9 @@ internal static class LineDirectiveTriviaInjector
     private static (SyntaxTriviaList Before, SyntaxTriviaList After) SplitLeadingTrivia(
         SyntaxTriviaList leading)
     {
-        int lastConsuming = -1;
-        for (int index = 0; index < leading.Count; index++)
-        {
-            if (ConsumesMappedLines(leading[index]))
-            {
-                lastConsuming = index;
-            }
-        }
-
-        if (lastConsuming < 0)
-        {
-            return SplitWhitespaceOnly(leading);
-        }
-
-        int beforeEndExclusive = lastConsuming + 1;
-        if (beforeEndExclusive < leading.Count
-            && leading[beforeEndExclusive].IsKind(SyntaxKind.EndOfLineTrivia))
-        {
-            beforeEndExclusive++;
-        }
-
-        return (Slice(leading, 0, beforeEndExclusive), Slice(leading, beforeEndExclusive, leading.Count));
-    }
-
-    private static (SyntaxTriviaList Before, SyntaxTriviaList After) SplitWhitespaceOnly(
-        SyntaxTriviaList leading)
-    {
-        // Keep only the final indent after #line so the directive sits on its own line
-        // immediately above the first token, without an extra blank line.
+        // Why the final indent only: comments, #region, and blank-line EOLs after them
+        // must stay above #line. Taking a single post-comment EOL left leftover blank
+        // lines under the directive, which consume the statement's mapped numbers.
         int indentStart = leading.Count;
         for (int index = leading.Count - 1; index >= 0; index--)
         {
@@ -82,17 +56,6 @@ internal static class LineDirectiveTriviaInjector
         }
 
         return (Slice(leading, 0, indentStart), Slice(leading, indentStart, leading.Count));
-    }
-
-    private static bool ConsumesMappedLines(SyntaxTrivia trivia)
-    {
-        SyntaxKind kind = trivia.Kind();
-        return trivia.IsDirective
-            || kind == SyntaxKind.SingleLineCommentTrivia
-            || kind == SyntaxKind.MultiLineCommentTrivia
-            || kind == SyntaxKind.SingleLineDocumentationCommentTrivia
-            || kind == SyntaxKind.MultiLineDocumentationCommentTrivia
-            || kind == SyntaxKind.DisabledTextTrivia;
     }
 
     private static SyntaxTriviaList Slice(SyntaxTriviaList leading, int start, int endExclusive)

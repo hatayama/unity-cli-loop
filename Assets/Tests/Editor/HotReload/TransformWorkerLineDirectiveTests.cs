@@ -114,6 +114,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ProjectRelativePath);
         }
 
+        /// <summary>
+        /// What: a blank line after a leading comment stays above #line so the
+        /// statement token does not inherit a shifted mapped line.
+        /// </summary>
+        [Test]
+        public async Task Emit_CommentThenBlankLine_LineDirectiveSitsImmediatelyBeforeToken()
+        {
+            string source = ReadFixtureSource();
+            TransformWorkerClientResult result = await RunWorkerOnFixtureAsync(source);
+            AssertLineDirectiveImmediatelyBeforeToken(
+                result.Output.shimSource,
+                source,
+                "float commentThenBlankLine =",
+                ProjectRelativePath);
+        }
+
         private static void AssertLineDirectiveImmediatelyBeforeToken(
             string shimSource,
             string originalSource,

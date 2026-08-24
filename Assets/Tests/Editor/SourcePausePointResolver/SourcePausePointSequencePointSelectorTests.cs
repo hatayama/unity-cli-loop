@@ -102,6 +102,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: an outer for-increment SP after the inner header's partner does not
+        /// drop the inner header (init) when the request is the inner for line.
+        /// </summary>
+        [Test]
+        public void SelectIndex_NestedForHeaders_KeepsInnerHeaderDespiteOuterIncrementWitness()
+        {
+            List<SourcePausePointSequencePointCandidate> points =
+                new List<SourcePausePointSequencePointCandidate>
+                {
+                    new SourcePausePointSequencePointCandidate(10, 10, false),
+                    new SourcePausePointSequencePointCandidate(12, 40, false),
+                    new SourcePausePointSequencePointCandidate(14, 60, false),
+                    new SourcePausePointSequencePointCandidate(12, 80, false),
+                    new SourcePausePointSequencePointCandidate(10, 200, false)
+                };
+
+            int selected = SourcePausePointSequencePointSelector.SelectIndex(points, 12, 16);
+
+            Assert.That(selected, Is.EqualTo(1));
+            Assert.That(points[selected].StartLine, Is.EqualTo(12));
+            Assert.That(points[selected].Offset, Is.EqualTo(40));
+        }
+
+        /// <summary>
         /// What: hidden 0xFEEFEE points neither win nor invert a later real SP.
         /// </summary>
         [Test]

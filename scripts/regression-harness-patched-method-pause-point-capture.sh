@@ -217,6 +217,11 @@ await_capture() {
         cat "$RESULT_FILE"
         return 1
     fi
+    if [ "$expect_retarget" = "0" ] && [ "$retargeted" != "false" ]; then
+        log "FAIL: ${label} expected RetargetedToHotReloadPatch=false"
+        cat "$RESULT_FILE"
+        return 1
+    fi
     assert_good_capture "$label"
 }
 
@@ -229,6 +234,10 @@ open_harness_scene
 log "Stopping any existing Play Mode session..."
 run_uloop control-play-mode --action Stop > /dev/null
 run_uloop clear-pause-point --all > /dev/null
+# Why revert before (A): a leftover patch from a previous run would retarget (A)
+# and let a false compile-time baseline pass.
+log "Reverting leftover hot-reload patches before compile-time capture..."
+run_uloop hot-reload --revert-all > /dev/null
 
 log "Starting Play Mode..."
 run_uloop control-play-mode --action Play > /dev/null

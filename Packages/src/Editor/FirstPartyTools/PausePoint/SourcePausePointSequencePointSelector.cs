@@ -5,7 +5,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Picks the closest sequence point on or after a requested line after dropping
-    /// points whose IL offset is inverted relative to a later, smaller StartLine.
+    /// inverted duplicate-line points whose later same-line partner has an intervening
+    /// smaller StartLine.
     /// </summary>
     internal static class SourcePausePointSequencePointSelector
     {
@@ -46,11 +47,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<SourcePausePointSequencePointCandidate> points,
             SourcePausePointSequencePointCandidate candidate)
         {
-            // Why duplicate-line only: a for-increment SP has a smaller StartLine and a
-            // larger offset than the body. Treating every such pair as fake would drop the
-            // body and skip to after the loop, where the loop variable is out of scope.
-            // The diagnosed #line fake shares a StartLine with the real statement SP.
-            if (!HasDuplicateStartLine(points, candidate.StartLine))
+            // Why a same-line partner plus an in-between witness: an outer for-increment
+            // SP has a smaller StartLine and a larger offset than an inner header, but it
+            // sits after the inner header's partner. Treating that as fake would drop every
+            // inner-header SP and round into the body.
+            int partnerOffset = FindLargerSameLineOffset(points, candidate);
+            if (partnerOffset < 0)
             {
                 return false;
             }
@@ -59,13 +61,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // on one line; the first (loop head) must win, not the later condition SP.
             for (int index = 0; index < points.Count; index++)
             {
-                SourcePausePointSequencePointCandidate other = points[index];
-                if (other.IsHidden)
+                SourcePausePointSequencePointCandidate witness = points[index];
+                if (witness.IsHidden || witness.StartLine >= candidate.StartLine)
                 {
                     continue;
                 }
 
-                if (other.StartLine < candidate.StartLine && other.Offset > candidate.Offset)
+                if (witness.Offset > candidate.Offset && witness.Offset < partnerOffset)
                 {
                     return true;
                 }
@@ -74,27 +76,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static bool HasDuplicateStartLine(
+        private static int FindLargerSameLineOffset(
             IReadOnlyList<SourcePausePointSequencePointCandidate> points,
-            int startLine)
+            SourcePausePointSequencePointCandidate candidate)
         {
-            int seen = 0;
+            int partnerOffset = -1;
             for (int index = 0; index < points.Count; index++)
             {
                 SourcePausePointSequencePointCandidate other = points[index];
-                if (other.IsHidden || other.StartLine != startLine)
+                if (other.IsHidden
+                    || other.StartLine != candidate.StartLine
+                    || other.Offset <= candidate.Offset)
                 {
                     continue;
                 }
 
-                seen++;
-                if (seen > 1)
+                if (partnerOffset < 0 || other.Offset < partnerOffset)
                 {
-                    return true;
+                    partnerOffset = other.Offset;
                 }
             }
 
-            return false;
+            return partnerOffset;
         }
     }
 }
