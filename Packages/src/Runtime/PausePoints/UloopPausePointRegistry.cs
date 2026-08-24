@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public const int MaxCallerFramesLimit = 8;
 
         private static readonly ConcurrentDictionary<string, UloopPausePointEntry> Entries = new();
+        private static readonly HashSet<string> MethodEntryInstrumentedIds = new();
         private static IUloopPausePointPauseController _pauseController = new UnityEditorPausePointPauseController();
         private static Func<DateTime> _nowProvider = () => DateTime.UtcNow;
         private static int _nextGeneration;
@@ -98,7 +99,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             DateTime now = NowUtc();
             int generation = ++_nextGeneration;
             UloopPausePointEntry entry = new(
-                id, timeoutSeconds, mode, maxHistory, maxPreviewElements, maxCallerFrames, now, generation);
+                id, timeoutSeconds, mode, maxHistory, maxPreviewElements, maxCallerFrames, now, generation,
+                MethodEntryInstrumentedIds.Contains(id));
             Entries[id] = entry;
             // Why not clear the raw capture holder here: a re-enable does not resume Unity, so the
             // paused-window constraint (see UloopPausePointRawCaptureHolder's class comment) is not
@@ -339,6 +341,16 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             {
                 entry.IncrementMethodEntryCount();
             }
+        }
+
+        internal static void SetMethodEntryInstrumented(string id)
+        {
+            MethodEntryInstrumentedIds.Add(id);
+        }
+
+        internal static void ClearMethodEntryInstrumented(string id)
+        {
+            MethodEntryInstrumentedIds.Remove(id);
         }
 
         // Called from the Harmony Capture entry point right after IsArmed confirms the id is
@@ -669,6 +681,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public static void ResetForTests()
         {
             Entries.Clear();
+            MethodEntryInstrumentedIds.Clear();
             _nextGeneration = 0;
             _nextHitSequence = 0;
             _latestHitSnapshot = null;

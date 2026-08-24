@@ -270,7 +270,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePoint.Pause("jump");
 
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
-            Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit. The armed method was never invoked."));
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit."));
             Assert.That(snapshot.Expired, Is.True);
             Assert.That(snapshot.RemainingMilliseconds, Is.EqualTo(0));
             Assert.That(
@@ -286,6 +286,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetStatus_WhenEnteredMethodDoesNotHit_ReportsBranchNotTaken()
         {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
             UloopPausePointRegistry.Enable("jump", 1);
             UloopPausePointRegistry.RecordMethodEntry("jump");
             UloopPausePointRegistry.RecordMethodEntry("jump");
@@ -294,6 +295,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit. The armed method ran 2 time(s) but the armed line was never reached (branch not taken)."));
+        }
+
+        /// <summary>
+        /// Verifies an instrumented method that never runs reports the method-entry diagnostic.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenInstrumentedMethodNeverRuns_ReportsNeverInvoked()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit. The armed method was never invoked."));
         }
 
         [Test]

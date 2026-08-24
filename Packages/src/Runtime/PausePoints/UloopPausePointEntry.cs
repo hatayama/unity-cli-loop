@@ -22,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int maxPreviewElements,
             int maxCallerFrames,
             DateTime enabledAtUtc,
-            int generation)
+            int generation,
+            bool hasMethodEntryInstrumentation)
         {
             Id = id;
             TimeoutSeconds = timeoutSeconds;
@@ -33,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             EnabledAtUtc = enabledAtUtc;
             ExpiresAtUtc = enabledAtUtc.AddSeconds(timeoutSeconds);
             Generation = generation;
+            HasMethodEntryInstrumentation = hasMethodEntryInstrumentation;
             Status = UloopPausePointStatus.Enabled;
             IsEnabled = true;
             Message = "Pause point enabled.";
@@ -51,6 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public DateTime EnabledAtUtc { get; }
         public DateTime ExpiresAtUtc { get; private set; }
         public int Generation { get; }
+        public bool HasMethodEntryInstrumentation { get; }
         public string Status { get; private set; }
         public bool IsEnabled { get; private set; }
         public int HitCount { get; private set; }
@@ -107,10 +110,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // Increments are gated on IsEnabled, which is false here. An in-flight increment that
             // already passed that gate can still reach the snapshot after this message is composed.
             int methodEntryCount = MethodEntryCount;
-            Message = HitCount == 0
+            Message = HitCount == 0 && HasMethodEntryInstrumentation
                 ? methodEntryCount == 0
                     ? "Pause point expired before it was hit. The armed method was never invoked."
                     : $"Pause point expired before it was hit. The armed method ran {methodEntryCount} time(s) but the armed line was never reached (branch not taken)."
+                : HitCount == 0
+                    ? "Pause point expired before it was hit."
                 : $"Pause point capture window expired after {HitCount} hit(s); capture history is preserved.";
             return true;
         }
