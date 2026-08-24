@@ -278,6 +278,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string PartialApplyRecommendedNextAction =
             "Partially applied. Fix the failed methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches.";
 
+        public const string AtomicFileSkipReason =
+            "Skipped: hot reload applies each file all-or-nothing, and another method in this file failed. Nothing from this file was applied; patches from earlier reloads are untouched. Fix the failed methods and rerun, or run 'uloop compile'.";
+
         public const string FailedWithNoApplyRecommendedNextAction =
             "Fix the failed methods and rerun, or run 'uloop compile'.";
 

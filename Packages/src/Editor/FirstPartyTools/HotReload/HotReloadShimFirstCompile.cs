@@ -184,10 +184,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (shimReferencePaths.ErrorMessage != null)
             {
                 return ShimFirstCompileResult.Failed(
-                    HotReloadMethodOutcome.Failed(
-                        "(file)",
-                        shimReferencePaths.ErrorMessage,
-                        assemblyResolvePath));
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Failed(
+                            "(file)",
+                            shimReferencePaths.ErrorMessage,
+                            assemblyResolvePath)
+                    });
             }
 
             List<string> shimReferences = shimReferencePaths.References;
@@ -248,29 +251,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 return ShimFirstCompileResult.Failed(
-                    HotReloadMethodOutcome.Failed(
-                        failureMethodLabel,
-                        HotReloadSkippedMemberCompileNote.AppendNotes(
-                            compileResult.ErrorMessage,
-                            fallbackErrorMessages,
-                            workerOutput.skipped),
-                        assemblyResolvePath));
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Failed(
+                            failureMethodLabel,
+                            HotReloadSkippedMemberCompileNote.AppendNotes(
+                                compileResult.ErrorMessage,
+                                fallbackErrorMessages,
+                                workerOutput.skipped),
+                            assemblyResolvePath)
+                    });
             }
 
             siblingDerivedWarnings.AddRange(isolation.SiblingConstDriftWarnings);
             List<HotReloadMethodOutcome> isolationOutcomes = new List<HotReloadMethodOutcome>();
             isolationOutcomes.AddRange(isolation.FailedMethodOutcomes);
             isolationOutcomes.AddRange(isolation.SkippedCallerOutcomes);
-            if (isolation.RetryEntries.Length == 0)
-            {
-                return ShimFirstCompileResult.SucceededEmpty(isolationOutcomes, isolation.AddedFieldNames);
-            }
-
-            return ShimFirstCompileResult.Succeeded(
-                isolation.RetryEntries,
-                isolation.RetryCompileResult,
+            AppendAtomicFileSkipOutcomes(
                 isolationOutcomes,
-                isolation.AddedFieldNames);
+                isolation.RetryEntries,
+                assemblyResolvePath);
+            return ShimFirstCompileResult.Failed(isolationOutcomes);
+        }
+
+        // Why survivors stay Skipped: applying them after a sibling Failed would leave
+        // the file half-applied. Isolation still attributes the Failed methods.
+        private static void AppendAtomicFileSkipOutcomes(
+            List<HotReloadMethodOutcome> outcomes,
+            TransformWorkerEntryDto[] retryEntries,
+            string filePath)
+        {
+            Debug.Assert(outcomes != null, "outcomes must not be null.");
+            Debug.Assert(retryEntries != null, "retryEntries must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be empty.");
+
+            foreach (TransformWorkerEntryDto entry in retryEntries)
+            {
+                string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                    entry.typeMetadataName,
+                    entry.methodName,
+                    entry.parameterTypeFullNames ?? Array.Empty<string>(),
+                    entry.genericArity);
+                outcomes.Add(
+                    HotReloadMethodOutcome.Skipped(
+                        methodLabel,
+                        HotReloadConstants.AtomicFileSkipReason,
+                        filePath));
+            }
         }
 
         private sealed class ShimFirstCompileResult
@@ -295,25 +322,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AddedFieldNames = addedFieldNames;
             }
 
-            public static ShimFirstCompileResult Failed(HotReloadMethodOutcome outcome)
+            public static ShimFirstCompileResult Failed(List<HotReloadMethodOutcome> outcomes)
             {
                 return new ShimFirstCompileResult(
                     true,
-                    new List<HotReloadMethodOutcome> { outcome },
-                    Array.Empty<TransformWorkerEntryDto>(),
-                    null);
-            }
-
-            public static ShimFirstCompileResult SucceededEmpty(
-                List<HotReloadMethodOutcome> outcomes,
-                string[] addedFieldNames = null)
-            {
-                return new ShimFirstCompileResult(
-                    false,
                     outcomes,
                     Array.Empty<TransformWorkerEntryDto>(),
-                    null,
-                    addedFieldNames);
+                    null);
             }
 
             public static ShimFirstCompileResult Succeeded(
