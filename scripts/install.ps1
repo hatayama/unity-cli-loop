@@ -1,9 +1,12 @@
 $ErrorActionPreference = "Stop"
 
 # Why: Windows PowerShell 5.1 does not enable TLS 1.2 by default on some
-# hosts, so GitHub downloads fail before any retry can help. -bor keeps
-# protocols the host already enabled.
-[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+# hosts. Gate to Major -lt 6 because pwsh 6+ reports SecurityProtocol as
+# SystemDefault (0); 0 -bor Tls12 becomes Tls12-only and would restrict
+# later connections in the iex host session.
+if ($PSVersionTable.PSVersion.Major -lt 6) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+}
 
 $Repository = "hatayama/unity-cli-loop"
 $Version = if ($env:ULOOP_VERSION) { $env:ULOOP_VERSION } else { "latest" }

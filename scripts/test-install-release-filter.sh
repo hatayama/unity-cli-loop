@@ -973,14 +973,26 @@ test_git_bash_latest_installs_windows_zip_asset() {
   assert_contains "$work_dir/output.txt" "uloop mock version"
 }
 
-# Verifies payload downloads use -UseBasicParsing and TLS 1.2 is enabled
-# before any network call, so Windows PowerShell 5.1 can download on hosts
-# that still default to TLS 1.0.
+# Verifies -UseBasicParsing on the two payload downloads, the PS 5.1-only
+# TLS 1.2 -bor assignment, and that that assignment appears before the first
+# Invoke-WebRequest in install.ps1.
 test_powershell_installer_enables_tls12_and_basic_parsing() {
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'if ($PSVersionTable.PSVersion.Major -lt 6) {'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -UseBasicParsing -Uri $DownloadUrl -OutFile $ArchivePath'
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -UseBasicParsing -Uri $ChecksumUrl -OutFile $ChecksumPath'
   assert_not_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -Uri'
+
+  tls_line=$(grep -n -F '[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12' "$ROOT_DIR/scripts/install.ps1" | head -n 1 | cut -d: -f1)
+  first_web_request_line=$(grep -n -F 'Invoke-WebRequest' "$ROOT_DIR/scripts/install.ps1" | head -n 1 | cut -d: -f1)
+  if [ -z "$tls_line" ] || [ -z "$first_web_request_line" ]; then
+    echo "Expected TLS 1.2 assignment and Invoke-WebRequest line numbers in install.ps1" >&2
+    exit 1
+  fi
+  if [ "$tls_line" -ge "$first_web_request_line" ]; then
+    echo "Expected TLS 1.2 assignment at line $tls_line to precede first Invoke-WebRequest at line $first_web_request_line" >&2
+    exit 1
+  fi
 }
 
 test_powershell_installer_avoids_optional_archive_cmdlets() {
