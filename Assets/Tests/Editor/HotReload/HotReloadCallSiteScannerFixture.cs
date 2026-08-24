@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
 
+using UnityEngine;
+
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
     /// <summary>
@@ -117,6 +119,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public int Target()
         {
             return 1;
+        }
+    }
+
+    /// <summary>
+    /// Supplies compiled MonoBehaviour caller shapes for caller-aware lifecycle note tests.
+    /// </summary>
+    public sealed class OneShotCallerScannerFixture : MonoBehaviour
+    {
+        private void Awake()
+        {
+            AwakeOnlyTarget();
+            MixedTarget();
+        }
+
+        private void AwakeOnlyTarget()
+        {
+        }
+
+        private void MixedTarget()
+        {
+        }
+
+        public void OrdinaryCaller()
+        {
+            MixedTarget();
         }
     }
 }

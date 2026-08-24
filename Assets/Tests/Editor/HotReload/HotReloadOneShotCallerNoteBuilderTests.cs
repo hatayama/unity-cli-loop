@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 using NUnit.Framework;
 
 using UnityEngine;
+using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -213,6 +215,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     + "assemblies; objects that already ran them will not run the patched body. It takes "
                     + "effect only for newly created objects, or run `uloop compile` and re-enter Play Mode."));
         }
+
+        /// <summary>
+        /// What: compiled Awake-only callers add an indirect lifecycle note to a patched outcome.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_CompiledAwakeOnlyCaller_AddsIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("OneShotCallerScannerFixture.AwakeOnlyTarget()", "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateScannerFixtureCandidate("AwakeOnlyTarget", outcome)
+                };
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                projectRoot,
+                outcomes,
+                candidates,
+                (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
+
+            Assert.That(
+                outcomes[0].LifecycleNote,
+                Is.EqualTo(
+                    "OneShotCallerScannerFixture.AwakeOnlyTarget() is called only from one-shot lifecycle "
+                    + "method(s) (Awake) in the compiled assemblies; objects that already ran them will not run "
+                    + "the patched body. It takes effect only for newly created objects, or run `uloop compile` "
+                    + "and re-enter Play Mode."));
+        }
+
+        /// <summary>
+        /// What: a compiled ordinary caller suppresses the indirect lifecycle note.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_CompiledOrdinaryCaller_SuppressesIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("OneShotCallerScannerFixture.MixedTarget()", "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateScannerFixtureCandidate("MixedTarget", outcome)
+                };
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                projectRoot,
+                outcomes,
+                candidates,
+                (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
+
+            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: WithLifecycleNote returns a copy that preserves the patched outcome fields.
+        /// </summary>
+        [Test]
+        public void WithLifecycleNote_PatchedOutcome_PreservesOutcomeFields()
+        {
+            HotReloadMethodOutcome original = HotReloadMethodOutcome.Patched("Type.Method", "Assets/Test.cs");
+
+            HotReloadMethodOutcome updated = original.WithLifecycleNote("note");
+
+            Assert.That(updated, Is.Not.SameAs(original));
+            Assert.That(updated.Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched));
+            Assert.That(updated.Method, Is.EqualTo("Type.Method"));
+            Assert.That(updated.FilePath, Is.EqualTo("Assets/Test.cs"));
+            Assert.That(updated.LifecycleNote, Is.EqualTo("note"));
+        }
         /// <summary>
         /// What: one Awake caller produces the caller-aware lifecycle note.
         /// </summary>
@@ -315,6 +388,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     assemblyName,
                     "Type",
                     "SetUp",
+                    Array.Empty<string>(),
+                    0);
+            return new HotReloadOneShotCallerNoteEnricher.Candidate(identity, outcome);
+        }
+
+        private static HotReloadOneShotCallerNoteEnricher.Candidate CreateScannerFixtureCandidate(
+            string methodName,
+            HotReloadMethodOutcome outcome)
+        {
+            string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
+                "Assets/Tests/Editor/HotReload/HotReloadCallSiteScannerFixture.cs");
+            string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
+            HotReloadCallSiteScanner.CompiledMethodIdentity identity =
+                new HotReloadCallSiteScanner.CompiledMethodIdentity(
+                    assemblyName,
+                    typeof(OneShotCallerScannerFixture).FullName,
+                    methodName,
                     Array.Empty<string>(),
                     0);
             return new HotReloadOneShotCallerNoteEnricher.Candidate(identity, outcome);
