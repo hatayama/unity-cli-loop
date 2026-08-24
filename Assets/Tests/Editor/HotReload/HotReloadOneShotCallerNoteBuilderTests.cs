@@ -181,6 +181,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(scanCount, Is.EqualTo(0));
             Assert.That(outcomes[0].LifecycleNote, Is.EqualTo(workerNote));
         }
+
+        /// <summary>
+        /// What: a proven Awake-only caller writes the full indirect note into the response outcome list.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_OnlyValidAwakeCaller_ReplacesOutcomeWithIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateCandidate(typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name, outcome)
+                };
+            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
+            hit.TargetMethodKey = "Type::SetUp()";
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                "project",
+                outcomes,
+                candidates,
+                (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                    new List<HotReloadCallSiteScanner.CallSiteHit> { hit },
+                    new List<string>()));
+
+            Assert.That(
+                outcomes[0].LifecycleNote,
+                Is.EqualTo(
+                    "Type.SetUp is called only from one-shot lifecycle method(s) (Awake) in the compiled "
+                    + "assemblies; objects that already ran them will not run the patched body. It takes "
+                    + "effect only for newly created objects, or run `uloop compile` and re-enter Play Mode."));
+        }
         /// <summary>
         /// What: one Awake caller produces the caller-aware lifecycle note.
         /// </summary>
