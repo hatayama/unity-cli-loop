@@ -1575,7 +1575,11 @@ func TestRunSkillsDirSubcommandRejectsOutputDirInsideSkillSource(t *testing.T) {
 	if !strings.Contains(stderr.String(), skillsOutputDirFlagName) {
 		t.Fatalf("error should name --output-dir:\n%s", stderr.String())
 	}
-	if !strings.Contains(stderr.String(), skill.sourceDirectory) && !strings.Contains(stderr.String(), outputDir) {
+	envelope := clierrors.CLIErrorEnvelope{}
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("parse error envelope: %v; stderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(envelope.Error.Message, skill.sourceDirectory) && !strings.Contains(envelope.Error.Message, outputDir) {
 		t.Fatalf("error should name the conflicting path:\n%s", stderr.String())
 	}
 	if _, err := os.Stat(outputDir); !os.IsNotExist(err) {
