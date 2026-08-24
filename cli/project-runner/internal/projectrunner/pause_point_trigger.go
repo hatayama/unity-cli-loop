@@ -102,6 +102,12 @@ func parsePausePointTriggerCommand(command string, value string) (string, []stri
 	triggerCommand := tokens[0]
 	triggerArgs := tokens[1:]
 
+	// The value is dispatched in-process as argv, not through a shell. A leading "uloop" is
+	// therefore a command name, not a prefix, and becomes UNKNOWN_COMMAND after arming.
+	if triggerCommand == pausePointTriggerLeadingDispatcherToken {
+		return "", nil, rejectLeadingUloopTrigger(command, triggerArgs)
+	}
+
 	// A pause-point wait cannot make progress from inside another pause-point wait: there is no
 	// legitimate use case, only a wasted goroutine that outlives its parent's own timeout.
 	if triggerCommand == clicore.PausePointAwaitCommandName || triggerCommand == pausePointEnableCommandName {
@@ -132,6 +138,54 @@ func parsePausePointTriggerCommand(command string, value string) (string, []stri
 	}
 
 	return triggerCommand, triggerArgs, nil
+}
+
+const (
+	pausePointTriggerLeadingDispatcherToken   = "uloop"
+	pausePointTriggerLeadingUloopMessage      = `--trigger must name the uloop subcommand without the leading "uloop": the value runs in-process, not through a shell.`
+	pausePointTriggerExampleWithoutDispatcher = `simulate-keyboard --action Press --key Space`
+)
+
+// rejectLeadingUloopTrigger reports a parse-time ArgumentError so a prefixed --trigger never
+// reaches dispatch. Why not reuse pausePointTriggerCommandString: that helper joins tokens
+// without quoting, which would flatten a whitespace-bearing argument such as "10 20".
+func rejectLeadingUloopTrigger(command string, triggerArgs []string) error {
+	corrected := pausePointTriggerExampleWithoutDispatcher
+	if len(triggerArgs) > 0 {
+		corrected = formatPausePointTriggerTokens(triggerArgs)
+	}
+	return &clierrors.ArgumentError{
+		Message: pausePointTriggerLeadingUloopMessage,
+		Option:  "--" + tooldocs.PausePointTriggerFlagName,
+		Command: command,
+		NextActions: []string{
+			"Re-run with --trigger " + quotePausePointTriggerFlagValue(corrected),
+		},
+	}
+}
+
+// formatPausePointTriggerTokens joins tokens and re-quotes any token that contains whitespace
+// so the reconstructed --trigger value can be pasted back unchanged.
+func formatPausePointTriggerTokens(tokens []string) string {
+	formatted := make([]string, len(tokens))
+	for index, token := range tokens {
+		formatted[index] = quotePausePointTriggerToken(token)
+	}
+	return strings.Join(formatted, " ")
+}
+
+func quotePausePointTriggerToken(token string) string {
+	if strings.ContainsAny(token, " \t") {
+		return `"` + token + `"`
+	}
+	return token
+}
+
+func quotePausePointTriggerFlagValue(value string) string {
+	if strings.Contains(value, `"`) {
+		return "'" + value + "'"
+	}
+	return `"` + value + `"`
 }
 
 // tokenizePausePointTriggerValue splits a --trigger value into argv-style tokens, honoring single

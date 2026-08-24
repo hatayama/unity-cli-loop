@@ -110,6 +110,12 @@ func TestParsePausePointTriggerCommand(t *testing.T) {
 			value:       "simulate-keyboard --action Press --project-path=/tmp/OtherProject",
 			wantErrText: "cannot include --project-path",
 		},
+		{
+			name:        "accepts a trigger without a leading uloop token",
+			value:       "simulate-keyboard --action Press --key space",
+			wantCommand: "simulate-keyboard",
+			wantArgs:    []string{"--action", "Press", "--key", "space"},
+		},
 	}
 
 	for _, testCase := range cases {
@@ -138,6 +144,56 @@ func TestParsePausePointTriggerCommand(t *testing.T) {
 					t.Fatalf("args[%d] mismatch: got %q, want %q", index, arg, testCase.wantArgs[index])
 				}
 			}
+		})
+	}
+}
+
+const (
+	wantPausePointTriggerLeadingUloopMessage          = `--trigger must name the uloop subcommand without the leading "uloop": the value runs in-process, not through a shell.`
+	wantPausePointTriggerLeadingUloopCorrection       = `Re-run with --trigger "simulate-keyboard --action Press --key space"`
+	wantPausePointTriggerLeadingUloopExample          = `Re-run with --trigger "simulate-keyboard --action Press --key Space"`
+	wantPausePointTriggerLeadingUloopQuotedCorrection = `Re-run with --trigger 'simulate-mouse-input --action Move --position "10 20"'`
+)
+
+// Verifies a leading uloop token is rejected at parse time, before dispatch, and NextActions
+// carries the corrected command — including re-quoting tokens that contain whitespace.
+func TestParsePausePointTriggerCommandRejectsLeadingUloop(t *testing.T) {
+	cases := []struct {
+		name           string
+		value          string
+		wantNextAction string
+	}{
+		{
+			name:           "strips a leading uloop token and restates the remaining command",
+			value:          "uloop simulate-keyboard --action Press --key space",
+			wantNextAction: wantPausePointTriggerLeadingUloopCorrection,
+		},
+		{
+			name:           "uloop alone points at the subcommand format example",
+			value:          "uloop",
+			wantNextAction: wantPausePointTriggerLeadingUloopExample,
+		},
+		{
+			name:           "re-quotes a remaining token that contains whitespace",
+			value:          `uloop simulate-mouse-input --action Move --position "10 20"`,
+			wantNextAction: wantPausePointTriggerLeadingUloopQuotedCorrection,
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, _, err := parsePausePointTriggerCommand("await-pause-point", testCase.value)
+			argumentError := requireArgumentError(t, err)
+			if argumentError.Message != wantPausePointTriggerLeadingUloopMessage {
+				t.Fatalf("Message mismatch:\nwant %q\ngot  %q", wantPausePointTriggerLeadingUloopMessage, argumentError.Message)
+			}
+			if argumentError.Option != "--trigger" {
+				t.Fatalf("Option mismatch: got %q, want %q", argumentError.Option, "--trigger")
+			}
+			if argumentError.Command != "await-pause-point" {
+				t.Fatalf("Command mismatch: got %q, want %q", argumentError.Command, "await-pause-point")
+			}
+			requireNextActions(t, err, []string{testCase.wantNextAction})
 		})
 	}
 }

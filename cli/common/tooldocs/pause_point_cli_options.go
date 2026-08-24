@@ -74,7 +74,7 @@ func PausePointEnableCLIOnlyOptions() []PausePointCLIOnlyOption {
 		{
 			FlagName:    PausePointTriggerFlagName,
 			Type:        "string",
-			Description: "Requires --await. Same as await-pause-point's --trigger",
+			Description: "Requires --await. Same as await-pause-point's --trigger: a uloop subcommand without the leading 'uloop', e.g. \"simulate-keyboard --action Press --key Space\"",
 		},
 		{
 			FlagName:    PausePointResumePlayFlagName,
@@ -91,7 +91,7 @@ const (
 	pausePointCapturedVariablesDescription     = "How much of each captured variable to include in the response"
 	pausePointCapturedVariableNamesDescription = "Restrict CapturedVariables to these comma-separated names"
 	pausePointExpectDescription                = "Compare a captured variable against an expected value (repeatable; name=value)"
-	pausePointTriggerDescription               = "Runs a single uloop subcommand in-process right after arming/registration"
+	pausePointTriggerDescription               = "Runs a single uloop subcommand in-process right after arming/registration. Pass the subcommand without the leading 'uloop', e.g. \"simulate-keyboard --action Press --key Space\""
 	pausePointResumePlayDescription            = "After confirming the marker is armed, resume PlayMode if paused " +
 		"(before --trigger), so a paused-arm workflow can fire input in one call"
 )
