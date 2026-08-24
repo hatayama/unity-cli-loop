@@ -27,6 +27,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a parameterless void Awake declared on a MonoBehaviour is classified.
+        /// </summary>
+        [Test]
+        public void IsOneShotLifecycleCaller_ValidAwake_ReturnsTrue()
+        {
+            bool result = HotReloadOneShotCallerNoteEnricher.IsOneShotLifecycleCaller(
+                CreateHit(typeof(ValidLifecycleFixture), "Awake"));
+
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
         /// What: an unresolvable caller type is not classified.
         /// </summary>
         [Test]
