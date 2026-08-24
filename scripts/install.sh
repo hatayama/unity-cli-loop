@@ -529,7 +529,7 @@ extract_zip_asset() {
   if try_extract_zip_with_powershell; then
     return
   fi
-  echo "Unable to extract $asset_name: need unzip, a tar that can read zip, or powershell.exe Expand-Archive." >&2
+  echo "Unable to extract $asset_name: need unzip, a tar that can read zip, or powershell.exe Expand-Archive, or the archive did not contain $installed_command_name at its root." >&2
   exit 1
 }
 
