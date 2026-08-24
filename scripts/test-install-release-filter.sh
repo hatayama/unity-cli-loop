@@ -973,6 +973,16 @@ test_git_bash_latest_installs_windows_zip_asset() {
   assert_contains "$work_dir/output.txt" "uloop mock version"
 }
 
+# Verifies payload downloads use -UseBasicParsing and TLS 1.2 is enabled
+# before any network call, so Windows PowerShell 5.1 can download on hosts
+# that still default to TLS 1.0.
+test_powershell_installer_enables_tls12_and_basic_parsing() {
+  assert_contains "$ROOT_DIR/scripts/install.ps1" '[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -UseBasicParsing -Uri $DownloadUrl -OutFile $ArchivePath'
+  assert_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -UseBasicParsing -Uri $ChecksumUrl -OutFile $ChecksumPath'
+  assert_not_contains "$ROOT_DIR/scripts/install.ps1" 'Invoke-WebRequest -Uri'
+}
+
 test_powershell_installer_avoids_optional_archive_cmdlets() {
   assert_contains "$ROOT_DIR/scripts/install.ps1" 'function Get-UloopSha256Hash'
   assert_contains "$ROOT_DIR/scripts/install.ps1" '[System.Security.Cryptography.SHA256]::Create()'
@@ -1252,6 +1262,7 @@ test_posix_silences_legacy_cleanup_when_npm_prefix_cannot_be_inferred
 test_posix_removes_npm_package_before_replacing_same_bin_path
 test_powershell_latest_skips_prerelease_assets
 test_git_bash_latest_installs_windows_zip_asset
+test_powershell_installer_enables_tls12_and_basic_parsing
 test_powershell_installer_avoids_optional_archive_cmdlets
 test_powershell_installer_uses_non_installer_staged_executable_name
 test_powershell_native_probe_restores_error_action_preference

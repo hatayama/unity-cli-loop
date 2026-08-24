@@ -1,5 +1,10 @@
 $ErrorActionPreference = "Stop"
 
+# Why: Windows PowerShell 5.1 does not enable TLS 1.2 by default on some
+# hosts, so GitHub downloads fail before any retry can help. -bor keeps
+# protocols the host already enabled.
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
 $Repository = "hatayama/unity-cli-loop"
 $Version = if ($env:ULOOP_VERSION) { $env:ULOOP_VERSION } else { "latest" }
 $LatestVersion = "latest"
@@ -609,8 +614,8 @@ try {
     $ArchivePath = Join-Path $TempDir $AssetName
     $ChecksumPath = Join-Path $TempDir "$AssetName.sha256"
     Write-Host "Downloading uloop dispatcher archive..."
-    Invoke-WebRequest -Uri $DownloadUrl -OutFile $ArchivePath
-    Invoke-WebRequest -Uri $ChecksumUrl -OutFile $ChecksumPath
+    Invoke-WebRequest -UseBasicParsing -Uri $DownloadUrl -OutFile $ArchivePath
+    Invoke-WebRequest -UseBasicParsing -Uri $ChecksumUrl -OutFile $ChecksumPath
     Write-Host "Verifying uloop dispatcher archive..."
     $ExpectedHash = ((Get-Content -Path $ChecksumPath -Raw) -split "\s+")[0].ToLowerInvariant()
     $ActualHash = Get-UloopSha256Hash -Path $ArchivePath
