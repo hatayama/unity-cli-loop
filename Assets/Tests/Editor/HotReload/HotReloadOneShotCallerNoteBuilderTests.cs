@@ -217,6 +217,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a function-pointer load suppresses the note before its Awake caller is classified.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_FunctionPointerLoadHit_SuppressesIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateCandidate(typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name, outcome)
+                };
+            HotReloadCallSiteScanner.CallSiteHit hit = CreateHit(typeof(ValidLifecycleFixture), "Awake");
+            hit.TargetMethodKey = "Type::SetUp()";
+            hit.IsFunctionPointerLoad = true;
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                "project",
+                outcomes,
+                candidates,
+                (assemblyName, identities) => new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                    new List<HotReloadCallSiteScanner.CallSiteHit> { hit },
+                    new List<string>()));
+
+            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+        }
+
+        /// <summary>
         /// What: compiled Awake-only callers add an indirect lifecycle note to a patched outcome.
         /// </summary>
         [Test]
@@ -258,6 +286,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new List<HotReloadOneShotCallerNoteEnricher.Candidate>
                 {
                     CreateScannerFixtureCandidate("MixedTarget", outcome)
+                };
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                projectRoot,
+                outcomes,
+                candidates,
+                (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
+
+            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a handler assigned as a delegate in Awake suppresses the indirect note because
+        /// event-driven calls are not proven to be one-shot.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_CompiledDelegateAssignment_SuppressesIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
+                "OneShotCallerScannerFixture.DelegateAssignedTarget()",
+                "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateScannerFixtureCandidate("DelegateAssignedTarget", outcome)
                 };
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 

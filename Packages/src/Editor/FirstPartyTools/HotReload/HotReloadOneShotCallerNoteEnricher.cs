@@ -109,13 +109,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         candidate.Identity.MethodName,
                         candidate.Identity.ParameterTypeFullNames,
                         candidate.Identity.GenericArity);
-                    List<OneShotCallerClassification> callers = new List<OneShotCallerClassification>();
+                    List<HotReloadCallSiteScanner.CallSiteHit> targetHits =
+                        new List<HotReloadCallSiteScanner.CallSiteHit>();
+                    bool hasFunctionPointerLoad = false;
                     foreach (HotReloadCallSiteScanner.CallSiteHit hit in result.Hits)
                     {
-                        if (hit.TargetMethodKey == targetKey)
+                        if (hit.TargetMethodKey != targetKey)
                         {
-                            callers.Add(new OneShotCallerClassification(hit.CallerMethodName, IsOneShotLifecycleCaller(hit)));
+                            continue;
                         }
+
+                        targetHits.Add(hit);
+                        hasFunctionPointerLoad |= hit.IsFunctionPointerLoad;
+                    }
+
+                    // A delegate target can run after its Awake registration, so a function-pointer
+                    // load cannot prove the target is called only from one-shot lifecycle methods.
+                    if (hasFunctionPointerLoad)
+                    {
+                        continue;
+                    }
+
+                    List<OneShotCallerClassification> callers = new List<OneShotCallerClassification>();
+                    foreach (HotReloadCallSiteScanner.CallSiteHit hit in targetHits)
+                    {
+                        callers.Add(new OneShotCallerClassification(hit.CallerMethodName, IsOneShotLifecycleCaller(hit)));
                     }
 
                     string note = HotReloadOneShotCallerNoteBuilder.Build(candidate.Outcome.Method, callers);

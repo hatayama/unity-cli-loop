@@ -77,6 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public string[] CallerParameterTypeFullNames;
             public string CallerMethodKey;
             public string TargetMethodKey;
+            public bool IsFunctionPointerLoad;
         }
 
         /// <summary>
@@ -280,7 +281,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                hits.Add(CreateHit(assemblyName, reportedCaller, target));
+                hits.Add(
+                    CreateHit(
+                        assemblyName,
+                        reportedCaller,
+                        target,
+                        IsFunctionPointerLoadOpcode(instruction.OpCode)));
             }
         }
 
@@ -290,6 +296,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 || opCode == OpCodes.Callvirt
                 || opCode == OpCodes.Ldftn
                 || opCode == OpCodes.Ldvirtftn;
+        }
+
+        private static bool IsFunctionPointerLoadOpcode(OpCode opCode)
+        {
+            return opCode == OpCodes.Ldftn || opCode == OpCodes.Ldvirtftn;
         }
 
         private static (bool matched, CompiledMethodIdentity target) FindMatchingTarget(
@@ -454,7 +465,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static CallSiteHit CreateHit(
             string assemblyName,
             MethodDefinition caller,
-            CompiledMethodIdentity target)
+            CompiledMethodIdentity target,
+            bool isFunctionPointerLoad)
         {
             string[] parameterTypeFullNames = new string[caller.Parameters.Count];
             for (int index = 0; index < caller.Parameters.Count; index++)
@@ -482,7 +494,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     target.TypeMetadataName,
                     target.MethodName,
                     target.ParameterTypeFullNames,
-                    target.GenericArity)
+                    target.GenericArity),
+                IsFunctionPointerLoad = isFunctionPointerLoad
             };
         }
 

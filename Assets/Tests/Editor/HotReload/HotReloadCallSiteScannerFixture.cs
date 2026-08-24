@@ -127,10 +127,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public sealed class OneShotCallerScannerFixture : MonoBehaviour
     {
+        private event Action RepeatedEvent;
+
         private void Awake()
         {
             AwakeOnlyTarget();
             MixedTarget();
+            RepeatedEvent += DelegateAssignedTarget;
+        }
+
+        private void Update()
+        {
+            RepeatedEvent?.Invoke();
         }
 
         private void AwakeOnlyTarget()
@@ -138,6 +146,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private void MixedTarget()
+        {
+        }
+
+        private void DelegateAssignedTarget()
         {
         }
 

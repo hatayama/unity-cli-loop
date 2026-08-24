@@ -99,6 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 hits[0].CallerMethodKey,
                 Is.EqualTo(FixtureTypeMetadataName + "::CaptureDelegate()"));
+            Assert.That(hits[0].IsFunctionPointerLoad, Is.True);
         }
 
         /// <summary>
