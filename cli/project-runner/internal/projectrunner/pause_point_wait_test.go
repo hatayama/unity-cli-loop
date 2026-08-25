@@ -599,6 +599,31 @@ func TestPausePointExpiredErrorPrependsRecommendedNextAction(t *testing.T) {
 	}
 }
 
+// Verifies skipped conditional hits suppress the resolved-line guidance that
+// would otherwise contradict the expired hint by claiming the line never ran.
+func TestPausePointExpiredErrorWithSkippedHitsOmitsNeverExecutedGuidance(t *testing.T) {
+	response := pausePointStatusResponse{
+		Id:                  "Assets/Scripts/Foo.cs:72",
+		Status:              pausePointStatusExpired,
+		HitWhen:             "speed > 5",
+		HitWhenSkippedCount: 3,
+		ResolvedLine:        72,
+		EditorState:         pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+	}
+
+	cliErr := pausePointWaitError("/tmp/project", waitForPausePointOptions{
+		id:             response.Id,
+		timeoutSeconds: 30,
+	}, response, pausePointWaitStateExpired, false, false, nil)
+
+	if cliErr.Message != "Pause point expired before it was hit." {
+		t.Fatalf("Message mismatch: got %#v, want %#v", cliErr.Message, "Pause point expired before it was hit.")
+	}
+	if cliErr.Details["Hint"] != "The marker expired after its line executed, but no hit matched --hit-when. Re-enable it with a longer --timeout-seconds, then adjust the --hit-when condition or trigger input so a hit matches." {
+		t.Fatalf("Hint mismatch: got %#v", cliErr.Details["Hint"])
+	}
+}
+
 // Verifies an empty RecommendedNextAction does not prepend a blank NextActions entry.
 func TestPausePointExpiredErrorOmitsEmptyRecommendedNextAction(t *testing.T) {
 	response := pausePointStatusResponse{
@@ -1399,6 +1424,61 @@ func TestApplyPausePointHitStatusNote(t *testing.T) {
 	}
 }
 
+// Verifies HitWhenNote reports skipped conditional hits only when the line ran
+// without any matching capture.
+func TestApplyPausePointHitWhenNote(t *testing.T) {
+	cases := []struct {
+		name     string
+		response pausePointStatusResponse
+		wantNote string
+	}{
+		{
+			name: "skipped conditional hits set note",
+			response: pausePointStatusResponse{
+				HitWhen:             "speed > 5",
+				HitCount:            0,
+				HitWhenSkippedCount: 3,
+			},
+			wantNote: "The line executed but no hit matched --hit-when; 3 hit(s) were skipped.",
+		},
+		{
+			name: "missing condition omits note",
+			response: pausePointStatusResponse{
+				HitCount:            0,
+				HitWhenSkippedCount: 3,
+			},
+			wantNote: "",
+		},
+		{
+			name: "matching hit omits note",
+			response: pausePointStatusResponse{
+				HitWhen:             "speed > 5",
+				HitCount:            1,
+				HitWhenSkippedCount: 3,
+			},
+			wantNote: "",
+		},
+		{
+			name: "no skipped hits omits note",
+			response: pausePointStatusResponse{
+				HitWhen:             "speed > 5",
+				HitCount:            0,
+				HitWhenSkippedCount: 0,
+			},
+			wantNote: "",
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			response := applyPausePointHitWhenNote(testCase.response)
+			if response.HitWhenNote != testCase.wantNote {
+				t.Fatalf("HitWhenNote mismatch: got %#v, want %#v", response.HitWhenNote, testCase.wantNote)
+			}
+		})
+	}
+}
+
 // Verifies a set StatusNote survives json.Marshal under that exact key.
 func TestPausePointStatusResponseIncludesStatusNote(t *testing.T) {
 	marshaled, err := json.Marshal(pausePointStatusResponse{
@@ -2012,6 +2092,45 @@ func TestRunPausePointStatusIncludesStatusNoteOnTraceHit(t *testing.T) {
 	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
 }
 
+// Verifies pause-point-status exposes the hit-when diagnostic after conditional
+// captures were skipped, so omitting the status-command wiring makes this test Red.
+func TestRunPausePointStatusIncludesHitWhenNoteForSkippedHits(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	defer func() {
+		queryPausePointStatus = originalQuery
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:                  id,
+			Status:              pausePointStatusEnabled,
+			IsEnabled:           true,
+			HitWhen:             "speed > 5",
+			HitWhenSkippedCount: 3,
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointStatusCommand(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: "/tmp/MyProject"},
+		[]string{"--id", "jump"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	assertStdoutHasPausePointHitWhenNote(t, stdout.Bytes(),
+		"The line executed but no hit matched --hit-when; 3 hit(s) were skipped.")
+}
+
 // Verifies pause-point-status stdout includes the frame-boundary StatusNote on a
 // non-trace Hit. Removing applyPausePointHitStatusNote from the status command
 // path makes this test Red.
@@ -2203,6 +2322,28 @@ func assertStdoutHasPausePointStatusNote(t *testing.T, stdout []byte, wantNote s
 	if note != wantNote {
 		t.Fatalf("StatusNote mismatch: got %#v, want %#v",
 			note, wantNote)
+	}
+}
+
+func assertStdoutHasPausePointHitWhenNote(t *testing.T, stdout []byte, wantNote string) {
+	t.Helper()
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(stdout, &decoded); err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\n%s", err, stdout)
+	}
+
+	rawNote, ok := decoded["HitWhenNote"]
+	if !ok {
+		t.Fatalf("HitWhenNote missing from JSON: %s", stdout)
+	}
+
+	var note string
+	if err := json.Unmarshal(rawNote, &note); err != nil {
+		t.Fatalf("unmarshal note failed: %v", err)
+	}
+	if note != wantNote {
+		t.Fatalf("HitWhenNote mismatch: got %#v, want %#v", note, wantNote)
 	}
 }
 

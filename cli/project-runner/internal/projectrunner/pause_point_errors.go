@@ -135,7 +135,9 @@ const (
 	// sequence can occur.
 	pausePointHintAlreadyHitWaitingForNew = "The marker had already hit and Unity may still be paused by that hit; pass --resume-play or resume Play Mode so a new hit can occur."
 
-	pausePointHintTimeoutAutoCleared = "This command disarmed the marker on timeout; re-enable the pause point (enable-pause-point) before waiting again. "
+	pausePointHintTimeoutAutoCleared    = "This command disarmed the marker on timeout; re-enable the pause point (enable-pause-point) before waiting again. "
+	pausePointHitWhenNoMatchTimeoutHint = "The marker's line executed, but no hit matched --hit-when. Adjust the --hit-when condition or trigger input so a hit matches, then wait again."
+	pausePointHitWhenNoMatchExpiredHint = "The marker expired after its line executed, but no hit matched --hit-when. Re-enable it with a longer --timeout-seconds, then adjust the --hit-when condition or trigger input so a hit matches."
 
 	// Explains how to read resolved-line Details on Expired when HitCount is still 0.
 	// Why not mention ResolvedLineText: C# omits empty text, so Details may carry only ResolvedLine.
@@ -196,6 +198,12 @@ func pausePointTimeoutHint(
 	if response.EditorState.IsPaused {
 		return pausePointHintEditorAlreadyPaused
 	}
+	if pausePointHasHitWhenSkips(response) {
+		if markerClearedByThisCommand {
+			return pausePointHintTimeoutAutoCleared + pausePointHitWhenNoMatchTimeoutHint
+		}
+		return pausePointHitWhenNoMatchTimeoutHint
+	}
 	if markerClearedByThisCommand {
 		return pausePointHintTimeoutAutoCleared + pausePointNonFiringPatternsHint
 	}
@@ -225,11 +233,20 @@ func pausePointExpiredHint(response pausePointStatusResponse, triggerResult *pau
 	if response.EditorState.IsPaused {
 		return pausePointHintEditorAlreadyPaused
 	}
+	if pausePointHasHitWhenSkips(response) {
+		return pausePointHitWhenNoMatchExpiredHint
+	}
 	if response.HitCount == 0 {
 		return "Marker expired before it was hit: the enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out. Re-enable the marker with a longer --timeout-seconds and trigger the code path again. " +
 			pausePointNonFiringPatternsHint
 	}
 	return ""
+}
+
+// pausePointHasHitWhenSkips identifies the state that proves the line executed
+// while the condition prevented every capture.
+func pausePointHasHitWhenSkips(response pausePointStatusResponse) bool {
+	return response.HitWhen != "" && response.HitCount == 0 && response.HitWhenSkippedCount > 0
 }
 
 func pausePointStateError(
@@ -314,6 +331,9 @@ func pausePointStateErrorDetails(
 		"Expired":                         response.Expired,
 		"HitCount":                        response.HitCount,
 		"MethodEntryCount":                response.MethodEntryCount,
+		"HitWhen":                         response.HitWhen,
+		"HitWhenSkippedCount":             response.HitWhenSkippedCount,
+		"HitWhenErrorNote":                response.HitWhenErrorNote,
 		"TimeoutSeconds":                  pausePointMarkerTimeoutSeconds(options, response),
 		"EnabledAtUtc":                    response.EnabledAtUtc,
 		"ElapsedSinceEnabledMilliseconds": response.ElapsedSinceEnabledMilliseconds,
@@ -366,7 +386,7 @@ func pausePointRemainingMilliseconds(options waitForPausePointOptions, response 
 }
 
 func pausePointExpiredResolvedFieldsNote(response pausePointStatusResponse) string {
-	if response.HitCount != 0 || response.ResolvedLine == 0 {
+	if response.HitCount != 0 || response.ResolvedLine == 0 || pausePointHasHitWhenSkips(response) {
 		return ""
 	}
 	return pausePointExpiredResolvedFieldsGuidance
