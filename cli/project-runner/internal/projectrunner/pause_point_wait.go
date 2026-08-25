@@ -39,6 +39,10 @@ const (
 	// pause are already post-frame; agents otherwise treat them as at-line evidence.
 	pausePointHitFrameBoundaryStatusNote = "Unity pauses at the next frame boundary; the rest of the hit frame already ran. Read at-line values from CapturedVariables; live reads via execute-dynamic-code reflect post-frame state."
 
+	// pausePointHitWhenNoteFormat tells callers that the line is reachable even
+	// though no capture matched the condition.
+	pausePointHitWhenNoteFormat = "The line executed but no hit matched --hit-when; %d hit(s) were skipped."
+
 	// Shared by await-pause-point and pause-point-status when --id is missing. Why one
 	// constant: the two parsers used to copy the same sentence, and a file:line id is a
 	// valid answer that the old wording never mentioned.
@@ -151,6 +155,17 @@ func applyPausePointHitStatusNote(response pausePointStatusResponse) pausePointS
 	return response
 }
 
+// applyPausePointHitWhenNote reports conditional skips without replacing the
+// mode-specific StatusNote that only belongs to captured Hits.
+func applyPausePointHitWhenNote(response pausePointStatusResponse) pausePointStatusResponse {
+	if response.HitWhen == "" || response.HitCount != 0 || response.HitWhenSkippedCount <= 0 {
+		return response
+	}
+
+	response.HitWhenNote = fmt.Sprintf(pausePointHitWhenNoteFormat, response.HitWhenSkippedCount)
+	return response
+}
+
 func runWaitForPausePointCommand(
 	ctx context.Context,
 	connection unityipc.Connection,
@@ -221,6 +236,7 @@ func runPausePointStatusCommand(
 	response = normalizePausePointStatusResponse(response)
 	response = filterPausePointCapturedVariableHistory(response)
 	response = applyPausePointHitStatusNote(response)
+	response = applyPausePointHitWhenNote(response)
 	// Evaluated against the raw CapturedVariables, before the filters below can narrow or strip
 	// values, for the same reason as on the await path (runWaitForPausePoint): otherwise an --expect
 	// target not also requested via --captured-variable-names, or whose value names mode stripped,

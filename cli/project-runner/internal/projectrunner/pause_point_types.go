@@ -45,6 +45,11 @@ type pausePointStatusResponse struct {
 	// fixture stays unchanged.
 	StatusNote string `json:"StatusNote,omitempty"`
 
+	// HitWhenNote is set by the CLI when the armed line ran but every capture was
+	// skipped by --hit-when. It stays separate from StatusNote because it applies
+	// before a Hit exists and must not replace mode-specific hit guidance.
+	HitWhenNote string `json:"HitWhenNote,omitempty"`
+
 	CapturedVariables          []pausePointCapturedVariable `json:"CapturedVariables"`
 	CallerFrames               []pausePointCallerFrame      `json:"CallerFrames"`
 	CapturedVariablesTruncated bool                         `json:"CapturedVariablesTruncated"`
