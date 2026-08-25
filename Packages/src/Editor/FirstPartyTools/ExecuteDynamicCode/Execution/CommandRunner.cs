@@ -206,7 +206,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private ExecutionResult ExecuteInternal(ExecutionContext context, CancellationToken cancellationToken)
         {
-            UloopDynamicCodePartialResults.Clear();
+            UloopDynamicCodePartialResults.OpenExecutionScope();
             if (context.CompiledAssembly == null)
             {
                 return CapturePartialResults(
@@ -297,7 +297,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private async Task<ExecutionResult> ExecuteInternalAsync(ExecutionContext context, CancellationToken cancellationToken)
         {
-            UloopDynamicCodePartialResults.Clear();
+            UloopDynamicCodePartialResults.OpenExecutionScope();
             if (context.CompiledAssembly == null)
             {
                 return CapturePartialResults(

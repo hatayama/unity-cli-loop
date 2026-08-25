@@ -69,6 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public async Task ExecuteAsync_WhenCommandSucceeds_CapturesOnlyCurrentPartialResults()
         {
+            UloopDynamicCodePartialResults.OpenExecutionScope();
             UloopDynamicCodePartialResults.Set("stale", "previous request");
             WrappedDynamicCommandState.PrepareReturningCommandWithPartialResult(
                 "ready",
@@ -97,6 +98,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(result.Success, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("planned failure"));
             Assert.That(result.PartialResults["beforeThrow"], Is.EqualTo("saved"));
+        }
+
+        /// <summary>
+        /// What: a late Set from a cancelled request cannot appear in the next request's partial results.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenCancelledRequestCompletesLate_DropsItsPartialResultsFromNextRequest()
+        {
+            WrappedDynamicCommandState.PrepareCancelledRequestThenNextRequestSequence();
+            CommandRunner runner = new();
+            using CancellationTokenSource cancellationTokenSource = new();
+
+            try
+            {
+                Task<ExecutionResult> cancelledRequest = runner.ExecuteAsync(
+                    CreateContext(cancellationTokenSource.Token));
+                await AwaitCancelledRequestStartWithinTimeoutAsync();
+
+                cancellationTokenSource.Cancel();
+
+                ExecutionResult cancelledResult = await AwaitResultWithinTimeoutAsync(cancelledRequest);
+                Assert.That(cancelledResult.PartialResults["phase"], Is.EqualTo("running"));
+
+                Task<ExecutionResult> nextRequest = runner.ExecuteAsync(CreateContext(CancellationToken.None));
+                await AwaitNextRequestStartWithinTimeoutAsync();
+
+                WrappedDynamicCommandState.ReleaseCancelledRequest();
+                await AwaitLatePartialResultWithinTimeoutAsync();
+                WrappedDynamicCommandState.CompleteNextRequest();
+
+                ExecutionResult nextResult = await AwaitResultWithinTimeoutAsync(nextRequest);
+                Assert.That(nextResult.Success, Is.True);
+                Assert.That(nextResult.PartialResults["currentRequest"], Is.EqualTo("ready"));
+                Assert.That(nextResult.PartialResults.ContainsKey("lateFromCancelledRequest"), Is.False);
+            }
+            finally
+            {
+                WrappedDynamicCommandState.ReleaseCancelledRequest();
+                WrappedDynamicCommandState.CompleteNextRequest();
+            }
         }
 
         [Test]
@@ -179,6 +220,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             await startedTask;
         }
 
+        private static async Task AwaitCancelledRequestStartWithinTimeoutAsync()
+        {
+            await AwaitSignalWithinTimeoutAsync(
+                WrappedDynamicCommandState.CancelledRequestStartedTask,
+                "CommandRunner did not invoke the cancelled dynamic command before the timeout.");
+        }
+
+        private static async Task AwaitNextRequestStartWithinTimeoutAsync()
+        {
+            await AwaitSignalWithinTimeoutAsync(
+                WrappedDynamicCommandState.NextRequestStartedTask,
+                "CommandRunner did not invoke the next dynamic command before the timeout.");
+        }
+
+        private static async Task AwaitLatePartialResultWithinTimeoutAsync()
+        {
+            await AwaitSignalWithinTimeoutAsync(
+                WrappedDynamicCommandState.LatePartialResultSetTask,
+                "The cancelled dynamic command did not attempt its late partial result before the timeout.");
+        }
+
+        private static async Task AwaitSignalWithinTimeoutAsync(Task signalTask, string timeoutMessage)
+        {
+            Task timeoutTask = Task.Delay(CancellationPropagationTimeout);
+            Task completedTask = await Task.WhenAny(signalTask, timeoutTask);
+            if (completedTask == timeoutTask)
+            {
+                Assert.Fail(timeoutMessage);
+            }
+
+            await signalTask;
+        }
+
         private static async Task AwaitFaultObservationWithinTimeoutAsync(Task observationTask)
         {
             Task timeoutTask = Task.Delay(CancellationPropagationTimeout);
@@ -200,19 +274,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         private static string _returnValue = "";
         private static bool _shouldComplete;
         private static bool _shouldThrow;
+        private static bool _runCancelledRequestThenNextRequestSequence;
+        private static int _sequenceInvocationCount;
         private static string _partialResultName = string.Empty;
         private static object _partialResultValue;
         private static TaskCompletionSource<object> _blockingCompletionSource =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         private static TaskCompletionSource<bool> _startedCompletionSource =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private static TaskCompletionSource<object> _cancelledRequestCompletionSource =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private static TaskCompletionSource<object> _nextRequestCompletionSource =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private static TaskCompletionSource<bool> _cancelledRequestStartedCompletionSource =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private static TaskCompletionSource<bool> _nextRequestStartedCompletionSource =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private static TaskCompletionSource<bool> _latePartialResultSetCompletionSource =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public static Task StartedTask => _startedCompletionSource.Task;
+
+        public static Task CancelledRequestStartedTask => _cancelledRequestStartedCompletionSource.Task;
+
+        public static Task NextRequestStartedTask => _nextRequestStartedCompletionSource.Task;
+
+        public static Task LatePartialResultSetTask => _latePartialResultSetCompletionSource.Task;
 
         public static void PrepareBlockingCommand()
         {
             _shouldComplete = false;
             _shouldThrow = false;
+            _runCancelledRequestThenNextRequestSequence = false;
             _returnValue = "";
             _partialResultName = "phase";
             _partialResultValue = "running";
@@ -226,6 +319,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             _shouldComplete = true;
             _shouldThrow = false;
+            _runCancelledRequestThenNextRequestSequence = false;
             _returnValue = returnValue;
             _partialResultName = string.Empty;
             _partialResultValue = null;
@@ -240,6 +334,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             _shouldComplete = true;
             _shouldThrow = false;
+            _runCancelledRequestThenNextRequestSequence = false;
             _returnValue = returnValue;
             _partialResultName = partialResultName;
             _partialResultValue = partialResultValue;
@@ -251,10 +346,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             _shouldComplete = false;
             _shouldThrow = true;
+            _runCancelledRequestThenNextRequestSequence = false;
             _returnValue = string.Empty;
             _partialResultName = partialResultName;
             _partialResultValue = partialResultValue;
             _startedCompletionSource = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        public static void PrepareCancelledRequestThenNextRequestSequence()
+        {
+            _shouldComplete = false;
+            _shouldThrow = false;
+            _runCancelledRequestThenNextRequestSequence = true;
+            _sequenceInvocationCount = 0;
+            _returnValue = string.Empty;
+            _partialResultName = string.Empty;
+            _partialResultValue = null;
+            _cancelledRequestCompletionSource = new TaskCompletionSource<object>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            _nextRequestCompletionSource = new TaskCompletionSource<object>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            _cancelledRequestStartedCompletionSource = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            _nextRequestStartedCompletionSource = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            _latePartialResultSetCompletionSource = new TaskCompletionSource<bool>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
@@ -263,8 +380,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             _blockingCompletionSource.TrySetResult(null);
         }
 
+        public static void ReleaseCancelledRequest()
+        {
+            _cancelledRequestCompletionSource.TrySetResult(null);
+        }
+
+        public static void CompleteNextRequest()
+        {
+            _nextRequestCompletionSource.TrySetResult(null);
+        }
+
         public static Task<object> ExecuteAsync(CancellationToken ct)
         {
+            if (_runCancelledRequestThenNextRequestSequence)
+            {
+                return ExecuteCancelledRequestThenNextRequestSequenceAsync();
+            }
+
             // This intentionally ignores ct because the regression occurs when user code does not observe it.
             _startedCompletionSource.TrySetResult(true);
             if (!string.IsNullOrEmpty(_partialResultName))
@@ -283,6 +415,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             }
 
             return _blockingCompletionSource.Task;
+        }
+
+        private static async Task<object> ExecuteCancelledRequestThenNextRequestSequenceAsync()
+        {
+            int invocation = Interlocked.Increment(ref _sequenceInvocationCount);
+            if (invocation == 1)
+            {
+                UloopDynamicCodePartialResults.Set("phase", "running");
+                _cancelledRequestStartedCompletionSource.TrySetResult(true);
+                await _cancelledRequestCompletionSource.Task;
+                UloopDynamicCodePartialResults.Set("lateFromCancelledRequest", "late");
+                _latePartialResultSetCompletionSource.TrySetResult(true);
+                return "cancelled request completed";
+            }
+
+            System.Diagnostics.Debug.Assert(invocation == 2, "The test sequence supports exactly two requests.");
+            UloopDynamicCodePartialResults.Set("currentRequest", "ready");
+            _nextRequestStartedCompletionSource.TrySetResult(true);
+            return await _nextRequestCompletionSource.Task;
         }
     }
 }

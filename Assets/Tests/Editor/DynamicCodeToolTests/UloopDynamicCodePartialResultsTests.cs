@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [SetUp]
         public void SetUp()
         {
-            UloopDynamicCodePartialResults.Clear();
+            UloopDynamicCodePartialResults.OpenExecutionScope();
         }
 
         [TearDown]
