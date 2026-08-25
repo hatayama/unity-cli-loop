@@ -386,7 +386,7 @@ func pausePointRemainingMilliseconds(options waitForPausePointOptions, response 
 }
 
 func pausePointExpiredResolvedFieldsNote(response pausePointStatusResponse) string {
-	if response.HitCount != 0 || response.ResolvedLine == 0 {
+	if response.HitCount != 0 || response.ResolvedLine == 0 || pausePointHasHitWhenSkips(response) {
 		return ""
 	}
 	return pausePointExpiredResolvedFieldsGuidance

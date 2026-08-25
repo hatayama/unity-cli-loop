@@ -599,6 +599,31 @@ func TestPausePointExpiredErrorPrependsRecommendedNextAction(t *testing.T) {
 	}
 }
 
+// Verifies skipped conditional hits suppress the resolved-line guidance that
+// would otherwise contradict the expired hint by claiming the line never ran.
+func TestPausePointExpiredErrorWithSkippedHitsOmitsNeverExecutedGuidance(t *testing.T) {
+	response := pausePointStatusResponse{
+		Id:                  "Assets/Scripts/Foo.cs:72",
+		Status:              pausePointStatusExpired,
+		HitWhen:             "speed > 5",
+		HitWhenSkippedCount: 3,
+		ResolvedLine:        72,
+		EditorState:         pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+	}
+
+	cliErr := pausePointWaitError("/tmp/project", waitForPausePointOptions{
+		id:             response.Id,
+		timeoutSeconds: 30,
+	}, response, pausePointWaitStateExpired, false, false, nil)
+
+	if cliErr.Message != "Pause point expired before it was hit." {
+		t.Fatalf("Message mismatch: got %#v, want %#v", cliErr.Message, "Pause point expired before it was hit.")
+	}
+	if cliErr.Details["Hint"] != "The marker expired after its line executed, but no hit matched --hit-when. Re-enable it with a longer --timeout-seconds, then adjust the --hit-when condition or trigger input so a hit matches." {
+		t.Fatalf("Hint mismatch: got %#v", cliErr.Details["Hint"])
+	}
+}
+
 // Verifies an empty RecommendedNextAction does not prepend a blank NextActions entry.
 func TestPausePointExpiredErrorOmitsEmptyRecommendedNextAction(t *testing.T) {
 	response := pausePointStatusResponse{
