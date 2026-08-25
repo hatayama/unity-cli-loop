@@ -1,5 +1,58 @@
 # Changelog
 
+## [3.0.0-beta.67](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.66...uloop-project-runner-v3.0.0-beta.67) (2026-08-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* align CLI option names across first-party tools ([#2422](https://github.com/hatayama/unity-cli-loop/issues/2422))
+
+### Features
+
+* accept --file and --line on pause-point-status and await-pause-point ([#2411](https://github.com/hatayama/unity-cli-loop/issues/2411)) ([f650e36](https://github.com/hatayama/unity-cli-loop/commit/f650e36a6bcbd2880dba6ee385c59181895e756f))
+* add a compact command-name listing to uloop list ([13f5d06](https://github.com/hatayama/unity-cli-loop/commit/13f5d06bba57bfb7f1afdb430dab4e2e7fd384d4))
+* add a max-caller-frames option to enable-pause-point ([779c32b](https://github.com/hatayama/unity-cli-loop/commit/779c32b5af581bdca603be069f245711e4d4760d))
+* add uloop hot-reload for live C# patching without domain reload ([#2254](https://github.com/hatayama/unity-cli-loop/issues/2254)) ([20e97f6](https://github.com/hatayama/unity-cli-loop/commit/20e97f69c6fd6f64095934a4eebdc18115329e6a))
+* align CLI option names across first-party tools ([#2422](https://github.com/hatayama/unity-cli-loop/issues/2422)) ([2e4daff](https://github.com/hatayama/unity-cli-loop/commit/2e4daff6536a7febe88841d9c6104b2fbf8923ff))
+* annotate pause-point collection previews with order and truncation ([#2293](https://github.com/hatayama/unity-cli-loop/issues/2293)) ([4b9b156](https://github.com/hatayama/unity-cli-loop/commit/4b9b156a74302006372eb0de720e95c4e3094f27))
+* announce pause-point wait start on stderr before the blocking wait ([#2333](https://github.com/hatayama/unity-cli-loop/issues/2333)) ([e8eb46f](https://github.com/hatayama/unity-cli-loop/commit/e8eb46f361427df4621bff67da6cc234b6a519dd))
+* compile pending script changes before running tests ([5ab6770](https://github.com/hatayama/unity-cli-loop/commit/5ab6770185af6444b9074424fd88bb667cf8f67b))
+* default hot-reload --files to sources changed since the last compile ([1c75e85](https://github.com/hatayama/unity-cli-loop/commit/1c75e85ade883553f691c91d116ed9501bb91835))
+* default screenshot capture mode to rendering during Play Mode ([#2379](https://github.com/hatayama/unity-cli-loop/issues/2379)) ([393c11f](https://github.com/hatayama/unity-cli-loop/commit/393c11fa00e8cce3bb6e8058b0a06da56ec34233))
+* echo enable-time resolved marker fields on expired pause-point responses ([#2311](https://github.com/hatayama/unity-cli-loop/issues/2311)) ([7332b03](https://github.com/hatayama/unity-cli-loop/commit/7332b03009b0c4cb6ecbc8fd8330c49bc401ab85))
+* enable-pause-point switches Release editors to Debug automatically ([b2ba35e](https://github.com/hatayama/unity-cli-loop/commit/b2ba35ee7018ca55e1d36d9bd00d77c768639f60))
+* explain frame-boundary pausing on hit responses and surface the expired next action ([#2285](https://github.com/hatayama/unity-cli-loop/issues/2285)) ([812d4fe](https://github.com/hatayama/unity-cli-loop/commit/812d4fed5daaf84c67ea892eddb34f38fa887121))
+* explain hit-when skips in pause-point CLI notes and wait diagnostics ([#2406](https://github.com/hatayama/unity-cli-loop/issues/2406)) ([47a231f](https://github.com/hatayama/unity-cli-loop/commit/47a231f29252ececf543bfd7a11d933916a34150))
+* explain unreported trigger results on pause-point wait settlement ([#2334](https://github.com/hatayama/unity-cli-loop/issues/2334)) ([ba9590f](https://github.com/hatayama/unity-cli-loop/commit/ba9590fce0e2fe6c571ddab56ef2ef3fd2f27763))
+* focus Unity when a compile stalls before compilation starts ([#2341](https://github.com/hatayama/unity-cli-loop/issues/2341)) ([08c8d2a](https://github.com/hatayama/unity-cli-loop/commit/08c8d2a060a80d8d98dc5271c75c306a5edfd172))
+* gate pause-point hits with the hit-when condition ([#2405](https://github.com/hatayama/unity-cli-loop/issues/2405)) ([f5f4e33](https://github.com/hatayama/unity-cli-loop/commit/f5f4e3391e3a131b92d12288fbfe633b4a3c4914))
+* include caller stack frames in pause-point hit captures ([6c31a83](https://github.com/hatayama/unity-cli-loop/commit/6c31a8300ca7845e7d5a90bde42cc675df3154a5))
+* include the running tool's elapsed time in single-flight busy rejections ([c5709bd](https://github.com/hatayama/unity-cli-loop/commit/c5709bd769e384249e2d0d4ea1235ad110e30b22))
+* label drift candidates with their compiled methods and rebalance the expired hint ([#2415](https://github.com/hatayama/unity-cli-loop/issues/2415)) ([d17ed2d](https://github.com/hatayama/unity-cli-loop/commit/d17ed2d16d673ce187985ce9c976adad36bcf9ab))
+* list all markers when pause-point-status omits --id ([#2413](https://github.com/hatayama/unity-cli-loop/issues/2413)) ([aee4288](https://github.com/hatayama/unity-cli-loop/commit/aee4288a2415efa148e335572442307402cb19e6))
+* name the Script Updating Consent dialog in the compile stall warning ([#2328](https://github.com/hatayama/unity-cli-loop/issues/2328)) ([67d0b9a](https://github.com/hatayama/unity-cli-loop/commit/67d0b9ac157a6fb9f2b2730480e48579c8954b58))
+* note symbol-less caller frames in pause-point responses ([#2298](https://github.com/hatayama/unity-cli-loop/issues/2298)) ([e5b4b8e](https://github.com/hatayama/unity-cli-loop/commit/e5b4b8e4719798fec9f3b057173d3dc733028f17))
+* Remove the leftover uloop completion command ([50aa929](https://github.com/hatayama/unity-cli-loop/commit/50aa92925f963450e0becf6c113366b12ab2a42c))
+* report interim compile-wait diagnostics so a stalled compile is visible before the timeout ([6d9c416](https://github.com/hatayama/unity-cli-loop/commit/6d9c4164f0797123084011054715fbc031a54dbb))
+* report method entry counts for expired pause points ([#2402](https://github.com/hatayama/unity-cli-loop/issues/2402)) ([d1e3c21](https://github.com/hatayama/unity-cli-loop/commit/d1e3c21fce43d989fdb99f7fd58c5e713abeefcd))
+* report the line resolution basis in enable-pause-point responses ([#2409](https://github.com/hatayama/unity-cli-loop/issues/2409)) ([ea30b1e](https://github.com/hatayama/unity-cli-loop/commit/ea30b1e2bbfcaf03163e6f5a83716c9786d7429a))
+* state the preview cap and history cost when a captured value is clipped ([#2414](https://github.com/hatayama/unity-cli-loop/issues/2414)) ([984a87f](https://github.com/hatayama/unity-cli-loop/commit/984a87fa46cfb637116a03cc08e800a5f44397c4))
+* suggest option values and near-miss option names on argument parsing errors ([#2309](https://github.com/hatayama/unity-cli-loop/issues/2309)) ([62b8aa6](https://github.com/hatayama/unity-cli-loop/commit/62b8aa667a458514a177fbca50c45c4b8311765f))
+
+
+### Bug Fixes
+
+* --trigger now rejects a leading uloop and shows the command to retry ([#2388](https://github.com/hatayama/unity-cli-loop/issues/2388)) ([9cefd73](https://github.com/hatayama/unity-cli-loop/commit/9cefd733403d6d5d74cde0cdbac511c1e80561bc))
+* align clear-pause-point messages with ClearedCount for auto-disarmed and expired markers ([319159b](https://github.com/hatayama/unity-cli-loop/commit/319159bb6cffef137eef8c91eb97435a84b1fff2))
+* align pause-point truncation aggregates with per-variable clipping ([#2376](https://github.com/hatayama/unity-cli-loop/issues/2376)) ([ea066fb](https://github.com/hatayama/unity-cli-loop/commit/ea066fb71e6a88fef1b50c81f71bae12d4d0461d))
+* describe CLI-only options in await-pause-point and pause-point-status help ([#2299](https://github.com/hatayama/unity-cli-loop/issues/2299)) ([7b237bd](https://github.com/hatayama/unity-cli-loop/commit/7b237bd2130c734733abbf3f920f6250a3885663))
+* explain pause-point truncation flags filtered by captured-variable names ([#2290](https://github.com/hatayama/unity-cli-loop/issues/2290)) ([f15ac70](https://github.com/hatayama/unity-cli-loop/commit/f15ac70251f9337973be5c2d25991e400e0865e7))
+* harden pause-point caller-frame path and array normalization ([3e86a46](https://github.com/hatayama/unity-cli-loop/commit/3e86a46437353a66c0324d966f2e5140fed1f36f))
+* omit null simulate-keyboard fields and surface pause-point reading notes before captured variables ([#2347](https://github.com/hatayama/unity-cli-loop/issues/2347)) ([d3cfee4](https://github.com/hatayama/unity-cli-loop/commit/d3cfee45961b8128cf3ac2281f66f3005a7b7aba))
+* pause-point timeout now explains a rejected trigger instead of blaming a missed line ([#2395](https://github.com/hatayama/unity-cli-loop/issues/2395)) ([8a5f1c9](https://github.com/hatayama/unity-cli-loop/commit/8a5f1c91be6b2b7f3acd43bbfbb2009d9370078e))
+* suggest unknown-option corrections from any kebab token and CLI-only flags ([f1e2ec2](https://github.com/hatayama/unity-cli-loop/commit/f1e2ec205f14dc8e2621390963916a506180aa65))
+* teach missing-id and unexpected-argument NextActions about file:line ids and comma lists ([#2346](https://github.com/hatayama/unity-cli-loop/issues/2346)) ([1822d64](https://github.com/hatayama/unity-cli-loop/commit/1822d64ba12575222e21725b3250998b6e738d29))
+
 ## [3.0.0-beta.66] (2026-08-11)
 
 
