@@ -82,6 +82,35 @@ func TestVisibleOptionHelpEntriesIncludesExecuteDynamicCodeCodeFile(t *testing.T
 	}
 }
 
+// Tests that run-tests help and option discovery expose its CLI-only compile bypass with the
+// approved fixed description.
+func TestVisibleOptionEntriesIncludeRunTestsSkipCompile(t *testing.T) {
+	tool, ok := FindTool(LoadDefaultTools(), RunTestsCommandName)
+	if !ok {
+		t.Fatal("run-tests was not found in default tools")
+	}
+
+	options := tooldocs.VisibleOptionNamesForTool(tool)
+	if !slices.Contains(options, tooldocs.RunTestsSkipCompileOptionName) {
+		t.Fatalf("run-tests skip-compile option was not listed: %#v", options)
+	}
+
+	entries := tooldocs.VisibleOptionHelpEntriesForTool(tool)
+	for _, entry := range entries {
+		if entry.Name != tooldocs.RunTestsSkipCompileOptionName {
+			continue
+		}
+		if entry.Usage != tooldocs.RunTestsSkipCompileOptionUsage {
+			t.Fatalf("skip-compile usage mismatch: %#v", entry)
+		}
+		if entry.Description != "Skip the automatic compile before running tests; use only while validating active hot-reload patches." {
+			t.Fatalf("skip-compile description mismatch: %#v", entry)
+		}
+		return
+	}
+	t.Fatalf("run-tests help is missing %s: %#v", tooldocs.RunTestsSkipCompileOptionName, entries)
+}
+
 // Tests that cached tool loading hides tools whose source skills are internal.
 func TestLoadToolsFiltersInternalSkillToolsFromCache(t *testing.T) {
 	projectRoot := t.TempDir()

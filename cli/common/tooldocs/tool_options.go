@@ -58,8 +58,21 @@ func VisibleOptionNamesForTool(tool tools.ToolDefinition) []string {
 		options = append(options, "--"+OptionNameForProperty(tool.Name, propertyName, property))
 	}
 	options = appendDynamicCodeFileOptionName(tool, options)
+	options = appendRunTestsSkipCompileOptionName(tool, options)
 	sort.Strings(options)
 	return options
+}
+
+func appendRunTestsSkipCompileOptionName(tool tools.ToolDefinition, options []string) []string {
+	if tool.Name != runTestsCommandName {
+		return options
+	}
+	for _, option := range options {
+		if option == RunTestsSkipCompileOptionName {
+			return options
+		}
+	}
+	return append(options, RunTestsSkipCompileOptionName)
 }
 
 func IsBooleanProperty(property tools.ToolProperty) bool {

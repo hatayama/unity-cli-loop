@@ -84,6 +84,13 @@ func TestNewListCatalogUsesSpecialOptionAliases(t *testing.T) {
 		t.Fatalf("fail-on-unsaved-changes default mismatch: %#v", failOnUnsavedChanges)
 	}
 	assertListOptionMissing(t, runTestsTool, "--no-save-before-run")
+	skipCompile := findListOption(t, runTestsTool, tooldocs.RunTestsSkipCompileOptionName)
+	if skipCompile.Type != "boolean" {
+		t.Fatalf("skip-compile type mismatch: %#v", skipCompile)
+	}
+	if skipCompile.Description != "Skip the automatic compile before running tests; use only while validating active hot-reload patches." {
+		t.Fatalf("skip-compile description mismatch: %#v", skipCompile)
+	}
 
 	compileTool := findListTool(t, catalog, clicore.CompileCommandName)
 	stopOnExternalSceneChanges := findListOption(t, compileTool, "--stop-on-external-scene-changes")

@@ -52,6 +52,22 @@ func runDynamicProjectTool(
 	stdout io.Writer,
 	stderr io.Writer,
 ) int {
+	if command == clicore.RunTestsCommandName {
+		return runTestsWithImplicitCompile(ctx, connection, commandArgs, startPath, stdout, stderr)
+	}
+	return runDynamicProjectToolWithCompileNote(ctx, connection, command, commandArgs, startPath, stdout, stderr, false)
+}
+
+func runDynamicProjectToolWithCompileNote(
+	ctx context.Context,
+	connection unityipc.Connection,
+	command string,
+	commandArgs []string,
+	startPath string,
+	stdout io.Writer,
+	stderr io.Writer,
+	includeCompileNote bool,
+) int {
 	tool, cache, ok, err := clicore.FindToolForCommand(connection.ProjectRoot, command)
 	if err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: command})
@@ -86,7 +102,21 @@ func runDynamicProjectTool(
 		}).ToCLIError(clierrors.ErrorContext{ProjectRoot: connection.ProjectRoot, Command: command}))
 		return 1
 	}
-	return runTool(ctx, connection, command, params, stdout, stderr)
+	if !includeCompileNote {
+		return runTool(ctx, connection, command, params, stdout, stderr)
+	}
+
+	result := runPlainTool(ctx, connection, command, params, stderr)
+	if len(result.result) == 0 {
+		return result.exitCode
+	}
+	withCompileNote, err := injectRunTestsCompileNote(result.result)
+	if err != nil {
+		writeRunTestsCompileNoteError(stderr, connection, err)
+		return 1
+	}
+	clicore.WriteJSON(stdout, withCompileNote)
+	return result.exitCode
 }
 
 func prepareDynamicToolParams(

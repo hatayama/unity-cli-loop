@@ -76,6 +76,19 @@ func runTool(ctx context.Context, connection unityipc.Connection, command string
 		return runControlPlayModeWithStateWait(ctx, connection, params, stdout, stderr)
 	}
 
+	result := runPlainTool(ctx, connection, command, params, stderr)
+	if len(result.result) > 0 {
+		clicore.WriteJSON(stdout, result.result)
+	}
+	return result.exitCode
+}
+
+type toolExecutionResult struct {
+	result   json.RawMessage
+	exitCode int
+}
+
+func runPlainTool(ctx context.Context, connection unityipc.Connection, command string, params map[string]any, stderr io.Writer) toolExecutionResult {
 	applyDebugTimingParams(command, params)
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, command)
@@ -93,12 +106,11 @@ func runTool(ctx context.Context, connection unityipc.Connection, command string
 			ProjectRoot: connection.ProjectRoot,
 			Command:     command,
 		})
-		return 1
+		return toolExecutionResult{exitCode: 1}
 	}
 	result := stripDebugTimingResult(command, outcome.Result)
-	clicore.WriteJSON(stdout, result)
 	writeDebugTiming(stderr, command, time.Since(startedAt), outcome)
-	return toolEnvelopeExitCode(result)
+	return toolExecutionResult{result: result, exitCode: toolEnvelopeExitCode(result)}
 }
 
 func runExecuteDynamicCodeWithDomainReloadWait(ctx context.Context, connection unityipc.Connection, params map[string]any, stdout io.Writer, stderr io.Writer) int {
@@ -165,13 +177,38 @@ func runCompileWithDomainReloadWaitWithDeps(
 	stderr io.Writer,
 	compileWait compileWaitDeps,
 ) int {
+	result := runCompileWithDomainReloadWaitResultWithDeps(ctx, connection, params, stderr, compileWait)
+	return writeCompileExecutionResult(stdout, result)
+}
+
+// compileExecutionResult keeps compile's Unity response available to a composing command until
+// that command decides its single final stdout payload.
+type compileExecutionResult struct {
+	result   json.RawMessage
+	exitCode int
+}
+
+func writeCompileExecutionResult(stdout io.Writer, result compileExecutionResult) int {
+	if len(result.result) > 0 {
+		clicore.WriteJSON(stdout, result.result)
+	}
+	return result.exitCode
+}
+
+func runCompileWithDomainReloadWaitResultWithDeps(
+	ctx context.Context,
+	connection unityipc.Connection,
+	params map[string]any,
+	stderr io.Writer,
+	compileWait compileWaitDeps,
+) compileExecutionResult {
 	waitTimeout, timeoutErr := compileWaitTimeoutFromParams(params)
 	if timeoutErr != nil {
 		clierrors.WriteClassifiedError(stderr, timeoutErr, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return 1
+		return compileExecutionResult{exitCode: 1}
 	}
 	if waitTimeout > time.Duration(compileWaitTimeoutRetentionWarningSeconds)*time.Second {
 		_, _ = fmt.Fprintf(
@@ -180,11 +217,11 @@ func runCompileWithDomainReloadWaitWithDeps(
 		)
 	}
 
-	if handled, code := tryAttachToPendingCompile(ctx, connection, params, waitTimeout, stdout, stderr, compileWait); handled {
-		return code
+	if handled, result := tryAttachToPendingCompile(ctx, connection, params, waitTimeout, stderr, compileWait); handled {
+		return result
 	}
 
-	return runFreshCompileWithDomainReloadWaitWithDeps(ctx, connection, params, stdout, stderr, compileWait)
+	return runFreshCompileWithDomainReloadWaitResultWithDeps(ctx, connection, params, stderr, compileWait)
 }
 
 func runFreshCompileWithDomainReloadWaitWithDeps(
@@ -195,13 +232,24 @@ func runFreshCompileWithDomainReloadWaitWithDeps(
 	stderr io.Writer,
 	compileWait compileWaitDeps,
 ) int {
+	result := runFreshCompileWithDomainReloadWaitResultWithDeps(ctx, connection, params, stderr, compileWait)
+	return writeCompileExecutionResult(stdout, result)
+}
+
+func runFreshCompileWithDomainReloadWaitResultWithDeps(
+	ctx context.Context,
+	connection unityipc.Connection,
+	params map[string]any,
+	stderr io.Writer,
+	compileWait compileWaitDeps,
+) compileExecutionResult {
 	waitTimeout, timeoutErr := compileWaitTimeoutFromParams(params)
 	if timeoutErr != nil {
 		clierrors.WriteClassifiedError(stderr, timeoutErr, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return 1
+		return compileExecutionResult{exitCode: 1}
 	}
 
 	requestID, err := prepareCompileWaitParams(params)
@@ -210,7 +258,7 @@ func runFreshCompileWithDomainReloadWaitWithDeps(
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return 1
+		return compileExecutionResult{exitCode: 1}
 	}
 
 	logCliDebugModeResolved(connection, clicore.CompileCommandName)
@@ -236,7 +284,7 @@ func runFreshCompileWithDomainReloadWaitWithDeps(
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return 1
+		return compileExecutionResult{exitCode: 1}
 	}
 
 	spinner.Update("Waiting for domain reload to complete...")
@@ -255,7 +303,7 @@ func runFreshCompileWithDomainReloadWaitWithDeps(
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return 1
+		return compileExecutionResult{exitCode: 1}
 	}
 	if !completed {
 		spinner.Stop()
@@ -267,9 +315,9 @@ func runFreshCompileWithDomainReloadWaitWithDeps(
 			time.Since(waitStartedAt),
 			compilePendingRecordLifetime-waitTimeout,
 		))
-		return 1
+		return compileExecutionResult{exitCode: 1}
 	}
-	return completeCompileResultOutput(ctx, connection, result, stdout, stderr, spinner, startedAt, outcome)
+	return completeCompileResult(ctx, connection, result, stderr, spinner, startedAt, outcome)
 }
 
 func writePostCompileWarmupWarning(stderr io.Writer, err error) {

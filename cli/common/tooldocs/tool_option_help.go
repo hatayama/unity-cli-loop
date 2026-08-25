@@ -19,6 +19,14 @@ const (
 
 const DynamicCodeFileOptionDescription = "Read C# code from a file instead of --code when shell quoting would alter multiline code"
 
+const (
+	RunTestsSkipCompileFlagName    = "skip-compile"
+	RunTestsSkipCompileOptionName  = "--" + RunTestsSkipCompileFlagName
+	RunTestsSkipCompileOptionUsage = RunTestsSkipCompileOptionName
+)
+
+const RunTestsSkipCompileOptionDescription = "Skip the automatic compile before running tests; use only while validating active hot-reload patches."
+
 // optionValuesSeparator joins the accepted values of an option in help output.
 const optionValuesSeparator = "|"
 
@@ -52,6 +60,7 @@ func VisibleOptionHelpEntriesForTool(tool tools.ToolDefinition) []OptionHelpEntr
 	}
 
 	entries = appendDynamicCodeFileOptionHelpEntry(tool, entries)
+	entries = appendRunTestsSkipCompileOptionHelpEntry(tool, entries)
 	entries = appendPausePointEnableCLIOnlyOptionHelpEntries(tool.Name, entries)
 	sort.Slice(entries, func(i int, j int) bool {
 		return entries[i].Name < entries[j].Name
@@ -155,5 +164,19 @@ func appendDynamicCodeFileOptionHelpEntry(tool tools.ToolDefinition, entries []O
 		Name:        DynamicCodeFileOptionName,
 		Usage:       DynamicCodeFileOptionUsage,
 		Description: DynamicCodeFileOptionDescription,
+	})
+}
+
+func appendRunTestsSkipCompileOptionHelpEntry(tool tools.ToolDefinition, entries []OptionHelpEntry) []OptionHelpEntry {
+	if tool.Name != runTestsCommandName {
+		return entries
+	}
+	if hasOptionHelpEntry(entries, RunTestsSkipCompileOptionName) {
+		return entries
+	}
+	return append(entries, OptionHelpEntry{
+		Name:        RunTestsSkipCompileOptionName,
+		Usage:       RunTestsSkipCompileOptionUsage,
+		Description: RunTestsSkipCompileOptionDescription,
 	})
 }
