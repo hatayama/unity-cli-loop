@@ -9,12 +9,23 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/skillscan"
 )
 
+// Suffixes appended (before the random digits os.CreateTemp and os.MkdirTemp
+// add) to temp and backup copies created during a sync. The uloop marker
+// claims a namespace no user file lands in by accident, so dir-mode
+// stale-artifact cleanup can identify uloop's own debris by name alone without
+// risking human-named backups such as references.backup-2024; the cleanup
+// matches these same constants, so the producers and the matcher cannot drift.
+const (
+	skillSyncTempSuffix   = ".uloop-tmp-"
+	skillSyncBackupSuffix = ".uloop-backup-"
+)
+
 func syncSkillDirectory(sourceDir string, destinationDir string) error {
 	parentDir := filepath.Dir(destinationDir)
 	if err := os.MkdirAll(parentDir, 0o755); err != nil {
 		return err
 	}
-	tempDir, err := os.MkdirTemp(parentDir, filepath.Base(destinationDir)+".tmp-")
+	tempDir, err := os.MkdirTemp(parentDir, filepath.Base(destinationDir)+skillSyncTempSuffix)
 	if err != nil {
 		return err
 	}
@@ -44,7 +55,7 @@ func replaceSkillDirectory(sourceDir string, destinationDir string) error {
 	}
 
 	parentDir := filepath.Dir(destinationDir)
-	backupDir, err := os.MkdirTemp(parentDir, filepath.Base(destinationDir)+".backup-")
+	backupDir, err := os.MkdirTemp(parentDir, filepath.Base(destinationDir)+skillSyncBackupSuffix)
 	if err != nil {
 		return err
 	}
@@ -120,13 +131,8 @@ func getSkillStatusWithStat(
 }
 
 func isInstalledSkillOutdated(installedDir string, skill skillDefinition) bool {
-	installedContent, err := os.ReadFile(filepath.Join(installedDir, skillscan.SkillFileName))
-	if err != nil {
-		return true
-	}
-	installedContent = normalizeSkillFileContent(skillscan.SkillFileName, installedContent)
-	expectedContent := normalizeSkillFileContent(skillscan.SkillFileName, skill.content)
-	if !bytes.Equal(installedContent, expectedContent) {
+	matches, err := installedSkillFileMatches(installedDir, skill)
+	if err != nil || !matches {
 		return true
 	}
 
@@ -135,13 +141,33 @@ func isInstalledSkillOutdated(installedDir string, skill skillDefinition) bool {
 	if len(expectedFiles) != len(installedFiles) {
 		return true
 	}
+	return !comparableFilesMatch(expectedFiles, installedFiles)
+}
+
+// comparableFilesMatch reports whether every expected file exists in installed
+// with equal normalized content. Target-mode and dir-mode staleness checks both
+// go through here so the comparison rule cannot drift between them.
+func comparableFilesMatch(expectedFiles map[string][]byte, installedFiles map[string][]byte) bool {
 	for relativePath, expectedContent := range expectedFiles {
 		installedContent, ok := installedFiles[relativePath]
 		if !ok || !bytes.Equal(expectedContent, installedContent) {
-			return true
+			return false
 		}
 	}
-	return false
+	return true
+}
+
+// installedSkillFileMatches reports whether the installed SKILL.md equals the
+// source content after normalization. Target-mode and dir-mode status checks
+// both go through here so the comparison rule cannot drift between them.
+func installedSkillFileMatches(installedDir string, skill skillDefinition) (bool, error) {
+	installedContent, err := os.ReadFile(filepath.Join(installedDir, skillscan.SkillFileName))
+	if err != nil {
+		return false, err
+	}
+	installedContent = normalizeSkillFileContent(skillscan.SkillFileName, installedContent)
+	expectedContent := normalizeSkillFileContent(skillscan.SkillFileName, skill.content)
+	return bytes.Equal(installedContent, expectedContent), nil
 }
 
 func collectComparableSkillFiles(root string) map[string][]byte {

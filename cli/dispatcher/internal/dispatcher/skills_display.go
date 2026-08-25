@@ -37,6 +37,8 @@ func statusIcon(status string) string {
 		return "+"
 	case "outdated":
 		return "^"
+	case "conflict":
+		return "!"
 	default:
 		return "-"
 	}
@@ -48,6 +50,8 @@ func statusText(status string) string {
 		return "installed"
 	case "outdated":
 		return "outdated"
+	case "conflict":
+		return "conflict"
 	default:
 		return "not installed"
 	}
@@ -71,11 +75,22 @@ func printSkillsSubcommandHelp(command string, stdout io.Writer) {
 	clicore.WriteLine(stdout, "Options:")
 	clicore.WriteLine(stdout, "  -g, --global")
 	clicore.WriteLine(stdout, "      --flat")
+	if skillsSubcommandSupportsOutputDir(command) {
+		clicore.WriteLine(stdout, "      "+skillsOutputDirFlagName+" <path>")
+	}
 	printSkillTargetFlagLines(stdout, "      ")
 	clicore.WriteLine(stdout, "")
 	if command == "install" {
 		clicore.WriteLine(stdout, "Targets that already contain uloop skills are refreshed automatically,")
 		clicore.WriteLine(stdout, "even when their flag is omitted, so previously installed copies never go stale.")
+		clicore.WriteLine(stdout, "")
+	}
+	if skillsSubcommandSupportsOutputDir(command) {
+		clicore.WriteLine(stdout, "With --output-dir, skills are managed flat as <path>/<skill-name> with no")
+		clicore.WriteLine(stdout, "target subdirectories. Top-level files uloop does not manage are left untouched,")
+		clicore.WriteLine(stdout, "while source-owned directories such as references/ are replaced wholly on")
+		clicore.WriteLine(stdout, "update. Skills are sourced from the Unity project, so run this inside a")
+		clicore.WriteLine(stdout, "Unity project or pass --project-path.")
 		clicore.WriteLine(stdout, "")
 	}
 	if command == "install-v3-migration" {
@@ -93,6 +108,10 @@ func printSkillsTargetGuidance(command string, stdout io.Writer) {
 	clicore.WriteFormat(stdout, "\nPlease specify at least one target for '%s':\n\n", command)
 	clicore.WriteLine(stdout, "Available targets:")
 	printSkillTargetFlagLines(stdout, "  ")
+	if skillsSubcommandSupportsOutputDir(command) {
+		clicore.WriteLine(stdout, "")
+		clicore.WriteLine(stdout, "Or pass "+skillsOutputDirFlagName+" <path> to sync skills into a custom directory.")
+	}
 }
 
 // printSkillTargetFlagLines prints one --<id> line per target in the shared

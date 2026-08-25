@@ -224,6 +224,11 @@ uloop skills install --codex
 
 # Or install globally
 uloop skills install --claude --global
+
+# Or sync into a custom directory (e.g. an external skill-package store),
+# flat as <path>/<skill-name>; unmanaged top-level files there are left
+# untouched (skill-owned directories such as references/ are replaced wholly)
+uloop skills install --output-dir path/to/skills
 ```
 </details>
 
