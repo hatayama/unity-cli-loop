@@ -228,31 +228,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         /// </summary>
         public static IReadOnlyList<UloopPausePointSnapshot> GetAllStatuses()
         {
-            DateTime now = NowUtc();
-            bool anyExpired = false;
-            List<UloopPausePointEntry> entries = new();
-            foreach (UloopPausePointEntry entry in Entries.Values)
-            {
-                entries.Add(entry);
-                if (TryExpire(entry, now))
-                {
-                    anyExpired = true;
-                }
-            }
-
-            if (anyExpired)
-            {
-                ResumeEditorPause();
-            }
-
-            List<UloopPausePointSnapshot> snapshots = new();
-            foreach (UloopPausePointEntry entry in entries)
-            {
-                snapshots.Add(entry.ToSnapshot(now, _pauseController));
-            }
-
-            snapshots.Sort((left, right) => string.Compare(left.Id, right.Id, StringComparison.Ordinal));
-            return snapshots;
+            return UloopPausePointStatusSnapshotCollector.Collect(
+                Entries.Values,
+                NowUtc(),
+                _pauseController,
+                TryExpire,
+                ResumeEditorPause);
         }
 
         /// <summary>
@@ -448,15 +429,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         /// </summary>
         public static int GetActiveCount()
         {
-            int count = 0;
-            foreach (UloopPausePointEntry entry in Entries.Values)
-            {
-                if (entry.IsEnabled)
-                {
-                    count++;
-                }
-            }
-            return count;
+            return UloopPausePointStatusSnapshotCollector.CountActiveEntries(Entries.Values);
         }
 
         private static UloopPausePointSnapshot HitCore(

@@ -92,17 +92,6 @@ type waitForPausePointOptions struct {
 	markerJustEnabled bool
 }
 
-type pausePointStatusOptions struct {
-	id                    string
-	idProvided            bool
-	listMode              bool
-	listModePerMarkerFlag string
-	queryTarget           pausePointQueryTarget
-	capturedVariablesMode pausePointCapturedVariablesMode
-	capturedVariableNames []string
-	expectations          []pausePointExpectation
-}
-
 func normalizePausePointStatusResponse(response pausePointStatusResponse) pausePointStatusResponse {
 	if response.Status == pausePointStatusExpired {
 		response.Expired = true
@@ -411,116 +400,6 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 	options.id = queryID
 
 	return options, nil
-}
-
-func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error) {
-	options := pausePointStatusOptions{capturedVariablesMode: pausePointCapturedVariablesModeFull}
-
-	for index := 0; index < len(args); index++ {
-		arg := args[index]
-		name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
-		if err != nil {
-			return pausePointStatusOptions{}, err
-		}
-
-		switch name {
-		case PausePointIDFlagName:
-			options.id = value
-			options.idProvided = true
-		case PausePointFileFlagName:
-			options.queryTarget.file = value
-			options.queryTarget.hasFile = true
-		case PausePointLineFlagName:
-			parseErr := setPausePointQueryTargetLine(&options.queryTarget, value)
-			if parseErr != nil {
-				return pausePointStatusOptions{}, parseErr
-			}
-		case tooldocs.PausePointCapturedVariablesFlagName:
-			mode, parseErr := parsePausePointCapturedVariablesMode(value)
-			if parseErr != nil {
-				return pausePointStatusOptions{}, parseErr
-			}
-			options.capturedVariablesMode = mode
-			if options.listModePerMarkerFlag == "" {
-				options.listModePerMarkerFlag = name
-			}
-		case tooldocs.PausePointCapturedVariableNamesFlagName:
-			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
-			if options.listModePerMarkerFlag == "" {
-				options.listModePerMarkerFlag = name
-			}
-		case tooldocs.PausePointExpectFlagName:
-			expectation, parseErr := parsePausePointExpectFlagValue(value)
-			if parseErr != nil {
-				return pausePointStatusOptions{}, parseErr
-			}
-			options.expectations = append(options.expectations, expectation)
-			if options.listModePerMarkerFlag == "" {
-				options.listModePerMarkerFlag = name
-			}
-		default:
-			return pausePointStatusOptions{}, pausePointUnknownOptionError(clicore.PausePointStatusUserCommandName, name)
-		}
-
-		if consumedNext {
-			index++
-		}
-	}
-	if !options.idProvided && !options.queryTarget.hasFile && !options.queryTarget.hasLine {
-		if options.listModePerMarkerFlag != "" {
-			return pausePointStatusOptions{}, pausePointStatusListModeOptionError(options.listModePerMarkerFlag)
-		}
-		options.listMode = true
-		return options, nil
-	}
-
-	queryID, targetErr := resolvePausePointQueryID(
-		options.id,
-		options.idProvided,
-		options.queryTarget,
-		clicore.PausePointStatusUserCommandName)
-	if targetErr != nil {
-		return pausePointStatusOptions{}, targetErr
-	}
-	options.id = queryID
-
-	return options, nil
-}
-
-func runPausePointStatusListCommand(
-	ctx context.Context,
-	connection unityipc.Connection,
-	stdout io.Writer,
-	stderr io.Writer,
-) int {
-	response, err := queryPausePointStatusList(ctx, connection)
-	if err != nil {
-		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
-			ProjectRoot: connection.ProjectRoot,
-			Command:     clicore.PausePointStatusUserCommandName,
-		})
-		return 1
-	}
-
-	result, err := json.Marshal(response)
-	if err != nil {
-		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
-			ProjectRoot: connection.ProjectRoot,
-			Command:     clicore.PausePointStatusUserCommandName,
-		})
-		return 1
-	}
-
-	clicore.WriteJSON(stdout, result)
-	return 0
-}
-
-func pausePointStatusListModeOptionError(flagName string) *clierrors.ArgumentError {
-	return &clierrors.ArgumentError{
-		Message: fmt.Sprintf("--%s requires --id or --file with --line.", flagName),
-		Option:  "--" + flagName,
-		Command: clicore.PausePointStatusUserCommandName,
-	}
 }
 
 func parsePausePointTimeoutSeconds(value string) (int, error) {
