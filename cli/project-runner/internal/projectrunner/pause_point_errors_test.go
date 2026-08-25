@@ -229,6 +229,42 @@ func TestPausePointWaitHintsDifferentiateHitWhenSkips(t *testing.T) {
 	}
 }
 
+// Verifies skipped-hit guidance requires zero matching captures and keeps the
+// timeout auto-clear guidance when every conditional capture was skipped.
+func TestPausePointHitWhenHintsRequireZeroMatchingHits(t *testing.T) {
+	autoClearedTimeoutHint := pausePointTimeoutHint(pausePointStatusResponse{
+		Status:              pausePointStatusEnabled,
+		HitWhen:             "speed > 5",
+		HitWhenSkippedCount: 3,
+		EditorState:         pausePointEditorState{IsPlaying: true},
+	}, false, true, nil)
+	if autoClearedTimeoutHint != "This command disarmed the marker on timeout; re-enable the pause point (enable-pause-point) before waiting again. The marker's line executed, but no hit matched --hit-when. Adjust the --hit-when condition or trigger input so a hit matches, then wait again." {
+		t.Fatalf("auto-cleared timeout hint mismatch: got %q", autoClearedTimeoutHint)
+	}
+
+	expiredMatchingHitHint := pausePointExpiredHint(pausePointStatusResponse{
+		Status:              pausePointStatusExpired,
+		HitCount:            1,
+		HitWhen:             "speed > 5",
+		HitWhenSkippedCount: 3,
+		EditorState:         pausePointEditorState{IsPlaying: true},
+	}, nil)
+	if expiredMatchingHitHint != "" {
+		t.Fatalf("expired matching-hit hint mismatch: got %q", expiredMatchingHitHint)
+	}
+
+	timeoutMatchingHitHint := pausePointTimeoutHint(pausePointStatusResponse{
+		Status:              pausePointStatusEnabled,
+		HitCount:            1,
+		HitWhen:             "speed > 5",
+		HitWhenSkippedCount: 3,
+		EditorState:         pausePointEditorState{IsPlaying: true},
+	}, false, false, nil)
+	if timeoutMatchingHitHint != "" {
+		t.Fatalf("timeout matching-hit hint mismatch: got %q", timeoutMatchingHitHint)
+	}
+}
+
 // Verifies timeout auto-clear diagnosis is the re-enable hint, not the old "wait again" path.
 func TestPausePointTimeoutHint_AutoCleared_ReturnsReEnableHint(t *testing.T) {
 	response := pausePointStatusResponse{
