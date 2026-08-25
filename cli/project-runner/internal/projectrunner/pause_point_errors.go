@@ -242,7 +242,10 @@ func pausePointExpiredHint(response pausePointStatusResponse, triggerResult *pau
 	if response.HitCount == 0 {
 		return pausePointExpiredNoHitPrefix + pausePointNonFiringPatternsHint + pausePointExpiredNoHitSuffix
 	}
-	return pausePointExpiredAfterHitHint
+	if response.HitCount > 0 {
+		return pausePointExpiredAfterHitHint
+	}
+	return ""
 }
 
 // pausePointHasHitWhenSkips identifies the state that proves the line executed

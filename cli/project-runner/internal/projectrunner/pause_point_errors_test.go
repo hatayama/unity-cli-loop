@@ -106,6 +106,39 @@ func TestPausePointExpiredHint_SuppressedByHotReload_ReturnsSuppressedHint(t *te
 	}
 }
 
+// Verifies hot-reload suppression wins before a failed trigger because a suppressed marker cannot fire.
+func TestPausePointExpiredHint_SuppressedByHotReload_WinsOverFailedTrigger(t *testing.T) {
+	cases := []struct {
+		name     string
+		response pausePointStatusResponse
+		trigger  *pausePointTriggerResult
+		wantHint string
+	}{
+		{
+			name: "suppressed before failed trigger",
+			response: pausePointStatusResponse{
+				HitCount:              0,
+				SuppressedByHotReload: true,
+				EditorState: pausePointEditorState{
+					IsPlaying: true,
+					IsPaused:  false,
+				},
+			},
+			trigger:  failedPausePointTriggerResult(),
+			wantHint: "The marker's method is hot-reload patched and the marker could not be re-targeted onto the patched body. Revert the patch with 'uloop hot-reload --revert-all' or run 'uloop compile', then re-enable the marker.",
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			hint := pausePointExpiredHint(testCase.response, testCase.trigger)
+			if hint != testCase.wantHint {
+				t.Fatalf("hint mismatch: got %q, want %q", hint, testCase.wantHint)
+			}
+		})
+	}
+}
+
 // Verifies pausePointStateError exposes SuppressedByHotReload in Details for await failures.
 func TestPausePointStateError_DetailsIncludeSuppressedByHotReload(t *testing.T) {
 	response := pausePointStatusResponse{
@@ -262,6 +295,23 @@ func TestPausePointHitWhenHintsRequireZeroMatchingHits(t *testing.T) {
 	}, false, false, nil)
 	if timeoutMatchingHitHint != "" {
 		t.Fatalf("timeout matching-hit hint mismatch: got %q", timeoutMatchingHitHint)
+	}
+}
+
+// Verifies a malformed negative hit count does not claim the marker recorded a hit.
+func TestPausePointExpiredHint_NegativeHitCount_ReturnsEmpty(t *testing.T) {
+	response := pausePointStatusResponse{
+		Status:   pausePointStatusExpired,
+		HitCount: -1,
+		EditorState: pausePointEditorState{
+			IsPlaying: true,
+			IsPaused:  false,
+		},
+	}
+
+	hint := pausePointExpiredHint(response, nil)
+	if hint != "" {
+		t.Fatalf("expected empty hint for negative hit count, got %q", hint)
 	}
 }
 

@@ -323,21 +323,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why cap 3: a longer match list turns the enable warning into another line-number puzzle.
         public const int CompiledLineDriftCandidateMatchLimit = 3;
 
-        // Format: 1-based compiled line number. Why "Candidate": this is a search hit, not a
-        // guarantee that re-enabling there is the intended statement.
+        // Format: 1-based compiled line number, optionally annotated with its containing compiled
+        // method. Why "Candidate": this is a search hit, not a guarantee that re-enabling there
+        // is the intended statement.
         public const string HotReloadCompiledLineDriftCandidateSingleFormat =
             " Candidate: the edited line's text appears at line {0} in the last compiled source.";
 
-        // Format: comma-separated 1-based compiled line numbers, with an optional truncation note.
+        // Format: comma-separated 1-based compiled line numbers, each optionally annotated with
+        // its containing compiled method, with an optional truncation note.
         public const string HotReloadCompiledLineDriftCandidateMultipleFormat =
             " Candidate: the edited line's text appears at lines {0} in the last compiled source.";
 
-        // Format: requested --line, 1-based compiled line number.
+        // Format: requested --line, then a 1-based compiled line number optionally annotated with
+        // its containing compiled method.
         public const string HotReloadCompiledLineDriftRequestedLineCandidateSingleFormat =
             " Candidate: the text at --line {0} in the edited file appears at line {1} in the last compiled source.";
 
-        // Format: requested --line, comma-separated 1-based compiled line numbers, with an
-        // optional truncation note.
+        // Format: requested --line, then comma-separated 1-based compiled line numbers each
+        // optionally annotated with their containing compiled method, with an optional truncation note.
         public const string HotReloadCompiledLineDriftRequestedLineCandidateMultipleFormat =
             " Candidate: the text at --line {0} in the edited file appears at lines {1} in the last compiled source.";
 

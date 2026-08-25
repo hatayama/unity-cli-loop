@@ -404,7 +404,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < namedCompiledMethodSpans.Count; index++)
             {
                 SourcePausePointNearbyCompiledMethod span = namedCompiledMethodSpans[index];
-                if (span == null || line < span.StartLine || line > span.EndLine)
+                if (line < span.StartLine || line > span.EndLine)
                 {
                     continue;
                 }

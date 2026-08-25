@@ -909,6 +909,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a single resolved-line candidate inside a named compiled span identifies its method.
+        /// </summary>
+        [Test]
+        public void AppendCandidateCompiledLinesToDriftWarningOrUnchanged_WhenSingleCandidateHasNamedSpan_AnnotatesMethod()
+        {
+            string drift = string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                ForwardSlashFile,
+                17,
+                "return 1;",
+                "return 2;");
+            string[] compiledLines =
+            {
+                "class Sample",
+                "            return 2;",
+                "            return 1;"
+            };
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedSpans =
+                new[]
+                {
+                    new SourcePausePointNearbyCompiledMethod("Enemy.TakeDamage", 2, 2)
+                };
+
+            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                "return 2;",
+                compiledLines,
+                namedSpans);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift + " Candidate: the edited line's text appears at line 2 (in 'Enemy.TakeDamage') in the last compiled source."));
+        }
+
+        /// <summary>
         /// What: candidate lines inside named compiled spans identify their containing methods.
         /// </summary>
         [Test]
@@ -944,6 +980,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warning,
                 Is.EqualTo(
                     drift + " Candidate: the edited line's text appears at lines 2 (in 'Enemy.TakeDamage'), 4 (in 'Enemy.Heal') in the last compiled source."));
+        }
+
+        /// <summary>
+        /// What: a mixed resolved-line candidate list leaves lines outside every named span bare.
+        /// </summary>
+        [Test]
+        public void AppendCandidateCompiledLinesToDriftWarningOrUnchanged_WhenCandidatesMixSpansAndBareLine_AnnotatesOnlySpans()
+        {
+            string drift = string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                ForwardSlashFile,
+                17,
+                "return 1;",
+                "return 2;");
+            string[] compiledLines =
+            {
+                "            return 2;",
+                "class Sample",
+                "            return 2;",
+                "class Other",
+                "            return 2;"
+            };
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedSpans =
+                new[]
+                {
+                    new SourcePausePointNearbyCompiledMethod("Enemy.TakeDamage", 1, 1),
+                    new SourcePausePointNearbyCompiledMethod("Enemy.Heal", 5, 5)
+                };
+
+            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                "return 2;",
+                compiledLines,
+                namedSpans);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift + " Candidate: the edited line's text appears at lines 1 (in 'Enemy.TakeDamage'), 3, 5 (in 'Enemy.Heal') in the last compiled source."));
         }
 
         /// <summary>
@@ -1008,6 +1083,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warning,
                 Is.EqualTo(
                     drift + " Candidate: the edited line's text appears at lines 1, 3, 4 (first 3 matches) in the last compiled source."));
+        }
+
+        /// <summary>
+        /// What: annotations are rendered before the compiled-line candidate truncation suffix.
+        /// </summary>
+        [Test]
+        public void AppendCandidateCompiledLinesToDriftWarningOrUnchanged_WhenAnnotatedCandidatesAreTruncated_AnnotatesBeforeSuffix()
+        {
+            string drift = string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                ForwardSlashFile,
+                17,
+                "return 1;",
+                "return 2;");
+            string[] compiledLines =
+            {
+                "            return 2;",
+                "            return 1;",
+                "            return 2;",
+                "            return 2;",
+                "            return 2;"
+            };
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedSpans =
+                new[]
+                {
+                    new SourcePausePointNearbyCompiledMethod("Enemy.TakeDamage", 1, 1),
+                    new SourcePausePointNearbyCompiledMethod("Enemy.Heal", 3, 3),
+                    new SourcePausePointNearbyCompiledMethod("Enemy.Revive", 4, 4)
+                };
+
+            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                "return 2;",
+                compiledLines,
+                namedSpans);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift + " Candidate: the edited line's text appears at lines 1 (in 'Enemy.TakeDamage'), 3 (in 'Enemy.Heal'), 4 (in 'Enemy.Revive') (first 3 matches) in the last compiled source."));
         }
 
         /// <summary>
@@ -1082,6 +1197,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(
                     drift
                     + " Candidate: the text at --line 107 in the edited file appears at line 2 in the last compiled source."));
+        }
+
+        /// <summary>
+        /// What: multiple requested-line candidates inside named compiled spans identify each method.
+        /// </summary>
+        [Test]
+        public void AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged_WhenMultipleCandidatesHaveNamedSpans_AnnotatesEachMethod()
+        {
+            string drift =
+                "'Assets/Scripts/Example.cs' --line 107 is 'return 2;' in the edited file, "
+                + "but the marker snapped forward to line 109 in 'Example.Run'.";
+            string[] compiledLines =
+            {
+                "class Sample",
+                "            return 2;",
+                "            return 1;",
+                "            return 2;"
+            };
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedSpans =
+                new[]
+                {
+                    new SourcePausePointNearbyCompiledMethod("Enemy.TakeDamage", 2, 2),
+                    new SourcePausePointNearbyCompiledMethod("Enemy.Heal", 4, 4)
+                };
+
+            string warning = PausePointEnableWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                107,
+                "return 2;",
+                compiledLines,
+                namedSpans);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift
+                    + " Candidate: the text at --line 107 in the edited file appears at lines 2 (in 'Enemy.TakeDamage'), 4 (in 'Enemy.Heal') in the last compiled source."));
         }
 
         /// <summary>
