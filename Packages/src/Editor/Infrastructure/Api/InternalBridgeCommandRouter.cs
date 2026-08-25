@@ -48,6 +48,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             if (methodName == UnityCliLoopConstants.COMMAND_NAME_GET_PAUSE_POINT_STATUS)
             {
+                if (PausePointStatusBridgeCommand.IsListRequest(paramsToken))
+                {
+                    return PausePointStatusBridgeCommand.ExecuteList();
+                }
+
                 return PausePointStatusBridgeCommand.Execute(paramsToken);
             }
 

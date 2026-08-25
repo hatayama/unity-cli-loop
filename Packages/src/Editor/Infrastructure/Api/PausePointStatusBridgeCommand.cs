@@ -17,12 +17,40 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         private const string IdParamName = "Id";
         private const string ReasonParamName = "Reason";
         private const string MinimumRemainingSecondsParamName = "MinimumRemainingSeconds";
+        private const string EmptyListMessage = "No pause points are registered.";
+        private const string EmptyListNextAction =
+            "Enable one with 'uloop enable-pause-point --id <marker-id>' or '--file <project-relative path> --line <line>'.";
+        private const string NonEmptyListNextAction =
+            "Pass --id <marker-id> to inspect one pause point in detail.";
 
         public static PausePointStatusResponse Execute(JToken paramsToken)
         {
             string id = ReadId(paramsToken);
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(id);
             return PausePointStatusResponse.FromSnapshot(snapshot);
+        }
+
+        public static bool IsListRequest(JToken paramsToken)
+        {
+            return string.IsNullOrEmpty(ReadId(paramsToken));
+        }
+
+        public static PausePointStatusListResponse ExecuteList()
+        {
+            IReadOnlyList<UloopPausePointSnapshot> snapshots = UloopPausePointRegistry.GetAllStatuses();
+            List<PausePointStatusListItemResponse> pausePoints = snapshots
+                .Select(PausePointStatusListItemResponse.FromSnapshot)
+                .ToList();
+            int count = pausePoints.Count;
+            return new PausePointStatusListResponse
+            {
+                Message = count == 0 ? EmptyListMessage : $"{count} pause point(s) registered.",
+                Count = count,
+                PausePoints = pausePoints,
+                NextActions = count == 0
+                    ? new string[] { EmptyListNextAction }
+                    : new string[] { NonEmptyListNextAction }
+            };
         }
 
         // Called once when await-pause-point starts waiting, so a marker enabled well before a
@@ -258,6 +286,54 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             }
 
             return recommendedNextAction ?? string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Summary response returned when pause-point-status does not identify one marker.
+    /// </summary>
+    public class PausePointStatusListResponse : UnityCliLoopToolResponse
+    {
+        [JsonProperty(Order = 1)]
+        public string Message { get; set; } = string.Empty;
+
+        [JsonProperty(Order = 2)]
+        public int Count { get; set; }
+
+        [JsonProperty(Order = 3)]
+        public IReadOnlyList<PausePointStatusListItemResponse> PausePoints { get; set; } =
+            Array.Empty<PausePointStatusListItemResponse>();
+
+        [JsonProperty(Order = 4)]
+        public IReadOnlyList<string> NextActions { get; set; } = Array.Empty<string>();
+    }
+
+    /// <summary>
+    /// Compact pause point data used by the id-less status list.
+    /// </summary>
+    public class PausePointStatusListItemResponse
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string Mode { get; set; } = string.Empty;
+        public int HitCount { get; set; }
+        public long RemainingMilliseconds { get; set; }
+
+        internal static PausePointStatusListItemResponse FromSnapshot(UloopPausePointSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return new PausePointStatusListItemResponse
+            {
+                Id = snapshot.Id,
+                Status = snapshot.Status,
+                Mode = snapshot.Mode,
+                HitCount = snapshot.HitCount,
+                RemainingMilliseconds = snapshot.RemainingMilliseconds
+            };
         }
     }
 

@@ -2681,24 +2681,15 @@ func TestRunPausePointStatusDerivesRemainingTimeFromOlderResponse(t *testing.T) 
 	}
 }
 
-// Verifies pause-point-status requires either a marker id or a complete file:line target.
-func TestParsePausePointStatusOptionsRequiresMarkerTarget(t *testing.T) {
-	_, err := parsePausePointStatusOptions([]string{})
-
-	if err == nil {
-		t.Fatal("expected missing marker target error")
+// Verifies pause-point-status without an id or file:line target selects list mode.
+func TestParsePausePointStatusOptionsWithoutTargetUsesListMode(t *testing.T) {
+	options, err := parsePausePointStatusOptions([]string{})
+	if err != nil {
+		t.Fatalf("expected list mode, got %v", err)
 	}
-	if err.Error() != "Missing required option: --id" {
-		t.Fatalf("error mismatch: %v", err)
+	if options.id != "" || options.idProvided || options.queryTarget.hasFile || options.queryTarget.hasLine {
+		t.Fatalf("expected empty list target, got %#v", options)
 	}
-}
-
-// Verifies the missing-target NextAction explains both id and file:line forms for status.
-func TestParsePausePointStatusOptionsMissingTargetNextActionMentionsFileLineFlags(t *testing.T) {
-	_, err := parsePausePointStatusOptions([]string{})
-	requireNextActions(t, err, []string{
-		"Pass --id <marker-id> matching UloopPausePoint.Pause(\"<marker-id>\"), or the Id returned by enable-pause-point (file:line markers use <project-relative path>:<line>, e.g. Assets/Scripts/Foo.cs:42). Alternatively, query a file:line marker with --file <project-relative path> --line <line>.",
-	})
 }
 
 // Verifies both query commands compose a source marker id from --file and decimal --line values.

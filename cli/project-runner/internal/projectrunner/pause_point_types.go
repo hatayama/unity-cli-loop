@@ -127,6 +127,24 @@ type pausePointStatusResponse struct {
 	TriggerFailed *bool `json:"TriggerFailed,omitempty"`
 }
 
+// pausePointStatusListResponse is the compact response used when no individual marker is queried.
+type pausePointStatusListResponse struct {
+	Success     bool                               `json:"Success"`
+	Message     string                             `json:"Message"`
+	Count       int                                `json:"Count"`
+	PausePoints []pausePointStatusListItemResponse `json:"PausePoints"`
+	NextActions []string                           `json:"NextActions"`
+}
+
+// pausePointStatusListItemResponse keeps id-less status output bounded to the fields needed for selection.
+type pausePointStatusListItemResponse struct {
+	Id                    string `json:"Id"`
+	Status                string `json:"Status"`
+	Mode                  string `json:"Mode"`
+	HitCount              int    `json:"HitCount"`
+	RemainingMilliseconds int64  `json:"RemainingMilliseconds"`
+}
+
 // pausePointStatusResult wraps a status response with the CLI-evaluated --expect verdicts.
 // pause-point-status marshals the Unity response directly, so it needs this wrapper to carry the
 // two extra fields; the names match pausePointWaitResult's so one query shape reads both commands.

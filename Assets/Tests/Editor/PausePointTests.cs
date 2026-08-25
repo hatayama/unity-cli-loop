@@ -4,12 +4,15 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
 
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.CompositionRoot;
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -281,6 +284,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo("Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required."));
             Assert.That(snapshot.IsEnabled, Is.False);
             Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies listing with no registered markers returns an empty collection.
+        /// </summary>
+        [Test]
+        public void GetAllStatuses_WhenNoMarkersAreRegistered_ReturnsEmptyCollection()
+        {
+            IReadOnlyList<UloopPausePointSnapshot> snapshots = UloopPausePointRegistry.GetAllStatuses();
+
+            Assert.That(snapshots, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies list status snapshots are ordered by ordinal marker id rather than registry insertion order.
+        /// </summary>
+        [Test]
+        public void GetAllStatuses_WhenMarkersAreRegistered_ReturnsOrdinalIdOrder()
+        {
+            UloopPausePointRegistry.Enable("a", 30);
+            UloopPausePointRegistry.Enable("B", 30);
+
+            IReadOnlyList<UloopPausePointSnapshot> snapshots = UloopPausePointRegistry.GetAllStatuses();
+
+            Assert.That(snapshots.Select(snapshot => snapshot.Id), Is.EqualTo(new[] { "B", "a" }));
+            Assert.That(snapshots.Select(snapshot => snapshot.RemainingMilliseconds), Is.EqualTo(new long[] { 30000, 30000 }));
+        }
+
+        /// <summary>
+        /// Verifies listing applies the same expiration transition and editor-resume side effect as a single status query.
+        /// </summary>
+        [Test]
+        public void GetAllStatuses_WhenMarkerHasExpired_ExpiresAndResumesEditor()
+        {
+            UloopPausePointRegistry.Enable("jump", 1);
+            _pauseController.Pause();
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            IReadOnlyList<UloopPausePointSnapshot> snapshots = UloopPausePointRegistry.GetAllStatuses();
+
+            Assert.That(snapshots, Has.Count.EqualTo(1));
+            Assert.That(snapshots[0].Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(snapshots[0].IsEnabled, Is.False);
+            Assert.That(snapshots[0].RemainingMilliseconds, Is.EqualTo(0));
+            Assert.That(snapshots[0].EditorState.IsPaused, Is.False);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies listing expires every elapsed marker before issuing one editor resume.
+        /// </summary>
+        [Test]
+        public void GetAllStatuses_WhenTwoMarkersHaveExpired_ExpiresBothAndResumesEditorOnce()
+        {
+            UloopPausePointRegistry.Enable("alpha", 1);
+            UloopPausePointRegistry.Enable("zulu", 1);
+            _pauseController.Pause();
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            IReadOnlyList<UloopPausePointSnapshot> snapshots = UloopPausePointRegistry.GetAllStatuses();
+
+            Assert.That(snapshots.Select(snapshot => snapshot.Status), Is.EqualTo(new[]
+            {
+                UloopPausePointStatus.Expired,
+                UloopPausePointStatus.Expired
+            }));
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(1));
         }
 
         /// <summary>
@@ -1261,6 +1331,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.CapturedVariablesTruncated, Is.True);
             Assert.That(response.CapturedVariables.Select(v => v.Name), Is.EquivalentTo(new[] { "speed" }));
             Assert.That(response.CapturedVariables[0].Value, Is.EqualTo("5"));
+        }
+
+        /// <summary>
+        /// Verifies an id-less internal status request routes to the empty list response and keeps its wire JSON fixed.
+        /// </summary>
+        [Test]
+        public void PausePointStatusBridge_ExecuteWithoutId_ReturnsEmptyListWireJson()
+        {
+            UnityCliLoopToolRegistrarService toolRegistrarService =
+                UnityCliLoopToolRegistrarTestFactory.Create(UnityCliLoopToolDiscovery.DiscoverTools);
+
+            UnityCliLoopToolResponse response = InternalBridgeCommandRouter.Execute(
+                UnityCliLoopConstants.COMMAND_NAME_GET_PAUSE_POINT_STATUS,
+                new JObject(),
+                toolRegistrarService);
+            string json = JsonConvert.SerializeObject(
+                response,
+                Formatting.None,
+                UnityCliLoopJsonResponseSerializerSettings.Settings);
+
+            Assert.That(response, Is.TypeOf<PausePointStatusListResponse>());
+            Assert.That(
+                json,
+                Is.EqualTo(
+                    "{\"Success\":true,\"Message\":\"No pause points are registered.\",\"Count\":0,\"PausePoints\":[],\"NextActions\":[\"Enable one with 'uloop enable-pause-point --id <marker-id>' or '--file <project-relative path> --line <line>'.\"]}"));
+        }
+
+        /// <summary>
+        /// Verifies list responses expose only sorted pause point summaries with the approved count guidance wire shape.
+        /// </summary>
+        [Test]
+        public void PausePointStatusBridge_ExecuteList_WhenMarkersAreRegistered_ReturnsSummaryWireJson()
+        {
+            UloopPausePointRegistry.Enable("zulu", 30);
+            UloopPausePointRegistry.Enable("alpha", 30);
+
+            PausePointStatusListResponse response = PausePointStatusBridgeCommand.ExecuteList();
+            string json = JsonConvert.SerializeObject(
+                response,
+                Formatting.None,
+                UnityCliLoopJsonResponseSerializerSettings.Settings);
+
+            Assert.That(
+                json,
+                Is.EqualTo(
+                    "{\"Success\":true,\"Message\":\"2 pause point(s) registered.\",\"Count\":2,\"PausePoints\":[{\"Id\":\"alpha\",\"Status\":\"Enabled\",\"Mode\":\"single-shot\",\"HitCount\":0,\"RemainingMilliseconds\":30000},{\"Id\":\"zulu\",\"Status\":\"Enabled\",\"Mode\":\"single-shot\",\"HitCount\":0,\"RemainingMilliseconds\":30000}],\"NextActions\":[\"Pass --id <marker-id> to inspect one pause point in detail.\"]}"));
         }
 
         [Test]

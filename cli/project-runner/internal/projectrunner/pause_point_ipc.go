@@ -59,6 +59,29 @@ func queryPausePointStatusFromUnity(
 	return sendPausePointStatusCommand(ctx, connection, pausePointStatusCommandName, map[string]any{"Id": id})
 }
 
+func queryPausePointStatusListFromUnity(
+	ctx context.Context,
+	connection unityipc.Connection,
+) (pausePointStatusListResponse, error) {
+	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
+	defer cancel()
+
+	result, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
+		probeContext,
+		pausePointStatusCommandName,
+		map[string]any{},
+	)
+	if err != nil {
+		return pausePointStatusListResponse{}, err
+	}
+
+	response := pausePointStatusListResponse{}
+	if err := json.Unmarshal(result, &response); err != nil {
+		return pausePointStatusListResponse{}, err
+	}
+	return response, nil
+}
+
 func clearPausePointStatusFromUnity(
 	ctx context.Context,
 	connection unityipc.Connection,

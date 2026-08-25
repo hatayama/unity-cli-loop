@@ -56,9 +56,10 @@ const (
 )
 
 var (
-	queryPausePointStatus  = queryPausePointStatusFromUnity
-	clearPausePointStatus  = clearPausePointStatusFromUnity
-	extendPausePointExpiry = extendPausePointExpiryFromUnity
+	queryPausePointStatus     = queryPausePointStatusFromUnity
+	queryPausePointStatusList = queryPausePointStatusListFromUnity
+	clearPausePointStatus     = clearPausePointStatusFromUnity
+	extendPausePointExpiry    = extendPausePointExpiryFromUnity
 )
 
 type waitForPausePointOptions struct {
@@ -89,15 +90,6 @@ type waitForPausePointOptions struct {
 	// first status query, and a real hit can race into that window on continuous/trace markers.
 	// Baselining that hit would demand a later sequence that never comes (continuous pauses on hit).
 	markerJustEnabled bool
-}
-
-type pausePointStatusOptions struct {
-	id                    string
-	idProvided            bool
-	queryTarget           pausePointQueryTarget
-	capturedVariablesMode pausePointCapturedVariablesMode
-	capturedVariableNames []string
-	expectations          []pausePointExpectation
 }
 
 func normalizePausePointStatusResponse(response pausePointStatusResponse) pausePointStatusResponse {
@@ -227,6 +219,9 @@ func runPausePointStatusCommand(
 			Command:     clicore.PausePointStatusUserCommandName,
 		})
 		return 1
+	}
+	if options.listMode {
+		return runPausePointStatusListCommand(ctx, connection, stdout, stderr)
 	}
 
 	response, err := queryPausePointStatus(ctx, connection, options.id)
@@ -401,64 +396,6 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 		clicore.PausePointAwaitCommandName)
 	if targetErr != nil {
 		return waitForPausePointOptions{}, targetErr
-	}
-	options.id = queryID
-
-	return options, nil
-}
-
-func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error) {
-	options := pausePointStatusOptions{capturedVariablesMode: pausePointCapturedVariablesModeFull}
-
-	for index := 0; index < len(args); index++ {
-		arg := args[index]
-		name, value, consumedNext, err := clicore.ParseFlagValue(arg, args, index)
-		if err != nil {
-			return pausePointStatusOptions{}, err
-		}
-
-		switch name {
-		case PausePointIDFlagName:
-			options.id = value
-			options.idProvided = true
-		case PausePointFileFlagName:
-			options.queryTarget.file = value
-			options.queryTarget.hasFile = true
-		case PausePointLineFlagName:
-			parseErr := setPausePointQueryTargetLine(&options.queryTarget, value)
-			if parseErr != nil {
-				return pausePointStatusOptions{}, parseErr
-			}
-		case tooldocs.PausePointCapturedVariablesFlagName:
-			mode, parseErr := parsePausePointCapturedVariablesMode(value)
-			if parseErr != nil {
-				return pausePointStatusOptions{}, parseErr
-			}
-			options.capturedVariablesMode = mode
-		case tooldocs.PausePointCapturedVariableNamesFlagName:
-			options.capturedVariableNames = parsePausePointCapturedVariableNames(value)
-		case tooldocs.PausePointExpectFlagName:
-			expectation, parseErr := parsePausePointExpectFlagValue(value)
-			if parseErr != nil {
-				return pausePointStatusOptions{}, parseErr
-			}
-			options.expectations = append(options.expectations, expectation)
-		default:
-			return pausePointStatusOptions{}, pausePointUnknownOptionError(clicore.PausePointStatusUserCommandName, name)
-		}
-
-		if consumedNext {
-			index++
-		}
-	}
-
-	queryID, targetErr := resolvePausePointQueryID(
-		options.id,
-		options.idProvided,
-		options.queryTarget,
-		clicore.PausePointStatusUserCommandName)
-	if targetErr != nil {
-		return pausePointStatusOptions{}, targetErr
 	}
 	options.id = queryID
 
