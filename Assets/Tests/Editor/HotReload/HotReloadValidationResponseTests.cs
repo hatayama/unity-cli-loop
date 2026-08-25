@@ -45,6 +45,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an invalid files response serializes its code and ordered recovery actions.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilesContainWhitespace_SerializesStructuredValidationFields()
+        {
+            HotReloadResponse response = await ExecuteAsync(
+                new JObject { ["Files"] = new JArray("   ") });
+            JObject json = SerializeResponse(response);
+            JArray nextActions = json["NextActions"] as JArray;
+
+            Assert.That(json.Value<string>("ErrorCode"), Is.EqualTo("HOT_RELOAD_INVALID_FILES"));
+            Assert.That(nextActions, Is.Not.Null);
+            Assert.That(
+                nextActions.ToObject<string[]>(),
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Remove null or empty entries from --files.",
+                        "Pass project-relative .cs paths with --files."
+                    }));
+        }
+
+        /// <summary>
+        /// What: a status conflict response serializes its code and ordered recovery actions.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenStatusHasFiles_SerializesStructuredValidationFields()
+        {
+            HotReloadResponse response = await ExecuteAsync(
+                new JObject
+                {
+                    ["Status"] = true,
+                    ["Files"] = new JArray("Assets/Scripts/Player.cs")
+                });
+            JObject json = SerializeResponse(response);
+            JArray nextActions = json["NextActions"] as JArray;
+
+            Assert.That(json.Value<string>("ErrorCode"), Is.EqualTo("HOT_RELOAD_STATUS_CONFLICT"));
+            Assert.That(nextActions, Is.Not.Null);
+            Assert.That(
+                nextActions.ToObject<string[]>(),
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Run 'uloop hot-reload --status' with no other flags to inspect active patches.",
+                        "To apply or revert patches, drop --status and pass --files or --revert-all."
+                    }));
+        }
+
+        /// <summary>
         /// What: successful apply, status, and revert responses omit empty validation fields.
         /// </summary>
         [Test]
