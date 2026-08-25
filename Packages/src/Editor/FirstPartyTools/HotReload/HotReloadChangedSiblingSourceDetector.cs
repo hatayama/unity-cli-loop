@@ -8,7 +8,7 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Finds compilation-assembly siblings whose on-disk bytes differ from the last compile snapshot.
+    /// Finds compilation-assembly sources whose on-disk bytes differ from the last compile snapshot.
     /// </summary>
     internal static class HotReloadChangedSiblingSourceDetector
     {
@@ -69,37 +69,86 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadChangedSiblingScanResult.Empty;
             }
 
+            HotReloadChangedSourceScanResult sourceScan = DetectChangedFromSnapshotDirectory(
+                projectRoot,
+                assemblySnapshotDirectoryName,
+                sourceFiles,
+                editedProjectRelativePath);
+            List<string> changedSiblingAbsolutePaths = new List<string>(
+                sourceScan.ChangedProjectRelativePaths.Count);
+            for (int index = 0; index < sourceScan.ChangedProjectRelativePaths.Count; index++)
+            {
+                changedSiblingAbsolutePaths.Add(
+                    ToAbsoluteProjectPath(projectRoot, sourceScan.ChangedProjectRelativePaths[index]));
+            }
+
+            return new HotReloadChangedSiblingScanResult(
+                changedSiblingAbsolutePaths.ToArray(),
+                sourceScan.ScanLimitWarning);
+        }
+
+        /// <summary>
+        /// Returns every changed project-relative source path for one snapshot directory.
+        /// </summary>
+        internal static HotReloadChangedSourceScanResult DetectAllChangedFromSnapshotDirectory(
+            string projectRoot,
+            string assemblySnapshotDirectoryName,
+            string[] sourceFiles)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
+            Debug.Assert(
+                !string.IsNullOrEmpty(assemblySnapshotDirectoryName),
+                "assemblySnapshotDirectoryName must not be null or empty.");
+
+            return DetectChangedFromSnapshotDirectory(
+                projectRoot,
+                assemblySnapshotDirectoryName,
+                sourceFiles,
+                excludedProjectRelativePath: null);
+        }
+
+        private static HotReloadChangedSourceScanResult DetectChangedFromSnapshotDirectory(
+            string projectRoot,
+            string assemblySnapshotDirectoryName,
+            string[] sourceFiles,
+            string excludedProjectRelativePath)
+        {
             string snapshotDirectory = Path.Combine(
                 projectRoot,
                 HotReloadConstants.SourceSnapshotRelativeDirectory,
                 assemblySnapshotDirectoryName);
             if (!Directory.Exists(snapshotDirectory))
             {
-                return HotReloadChangedSiblingScanResult.Empty;
+                return new HotReloadChangedSourceScanResult(false, new List<string>(), string.Empty);
             }
 
-            List<string> changedSiblingAbsolutePaths = new List<string>();
+            List<string> changedProjectRelativePaths = new List<string>();
+            if (sourceFiles == null || sourceFiles.Length == 0)
+            {
+                return new HotReloadChangedSourceScanResult(true, changedProjectRelativePaths, string.Empty);
+            }
+
             for (int index = 0; index < sourceFiles.Length; index++)
             {
-                string changedPath = TryResolveChangedSiblingAbsolutePath(
+                string changedPath = TryResolveChangedProjectRelativePath(
                     projectRoot,
                     snapshotDirectory,
                     sourceFiles[index],
-                    editedProjectRelativePath);
+                    excludedProjectRelativePath);
                 if (changedPath != null)
                 {
-                    changedSiblingAbsolutePaths.Add(changedPath);
+                    changedProjectRelativePaths.Add(changedPath);
                 }
             }
 
-            return LimitChangedSiblings(changedSiblingAbsolutePaths);
+            return LimitChangedSources(changedProjectRelativePaths);
         }
 
-        private static string TryResolveChangedSiblingAbsolutePath(
+        private static string TryResolveChangedProjectRelativePath(
             string projectRoot,
             string snapshotDirectory,
             string projectRelativeSourcePath,
-            string editedProjectRelativePath)
+            string excludedProjectRelativePath)
         {
             if (string.IsNullOrEmpty(projectRelativeSourcePath))
             {
@@ -107,13 +156,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string normalizedRelativePath = projectRelativeSourcePath.Replace('\\', '/');
-            if (IsSameProjectRelativePath(normalizedRelativePath, editedProjectRelativePath))
+            if (!string.IsNullOrEmpty(excludedProjectRelativePath)
+                && IsSameProjectRelativePath(normalizedRelativePath, excludedProjectRelativePath))
             {
                 return null;
             }
 
-            string absoluteSourcePath = Path.GetFullPath(
-                Path.Combine(projectRoot, normalizedRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            string absoluteSourcePath = ToAbsoluteProjectPath(projectRoot, normalizedRelativePath);
             if (!File.Exists(absoluteSourcePath))
             {
                 return null;
@@ -134,27 +183,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
-            return absoluteSourcePath;
+            // Why project-relative: the default --files path must work across machines and is the CLI contract.
+            return normalizedRelativePath;
         }
 
-        private static HotReloadChangedSiblingScanResult LimitChangedSiblings(List<string> changedSiblingAbsolutePaths)
+        private static HotReloadChangedSourceScanResult LimitChangedSources(
+            List<string> changedProjectRelativePaths)
         {
-            int totalChanged = changedSiblingAbsolutePaths.Count;
+            int totalChanged = changedProjectRelativePaths.Count;
             if (totalChanged <= HotReloadConstants.SiblingConstDriftScanFileLimit)
             {
-                return new HotReloadChangedSiblingScanResult(
-                    changedSiblingAbsolutePaths.ToArray(),
+                return new HotReloadChangedSourceScanResult(
+                    true,
+                    changedProjectRelativePaths,
                     string.Empty);
             }
 
-            string[] limited = new string[HotReloadConstants.SiblingConstDriftScanFileLimit];
-            changedSiblingAbsolutePaths.CopyTo(0, limited, 0, HotReloadConstants.SiblingConstDriftScanFileLimit);
+            List<string> limited = changedProjectRelativePaths.GetRange(
+                0,
+                HotReloadConstants.SiblingConstDriftScanFileLimit);
             string warning = string.Format(
                 CultureInfo.InvariantCulture,
                 HotReloadConstants.SiblingConstDriftScanLimitedWarningFormat,
                 HotReloadConstants.SiblingConstDriftScanFileLimit,
                 totalChanged);
-            return new HotReloadChangedSiblingScanResult(limited, warning);
+            return new HotReloadChangedSourceScanResult(true, limited, warning);
+        }
+
+        private static string ToAbsoluteProjectPath(string projectRoot, string projectRelativePath)
+        {
+            return Path.GetFullPath(
+                Path.Combine(projectRoot, projectRelativePath.Replace('/', Path.DirectorySeparatorChar)));
         }
 
         private static bool IsSameProjectRelativePath(string left, string right)

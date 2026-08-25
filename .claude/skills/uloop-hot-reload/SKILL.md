@@ -18,6 +18,7 @@ or `Failed`; one unpatchable method never aborts the rest of the run.
 ```bash
 uloop hot-reload --files Assets/Scripts/Enemy.cs
 uloop hot-reload --files Assets/Scripts/Enemy.cs,Assets/Scripts/Boss.cs
+uloop hot-reload
 uloop hot-reload --revert-all
 ```
 
@@ -32,9 +33,14 @@ before its first import: Unity has not compiled it into any assembly yet. Run
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. Required when neither `--revert-all` nor `--status` is set |
+| `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. When omitted or empty on apply, selects the `.cs` sources whose bytes changed since the last compile snapshot, capped at 50 changed files per assembly with a warning when the cap trims the list; run `uloop compile` first when no snapshot exists, or pass explicit paths when no changed source is found |
 | `--revert-all` | flag | - | Remove every active hot-reload patch and clear the patch ledger. When set, `--files` is ignored |
 | `--status` | flag | - | Lists the currently active changes (patched methods and added members) without applying or reverting anything. |
+
+When `--files` is omitted or empty, a source is selected only when its compilation assembly has a
+snapshot directory and that source has its own snapshot file. A missing per-file snapshot is
+left out rather than guessed as changed, so pass the file explicitly or run `uloop compile`
+to establish a complete baseline.
 
 ## Checking what is currently patched
 
@@ -372,7 +378,7 @@ cached dispatch can bypass a hot-reload patch too.
 Returns JSON with:
 
 - `Success` (boolean): `false` on parameter validation failure or when any method outcome is `Failed`. `Skipped` outcomes alone never force `false`
-- `ErrorCode` (string, optional): Present on parameter validation failure. Values are `HOT_RELOAD_FILES_REQUIRED` when apply needs `--files`, `HOT_RELOAD_INVALID_FILES` when `--files` contains a null or empty path, and `HOT_RELOAD_STATUS_CONFLICT` when `--status` is combined with `--files` or `--revert-all`.
+- `ErrorCode` (string, optional): Present on parameter validation failure. Values are `HOT_RELOAD_FILES_REQUIRED` when an omitted apply has no compile snapshots, `HOT_RELOAD_NO_CHANGED_FILES` when snapshots contain no changed `.cs` files, `HOT_RELOAD_INVALID_FILES` when `--files` contains a null or empty path, and `HOT_RELOAD_STATUS_CONFLICT` when `--status` is combined with `--files` or `--revert-all`.
 - `NextActions` (array, optional): Ordered recovery steps, present only with `ErrorCode` on a parameter validation failure. Omitted from every other response, including successful apply, plain `--status`, and `--revert-all` runs.
 - `Methods` (array): Per-method `{ Kind, Method, Reason, FilePath, InvocationCount, LifecycleNote }` where `Kind` is `Patched`, `Skipped`, `Failed`, `Added`, or `AlreadyActive` on apply runs, and `Active` or `Added` on `--status` runs; empty on `--revert-all` runs. `AlreadyActive` means this file's source matched the last fully applied reload (a run with no Skipped or Failed outcomes), so the existing patch was left in place and the row carries the live `InvocationCount`. `InvocationCount` is meaningful on `Active` rows and `AlreadyActive` apply rows (calls since the current patch was applied); it is `0` on other apply/revert outcomes. On `--status`, an `Active` row with `InvocationCount` 0 sets `Reason` to explain that the method has not run since the patch: finished calls do not re-run, the patched body takes effect on the next call, and how to retrigger an initialization-only path. Added-member rows always show InvocationCount 0 — added-member calls are not instrumented, and the row's Reason says so. `LifecycleNote` is set when a patched method is a Unity one-shot lifecycle message (`private void Awake`/`Start`/`OnEnable`/`OnDisable`/`OnDestroy` on a `MonoBehaviour`), or when every compiled caller of the patched method is such a message; empty otherwise — it does not change `Kind`. `Added` rows carry the added member's signature and file; their `InvocationCount` is always `0` (added-member calls are not instrumented). Example `--status` row: `{ "Kind": "Added", "Method": "Ns.Host.NewHelper(System.Int32)", "Reason": "Added-member calls are not instrumented, so InvocationCount is always 0 for this row.", "FilePath": "Assets/Scripts/Host.cs", "InvocationCount": 0, "LifecycleNote": "" }`
 - `Warnings` (array): Non-fatal notes — one aggregated line listing the patched methods at risk of being already JIT-inlined into existing callers — those marked `[AggressiveInlining]`, plus (only when Code Optimization is Release) those with tiny pre-patch bodies — meaning the change may not show at those call sites, the pause-point interaction above, and the const drift, outside-body drift, and missing-baseline entries described in "Scope and limits". When a run carries two or more warnings and all of them are hot reload warnings, the Message ends with "A single 'uloop compile' clears all of them at once." — read it as the shortest recovery, not as an obligation to compile immediately. Pause-point warnings carry their own recovery steps, so that line does not appear when they are present.

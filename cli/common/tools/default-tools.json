@@ -764,7 +764,7 @@
         "properties": {
           "Files": {
             "type": "array",
-            "description": "Project-relative .cs paths whose method bodies should be hot-reloaded. Required when neither --revert-all nor --status is set",
+            "description": "Project-relative .cs paths whose method bodies should be hot-reloaded. When omitted or empty on apply, selects the .cs sources whose bytes changed since the last compile snapshot, capped at 50 changed files per assembly with a warning when the cap trims the list; run uloop compile first when no snapshot exists, or pass explicit paths when no changed source is found",
             "items": {
               "type": "string"
             }

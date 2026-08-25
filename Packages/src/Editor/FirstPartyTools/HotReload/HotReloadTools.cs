@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class HotReloadSchema : UnityCliLoopToolSchema
     {
         /// <summary>
-        /// Project-relative source file paths to hot-reload. Required when RevertAll is false.
+        /// Project-relative source file paths to hot-reload. Omitted or empty apply values select sources changed since the last compile snapshot; --status rejects a nonempty value and --revert-all ignores it.
         /// </summary>
         public string[] Files { get; set; } = Array.Empty<string>();
 
@@ -119,6 +119,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     [UnityCliLoopTool]
     public class HotReloadTool : UnityCliLoopTool<HotReloadSchema, HotReloadResponse>
     {
+        // Why internal seams: compile-pipeline enumeration and apply execution cannot use planted
+        // fixtures, so tests substitute them while production keeps these default implementations.
+        internal static Func<HotReloadChangedFileAggregationResult> DetectChangedFilesForTesting =
+            HotReloadChangedFileAggregator.Detect;
+
+        internal static Func<IReadOnlyList<string>, CancellationToken, Task<HotReloadOrchestratorResult>>
+            RunApplyAsyncForTesting = RunApplyAsync;
+
         public override string ToolName => UnityCliLoopConstants.TOOL_NAME_HOT_RELOAD;
 
         protected override async Task<HotReloadResponse> ExecuteAsync(
@@ -158,14 +166,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateValidationFailure(validationFailure);
             }
 
-            HotReloadOrchestratorResult result = await HotReloadOrchestrator
-                .RunAsync(parameters.Files, contentPathOverride: null, ct)
+            HotReloadDefaultFileSelection selection = HotReloadDefaultFileSelector.Resolve(
+                parameters.Files,
+                DetectChangedFilesForTesting);
+            if (selection.ValidationFailure != null)
+            {
+                return CreateValidationFailure(selection.ValidationFailure);
+            }
+
+            HotReloadOrchestratorResult result = await RunApplyAsyncForTesting(selection.Files, ct)
                 .ConfigureAwait(false);
             // Why switch back: SessionState for Play-entry drop recovery is a Unity Editor API.
             await MainThreadSwitcher.SwitchToMainThread(ct);
             HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(result.Methods);
 
-            return BuildApplyResponse(result);
+            HotReloadResponse response = BuildApplyResponse(result, selection.ScanLimitWarnings);
+            if (!string.IsNullOrEmpty(selection.SelectionMessage))
+            {
+                response.Message = selection.SelectionMessage + " " + response.Message;
+            }
+
+            return response;
         }
 
         private static HotReloadResponse ExecuteRevertAll()
@@ -255,19 +276,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        // Returns structured validation details so the response does not infer an error code from Message text.
+        // Validates supplied files so omitted files can use the compile-snapshot default path.
         internal static HotReloadValidationFailure ValidateApplyParameters(HotReloadSchema parameters)
         {
-            if (parameters.Files == null || parameters.Files.Length == 0)
+            if (parameters.Files == null)
             {
-                return new HotReloadValidationFailure(
-                    "Files is required unless --revert-all or --status is set. Pass project-relative .cs paths with --files, e.g. 'uloop hot-reload --files Assets/Scripts/Player.cs'.",
-                    HotReloadValidationErrorCodes.FilesRequired,
-                    new[]
-                    {
-                        "Pass project-relative .cs paths with --files.",
-                        "Run 'uloop hot-reload --status' to inspect active patches."
-                    });
+                return null;
             }
 
             for (int index = 0; index < parameters.Files.Length; index++)
@@ -288,7 +302,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        internal static HotReloadResponse BuildApplyResponse(HotReloadOrchestratorResult result)
+        internal static HotReloadResponse BuildApplyResponse(
+            HotReloadOrchestratorResult result,
+            IReadOnlyList<string> additionalWarnings = null)
         {
             Debug.Assert(result != null, "result must not be null.");
 
@@ -317,6 +333,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             List<string> warnings = new List<string>(result.Warnings);
+            if (additionalWarnings != null)
+            {
+                warnings.AddRange(additionalWarnings);
+            }
+
             // Why before the pause-point extras: this warning is cleared by compile, so it must
             // count toward the single-compile resolution suffix instead of suppressing it.
             HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
@@ -592,6 +613,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return addedCount;
+        }
+
+        private static Task<HotReloadOrchestratorResult> RunApplyAsync(
+            IReadOnlyList<string> files,
+            CancellationToken ct)
+        {
+            return HotReloadOrchestrator.RunAsync(files, contentPathOverride: null, ct);
         }
 
         private static HotReloadResponse CreateValidationFailure(HotReloadValidationFailure failure)
