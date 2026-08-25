@@ -43,34 +43,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: calling hot-reload with neither --files, --revert-all, nor --status names
-        /// --files and returns a structured recovery action.
+        /// What: omitting --files without compile snapshots returns the required-files code and recovery actions.
         /// </summary>
         [Test]
-        public async Task ExecuteAsync_WithoutFilesOrRevertAll_ReturnsValidationFailure()
+        public async Task ExecuteAsync_WithoutFilesAndWithoutBaseline_ReturnsValidationFailure()
         {
-            HotReloadTool tool = new HotReloadTool();
-            JObject parameters = new JObject();
+            Func<HotReloadChangedFileAggregationResult> previousDetector =
+                HotReloadTool.DetectChangedFilesForTesting;
+            try
+            {
+                HotReloadTool.DetectChangedFilesForTesting = () =>
+                    new HotReloadChangedFileAggregationResult(
+                        hasBaseline: false,
+                        changedProjectRelativePaths: new List<string>(),
+                        scanLimitWarnings: new List<string>());
 
-            UnityCliLoopToolResponse baseResponse =
-                await tool.ExecuteAsync(parameters, CancellationToken.None);
-            HotReloadResponse response = baseResponse as HotReloadResponse;
+                HotReloadTool tool = new HotReloadTool();
+                UnityCliLoopToolResponse baseResponse =
+                    await tool.ExecuteAsync(new JObject(), CancellationToken.None);
+                HotReloadResponse response = baseResponse as HotReloadResponse;
 
-            Assert.That(response, Is.Not.Null);
-            Assert.That(response.Success, Is.False);
-            Assert.That(
-                response.Message,
-                Is.EqualTo(
-                    "Files is required unless --revert-all or --status is set. Pass project-relative .cs paths with --files, e.g. 'uloop hot-reload --files Assets/Scripts/Player.cs'."));
-            Assert.That(response.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.FilesRequired));
-            Assert.That(
-                response.NextActions,
-                Is.EqualTo(
-                    new[]
-                    {
-                        "Pass project-relative .cs paths with --files.",
-                        "Run 'uloop hot-reload --status' to inspect active patches."
-                    }));
+                Assert.That(response, Is.Not.Null);
+                Assert.That(response.Success, Is.False);
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        "No compile snapshots exist yet. Run 'uloop compile' first or pass project-relative .cs paths with --files."));
+                Assert.That(response.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.FilesRequired));
+                Assert.That(
+                    response.NextActions,
+                    Is.EqualTo(
+                        new[]
+                        {
+                            "Run 'uloop compile' to create source snapshots.",
+                            "Pass project-relative .cs paths with --files."
+                        }));
+            }
+            finally
+            {
+                HotReloadTool.DetectChangedFilesForTesting = previousDetector;
+            }
         }
 
         /// <summary>
@@ -238,10 +250,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an empty Files list returns the required-files code and recovery actions.
+        /// What: an empty Files list leaves selection to the compile-snapshot default path.
         /// </summary>
         [Test]
-        public void ValidateApplyParameters_MissingFiles_ReturnsErrorNamingFilesOption()
+        public void ValidateApplyParameters_EmptyFiles_LeavesSelectionToExecuteAsync()
         {
             HotReloadSchema schema = new HotReloadSchema
             {
@@ -250,19 +262,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadValidationFailure failure = HotReloadTool.ValidateApplyParameters(schema);
 
-            Assert.That(
-                failure.Message,
-                Is.EqualTo(
-                    "Files is required unless --revert-all or --status is set. Pass project-relative .cs paths with --files, e.g. 'uloop hot-reload --files Assets/Scripts/Player.cs'."));
-            Assert.That(failure.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.FilesRequired));
-            Assert.That(
-                failure.NextActions,
-                Is.EqualTo(
-                    new[]
-                    {
-                        "Pass project-relative .cs paths with --files.",
-                        "Run 'uloop hot-reload --status' to inspect active patches."
-                    }));
+            Assert.That(failure, Is.Null);
         }
 
         /// <summary>
