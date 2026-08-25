@@ -35,7 +35,7 @@ func pausePointWaitError(
 	case pausePointWaitStateExpired:
 		waitErr = pausePointStateError(
 			clierrors.ErrorCodePausePointExpired,
-			"Pause point expired before it was hit.",
+			pausePointExpiredMessage(response),
 			projectRoot,
 			options,
 			response,
@@ -176,6 +176,13 @@ func pausePointSuppressedByHotReloadHint(response pausePointStatusResponse) stri
 		return response.SuppressedByHotReloadReason
 	}
 	return pausePointHintSuppressedByHotReload
+}
+
+func pausePointExpiredMessage(response pausePointStatusResponse) string {
+	if response.HitCount > 0 {
+		return "Pause point expired after it was hit."
+	}
+	return "Pause point expired before it was hit."
 }
 
 // pausePointTimeoutHint maps the final probed status to a deterministic diagnosis,

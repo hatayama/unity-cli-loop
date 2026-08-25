@@ -945,6 +945,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: overlapping compiled spans choose the smallest containing method for a candidate.
+        /// </summary>
+        [Test]
+        public void AppendCandidateCompiledLinesToDriftWarningOrUnchanged_WhenNamedSpansOverlap_AnnotatesSmallestContainingMethod()
+        {
+            string drift = string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                ForwardSlashFile,
+                17,
+                "return 1;",
+                "return 2;");
+            string[] compiledLines = new string[12];
+            compiledLines[11] = "return 2;";
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedSpans =
+                new[]
+                {
+                    new SourcePausePointNearbyCompiledMethod("Enemy.Outer", 10, 20),
+                    new SourcePausePointNearbyCompiledMethod("Enemy.Inner", 11, 13)
+                };
+
+            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                "return 2;",
+                compiledLines,
+                namedSpans);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift + " Candidate: the edited line's text appears at line 12 (in 'Enemy.Inner') in the last compiled source."));
+        }
+
+        /// <summary>
         /// What: candidate lines inside named compiled spans identify their containing methods.
         /// </summary>
         [Test]

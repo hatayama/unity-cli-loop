@@ -401,6 +401,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return line.ToString();
             }
 
+            SourcePausePointNearbyCompiledMethod smallestContainingSpan = null;
             for (int index = 0; index < namedCompiledMethodSpans.Count; index++)
             {
                 SourcePausePointNearbyCompiledMethod span = namedCompiledMethodSpans[index];
@@ -409,9 +410,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                if (smallestContainingSpan != null
+                    && span.EndLine - span.StartLine >= smallestContainingSpan.EndLine - smallestContainingSpan.StartLine)
+                {
+                    continue;
+                }
+
+                // Why prefer the narrowest span: an enclosing method can overlap a generated
+                // local-function span, while the narrow span identifies the candidate's method.
+                smallestContainingSpan = span;
+            }
+
+            if (smallestContainingSpan != null)
+            {
                 return line + string.Format(
                     SourcePausePointConstants.HotReloadCompiledLineDriftCandidateMethodAnnotationFormat,
-                    span.DisplayName);
+                    smallestContainingSpan.DisplayName);
             }
 
             return line.ToString();

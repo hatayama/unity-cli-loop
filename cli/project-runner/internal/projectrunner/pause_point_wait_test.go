@@ -1623,6 +1623,31 @@ func TestPausePointExpiredErrorIncludesDiagnosisHint(t *testing.T) {
 	}
 }
 
+// Verifies an expired marker with a recorded hit reports a message and hint that agree on that hit.
+func TestPausePointExpiredErrorAfterHit_ReportsConsistentMessageAndHint(t *testing.T) {
+	response := pausePointStatusResponse{
+		Id:       "jump",
+		Status:   pausePointStatusExpired,
+		HitCount: 1,
+		EditorState: pausePointEditorState{
+			IsPlaying:  true,
+			CapturedAt: "Current",
+		},
+	}
+
+	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 1,
+	}, response, pausePointWaitStateExpired, false, false, nil)
+
+	if cliErr.Message != "Pause point expired after it was hit." {
+		t.Fatalf("Message mismatch: got %q", cliErr.Message)
+	}
+	if cliErr.Details["Hint"] != "The marker was hit before its --timeout-seconds window closed, so this is not a missed code path. Read the recorded hit with 'uloop pause-point-status --id <marker-id>' (HitCount, CapturedVariables, CapturedVariableHistory survive expiry); re-enable the marker if you need to capture another hit." {
+		t.Fatalf("Hint mismatch: got %#v", cliErr.Details["Hint"])
+	}
+}
+
 // Verifies the expired hint lists hot-reload line drift as candidate (4) and orders it after (3).
 func TestPausePointExpiredHintIncludesHotReloadLineDriftCandidate(t *testing.T) {
 	cliErr := pausePointWaitError("/tmp/MyProject", waitForPausePointOptions{
@@ -1721,7 +1746,7 @@ func TestPausePointExpiredErrorOmitsResolvedNoteWhenHitCountPositive(t *testing.
 		timeoutSeconds: 1,
 	}, response, pausePointWaitStateExpired, false, false, nil)
 
-	if cliErr.Message != "Pause point expired before it was hit." {
+	if cliErr.Message != "Pause point expired after it was hit." {
 		t.Fatalf("Message mismatch: %q", cliErr.Message)
 	}
 	if cliErr.Details["ResolvedLine"] != 42 {
