@@ -186,6 +186,213 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: passed and skipped leaves with a skipped root aggregate are reported as a passed run.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenPassedAndSkippedLeavesHaveSkippedRoot_ReturnsPassedSuccess()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Skipped,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase("SkippedTest", TestResultStatus.Skipped, 0.1)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.True);
+            Assert.That(result.status, Is.EqualTo("Passed"));
+            Assert.That(result.message, Is.EqualTo("Test execution completed with status: Passed"));
+        }
+
+        /// <summary>
+        /// What: a skipped leaf is exposed by full name alongside a fully passed classification.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenPassedAndSkippedLeavesHaveSkippedRoot_CollectsSkippedTestFullNames()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Skipped,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase("SkippedTest", TestResultStatus.Skipped, 0.1)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.skippedCount, Is.EqualTo(1));
+            Assert.That(result.skippedTests, Is.EqualTo(new[] { "Example.Tests.SkippedTest" }));
+        }
+
+        /// <summary>
+        /// What: only the first 10 skipped leaves are listed while SkippedCount retains the full count.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenElevenTestsAreSkipped_ListsFirstTenSkippedFullNames()
+        {
+            List<ITestResultAdaptor> children = new List<ITestResultAdaptor>();
+            for (int index = 0; index < 11; index++)
+            {
+                string suffix = index.ToString(CultureInfo.InvariantCulture);
+                children.Add(CreateTestCase("SkippedTest" + suffix, TestResultStatus.Skipped, 0.1));
+            }
+
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Skipped,
+                0.1,
+                children);
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.status, Is.EqualTo("Skipped"));
+            Assert.That(result.message, Is.EqualTo("Test execution completed with status: Skipped"));
+            Assert.That(result.skippedCount, Is.EqualTo(11));
+            Assert.That(result.skippedTests, Is.Not.Null);
+            Assert.That(result.skippedTests.Length, Is.EqualTo(10));
+            Assert.That(result.skippedTests[0], Is.EqualTo("Example.Tests.SkippedTest0"));
+            Assert.That(result.skippedTests[9], Is.EqualTo("Example.Tests.SkippedTest9"));
+        }
+
+        /// <summary>
+        /// What: passed and skipped leaves use the all-green aggregation when the root is Inconclusive.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenPassedAndSkippedLeavesHaveInconclusiveRoot_ReturnsPassedSuccess()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Inconclusive,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase("SkippedTest", TestResultStatus.Skipped, 0.1)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.True);
+            Assert.That(result.status, Is.EqualTo("Passed"));
+            Assert.That(result.message, Is.EqualTo("Test execution completed with status: Passed"));
+        }
+
+        /// <summary>
+        /// What: skipped full names preserve depth-first result-tree order across nested suites.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenSkippedLeavesSpanNestedSuites_CollectsAllNamesInTraversalOrder()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Skipped,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("SkippedBefore", TestResultStatus.Skipped, 0.1),
+                    CreateTestSuite(
+                        "NestedSuite",
+                        TestResultStatus.Skipped,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestCase("SkippedNestedFirst", TestResultStatus.Skipped, 0.1),
+                            CreateTestCase("SkippedNestedSecond", TestResultStatus.Skipped, 0.1)
+                        }),
+                    CreateTestCase("SkippedAfter", TestResultStatus.Skipped, 0.1)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(
+                result.skippedTests,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Example.Tests.SkippedBefore",
+                        "Example.Tests.SkippedNestedFirst",
+                        "Example.Tests.SkippedNestedSecond",
+                        "Example.Tests.SkippedAfter"
+                    }));
+        }
+
+        /// <summary>
+        /// What: a root Passed aggregate containing an inconclusive leaf remains a successful run.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenPassedAndInconclusiveLeavesHavePassedRoot_PreservesPassedSuccess()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Passed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase("InconclusiveTest", TestResultStatus.Inconclusive, 0.1)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.True);
+            Assert.That(result.status, Is.EqualTo("Passed"));
+            Assert.That(result.message, Is.EqualTo("Test execution completed with status: Passed"));
+        }
+
+        /// <summary>
+        /// What: a non-Passed root aggregate containing an inconclusive leaf remains non-successful.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenPassedAndInconclusiveLeavesHaveInconclusiveRoot_ReturnsRootStatusFailure()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Inconclusive,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase("InconclusiveTest", TestResultStatus.Inconclusive, 0.1)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.status, Is.EqualTo("Inconclusive"));
+            Assert.That(result.message, Is.EqualTo("Test execution completed with status: Inconclusive"));
+        }
+
+        /// <summary>
+        /// What: a failed leaf takes precedence over a root Passed aggregate for all response fields.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenPassedAndFailedLeavesHavePassedRoot_ReturnsFailedClassification()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Passed,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase("FailingTest", TestResultStatus.Failed, 0.1)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.False);
+            Assert.That(result.status, Is.EqualTo("Failed"));
+            Assert.That(result.message, Is.EqualTo("Test execution completed with status: Failed"));
+        }
+
+        /// <summary>
         /// What: a failed leaf copies FullName, Message, and File/Line parsed from (at path:line).
         /// </summary>
         [Test]

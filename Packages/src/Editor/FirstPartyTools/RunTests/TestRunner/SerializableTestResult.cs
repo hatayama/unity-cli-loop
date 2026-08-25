@@ -29,6 +29,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public FailedTestDetail[] failedTests;
 
         /// <summary>
+        /// Skipped leaf test full names, capped for the JSON response. Null when none skipped.
+        /// </summary>
+        public string[] skippedTests;
+
+        /// <summary>
         /// One failed test leaf included in a run-tests response.
         /// </summary>
         [Serializable]

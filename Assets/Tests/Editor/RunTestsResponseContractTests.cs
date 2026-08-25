@@ -8,7 +8,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Verifies run-tests JSON omits null FailedTests and null File/Line keys.
+    /// Verifies run-tests JSON optional test-detail fields and null File/Line keys.
     /// </summary>
     public sealed class RunTestsResponseContractTests
     {
@@ -80,6 +80,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(first["Message"]?.Value<string>(), Is.EqualTo("Expected 2 But was: 1"));
             Assert.That(first.Property("File"), Is.Null);
             Assert.That(first.Property("Line"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: SkippedTests is omitted without skipped leaves and serializes each full name when present.
+        /// </summary>
+        [Test]
+        public void RunTestsResponse_WhenSerialized_OmitsOrIncludesSkippedTestsByPresence()
+        {
+            RunTestsResponse zeroSkippedTests = new RunTestsResponse(
+                success: true,
+                message: "Test execution completed with status: Passed",
+                completedAt: "2026-01-01T00:00:00.0000000Z",
+                testCount: 1,
+                passedCount: 1,
+                failedCount: 0,
+                skippedCount: 0,
+                xmlPath: string.Empty,
+                status: RunTestsExecutionStatus.Passed,
+                hasFailures: false,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty);
+
+            JObject zeroSkippedTestsJson = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    zeroSkippedTests,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+
+            Assert.That(zeroSkippedTestsJson.Property("SkippedTests"), Is.Null);
+
+            RunTestsResponse populated = new RunTestsResponse(
+                success: true,
+                message: "Test execution completed with status: Passed",
+                completedAt: "2026-01-01T00:00:00.0000000Z",
+                testCount: 2,
+                passedCount: 1,
+                failedCount: 0,
+                skippedCount: 1,
+                xmlPath: string.Empty,
+                status: RunTestsExecutionStatus.Passed,
+                hasFailures: false,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty)
+            {
+                SkippedTests = new[] { "Example.Tests.SkippedTest" }
+            };
+
+            JObject populatedJson = JObject.Parse(
+                JsonConvert.SerializeObject(
+                    populated,
+                    Formatting.None,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings));
+            JArray skippedTests = (JArray)populatedJson["SkippedTests"];
+
+            Assert.That(skippedTests, Is.Not.Null);
+            Assert.That(skippedTests.Count, Is.EqualTo(1));
+            Assert.That(skippedTests[0].Value<string>(), Is.EqualTo("Example.Tests.SkippedTest"));
         }
 
         /// <summary>

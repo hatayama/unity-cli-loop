@@ -171,10 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 response.ClearedPausePointIds = clearedPausePointIds;
             }
 
-            if (result.failedTests != null && result.failedTests.Length > 0)
-            {
-                response.FailedTests = result.failedTests;
-            }
+            CopyTestDetails(result, response);
 
             response.Warning = RunTestsHotReloadDiscardWarningBuilder.Build(activeHotReloadChangeCountAtStart);
 
@@ -204,6 +201,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await ApplyUnfilteredFilterEchoIfNeededAsync(response, parameters, ct)
                 .ConfigureAwait(false);
             return response;
+        }
+
+        private void CopyTestDetails(SerializableTestResult result, RunTestsResponse response)
+        {
+            if (result.failedTests != null && result.failedTests.Length > 0)
+            {
+                response.FailedTests = result.failedTests;
+            }
+
+            if (result.skippedTests != null && result.skippedTests.Length > 0)
+            {
+                response.SkippedTests = result.skippedTests;
+            }
         }
 
         private void AppendPredefinedAssemblyTestNoticeIfNeeded(

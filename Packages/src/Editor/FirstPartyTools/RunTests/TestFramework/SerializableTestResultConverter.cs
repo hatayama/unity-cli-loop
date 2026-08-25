@@ -10,6 +10,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class SerializableTestResultConverter
     {
+        private enum RunTestsResultClassification
+        {
+            NoTestsFound,
+            HasFailures,
+            FullyPassed,
+            RootStatus
+        }
+
         public static SerializableTestResult FromTestResult(ITestResultAdaptor result)
         {
             if (result == null)
@@ -38,9 +46,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int skippedTests = CountSkippedTests(result);
             bool noTestsFound = totalTests == 0;
             bool hasFailures = failedTests > 0;
-            bool success = totalTests > 0 && result.TestStatus == TestStatus.Passed;
-            string message = CreateMessage(result, totalTests);
-            string status = CreateStatus(result, noTestsFound, hasFailures);
+            RunTestsResultClassification classification = Classify(
+                result,
+                totalTests,
+                passedTests,
+                failedTests,
+                skippedTests,
+                noTestsFound,
+                hasFailures);
+            bool success = classification == RunTestsResultClassification.FullyPassed;
+            string status = CreateStatus(result, classification);
+            string message = CreateMessage(status, classification);
             string noTestsFoundExplanation = noTestsFound
                 ? RunTestsResponse.NoTestsFoundExplanationText
                 : string.Empty;
@@ -59,23 +75,56 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 failedCount = failedTests,
                 skippedCount = skippedTests,
                 xmlPath = null,
-                failedTests = CollectFailedTestDetails(result)
+                failedTests = CollectFailedTestDetails(result),
+                skippedTests = CollectSkippedTestFullNames(result)
             };
         }
 
-        private static string CreateStatus(ITestResultAdaptor result, bool noTestsFound, bool hasFailures)
+        private static RunTestsResultClassification Classify(
+            ITestResultAdaptor result,
+            int totalTests,
+            int passedTests,
+            int failedTests,
+            int skippedTests,
+            bool noTestsFound,
+            bool hasFailures)
         {
             if (noTestsFound)
             {
-                return RunTestsExecutionStatus.NoTestsFound;
+                return RunTestsResultClassification.NoTestsFound;
             }
 
             if (hasFailures)
             {
+                return RunTestsResultClassification.HasFailures;
+            }
+
+            if (totalTests > 0
+                && failedTests == 0
+                && (result.TestStatus == TestStatus.Passed
+                    || (passedTests > 0 && passedTests + skippedTests == totalTests)))
+            {
+                return RunTestsResultClassification.FullyPassed;
+            }
+
+            return RunTestsResultClassification.RootStatus;
+        }
+
+        private static string CreateStatus(
+            ITestResultAdaptor result,
+            RunTestsResultClassification classification)
+        {
+            if (classification == RunTestsResultClassification.NoTestsFound)
+            {
+                return RunTestsExecutionStatus.NoTestsFound;
+            }
+
+            if (classification == RunTestsResultClassification.HasFailures)
+            {
                 return RunTestsExecutionStatus.Failed;
             }
 
-            if (result.TestStatus == TestStatus.Passed)
+            if (classification == RunTestsResultClassification.FullyPassed)
             {
                 return RunTestsExecutionStatus.Passed;
             }
@@ -83,14 +132,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return result.TestStatus.ToString();
         }
 
-        private static string CreateMessage(ITestResultAdaptor result, int totalTests)
+        private static string CreateMessage(
+            string status,
+            RunTestsResultClassification classification)
         {
-            if (totalTests == 0)
+            if (classification == RunTestsResultClassification.NoTestsFound)
             {
                 return RunTestsResponse.NoTestsFoundMessage;
             }
 
-            return $"Test execution completed with status: {result.TestStatus}";
+            return $"Test execution completed with status: {status}";
         }
 
         private static int CountTotalTests(ITestResultAdaptor result)
@@ -200,6 +251,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 File = file,
                 Line = line
             };
+        }
+
+        private static string[] CollectSkippedTestFullNames(ITestResultAdaptor result)
+        {
+            List<string> fullNames = new List<string>();
+            AppendSkippedTestFullNames(result, fullNames);
+            if (fullNames.Count == 0)
+            {
+                return null;
+            }
+
+            return fullNames.ToArray();
+        }
+
+        private static void AppendSkippedTestFullNames(
+            ITestResultAdaptor result,
+            List<string> fullNames)
+        {
+            if (fullNames.Count >= RunTestsConstants.FailedTestDetailsLimit)
+            {
+                return;
+            }
+
+            if (!result.Test.IsSuite)
+            {
+                if (result.TestStatus == TestStatus.Skipped)
+                {
+                    fullNames.Add(result.Test.FullName);
+                }
+
+                return;
+            }
+
+            if (result.Children == null)
+            {
+                return;
+            }
+
+            foreach (ITestResultAdaptor child in result.Children)
+            {
+                AppendSkippedTestFullNames(child, fullNames);
+                if (fullNames.Count >= RunTestsConstants.FailedTestDetailsLimit)
+                {
+                    return;
+                }
+            }
         }
     }
 }
