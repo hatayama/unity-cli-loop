@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             
             JObject parameters = new()            {
                 ["RequiredComponents"] = new JArray { "Camera" },
-                ["MaxResults"] = 1,
+                ["MaxCount"] = 1,
                 ["IncludeInheritedProperties"] = true
             };
             
@@ -63,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             JObject parameters = new()            {
                 ["NamePattern"] = "Main Camera",
                 ["SearchMode"] = "Path",
-                ["MaxResults"] = 1
+                ["MaxCount"] = 1
             };
             
             try

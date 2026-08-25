@@ -16,6 +16,10 @@ trigger updates in the same PR:
   accompanied by changes under both `cli/project-runner/` and `cli/dispatcher/`.
 - Installer scripts (`scripts/install.sh`, `scripts/install.ps1`) must be accompanied by a
   change under `cli/dispatcher/`, because installers ship as dispatcher release assets.
+- The embedded tool catalog (`cli/common/tools/default-tools.json`) is the one
+  non-Go shared input: it is compiled into both binaries, so catalog changes —
+  including regenerations driven by skill parameter-table edits — need the
+  same accompanying trigger changes and stamp refresh.
 
 Run `scripts/stamp-release-inputs.sh` to refresh
 `cli/project-runner/shared-inputs-stamp.json` and

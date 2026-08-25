@@ -63,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Tag = parameters.Tag,
                     Layer = parameters.Layer,
                     IncludeInactive = parameters.IncludeInactive,
-                    MaxResults = parameters.MaxResults
+                    MaxCount = parameters.MaxCount
                 };
                 
                 GameObjectDetails[] foundObjects = _finderService.FindGameObjectsAdvanced(options);

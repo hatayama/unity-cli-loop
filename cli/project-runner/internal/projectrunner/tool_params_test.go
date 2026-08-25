@@ -308,6 +308,89 @@ func TestBuildToolParamsUnknownOptionSuggestsRunTestsSkipCompile(t *testing.T) {
 	})
 }
 
+// Verifies renamed options emit their new JSON-RPC parameter keys.
+func TestBuildToolParamsConvertsRenamedFirstPartyToolOptions(t *testing.T) {
+	cases := []struct {
+		command   string
+		args      []string
+		paramName string
+		want      int
+	}{
+		{
+			command:   clicore.CompileCommandName,
+			args:      []string{"--timeout-seconds", "45"},
+			paramName: "TimeoutSeconds",
+			want:      45,
+		},
+		{
+			command:   "find-game-objects",
+			args:      []string{"--max-count", "5"},
+			paramName: "MaxCount",
+			want:      5,
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.command, func(t *testing.T) {
+			tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), testCase.command)
+			if !ok {
+				t.Fatalf("%s was not found in default tools", testCase.command)
+			}
+
+			params, _, err := buildToolParams(testCase.args, tool)
+			if err != nil {
+				t.Fatalf("renamed option was rejected: %v", err)
+			}
+			if params[testCase.paramName] != testCase.want {
+				t.Fatalf("%s mismatch: %#v", testCase.paramName, params)
+			}
+		})
+	}
+}
+
+// Verifies removed option names are invalid arguments that guide callers to the replacement names.
+func TestBuildToolParamsRejectsRemovedFirstPartyToolOptionsWithReplacementSuggestions(t *testing.T) {
+	cases := []struct {
+		command string
+		args    []string
+		want    []string
+	}{
+		{
+			command: clicore.CompileCommandName,
+			args:    []string{"--compile-wait-timeout-seconds", "45"},
+			want: []string{
+				"Did you mean: uloop compile --timeout-seconds",
+				"Run `uloop compile --help` to inspect supported options.",
+			},
+		},
+		{
+			command: "find-game-objects",
+			args:    []string{"--max-results", "5"},
+			want: []string{
+				"Did you mean: uloop find-game-objects --max-count",
+				"Run `uloop find-game-objects --help` to inspect supported options.",
+			},
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.command, func(t *testing.T) {
+			tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), testCase.command)
+			if !ok {
+				t.Fatalf("%s was not found in default tools", testCase.command)
+			}
+
+			_, _, err := buildToolParams(testCase.args, tool)
+			argumentError := requireArgumentError(t, err)
+			cliError := argumentError.ToCLIError(clierrors.ErrorContext{Command: testCase.command})
+			if cliError.ErrorCode != clierrors.ErrorCodeInvalidArgument {
+				t.Fatalf("error code mismatch: %#v", cliError)
+			}
+			requireNextActions(t, err, testCase.want)
+		})
+	}
+}
+
 // Verifies enable-pause-point suggests its CLI-only trigger option when a supplied flag is a close typo.
 func TestBuildToolParamsUnknownOptionSuggestsPausePointTrigger(t *testing.T) {
 	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), pausePointEnableCommandName)

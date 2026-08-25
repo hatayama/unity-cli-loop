@@ -22,7 +22,7 @@ const (
 	compileRequestIDParam    = "RequestId"
 	compileWaitParam         = clicore.DomainReloadWaitParam
 	compileForceParam        = "ForceRecompile"
-	compileWaitTimeoutParam  = "CompileWaitTimeoutSeconds"
+	compileWaitTimeoutParam  = "TimeoutSeconds"
 	// Why separate from ToolReadinessTimeout (180s): launch readiness stays short.
 	// Why 10m: worst-case blind block beats headroom. Why ≤ C# CompileResultLifetime (20m):
 	// timed-out clients can still retrieve results by retrying uloop compile ~10m more.
@@ -78,7 +78,7 @@ func prepareCompileWaitParams(params map[string]any) (string, error) {
 	return requestID, nil
 }
 
-// compileWaitTimeoutFromParams reads CompileWaitTimeoutSeconds from tool params.
+// compileWaitTimeoutFromParams reads TimeoutSeconds from tool params.
 // Missing values keep the default compileWaitTimeout (10m). Non-positive or non-integer
 // values are rejected before a compile request is sent.
 func compileWaitTimeoutFromParams(params map[string]any) (time.Duration, error) {
@@ -90,7 +90,7 @@ func compileWaitTimeoutFromParams(params map[string]any) (time.Duration, error) 
 	seconds, ok := positiveInt64FromAny(value)
 	if !ok || seconds > compileWaitTimeoutMaxSeconds {
 		return 0, clierrors.InvalidValueArgumentError(
-			"--compile-wait-timeout-seconds",
+			"--timeout-seconds",
 			fmt.Sprint(value),
 			"positive integer",
 		)
