@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class HotReloadSchema : UnityCliLoopToolSchema
     {
         /// <summary>
-        /// Project-relative source file paths to hot-reload. Required when RevertAll is false.
+        /// Project-relative source file paths to hot-reload. Omitted or empty apply values select sources changed since the last compile snapshot; --status rejects a nonempty value and --revert-all ignores it.
         /// </summary>
         public string[] Files { get; set; } = Array.Empty<string>();
 
