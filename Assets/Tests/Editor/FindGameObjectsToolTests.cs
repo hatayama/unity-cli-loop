@@ -392,9 +392,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
         
         [Test]
-        public async Task ExecuteAsync_WithMaxResults_LimitsReturnedObjects()
+        public async Task ExecuteAsync_WithMaxCount_LimitsReturnedObjects()
         {
-            // Arrange
+            // Verifies the MaxCount wire parameter limits the returned GameObjects.
             // Create many GameObjects
             GameObject[] manyObjects = new GameObject[20];
             for (int i = 0; i < 20; i++)
@@ -405,7 +405,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject paramsJson = new()            {
                 ["NamePattern"] = "ManyObject",
                 ["SearchMode"] = "Contains",
-                ["MaxResults"] = 5
+                ["MaxCount"] = 5
             };
             
             try

@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Why no [Description]: first-party schema properties must keep long-form agent guidance
         /// in skill files (see FirstPartyToolSchemaMetadataTests), not runtime metadata.
         /// </summary>
-        public int CompileWaitTimeoutSeconds { get; set; } = 600;
+        public int TimeoutSeconds { get; set; } = 600;
 
         /// <summary>
         /// Internal request identifier used for delayed result recovery across domain reload.

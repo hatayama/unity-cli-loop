@@ -465,7 +465,7 @@ func TestRunCompileWithDomainReloadWaitWritesRequestLifecycleVibeLogs(t *testing
 	}
 }
 
-// Verifies runCompileWithDomainReloadWaitWithDeps wires CompileWaitTimeoutSeconds into
+// Verifies runCompileWithDomainReloadWaitWithDeps wires TimeoutSeconds into
 // the wait deadline and COMPILE_WAIT_TIMEOUT message (not only the wait helper itself).
 func TestRunCompileWithDomainReloadWaitUsesConfiguredTimeout(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -514,7 +514,7 @@ func TestRunCompileWithDomainReloadWaitUsesConfiguredTimeout(t *testing.T) {
 	}
 }
 
-// Verifies invalid CompileWaitTimeoutSeconds fails before a compile request is dispatched.
+// Verifies invalid TimeoutSeconds fails before a compile request is dispatched.
 func TestRunCompileWithDomainReloadWaitRejectsNonPositiveTimeout(t *testing.T) {
 	enableCliVibeLog(t)
 	projectRoot := t.TempDir()
@@ -695,7 +695,7 @@ func TestWritePostCompileWarmupWarningReportsNonFatalFailure(t *testing.T) {
 	}
 }
 
-// Verifies CompileWaitTimeoutSeconds is parsed from tool params with the default
+// Verifies TimeoutSeconds is parsed from tool params with the default
 // kept when absent and non-positive or non-integer values rejected.
 func TestCompileWaitTimeoutFromParams(t *testing.T) {
 	cases := []struct {
@@ -772,6 +772,17 @@ func TestCompileWaitTimeoutFromParams(t *testing.T) {
 				t.Fatalf("timeout mismatch: got %v want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// Verifies the renamed TimeoutSeconds parameter controls the compile wait deadline.
+func TestCompileWaitTimeoutFromParamsReadsTimeoutSeconds(t *testing.T) {
+	actual, err := compileWaitTimeoutFromParams(map[string]any{"TimeoutSeconds": 45})
+	if err != nil {
+		t.Fatalf("TimeoutSeconds failed: %v", err)
+	}
+	if actual != 45*time.Second {
+		t.Fatalf("TimeoutSeconds mismatch: %s", actual)
 	}
 }
 

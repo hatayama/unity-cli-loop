@@ -20,7 +20,7 @@
             "description": "Stop before compilation if open Scene files changed externally instead of auto-reloading them",
             "default": true
           },
-          "CompileWaitTimeoutSeconds": {
+          "TimeoutSeconds": {
             "type": "integer",
             "description": "Maximum seconds the CLI waits for the compile to finish before returning COMPILE_WAIT_TIMEOUT (default 600). Values above 1200 exceed the Unity-side result retention window (20 minutes) and weaken post-timeout recovery.",
             "default": 600
@@ -213,7 +213,7 @@
             "type": "integer",
             "description": "Layer filter (layer number)"
           },
-          "MaxResults": {
+          "MaxCount": {
             "type": "integer",
             "description": "Maximum number of results",
             "default": 20

@@ -213,7 +213,7 @@ func runCompileWithDomainReloadWaitResultWithDeps(
 	if waitTimeout > time.Duration(compileWaitTimeoutRetentionWarningSeconds)*time.Second {
 		_, _ = fmt.Fprintf(
 			stderr,
-			"warning: --compile-wait-timeout-seconds exceeds the Unity-side compile result retention window (20 minutes); if the wait times out, the result may expire before a retry can recover it.\n",
+			"warning: --timeout-seconds exceeds the Unity-side compile result retention window (20 minutes); if the wait times out, the result may expire before a retry can recover it.\n",
 		)
 	}
 

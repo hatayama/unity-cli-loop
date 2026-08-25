@@ -66,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     
                     results.Add(details);
                     
-                    if (results.Count >= options.MaxResults)
+                    if (results.Count >= options.MaxCount)
                         break;
                 }
             }

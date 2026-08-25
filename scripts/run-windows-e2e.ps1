@@ -364,7 +364,7 @@ function Invoke-CliRecoveryReadinessSmoke {
 function Invoke-DiscoverySmoke {
     Open-Scene -ScenePath $DiscoveryScenePath
     Start-PlayMode
-    Invoke-UloopJsonChecked -CommandArguments @("find-game-objects", "--search-mode", "Contains", "--name-pattern", "Canvas", "--max-results", "10") | Out-Null
+    Invoke-UloopJsonChecked -CommandArguments @("find-game-objects", "--search-mode", "Contains", "--name-pattern", "Canvas", "--max-count", "10") | Out-Null
     Invoke-UloopJsonChecked -CommandArguments @("get-hierarchy", "--max-depth", "3") | Out-Null
     Invoke-UloopJsonChecked -CommandArguments @("screenshot", "--capture-mode", "rendering", "--annotate-elements", "--elements-only") | Out-Null
     Stop-PlayMode

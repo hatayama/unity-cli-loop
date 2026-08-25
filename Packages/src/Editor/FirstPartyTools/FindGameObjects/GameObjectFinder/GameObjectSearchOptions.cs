@@ -12,6 +12,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Tag { get; set; } = "";
         public int? Layer { get; set; } = null;
         public bool IncludeInactive { get; set; } = false;
-        public int MaxResults { get; set; } = 100;
+        public int MaxCount { get; set; } = 100;
     }
 }

@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool IncludeInactive { get; set; } = false;
         
         // Result control
-        public int MaxResults { get; set; } = 20;  // Reduced from 100 to prevent performance issues
+        public int MaxCount { get; set; } = 20;  // Reduced from 100 to prevent performance issues
         public bool IncludeInheritedProperties { get; set; } = false;
     }
     

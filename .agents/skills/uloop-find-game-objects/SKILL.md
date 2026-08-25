@@ -25,7 +25,7 @@ uloop find-game-objects [options]
 | `--required-components` | array | - | Required components |
 | `--tag` | string | - | Tag filter |
 | `--layer` | integer | - | Layer filter (layer number) |
-| `--max-results` | integer | `20` | Maximum number of results |
+| `--max-count` | integer | `20` | Maximum number of results |
 | `--include-inactive` | flag | - | Include inactive GameObjects |
 | `--include-inherited-properties` | flag | - | Include inherited properties in results |
 
@@ -50,7 +50,7 @@ Returns JSON with:
   - `Tag` (string): GameObject tag
   - `Layer` (number): Layer index
   - `Components` (array): Each entry has `Type` (short name, e.g., `Rigidbody`), `FullTypeName` (e.g., `UnityEngine.Rigidbody`), and `Properties` (array of Inspector-visible `{Name, Type, Value}` pairs)
-- `TotalFound` (number): Results returned (after `--max-results` clipping). For multi-selection file export, this is the number exported.
+- `TotalFound` (number): Results returned (after `--max-count` clipping). For multi-selection file export, this is the number exported.
 - `ErrorMessage` (string): Top-level failure summary (empty on success)
 - `ProcessingErrors` (array): Selected-mode per-GameObject serialization failures, each `{GameObjectName, GameObjectPath, Error}`. Omitted/null or empty on clean runs.
 

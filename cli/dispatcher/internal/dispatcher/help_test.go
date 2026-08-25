@@ -203,6 +203,7 @@ func TestRunDispatcherCompileHelpDoesNotRequireUnityProject(t *testing.T) {
 		"Usage:",
 		"uloop compile",
 		"--force-recompile",
+		"--timeout-seconds",
 		"--no-wait-for-domain-reload",
 		"--stop-on-external-scene-changes",
 		"Stop before compilation if open Scene files changed externally instead of auto-reloading them",
@@ -214,6 +215,25 @@ func TestRunDispatcherCompileHelpDoesNotRequireUnityProject(t *testing.T) {
 	}
 	if strings.Contains(output, "--wait-for-domain-reload") {
 		t.Fatalf("compile help exposed removed wait flag:\n%s", output)
+	}
+}
+
+// Verifies embedded help exposes the renamed maximum result count option.
+func TestRunDispatcherFindGameObjectsHelpShowsMaxCount(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunDispatcher(context.Background(), []string{"find-game-objects", "--help"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("find-game-objects help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "--max-count") {
+		t.Fatalf("find-game-objects help missing --max-count:\n%s", output)
+	}
+	if strings.Contains(output, "--max-results") {
+		t.Fatalf("find-game-objects help still exposes --max-results:\n%s", output)
 	}
 }
 

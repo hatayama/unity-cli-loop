@@ -11,7 +11,7 @@ Execute Unity project compilation.
 ## Usage
 
 ```bash
-uloop compile [--force-recompile] [--no-wait-for-domain-reload] [--stop-on-external-scene-changes] [--compile-wait-timeout-seconds <seconds>]
+uloop compile [--force-recompile] [--no-wait-for-domain-reload] [--stop-on-external-scene-changes] [--timeout-seconds <seconds>]
 ```
 
 ## Parameters
@@ -21,7 +21,7 @@ uloop compile [--force-recompile] [--no-wait-for-domain-reload] [--stop-on-exter
 | `--force-recompile` | flag | - | Full recompile plus domain reload. Almost never needed: a plain compile already detects externally edited files, and the forced reload can freeze large projects and come back as `COMPILE_RESULT_UNKNOWN`. |
 | `--no-wait-for-domain-reload` | flag | - | Return before Domain Reload completion |
 | `--stop-on-external-scene-changes` | flag | - | Stop before compilation if open Scene files changed externally instead of auto-reloading them |
-| `--compile-wait-timeout-seconds` | integer | 600 | Maximum seconds the CLI waits for the compile to finish before returning COMPILE_WAIT_TIMEOUT (default 600). Values above 1200 exceed the Unity-side result retention window (20 minutes) and weaken post-timeout recovery. |
+| `--timeout-seconds` | integer | 600 | Maximum seconds the CLI waits for the compile to finish before returning COMPILE_WAIT_TIMEOUT (default 600). Values above 1200 exceed the Unity-side result retention window (20 minutes) and weaken post-timeout recovery. |
 
 ## When to use --force-recompile
 
