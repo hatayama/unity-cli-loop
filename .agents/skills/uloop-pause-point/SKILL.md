@@ -219,7 +219,7 @@ is in `SuppressedByHotReloadReason` and surfaced as the status `Warning`. The ma
 not cleared — it fires again once a transition restores its line, or after
 `uloop compile` and a re-enable.
 
-Use `uloop pause-point-status` only when you need to confirm the marker is armed or inspect the current hit state. A file:line marker can be addressed either by its returned `Id` (`--id "Assets/Scripts/Enemy.cs:42"`) or by the original pair (`--file "Assets/Scripts/Enemy.cs" --line 42`) — the same applies to `await-pause-point`. Always pass `--file` and `--line` together, and never combine them with `--id`.
+Run `uloop pause-point-status` with no target to list every registered marker as a compact summary (`Id`, `Status`, `Mode`, `HitCount`, `RemainingMilliseconds`). To inspect one marker in detail — confirming it is armed, or reading its current hit state — address it by its returned `Id` (`--id "Assets/Scripts/Enemy.cs:42"`) or by the original pair (`--file "Assets/Scripts/Enemy.cs" --line 42`); `await-pause-point` accepts the same two addressing forms but always requires a target. Always pass `--file` and `--line` together, and never combine them with `--id`.
 
 For the full diagnosis flow — the `Error.Details` status fields, bisecting with a second marker on the method entry, JIT inlining, physics-callback misses, and delegate bypass — read [references/troubleshooting.md](references/troubleshooting.md).
 

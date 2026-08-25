@@ -224,6 +224,38 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         }
 
         /// <summary>
+        /// Returns current snapshots for every registered pause point in deterministic marker-id order.
+        /// </summary>
+        public static IReadOnlyList<UloopPausePointSnapshot> GetAllStatuses()
+        {
+            DateTime now = NowUtc();
+            bool anyExpired = false;
+            List<UloopPausePointEntry> entries = new();
+            foreach (UloopPausePointEntry entry in Entries.Values)
+            {
+                entries.Add(entry);
+                if (TryExpire(entry, now))
+                {
+                    anyExpired = true;
+                }
+            }
+
+            if (anyExpired)
+            {
+                ResumeEditorPause();
+            }
+
+            List<UloopPausePointSnapshot> snapshots = new();
+            foreach (UloopPausePointEntry entry in entries)
+            {
+                snapshots.Add(entry.ToSnapshot(now, _pauseController));
+            }
+
+            snapshots.Sort((left, right) => string.Compare(left.Id, right.Id, StringComparison.Ordinal));
+            return snapshots;
+        }
+
+        /// <summary>
         /// Marks whether an armed marker could not stay live across a hot-reload patch transition.
         /// When <paramref name="suppressed"/> is false, <paramref name="reason"/> is cleared to null.
         /// No-op when the id is unknown.
