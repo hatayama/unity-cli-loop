@@ -68,7 +68,7 @@ PowerShell-only parameters:
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `-CommandTimeoutSeconds` | 600 | Kill bound for one uloop call. Raise it for large projects and parallel soaks (see below) |
-| `-CompileWaitTimeoutSeconds` | 0 (runner default) | Passed to every compile as `--compile-wait-timeout-seconds` when the pinned runner accepts it |
+| `-CompileWaitTimeoutSeconds` | 0 (runner default) | Passed to every compile as `--timeout-seconds` (`--compile-wait-timeout-seconds` on pre-rename runners) when the pinned runner accepts it |
 | `-KeepCodeOptimization` | off | Leave the editor's code optimization mode alone (see below) |
 
 Environment: `ULOOP_BIN` selects the uloop binary (default: `uloop` from
@@ -85,11 +85,12 @@ took ~8 minutes on its own, and over 10 minutes with three editors compiling in
 parallel, so raise `-CommandTimeoutSeconds` for runs like that.
 
 A compile that outlives the runner's own wait returns `COMPILE_WAIT_TIMEOUT`
-while Unity keeps compiling. Runners from `--compile-wait-timeout-seconds`
-onwards let that wait be raised: pass `-CompileWaitTimeoutSeconds` and the
-harness appends the flag to every compile, lifting its kill watchdog above the
-new wait so a timeout can still be reported rather than killed. Against an
-older pinned runner the request is logged and ignored. Values above 1200 exceed
+while Unity keeps compiling. Runners with a configurable wait let that wait be raised: pass
+`-CompileWaitTimeoutSeconds` and the harness appends the flag the pinned
+runner accepts (`--timeout-seconds`, or `--compile-wait-timeout-seconds`
+before the rename) to every compile, lifting its kill watchdog above the new
+wait so a timeout can still be reported rather than killed. Against an older
+pinned runner the request is logged and ignored. Values above 1200 exceed
 Unity's 20-minute result retention, which weakens the post-timeout recovery.
 
 uloop is single-flight, so a command issued while Unity still runs an earlier

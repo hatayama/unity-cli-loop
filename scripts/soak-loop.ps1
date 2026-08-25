@@ -61,10 +61,10 @@ param(
     # especially for parallel soaks: a full recompile of one large project took
     # over 10 minutes with three editors compiling at once.
     [int]$CommandTimeoutSeconds = 600,
-    # Passed to every compile as --compile-wait-timeout-seconds when the pinned
-    # runner accepts it (0 = leave the runner's own default alone). Raise it on
-    # a project whose forced recompile outlives the runner's 10-minute wait;
-    # above 1200 the runner warns that Unity may drop the retained result.
+    # Passed to every compile as --timeout-seconds, or --compile-wait-timeout-seconds
+    # when the pinned runner predates the rename (0 = leave the runner's own default
+    # alone). Raise it on a project whose forced recompile outlives the runner's
+    # 10-minute wait; above 1200 the runner warns that Unity may drop the retained result.
     [int]$CompileWaitTimeoutSeconds = 0,
     # Pause between iterations.
     [int]$SleepSeconds = 0,
@@ -953,14 +953,20 @@ try {
     }
 
     # Runners predating the configurable wait reject the flag outright, and the
-    # soak has to keep working against whichever runner the project pins.
+    # soak has to keep working against whichever runner the project pins. The
+    # flag name also changed across runner generations, so probe help for the
+    # current name first and fall back to the pre-rename one.
     if ($CompileWaitTimeoutSeconds -gt 0) {
-        if ($compileHelp -match '(?m)^\s*--compile-wait-timeout-seconds') {
+        if ($compileHelp -match '(?m)^\s*--timeout-seconds') {
+            $CompileWaitArguments += @("--timeout-seconds", "$CompileWaitTimeoutSeconds")
+            Write-SoakLog -Message "compile wait timeout: ${CompileWaitTimeoutSeconds}s (watchdog ${CommandTimeoutSeconds}s)"
+        }
+        elseif ($compileHelp -match '(?m)^\s*--compile-wait-timeout-seconds') {
             $CompileWaitArguments += @("--compile-wait-timeout-seconds", "$CompileWaitTimeoutSeconds")
             Write-SoakLog -Message "compile wait timeout: ${CompileWaitTimeoutSeconds}s (watchdog ${CommandTimeoutSeconds}s)"
         }
         else {
-            Write-SoakLog -Message "compile wait timeout: ignored - the pinned runner has no --compile-wait-timeout-seconds"
+            Write-SoakLog -Message "compile wait timeout: ignored - the pinned runner has no configurable compile wait flag"
         }
     }
 
