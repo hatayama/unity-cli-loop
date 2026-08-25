@@ -329,7 +329,16 @@ func writePostCompileWarmupWarning(stderr io.Writer, err error) {
 	_, _ = fmt.Fprintf(stderr, "warning: post-compile warmup skipped: %v\n", err)
 }
 
-func runList(ctx context.Context, connection unityipc.Connection, stdout io.Writer, stderr io.Writer) int {
+func runList(ctx context.Context, connection unityipc.Connection, commandArgs []string, stdout io.Writer, stderr io.Writer) int {
+	options, err := parseListOptions(commandArgs)
+	if err != nil {
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     "list",
+		})
+		return 1
+	}
+
 	spinner := clicore.NewToolSpinner(stderr, "list")
 	outcome, err := sendWithTransientConnectionRetry(
 		ctx,
@@ -345,6 +354,16 @@ func runList(ctx context.Context, connection unityipc.Connection, stdout io.Writ
 			Command:     "list",
 		})
 		return 1
+	}
+	if options.namesOnly {
+		if err := writeToolNames(outcome.Result, stdout); err != nil {
+			clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
+				ProjectRoot: connection.ProjectRoot,
+				Command:     "list",
+			})
+			return 1
+		}
+		return 0
 	}
 	clicore.WriteJSON(stdout, formatToolListResult(outcome.Result, connection.ProjectRoot))
 	return 0

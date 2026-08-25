@@ -27,7 +27,7 @@ func runResolvedProjectCommand(
 	}
 	switch command {
 	case "list":
-		return runList(ctx, connection, stdout, stderr)
+		return runList(ctx, connection, commandArgs, stdout, stderr)
 	case "sync":
 		return runSync(ctx, connection, stdout, stderr)
 	case "focus-window":

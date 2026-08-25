@@ -2,6 +2,7 @@ package projectrunner
 
 import (
 	"encoding/json"
+	"io"
 	"sort"
 
 	"github.com/hatayama/unity-cli-loop/common/skilldocs"
@@ -52,6 +53,24 @@ func formatToolListResult(result json.RawMessage, projectRoot string) json.RawMe
 		panic(err)
 	}
 	return content
+}
+
+func writeToolNames(result json.RawMessage, stdout io.Writer) error {
+	var cache clicore.ToolsCache
+	if err := json.Unmarshal(result, &cache); err != nil {
+		return err
+	}
+
+	for _, command := range clicore.NativeCommands {
+		clicore.WriteLine(stdout, command.Name)
+	}
+	for _, tool := range cache.Tools {
+		if _, ok := clicore.NativeCommand(tool.Name); ok {
+			continue
+		}
+		clicore.WriteLine(stdout, tool.Name)
+	}
+	return nil
 }
 
 func newListCatalog(cache clicore.ToolsCache) listCatalog {
