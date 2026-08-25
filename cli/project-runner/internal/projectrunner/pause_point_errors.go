@@ -138,6 +138,9 @@ const (
 	pausePointHintTimeoutAutoCleared    = "This command disarmed the marker on timeout; re-enable the pause point (enable-pause-point) before waiting again. "
 	pausePointHitWhenNoMatchTimeoutHint = "The marker's line executed, but no hit matched --hit-when. Adjust the --hit-when condition or trigger input so a hit matches, then wait again."
 	pausePointHitWhenNoMatchExpiredHint = "The marker expired after its line executed, but no hit matched --hit-when. Re-enable it with a longer --timeout-seconds, then adjust the --hit-when condition or trigger input so a hit matches."
+	pausePointExpiredNoHitPrefix        = "The enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out before the marker was hit. "
+	pausePointExpiredNoHitSuffix        = " Once the cause is addressed, re-enable the marker (raise --timeout-seconds only if the window itself was too short) and trigger the code path again."
+	pausePointExpiredAfterHitHint       = "The marker was hit before its --timeout-seconds window closed, so this is not a missed code path. Read the recorded hit with 'uloop pause-point-status --id <marker-id>' (HitCount, CapturedVariables, CapturedVariableHistory survive expiry); re-enable the marker if you need to capture another hit."
 
 	// Explains how to read resolved-line Details on Expired when HitCount is still 0.
 	// Why not mention ResolvedLineText: C# omits empty text, so Details may carry only ResolvedLine.
@@ -237,10 +240,9 @@ func pausePointExpiredHint(response pausePointStatusResponse, triggerResult *pau
 		return pausePointHitWhenNoMatchExpiredHint
 	}
 	if response.HitCount == 0 {
-		return "Marker expired before it was hit: the enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out. Re-enable the marker with a longer --timeout-seconds and trigger the code path again. " +
-			pausePointNonFiringPatternsHint
+		return pausePointExpiredNoHitPrefix + pausePointNonFiringPatternsHint + pausePointExpiredNoHitSuffix
 	}
-	return ""
+	return pausePointExpiredAfterHitHint
 }
 
 // pausePointHasHitWhenSkips identifies the state that proves the line executed

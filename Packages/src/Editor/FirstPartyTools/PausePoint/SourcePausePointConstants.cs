@@ -346,6 +346,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string HotReloadCompiledLineDriftCandidateTruncatedMatchesSuffixFormat =
             " (first {0} matches)";
 
+        // Format: compiled method display name. Kept separate from Candidate sentence formats so
+        // their established wording stays unchanged while each matching line can name its method.
+        public const string HotReloadCompiledLineDriftCandidateMethodAnnotationFormat =
+            " (in '{0}')";
+
         public const string NearbyCompiledMethodsPrefix =
             " Nearby methods in the last compiled source: ";
 

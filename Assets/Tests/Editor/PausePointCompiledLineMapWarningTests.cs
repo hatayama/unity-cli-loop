@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 
@@ -606,6 +607,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     ResolveFailureFile,
                     response.ResolvedLine);
                 Assert.That(spanResult.Success, Is.True, spanResult.ErrorMessage);
+                IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans =
+                    SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(ResolveFailureFile);
                 Assert.That(spanResult.Resolution.CompiledMethodStartLine, Is.GreaterThan(0));
                 Assert.That(spanResult.Resolution.CompiledMethodEndLine, Is.GreaterThan(0));
                 string expectedDrift = string.Format(
@@ -622,7 +625,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 expectedDrift = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                     expectedDrift,
                     "return 424242;",
-                    snapshotLines);
+                    snapshotLines,
+                    namedCompiledMethodSpans);
                 string expectedWarning = PausePointEnableWarnings.MergeWarnings(
                     PausePointEnableWarnings.MergeWarnings(
                         PausePointEnableWarnings.MergeWarnings(
@@ -784,7 +788,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + spanResult.Resolution.CompiledMethodEndLine + "."
                     + " Candidate: the text at --line " + requestedLine
                     + " in the edited file appears at line " + requestedLine
-                    + " in the last compiled source.";
+                    + " (in 'PausePointCompiledLineMapWarningTests.CompiledLineDriftProbe') in the last compiled source.";
                 string expectedWarning = PausePointEnableWarnings.MergeWarnings(
                     PausePointEnableWarnings.MergeWarnings(
                         PausePointEnableWarnings.MergeWarnings(
@@ -902,6 +906,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 warning,
                 Is.EqualTo(
                     drift + " Candidate: the edited line's text appears at line 2 in the last compiled source."));
+        }
+
+        /// <summary>
+        /// What: candidate lines inside named compiled spans identify their containing methods.
+        /// </summary>
+        [Test]
+        public void AppendCandidateCompiledLinesToDriftWarningOrUnchanged_WhenCandidatesHaveNamedSpans_AnnotatesEachMethod()
+        {
+            string drift = string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                ForwardSlashFile,
+                17,
+                "return 1;",
+                "return 2;");
+            string[] compiledLines =
+            {
+                "class Sample",
+                "            return 2;",
+                "            return 1;",
+                "            return 2;"
+            };
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedSpans =
+                new[]
+                {
+                    new SourcePausePointNearbyCompiledMethod("Enemy.TakeDamage", 2, 2),
+                    new SourcePausePointNearbyCompiledMethod("Enemy.Heal", 4, 4)
+                };
+
+            string warning = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                drift,
+                "return 2;",
+                compiledLines,
+                namedSpans);
+
+            Assert.That(
+                warning,
+                Is.EqualTo(
+                    drift + " Candidate: the edited line's text appears at lines 2 (in 'Enemy.TakeDamage'), 4 (in 'Enemy.Heal') in the last compiled source."));
         }
 
         /// <summary>

@@ -349,6 +349,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: named span collection returns every compiled method in a file with its display name.
+        /// </summary>
+        [Test]
+        public void FindNamedCompiledMethodSpansInFile_WhenFileHasMethods_ReturnsNamedSpans()
+        {
+            string file = FixturesDirectory + "CompiledMethodSpanFixture.cs";
+
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> spans =
+                SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(file);
+            SourcePausePointResolveResult target = SourcePausePointResolver.Resolve(file, 9, "Target");
+            SourcePausePointResolveResult other = SourcePausePointResolver.Resolve(file, 15, "OtherMethod");
+
+            Assert.That(spans.Count, Is.EqualTo(2));
+            Assert.That(spans[0].DisplayName, Is.EqualTo("CompiledMethodSpanFixture.Target"));
+            Assert.That(spans[0].StartLine, Is.EqualTo(target.Resolution.CompiledMethodStartLine));
+            Assert.That(spans[0].EndLine, Is.EqualTo(target.Resolution.CompiledMethodEndLine));
+            Assert.That(spans[1].DisplayName, Is.EqualTo("CompiledMethodSpanFixture.OtherMethod"));
+            Assert.That(spans[1].StartLine, Is.EqualTo(other.Resolution.CompiledMethodStartLine));
+            Assert.That(spans[1].EndLine, Is.EqualTo(other.Resolution.CompiledMethodEndLine));
+        }
+
+        /// <summary>
         /// What: an empty method filter accepts every compiled method name.
         /// </summary>
         [Test]
