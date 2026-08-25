@@ -78,6 +78,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string Message { get; set; } = string.Empty;
 
+        public string ErrorCode { get; set; } = string.Empty;
+
+        public string[] NextActions { get; set; } = Array.Empty<string>();
+
         public string RecommendedNextAction { get; set; } = string.Empty;
 
         /// <summary>
@@ -91,6 +95,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeRecommendedNextAction()
         {
             return !string.IsNullOrEmpty(RecommendedNextAction);
+        }
+
+        public bool ShouldSerializeErrorCode()
+        {
+            return !string.IsNullOrEmpty(ErrorCode);
+        }
+
+        public bool ShouldSerializeNextActions()
+        {
+            return NextActions != null && NextActions.Length > 0;
         }
 
         public bool ShouldSerializeDroppedByPlayModeEntryCount()
@@ -120,7 +134,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     || (parameters.Files != null && parameters.Files.Length > 0))
                 {
                     return CreateValidationFailure(
-                        "--status cannot be combined with --files or --revert-all.");
+                        new HotReloadValidationFailure(
+                            "--status cannot be combined with --files or --revert-all.",
+                            HotReloadValidationErrorCodes.StatusConflict,
+                            new[]
+                            {
+                                "Run 'uloop hot-reload --status' with no other flags to inspect active patches.",
+                                "To apply or revert patches, drop --status and pass --files or --revert-all."
+                            }));
                 }
 
                 return ExecuteStatus();
@@ -131,10 +152,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return ExecuteRevertAll();
             }
 
-            string validationError = ValidateApplyParameters(parameters);
-            if (validationError != null)
+            HotReloadValidationFailure validationFailure = ValidateApplyParameters(parameters);
+            if (validationFailure != null)
             {
-                return CreateValidationFailure(validationError);
+                return CreateValidationFailure(validationFailure);
             }
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator
@@ -234,21 +255,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        // Returns an error message when apply-mode arguments are invalid, or null when valid.
-        internal static string ValidateApplyParameters(HotReloadSchema parameters)
+        // Returns structured validation details so the response does not infer an error code from Message text.
+        internal static HotReloadValidationFailure ValidateApplyParameters(HotReloadSchema parameters)
         {
             if (parameters.Files == null || parameters.Files.Length == 0)
             {
-                // Why: agents that omit --files otherwise cannot tell which option name to pass
-                // without a second --help round trip, and HotReloadResponse has no NextActions.
-                return "Files is required unless --revert-all or --status is set. Pass project-relative .cs paths with --files, e.g. 'uloop hot-reload --files Assets/Scripts/Player.cs'.";
+                return new HotReloadValidationFailure(
+                    "Files is required unless --revert-all or --status is set. Pass project-relative .cs paths with --files, e.g. 'uloop hot-reload --files Assets/Scripts/Player.cs'.",
+                    HotReloadValidationErrorCodes.FilesRequired,
+                    new[]
+                    {
+                        "Pass project-relative .cs paths with --files.",
+                        "Run 'uloop hot-reload --status' to inspect active patches."
+                    });
             }
 
             for (int index = 0; index < parameters.Files.Length; index++)
             {
                 if (string.IsNullOrWhiteSpace(parameters.Files[index]))
                 {
-                    return "Files must not contain null or empty paths.";
+                    return new HotReloadValidationFailure(
+                        "Files must not contain null or empty paths.",
+                        HotReloadValidationErrorCodes.InvalidFiles,
+                        new[]
+                        {
+                            "Remove null or empty entries from --files.",
+                            "Pass project-relative .cs paths with --files."
+                        });
                 }
             }
 
@@ -561,12 +594,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return addedCount;
         }
 
-        private static HotReloadResponse CreateValidationFailure(string message)
+        private static HotReloadResponse CreateValidationFailure(HotReloadValidationFailure failure)
         {
+            Debug.Assert(failure != null, "failure must not be null.");
             return new HotReloadResponse
             {
                 Success = false,
-                Message = message
+                Message = failure.Message,
+                ErrorCode = failure.ErrorCode,
+                NextActions = failure.NextActions
             };
         }
     }

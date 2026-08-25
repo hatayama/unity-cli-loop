@@ -44,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: calling hot-reload with neither --files, --revert-all, nor --status names
-        /// --files and shows a project-relative .cs example.
+        /// --files and returns a structured recovery action.
         /// </summary>
         [Test]
         public async Task ExecuteAsync_WithoutFilesOrRevertAll_ReturnsValidationFailure()
@@ -62,6 +62,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response.Message,
                 Is.EqualTo(
                     "Files is required unless --revert-all or --status is set. Pass project-relative .cs paths with --files, e.g. 'uloop hot-reload --files Assets/Scripts/Player.cs'."));
+            Assert.That(response.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.FilesRequired));
+            Assert.That(
+                response.NextActions,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Pass project-relative .cs paths with --files.",
+                        "Run 'uloop hot-reload --status' to inspect active patches."
+                    }));
         }
 
         /// <summary>
@@ -229,7 +238,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an empty Files list names --files and shows a project-relative .cs example.
+        /// What: an empty Files list returns the required-files code and recovery actions.
         /// </summary>
         [Test]
         public void ValidateApplyParameters_MissingFiles_ReturnsErrorNamingFilesOption()
@@ -239,16 +248,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Files = Array.Empty<string>()
             };
 
-            string error = HotReloadTool.ValidateApplyParameters(schema);
+            HotReloadValidationFailure failure = HotReloadTool.ValidateApplyParameters(schema);
 
             Assert.That(
-                error,
+                failure.Message,
                 Is.EqualTo(
                     "Files is required unless --revert-all or --status is set. Pass project-relative .cs paths with --files, e.g. 'uloop hot-reload --files Assets/Scripts/Player.cs'."));
+            Assert.That(failure.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.FilesRequired));
+            Assert.That(
+                failure.NextActions,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Pass project-relative .cs paths with --files.",
+                        "Run 'uloop hot-reload --status' to inspect active patches."
+                    }));
         }
 
         /// <summary>
-        /// What: blank path entries are rejected before the orchestrator runs.
+        /// What: blank path entries return the invalid-files code and recovery actions.
         /// </summary>
         [Test]
         public void ValidateApplyParameters_WhitespaceOnlyPath_ReturnsError()
@@ -258,9 +276,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Files = new[] { "   " }
             };
 
-            string error = HotReloadTool.ValidateApplyParameters(schema);
+            HotReloadValidationFailure failure = HotReloadTool.ValidateApplyParameters(schema);
 
-            Assert.That(error, Is.EqualTo("Files must not contain null or empty paths."));
+            Assert.That(failure.Message, Is.EqualTo("Files must not contain null or empty paths."));
+            Assert.That(failure.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.InvalidFiles));
+            Assert.That(
+                failure.NextActions,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Remove null or empty entries from --files.",
+                        "Pass project-relative .cs paths with --files."
+                    }));
+        }
+
+        /// <summary>
+        /// What: --status combined with --files returns the status-conflict code and distinct exits.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_StatusWithFiles_ReturnsStructuredValidationFailure()
+        {
+            HotReloadTool tool = new HotReloadTool();
+            JObject parameters = new JObject
+            {
+                ["Status"] = true,
+                ["Files"] = new JArray("Assets/Scripts/Player.cs")
+            };
+
+            UnityCliLoopToolResponse baseResponse =
+                await tool.ExecuteAsync(parameters, CancellationToken.None);
+            HotReloadResponse response = baseResponse as HotReloadResponse;
+
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response.Success, Is.False);
+            Assert.That(
+                response.Message,
+                Is.EqualTo("--status cannot be combined with --files or --revert-all."));
+            Assert.That(response.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.StatusConflict));
+            Assert.That(
+                response.NextActions,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Run 'uloop hot-reload --status' with no other flags to inspect active patches.",
+                        "To apply or revert patches, drop --status and pass --files or --revert-all."
+                    }));
         }
 
         [Test]
