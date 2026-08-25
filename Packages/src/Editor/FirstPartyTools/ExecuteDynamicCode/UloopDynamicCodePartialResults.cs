@@ -35,7 +35,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             AfterGenerationValidatedForTesting?.Invoke();
-            Entries[name] = new PartialResultEntry(currentGeneration, value?.ToString() ?? "null");
+            PartialResultEntry entry = new(currentGeneration, value?.ToString() ?? "null");
+            // ConcurrentDictionary reruns this factory after contention, so the comparison always sees
+            // the latest entry. A get-then-set would let a stale execution replace a newer result.
+            Entries.AddOrUpdate(
+                name,
+                entry,
+                (_, existingEntry) => existingEntry.Generation > currentGeneration
+                    ? existingEntry
+                    : entry);
         }
 
         /// <summary>

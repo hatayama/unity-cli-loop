@@ -74,5 +74,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(snapshot["currentRequest"], Is.EqualTo("ready"));
             Assert.That(snapshot.ContainsKey("lateFromCancelledRequest"), Is.False);
         }
+
+        /// <summary>
+        /// What: Snapshot preserves a successor value when a stale execution writes the same name.
+        /// </summary>
+        [Test]
+        public void Snapshot_WhenStaleSetResumesWithCurrentName_KeepsCurrentEntry()
+        {
+            UloopDynamicCodePartialResults.AfterGenerationValidatedForTesting = () =>
+            {
+                UloopDynamicCodePartialResults.AfterGenerationValidatedForTesting = null;
+                UloopDynamicCodePartialResults.OpenExecutionScope();
+                UloopDynamicCodePartialResults.Set("sharedResult", "successor value");
+            };
+
+            UloopDynamicCodePartialResults.Set("sharedResult", "stale value");
+
+            Dictionary<string, string> snapshot = UloopDynamicCodePartialResults.Snapshot();
+            Assert.That(snapshot["sharedResult"], Is.EqualTo("successor value"));
+        }
     }
 }
