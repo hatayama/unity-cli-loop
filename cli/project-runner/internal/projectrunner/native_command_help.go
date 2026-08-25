@@ -14,6 +14,8 @@ import (
 // The string values are the tooldocs constants so parsers and option tables cannot drift.
 const (
 	PausePointIDFlagName           = tooldocs.PausePointIDFlagName
+	PausePointFileFlagName         = tooldocs.PausePointFileFlagName
+	PausePointLineFlagName         = tooldocs.PausePointLineFlagName
 	PausePointTimeoutFlagName      = tooldocs.PausePointTimeoutSecondsFlagName
 	PausePointLogsMaxCountFlagName = tooldocs.PausePointMatchingLogsMaxCountFlagName
 )

@@ -86,6 +86,30 @@ func TestPausePointAwaitAndStatusCLIOnlyHelpEntries(t *testing.T) {
 	}
 }
 
+// Verifies both query commands describe the file:line target flags with the fixed contract text.
+func TestPausePointQueryCLIOnlyOptionsDescribeFileLineTarget(t *testing.T) {
+	for _, options := range [][]PausePointCLIOnlyOption{
+		PausePointAwaitCLIOnlyOptions(),
+		PausePointStatusCLIOnlyOptions(),
+	} {
+		fileOption, found := findPausePointCLIOnlyOption(options, "file")
+		if !found {
+			t.Fatal("missing --file option")
+		}
+		if fileOption.Description != "Project-relative source file of a file:line pause point. Requires --line; mutually exclusive with --id" {
+			t.Fatalf("--file description = %q", fileOption.Description)
+		}
+
+		lineOption, found := findPausePointCLIOnlyOption(options, "line")
+		if !found {
+			t.Fatal("missing --line option")
+		}
+		if lineOption.Description != "1-based source line of a file:line pause point. Requires --file; mutually exclusive with --id" {
+			t.Fatalf("--line description = %q", lineOption.Description)
+		}
+	}
+}
+
 // Verifies the CLI-only option table is not applied to unrelated tools, which would advertise
 // pause-point orchestration flags on commands that reject them.
 func TestVisibleOptionHelpEntriesOmitPausePointCLIOnlyOptionsForOtherTools(t *testing.T) {
@@ -138,4 +162,16 @@ func findOptionHelpEntry(entries []OptionHelpEntry, name string) (OptionHelpEntr
 		}
 	}
 	return OptionHelpEntry{}, false
+}
+
+func findPausePointCLIOnlyOption(
+	options []PausePointCLIOnlyOption,
+	flagName string,
+) (PausePointCLIOnlyOption, bool) {
+	for _, option := range options {
+		if option.FlagName == flagName {
+			return option, true
+		}
+	}
+	return PausePointCLIOnlyOption{}, false
 }

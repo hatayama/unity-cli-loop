@@ -32,20 +32,16 @@ func TestParsePausePointStatusUnknownOptionNamesEnableAsTheOwner(t *testing.T) {
 	}
 }
 
-// Verifies an enable-pause-point flag whose value is not carried into this command's response names
-// the owner without claiming a carry-over that does not happen.
-func TestParsePausePointStatusUnknownOptionOmitsCarryOverForNonCarriedFlags(t *testing.T) {
-	_, err := parsePausePointStatusOptions([]string{"--id", "jump", "--line", "42"})
-
-	if err == nil {
-		t.Fatal("expected error for --line passed to pause-point-status")
+// Verifies pause-point-status owns --file and --line, so its parser accepts a file:line target.
+func TestParsePausePointStatusAcceptsFileLineTarget(t *testing.T) {
+	options, err := parsePausePointStatusOptions([]string{
+		"--file", "Assets/Scripts/Marker.cs", "--line", "42",
+	})
+	if err != nil {
+		t.Fatalf("file:line target was rejected: %v", err)
 	}
-	message := err.Error()
-	if !strings.Contains(message, "--line is an enable-pause-point option, not a pause-point-status one.") {
-		t.Errorf("owner sentence missing: %s", message)
-	}
-	if strings.Contains(message, "already applied to the response") {
-		t.Errorf("carry-over sentence must not be claimed for --line: %s", message)
+	if options.id != "Assets/Scripts/Marker.cs:42" {
+		t.Fatalf("id = %q", options.id)
 	}
 }
 

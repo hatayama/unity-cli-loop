@@ -20,7 +20,7 @@ func TestRunProjectLocalAwaitPausePointHelpListsExpectedFlags(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("await-pause-point --help failed: code=%d stderr=%s", code, stderr.String())
 	}
-	for _, flag := range []string{"--id", "--timeout-seconds", "--matching-logs-max-count", "--captured-variables", "--expect", "--trigger", "--resume-play"} {
+	for _, flag := range []string{"--id", "--file", "--line", "--timeout-seconds", "--matching-logs-max-count", "--captured-variables", "--expect", "--trigger", "--resume-play"} {
 		if !strings.Contains(stdout.String(), flag) {
 			t.Fatalf("await-pause-point --help must list %s: %s", flag, stdout.String())
 		}
@@ -38,7 +38,9 @@ func TestRunProjectLocalAwaitPausePointHelpOptionsSection(t *testing.T) {
   --captured-variable-names <value>  Restrict CapturedVariables to these comma-separated names
   --captured-variables <value>       How much of each captured variable to include in the response; values: full|names
   --expect <value>                   Compare a captured variable against an expected value (repeatable; name=value)
+  --file <value>                     Project-relative source file of a file:line pause point. Requires --line; mutually exclusive with --id
   --id <value>                       Pause-point marker id matching UloopPausePoint.Pause or the id returned by enable-pause-point
+  --line <value>                     1-based source line of a file:line pause point. Requires --file; mutually exclusive with --id
   --matching-logs-max-count <value>  Maximum Console logs matching the marker id to include on a hit
   --resume-play                      After confirming the marker is armed, resume PlayMode if paused (before --trigger), so a paused-arm workflow can fire input in one call
   --timeout-seconds <value>          Seconds to wait for a hit before timing out
@@ -58,7 +60,7 @@ func TestRunProjectLocalPausePointStatusHelpListsExpectedFlags(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("pause-point-status --help failed: code=%d stderr=%s", code, stderr.String())
 	}
-	for _, flag := range []string{"--id", "--captured-variables"} {
+	for _, flag := range []string{"--id", "--file", "--line", "--captured-variables"} {
 		if !strings.Contains(stdout.String(), flag) {
 			t.Fatalf("pause-point-status --help must list %s: %s", flag, stdout.String())
 		}
@@ -75,7 +77,9 @@ func TestRunProjectLocalPausePointStatusHelpOptionsSection(t *testing.T) {
   --captured-variable-names <value>  Restrict CapturedVariables to these comma-separated names
   --captured-variables <value>       How much of each captured variable to include in the response; values: full|names
   --expect <value>                   Compare a captured variable against an expected value (repeatable; name=value)
+  --file <value>                     Project-relative source file of a file:line pause point. Requires --line; mutually exclusive with --id
   --id <value>                       Pause-point marker id matching UloopPausePoint.Pause or the id returned by enable-pause-point
+  --line <value>                     1-based source line of a file:line pause point. Requires --file; mutually exclusive with --id
 `
 	assertNativeCommandHelpOptionsSection(t, "pause-point-status", expectedOptions)
 }
