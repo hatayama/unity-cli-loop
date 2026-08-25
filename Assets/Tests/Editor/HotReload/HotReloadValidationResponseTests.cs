@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,29 +20,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public sealed class HotReloadValidationResponseTests
     {
         /// <summary>
-        /// What: a validation failure serializes its structured error code and recovery actions.
+        /// What: an omitted apply without a baseline serializes its structured error code and recovery actions.
         /// </summary>
         [Test]
-        public async Task ExecuteAsync_WhenFilesAreMissing_SerializesStructuredValidationFields()
+        public async Task ExecuteAsync_WhenFilesAreMissingAndNoBaseline_SerializesStructuredValidationFields()
         {
-            HotReloadTool tool = new HotReloadTool();
-            UnityCliLoopToolResponse baseResponse =
-                await tool.ExecuteAsync(new JObject(), CancellationToken.None);
-            HotReloadResponse response = baseResponse as HotReloadResponse;
-            JObject json = SerializeResponse(response);
-            JArray nextActions = json["NextActions"] as JArray;
+            Func<HotReloadChangedFileAggregationResult> previousDetector =
+                HotReloadTool.DetectChangedFilesForTesting;
+            try
+            {
+                HotReloadTool.DetectChangedFilesForTesting = () =>
+                    new HotReloadChangedFileAggregationResult(
+                        hasBaseline: false,
+                        changedProjectRelativePaths: new List<string>(),
+                        scanLimitWarnings: new List<string>());
 
-            Assert.That(response, Is.Not.Null);
-            Assert.That(json.Value<string>("ErrorCode"), Is.EqualTo("HOT_RELOAD_FILES_REQUIRED"));
-            Assert.That(nextActions, Is.Not.Null);
-            Assert.That(
-                nextActions.ToObject<string[]>(),
-                Is.EqualTo(
-                    new[]
-                    {
-                        "Pass project-relative .cs paths with --files.",
-                        "Run 'uloop hot-reload --status' to inspect active patches."
-                    }));
+                HotReloadResponse response = await ExecuteAsync(new JObject());
+                JObject json = SerializeResponse(response);
+                JArray nextActions = json["NextActions"] as JArray;
+
+                Assert.That(json.Value<string>("ErrorCode"), Is.EqualTo("HOT_RELOAD_FILES_REQUIRED"));
+                Assert.That(nextActions, Is.Not.Null);
+                Assert.That(
+                    nextActions.ToObject<string[]>(),
+                    Is.EqualTo(
+                        new[]
+                        {
+                            "Run 'uloop compile' to create source snapshots.",
+                            "Pass project-relative .cs paths with --files."
+                        }));
+            }
+            finally
+            {
+                HotReloadTool.DetectChangedFilesForTesting = previousDetector;
+            }
         }
 
         /// <summary>
