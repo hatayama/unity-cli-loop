@@ -1873,23 +1873,23 @@ func TestParseUnknownOptionErrorsOmitStaleRunnerHint(t *testing.T) {
 	}
 }
 
-// Verifies await-pause-point requires a marker id.
-func TestParseWaitForPausePointOptionsRequiresID(t *testing.T) {
+// Verifies await-pause-point requires either a marker id or a complete file:line target.
+func TestParseWaitForPausePointOptionsRequiresMarkerTarget(t *testing.T) {
 	_, err := parseWaitForPausePointOptions([]string{"--timeout-seconds", "1"})
 
 	if err == nil {
-		t.Fatal("expected missing id error")
+		t.Fatal("expected missing marker target error")
 	}
-	if !strings.Contains(err.Error(), "Missing required option") {
+	if err.Error() != "Missing required option: --id" {
 		t.Fatalf("error mismatch: %v", err)
 	}
 }
 
-// Verifies the missing --id NextAction names both Pause ids and file:line ids.
-func TestParseWaitForPausePointOptionsMissingIDNextActionMentionsFileLineIds(t *testing.T) {
+// Verifies the missing-target NextAction explains both id and file:line forms for await.
+func TestParseWaitForPausePointOptionsMissingTargetNextActionMentionsFileLineFlags(t *testing.T) {
 	_, err := parseWaitForPausePointOptions([]string{"--timeout-seconds", "1"})
 	requireNextActions(t, err, []string{
-		"Pass --id <marker-id> matching UloopPausePoint.Pause(\"<marker-id>\"), or the Id returned by enable-pause-point (file:line markers use <project-relative path>:<line>, e.g. Assets/Scripts/Foo.cs:42).",
+		"Pass --id <marker-id> matching UloopPausePoint.Pause(\"<marker-id>\"), or the Id returned by enable-pause-point (file:line markers use <project-relative path>:<line>, e.g. Assets/Scripts/Foo.cs:42). Alternatively, query a file:line marker with --file <project-relative path> --line <line>.",
 	})
 }
 
@@ -2681,24 +2681,143 @@ func TestRunPausePointStatusDerivesRemainingTimeFromOlderResponse(t *testing.T) 
 	}
 }
 
-// Verifies pause-point-status requires a marker id.
-func TestParsePausePointStatusOptionsRequiresID(t *testing.T) {
+// Verifies pause-point-status requires either a marker id or a complete file:line target.
+func TestParsePausePointStatusOptionsRequiresMarkerTarget(t *testing.T) {
 	_, err := parsePausePointStatusOptions([]string{})
 
 	if err == nil {
-		t.Fatal("expected missing id error")
+		t.Fatal("expected missing marker target error")
 	}
-	if !strings.Contains(err.Error(), "Missing required option") {
+	if err.Error() != "Missing required option: --id" {
 		t.Fatalf("error mismatch: %v", err)
 	}
 }
 
-// Verifies pause-point-status missing --id uses the same file:line NextAction as await.
-func TestParsePausePointStatusOptionsMissingIDNextActionMentionsFileLineIds(t *testing.T) {
+// Verifies the missing-target NextAction explains both id and file:line forms for status.
+func TestParsePausePointStatusOptionsMissingTargetNextActionMentionsFileLineFlags(t *testing.T) {
 	_, err := parsePausePointStatusOptions([]string{})
 	requireNextActions(t, err, []string{
-		"Pass --id <marker-id> matching UloopPausePoint.Pause(\"<marker-id>\"), or the Id returned by enable-pause-point (file:line markers use <project-relative path>:<line>, e.g. Assets/Scripts/Foo.cs:42).",
+		"Pass --id <marker-id> matching UloopPausePoint.Pause(\"<marker-id>\"), or the Id returned by enable-pause-point (file:line markers use <project-relative path>:<line>, e.g. Assets/Scripts/Foo.cs:42). Alternatively, query a file:line marker with --file <project-relative path> --line <line>.",
 	})
+}
+
+// Verifies both query commands compose a source marker id from --file and decimal --line values.
+func TestParsePausePointQueryOptionsComposeFileLineID(t *testing.T) {
+	awaitOptions, awaitErr := parseWaitForPausePointOptions([]string{
+		"--file", `Assets\Scripts\Marker.cs`, "--line", "0042",
+	})
+	if awaitErr != nil {
+		t.Fatalf("await file:line parse failed: %v", awaitErr)
+	}
+	if awaitOptions.id != "Assets/Scripts/Marker.cs:42" {
+		t.Fatalf("await id = %q", awaitOptions.id)
+	}
+
+	statusOptions, statusErr := parsePausePointStatusOptions([]string{
+		"--file", "/source/Assets/Scripts/Marker.cs", "--line", "7",
+	})
+	if statusErr != nil {
+		t.Fatalf("status file:line parse failed: %v", statusErr)
+	}
+	if statusOptions.id != "/source/Assets/Scripts/Marker.cs:7" {
+		t.Fatalf("status id = %q", statusOptions.id)
+	}
+}
+
+// Verifies file and line must be supplied together for both pause-point query commands.
+func TestParsePausePointQueryOptionsRequireCompleteFileLinePair(t *testing.T) {
+	_, awaitFileErr := parseWaitForPausePointOptions([]string{"--file", "Assets/Scripts/Marker.cs"})
+	if awaitFileErr == nil || awaitFileErr.Error() != "--file requires --line." {
+		t.Fatalf("await file-only error = %v", awaitFileErr)
+	}
+	_, awaitLineErr := parseWaitForPausePointOptions([]string{"--line", "42"})
+	if awaitLineErr == nil || awaitLineErr.Error() != "--line requires --file." {
+		t.Fatalf("await line-only error = %v", awaitLineErr)
+	}
+
+	_, statusFileErr := parsePausePointStatusOptions([]string{"--file", "Assets/Scripts/Marker.cs"})
+	if statusFileErr == nil || statusFileErr.Error() != "--file requires --line." {
+		t.Fatalf("status file-only error = %v", statusFileErr)
+	}
+	_, statusLineErr := parsePausePointStatusOptions([]string{"--line", "42"})
+	if statusLineErr == nil || statusLineErr.Error() != "--line requires --file." {
+		t.Fatalf("status line-only error = %v", statusLineErr)
+	}
+}
+
+// Verifies id and file:line target forms are mutually exclusive for both query commands.
+func TestParsePausePointQueryOptionsRejectCombinedIDAndFileLineTarget(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "complete file line target",
+			args: []string{"--id", "marker", "--file", "Assets/Scripts/Marker.cs", "--line", "42"},
+		},
+		{
+			name: "file only target",
+			args: []string{"--id", "marker", "--file", "Assets/Scripts/Marker.cs"},
+		},
+		{
+			name: "line only target",
+			args: []string{"--id", "marker", "--line", "42"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, awaitErr := parseWaitForPausePointOptions(test.args)
+			if awaitErr == nil || awaitErr.Error() != "--id cannot be combined with --file or --line." {
+				t.Fatalf("await combined-target error = %v", awaitErr)
+			}
+
+			_, statusErr := parsePausePointStatusOptions(test.args)
+			if statusErr == nil || statusErr.Error() != "--id cannot be combined with --file or --line." {
+				t.Fatalf("status combined-target error = %v", statusErr)
+			}
+		})
+	}
+}
+
+// Verifies both query commands reject non-positive and non-numeric --line values before id composition.
+func TestParsePausePointQueryOptionsRejectInvalidLine(t *testing.T) {
+	tests := []struct {
+		name      string
+		line      string
+		wantError string
+	}{
+		{
+			name:      "non numeric",
+			line:      "forty-two",
+			wantError: "Invalid positive integer value for --line: forty-two",
+		},
+		{
+			name:      "zero",
+			line:      "0",
+			wantError: "Invalid positive integer value for --line: 0",
+		},
+		{
+			name:      "negative",
+			line:      "-42",
+			wantError: "Invalid positive integer value for --line: -42",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"--file", "Assets/Scripts/Marker.cs", "--line", test.line}
+			_, awaitErr := parseWaitForPausePointOptions(args)
+			if awaitErr == nil || awaitErr.Error() != test.wantError {
+				t.Fatalf("await line error = %v", awaitErr)
+			}
+
+			_, statusErr := parsePausePointStatusOptions(args)
+			if statusErr == nil || statusErr.Error() != test.wantError {
+				t.Fatalf("status line error = %v", statusErr)
+			}
+		})
+	}
 }
 
 func parsePausePointErrorEnvelope(t *testing.T, payload []byte) clierrors.CLIErrorEnvelope {
