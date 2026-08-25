@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 using UnityEditor;
 using UnityEditor.Compilation;
@@ -56,7 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UloopPausePointHitWhenCondition hitWhenCondition = hitWhenParseResult == null
                 ? null
                 : hitWhenParseResult.Condition;
-            string captureSettingsError = ValidateCaptureSettings(parameters, hitWhenParseResult);
+            string captureSettingsError = PausePointEnableValidation.ValidateCaptureSettings(parameters, hitWhenParseResult);
             if (captureSettingsError != null)
             {
                 return CreateValidationFailure(
@@ -65,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Fix the rejected capture argument described in Message and re-run; uloop enable-pause-point --help lists the accepted values.");
             }
 
-            string modeError = ValidateEnableMode(parameters);
+            string modeError = PausePointEnableValidation.ValidateEnableMode(parameters);
             if (modeError != null)
             {
                 return CreateValidationFailure(
@@ -145,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return PausePointResponse.FromClearAll(clearAllResult);
             }
 
-            string idError = ValidateId(parameters.Id);
+            string idError = PausePointEnableValidation.ValidateId(parameters.Id);
             if (idError != null)
             {
                 return CreateValidationFailure(
@@ -556,93 +555,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string BuildSourcePausePointId(string file, int line)
         {
             return SourcePausePointPathNormalizer.ToForwardSlashes(file) + ":" + line;
-        }
-
-        // Returns an error message when the Id/File/Line combination fails validation, or null
-        // when exactly one of "Id" or "File"+"Line" is provided.
-        private static string ValidateEnableMode(EnablePausePointSchema parameters)
-        {
-            bool hasId = !string.IsNullOrWhiteSpace(parameters.Id);
-            bool hasFile = !string.IsNullOrWhiteSpace(parameters.File);
-            bool hasLine = parameters.Line > 0;
-
-            if (hasId && (hasFile || hasLine))
-            {
-                return "Specify either Id or File and Line, not both.";
-            }
-
-            if (!hasId && !hasFile && !hasLine)
-            {
-                return "Id must not be null or empty.";
-            }
-
-            if (!hasId && hasFile != hasLine)
-            {
-                return "File and Line must both be provided together.";
-            }
-
-            return null;
-        }
-
-        private static string ValidateCaptureSettings(
-            EnablePausePointSchema parameters,
-            UloopPausePointHitWhenParseResult hitWhenParseResult)
-        {
-            string[] supportedModes =
-            {
-                UloopPausePointCaptureMode.SingleShot,
-                UloopPausePointCaptureMode.Continuous,
-                UloopPausePointCaptureMode.Trace
-            };
-            if (!supportedModes.Contains(parameters.Mode))
-            {
-                return $"Mode must be one of: {string.Join(", ", supportedModes)}.";
-            }
-
-            if (parameters.MaxHistory <= 0 || parameters.MaxHistory > UloopPausePointRegistry.MaxHistoryLimit)
-            {
-                return $"MaxHistory must be between 1 and {UloopPausePointRegistry.MaxHistoryLimit}.";
-            }
-
-            if (parameters.MaxPreviewElements <= 0 ||
-                parameters.MaxPreviewElements > UloopPausePointRegistry.MaxPreviewElementsLimit)
-            {
-                return $"MaxPreviewElements must be between 1 and {UloopPausePointRegistry.MaxPreviewElementsLimit}.";
-            }
-
-            if (parameters.MaxCallerFrames < 0 ||
-                parameters.MaxCallerFrames > UloopPausePointRegistry.MaxCallerFramesLimit)
-            {
-                return $"MaxCallerFrames must be between 0 and {UloopPausePointRegistry.MaxCallerFramesLimit}.";
-            }
-
-            if (string.IsNullOrWhiteSpace(parameters.HitWhen))
-            {
-                return null;
-            }
-
-            if (!string.IsNullOrWhiteSpace(parameters.Id) && string.IsNullOrWhiteSpace(parameters.File))
-            {
-                return "--hit-when requires a --file/--line marker.";
-            }
-
-            if (!string.IsNullOrEmpty(hitWhenParseResult.ErrorMessage))
-            {
-                return hitWhenParseResult.ErrorMessage;
-            }
-
-            return null;
-        }
-
-        // Returns an error message when id fails validation, or null when it is valid.
-        private static string ValidateId(string id)
-        {
-            if (string.IsNullOrWhiteSpace(id))
-            {
-                return "Id must not be null or empty.";
-            }
-
-            return null;
         }
 
         private static PausePointResponse CreateValidationFailure(
