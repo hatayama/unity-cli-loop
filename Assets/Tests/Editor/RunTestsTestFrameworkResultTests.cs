@@ -251,11 +251,76 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
 
+            Assert.That(result.success, Is.False);
+            Assert.That(result.status, Is.EqualTo("Skipped"));
+            Assert.That(result.message, Is.EqualTo("Test execution completed with status: Skipped"));
             Assert.That(result.skippedCount, Is.EqualTo(11));
             Assert.That(result.skippedTests, Is.Not.Null);
             Assert.That(result.skippedTests.Length, Is.EqualTo(10));
             Assert.That(result.skippedTests[0], Is.EqualTo("Example.Tests.SkippedTest0"));
             Assert.That(result.skippedTests[9], Is.EqualTo("Example.Tests.SkippedTest9"));
+        }
+
+        /// <summary>
+        /// What: passed and skipped leaves use the all-green aggregation when the root is Inconclusive.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenPassedAndSkippedLeavesHaveInconclusiveRoot_ReturnsPassedSuccess()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Inconclusive,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("PassingTest", TestResultStatus.Passed, 0.1),
+                    CreateTestCase("SkippedTest", TestResultStatus.Skipped, 0.1)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(result.success, Is.True);
+            Assert.That(result.status, Is.EqualTo("Passed"));
+            Assert.That(result.message, Is.EqualTo("Test execution completed with status: Passed"));
+        }
+
+        /// <summary>
+        /// What: skipped full names preserve depth-first result-tree order across nested suites.
+        /// </summary>
+        [Test]
+        public void FromTestResult_WhenSkippedLeavesSpanNestedSuites_CollectsAllNamesInTraversalOrder()
+        {
+            ITestResultAdaptor resultAdaptor = CreateTestSuite(
+                "RootSuite",
+                TestResultStatus.Skipped,
+                0.1,
+                new List<ITestResultAdaptor>
+                {
+                    CreateTestCase("SkippedBefore", TestResultStatus.Skipped, 0.1),
+                    CreateTestSuite(
+                        "NestedSuite",
+                        TestResultStatus.Skipped,
+                        0.1,
+                        new List<ITestResultAdaptor>
+                        {
+                            CreateTestCase("SkippedNestedFirst", TestResultStatus.Skipped, 0.1),
+                            CreateTestCase("SkippedNestedSecond", TestResultStatus.Skipped, 0.1)
+                        }),
+                    CreateTestCase("SkippedAfter", TestResultStatus.Skipped, 0.1)
+                });
+
+            SerializableTestResult result = SerializableTestResultConverter.FromTestResult(resultAdaptor);
+
+            Assert.That(
+                result.skippedTests,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Example.Tests.SkippedBefore",
+                        "Example.Tests.SkippedNestedFirst",
+                        "Example.Tests.SkippedNestedSecond",
+                        "Example.Tests.SkippedAfter"
+                    }));
         }
 
         /// <summary>
