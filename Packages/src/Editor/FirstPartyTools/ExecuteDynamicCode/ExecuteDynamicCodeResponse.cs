@@ -17,6 +17,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         
         /// <summary>Log messages</summary>
         public List<string> Logs { get; set; } = new();
+
+        /// <summary>
+        /// Values a dynamic-code snippet explicitly saved before its execution completed or failed.
+        /// </summary>
+        public Dictionary<string, string> PartialResults { get; set; } = new();
         
         /// <summary>Compilation errors</summary>
         public List<CompilationErrorDto> CompilationErrors { get; set; } = new();
@@ -111,6 +116,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeTimings()
         {
             return EmitTimingsInJsonResponse && Timings != null && Timings.Count > 0;
+        }
+
+        public bool ShouldSerializePartialResults()
+        {
+            return PartialResults != null && PartialResults.Count > 0;
         }
 
         public bool ShouldSerializeEmitTimingsInJsonResponse()

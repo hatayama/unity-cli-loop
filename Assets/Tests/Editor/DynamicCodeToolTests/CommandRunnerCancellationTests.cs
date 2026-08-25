@@ -17,6 +17,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     {
         private static readonly TimeSpan CancellationPropagationTimeout = TimeSpan.FromSeconds(1);
 
+        [TearDown]
+        public void TearDown()
+        {
+            UloopDynamicCodePartialResults.Clear();
+        }
+
+        /// <summary>
+        /// What: cancellation returns partial results captured before the command's task outlives the request.
+        /// </summary>
         [Test]
         public async Task ExecuteAsync_WhenAsyncResultIgnoresCancellation_ShouldCancelAndAllowNextExecution()
         {
@@ -36,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 ExecutionResult firstResult = await AwaitResultWithinTimeoutAsync(firstExecution);
                 Assert.That(firstResult.Success, Is.False);
                 Assert.That(firstResult.ErrorMessage, Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED));
+                Assert.That(firstResult.PartialResults["phase"], Is.EqualTo("running"));
                 Assert.That(runner.IsRunning, Is.False);
 
                 WrappedDynamicCommandState.PrepareReturningCommand("ready");
@@ -51,6 +61,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             {
                 WrappedDynamicCommandState.CompleteBlockingCommand();
             }
+        }
+
+        /// <summary>
+        /// What: a successful command replaces stale entries with the values it opted in to report.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenCommandSucceeds_CapturesOnlyCurrentPartialResults()
+        {
+            UloopDynamicCodePartialResults.Set("stale", "previous request");
+            WrappedDynamicCommandState.PrepareReturningCommandWithPartialResult(
+                "ready",
+                "completed",
+                3);
+            CommandRunner runner = new();
+
+            ExecutionResult result = await runner.ExecuteAsync(CreateContext(CancellationToken.None));
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.PartialResults, Has.Count.EqualTo(1));
+            Assert.That(result.PartialResults["completed"], Is.EqualTo("3"));
+        }
+
+        /// <summary>
+        /// What: an invocation exception retains values captured before the exception was thrown.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenCommandThrows_CapturesPartialResults()
+        {
+            WrappedDynamicCommandState.PrepareThrowingCommand("beforeThrow", "saved");
+            CommandRunner runner = new();
+
+            ExecutionResult result = await runner.ExecuteAsync(CreateContext(CancellationToken.None));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Is.EqualTo("planned failure"));
+            Assert.That(result.PartialResults["beforeThrow"], Is.EqualTo("saved"));
         }
 
         [Test]
@@ -153,6 +199,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
     {
         private static string _returnValue = "";
         private static bool _shouldComplete;
+        private static bool _shouldThrow;
+        private static string _partialResultName = string.Empty;
+        private static object _partialResultValue;
         private static TaskCompletionSource<object> _blockingCompletionSource =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         private static TaskCompletionSource<bool> _startedCompletionSource =
@@ -163,7 +212,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public static void PrepareBlockingCommand()
         {
             _shouldComplete = false;
+            _shouldThrow = false;
             _returnValue = "";
+            _partialResultName = "phase";
+            _partialResultValue = "running";
             _blockingCompletionSource = new TaskCompletionSource<object>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             _startedCompletionSource = new TaskCompletionSource<bool>(
@@ -173,7 +225,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public static void PrepareReturningCommand(string returnValue)
         {
             _shouldComplete = true;
+            _shouldThrow = false;
             _returnValue = returnValue;
+            _partialResultName = string.Empty;
+            _partialResultValue = null;
+            _startedCompletionSource = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        public static void PrepareReturningCommandWithPartialResult(
+            string returnValue,
+            string partialResultName,
+            object partialResultValue)
+        {
+            _shouldComplete = true;
+            _shouldThrow = false;
+            _returnValue = returnValue;
+            _partialResultName = partialResultName;
+            _partialResultValue = partialResultValue;
+            _startedCompletionSource = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        public static void PrepareThrowingCommand(string partialResultName, object partialResultValue)
+        {
+            _shouldComplete = false;
+            _shouldThrow = true;
+            _returnValue = string.Empty;
+            _partialResultName = partialResultName;
+            _partialResultValue = partialResultValue;
             _startedCompletionSource = new TaskCompletionSource<bool>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
         }
@@ -187,6 +267,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             // This intentionally ignores ct because the regression occurs when user code does not observe it.
             _startedCompletionSource.TrySetResult(true);
+            if (!string.IsNullOrEmpty(_partialResultName))
+            {
+                UloopDynamicCodePartialResults.Set(_partialResultName, _partialResultValue);
+            }
+
+            if (_shouldThrow)
+            {
+                throw new InvalidOperationException("planned failure");
+            }
+
             if (_shouldComplete)
             {
                 return Task.FromResult<object>(_returnValue);

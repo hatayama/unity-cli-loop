@@ -170,6 +170,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// What: opted-in partial results flow from ExecutionResult through the response serializer.
+        /// </summary>
+        [Test]
+        public void ConvertExecutionResultToResponse_WhenPartialResultsExist_SerializesTheirValues()
+        {
+            DynamicCodeExecutionResponseFactory factory = new();
+            ExecutionResult result = new()
+            {
+                Success = false,
+                ErrorMessage = "execution failed",
+                PartialResults = new Dictionary<string, string>
+                {
+                    ["completedSteps"] = "2"
+                }
+            };
+
+            ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result);
+            JObject serialized = JObject.Parse(
+                JsonConvert.SerializeObject(response, JsonRpcResponseSerializer.Settings));
+
+            Assert.That(response.PartialResults["completedSteps"], Is.EqualTo("2"));
+            Assert.That(serialized["PartialResults"]?["completedSteps"]?.Value<string>(), Is.EqualTo("2"));
+        }
+
+        /// <summary>
+        /// What: empty partial results remain absent from the dynamic-code JSON contract.
+        /// </summary>
+        [Test]
+        public void ExecuteDynamicCodeResponse_WhenPartialResultsAreEmpty_OmitsTheirJsonKey()
+        {
+            ExecuteDynamicCodeResponse response = new();
+
+            JObject serialized = JObject.Parse(
+                JsonConvert.SerializeObject(response, JsonRpcResponseSerializer.Settings));
+
+            Assert.That(serialized.Property("PartialResults"), Is.Null);
+        }
+
+        /// <summary>
         /// What: an injected unfocused provider adds the exact hint to a Play Mode response.
         /// </summary>
         [Test]

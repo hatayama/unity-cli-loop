@@ -51,6 +51,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(serializedResponse["DomainReloadWaitRequired"], Is.Null);
         }
 
+        /// <summary>
+        /// What: a cancelled ExecutionResult retains partial results in the dedicated cancellation response.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenResultIsCancelled_MapsPartialResults()
+        {
+            MarkForegroundWarmupCompleted();
+            ExecuteDynamicCodeUseCase useCase = new(
+                new FakeDynamicCodeExecutionRuntime(
+                    new ExecutionResult
+                    {
+                        Success = false,
+                        ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED,
+                        PartialResults = new Dictionary<string, string>
+                        {
+                            ["beforeCancel"] = "saved"
+                        }
+                    }));
+
+            ExecuteDynamicCodeResponse response = await useCase.ExecuteAsync(
+                new ExecuteDynamicCodeSchema { Code = "return 1;" },
+                CancellationToken.None);
+
+            Assert.That(response.PartialResults["beforeCancel"], Is.EqualTo("saved"));
+        }
+
         [Test]
         public void ExecuteDynamicCodeResponse_WhenSerializedWithInternalSignals_KeepsControlFieldNames()
         {

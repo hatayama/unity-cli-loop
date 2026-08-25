@@ -91,16 +91,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             catch (OperationCanceledException)
             {
                 await MainThreadSwitcher.SwitchToMainThread();
-                return CreateCancelledResult();
+                return CapturePartialResults(CreateCancelledResult());
             }
             catch (Exception ex)
             {
                 LogExecutionError(ex, correlationId);
                 await MainThreadSwitcher.SwitchToMainThread();
 
-                return CreateErrorResult(
-                    ex.Message,
-                    new List<string> { $"Exception: {ex.Message}" });
+                return CapturePartialResults(
+                    CreateErrorResult(
+                        ex.Message,
+                        new List<string> { $"Exception: {ex.Message}" }));
             }
             finally
             {
@@ -181,6 +182,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
+        private static ExecutionResult CapturePartialResults(ExecutionResult result)
+        {
+            System.Diagnostics.Debug.Assert(result != null, "result must not be null");
+            result.PartialResults = UloopDynamicCodePartialResults.Snapshot();
+            return result;
+        }
+
         private static object CreateInstance(Type targetType)
         {
             return Activator.CreateInstance(targetType);
@@ -198,9 +206,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private ExecutionResult ExecuteInternal(ExecutionContext context, CancellationToken cancellationToken)
         {
+            UloopDynamicCodePartialResults.Clear();
             if (context.CompiledAssembly == null)
             {
-                return CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_NO_COMPILED_ASSEMBLY);
+                return CapturePartialResults(
+                    CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_NO_COMPILED_ASSEMBLY));
             }
 
             try
@@ -211,16 +221,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 
                 if (targetType == null || executeMethod == null)
                 {
-                    return CreateErrorResult(
-                        UnityCliLoopConstants.ERROR_MESSAGE_NO_EXECUTE_METHOD,
-                        new List<string> { "Assembly types checked but no Execute method found" });
+                    return CapturePartialResults(
+                        CreateErrorResult(
+                            UnityCliLoopConstants.ERROR_MESSAGE_NO_EXECUTE_METHOD,
+                            new List<string> { "Assembly types checked but no Execute method found" }));
                 }
 
                 // Create instance
                 object instance = CreateInstance(targetType);
                 if (instance == null)
                 {
-                    return CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_FAILED_TO_CREATE_INSTANCE);
+                    return CapturePartialResults(
+                        CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_FAILED_TO_CREATE_INSTANCE));
                 }
 
                 // Check cancellation
@@ -238,13 +250,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     // Convert result to string
                     string resultString = executionResult?.ToString() ?? "";
                     
-                    return CreateSuccessResult(resultString);
+                    return CapturePartialResults(CreateSuccessResult(resultString));
                 }
                 catch (NotSupportedException ex)
                 {
-                    return CreateErrorResult(
-                        UnityCliLoopConstants.ERROR_MESSAGE_UNSUPPORTED_SIGNATURE,
-                        new List<string> { ex.Message });
+                    return CapturePartialResults(
+                        CreateErrorResult(
+                            UnityCliLoopConstants.ERROR_MESSAGE_UNSUPPORTED_SIGNATURE,
+                            new List<string> { ex.Message }));
                 }
             }
             catch (OperationCanceledException)
@@ -260,31 +273,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     throw innerException;
                 }
                 
-                return CreateErrorResult(
-                    innerException.Message,
-                    new List<string> 
-                    { 
-                        $"Target invocation exception: {innerException.Message}",
-                        $"Stack trace: {innerException.StackTrace}"
-                    });
+                return CapturePartialResults(
+                    CreateErrorResult(
+                        innerException.Message,
+                        new List<string>
+                        {
+                            $"Target invocation exception: {innerException.Message}",
+                            $"Stack trace: {innerException.StackTrace}"
+                        }));
             }
             catch (Exception ex)
             {
-                return CreateErrorResult(
-                    ex.Message,
-                    new List<string> 
-                    { 
-                        $"Execution exception: {ex.Message}",
-                        $"Stack trace: {ex.StackTrace}"
-                    });
+                return CapturePartialResults(
+                    CreateErrorResult(
+                        ex.Message,
+                        new List<string>
+                        {
+                            $"Execution exception: {ex.Message}",
+                            $"Stack trace: {ex.StackTrace}"
+                        }));
             }
         }
 
         private async Task<ExecutionResult> ExecuteInternalAsync(ExecutionContext context, CancellationToken cancellationToken)
         {
+            UloopDynamicCodePartialResults.Clear();
             if (context.CompiledAssembly == null)
             {
-                return CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_NO_COMPILED_ASSEMBLY);
+                return CapturePartialResults(
+                    CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_NO_COMPILED_ASSEMBLY));
             }
 
             try
@@ -297,7 +314,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     object instance = CreateInstance(asyncType);
                     if (instance == null)
                     {
-                        return CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_FAILED_TO_CREATE_INSTANCE);
+                        return CapturePartialResults(
+                            CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_FAILED_TO_CREATE_INSTANCE));
                     }
 
                     cancellationToken.ThrowIfCancellationRequested();
@@ -311,7 +329,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     object awaitedResult = await AwaitableHelper.AwaitIfNeeded(invoked, cancellationToken).ConfigureAwait(false);
                     string resultString = awaitedResult?.ToString() ?? "";
 
-                    return CreateSuccessResult(resultString);
+                    return CapturePartialResults(CreateSuccessResult(resultString));
                 }
 
                 // Fallback to sync path if no async method found
@@ -330,23 +348,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     throw innerException;
                 }
 
-                return CreateErrorResult(
-                    innerException.Message,
-                    new List<string>
-                    {
-                        $"Target invocation exception: {innerException.Message}",
-                        $"Stack trace: {innerException.StackTrace}"
-                    });
+                return CapturePartialResults(
+                    CreateErrorResult(
+                        innerException.Message,
+                        new List<string>
+                        {
+                            $"Target invocation exception: {innerException.Message}",
+                            $"Stack trace: {innerException.StackTrace}"
+                        }));
             }
             catch (Exception ex)
             {
-                return CreateErrorResult(
-                    ex.Message,
-                    new List<string>
-                    {
-                        $"Execution exception: {ex.Message}",
-                        $"Stack trace: {ex.StackTrace}"
-                    });
+                return CapturePartialResults(
+                    CreateErrorResult(
+                        ex.Message,
+                        new List<string>
+                        {
+                            $"Execution exception: {ex.Message}",
+                            $"Stack trace: {ex.StackTrace}"
+                        }));
             }
         }
 

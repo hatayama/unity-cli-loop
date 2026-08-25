@@ -83,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (DynamicCodeExecutionResponseFactory.IsCancelledResult(finalResult))
                 {
                     ExecuteDynamicCodeResponse cancelledResponse =
-                        DynamicCodeExecutionResponseFactory.CreateCancelledResponse();
+                        DynamicCodeExecutionResponseFactory.CreateCancelledResponse(finalResult);
                     cancelledResponse.Logs = finalResult.Logs ?? cancelledResponse.Logs;
                     cancelledResponse.Timings = finalResult.Timings != null
                         ? new List<string>(finalResult.Timings)
