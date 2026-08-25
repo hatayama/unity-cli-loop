@@ -84,6 +84,33 @@ func TestRunProjectLocalPausePointStatusHelpOptionsSection(t *testing.T) {
 	assertNativeCommandHelpOptionsSection(t, "pause-point-status", expectedOptions)
 }
 
+// Verifies list --help prints the complete names-only option contract, including the usage and
+// global options sections that callers need after the unknown-option recovery guidance.
+func TestRunProjectLocalListHelpOutput(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(context.Background(), []string{"list", "--help"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("list --help failed: code=%d stderr=%s", code, stderr.String())
+	}
+
+	const expected = "Usage:\n" +
+		"  uloop list [options]\n" +
+		"\n" +
+		"Show Unity tools currently exposed by the Editor\n" +
+		"\n" +
+		"Options:\n" +
+		"  --names                            Show command names only, one per line\n" +
+		"\n" +
+		"Global options:\n" +
+		"  --project-path <path>   Run against a Unity project outside the current directory\n"
+	if stdout.String() != expected {
+		t.Fatalf("list --help output mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expected)
+	}
+}
+
 func assertNativeCommandHelpOptionsSection(t *testing.T, command string, expectedOptions string) {
 	t.Helper()
 	t.Chdir(t.TempDir())
@@ -143,10 +170,10 @@ func TestRunProjectLocalPausePointHelpPointsAtTheSkill(t *testing.T) {
 	}
 }
 
-// Verifies list/sync/focus-window --help print only the global --project-path
+// Verifies sync/focus-window --help print only the global --project-path
 // option, since these commands take no command-specific flags.
 func TestRunProjectLocalNoOptionCommandsHelpListsOnlyGlobalOption(t *testing.T) {
-	for _, command := range []string{"list", "sync", "focus-window"} {
+	for _, command := range []string{"sync", "focus-window"} {
 		t.Run(command, func(t *testing.T) {
 			t.Chdir(t.TempDir())
 

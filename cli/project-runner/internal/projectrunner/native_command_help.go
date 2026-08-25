@@ -25,6 +25,8 @@ const (
 // is advertised and recognized without a second handwritten name list.
 func runnerNativeCLIOnlyOptions(command string) []tooldocs.PausePointCLIOnlyOption {
 	switch command {
+	case "list":
+		return tooldocs.ListCLIOnlyOptions()
 	case clicore.PausePointAwaitCommandName:
 		return tooldocs.PausePointAwaitCLIOnlyOptions()
 	case clicore.PausePointStatusUserCommandName:

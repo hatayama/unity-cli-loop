@@ -95,6 +95,26 @@ func TestPrintProjectLocalHelpListsNativeCommandsAndLiveToolGuidance(t *testing.
 	}
 }
 
+// Verifies the names-only list guidance is a complete aligned footer line, so agents can discover
+// the compact command listing without parsing the full live tool catalog.
+func TestPrintDispatcherHelpListsNamesOnlyFooterLine(t *testing.T) {
+	var stdout bytes.Buffer
+
+	printDispatcherHelp(&stdout)
+
+	const expected = "  uloop list --names                          Show command names only, one per line"
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		if !strings.HasPrefix(line, "  uloop list --names") {
+			continue
+		}
+		if line != expected {
+			t.Fatalf("names-only footer line mismatch: got %q want %q", line, expected)
+		}
+		return
+	}
+	t.Fatalf("help output missing names-only footer line %q:\n%s", expected, stdout.String())
+}
+
 // Tests that dispatcher help with --project-path includes cached tools from that explicit project.
 func TestRunDispatcherHelpWithProjectPathShowsCachedProjectTools(t *testing.T) {
 	projectRoot := createLaunchTestProject(t)

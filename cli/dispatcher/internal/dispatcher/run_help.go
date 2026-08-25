@@ -71,6 +71,7 @@ func printMainHelp(stdout io.Writer, displayVersion string, description string, 
 	clicore.WriteLine(stdout, "")
 	clicore.WriteLine(stdout, "More:")
 	clicore.WriteLine(stdout, "  uloop list                                  Show the live Unity tool list")
+	clicore.WriteLine(stdout, "  uloop list --names                          Show command names only, one per line")
 	clicore.WriteLine(stdout, "  uloop --project-path /path/to/project list  Show tools for another Unity project")
 	clicore.WriteLine(stdout, "  uloop <command> --help                      Show help for native and Unity tool commands")
 }
