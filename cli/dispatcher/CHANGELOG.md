@@ -1,5 +1,40 @@
 # Changelog
 
+## [3.0.0-beta.33](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.32...dispatcher-v3.0.0-beta.33) (2026-08-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* align CLI option names across first-party tools ([#2422](https://github.com/hatayama/unity-cli-loop/issues/2422))
+
+### Features
+
+* accept --file and --line on pause-point-status and await-pause-point ([#2411](https://github.com/hatayama/unity-cli-loop/issues/2411)) ([f650e36](https://github.com/hatayama/unity-cli-loop/commit/f650e36a6bcbd2880dba6ee385c59181895e756f))
+* add a compact command-name listing to uloop list ([13f5d06](https://github.com/hatayama/unity-cli-loop/commit/13f5d06bba57bfb7f1afdb430dab4e2e7fd384d4))
+* add a max-caller-frames option to enable-pause-point ([779c32b](https://github.com/hatayama/unity-cli-loop/commit/779c32b5af581bdca603be069f245711e4d4760d))
+* add uloop hot-reload for live C# patching without domain reload ([#2254](https://github.com/hatayama/unity-cli-loop/issues/2254)) ([20e97f6](https://github.com/hatayama/unity-cli-loop/commit/20e97f69c6fd6f64095934a4eebdc18115329e6a))
+* align CLI option names across first-party tools ([#2422](https://github.com/hatayama/unity-cli-loop/issues/2422)) ([2e4daff](https://github.com/hatayama/unity-cli-loop/commit/2e4daff6536a7febe88841d9c6104b2fbf8923ff))
+* compile pending script changes before running tests ([5ab6770](https://github.com/hatayama/unity-cli-loop/commit/5ab6770185af6444b9074424fd88bb667cf8f67b))
+* default hot-reload --files to sources changed since the last compile ([1c75e85](https://github.com/hatayama/unity-cli-loop/commit/1c75e85ade883553f691c91d116ed9501bb91835))
+* default screenshot capture mode to rendering during Play Mode ([#2379](https://github.com/hatayama/unity-cli-loop/issues/2379)) ([393c11f](https://github.com/hatayama/unity-cli-loop/commit/393c11fa00e8cce3bb6e8058b0a06da56ec34233))
+* focus a freshly launched Unity while waiting for readiness ([#2344](https://github.com/hatayama/unity-cli-loop/issues/2344)) ([a931e0d](https://github.com/hatayama/unity-cli-loop/commit/a931e0d3f8f98dcee1a40525a8fec3633c2760fb))
+* gate pause-point hits with the hit-when condition ([#2405](https://github.com/hatayama/unity-cli-loop/issues/2405)) ([f5f4e33](https://github.com/hatayama/unity-cli-loop/commit/f5f4e3391e3a131b92d12288fbfe633b4a3c4914))
+* include the running tool's elapsed time in single-flight busy rejections ([c5709bd](https://github.com/hatayama/unity-cli-loop/commit/c5709bd769e384249e2d0d4ea1235ad110e30b22))
+* install skills into any directory with the new --output-dir option ([#2332](https://github.com/hatayama/unity-cli-loop/issues/2332)) ([f3c8051](https://github.com/hatayama/unity-cli-loop/commit/f3c8051de70e90c57ab03305649c44ca28c56d37))
+* list all markers when pause-point-status omits --id ([#2413](https://github.com/hatayama/unity-cli-loop/issues/2413)) ([aee4288](https://github.com/hatayama/unity-cli-loop/commit/aee4288a2415efa148e335572442307402cb19e6))
+* Remove the leftover uloop completion command ([50aa929](https://github.com/hatayama/unity-cli-loop/commit/50aa92925f963450e0becf6c113366b12ab2a42c))
+* report interim compile-wait diagnostics so a stalled compile is visible before the timeout ([6d9c416](https://github.com/hatayama/unity-cli-loop/commit/6d9c4164f0797123084011054715fbc031a54dbb))
+
+
+### Bug Fixes
+
+* --trigger now rejects a leading uloop and shows the command to retry ([#2388](https://github.com/hatayama/unity-cli-loop/issues/2388)) ([9cefd73](https://github.com/hatayama/unity-cli-loop/commit/9cefd733403d6d5d74cde0cdbac511c1e80561bc))
+* align clear-pause-point messages with ClearedCount for auto-disarmed and expired markers ([319159b](https://github.com/hatayama/unity-cli-loop/commit/319159bb6cffef137eef8c91eb97435a84b1fff2))
+* describe CLI-only options in await-pause-point and pause-point-status help ([#2299](https://github.com/hatayama/unity-cli-loop/issues/2299)) ([7b237bd](https://github.com/hatayama/unity-cli-loop/commit/7b237bd2130c734733abbf3f920f6250a3885663))
+* force TLS 1.2 and basic parsing for PowerShell installer downloads ([ea9e052](https://github.com/hatayama/unity-cli-loop/commit/ea9e0529a8b8565eac344a72582a1770c2c59d4e))
+* Git Bash can install uloop from a zip without unzip ([cbcdc62](https://github.com/hatayama/unity-cli-loop/commit/cbcdc62b7fc1c1134522fb7f31cbb8c0c8863b9d))
+* Windows uloop update can replace a running uloop.exe ([6857430](https://github.com/hatayama/unity-cli-loop/commit/6857430d1c33ab7e46c778eae318afdf2de53576))
+
 ## [3.0.0-beta.32](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.31...dispatcher-v3.0.0-beta.32) (2026-08-12)
 
 
