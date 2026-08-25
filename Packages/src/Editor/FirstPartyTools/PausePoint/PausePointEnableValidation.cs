@@ -1,4 +1,3 @@
-using System;
 using System.Linq;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
@@ -38,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public static string ValidateCaptureSettings(
             EnablePausePointSchema parameters,
+            string hitWhen,
             UloopPausePointHitWhenParseResult hitWhenParseResult)
         {
             string[] supportedModes =
@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return $"MaxCallerFrames must be between 0 and {UloopPausePointRegistry.MaxCallerFramesLimit}.";
             }
 
-            if (string.IsNullOrWhiteSpace(parameters.HitWhen))
+            if (string.IsNullOrEmpty(hitWhen))
             {
                 return null;
             }

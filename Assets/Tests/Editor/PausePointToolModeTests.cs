@@ -76,6 +76,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: whitespace-only hit-when input is treated as an absent condition before arming an id marker.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenHitWhenIsWhitespaceOnly_TreatsItAsAbsent()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["hitWhen"] = "  "
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(snapshot.HitWhen, Is.EqualTo(string.Empty));
+            Assert.That(UloopPausePointRegistry.GetHitWhenCondition("jump"), Is.Null);
+        }
+
+        /// <summary>
         /// What: malformed hit-when input returns the DSL grammar error before a marker is armed.
         /// </summary>
         [Test]

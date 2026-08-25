@@ -49,13 +49,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public PausePointResponse Enable(EnablePausePointSchema parameters)
         {
-            UloopPausePointHitWhenParseResult hitWhenParseResult = string.IsNullOrWhiteSpace(parameters.HitWhen)
+            string hitWhen = string.IsNullOrWhiteSpace(parameters.HitWhen)
+                ? string.Empty
+                : parameters.HitWhen;
+            UloopPausePointHitWhenParseResult hitWhenParseResult = string.IsNullOrEmpty(hitWhen)
                 ? null
-                : UloopPausePointHitWhenCondition.Parse(parameters.HitWhen);
+                : UloopPausePointHitWhenCondition.Parse(hitWhen);
             UloopPausePointHitWhenCondition hitWhenCondition = hitWhenParseResult == null
                 ? null
                 : hitWhenParseResult.Condition;
-            string captureSettingsError = PausePointEnableValidation.ValidateCaptureSettings(parameters, hitWhenParseResult);
+            string captureSettingsError = PausePointEnableValidation.ValidateCaptureSettings(
+                parameters,
+                hitWhen,
+                hitWhenParseResult);
             if (captureSettingsError != null)
             {
                 return CreateValidationFailure(
@@ -83,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!string.IsNullOrWhiteSpace(parameters.File))
             {
-                return EnableBySourceLocation(parameters, hitWhenCondition);
+                return EnableBySourceLocation(parameters, hitWhen, hitWhenCondition);
             }
 
             string rearmWarning = PausePointEnableWarnings.BuildRearmDiscardWarningOrEmpty(
@@ -95,7 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxHistory,
                 parameters.MaxPreviewElements,
                 parameters.MaxCallerFrames,
-                parameters.HitWhen,
+                hitWhen,
                 hitWhenCondition);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.Warning = PausePointEnableWarnings.MergeWarnings(
@@ -203,6 +209,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // arms the same registry state machine the Id path uses, keyed by the derived source id.
         private static PausePointResponse EnableBySourceLocation(
             EnablePausePointSchema parameters,
+            string hitWhen,
             UloopPausePointHitWhenCondition hitWhenCondition)
         {
             if (CompilationPipeline.codeOptimization == CodeOptimization.Release)
@@ -250,6 +257,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return FinishEnableBySourceLocation(
                         id,
                         parameters,
+                        hitWhen,
                         hitWhenCondition,
                         shimResolution.ResolvedLine,
                         shimResolution.ResolvedLine,
@@ -352,6 +360,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return FinishEnableBySourceLocation(
                 id,
                 parameters,
+                hitWhen,
                 hitWhenCondition,
                 resolveResult.Resolution.ResolvedLine,
                 resolveResult.Resolution.ResolvedEndLine,
@@ -368,6 +377,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static PausePointResponse FinishEnableBySourceLocation(
             string id,
             EnablePausePointSchema parameters,
+            string hitWhen,
             UloopPausePointHitWhenCondition hitWhenCondition,
             int resolvedLine,
             int resolvedEndLine,
@@ -391,7 +401,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxHistory,
                 parameters.MaxPreviewElements,
                 parameters.MaxCallerFrames,
-                parameters.HitWhen,
+                hitWhen,
                 hitWhenCondition);
             if (retargetedToHotReloadPatch)
             {
