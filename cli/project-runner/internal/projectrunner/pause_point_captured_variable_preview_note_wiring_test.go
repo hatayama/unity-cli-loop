@@ -10,7 +10,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
-func stubPausePointStatusHitWithTruncatedCapturedVariable(t *testing.T) {
+func stubPausePointStatusHitWithTruncatedCapturedVariable(t *testing.T, maxPreviewElements int) {
 	t.Helper()
 
 	originalQuery := queryPausePointStatus
@@ -24,13 +24,14 @@ func stubPausePointStatusHitWithTruncatedCapturedVariable(t *testing.T) {
 		id string,
 	) (pausePointStatusResponse, error) {
 		return pausePointStatusResponse{
-			Success:     true,
-			Id:          id,
-			Status:      pausePointStatusHit,
-			IsEnabled:   true,
-			IsHit:       true,
-			HitCount:    1,
-			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+			Success:            true,
+			Id:                 id,
+			Status:             pausePointStatusHit,
+			IsEnabled:          true,
+			IsHit:              true,
+			HitCount:           1,
+			MaxPreviewElements: maxPreviewElements,
+			EditorState:        pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
 			CapturedVariables: []pausePointCapturedVariable{
 				{
 					Name:      "board",
@@ -63,32 +64,34 @@ func capturedVariablePreviewNoteFromStdout(t *testing.T, output string) string {
 	return note
 }
 
-func assertStdoutCapturedVariablePreviewNote(t *testing.T, output string) {
+func assertStdoutCapturedVariablePreviewNote(t *testing.T, output string, want string) {
 	t.Helper()
 
 	note := capturedVariablePreviewNoteFromStdout(t, output)
-	if note != wantCapturedVariablePreviewNote {
-		t.Fatalf("CapturedVariablePreviewNote mismatch: got %#v, want %#v", note, wantCapturedVariablePreviewNote)
+	if note != want {
+		t.Fatalf("CapturedVariablePreviewNote mismatch: got %#v, want %#v", note, want)
 	}
 }
 
 // Verifies pause-point-status stdout includes CapturedVariablePreviewNote when a remaining
 // captured variable is truncated, so dropping the status-command apply call fails this test.
 func TestRunPausePointStatusCommandIncludesCapturedVariablePreviewNote(t *testing.T) {
-	stubPausePointStatusHitWithTruncatedCapturedVariable(t)
+	const want = "a captured value was clipped at the current --max-preview-elements cap of 13 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. While Unity is still paused, UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the full live value."
+	stubPausePointStatusHitWithTruncatedCapturedVariable(t, 13)
 
 	code, output := runPausePointStatusForExpect(t, []string{"--id", "jump"})
 
 	if code != 0 {
 		t.Fatalf("expected success, got %d: %s", code, output)
 	}
-	assertStdoutCapturedVariablePreviewNote(t, output)
+	assertStdoutCapturedVariablePreviewNote(t, output, want)
 }
 
 // Verifies await-pause-point stdout includes CapturedVariablePreviewNote on a truncated hit, so
 // dropping the plain-await apply call fails this test.
 func TestRunWaitForPausePointIncludesCapturedVariablePreviewNote(t *testing.T) {
-	stubPausePointStatusHitWithTruncatedCapturedVariable(t)
+	const want = "a captured value was clipped at the current --max-preview-elements cap of 37 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. While Unity is still paused, UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the full live value."
+	stubPausePointStatusHitWithTruncatedCapturedVariable(t, 37)
 	stubPausePointMatchingLogs(t, nil)
 
 	var stdout bytes.Buffer
@@ -109,13 +112,14 @@ func TestRunWaitForPausePointIncludesCapturedVariablePreviewNote(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected success, got %d: %s", code, stdout.String())
 	}
-	assertStdoutCapturedVariablePreviewNote(t, stdout.String())
+	assertStdoutCapturedVariablePreviewNote(t, stdout.String(), want)
 }
 
 // Verifies enable-pause-point --await stdout includes CapturedVariablePreviewNote on a truncated
 // hit, so dropping the enable-await apply call fails this test.
 func TestRunPausePointWaitAfterEnableIncludesCapturedVariablePreviewNote(t *testing.T) {
-	stubPausePointStatusHitWithTruncatedCapturedVariable(t)
+	const want = "a captured value was clipped at the current --max-preview-elements cap of 91 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. While Unity is still paused, UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the full live value."
+	stubPausePointStatusHitWithTruncatedCapturedVariable(t, 91)
 	stubPausePointMatchingLogs(t, nil)
 	stubPausePointTriggerDispatch(t, `{"Success":true}`)
 
@@ -124,5 +128,5 @@ func TestRunPausePointWaitAfterEnableIncludesCapturedVariablePreviewNote(t *test
 	if code != 0 {
 		t.Fatalf("expected success, got %d: %s", code, output)
 	}
-	assertStdoutCapturedVariablePreviewNote(t, output)
+	assertStdoutCapturedVariablePreviewNote(t, output, want)
 }

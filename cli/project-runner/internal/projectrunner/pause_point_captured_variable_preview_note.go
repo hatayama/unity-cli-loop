@@ -1,9 +1,12 @@
 package projectrunner
 
+import "fmt"
+
 const (
 	// pausePointCapturedVariablePreviewNote explains how to recover a clipped captured
-	// value: raise the enable-time preview cap, or read the live value while paused.
-	pausePointCapturedVariablePreviewNote = "a captured value was clipped; re-enable with a larger --max-preview-elements, or read the full value while paused via UloopPausePoint.TryGetCapturedValue in execute-dynamic-code."
+	// value: raise the enable-time preview cap after preserving evidence, or read the live value
+	// while paused.
+	pausePointCapturedVariablePreviewNoteFormat = "a captured value was clipped at the current --max-preview-elements cap of %d elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. While Unity is still paused, UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the full live value."
 )
 
 // applyPausePointCapturedVariablePreviewNote records that a listed captured value was
@@ -16,6 +19,8 @@ func applyPausePointCapturedVariablePreviewNote(
 		return response
 	}
 
-	response.CapturedVariablePreviewNote = pausePointCapturedVariablePreviewNote
+	response.CapturedVariablePreviewNote = fmt.Sprintf(
+		pausePointCapturedVariablePreviewNoteFormat,
+		response.MaxPreviewElements)
 	return response
 }
