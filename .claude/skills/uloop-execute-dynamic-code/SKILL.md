@@ -69,11 +69,20 @@ Returns JSON:
 - `Success`: boolean — overall execution success
 - `Result`: string — value of the snippet's `return` statement (empty when omitted)
 - `Logs`: string[] — execution messages from the dynamic-code tool; read Unity Console `Debug.Log` output with `get-logs`
+- `PartialResults` (object, optional): values that a snippet explicitly saves before it completes or fails
 - `CompilationErrors`: object[] — Roslyn diagnostics with `Message`, `Line`, `Column`, `ErrorCode`, optional `Hint` and `Suggestions`
 - `Error` / `ErrorMessage`: string — top-level failure summary (empty on success)
 - `UpdatedCode`: string|null — the wrapped form actually compiled (handy when debugging using-statement reordering)
 - `DiagnosticsSummary`: string|null — compact summary when diagnostics are available
 - `Diagnostics`: object[] — structured diagnostics; same shape as `CompilationErrors`, usually populated together with it
 - `Warning` (string, optional): Set when Play Mode is running while the Unity Editor is unfocused. Progress may be throttled; run `uloop focus-window`, or use the `pause-point --await`/`--trigger` flow instead of polling for progress.
+
+To retain an intermediate value across a later exception, opt in before the risky code:
+
+```csharp
+UloopDynamicCodePartialResults.Set("completedSteps", completedSteps);
+```
+
+`PartialResults` contains only values explicitly saved this way. Ordinary local variables cannot be recovered after an exception unwinds the snippet. A cancellation that occurs before the snippet produces an execution result also returns no `PartialResults`.
 
 On `Success: false`, inspect `CompilationErrors` first. If empty, read `ErrorMessage` (and `Logs` for extra context) — the failure may be a runtime exception, cancellation, or an "execution in progress" rejection, all of which return empty `CompilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.

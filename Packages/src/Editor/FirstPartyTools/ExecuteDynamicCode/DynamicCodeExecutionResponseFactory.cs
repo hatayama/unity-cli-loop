@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     StringComparison.Ordinal);
         }
 
-        internal static ExecuteDynamicCodeResponse CreateCancelledResponse()
+        internal static ExecuteDynamicCodeResponse CreateCancelledResponse(ExecutionResult executionResult = null)
         {
             return new ExecuteDynamicCodeResponse
             {
@@ -47,7 +47,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Result = string.Empty,
                 Logs = new List<string> { "Execution cancelled" },
                 CompilationErrors = new List<CompilationErrorDto>(),
-                ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED
+                ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED,
+                PartialResults = executionResult?.PartialResults != null
+                    ? new Dictionary<string, string>(executionResult.PartialResults)
+                    : new Dictionary<string, string>()
             };
         }
 
@@ -90,6 +93,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Logs = result.Logs ?? new List<string>(),
                 CompilationErrors = new List<CompilationErrorDto>(),
                 ErrorMessage = result.ErrorMessage ?? string.Empty,
+                PartialResults = result.PartialResults != null
+                    ? new Dictionary<string, string>(result.PartialResults)
+                    : new Dictionary<string, string>(),
                 Timings = result.Timings != null ? new List<string>(result.Timings) : new List<string>()
             };
 
