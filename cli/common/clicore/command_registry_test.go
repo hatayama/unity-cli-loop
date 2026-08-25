@@ -90,3 +90,16 @@ func TestIsRunnerOwnedCommandName(t *testing.T) {
 		}
 	}
 }
+
+// Verifies pause-point-status help describes both a targeted query and an id-less marker list.
+func TestPausePointStatusNativeCommandDescription(t *testing.T) {
+	entry, found := NativeCommand(PausePointStatusUserCommandName)
+	if !found {
+		t.Fatalf("%s must be registered", PausePointStatusUserCommandName)
+	}
+
+	const want = "Show one pause point marker's state, or list all registered markers when no target is given"
+	if entry.Description != want {
+		t.Fatalf("description = %q, want %q", entry.Description, want)
+	}
+}

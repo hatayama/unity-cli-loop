@@ -64,6 +64,16 @@ func TestParsePausePointStatusOptionsListModeRejectsPerMarkerOptions(t *testing.
 			args:      []string{"--expect", "speed==5"},
 			wantError: "--expect requires --id or --file with --line.",
 		},
+		{
+			name:      "captured variables before expect",
+			args:      []string{"--captured-variables", "full", "--expect", "speed==5"},
+			wantError: "--captured-variables requires --id or --file with --line.",
+		},
+		{
+			name:      "expect before captured variables",
+			args:      []string{"--expect", "speed==5", "--captured-variables", "full"},
+			wantError: "--expect requires --id or --file with --line.",
+		},
 	}
 
 	for _, test := range tests {

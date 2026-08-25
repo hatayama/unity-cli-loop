@@ -303,12 +303,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void GetAllStatuses_WhenMarkersAreRegistered_ReturnsOrdinalIdOrder()
         {
-            UloopPausePointRegistry.Enable("zulu", 30);
-            UloopPausePointRegistry.Enable("alpha", 30);
+            UloopPausePointRegistry.Enable("a", 30);
+            UloopPausePointRegistry.Enable("B", 30);
 
             IReadOnlyList<UloopPausePointSnapshot> snapshots = UloopPausePointRegistry.GetAllStatuses();
 
-            Assert.That(snapshots.Select(snapshot => snapshot.Id), Is.EqualTo(new[] { "alpha", "zulu" }));
+            Assert.That(snapshots.Select(snapshot => snapshot.Id), Is.EqualTo(new[] { "B", "a" }));
             Assert.That(snapshots.Select(snapshot => snapshot.RemainingMilliseconds), Is.EqualTo(new long[] { 30000, 30000 }));
         }
 
@@ -329,6 +329,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshots[0].IsEnabled, Is.False);
             Assert.That(snapshots[0].RemainingMilliseconds, Is.EqualTo(0));
             Assert.That(snapshots[0].EditorState.IsPaused, Is.False);
+            Assert.That(_pauseController.ResumeCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Verifies listing expires every elapsed marker before issuing one editor resume.
+        /// </summary>
+        [Test]
+        public void GetAllStatuses_WhenTwoMarkersHaveExpired_ExpiresBothAndResumesEditorOnce()
+        {
+            UloopPausePointRegistry.Enable("alpha", 1);
+            UloopPausePointRegistry.Enable("zulu", 1);
+            _pauseController.Pause();
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            IReadOnlyList<UloopPausePointSnapshot> snapshots = UloopPausePointRegistry.GetAllStatuses();
+
+            Assert.That(snapshots.Select(snapshot => snapshot.Status), Is.EqualTo(new[]
+            {
+                UloopPausePointStatus.Expired,
+                UloopPausePointStatus.Expired
+            }));
             Assert.That(_pauseController.ResumeCount, Is.EqualTo(1));
         }
 
