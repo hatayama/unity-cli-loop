@@ -74,6 +74,7 @@ type pausePointStatusResponse struct {
 	LateHitDiscardedAfterClear  bool   `json:"LateHitDiscardedAfterClear"`
 	SuppressedByHotReload       bool   `json:"SuppressedByHotReload"`
 	RetargetedToHotReloadPatch  bool   `json:"RetargetedToHotReloadPatch"`
+	LineBasis                   string `json:"LineBasis,omitempty"`
 	SuppressedByHotReloadReason string `json:"SuppressedByHotReloadReason,omitempty"`
 
 	// Warning is set by Unity on enable/clear tool responses when this shared type decodes those

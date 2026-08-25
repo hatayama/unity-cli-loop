@@ -1,8 +1,11 @@
 using System;
 
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Runtime;
 using io.github.hatayama.UnityCliLoop.Tests.PausePointToolsFixtures;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -94,6 +97,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
             Assert.That(response.RecommendedNextAction, Is.EqualTo(ExpectedArmingNextActionForJump));
+            string json = JsonConvert.SerializeObject(
+                response,
+                Formatting.None,
+                UnityCliLoopJsonResponseSerializerSettings.Settings);
+            JObject payload = JObject.Parse(json);
+            Assert.That(payload["LineBasis"], Is.Null);
         }
 
         /// <summary>
@@ -121,6 +130,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 + FixtureStatementLine
                 + "\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time.";
             Assert.That(response.RecommendedNextAction, Is.EqualTo(expected));
+            string json = JsonConvert.SerializeObject(
+                response,
+                Formatting.None,
+                UnityCliLoopJsonResponseSerializerSettings.Settings);
+            JObject payload = JObject.Parse(json);
+            Assert.That(payload["LineBasis"]?.Value<string>(), Is.EqualTo("LastCompiledSource"));
         }
 
         /// <summary>

@@ -355,6 +355,7 @@ func runEnablePausePointAndAwait(
 			ResolvedLineText: enableResponse.ResolvedLineText,
 			ResolvedMethod:   enableResponse.ResolvedMethod,
 			SnapshotTiming:   enableResponse.SnapshotTiming,
+			LineBasis:        enableResponse.LineBasis,
 		},
 		stdout,
 		stderr,

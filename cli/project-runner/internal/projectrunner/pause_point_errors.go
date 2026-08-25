@@ -405,4 +405,7 @@ func applyPausePointExpiredResolvedFieldDetails(details map[string]any, response
 	if response.SnapshotTiming != "" {
 		details["SnapshotTiming"] = response.SnapshotTiming
 	}
+	if response.LineBasis != "" {
+		details["LineBasis"] = response.LineBasis
+	}
 }
