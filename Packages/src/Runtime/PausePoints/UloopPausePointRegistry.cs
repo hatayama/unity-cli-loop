@@ -8,11 +8,11 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
-        /// Stores enabled pause point state for the current Editor domain. All members except
-        /// IsArmed, RecordMethodEntry, GetHitWhenCondition, RecordHitWhenSkip, RecordHitWhenError,
-        /// and ResumeEditorPauseForClientDisconnect are main-thread-only by convention; the capture
-        /// accessors are Harmony entry points, and the disconnect resume path only sets a pending flag
-        /// so thread-pool callers never touch EditorApplication.isPaused.
+    /// Stores enabled pause point state for the current Editor domain. All members except
+    /// IsArmed, RecordMethodEntry, GetHitWhenCondition, RecordHitWhenSkip, RecordHitWhenError,
+    /// and ResumeEditorPauseForClientDisconnect are main-thread-only by convention; the capture
+    /// accessors are Harmony entry points, and the disconnect resume path only sets a pending flag
+    /// so thread-pool callers never touch EditorApplication.isPaused.
     /// </summary>
     internal static class UloopPausePointRegistry
     {
