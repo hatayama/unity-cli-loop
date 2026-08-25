@@ -72,6 +72,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an assembly snapshot directory without the source's own snapshot keeps the baseline
+        /// and fails closed instead of treating the source as changed.
+        /// </summary>
+        [Test]
+        public void DetectAllChangedFromSnapshotDirectory_WhenSourceSnapshotIsMissing_ReportsBaselineWithoutChanges()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string sourcePath = "Assets/Source.cs";
+                string snapshotDirectory = Path.Combine(
+                    projectRoot,
+                    HotReloadConstants.SourceSnapshotRelativeDirectory,
+                    "Assembly-mvid");
+                WriteProjectFile(projectRoot, sourcePath, "disk-changed");
+                Directory.CreateDirectory(snapshotDirectory);
+
+                HotReloadChangedSourceScanResult result =
+                    HotReloadChangedSiblingSourceDetector.DetectAllChangedFromSnapshotDirectory(
+                        projectRoot,
+                        "Assembly-mvid",
+                        new[] { sourcePath });
+
+                Assert.That(result.HasBaseline, Is.True);
+                Assert.That(result.ChangedProjectRelativePaths, Is.Empty);
+                Assert.That(result.ScanLimitWarning, Is.EqualTo(string.Empty));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
         /// What: every snapshot-mismatched source is returned without requiring an edited-file exclusion.
         /// </summary>
         [Test]

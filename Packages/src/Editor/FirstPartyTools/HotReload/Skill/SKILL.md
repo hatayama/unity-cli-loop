@@ -33,11 +33,11 @@ before its first import: Unity has not compiled it into any assembly yet. Run
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. When omitted on apply, selects every `.cs` source whose bytes changed since the last compile snapshot; run `uloop compile` first when no snapshot exists, or pass explicit paths when no changed source is found |
+| `--files` | array | - | Project-relative `.cs` paths whose method bodies should be hot-reloaded. When omitted or empty on apply, selects the `.cs` sources whose bytes changed since the last compile snapshot, capped at 50 changed files per assembly with a warning when the cap trims the list; run `uloop compile` first when no snapshot exists, or pass explicit paths when no changed source is found |
 | `--revert-all` | flag | - | Remove every active hot-reload patch and clear the patch ledger. When set, `--files` is ignored |
 | `--status` | flag | - | Lists the currently active changes (patched methods and added members) without applying or reverting anything. |
 
-When `--files` is omitted, a source is selected only when its compilation assembly has a
+When `--files` is omitted or empty, a source is selected only when its compilation assembly has a
 snapshot directory and that source has its own snapshot file. A missing per-file snapshot is
 left out rather than guessed as changed, so pass the file explicitly or run `uloop compile`
 to establish a complete baseline.

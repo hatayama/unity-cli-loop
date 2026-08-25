@@ -35,7 +35,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: omitting --files applies the sorted changed sources and prefixes the exact selection message.
+        /// What: production seam defaults remain wired to the real detector and private apply method.
+        /// </summary>
+        [Test]
+        public void StaticSeams_UseProductionDefaults()
+        {
+            Assert.That(
+                HotReloadTool.DetectChangedFilesForTesting,
+                Is.EqualTo(
+                    (Func<HotReloadChangedFileAggregationResult>)HotReloadChangedFileAggregator.Detect));
+            Assert.That(HotReloadTool.RunApplyAsyncForTesting.Method.Name, Is.EqualTo("RunApplyAsync"));
+            Assert.That(
+                HotReloadTool.RunApplyAsyncForTesting.Method.DeclaringType,
+                Is.EqualTo(typeof(HotReloadTool)));
+        }
+
+        /// <summary>
+        /// What: omitting --files retains existing warnings, appends selection warnings, and prefixes
+        /// the exact selection message.
         /// </summary>
         [Test]
         public async Task ExecuteAsync_WhenFilesAreOmittedAndChangesExist_AppliesSelectedFilesAndPrefixesMessage()
@@ -55,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         {
                             HotReloadMethodOutcome.Patched("Host.Selected()", "Assets/Selected.cs")
                         },
-                        new List<string>(),
+                        new List<string> { "orchestrator warning" },
                         patchedTotal: 1,
                         activePatchTotal: 1));
             };
@@ -67,8 +84,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response.Message,
                 Is.EqualTo(
                     "--files was omitted; 1 changed file(s) since the last compile were selected: Assets/Selected.cs. "
-                    + "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. 1 warning(s). See Warnings."));
-            Assert.That(response.Warnings, Is.EqualTo(new[] { "scan limit warning" }));
+                    + "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. 2 warning(s). See Warnings. "
+                    + "A single 'uloop compile' clears all of them at once."));
+            Assert.That(
+                response.Warnings,
+                Is.EqualTo(new[] { "orchestrator warning", "scan limit warning" }));
         }
 
         /// <summary>
