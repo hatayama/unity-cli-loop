@@ -7,9 +7,11 @@ import (
 	"io"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/clitest"
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/common/unityipc"
 )
 
@@ -28,6 +30,7 @@ func TestExtractRunTestsSkipCompileFlagRemovesOnlyItsFlag(t *testing.T) {
 // native-only CompileNote to the one final test response.
 func TestRunTestsWithImplicitCompileRunsCompileThenUsesLiveCatalog(t *testing.T) {
 	projectRoot := t.TempDir()
+	writeRunTestsCompileToolCache(t, projectRoot)
 	listener := newLoopbackIpcListener(t)
 	requests := make(chan map[string]any, 1)
 	serverErr := make(chan error, 1)
@@ -37,7 +40,46 @@ func TestRunTestsWithImplicitCompileRunsCompileThenUsesLiveCatalog(t *testing.T)
 	compileCalls := 0
 	runTestsImplicitCompile = func(context.Context, unityipc.Connection, io.Writer) compileExecutionResult {
 		compileCalls++
-		writeRunTestsCompileToolCache(t, projectRoot)
+		writeRunTestsCompileToolCacheWithTestMode(t, projectRoot)
+		return compileExecutionResult{result: json.RawMessage(`{"Success":true}`), exitCode: 0}
+	}
+	t.Cleanup(func() {
+		runTestsImplicitCompile = original
+	})
+
+	connection := unityipc.Connection{
+		Endpoint:    unityipc.Endpoint{Network: listener.Addr().Network(), Address: listener.Addr().String()},
+		ProjectRoot: projectRoot,
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runTestsWithImplicitCompile(context.Background(), connection, []string{"--test-mode", "EditMode"}, projectRoot, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("run-tests failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if compileCalls != 1 {
+		t.Fatalf("compile call count mismatch: %d", compileCalls)
+	}
+	request := readIPCRequest(t, requests)
+	if request["TestMode"] != "EditMode" {
+		t.Fatalf("live TestMode parameter mismatch: %#v", request)
+	}
+	assertSingleRunTestsJSON(t, stdout.Bytes(), true)
+	assertServerDidNotFail(t, serverErr)
+}
+
+// Verifies a literal null Unity response is classified instead of panicking during CompileNote injection.
+func TestRunTestsWithImplicitCompileClassifiesNullTestResponse(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeRunTestsCompileToolCache(t, projectRoot)
+	listener := newLoopbackIpcListener(t)
+	requests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(listener, clicore.RunTestsCommandName, requests, serverErr, "null")
+
+	original := runTestsImplicitCompile
+	runTestsImplicitCompile = func(context.Context, unityipc.Connection, io.Writer) compileExecutionResult {
 		return compileExecutionResult{result: json.RawMessage(`{"Success":true}`), exitCode: 0}
 	}
 	t.Cleanup(func() {
@@ -52,14 +94,24 @@ func TestRunTestsWithImplicitCompileRunsCompileThenUsesLiveCatalog(t *testing.T)
 	var stderr bytes.Buffer
 
 	code := runTestsWithImplicitCompile(context.Background(), connection, nil, projectRoot, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("run-tests failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	if code != 1 {
+		t.Fatalf("null response exit code mismatch: %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	if compileCalls != 1 {
-		t.Fatalf("compile call count mismatch: %d", compileCalls)
+	if stdout.Len() != 0 {
+		t.Fatalf("null response must not write stdout: %s", stdout.String())
+	}
+
+	var envelope clierrors.CLIErrorEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("null response stderr must be a classified error: %v\n%s", err, stderr.String())
+	}
+	if envelope.Error.ErrorCode != clierrors.ErrorCodeInternalError {
+		t.Fatalf("null response error code mismatch: %#v", envelope.Error)
+	}
+	if envelope.Error.Message != "run-tests response must be a JSON object" {
+		t.Fatalf("null response error message mismatch: %#v", envelope.Error)
 	}
 	readIPCRequest(t, requests)
-	assertSingleRunTestsJSON(t, stdout.Bytes(), true)
 	assertServerDidNotFail(t, serverErr)
 }
 
@@ -137,6 +189,10 @@ func TestRunTestsWithImplicitCompileSkipCompileOmitsCompileNote(t *testing.T) {
 // Verifies a failed implicit compile is the only output and prevents the test IPC request.
 func TestRunTestsWithImplicitCompileFailsFastWithCompileResponse(t *testing.T) {
 	projectRoot := t.TempDir()
+	listener := newLoopbackIpcListener(t)
+	requests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(listener, clicore.RunTestsCommandName, requests, serverErr, `{"Success":true,"Status":"Passed"}`)
 	compileResponse := json.RawMessage(`{"Success":false,"ErrorCount":1,"WarningCount":0}`)
 	compileResult := compileExecutionResult{result: compileResponse, exitCode: 1}
 	var compileStdout bytes.Buffer
@@ -153,7 +209,10 @@ func TestRunTestsWithImplicitCompileFailsFastWithCompileResponse(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	connection := unityipc.Connection{ProjectRoot: projectRoot}
+	connection := unityipc.Connection{
+		Endpoint:    unityipc.Endpoint{Network: listener.Addr().Network(), Address: listener.Addr().String()},
+		ProjectRoot: projectRoot,
+	}
 
 	code := runTestsWithImplicitCompile(context.Background(), connection, nil, projectRoot, &stdout, &stderr)
 	if code != 1 {
@@ -165,6 +224,8 @@ func TestRunTestsWithImplicitCompileFailsFastWithCompileResponse(t *testing.T) {
 	if bytes.Contains(stdout.Bytes(), []byte("CompileNote")) {
 		t.Fatalf("compile failure must not include CompileNote: %s", stdout.String())
 	}
+	assertNoIPCRequest(t, requests)
+	assertServerDidNotFail(t, serverErr)
 }
 
 func writeRunTestsCompileToolCache(t *testing.T, projectRoot string) {
@@ -176,6 +237,25 @@ func writeRunTestsCompileToolCache(t *testing.T, projectRoot string) {
       "inputSchema": {
         "type": "object",
         "properties": {}
+      }
+    }
+  ]
+}`)
+}
+
+func writeRunTestsCompileToolCacheWithTestMode(t *testing.T, projectRoot string) {
+	t.Helper()
+	clitest.WriteProjectFile(t, projectRoot, filepath.Join(clicore.CacheDirectoryName, clicore.CacheFileName), `{
+  "tools": [
+    {
+      "name": "run-tests",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "TestMode": {
+            "type": "string"
+          }
+        }
       }
     }
   ]
@@ -206,8 +286,17 @@ func assertSingleRunTestsJSON(t *testing.T, output []byte, expectCompileNote boo
 	if err := json.Unmarshal(compileNote, &note); err != nil {
 		t.Fatalf("CompileNote must be a string: %v", err)
 	}
-	if note != runTestsCompileNote {
+	if note != "A compile ran before the tests and succeeded. Pass --skip-compile to run the tests without this compile step." {
 		t.Fatalf("CompileNote mismatch: %q", note)
+	}
+}
+
+func assertNoIPCRequest(t *testing.T, requests <-chan map[string]any) {
+	t.Helper()
+	select {
+	case request := <-requests:
+		t.Fatalf("compile failure must not send run-tests: %#v", request)
+	case <-time.After(100 * time.Millisecond):
 	}
 }
 

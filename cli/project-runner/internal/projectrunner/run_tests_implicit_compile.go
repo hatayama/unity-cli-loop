@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 
 	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
@@ -69,6 +70,9 @@ func injectRunTestsCompileNote(raw []byte) ([]byte, error) {
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, err
+	}
+	if fields == nil {
+		return nil, errors.New("run-tests response must be a JSON object")
 	}
 	note, err := json.Marshal(runTestsCompileNote)
 	if err != nil {
