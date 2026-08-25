@@ -41,6 +41,13 @@ func resolvePausePointQueryID(
 	target pausePointQueryTarget,
 	command string,
 ) (string, error) {
+	if idProvided && (target.hasFile || target.hasLine) {
+		return "", &clierrors.ArgumentError{
+			Message: "--id cannot be combined with --file or --line.",
+			Option:  "--" + PausePointIDFlagName,
+			Command: command,
+		}
+	}
 	if target.hasFile && !target.hasLine {
 		return "", &clierrors.ArgumentError{
 			Message: "--file requires --line.",
@@ -52,13 +59,6 @@ func resolvePausePointQueryID(
 		return "", &clierrors.ArgumentError{
 			Message: "--line requires --file.",
 			Option:  "--" + PausePointLineFlagName,
-			Command: command,
-		}
-	}
-	if idProvided && (target.hasFile || target.hasLine) {
-		return "", &clierrors.ArgumentError{
-			Message: "--id cannot be combined with --file or --line.",
-			Option:  "--" + PausePointIDFlagName,
 			Command: command,
 		}
 	}

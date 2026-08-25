@@ -2747,16 +2747,76 @@ func TestParsePausePointQueryOptionsRequireCompleteFileLinePair(t *testing.T) {
 
 // Verifies id and file:line target forms are mutually exclusive for both query commands.
 func TestParsePausePointQueryOptionsRejectCombinedIDAndFileLineTarget(t *testing.T) {
-	args := []string{"--id", "marker", "--file", "Assets/Scripts/Marker.cs", "--line", "42"}
-
-	_, awaitErr := parseWaitForPausePointOptions(args)
-	if awaitErr == nil || awaitErr.Error() != "--id cannot be combined with --file or --line." {
-		t.Fatalf("await combined-target error = %v", awaitErr)
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "complete file line target",
+			args: []string{"--id", "marker", "--file", "Assets/Scripts/Marker.cs", "--line", "42"},
+		},
+		{
+			name: "file only target",
+			args: []string{"--id", "marker", "--file", "Assets/Scripts/Marker.cs"},
+		},
+		{
+			name: "line only target",
+			args: []string{"--id", "marker", "--line", "42"},
+		},
 	}
 
-	_, statusErr := parsePausePointStatusOptions(args)
-	if statusErr == nil || statusErr.Error() != "--id cannot be combined with --file or --line." {
-		t.Fatalf("status combined-target error = %v", statusErr)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, awaitErr := parseWaitForPausePointOptions(test.args)
+			if awaitErr == nil || awaitErr.Error() != "--id cannot be combined with --file or --line." {
+				t.Fatalf("await combined-target error = %v", awaitErr)
+			}
+
+			_, statusErr := parsePausePointStatusOptions(test.args)
+			if statusErr == nil || statusErr.Error() != "--id cannot be combined with --file or --line." {
+				t.Fatalf("status combined-target error = %v", statusErr)
+			}
+		})
+	}
+}
+
+// Verifies both query commands reject non-positive and non-numeric --line values before id composition.
+func TestParsePausePointQueryOptionsRejectInvalidLine(t *testing.T) {
+	tests := []struct {
+		name      string
+		line      string
+		wantError string
+	}{
+		{
+			name:      "non numeric",
+			line:      "forty-two",
+			wantError: "Invalid positive integer value for --line: forty-two",
+		},
+		{
+			name:      "zero",
+			line:      "0",
+			wantError: "Invalid positive integer value for --line: 0",
+		},
+		{
+			name:      "negative",
+			line:      "-42",
+			wantError: "Invalid positive integer value for --line: -42",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"--file", "Assets/Scripts/Marker.cs", "--line", test.line}
+			_, awaitErr := parseWaitForPausePointOptions(args)
+			if awaitErr == nil || awaitErr.Error() != test.wantError {
+				t.Fatalf("await line error = %v", awaitErr)
+			}
+
+			_, statusErr := parsePausePointStatusOptions(args)
+			if statusErr == nil || statusErr.Error() != test.wantError {
+				t.Fatalf("status line error = %v", statusErr)
+			}
+		})
 	}
 }
 

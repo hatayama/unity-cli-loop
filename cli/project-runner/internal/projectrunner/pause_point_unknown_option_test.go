@@ -45,6 +45,23 @@ func TestParsePausePointStatusAcceptsFileLineTarget(t *testing.T) {
 	}
 }
 
+// Verifies an enable-only flag that status cannot carry over still names enable as its owner
+// without claiming a response value exists for it.
+func TestParsePausePointStatusUnknownOptionOmitsCarryOverForNonCarriedFlags(t *testing.T) {
+	_, err := parsePausePointStatusOptions([]string{"--id", "jump", "--method", "Player.Jump"})
+
+	if err == nil {
+		t.Fatal("expected error for --method passed to pause-point-status")
+	}
+	message := err.Error()
+	if !strings.Contains(message, "--method is an enable-pause-point option, not a pause-point-status one.") {
+		t.Errorf("owner sentence missing: %s", message)
+	}
+	if strings.Contains(message, "already applied to the response") {
+		t.Errorf("carry-over sentence must not be claimed for --method: %s", message)
+	}
+}
+
 // Verifies a flag owned by another runner-owned command names that command, so a flag borrowed from
 // await-pause-point is not reported as an enable-pause-point one.
 func TestParsePausePointStatusUnknownOptionNamesAwaitAsTheOwner(t *testing.T) {
