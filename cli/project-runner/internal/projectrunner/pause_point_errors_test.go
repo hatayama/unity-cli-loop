@@ -106,6 +106,39 @@ func TestPausePointExpiredHint_SuppressedByHotReload_ReturnsSuppressedHint(t *te
 	}
 }
 
+// Verifies hot-reload suppression wins before a failed trigger because a suppressed marker cannot fire.
+func TestPausePointExpiredHint_SuppressedByHotReload_WinsOverFailedTrigger(t *testing.T) {
+	cases := []struct {
+		name     string
+		response pausePointStatusResponse
+		trigger  *pausePointTriggerResult
+		wantHint string
+	}{
+		{
+			name: "suppressed before failed trigger",
+			response: pausePointStatusResponse{
+				HitCount:              0,
+				SuppressedByHotReload: true,
+				EditorState: pausePointEditorState{
+					IsPlaying: true,
+					IsPaused:  false,
+				},
+			},
+			trigger:  failedPausePointTriggerResult(),
+			wantHint: "The marker's method is hot-reload patched and the marker could not be re-targeted onto the patched body. Revert the patch with 'uloop hot-reload --revert-all' or run 'uloop compile', then re-enable the marker.",
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			hint := pausePointExpiredHint(testCase.response, testCase.trigger)
+			if hint != testCase.wantHint {
+				t.Fatalf("hint mismatch: got %q, want %q", hint, testCase.wantHint)
+			}
+		})
+	}
+}
+
 // Verifies pausePointStateError exposes SuppressedByHotReload in Details for await failures.
 func TestPausePointStateError_DetailsIncludeSuppressedByHotReload(t *testing.T) {
 	response := pausePointStatusResponse{
@@ -212,7 +245,7 @@ func TestPausePointWaitHintsDifferentiateHitWhenSkips(t *testing.T) {
 				Status:      pausePointStatusExpired,
 				EditorState: pausePointEditorState{IsPlaying: true},
 			},
-			wantHint: "Marker expired before it was hit: the enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out. Re-enable the marker with a longer --timeout-seconds and trigger the code path again. If the target line never hit despite the trigger firing, check the non-firing patterns: (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; (3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. (4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable. For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too. Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file.",
+			wantHint: "The enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out before the marker was hit. If the target line never hit despite the trigger firing, check the non-firing patterns: (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; (3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. (4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable. For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too. Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file. Once the cause is addressed, re-enable the marker (raise --timeout-seconds only if the window itself was too short) and trigger the code path again.",
 		},
 	}
 
@@ -249,7 +282,7 @@ func TestPausePointHitWhenHintsRequireZeroMatchingHits(t *testing.T) {
 		HitWhenSkippedCount: 3,
 		EditorState:         pausePointEditorState{IsPlaying: true},
 	}, nil)
-	if expiredMatchingHitHint != "" {
+	if expiredMatchingHitHint != "The marker was hit before its --timeout-seconds window closed, so this is not a missed code path. Read the recorded hit with 'uloop pause-point-status --id <marker-id>' (HitCount, CapturedVariables, CapturedVariableHistory survive expiry); re-enable the marker if you need to capture another hit." {
 		t.Fatalf("expired matching-hit hint mismatch: got %q", expiredMatchingHitHint)
 	}
 
@@ -262,6 +295,23 @@ func TestPausePointHitWhenHintsRequireZeroMatchingHits(t *testing.T) {
 	}, false, false, nil)
 	if timeoutMatchingHitHint != "" {
 		t.Fatalf("timeout matching-hit hint mismatch: got %q", timeoutMatchingHitHint)
+	}
+}
+
+// Verifies a malformed negative hit count does not claim the marker recorded a hit.
+func TestPausePointExpiredHint_NegativeHitCount_ReturnsEmpty(t *testing.T) {
+	response := pausePointStatusResponse{
+		Status:   pausePointStatusExpired,
+		HitCount: -1,
+		EditorState: pausePointEditorState{
+			IsPlaying: true,
+			IsPaused:  false,
+		},
+	}
+
+	hint := pausePointExpiredHint(response, nil)
+	if hint != "" {
+		t.Fatalf("expected empty hint for negative hit count, got %q", hint)
 	}
 }
 

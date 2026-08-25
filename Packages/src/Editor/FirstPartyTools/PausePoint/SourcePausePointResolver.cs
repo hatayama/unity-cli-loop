@@ -329,6 +329,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return spans;
         }
 
+        /// <summary>
+        /// Collects every compiled method span in a file with the display name used in warnings.
+        /// </summary>
+        internal static IReadOnlyList<SourcePausePointNearbyCompiledMethod> FindNamedCompiledMethodSpansInFile(
+            string projectRelativeFilePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
+
+            return WithCompiledModuleOrDefault(
+                projectRelativeFilePath,
+                (module, normalizedInputPath) => CollectNamedCompiledMethodSpans(module, normalizedInputPath),
+                Array.Empty<SourcePausePointNearbyCompiledMethod>());
+        }
+
+        private static IReadOnlyList<SourcePausePointNearbyCompiledMethod> CollectNamedCompiledMethodSpans(
+            ModuleDefinition module,
+            string normalizedInputPath)
+        {
+            List<SourcePausePointNearbyCompiledMethod> spans = new List<SourcePausePointNearbyCompiledMethod>();
+            foreach (MethodDefinition method in EnumerateMethodsInModule(module))
+            {
+                SourcePausePointNearbyCompiledMethod span = TryCreateNearbyCompiledMethod(
+                    method,
+                    normalizedInputPath);
+                if (span != null)
+                {
+                    spans.Add(span);
+                }
+            }
+
+            return spans;
+        }
+
         // Why a file:line entry: the resolver test assembly cannot take a Cecil
         // ModuleDefinition dependency, but TakeAtMostTwo only runs on this walk.
         internal static IReadOnlyList<SourcePausePointNearbyCompiledMethod> FindNearbyCompiledMethodsInFile(

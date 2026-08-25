@@ -300,6 +300,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ? SourcePausePointConstants.HotReloadCompiledLineMapResolveFailureNextAction
                     : SourcePausePointConstants.ResolveFailedRecommendedNextAction;
                 IReadOnlyList<string> compiledSourceLinesOrNull = null;
+                IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans =
+                    Array.Empty<SourcePausePointNearbyCompiledMethod>();
                 bool requestedLineReadOk = false;
                 string requestedLineEditedText = string.Empty;
                 // Why skip snapshot/edited-line IO without patches: Candidate is omitted on that
@@ -310,6 +312,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     compiledSourceLinesOrNull = string.IsNullOrEmpty(compiledSnapshotSource)
                         ? null
                         : SourcePausePointSourceLineReader.SplitSourceLines(compiledSnapshotSource);
+                    namedCompiledMethodSpans = SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(
+                        parameters.File);
                     (requestedLineReadOk, requestedLineEditedText) =
                         PausePointCompiledLineComparisonWarnings.ReadEditedLineText(
                             parameters.File,
@@ -323,7 +327,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.Line,
                     requestedLineReadOk,
                     requestedLineEditedText,
-                    compiledSourceLinesOrNull);
+                    compiledSourceLinesOrNull,
+                    namedCompiledMethodSpans);
 
                 PausePointResponse response = CreateValidationFailure(
                     message,

@@ -137,6 +137,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedLine,
                 resolvedEditedLineReadOk);
             string combined = PausePointEnableWarnings.MergeWarnings(snapWarning, driftWarning);
+            string resolvedTrimmed = resolvedEditedLineText == null
+                ? string.Empty
+                : resolvedEditedLineText.Trim();
+            string requestedTrimmed = requestedEditedLineText == null
+                ? string.Empty
+                : requestedEditedLineText.Trim();
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans =
+                Array.Empty<SourcePausePointNearbyCompiledMethod>();
+            if (driftWarning.Length > 0
+                || !string.Equals(resolvedTrimmed, requestedTrimmed, StringComparison.Ordinal))
+            {
+                namedCompiledMethodSpans = SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(file);
+            }
             combined = PausePointEnableWarnings.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
                 combined,
                 resolvedMethod,
@@ -147,22 +160,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 combined = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
                     combined,
                     resolvedEditedLineText,
-                    compiledSourceLines);
+                    compiledSourceLines,
+                    namedCompiledMethodSpans);
             }
 
-            string resolvedTrimmed = resolvedEditedLineText == null
-                ? string.Empty
-                : resolvedEditedLineText.Trim();
-            string requestedTrimmed = requestedEditedLineText == null
-                ? string.Empty
-                : requestedEditedLineText.Trim();
             if (!string.Equals(resolvedTrimmed, requestedTrimmed, StringComparison.Ordinal))
             {
                 combined = PausePointEnableWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
                     combined,
                     requestedLine,
                     requestedEditedLineText,
-                    compiledSourceLines);
+                    compiledSourceLines,
+                    namedCompiledMethodSpans);
             }
 
             return (combined, comparedAndMatched);

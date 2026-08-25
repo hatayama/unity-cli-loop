@@ -147,7 +147,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static string AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
             string driftWarning,
             string editedLineText,
-            IReadOnlyList<string> compiledSourceLines)
+            IReadOnlyList<string> compiledSourceLines,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans = null)
         {
             if (string.IsNullOrEmpty(driftWarning))
             {
@@ -173,7 +174,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return driftWarning;
             }
 
-            return driftWarning + FormatCandidateCompiledLinesSuffix(matches, truncated);
+            return driftWarning + FormatCandidateCompiledLinesSuffix(
+                matches,
+                truncated,
+                namedCompiledMethodSpans);
         }
 
         // Why a distinct sentence: the resolved-line candidate does not name --line, so two
@@ -182,7 +186,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string driftWarning,
             int requestedLine,
             string requestedLineEditedText,
-            IReadOnlyList<string> compiledSourceLines)
+            IReadOnlyList<string> compiledSourceLines,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans = null)
         {
             if (string.IsNullOrEmpty(driftWarning) || requestedLine <= 0)
             {
@@ -211,7 +216,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return driftWarning + FormatRequestedLineCandidateCompiledLinesSuffix(
                 requestedLine,
                 matches,
-                truncated);
+                truncated,
+                namedCompiledMethodSpans);
         }
 
         /// <summary>
@@ -222,7 +228,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string message,
             int requestedLine,
             string requestedLineEditedText,
-            IReadOnlyList<string> compiledSourceLines)
+            IReadOnlyList<string> compiledSourceLines,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans = null)
         {
             if (string.IsNullOrEmpty(message) || requestedLine <= 0)
             {
@@ -253,7 +260,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return message + FormatRequestedLineCandidateCompiledLinesSuffix(
                 requestedLine,
                 matches,
-                truncated);
+                truncated,
+                namedCompiledMethodSpans);
         }
 
         /// <summary>
@@ -267,7 +275,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int requestedLine,
             bool requestedLineReadOk,
             string requestedLineEditedText,
-            IReadOnlyList<string> compiledSourceLinesOrNull)
+            IReadOnlyList<string> compiledSourceLinesOrNull,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans = null)
         {
             string message = AppendNearbyCompiledMethodsSuffix(errorMessage, nearbyCompiledMethods);
             // Why skip Candidate when the edited line was not read: the Candidate sentence names
@@ -281,7 +290,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message,
                 requestedLine,
                 requestedLineEditedText,
-                compiledSourceLinesOrNull);
+                compiledSourceLinesOrNull,
+                namedCompiledMethodSpans);
         }
 
         private static (List<int> matches, bool truncated) CollectCandidateCompiledLineNumbers(
@@ -316,16 +326,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (matches, truncated);
         }
 
-        private static string FormatCandidateCompiledLinesSuffix(List<int> matches, bool truncated)
+        private static string FormatCandidateCompiledLinesSuffix(
+            List<int> matches,
+            bool truncated,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans)
         {
             if (matches.Count == 1 && !truncated)
             {
                 return string.Format(
                     SourcePausePointConstants.HotReloadCompiledLineDriftCandidateSingleFormat,
-                    matches[0]);
+                    FormatCandidateCompiledLine(matches[0], namedCompiledMethodSpans));
             }
 
-            string listed = string.Join(", ", matches);
+            string listed = FormatCandidateCompiledLineList(matches, namedCompiledMethodSpans);
             if (truncated)
             {
                 listed += string.Format(
@@ -341,17 +354,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string FormatRequestedLineCandidateCompiledLinesSuffix(
             int requestedLine,
             List<int> matches,
-            bool truncated)
+            bool truncated,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans)
         {
             if (matches.Count == 1 && !truncated)
             {
                 return string.Format(
                     SourcePausePointConstants.HotReloadCompiledLineDriftRequestedLineCandidateSingleFormat,
                     requestedLine,
-                    matches[0]);
+                    FormatCandidateCompiledLine(matches[0], namedCompiledMethodSpans));
             }
 
-            string listed = string.Join(", ", matches);
+            string listed = FormatCandidateCompiledLineList(matches, namedCompiledMethodSpans);
             if (truncated)
             {
                 listed += string.Format(
@@ -363,6 +377,58 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SourcePausePointConstants.HotReloadCompiledLineDriftRequestedLineCandidateMultipleFormat,
                 requestedLine,
                 listed);
+        }
+
+        private static string FormatCandidateCompiledLineList(
+            List<int> matches,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans)
+        {
+            List<string> formatted = new List<string>();
+            for (int index = 0; index < matches.Count; index++)
+            {
+                formatted.Add(FormatCandidateCompiledLine(matches[index], namedCompiledMethodSpans));
+            }
+
+            return string.Join(", ", formatted);
+        }
+
+        private static string FormatCandidateCompiledLine(
+            int line,
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans)
+        {
+            if (namedCompiledMethodSpans == null)
+            {
+                return line.ToString();
+            }
+
+            SourcePausePointNearbyCompiledMethod smallestContainingSpan = null;
+            for (int index = 0; index < namedCompiledMethodSpans.Count; index++)
+            {
+                SourcePausePointNearbyCompiledMethod span = namedCompiledMethodSpans[index];
+                if (line < span.StartLine || line > span.EndLine)
+                {
+                    continue;
+                }
+
+                if (smallestContainingSpan != null
+                    && span.EndLine - span.StartLine >= smallestContainingSpan.EndLine - smallestContainingSpan.StartLine)
+                {
+                    continue;
+                }
+
+                // Why prefer the narrowest span: an enclosing method can overlap a generated
+                // local-function span, while the narrow span identifies the candidate's method.
+                smallestContainingSpan = span;
+            }
+
+            if (smallestContainingSpan != null)
+            {
+                return line + string.Format(
+                    SourcePausePointConstants.HotReloadCompiledLineDriftCandidateMethodAnnotationFormat,
+                    smallestContainingSpan.DisplayName);
+            }
+
+            return line.ToString();
         }
 
         internal static string BuildRetargetedToHotReloadPatchWarningOrEmpty(
