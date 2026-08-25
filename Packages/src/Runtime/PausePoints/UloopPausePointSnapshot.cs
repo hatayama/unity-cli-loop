@@ -94,9 +94,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             RetargetedToHotReloadPatch = retargetedToHotReloadPatch;
             ResolvedLine = resolvedLine;
             ResolvedLineText = resolvedLineText;
-            HitWhen = hitWhen ?? string.Empty;
+            HitWhen = NormalizeOptionalText(hitWhen);
             HitWhenSkippedCount = hitWhenSkippedCount;
-            HitWhenErrorNote = hitWhenErrorNote ?? string.Empty;
+            HitWhenErrorNote = NormalizeOptionalText(hitWhenErrorNote);
         }
 
         public string Id { get; }
@@ -140,6 +140,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string HitWhen { get; }
         public int HitWhenSkippedCount { get; }
         public string HitWhenErrorNote { get; }
+
+        // Normalizes optional response text to the empty-string contract.
+        private static string NormalizeOptionalText(string value)
+        {
+            return value ?? string.Empty;
+        }
 
         public static UloopPausePointSnapshot NotEnabled(string id, IUloopPausePointPauseController pauseController)
         {
