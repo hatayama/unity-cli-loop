@@ -153,6 +153,7 @@ func visibleToolOptions(tool clicore.ToolDefinition) []visibleToolOption {
 		})
 	}
 	options = appendDynamicCodeFileSuggestionOption(tool, options)
+	options = appendRunTestsSkipCompileSuggestionOption(tool, options)
 	return appendPausePointEnableSuggestionOptions(tool, options)
 }
 
@@ -161,6 +162,13 @@ func appendDynamicCodeFileSuggestionOption(tool clicore.ToolDefinition, options 
 		return options
 	}
 	return appendSuggestionOption(options, tooldocs.DynamicCodeFileFlagName)
+}
+
+func appendRunTestsSkipCompileSuggestionOption(tool clicore.ToolDefinition, options []visibleToolOption) []visibleToolOption {
+	if tool.Name != clicore.RunTestsCommandName {
+		return options
+	}
+	return appendSuggestionOption(options, tooldocs.RunTestsSkipCompileFlagName)
 }
 
 func appendPausePointEnableSuggestionOptions(tool clicore.ToolDefinition, options []visibleToolOption) []visibleToolOption {

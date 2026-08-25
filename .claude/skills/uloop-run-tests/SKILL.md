@@ -8,7 +8,7 @@ description: "Run Unity Test Runner and report detailed results. Use for EditMod
 
 Execute Unity Test Runner. When tests fail, NUnit XML results with error messages and stack traces are automatically saved. Read the XML file at `XmlPath` for detailed failure diagnosis.
 
-Before running tests, run `uloop compile` first if you created, deleted, renamed, moved, or edited C# files, test files, `.asmdef`/`.asmref`, or package manifests since the last successful compile. This refreshes the AssetDatabase and surfaces compile errors before test execution.
+`uloop run-tests` automatically compiles pending script changes before running tests. Pass `--skip-compile` only while validating active hot-reload patches, because the compile clears those patches; otherwise let the default compile surface errors and run against current scripts.
 
 Before executing tests, `uloop run-tests` saves unsaved loaded Scene changes and unsaved current Prefab Stage changes by default. If saving fails, it returns `Success: false`, keeps `TestCount` at `0`, lists the unsaved items in `Message`, and does not start the Unity Test Runner.
 
@@ -32,6 +32,7 @@ uloop run-tests [options]
 | `--filter-type` | string | `all` | Filter type: `all`, `exact`, `regex`, `assembly` |
 | `--filter-value` | string | - | Filter value (test name, pattern, or assembly) |
 | `--fail-on-unsaved-changes` | flag | - | Fail before test execution if unsaved editor changes remain instead of auto-saving them |
+| `--skip-compile` | flag | - | Skip the automatic compile before running tests; use only while validating active hot-reload patches. |
 | `--timeout-seconds` | integer | `600` | Maximum seconds to wait for RunFinished before canceling the await (max `1500`). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands |
 
 exact matches the full test name (Namespace.Class.Method); use regex to run a whole test class, e.g. --filter-type regex --filter 'MyGame\.Tests\.PlayerTests\.'
@@ -55,6 +56,7 @@ Returns JSON with:
 - `ClearedPausePointIds` (string[], optional): IDs of pause points that were cleared before test execution. Omitted from JSON when no pause points were active.
 - `FailedTests` (array, optional): Up to 10 failed leaf tests with `FullName`, `Message`, and when the stack trace contains a path:line location, `File` and `Line`. Omitted when no tests failed. When `FailedCount` is greater than 10, `Message` ends with `first 10 of N failures listed; see XmlPath for full results.`
 - `SkippedTests` (string[], optional): Up to 10 full names of skipped leaf tests. Omitted when no tests were skipped. When `SkippedCount` is greater than 10, only the first 10 names are listed.
+- `CompileNote` (string, optional): States that the automatic compile ran and succeeded before the tests and names `--skip-compile` as the opt-out. Omitted when `--skip-compile` was passed; a failed compile returns the compile error response instead.
 
 ### XML Result File
 

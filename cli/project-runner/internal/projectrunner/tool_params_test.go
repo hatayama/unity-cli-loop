@@ -294,6 +294,20 @@ func TestBuildToolParamsUnknownOptionSuggestsTestModeFromSharedLaterToken(t *tes
 	})
 }
 
+// Verifies run-tests suggests its CLI-only compile bypass when a supplied flag is a close typo.
+func TestBuildToolParamsUnknownOptionSuggestsRunTestsSkipCompile(t *testing.T) {
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), clicore.RunTestsCommandName)
+	if !ok {
+		t.Fatal("run-tests was not found in default tools")
+	}
+
+	_, _, err := buildToolParams([]string{"--skip-compil"}, tool)
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop run-tests --skip-compile",
+		"Run `uloop run-tests --help` to inspect supported options.",
+	})
+}
+
 // Verifies enable-pause-point suggests its CLI-only trigger option when a supplied flag is a close typo.
 func TestBuildToolParamsUnknownOptionSuggestsPausePointTrigger(t *testing.T) {
 	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), pausePointEnableCommandName)

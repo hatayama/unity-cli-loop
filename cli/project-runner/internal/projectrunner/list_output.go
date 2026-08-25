@@ -89,6 +89,7 @@ func listOptionsForTool(tool clicore.ToolDefinition) []listOption {
 	}
 
 	options = appendDynamicCodeFileListOption(tool, options)
+	options = appendRunTestsSkipCompileListOption(tool, options)
 	options = appendPausePointEnableAwaitListOptions(tool, options)
 	sort.Slice(options, func(i int, j int) bool {
 		return options[i].Name < options[j].Name
@@ -136,6 +137,17 @@ func appendDynamicCodeFileListOption(tool clicore.ToolDefinition, options []list
 		Name:        tooldocs.DynamicCodeFileOptionName,
 		Type:        "string",
 		Description: tooldocs.DynamicCodeFileOptionDescription,
+	})
+}
+
+func appendRunTestsSkipCompileListOption(tool clicore.ToolDefinition, options []listOption) []listOption {
+	if tool.Name != clicore.RunTestsCommandName || hasListOption(options, tooldocs.RunTestsSkipCompileOptionName) {
+		return options
+	}
+	return append(options, listOption{
+		Name:        tooldocs.RunTestsSkipCompileOptionName,
+		Type:        "boolean",
+		Description: tooldocs.RunTestsSkipCompileOptionDescription,
 	})
 }
 

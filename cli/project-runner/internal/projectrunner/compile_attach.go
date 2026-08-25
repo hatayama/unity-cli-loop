@@ -38,20 +38,19 @@ func tryAttachToPendingCompile(
 	connection unityipc.Connection,
 	params map[string]any,
 	waitTimeout time.Duration,
-	stdout io.Writer,
 	stderr io.Writer,
 	deps compileWaitDeps,
-) (bool, int) {
+) (bool, compileExecutionResult) {
 	record, ok := readCompilePendingRecord(connection.ProjectRoot)
 	if !ok {
-		return false, 0
+		return false, compileExecutionResult{}
 	}
 
 	status, probed := probePendingCompileStatus(ctx, connection, record.RequestID, deps)
 	if !probed {
 		// Why keep the record: probe failures during domain reload are transient and
 		// do not prove the in-flight compile is gone.
-		return false, 0
+		return false, compileExecutionResult{}
 	}
 
 	// Why HasResult first: Ready is editor-wide (!compiling/!updating/!reload), not
@@ -61,17 +60,17 @@ func tryAttachToPendingCompile(
 	if status.HasResult && len(status.Result) > 0 {
 		if compileForceRecompileEnabled(params) {
 			clearCompilePendingRecord(connection.ProjectRoot)
-			return false, 0
+			return false, compileExecutionResult{}
 		}
-		return true, returnAttachedStoredCompileResult(ctx, connection, record, status.Result, stdout, stderr)
+		return true, returnAttachedStoredCompileResult(ctx, connection, record, status.Result, stderr)
 	}
 
 	if !status.Ready {
-		return attachWaitForPendingCompile(ctx, connection, record, params, waitTimeout, stdout, stderr, deps)
+		return attachWaitForPendingCompile(ctx, connection, record, params, waitTimeout, stderr, deps)
 	}
 
 	clearCompilePendingRecord(connection.ProjectRoot)
-	return false, 0
+	return false, compileExecutionResult{}
 }
 
 func probePendingCompileStatus(
@@ -120,10 +119,9 @@ func attachWaitForPendingCompile(
 	record compilePendingRecord,
 	params map[string]any,
 	waitTimeout time.Duration,
-	stdout io.Writer,
 	stderr io.Writer,
 	deps compileWaitDeps,
-) (bool, int) {
+) (bool, compileExecutionResult) {
 	if compileForceRecompileEnabled(params) {
 		_, _ = fmt.Fprintf(
 			stderr,
@@ -155,7 +153,7 @@ func attachWaitForPendingCompile(
 			ProjectRoot: connection.ProjectRoot,
 			Command:     clicore.CompileCommandName,
 		})
-		return true, 1
+		return true, compileExecutionResult{exitCode: 1}
 	}
 
 	switch outcome {
@@ -163,7 +161,7 @@ func attachWaitForPendingCompile(
 		spinner.Stop()
 		clearCompilePendingRecord(connection.ProjectRoot)
 		logCompileAttachResult(connection, record.RequestID, "disappeared", true)
-		return false, 0
+		return false, compileExecutionResult{}
 	case attachWaitTimedOut:
 		spinner.Stop()
 		// Why not refresh TimedOutAtUtc: stale expiry must stay anchored to the first timeout.
@@ -178,15 +176,15 @@ func attachWaitForPendingCompile(
 			time.Since(waitStartedAt),
 			retentionRemaining,
 		))
-		return true, 1
+		return true, compileExecutionResult{exitCode: 1}
 	case attachWaitCompleted:
 		clearCompilePendingRecord(connection.ProjectRoot)
 		logCompileAttachResult(connection, record.RequestID, "completed", true)
-		return true, completeCompileResultOutput(ctx, connection, result, stdout, stderr, spinner, startedAt, unityipc.UnitySendOutcome{})
+		return true, completeCompileResult(ctx, connection, result, stderr, spinner, startedAt, unityipc.UnitySendOutcome{})
 	default:
 		spinner.Stop()
 		logCompileAttachResult(connection, record.RequestID, "error", false)
-		return true, 1
+		return true, compileExecutionResult{exitCode: 1}
 	}
 }
 
@@ -256,27 +254,25 @@ func returnAttachedStoredCompileResult(
 	connection unityipc.Connection,
 	record compilePendingRecord,
 	result json.RawMessage,
-	stdout io.Writer,
 	stderr io.Writer,
-) int {
+) compileExecutionResult {
 	startedAt := time.Now()
 	logCompileAttachStart(connection, record.RequestID, "stored_result")
 	spinner := clicore.NewToolSpinner(stderr, clicore.CompileCommandName)
 	clearCompilePendingRecord(connection.ProjectRoot)
 	logCompileAttachResult(connection, record.RequestID, "stored_result", true)
-	return completeCompileResultOutput(ctx, connection, result, stdout, stderr, spinner, startedAt, unityipc.UnitySendOutcome{})
+	return completeCompileResult(ctx, connection, result, stderr, spinner, startedAt, unityipc.UnitySendOutcome{})
 }
 
-func completeCompileResultOutput(
+func completeCompileResult(
 	ctx context.Context,
 	connection unityipc.Connection,
 	result json.RawMessage,
-	stdout io.Writer,
 	stderr io.Writer,
 	spinner *ui.TerminalSpinner,
 	startedAt time.Time,
 	outcome unityipc.UnitySendOutcome,
-) int {
+) compileExecutionResult {
 	switch compileResultReadinessWaitMode(result) {
 	case compileReadinessWaitWarmup:
 		spinner.Update("Warming execute-dynamic-code after compile...")
@@ -286,9 +282,8 @@ func completeCompileResultOutput(
 		}
 	}
 	spinner.Stop()
-	clicore.WriteJSON(stdout, result)
 	writeDebugTiming(stderr, clicore.CompileCommandName, time.Since(startedAt), outcome)
-	return toolEnvelopeExitCode(result)
+	return compileExecutionResult{result: result, exitCode: toolEnvelopeExitCode(result)}
 }
 
 func persistCompilePendingRecordOrWarn(projectRoot string, requestID string, stderr io.Writer) {

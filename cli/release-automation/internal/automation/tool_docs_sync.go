@@ -38,6 +38,14 @@ var toolsWithoutParameterTable = map[string]bool{
 	"focus-window": true,
 }
 
+// cliOnlyParameterTableOptions records options parsed by the native runner before Unity sees a
+// schema. Keeping this narrow lets the generator reject every other stale skill-table row.
+var cliOnlyParameterTableOptions = map[string]map[string]bool{
+	"run-tests": {
+		tooldocs.RunTestsSkipCompileFlagName: true,
+	},
+}
+
 // descriptionKey identifies one description in the catalog. Property is empty for the tool's own
 // description.
 type descriptionKey struct {
@@ -183,6 +191,9 @@ func collectToolReplacements(
 func unknownTableRowProblems(toolName string, docs skilldocs.ToolDocs, documentedOptions map[string]bool) []string {
 	unknown := []string{}
 	for optionName := range docs.ParamDescriptions {
+		if cliOnlyParameterTableOptions[toolName][optionName] {
+			continue
+		}
 		if !documentedOptions[optionName] {
 			unknown = append(unknown, "--"+optionName)
 		}
