@@ -43,10 +43,10 @@ const (
 	// though no capture matched the condition.
 	pausePointHitWhenNoteFormat = "The line executed but no hit matched --hit-when; %d hit(s) were skipped."
 
-	// Shared by await-pause-point and pause-point-status when --id is missing. Why one
-	// constant: the two parsers used to copy the same sentence, and a file:line id is a
-	// valid answer that the old wording never mentioned.
-	pausePointMissingIDNextAction = "Pass --id <marker-id> matching UloopPausePoint.Pause(\"<marker-id>\"), or the Id returned by enable-pause-point (file:line markers use <project-relative path>:<line>, e.g. Assets/Scripts/Foo.cs:42)."
+	// Shared by await-pause-point and pause-point-status when no marker target was supplied. Why
+	// one constant: the two parsers used to copy the same sentence, and the new file:line form
+	// needs the same recovery wording on both commands.
+	pausePointMissingIDNextAction = "Pass --id <marker-id> matching UloopPausePoint.Pause(\"<marker-id>\"), or the Id returned by enable-pause-point (file:line markers use <project-relative path>:<line>, e.g. Assets/Scripts/Foo.cs:42). Alternatively, query a file:line marker with --file <project-relative path> --line <line>."
 
 	// Mode strings mirror UloopPausePointCaptureMode on the Unity side. Await uses an allowlist
 	// (continuous/trace) for the new-hit baseline — never `Mode != "single-shot"` — so an empty
@@ -63,6 +63,8 @@ var (
 
 type waitForPausePointOptions struct {
 	id                    string
+	idProvided            bool
+	queryTarget           pausePointQueryTarget
 	timeoutSeconds        int
 	timeout               time.Duration
 	matchingLogsMaxCount  int
@@ -91,6 +93,8 @@ type waitForPausePointOptions struct {
 
 type pausePointStatusOptions struct {
 	id                    string
+	idProvided            bool
+	queryTarget           pausePointQueryTarget
 	capturedVariablesMode pausePointCapturedVariablesMode
 	capturedVariableNames []string
 	expectations          []pausePointExpectation
@@ -390,15 +394,15 @@ func parseWaitForPausePointOptions(args []string) (waitForPausePointOptions, err
 		}
 	}
 
-	if options.id == "" {
-		return waitForPausePointOptions{}, &clierrors.ArgumentError{
-			Message:      "Missing required option: --id",
-			Option:       "--" + PausePointIDFlagName,
-			ExpectedType: "value",
-			Command:      clicore.PausePointAwaitCommandName,
-			NextActions:  []string{pausePointMissingIDNextAction},
-		}
+	queryID, targetErr := resolvePausePointQueryID(
+		options.id,
+		options.idProvided,
+		options.queryTarget,
+		clicore.PausePointAwaitCommandName)
+	if targetErr != nil {
+		return waitForPausePointOptions{}, targetErr
 	}
+	options.id = queryID
 
 	return options, nil
 }
@@ -416,6 +420,15 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 		switch name {
 		case PausePointIDFlagName:
 			options.id = value
+			options.idProvided = true
+		case PausePointFileFlagName:
+			options.queryTarget.file = value
+			options.queryTarget.hasFile = true
+		case PausePointLineFlagName:
+			parseErr := setPausePointQueryTargetLine(&options.queryTarget, value)
+			if parseErr != nil {
+				return pausePointStatusOptions{}, parseErr
+			}
 		case tooldocs.PausePointCapturedVariablesFlagName:
 			mode, parseErr := parsePausePointCapturedVariablesMode(value)
 			if parseErr != nil {
@@ -439,15 +452,15 @@ func parsePausePointStatusOptions(args []string) (pausePointStatusOptions, error
 		}
 	}
 
-	if options.id == "" {
-		return pausePointStatusOptions{}, &clierrors.ArgumentError{
-			Message:      "Missing required option: --id",
-			Option:       "--" + PausePointIDFlagName,
-			ExpectedType: "value",
-			Command:      clicore.PausePointStatusUserCommandName,
-			NextActions:  []string{pausePointMissingIDNextAction},
-		}
+	queryID, targetErr := resolvePausePointQueryID(
+		options.id,
+		options.idProvided,
+		options.queryTarget,
+		clicore.PausePointStatusUserCommandName)
+	if targetErr != nil {
+		return pausePointStatusOptions{}, targetErr
 	}
+	options.id = queryID
 
 	return options, nil
 }

@@ -17,7 +17,15 @@ func applyWaitForPausePointFlag(options *waitForPausePointOptions, name string, 
 	switch name {
 	case PausePointIDFlagName:
 		options.id = value
+		options.idProvided = true
 		return nil
+	case PausePointFileFlagName:
+		options.queryTarget.file = value
+		options.queryTarget.hasFile = true
+		return nil
+	case PausePointLineFlagName:
+		return setPausePointQueryTargetLine(&options.queryTarget, value)
+
 	case PausePointTimeoutFlagName:
 		return applyWaitForPausePointTimeout(options, value)
 	case PausePointLogsMaxCountFlagName:

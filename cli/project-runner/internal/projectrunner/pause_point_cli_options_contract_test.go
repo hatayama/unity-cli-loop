@@ -124,9 +124,11 @@ func TestPausePointSharedHelpOptionsAreAcceptedByTheWaitParser(t *testing.T) {
 // runner-owned native command's --help. A flag added to a tooldocs table without an entry
 // here fails the contract test below rather than silently going unchecked.
 var runnerNativeCommandSampleArgs = map[string][]string{
-	"--" + PausePointIDFlagName:                             {"--id", "marker"},
-	"--" + PausePointTimeoutFlagName:                        {"--timeout-seconds", "5"},
-	"--" + PausePointLogsMaxCountFlagName:                   {"--matching-logs-max-count", "3"},
+	"--" + PausePointIDFlagName:           {"--id", "marker"},
+	"--file":                              {"--file", "Assets/Scripts/Marker.cs", "--line", "42"},
+	"--line":                              {"--file", "Assets/Scripts/Marker.cs", "--line", "42"},
+	"--" + PausePointTimeoutFlagName:      {"--timeout-seconds", "5"},
+	"--" + PausePointLogsMaxCountFlagName: {"--matching-logs-max-count", "3"},
 	"--" + tooldocs.PausePointCapturedVariablesFlagName:     {"--captured-variables", "names"},
 	"--" + tooldocs.PausePointCapturedVariableNamesFlagName: {"--captured-variable-names", "score"},
 	"--" + tooldocs.PausePointExpectFlagName:                {"--expect", "score=1"},
@@ -145,7 +147,7 @@ func TestPausePointStatusHelpOptionsAreAcceptedByTheStatusParser(t *testing.T) {
 			t.Fatalf("no sample argv for %s: add one to runnerNativeCommandSampleArgs", optionName)
 		}
 
-		statusArgs := append([]string{"--" + PausePointIDFlagName, "marker"}, args...)
+		statusArgs := pausePointQuerySampleArgs(optionName, args)
 		if _, err := parsePausePointStatusOptions(statusArgs); err != nil {
 			t.Errorf("pause-point-status parser rejected advertised option %s: %v", optionName, err)
 		}
@@ -161,11 +163,20 @@ func TestPausePointAwaitHelpOptionsAreAcceptedByTheWaitParser(t *testing.T) {
 			t.Fatalf("no sample argv for %s: add one to runnerNativeCommandSampleArgs", optionName)
 		}
 
-		waitArgs := append([]string{"--" + PausePointIDFlagName, "marker"}, args...)
+		waitArgs := pausePointQuerySampleArgs(optionName, args)
 		if _, err := parseWaitForPausePointOptions(waitArgs); err != nil {
 			t.Errorf("await-pause-point parser rejected advertised option %s: %v", optionName, err)
 		}
 	}
+}
+
+// pausePointQuerySampleArgs supplies a complete marker target for each documented query option.
+// File and line must travel together and cannot be combined with --id, unlike every other option.
+func pausePointQuerySampleArgs(optionName string, args []string) []string {
+	if optionName == "--file" || optionName == "--line" {
+		return args
+	}
+	return append([]string{"--" + PausePointIDFlagName, "marker"}, args...)
 }
 
 // pausePointAwaitAdvertisedFlagNames is the await-pause-point advertised flag set. These are
@@ -173,6 +184,8 @@ func TestPausePointAwaitHelpOptionsAreAcceptedByTheWaitParser(t *testing.T) {
 // switch-based parser still accepts the flag.
 var pausePointAwaitAdvertisedFlagNames = []string{
 	"id",
+	"file",
+	"line",
 	"timeout-seconds",
 	"matching-logs-max-count",
 	"captured-variables",
@@ -186,6 +199,8 @@ var pausePointAwaitAdvertisedFlagNames = []string{
 // test-local-literal rule as pausePointAwaitAdvertisedFlagNames.
 var pausePointStatusAdvertisedFlagNames = []string{
 	"id",
+	"file",
+	"line",
 	"captured-variables",
 	"captured-variable-names",
 	"expect",

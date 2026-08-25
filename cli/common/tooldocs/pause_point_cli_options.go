@@ -16,6 +16,8 @@ const (
 	PausePointTriggerFlagName               = "trigger"
 	PausePointResumePlayFlagName            = "resume-play"
 	PausePointIDFlagName                    = "id"
+	PausePointFileFlagName                  = "file"
+	PausePointLineFlagName                  = "line"
 	PausePointTimeoutSecondsFlagName        = "timeout-seconds"
 	PausePointMatchingLogsMaxCountFlagName  = "matching-logs-max-count"
 )
@@ -86,6 +88,8 @@ func PausePointEnableCLIOnlyOptions() []PausePointCLIOnlyOption {
 
 const (
 	pausePointIDDescription                    = "Pause-point marker id matching UloopPausePoint.Pause or the id returned by enable-pause-point"
+	pausePointFileDescription                  = "Project-relative source file of a file:line pause point. Requires --line; mutually exclusive with --id"
+	pausePointLineDescription                  = "1-based source line of a file:line pause point. Requires --file; mutually exclusive with --id"
 	pausePointTimeoutSecondsDescription        = "Seconds to wait for a hit before timing out"
 	pausePointMatchingLogsMaxCountDescription  = "Maximum Console logs matching the marker id to include on a hit"
 	pausePointCapturedVariablesDescription     = "How much of each captured variable to include in the response"
@@ -114,6 +118,16 @@ func pausePointSharedQueryCLIOnlyOptions() []PausePointCLIOnlyOption {
 			FlagName:    PausePointIDFlagName,
 			Type:        "string",
 			Description: pausePointIDDescription,
+		},
+		{
+			FlagName:    PausePointFileFlagName,
+			Type:        "string",
+			Description: pausePointFileDescription,
+		},
+		{
+			FlagName:    PausePointLineFlagName,
+			Type:        "integer",
+			Description: pausePointLineDescription,
 		},
 		pausePointCapturedVariablesOption(),
 		{
