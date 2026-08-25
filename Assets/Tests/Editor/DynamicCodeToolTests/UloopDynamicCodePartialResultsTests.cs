@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [TearDown]
         public void TearDown()
         {
+            UloopDynamicCodePartialResults.AfterGenerationValidatedForTesting = null;
             UloopDynamicCodePartialResults.Clear();
         }
 
@@ -52,6 +53,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             Dictionary<string, string> snapshot = UloopDynamicCodePartialResults.Snapshot();
             Assert.That(snapshot, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: Snapshot excludes a stale write that resumes after the next execution scope opens.
+        /// </summary>
+        [Test]
+        public void Snapshot_WhenStaleSetResumesAfterNextScopeOpens_ExcludesStaleEntryAndKeepsCurrentEntries()
+        {
+            UloopDynamicCodePartialResults.AfterGenerationValidatedForTesting = () =>
+            {
+                UloopDynamicCodePartialResults.AfterGenerationValidatedForTesting = null;
+                UloopDynamicCodePartialResults.OpenExecutionScope();
+                UloopDynamicCodePartialResults.Set("currentRequest", "ready");
+            };
+
+            UloopDynamicCodePartialResults.Set("lateFromCancelledRequest", "late");
+
+            Dictionary<string, string> snapshot = UloopDynamicCodePartialResults.Snapshot();
+            Assert.That(snapshot["currentRequest"], Is.EqualTo("ready"));
+            Assert.That(snapshot.ContainsKey("lateFromCancelledRequest"), Is.False);
         }
     }
 }
