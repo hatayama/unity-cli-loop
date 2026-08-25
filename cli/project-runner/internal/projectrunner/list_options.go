@@ -1,6 +1,10 @@
 package projectrunner
 
-import clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+import (
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
+
+	"github.com/hatayama/unity-cli-loop/common/tooldocs"
+)
 
 type listOptions struct {
 	namesOnly bool
@@ -9,7 +13,7 @@ type listOptions struct {
 func parseListOptions(args []string) (listOptions, error) {
 	options := listOptions{}
 	for _, arg := range args {
-		if arg == "--names" {
+		if arg == "--"+tooldocs.ListNamesFlagName {
 			options.namesOnly = true
 			continue
 		}
