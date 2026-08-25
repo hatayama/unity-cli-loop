@@ -490,7 +490,7 @@ func TestRunEnablePausePointCommandAwaitPropagatesFileLineResolvedFields(t *test
 		pausePointEnableCommandName,
 		enableRequests,
 		serverErr,
-		`{"Success":true,"Id":"Assets/Foo.cs:42","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30,"ResolvedLine":42,"ResolvedLineText":"    DoJump();","ResolvedMethod":"Player.Update","SnapshotTiming":"OnEnter"}`,
+		`{"Success":true,"Id":"Assets/Foo.cs:42","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30,"ResolvedLine":42,"ResolvedLineText":"    DoJump();","ResolvedMethod":"Player.Update","SnapshotTiming":"OnEnter","LineBasis":"EditedFile"}`,
 	)
 
 	connection := unityipc.Connection{
@@ -530,6 +530,13 @@ func TestRunEnablePausePointCommandAwaitPropagatesFileLineResolvedFields(t *test
 	}
 	if response.SnapshotTiming != "OnEnter" {
 		t.Fatalf("SnapshotTiming mismatch: %#v", response)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &raw); err != nil {
+		t.Fatalf("failed to decode LineBasis: %v\n%s", err, stdout.String())
+	}
+	if raw["LineBasis"] != "EditedFile" {
+		t.Fatalf("LineBasis mismatch: %#v", raw["LineBasis"])
 	}
 }
 
@@ -851,6 +858,72 @@ func TestRunPausePointWaitAfterEnablePropagatesResolvedFieldsOnExpired(t *testin
 	wantMessage := "Pause point expired before it was hit. The marker stayed armed at the resolved line shown in Details; that line was never executed within the window."
 	if envelope.Error.Message != wantMessage {
 		t.Fatalf("Message mismatch:\nwant: %q\ngot:  %q", wantMessage, envelope.Error.Message)
+	}
+}
+
+// Verifies enable-pause-point --await copies enable-time LineBasis into Expired error Details,
+// because Expired does not marshal the normal wait response.
+func TestRunEnablePausePointCommandAwaitPropagatesLineBasisOnExpired(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+	})
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:          id,
+			Status:      pausePointStatusExpired,
+			Expired:     true,
+			EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+		}, nil
+	}
+
+	listener := newLoopbackIpcListener(t)
+	enableRequests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(
+		listener,
+		pausePointEnableCommandName,
+		enableRequests,
+		serverErr,
+		`{"Success":true,"Id":"Assets/Foo.cs:42","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30,"LineBasis":"LastCompiledSource"}`,
+	)
+
+	connection := unityipc.Connection{
+		Endpoint: unityipc.Endpoint{
+			Network: listener.Addr().Network(),
+			Address: listener.Addr().String(),
+		},
+		ProjectRoot: t.TempDir(),
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointCommand(
+		context.Background(),
+		connection,
+		[]string{"--file", "Assets/Foo.cs", "--line", "42", "--await"},
+		t.TempDir(),
+		&stdout,
+		&stderr)
+	if code != 1 {
+		t.Fatalf("expected expired failure, got %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	firstJSONByte := bytes.IndexByte(stderr.Bytes(), '{')
+	if firstJSONByte < 0 {
+		t.Fatalf("expected error JSON, got %s", stderr.String())
+	}
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes()[firstJSONByte:])
+	if envelope.Error.Details["LineBasis"] != "LastCompiledSource" {
+		t.Fatalf("LineBasis mismatch: %#v", envelope.Error.Details["LineBasis"])
 	}
 }
 

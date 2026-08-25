@@ -638,6 +638,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(
                     response.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction));
+                AssertLineBasis(response, "LastCompiledSource");
             }
             finally
             {
@@ -711,6 +712,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + requestedLine
                     + "\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time.";
                 Assert.That(response.RecommendedNextAction, Is.EqualTo(expectedArming));
+                AssertLineBasis(response, "LastCompiledSource");
             }
             finally
             {
@@ -1606,6 +1608,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     Is.True,
                     response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
                 Assert.That(response.RetargetedToHotReloadPatch, Is.False);
+                AssertLineBasis(response, "LastCompiledSource");
                 string dedicatedWarning = string.Format(
                     SourcePausePointConstants.HotReloadPatchedMethodPdbUnavailableWarningFormat,
                     "PausePointCompiledLineMapWarningTests.CompiledLineDriftProbe",
@@ -1674,6 +1677,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             return -1;
+        }
+
+        // Confirms a source-location enable response reports the resolver basis callers must use.
+        private static void AssertLineBasis(PausePointResponse response, string expected)
+        {
+            Assert.That(response.LineBasis, Is.EqualTo(expected));
         }
 
         private static PausePointResponse EnableUnresolvableLine()

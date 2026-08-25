@@ -130,6 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(enable.Success, Is.True, enable.Message + " / " + enable.RecommendedNextAction);
             Assert.That(enable.RetargetedToHotReloadPatch, Is.True);
+            Assert.That(enable.LineBasis, Is.EqualTo("EditedFile"));
             Assert.That(enable.ResolvedMethod, Does.Contain(nameof(HotReloadPausePointLineDriftFixture.PatchTarget)));
             Assert.That(enable.Warning ?? string.Empty, Does.Not.Contain("has active hot-reload patches"));
 

@@ -94,8 +94,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool LateHitDiscardedAfterClear { get; set; }
         public bool SuppressedByHotReload { get; set; }
         public bool RetargetedToHotReloadPatch { get; set; }
+        public string LineBasis { get; set; } = string.Empty;
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string SuppressedByHotReloadReason { get; set; }
+
+        public bool ShouldSerializeLineBasis()
+        {
+            return !string.IsNullOrEmpty(LineBasis);
+        }
 
         internal static PausePointResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {

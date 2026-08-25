@@ -263,6 +263,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         shimResolution.ResolvedLine,
                         shimResolution.MethodDisplayName,
                         shimPatchResult,
+                        "EditedFile",
                         retargetedToHotReloadPatch: true,
                         hasActiveHotReloadPatches: true,
                         editedMethodStartLine: shimResolution.SourceStartLine,
@@ -366,6 +367,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolveResult.Resolution.ResolvedEndLine,
                 resolveResult.Resolution.MethodDisplayName,
                 patchResult,
+                "LastCompiledSource",
                 retargetedToHotReloadPatch: false,
                 hasActiveHotReloadPatches: shimLookup != null,
                 compiledMethodStartLine: resolveResult.Resolution.CompiledMethodStartLine,
@@ -383,6 +385,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int resolvedEndLine,
             string resolvedMethod,
             SourcePausePointPatchResult patchResult,
+            string lineBasis,
             bool retargetedToHotReloadPatch,
             bool hasActiveHotReloadPatches,
             int editedMethodStartLine = 0,
@@ -429,6 +432,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedLineText = resolvedLineText;
             response.ResolvedMethod = resolvedMethod;
             response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
+            response.LineBasis = lineBasis;
             string enableWarning = PausePointEnableWarnings.MergeWarnings(
                 PausePointEnableWarnings.CreateEnableWarning(),
                 editedLineRemapWarning);
