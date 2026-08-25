@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string FixtureFilePath = "Assets/Tests/Editor/PausePointPerFrameTraceNoticeFixture.cs";
 
         private const string PlayerUpdateNotice =
-            "'Player.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.";
+            "'Player.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer --hit-when, a conditional line, or a larger --max-history.";
 
         [SetUp]
         public void SetUp()
@@ -38,16 +38,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// </summary>
         [TestCase(
             "Player.Update",
-            "'Player.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.")]
+            "'Player.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer --hit-when, a conditional line, or a larger --max-history.")]
         [TestCase(
             "Player.FixedUpdate",
-            "'Player.FixedUpdate' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.")]
+            "'Player.FixedUpdate' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer --hit-when, a conditional line, or a larger --max-history.")]
         [TestCase(
             "Player.LateUpdate",
-            "'Player.LateUpdate' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.")]
+            "'Player.LateUpdate' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer --hit-when, a conditional line, or a larger --max-history.")]
         [TestCase(
             "Player.OnGUI",
-            "'Player.OnGUI' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.")]
+            "'Player.OnGUI' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer --hit-when, a conditional line, or a larger --max-history.")]
         public void BuildPerFrameTraceWarningOrEmpty_WhenTraceAndPerFrameMessage_ReturnsNotice(
             string resolvedMethod,
             string expectedNotice)
@@ -122,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 merged,
                 Is.EqualTo(
-                    "Pause point was enabled before PlayMode while Domain Reload is enabled. Entering PlayMode may clear this marker; keep Domain Reload disabled for this workflow or enable the marker after PlayMode starts. 'Player.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history."));
+                    "Pause point was enabled before PlayMode while Domain Reload is enabled. Entering PlayMode may clear this marker; keep Domain Reload disabled for this workflow or enable the marker after PlayMode starts. 'Player.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer --hit-when, a conditional line, or a larger --max-history."));
         }
 
         /// <summary>
@@ -150,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.True,
                 response.ErrorCode + " / " + response.Message + " / " + response.RecommendedNextAction);
             string notice =
-                "'PerFrameTraceNoticeFixture.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer a conditional line or a larger --max-history.";
+                "'PerFrameTraceNoticeFixture.Update' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max 8) over within moments. Prefer --hit-when, a conditional line, or a larger --max-history.";
             string expectedWarning = PausePointEnableWarnings.MergeWarnings(
                 PausePointEnableWarnings.MergeWarnings(
                     PausePointEnableWarnings.CreateEnableWarning(),

@@ -50,7 +50,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public PausePointResponse Enable(EnablePausePointSchema parameters)
         {
-            string captureSettingsError = ValidateCaptureSettings(parameters);
+            UloopPausePointHitWhenParseResult hitWhenParseResult = string.IsNullOrWhiteSpace(parameters.HitWhen)
+                ? null
+                : UloopPausePointHitWhenCondition.Parse(parameters.HitWhen);
+            UloopPausePointHitWhenCondition hitWhenCondition = hitWhenParseResult == null
+                ? null
+                : hitWhenParseResult.Condition;
+            string captureSettingsError = ValidateCaptureSettings(parameters, hitWhenParseResult);
             if (captureSettingsError != null)
             {
                 return CreateValidationFailure(
@@ -78,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!string.IsNullOrWhiteSpace(parameters.File))
             {
-                return EnableBySourceLocation(parameters);
+                return EnableBySourceLocation(parameters, hitWhenCondition);
             }
 
             string rearmWarning = PausePointEnableWarnings.BuildRearmDiscardWarningOrEmpty(
@@ -89,7 +95,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.Mode,
                 parameters.MaxHistory,
                 parameters.MaxPreviewElements,
-                parameters.MaxCallerFrames);
+                parameters.MaxCallerFrames,
+                parameters.HitWhen,
+                hitWhenCondition);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             response.Warning = PausePointEnableWarnings.MergeWarnings(
                 PausePointEnableWarnings.CreateEnableWarning(),
@@ -194,7 +202,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Resolves File:Line to a patch location via the Resolver, patches it via Harmony, then
         // arms the same registry state machine the Id path uses, keyed by the derived source id.
-        private static PausePointResponse EnableBySourceLocation(EnablePausePointSchema parameters)
+        private static PausePointResponse EnableBySourceLocation(
+            EnablePausePointSchema parameters,
+            UloopPausePointHitWhenCondition hitWhenCondition)
         {
             if (CompilationPipeline.codeOptimization == CodeOptimization.Release)
             {
@@ -241,6 +251,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return FinishEnableBySourceLocation(
                         id,
                         parameters,
+                        hitWhenCondition,
                         shimResolution.ResolvedLine,
                         shimResolution.ResolvedLine,
                         shimResolution.MethodDisplayName,
@@ -342,6 +353,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return FinishEnableBySourceLocation(
                 id,
                 parameters,
+                hitWhenCondition,
                 resolveResult.Resolution.ResolvedLine,
                 resolveResult.Resolution.ResolvedEndLine,
                 resolveResult.Resolution.MethodDisplayName,
@@ -357,6 +369,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static PausePointResponse FinishEnableBySourceLocation(
             string id,
             EnablePausePointSchema parameters,
+            UloopPausePointHitWhenCondition hitWhenCondition,
             int resolvedLine,
             int resolvedEndLine,
             string resolvedMethod,
@@ -378,7 +391,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.Mode,
                 parameters.MaxHistory,
                 parameters.MaxPreviewElements,
-                parameters.MaxCallerFrames);
+                parameters.MaxCallerFrames,
+                parameters.HitWhen,
+                hitWhenCondition);
             if (retargetedToHotReloadPatch)
             {
                 UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, true);
@@ -569,7 +584,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        private static string ValidateCaptureSettings(EnablePausePointSchema parameters)
+        private static string ValidateCaptureSettings(
+            EnablePausePointSchema parameters,
+            UloopPausePointHitWhenParseResult hitWhenParseResult)
         {
             string[] supportedModes =
             {
@@ -597,6 +614,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxCallerFrames > UloopPausePointRegistry.MaxCallerFramesLimit)
             {
                 return $"MaxCallerFrames must be between 0 and {UloopPausePointRegistry.MaxCallerFramesLimit}.";
+            }
+
+            if (string.IsNullOrWhiteSpace(parameters.HitWhen))
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(parameters.Id) && string.IsNullOrWhiteSpace(parameters.File))
+            {
+                return "--hit-when requires a --file/--line marker.";
+            }
+
+            if (!string.IsNullOrEmpty(hitWhenParseResult.ErrorMessage))
+            {
+                return hitWhenParseResult.ErrorMessage;
             }
 
             return null;

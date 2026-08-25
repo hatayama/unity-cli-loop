@@ -8,10 +8,11 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     /// <summary>
-    /// Stores enabled pause point state for the current Editor domain. All members except
-    /// IsArmed, RecordMethodEntry, and ResumeEditorPauseForClientDisconnect are main-thread-only
-    /// by convention; IsArmed and RecordMethodEntry are Harmony entry points, and the disconnect
-    /// resume path only sets a pending flag so thread-pool callers never touch EditorApplication.isPaused.
+        /// Stores enabled pause point state for the current Editor domain. All members except
+        /// IsArmed, RecordMethodEntry, GetHitWhenCondition, RecordHitWhenSkip, RecordHitWhenError,
+        /// and ResumeEditorPauseForClientDisconnect are main-thread-only by convention; the capture
+        /// accessors are Harmony entry points, and the disconnect resume path only sets a pending flag
+        /// so thread-pool callers never touch EditorApplication.isPaused.
     /// </summary>
     internal static class UloopPausePointRegistry
     {
@@ -80,7 +81,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string mode = UloopPausePointCaptureMode.SingleShot,
             int maxHistory = DefaultMaxHistory,
             int maxPreviewElements = DefaultMaxPreviewElements,
-            int maxCallerFrames = DefaultMaxCallerFrames)
+            int maxCallerFrames = DefaultMaxCallerFrames,
+            string hitWhen = "",
+            UloopPausePointHitWhenCondition hitWhenCondition = null)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
             Debug.Assert(timeoutSeconds > 0, "timeoutSeconds must be greater than zero");
@@ -95,12 +98,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             Debug.Assert(
                 maxCallerFrames <= MaxCallerFramesLimit,
                 "maxCallerFrames must not exceed the caller-frame limit");
+            Debug.Assert(
+                string.IsNullOrEmpty(hitWhen) == (hitWhenCondition == null),
+                "hitWhen and hitWhenCondition must both be set or both be empty");
 
             DateTime now = NowUtc();
             int generation = ++_nextGeneration;
             UloopPausePointEntry entry = new(
                 id, timeoutSeconds, mode, maxHistory, maxPreviewElements, maxCallerFrames, now, generation,
-                MethodEntryInstrumentedIds.Contains(id));
+                MethodEntryInstrumentedIds.Contains(id), hitWhen, hitWhenCondition);
             Entries[id] = entry;
             // Why not clear the raw capture holder here: a re-enable does not resume Unity, so the
             // paused-window constraint (see UloopPausePointRawCaptureHolder's class comment) is not
@@ -340,6 +346,36 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             if (Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled)
             {
                 entry.IncrementMethodEntryCount();
+            }
+        }
+
+        // Returns the immutable condition attached at enable time. Capture calls this only after
+        // IsArmed, so an unknown or concurrently-cleared marker simply skips condition evaluation.
+        public static UloopPausePointHitWhenCondition GetHitWhenCondition(string id)
+        {
+            return Entries.TryGetValue(id, out UloopPausePointEntry entry)
+                ? entry.HitWhenCondition
+                : null;
+        }
+
+        // Capture runs in Harmony-injected methods that may be off the main thread, so the entry
+        // owns the Interlocked increment and this registry method keeps the same armed gate as
+        // RecordMethodEntry.
+        public static void RecordHitWhenSkip(string id)
+        {
+            if (Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled)
+            {
+                entry.IncrementHitWhenSkippedCount();
+            }
+        }
+
+        // Stores the first recoverable evaluation failure while allowing the current capture to
+        // proceed, so a typo cannot silently discard every frame from a live investigation.
+        public static void RecordHitWhenError(string id, string errorMessage)
+        {
+            if (Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled)
+            {
+                entry.RecordHitWhenError(errorMessage);
             }
         }
 

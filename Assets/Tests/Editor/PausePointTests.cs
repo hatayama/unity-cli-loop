@@ -62,6 +62,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
             Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.NotEnabled));
             Assert.That(snapshot.IsEnabled, Is.False);
+            Assert.That(snapshot.HitWhen, Is.EqualTo(string.Empty));
+            Assert.That(snapshot.HitWhenSkippedCount, Is.EqualTo(0));
+            Assert.That(snapshot.HitWhenErrorNote, Is.EqualTo(string.Empty));
         }
 
         [Test]
@@ -310,6 +313,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit. The armed method was never invoked."));
+        }
+
+        /// <summary>
+        /// What: an instrumented marker that skips hits by hit-when reports skipped-hit expiry evidence.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenHitWhenSkippedHitsExpire_ReportsConditionalExpiryMessage()
+        {
+            UloopPausePointHitWhenParseResult parseResult = UloopPausePointHitWhenCondition.Parse("speed > 5");
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable(
+                "jump",
+                1,
+                UloopPausePointCaptureMode.Trace,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                "speed > 5",
+                parseResult.Condition);
+            UloopPausePointRegistry.RecordHitWhenSkip("jump");
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before any hit matched --hit-when. The method entered 0 time(s); 1 hit(s) were skipped by the condition."));
         }
 
         [Test]
@@ -1752,6 +1780,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 snapshot.CapturedVariables.Select(v => v.Name),
                 Is.EquivalentTo(new[] { "left", "right", "sum", "this", "Tag" }));
+        }
+
+        /// <summary>
+        /// What: a valid file-line hit-when condition reaches the injected capture gate and skips a non-match.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenFileLineHitWhenDoesNotMatch_SkipsPatchedCapture()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["file"] = FixtureFilePath,
+                ["line"] = FixtureLine,
+                ["timeoutSeconds"] = 30,
+                ["mode"] = UloopPausePointCaptureMode.Trace,
+                ["maxCallerFrames"] = 0,
+                ["hitWhen"] = "sum > 5"
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+            EnableBySourceLocationFixture fixture = new();
+            int sum = fixture.Add(2, 3);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(response.Id);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.HitWhen, Is.EqualTo("sum > 5"));
+            Assert.That(sum, Is.EqualTo(5));
+            Assert.That(snapshot.HitCount, Is.EqualTo(0));
+            Assert.That(snapshot.HitWhenSkippedCount, Is.EqualTo(1));
+            Assert.That(snapshot.CapturedVariableHistory, Is.Empty);
         }
 
         /// <summary>

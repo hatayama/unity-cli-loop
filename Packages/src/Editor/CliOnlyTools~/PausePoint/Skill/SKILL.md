@@ -50,6 +50,7 @@ Enable a pause point so Unity pauses when that code path is reached, either by a
 | `--line` | integer | - | 1-based source line to resolve within File. Requires File; mutually exclusive with Id |
 | `--timeout-seconds` | integer | `30` | Seconds before the enable request expires and stops pausing late hits |
 | `--mode` | enum | `single-shot` | Capture mode: single-shot pauses once, continuous pauses on every hit, trace records hits without pausing |
+| `--hit-when` | string | - | Conditional capture expression (`<name> <op> <literal>`). Only matching hits are captured; requires File and Line |
 | `--max-history` | integer | `20` | Maximum number of captured hit frames to retain (1-100) |
 | `--max-preview-elements` | integer | `10` | Maximum number of elements to include in a captured collection's preview (1-1000). The value set at enable time also caps the previews in every later pause-point-status response for that marker; status has no flag to change it. |
 | `--max-caller-frames` | integer | `2` | Maximum number of caller stack frames to record on each hit (0-8). 0 disables capture (`CallerFrames` stays an empty array). The value set at enable time also caps every later pause-point-status response for that marker; status has no flag to change it. |

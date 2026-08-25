@@ -130,6 +130,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public bool IsHit { get; set; }
         public int HitCount { get; set; }
         public int MethodEntryCount { get; set; }
+        public string HitWhen { get; set; } = string.Empty;
+        public int HitWhenSkippedCount { get; set; }
+        public string HitWhenErrorNote { get; set; } = string.Empty;
         public int TimeoutSeconds { get; set; }
         public string Mode { get; set; } = string.Empty;
         public int MaxHistory { get; set; }
@@ -191,6 +194,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 IsHit = snapshot.IsHit,
                 HitCount = snapshot.HitCount,
                 MethodEntryCount = snapshot.MethodEntryCount,
+                HitWhen = snapshot.HitWhen,
+                HitWhenSkippedCount = snapshot.HitWhenSkippedCount,
+                HitWhenErrorNote = snapshot.HitWhenErrorNote,
                 TimeoutSeconds = snapshot.TimeoutSeconds,
                 Mode = snapshot.Mode,
                 MaxHistory = snapshot.MaxHistory,

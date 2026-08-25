@@ -160,7 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why conditional wording: the name match is not proof this is a Unity message, so
         // "is a per-frame Unity message" would be false for non-MonoBehaviour types.
         public const string PerFrameTraceNoticeFormat =
-            "'{0}' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max {1}) over within moments. Prefer a conditional line or a larger --max-history.";
+            "'{0}' matches a per-frame Unity message name; if this line runs every frame, capture mode 'trace' can roll the history (max {1}) over within moments. Prefer --hit-when, a conditional line, or a larger --max-history.";
 
         // Why name-based, not a MonoBehaviour type check: a plain C# Update is often driven
         // every frame by a MonoBehaviour delegate, and a type check would miss that case.

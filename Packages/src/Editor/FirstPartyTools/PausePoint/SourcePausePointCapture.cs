@@ -25,9 +25,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
+                instance, parameterNamesAndValues, localNamesAndValues);
+            UloopPausePointHitWhenCondition condition = UloopPausePointRegistry.GetHitWhenCondition(id);
+            if (condition != null)
+            {
+                UloopPausePointHitWhenEvaluation evaluation = condition.Evaluate(frame.Entries);
+                if (string.IsNullOrEmpty(evaluation.ErrorMessage) && !evaluation.Matched)
+                {
+                    UloopPausePointRegistry.RecordHitWhenSkip(id);
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(evaluation.ErrorMessage))
+                {
+                    UloopPausePointRegistry.RecordHitWhenError(id, evaluation.ErrorMessage);
+                }
+            }
+
             int maxPreviewElements = UloopPausePointRegistry.GetMaxPreviewElements(id);
-            (UloopPausePointCapturedVariableFrame frame, List<UloopCapturedVariable> variables, bool truncated) =
-                CaptureFrame(instance, parameterNamesAndValues, localNamesAndValues, maxPreviewElements);
+            (UloopPausePointCapturedVariableFrame formattedFrame, List<UloopCapturedVariable> variables, bool truncated) =
+                FormatFrame(frame, maxPreviewElements);
+            frame = formattedFrame;
             // The stack must be walked on the hitting thread; a deferred main-thread hit would see
             // the scheduler's stack instead of the caller chain that reached the marker.
             int maxCallerFrames = UloopPausePointRegistry.GetMaxCallerFrames(id);
@@ -69,6 +88,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             UloopPausePointCapturedVariableFrame frame = SourcePausePointVariableCollector.Collect(
                 instance, parameterNamesAndValues, localNamesAndValues);
+            return FormatFrame(frame, maxPreviewElements);
+        }
+
+        private static (UloopPausePointCapturedVariableFrame Frame, List<UloopCapturedVariable> Variables, bool Truncated)
+            FormatFrame(UloopPausePointCapturedVariableFrame frame, int maxPreviewElements)
+        {
             (List<UloopCapturedVariable> variables, bool truncated) =
                 SourcePausePointVariableFormatter.FormatFrame(frame, maxPreviewElements);
             frame = SourcePausePointTruncationAggregate.Merge(frame, variables);

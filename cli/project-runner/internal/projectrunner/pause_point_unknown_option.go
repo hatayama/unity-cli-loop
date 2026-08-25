@@ -28,6 +28,7 @@ var pausePointFlagOwnerSearchOrder = []string{
 var pausePointCarriedOverEnableFlagNames = []string{
 	"mode",
 	"max-history",
+	"hit-when",
 	"max-preview-elements",
 	"max-caller-frames",
 	PausePointTimeoutFlagName,
