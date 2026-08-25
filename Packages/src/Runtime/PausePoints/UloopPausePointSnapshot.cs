@@ -49,7 +49,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string suppressedByHotReloadReason,
             bool retargetedToHotReloadPatch,
             int resolvedLine,
-            string resolvedLineText)
+            string resolvedLineText,
+            string hitWhen,
+            int hitWhenSkippedCount,
+            string hitWhenErrorNote)
         {
             Debug.Assert(editorState != null, "editorState must not be null");
 
@@ -91,6 +94,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             RetargetedToHotReloadPatch = retargetedToHotReloadPatch;
             ResolvedLine = resolvedLine;
             ResolvedLineText = resolvedLineText;
+            HitWhen = NormalizeOptionalText(hitWhen);
+            HitWhenSkippedCount = hitWhenSkippedCount;
+            HitWhenErrorNote = NormalizeOptionalText(hitWhenErrorNote);
         }
 
         public string Id { get; }
@@ -131,6 +137,15 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool RetargetedToHotReloadPatch { get; }
         public int ResolvedLine { get; }
         public string ResolvedLineText { get; }
+        public string HitWhen { get; }
+        public int HitWhenSkippedCount { get; }
+        public string HitWhenErrorNote { get; }
+
+        // Normalizes optional response text to the empty-string contract.
+        private static string NormalizeOptionalText(string value)
+        {
+            return value ?? string.Empty;
+        }
 
         public static UloopPausePointSnapshot NotEnabled(string id, IUloopPausePointPauseController pauseController)
         {
@@ -176,7 +191,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 null,
                 false,
                 0,
-                null);
+                null,
+                string.Empty,
+                0,
+                string.Empty);
         }
     }
 }

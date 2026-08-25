@@ -111,6 +111,7 @@ func TestPausePointCarriedOverEnableFlagsAreVisibleInTheStatusResponse(t *testin
 	response, err := json.Marshal(pausePointStatusResponse{
 		Mode:               "continuous",
 		MaxHistory:         20,
+		HitWhen:            "speed > 5",
 		MaxPreviewElements: 5,
 		MaxCallerFrames:    4,
 		TimeoutSeconds:     30,
@@ -122,6 +123,7 @@ func TestPausePointCarriedOverEnableFlagsAreVisibleInTheStatusResponse(t *testin
 	carriedOverFields := map[string]string{
 		"mode":                 "Mode",
 		"max-history":          "MaxHistory",
+		"hit-when":             "HitWhen",
 		"max-preview-elements": "MaxPreviewElements",
 		"max-caller-frames":    "MaxCallerFrames",
 		"timeout-seconds":      "TimeoutSeconds",

@@ -57,6 +57,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: an id-only marker rejects hit-when because it has no captured method variables.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenIdMarkerUsesHitWhen_ReturnsSourceMarkerValidationFailure()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["hitWhen"] = "speed > 5"
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("--hit-when requires a --file/--line marker."));
+        }
+
+        /// <summary>
+        /// What: whitespace-only hit-when input is treated as an absent condition before arming an id marker.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenHitWhenIsWhitespaceOnly_TreatsItAsAbsent()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["hitWhen"] = "  "
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(snapshot.HitWhen, Is.EqualTo(string.Empty));
+            Assert.That(UloopPausePointRegistry.GetHitWhenCondition("jump"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: malformed hit-when input returns the DSL grammar error before a marker is armed.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenHitWhenIsMalformed_ReturnsDslGrammarValidationFailure()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["file"] = "Assets/NoSuchHitWhenFixture.cs",
+                ["line"] = 1,
+                ["hitWhen"] = "speed matches 5"
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(
+                response.Message,
+                Is.EqualTo("--hit-when must use '<name> <op> <literal>' where name is an identifier or this and op is ==, !=, >, >=, <, or <=."));
+        }
+
+        /// <summary>
         /// Verifies an unknown mode returns a user-facing validation failure with supported values.
         /// </summary>
         [Test]
@@ -213,6 +275,89 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
             Assert.That(snapshot.CapturedVariables.Single().Value.Split(',').Length, Is.EqualTo(maxPreviewElements));
             Assert.That(snapshot.CapturedVariablesTruncated, Is.True);
+        }
+
+        /// <summary>
+        /// What: a false hit-when condition skips capture before it can add a trace-history frame.
+        /// </summary>
+        [Test]
+        public void Capture_WhenHitWhenDoesNotMatch_SkipsCaptureAndRecordsSkipCount()
+        {
+            UloopPausePointHitWhenParseResult parseResult = UloopPausePointHitWhenCondition.Parse("speed > 5");
+            UloopPausePointRegistry.Enable(
+                "jump",
+                30,
+                UloopPausePointCaptureMode.Trace,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                "speed > 5",
+                parseResult.Condition);
+
+            SourcePausePointCapture.Capture(
+                "jump", null, Array.Empty<object>(), new object[] { "speed", 5 });
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.HitCount, Is.EqualTo(0));
+            Assert.That(snapshot.HitWhen, Is.EqualTo("speed > 5"));
+            Assert.That(snapshot.HitWhenSkippedCount, Is.EqualTo(1));
+            Assert.That(snapshot.HitWhenErrorNote, Is.EqualTo(string.Empty));
+            Assert.That(snapshot.CapturedVariableHistory, Is.Empty);
+            Assert.That(_pauseController.PauseCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a hit-when type error records the first error and keeps the capture fail-open.
+        /// </summary>
+        [Test]
+        public void Capture_WhenHitWhenEvaluationErrors_RecordsErrorAndCapturesFrame()
+        {
+            UloopPausePointHitWhenParseResult parseResult = UloopPausePointHitWhenCondition.Parse("speed == true");
+            UloopPausePointRegistry.Enable(
+                "jump",
+                30,
+                UloopPausePointCaptureMode.Trace,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                "speed == true",
+                parseResult.Condition);
+
+            SourcePausePointCapture.Capture(
+                "jump", null, Array.Empty<object>(), new object[] { "speed", 5 });
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.HitCount, Is.EqualTo(1));
+            Assert.That(snapshot.HitWhenSkippedCount, Is.EqualTo(0));
+            Assert.That(snapshot.HitWhenErrorNote, Is.EqualTo("--hit-when expected variable 'speed' to be Boolean."));
+            Assert.That(snapshot.CapturedVariableHistory, Has.Count.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: the first hit-when evaluation error remains status evidence when later frames fail differently.
+        /// </summary>
+        [Test]
+        public void RecordHitWhenError_WhenMultipleErrorsAreReported_KeepsFirstError()
+        {
+            UloopPausePointHitWhenParseResult parseResult = UloopPausePointHitWhenCondition.Parse("speed > 5");
+            UloopPausePointRegistry.Enable(
+                "jump",
+                30,
+                UloopPausePointCaptureMode.Trace,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                "speed > 5",
+                parseResult.Condition);
+
+            UloopPausePointRegistry.RecordHitWhenError("jump", "first error");
+            UloopPausePointRegistry.RecordHitWhenError("jump", "later error");
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.HitWhenErrorNote, Is.EqualTo("first error"));
         }
 
         /// <summary>

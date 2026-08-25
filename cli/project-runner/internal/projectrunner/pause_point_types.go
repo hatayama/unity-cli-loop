@@ -9,6 +9,9 @@ type pausePointStatusResponse struct {
 	IsHit                           bool                             `json:"IsHit"`
 	HitCount                        int                              `json:"HitCount"`
 	MethodEntryCount                int                              `json:"MethodEntryCount"`
+	HitWhen                         string                           `json:"HitWhen"`
+	HitWhenSkippedCount             int                              `json:"HitWhenSkippedCount"`
+	HitWhenErrorNote                string                           `json:"HitWhenErrorNote"`
 	TimeoutSeconds                  int                              `json:"TimeoutSeconds"`
 	Mode                            string                           `json:"Mode"`
 	MaxHistory                      int                              `json:"MaxHistory"`

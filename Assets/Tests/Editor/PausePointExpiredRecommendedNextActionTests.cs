@@ -87,7 +87,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.MethodEntryCount, Is.EqualTo(3));
         }
 
-        private static UloopPausePointSnapshot CreateExpiredSnapshot(string recommendedNextAction, int methodEntryCount)
+        /// <summary>
+        /// What: PausePointResponse preserves all hit-when status fields from a runtime snapshot.
+        /// </summary>
+        [Test]
+        public void FromSnapshot_WhenHitWhenFieldsArePresent_PropagatesFixedValues()
+        {
+            UloopPausePointSnapshot snapshot = CreateExpiredSnapshot(
+                string.Empty,
+                0,
+                "speed > 5",
+                3,
+                "--hit-when could not find variable 'speed' in the captured frame.");
+
+            PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
+
+            Assert.That(response.HitWhen, Is.EqualTo("speed > 5"));
+            Assert.That(response.HitWhenSkippedCount, Is.EqualTo(3));
+            Assert.That(response.HitWhenErrorNote, Is.EqualTo("--hit-when could not find variable 'speed' in the captured frame."));
+        }
+
+        /// <summary>
+        /// What: PausePointStatusResponse preserves all hit-when status fields from a runtime snapshot.
+        /// </summary>
+        [Test]
+        public void StatusFromSnapshot_WhenHitWhenFieldsArePresent_PropagatesFixedValues()
+        {
+            UloopPausePointSnapshot snapshot = CreateExpiredSnapshot(
+                string.Empty,
+                0,
+                "speed > 5",
+                3,
+                "--hit-when could not find variable 'speed' in the captured frame.");
+
+            PausePointStatusResponse response = PausePointStatusResponse.FromSnapshot(snapshot);
+
+            Assert.That(response.HitWhen, Is.EqualTo("speed > 5"));
+            Assert.That(response.HitWhenSkippedCount, Is.EqualTo(3));
+            Assert.That(response.HitWhenErrorNote, Is.EqualTo("--hit-when could not find variable 'speed' in the captured frame."));
+        }
+
+        private static UloopPausePointSnapshot CreateExpiredSnapshot(
+            string recommendedNextAction,
+            int methodEntryCount,
+            string hitWhen = "",
+            int hitWhenSkippedCount = 0,
+            string hitWhenErrorNote = "")
         {
             return new UloopPausePointSnapshot(
                 "jump",
@@ -130,7 +175,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 null,
                 false,
                 0,
-                null);
+                null,
+                hitWhen,
+                hitWhenSkippedCount,
+                hitWhenErrorNote);
         }
     }
 }

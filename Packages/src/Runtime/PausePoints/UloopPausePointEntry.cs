@@ -10,9 +10,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
     /// </summary>
     internal sealed class UloopPausePointEntry
     {
-        // Incremented from patched method bodies on arbitrary threads, so this field is the only
-        // entry state mutated outside the main thread; use Interlocked only.
+        // Incremented from patched method bodies on arbitrary threads, so this counter must use
+        // Interlocked instead of main-thread-only entry state.
         private int _methodEntryCount;
+        // Capture can evaluate conditions off the main thread, so its counter and first error use
+        // interlocked operations instead of coupling the patched method to Unity main-thread state.
+        private int _hitWhenSkippedCount;
+        private string _hitWhenErrorNote = string.Empty;
 
         public UloopPausePointEntry(
             string id,
@@ -23,7 +27,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int maxCallerFrames,
             DateTime enabledAtUtc,
             int generation,
-            bool hasMethodEntryInstrumentation)
+            bool hasMethodEntryInstrumentation,
+            string hitWhen,
+            UloopPausePointHitWhenCondition hitWhenCondition)
         {
             Id = id;
             TimeoutSeconds = timeoutSeconds;
@@ -35,6 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             ExpiresAtUtc = enabledAtUtc.AddSeconds(timeoutSeconds);
             Generation = generation;
             HasMethodEntryInstrumentation = hasMethodEntryInstrumentation;
+            HitWhen = hitWhen ?? string.Empty;
+            HitWhenCondition = hitWhenCondition;
             Status = UloopPausePointStatus.Enabled;
             IsEnabled = true;
             Message = "Pause point enabled.";
@@ -58,6 +66,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool IsEnabled { get; private set; }
         public int HitCount { get; private set; }
         public int MethodEntryCount => System.Threading.Volatile.Read(ref _methodEntryCount);
+        public string HitWhen { get; }
+        public UloopPausePointHitWhenCondition HitWhenCondition { get; }
+        public int HitWhenSkippedCount => System.Threading.Volatile.Read(ref _hitWhenSkippedCount);
+        public string HitWhenErrorNote => System.Threading.Volatile.Read(ref _hitWhenErrorNote);
         public DateTime FirstHitAtUtc { get; private set; }
         public DateTime HitAtUtc { get; private set; }
         public int FirstHitSequence { get; private set; }
@@ -86,6 +98,23 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             System.Threading.Interlocked.Increment(ref _methodEntryCount);
         }
 
+        public void IncrementHitWhenSkippedCount()
+        {
+            System.Threading.Interlocked.Increment(ref _hitWhenSkippedCount);
+        }
+
+        public void RecordHitWhenError(string errorMessage)
+        {
+            if (string.IsNullOrEmpty(errorMessage))
+            {
+                return;
+            }
+
+            // Why first only: later frames can repeat or change an error, but the first one is the
+            // closest evidence of why the condition began failing while leaving the hot path lock-free.
+            System.Threading.Interlocked.CompareExchange(ref _hitWhenErrorNote, errorMessage, string.Empty);
+        }
+
         public bool ExpireIfNeeded(DateTime nowUtc)
         {
             if (Status == UloopPausePointStatus.Cleared || Status == UloopPausePointStatus.Expired)
@@ -110,10 +139,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // Increments are gated on IsEnabled, which is false here. An in-flight increment that
             // already passed that gate can still reach the snapshot after this message is composed.
             int methodEntryCount = MethodEntryCount;
+            int hitWhenSkippedCount = HitWhenSkippedCount;
             Message = HitCount == 0 && HasMethodEntryInstrumentation
-                ? methodEntryCount == 0
-                    ? "Pause point expired before it was hit. The armed method was never invoked."
-                    : $"Pause point expired before it was hit. The armed method ran {methodEntryCount} time(s) but the armed line was never reached (branch not taken)."
+                ? hitWhenSkippedCount > 0
+                    ? $"Pause point expired before any hit matched --hit-when. The method entered {methodEntryCount} time(s); {hitWhenSkippedCount} hit(s) were skipped by the condition."
+                    : methodEntryCount == 0
+                        ? "Pause point expired before it was hit. The armed method was never invoked."
+                        : $"Pause point expired before it was hit. The armed method ran {methodEntryCount} time(s) but the armed line was never reached (branch not taken)."
                 : HitCount == 0
                     ? "Pause point expired before it was hit."
                 : $"Pause point capture window expired after {HitCount} hit(s); capture history is preserved.";
@@ -271,6 +303,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string recommendedNextAction = expired ? CreateExpiredRecommendedNextAction() : string.Empty;
             string firstHitAtUtc = HitCount > 0 ? FormatUtc(FirstHitAtUtc) : string.Empty;
             string lastHitAtUtc = HitCount > 0 ? FormatUtc(HitAtUtc) : string.Empty;
+            int hitWhenSkippedCount = HitWhenSkippedCount;
 
             return new UloopPausePointSnapshot(
                 Id,
@@ -310,7 +343,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 SuppressedByHotReloadReason,
                 RetargetedToHotReloadPatch,
                 ResolvedLine,
-                ResolvedLineText);
+                ResolvedLineText,
+                HitWhen,
+                hitWhenSkippedCount,
+                HitWhenErrorNote);
         }
 
         private long CalculateRemainingMilliseconds(DateTime nowUtc)
