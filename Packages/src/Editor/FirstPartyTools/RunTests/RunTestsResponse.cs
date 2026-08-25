@@ -88,6 +88,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public SerializableTestResult.FailedTestDetail[] FailedTests { get; set; }
 
         /// <summary>
+        /// Skipped leaf test full names, omitted from JSON when none were skipped.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string[] SkippedTests { get; set; }
+
+        /// <summary>
         /// Policy warning when hot-reload changes were live at test-run start. Empty when none
         /// were active; omitted from JSON via ShouldSerializeWarning.
         /// </summary>

@@ -176,6 +176,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 response.FailedTests = result.failedTests;
             }
 
+            if (result.skippedTests != null && result.skippedTests.Length > 0)
+            {
+                response.SkippedTests = result.skippedTests;
+            }
+
             response.Warning = RunTestsHotReloadDiscardWarningBuilder.Build(activeHotReloadChangeCountAtStart);
 
             if (result.failedCount > RunTestsConstants.FailedTestDetailsLimit)

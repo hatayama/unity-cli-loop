@@ -493,6 +493,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: skipped full names from the execution result are copied onto the response.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenTestsAreSkipped_CopiesSkippedTestFullNamesOntoResponse()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = new SerializableTestResult
+                {
+                    success = true,
+                    status = RunTestsExecutionStatus.Passed,
+                    hasFailures = false,
+                    noTestsFound = false,
+                    noTestsFoundExplanation = string.Empty,
+                    message = "Test execution completed with status: Passed",
+                    completedAt = "2026-01-01T00:00:00.0000000Z",
+                    testCount = 2,
+                    passedCount = 1,
+                    failedCount = 0,
+                    skippedCount = 1,
+                    xmlPath = null,
+                    skippedTests = new[] { "Example.Tests.SkippedTest" }
+                }
+            };
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(ValidationResult.Success());
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.SkippedTests, Is.EqualTo(new[] { "Example.Tests.SkippedTest" }));
+        }
+
+        /// <summary>
+        /// What: an execution result without skipped leaves leaves SkippedTests null on the response.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenNoTestsAreSkipped_LeavesSkippedTestsNull()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(ValidationResult.Success());
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.SkippedTests, Is.Null);
+        }
+
+        /// <summary>
         /// What: FailedCount above 10 appends the fixed-literal truncation note to Message.
         /// </summary>
         [Test]
