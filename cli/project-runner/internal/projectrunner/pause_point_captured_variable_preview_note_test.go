@@ -6,7 +6,11 @@ import (
 	"testing"
 )
 
-const wantCapturedVariablePreviewNote = "a captured value was clipped; re-enable with a larger --max-preview-elements, or read the full value while paused via UloopPausePoint.TryGetCapturedValue in execute-dynamic-code."
+const wantCapturedVariablePreviewNoteAtSevenElements = "a captured value was clipped at the current --max-preview-elements cap of 7 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. While Unity is still paused, UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the full live value."
+
+const wantCapturedVariablePreviewNoteAtTwentyThreeElements = "a captured value was clipped at the current --max-preview-elements cap of 23 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. While Unity is still paused, UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the full live value."
+
+const wantCapturedVariablePreviewNoteAtFortyTwoElements = "a captured value was clipped at the current --max-preview-elements cap of 42 elements; re-enable with a larger cap to widen future previews, but first read any CapturedVariables and CapturedVariableHistory you still need with pause-point-status, because re-enabling starts a new generation and discards them. While Unity is still paused, UloopPausePoint.TryGetCapturedValue in execute-dynamic-code returns the full live value."
 
 // TestApplyPausePointCapturedVariablePreviewNote verifies the CLI note is added only when a
 // remaining captured variable (current or history) is truncated, and that the wording is pinned
@@ -14,11 +18,12 @@ const wantCapturedVariablePreviewNote = "a captured value was clipped; re-enable
 func TestApplyPausePointCapturedVariablePreviewNote(t *testing.T) {
 	t.Run("note is set when a current variable is truncated", func(t *testing.T) {
 		result := applyPausePointCapturedVariablePreviewNote(pausePointStatusResponse{
+			MaxPreviewElements: 7,
 			CapturedVariables: []pausePointCapturedVariable{
 				{Name: "board", Truncated: true},
 			},
 		})
-		if result.CapturedVariablePreviewNote != wantCapturedVariablePreviewNote {
+		if result.CapturedVariablePreviewNote != wantCapturedVariablePreviewNoteAtSevenElements {
 			t.Fatalf("expected preview-clip note: %q", result.CapturedVariablePreviewNote)
 		}
 	})
@@ -37,6 +42,7 @@ func TestApplyPausePointCapturedVariablePreviewNote(t *testing.T) {
 
 	t.Run("note is set when only a history variable is truncated", func(t *testing.T) {
 		result := applyPausePointCapturedVariablePreviewNote(pausePointStatusResponse{
+			MaxPreviewElements: 23,
 			CapturedVariables: []pausePointCapturedVariable{
 				{Name: "health"},
 			},
@@ -48,7 +54,7 @@ func TestApplyPausePointCapturedVariablePreviewNote(t *testing.T) {
 				},
 			},
 		})
-		if result.CapturedVariablePreviewNote != wantCapturedVariablePreviewNote {
+		if result.CapturedVariablePreviewNote != wantCapturedVariablePreviewNoteAtTwentyThreeElements {
 			t.Fatalf("expected preview-clip note for a truncated history survivor: %q", result.CapturedVariablePreviewNote)
 		}
 	})
@@ -58,7 +64,7 @@ func TestApplyPausePointCapturedVariablePreviewNote(t *testing.T) {
 // survives json.Marshal under that exact key.
 func TestPausePointStatusResponseIncludesCapturedVariablePreviewNote(t *testing.T) {
 	marshaled, err := json.Marshal(pausePointStatusResponse{
-		CapturedVariablePreviewNote: pausePointCapturedVariablePreviewNote,
+		CapturedVariablePreviewNote: wantCapturedVariablePreviewNoteAtFortyTwoElements,
 	})
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
@@ -78,8 +84,8 @@ func TestPausePointStatusResponseIncludesCapturedVariablePreviewNote(t *testing.
 	if err := json.Unmarshal(rawNote, &note); err != nil {
 		t.Fatalf("unmarshal note failed: %v", err)
 	}
-	if note != wantCapturedVariablePreviewNote {
-		t.Fatalf("note mismatch: got %#v, want %#v", note, wantCapturedVariablePreviewNote)
+	if note != wantCapturedVariablePreviewNoteAtFortyTwoElements {
+		t.Fatalf("note mismatch: got %#v, want %#v", note, wantCapturedVariablePreviewNoteAtFortyTwoElements)
 	}
 }
 
