@@ -224,15 +224,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string[] runtimeSourcePaths = Directory.GetFiles(runtimeSourceDirectory, "*.cs", SearchOption.AllDirectories);
             string[] assemblyDefinitionPaths = Directory.GetFiles(runtimeSourceDirectory, "*.asmdef", SearchOption.AllDirectories);
+            string normalizedRuntimeSourceDirectory = NormalizeDirectorySeparators(
+                Path.GetFullPath(runtimeSourceDirectory));
             HashSet<string> allowedNestedAssemblyDefinitionPaths =
                 GetAllowedNestedRuntimeAssemblyDefinitionPaths(projectRoot);
             HashSet<string> nestedAssemblyDirectories = new();
 
             for (int pathIndex = 0; pathIndex < assemblyDefinitionPaths.Length; pathIndex++)
             {
-                string assemblyDefinitionPath = Path.GetFullPath(assemblyDefinitionPaths[pathIndex]);
-                string assemblyDefinitionDirectory = Path.GetDirectoryName(assemblyDefinitionPaths[pathIndex]);
-                if (assemblyDefinitionDirectory == runtimeSourceDirectory)
+                string assemblyDefinitionPath = NormalizeDirectorySeparators(
+                    Path.GetFullPath(assemblyDefinitionPaths[pathIndex]));
+                string assemblyDefinitionDirectory = NormalizeDirectorySeparators(
+                    Path.GetDirectoryName(assemblyDefinitionPaths[pathIndex]));
+                if (assemblyDefinitionDirectory == normalizedRuntimeSourceDirectory)
                 {
                     continue;
                 }
@@ -267,7 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 string assemblyDefinitionPath = Path.GetFullPath(
                     Path.Combine(projectRoot, PlayerVisibleNestedRuntimeAssemblyDefinitionPaths[pathIndex]));
-                allowedAssemblyDefinitionPaths.Add(assemblyDefinitionPath);
+                allowedAssemblyDefinitionPaths.Add(NormalizeDirectorySeparators(assemblyDefinitionPath));
             }
 
             return allowedAssemblyDefinitionPaths;
@@ -277,16 +281,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string sourcePath,
             HashSet<string> nestedAssemblyDirectories)
         {
+            string normalizedSourcePath = NormalizeDirectorySeparators(sourcePath);
             foreach (string nestedAssemblyDirectory in nestedAssemblyDirectories)
             {
-                string nestedAssemblyPrefix = nestedAssemblyDirectory + Path.DirectorySeparatorChar;
-                if (sourcePath.StartsWith(nestedAssemblyPrefix, System.StringComparison.Ordinal))
+                string nestedAssemblyPrefix = nestedAssemblyDirectory + "/";
+                if (normalizedSourcePath.StartsWith(nestedAssemblyPrefix, System.StringComparison.Ordinal))
                 {
                     return true;
                 }
             }
 
             return false;
+        }
+
+        private static string NormalizeDirectorySeparators(string path)
+        {
+            return path.Replace('\\', '/');
         }
 
         private static void AssertEditorOnlyTags(GameObject root, string prefabPath)

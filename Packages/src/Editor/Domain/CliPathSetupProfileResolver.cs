@@ -56,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 string configurationRoot = string.IsNullOrWhiteSpace(zDotDirectory)
                     ? homeDirectory
                     : zDotDirectory;
-                string configurationPath = Path.Combine(configurationRoot, ZshProfileFileName);
+                string configurationPath = CombinePosixPath(configurationRoot, ZshProfileFileName);
                 string configurationLine = BuildPosixExportLine(profileInstallDirectory);
                 return CreateSupportedPlan(
                     CliPathSetupShellKind.Zsh,
@@ -83,11 +83,10 @@ namespace io.github.hatayama.UnityCliLoop.Domain
             if (string.Equals(shellName, "fish", StringComparison.Ordinal))
             {
                 string configRoot = string.IsNullOrWhiteSpace(xdgConfigHome)
-                    ? Path.Combine(homeDirectory, DefaultXdgConfigDirectoryName)
+                    ? CombinePosixPath(homeDirectory, DefaultXdgConfigDirectoryName)
                     : xdgConfigHome;
-                string configurationPath = Path.Combine(
-                    configRoot,
-                    FishConfigDirectoryName,
+                string configurationPath = CombinePosixPath(
+                    CombinePosixPath(configRoot, FishConfigDirectoryName),
                     FishConfigFileName);
                 string configurationLine = $"fish_add_path --move \"{EscapeDoubleQuotedPathValue(profileInstallDirectory, false)}\"";
                 return CreateSupportedPlan(
@@ -140,20 +139,25 @@ namespace io.github.hatayama.UnityCliLoop.Domain
 
         private static string SelectBashProfilePath(string homeDirectory, Func<string, bool> fileExists)
         {
-            string bashProfilePath = Path.Combine(homeDirectory, BashProfileFileName);
+            string bashProfilePath = CombinePosixPath(homeDirectory, BashProfileFileName);
             if (fileExists(bashProfilePath))
             {
                 return bashProfilePath;
             }
 
-            string bashLoginPath = Path.Combine(homeDirectory, BashLoginFileName);
+            string bashLoginPath = CombinePosixPath(homeDirectory, BashLoginFileName);
             if (fileExists(bashLoginPath))
             {
                 return bashLoginPath;
             }
 
-            string profilePath = Path.Combine(homeDirectory, PosixProfileFileName);
+            string profilePath = CombinePosixPath(homeDirectory, PosixProfileFileName);
             return fileExists(profilePath) ? profilePath : bashProfilePath;
+        }
+
+        private static string CombinePosixPath(string root, string child)
+        {
+            return root.TrimEnd('/') + "/" + child.TrimStart('/');
         }
 
         private static string GetShellName(string shellPath)
@@ -170,13 +174,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
                 return installDirectory;
             }
 
-            string normalizedHome = homeDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string normalizedHome = homeDirectory.TrimEnd('/');
             if (string.Equals(installDirectory, normalizedHome, StringComparison.Ordinal))
             {
                 return HomeReference;
             }
 
-            string homePrefix = normalizedHome + Path.DirectorySeparatorChar;
+            string homePrefix = normalizedHome + "/";
             return installDirectory.StartsWith(homePrefix, StringComparison.Ordinal)
                 ? HomeReference + "/" + installDirectory.Substring(homePrefix.Length)
                 : installDirectory;

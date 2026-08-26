@@ -302,8 +302,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int stmtEnd = SourceTokenScanner.FindStatementEnd(source, pos, ref nextBraceDepth);
             int originalLineNumber1Based = GetLineNumber1Based(source, pos);
             PadTopLevelBodyBuilderToOriginalLine(result, originalLineNumber1Based);
-            string statementText = source.Substring(pos, stmtEnd - pos + 1).TrimEnd();
-            result.TopLevelBodyBuilder.AppendLine(statementText);
+            // Multi-line statements are copied verbatim, so CRLF input would leak
+            // platform line endings into the emitted body unless normalized here.
+            string statementText = source.Substring(pos, stmtEnd - pos + 1).TrimEnd()
+                .Replace("\r\n", "\n")
+                .Replace('\r', '\n');
+            result.TopLevelBodyBuilder.Append(statementText);
+            result.TopLevelBodyBuilder.Append('\n');
             result.NextBodyLineNumber1Based = originalLineNumber1Based + CountLinesInText(statementText);
             return new SourceTopLevelStep(stmtEnd + 1, nextBraceDepth);
         }
@@ -314,7 +319,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             while (result.NextBodyLineNumber1Based < originalLineNumber1Based)
             {
-                result.TopLevelBodyBuilder.AppendLine();
+                result.TopLevelBodyBuilder.Append('\n');
                 result.NextBodyLineNumber1Based++;
             }
         }
@@ -324,7 +329,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int lineNumber = 1;
             for (int position = 0; position < index && position < source.Length; position++)
             {
-                if (source[position] == '\n')
+                // A standalone CR is a line break too; CRLF must count as one break,
+                // matching the LF-normalized text the body builder emits.
+                if (source[position] == '\r')
+                {
+                    lineNumber++;
+                    if (position + 1 < index && source[position + 1] == '\n')
+                    {
+                        position++;
+                    }
+                }
+                else if (source[position] == '\n')
                 {
                     lineNumber++;
                 }

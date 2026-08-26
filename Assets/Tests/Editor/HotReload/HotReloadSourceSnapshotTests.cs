@@ -28,6 +28,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
         private const string FixtureProjectRelativePath =
             "Assets/Tests/Editor/HotReload/HotReloadE2EFixtures.cs";
+        private const string PredefinedEditorAssemblyName = "Assembly-CSharp-Editor";
+        private const string PredefinedEditorFixtureProjectRelativePath =
+            "Assets/RegressionHarness/AnnotatedScreenshotMismatch/Editor/AnnotatedScreenshotMismatchSceneBuilder.cs";
 
         /// <summary>
         /// What: the portable PDB next to a script assembly carries a per-document checksum that matches the hash of the source file bytes, which the snapshot baseline validation relies on.
@@ -78,6 +81,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FixtureProjectRelativePath,
                 dllPath);
             Assert.That(loaded, Is.Not.Null, "Verified snapshot must resolve after domain-reload capture.");
+            Assert.That(loaded, Is.EqualTo(File.ReadAllText(fixtureAbsolutePath)));
+        }
+
+        /// <summary>
+        /// What: predefined editor assemblies receive compile snapshots so bare hot reload can detect their changed sources.
+        /// </summary>
+        [Test]
+        public void LoadVerifiedSnapshotSource_ForPredefinedEditorAssembly_ReturnsOnDiskText()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string dllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                PredefinedEditorAssemblyName + HotReloadConstants.CompiledAssemblyExtension);
+            string fixtureAbsolutePath = Path.Combine(
+                projectRoot,
+                PredefinedEditorFixtureProjectRelativePath);
+
+            string loaded = HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
+                PredefinedEditorFixtureProjectRelativePath,
+                dllPath);
+
+            Assert.That(loaded, Is.Not.Null, "Predefined editor assembly snapshot must exist after compile.");
             Assert.That(loaded, Is.EqualTo(File.ReadAllText(fixtureAbsolutePath)));
         }
 

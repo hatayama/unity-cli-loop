@@ -38,7 +38,8 @@ set -u
 # recompile scratch script, the PlayMode ticker script, and the pause-point
 # scene) and are left behind after the run — delete the folder and its .meta
 # manually when done. When --pause-every > 0, the harness opens its generated
-# scene and keeps it open, so save your own scene changes before running.
+# scene during the run and releases it before the cleanup reminder, so save
+# your own scene changes before running.
 
 ULOOP_BIN="${ULOOP_BIN:-uloop}"
 
@@ -283,6 +284,7 @@ cleanup_editor_state() {
     if [ "$PAUSE_EVERY" -gt 0 ]; then
         run_uloop clear-pause-point --all > /dev/null 2>&1 || true
         run_uloop control-play-mode --action Stop > /dev/null 2>&1 || true
+        run_uloop execute-dynamic-code --code 'string activeScenePath = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (!System.String.Equals(activeScenePath, "Assets/UloopSoak/UloopSoak.unity", System.StringComparison.Ordinal)) { return "not-soak-scene"; } UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single); return "released";' > /dev/null 2>&1 || true
     fi
 }
 
@@ -297,7 +299,7 @@ summarize() {
         for (c in total)
             printf "%-14s %8d %8d %10d\n", c, total[c], fail[c] + 0, ms[c] / total[c]
     }' "$COMMANDS_CSV" | tee -a "$RUN_LOG"
-    log "Reminder: delete $SOAK_ASSETS_DIR (and its .meta) from the target project when finished."
+    log "Reminder: the harness released the soak scene if it was still active; delete $SOAK_ASSETS_DIR (and its .meta) from the target project when finished."
 }
 trap summarize EXIT
 trap 'exit 130' INT TERM
