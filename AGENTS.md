@@ -67,8 +67,9 @@ These files are generated copies. Update the source skill definitions instead, t
 Every `SKILL.md` must stay at or under 8,000 bytes as a whole file (frontmatter included):
 Codex truncates larger skill files to that size when injecting them into the model prompt.
 Move detail into `references/` files beside the skill instead of growing the body. CI fails
-the pull request via `go run ./cmd/check-skill-size` in `cli/release-automation`
-(`build-and-test.yml`); run it locally after editing any skill.
+the pull request via the `check-skill-size` step in `build-and-test.yml`; after editing any
+skill, run it locally from `cli/release-automation` with
+`go run ./cmd/check-skill-size --root "$(git rev-parse --show-toplevel)"`.
 
 ## Generated Tool Catalog
 

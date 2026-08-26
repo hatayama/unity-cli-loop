@@ -5,7 +5,7 @@ description: "Pauses Unity playback at any source file:line without editing code
 
 # uloop await-pause-point
 
-A pause point is the standard frame proof for verifying simulated input, physics, or UI transitions; sleeps and after-the-fact reads are not substitutes. It is patched into the already-compiled code — no source edit, no recompile — and captures locals, intermediate values, and branch reasons `execute-dynamic-code` cannot reach.
+A pause point is the standard frame proof for verifying simulated input, physics, or UI transitions; sleeps and after-the-fact reads are not substitutes. Skip it only for persistent-state checks that do not validate input delivery, event ordering, or transition-frame fidelity. It is patched into the already-compiled code — no source edit, no recompile — and captures locals and branch reasons `execute-dynamic-code` cannot reach.
 
 ## Quick Check
 
@@ -19,14 +19,14 @@ uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seco
 ```
 
 3. Read `CapturedVariables` in the hit response first, then gather extra evidence while still paused (`execute-dynamic-code`, one screenshot).
-4. A `single-shot` marker (the default) disarms itself after the hit; clear other modes with `uloop clear-pause-point`.
+4. A `single-shot` marker (the default) disarms after the hit; clear other modes with `uloop clear-pause-point`.
 
 A hit pauses Unity at the next frame boundary — the rest of that frame still runs. Only `CapturedVariables` is evidence of the values at the patched line. Before deviating from this template, read `references/quick-check-template.md`.
 
 ## Parameters
 
 The tables list only parameters Unity itself accepts; CLI-only flags (`--await`, `--trigger`,
-`--resume-play`, `--expect`, and the capture filters) are covered in the reference guides below.
+`--resume-play`, `--expect`, capture filters) are in the reference guides below.
 
 ### enable-pause-point
 
@@ -81,7 +81,7 @@ Clear one or all registered C# watch expressions
 | `--id` | string | - | Watch expression identifier to clear |
 | `--all` | flag | - | Clear every registered watch expression |
 
-## Status, Timeouts, and Hot Reload
+## Status, Timeouts, Hot Reload
 
 `uloop pause-point-status` with no target lists every marker; inspect one with `--id "<file>:<line>"` or with `--file`/`--line` together (never both). `await-pause-point` takes the same two forms but always requires a target.
 
@@ -90,21 +90,21 @@ On a wait timeout or `PAUSE_POINT_EXPIRED`, read `Error.Details.Hint` first, the
 ## Requirements & Safety
 
 - Release Code Optimization is switched to Debug (with a recompile) before arming; the switch reverts on the next Editor restart.
-- Patches do not survive compiles or domain reloads — re-enable afterwards (a Play entry with Domain Reload enabled removes every source pause point; the enable response warns). `uloop compile` while PlayMode runs also resets the PlayMode session.
+- Patches do not survive compiles or domain reloads — re-enable afterwards (a Play entry with Domain Reload enabled removes every source pause point; the enable response warns). `uloop compile` during PlayMode also resets the session.
 - Physics message methods, their helpers, and pre-bound delegates can miss hits on pre-existing GameObjects; the enable response warns where detectable.
 - An `--id` marker waits on a hand-written `UloopPausePoint.Pause(id)` call; its hits record no `CapturedVariables`.
 - On an enable failure, branch on the failure `ErrorCode` and follow `RecommendedNextAction`.
-- For scripts under `Packages/`, pass the package-id path form (`Packages/<package-id>/...`); a physical checkout path does not resolve.
+- For scripts under `Packages/`, pass the package-id path form (`Packages/<package-id>/...`); physical checkout paths do not resolve.
 
 ## Reference Guides
 
-All files live in `references/` beside this skill; read the one whose trigger matches:
+All live in `references/` beside this skill; read the one whose trigger matches:
 
-- `references/quick-check-template.md` — full loop: `--trigger`/`--await`/`--resume-play`, split steps, timeout sizing, hit fields.
-- `references/captured-variables.md` — reading `CapturedVariables`, previews/truncation, name filters, `--expect` value forms, caller frames, raw capture API.
+- `references/quick-check-template.md` — full loop: `--trigger`/`--await`/`--resume-play`, split steps, timeouts, hit fields.
+- `references/captured-variables.md` — `CapturedVariables`, previews/truncation, name filters, `--expect` value forms, caller frames, raw capture API.
 - `references/capture-modes-and-history.md` — mode details, history, `--max-history`, `--hit-when`.
-- `references/line-placement.md` — choosing the line to arm, every-frame lines, held input, input plus N frames.
+- `references/line-placement.md` — choosing the line to arm, every-frame lines, held input, input+N frames.
 - `references/watch-expressions.md` — watch evaluation rules.
 - `references/condition-triggered-pause.md` — pausing on a runtime condition (id-only marker + watcher).
 - `references/fast-progressing-games.md` — freezing self-progressing games, `--resume-play`, `ResumePlayResult`.
-- `references/troubleshooting.md` — timeouts, `HitCount` 0, physics-callback misses, hot-reload line resolution, enable failure codes.
+- `references/troubleshooting.md` — timeouts, `HitCount` 0, physics misses, hot-reload line resolution, failure codes.

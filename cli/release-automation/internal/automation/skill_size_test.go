@@ -101,6 +101,22 @@ func TestRunSkillSizeCheckFailsOnOversizedSkill(t *testing.T) {
 	}
 }
 
+// RunSkillSizeCheck exits 1 when the scanned root contains none of the skill
+// roots, so running it from the wrong directory cannot pass as a silent no-op.
+func TestRunSkillSizeCheckFailsWhenNoSkillRootExists(t *testing.T) {
+	root := t.TempDir()
+
+	stdout := bytes.Buffer{}
+	stderr := bytes.Buffer{}
+	exitCode := RunSkillSizeCheck(&stdout, &stderr, SkillSizeCheckOptions{Root: root})
+	if exitCode != 1 {
+		t.Fatalf("expected exit code 1 for a root without skill trees, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "no skill roots found") {
+		t.Fatalf("stderr did not explain the empty scan: %q", stderr.String())
+	}
+}
+
 // RunSkillSizeCheck exits 0 when every SKILL.md fits within the limit.
 func TestRunSkillSizeCheckPassesWhenAllSkillsFit(t *testing.T) {
 	root := t.TempDir()

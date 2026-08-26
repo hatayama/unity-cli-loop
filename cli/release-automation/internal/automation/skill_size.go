@@ -42,12 +42,22 @@ type SkillSizeCheckOptions struct {
 // forward slashes so reports stay stable on Windows.
 func ScanSkillFileSizes(root string, maxBytes int) ([]SkillSizeFinding, error) {
 	findings := []SkillSizeFinding{}
+	scannedRoots := 0
 	for _, skillRoot := range skillFileRoots {
-		rootFindings, err := scanSkillRoot(root, skillRoot, maxBytes)
+		rootFindings, scanned, err := scanSkillRoot(root, skillRoot, maxBytes)
 		if err != nil {
 			return nil, err
 		}
+		if scanned {
+			scannedRoots++
+		}
 		findings = append(findings, rootFindings...)
+	}
+	// A run that scanned nothing must not pass: with the default --root of ".",
+	// running from the wrong directory would otherwise report success without
+	// having looked at a single SKILL.md.
+	if scannedRoots == 0 {
+		return nil, fmt.Errorf("no skill roots found under %s; pass --root <repository root>", root)
 	}
 	sort.Slice(findings, func(left int, right int) bool {
 		return findings[left].Path < findings[right].Path
@@ -80,17 +90,17 @@ func RunSkillSizeCheck(stdout io.Writer, stderr io.Writer, options SkillSizeChec
 	return 1
 }
 
-func scanSkillRoot(repoRoot string, relativeDir string, maxBytes int) ([]SkillSizeFinding, error) {
+func scanSkillRoot(repoRoot string, relativeDir string, maxBytes int) ([]SkillSizeFinding, bool, error) {
 	absoluteRoot := filepath.Join(repoRoot, filepath.FromSlash(relativeDir))
 	fileInfo, err := os.Stat(absoluteRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, false, nil
 		}
-		return nil, err
+		return nil, false, err
 	}
 	if !fileInfo.IsDir() {
-		return nil, fmt.Errorf("skill root %s is not a directory", relativeDir)
+		return nil, false, fmt.Errorf("skill root %s is not a directory", relativeDir)
 	}
 
 	findings := []SkillSizeFinding{}
@@ -119,7 +129,7 @@ func scanSkillRoot(repoRoot string, relativeDir string, maxBytes int) ([]SkillSi
 		return nil
 	})
 	if walkErr != nil {
-		return nil, walkErr
+		return nil, true, walkErr
 	}
-	return findings, nil
+	return findings, true, nil
 }
