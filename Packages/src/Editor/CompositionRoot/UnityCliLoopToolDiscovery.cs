@@ -3,47 +3,24 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
+using UnityEditor;
+
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 {
     /// <summary>
-    /// Discovers Unity CLI tool implementations decorated with UnityCliLoopToolAttribute across
-    /// loaded assemblies and instantiates them for registration.
+    /// Discovers Unity CLI tool implementations indexed by Unity's editor type cache and
+    /// instantiates them for registration.
     /// </summary>
     internal static class UnityCliLoopToolDiscovery
     {
         internal static IReadOnlyList<IUnityCliLoopTool> DiscoverTools()
         {
-            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            List<Type> toolTypes = new();
-
-            foreach (Assembly assembly in assemblies)
-            {
-                if (assembly.IsDynamic)
-                {
-                    continue;
-                }
-
-                Type[] loadedTypes;
-                try
-                {
-                    loadedTypes = assembly.GetTypes();
-                }
-                catch (ReflectionTypeLoadException ex)
-                {
-                    // A partially loadable assembly must not abort tool discovery for every other assembly.
-                    loadedTypes = Array.FindAll(ex.Types, static t => t != null);
-                }
-
-                Type[] types = loadedTypes
-                    .Where(type => type.GetCustomAttribute<UnityCliLoopToolAttribute>() != null)
-                    .Where(type => typeof(IUnityCliLoopTool).IsAssignableFrom(type))
-                    .Where(type => !type.IsAbstract && !type.IsInterface)
-                    .ToArray();
-
-                toolTypes.AddRange(types);
-            }
+            Type[] toolTypes = TypeCache.GetTypesWithAttribute<UnityCliLoopToolAttribute>()
+                .Where(type => typeof(IUnityCliLoopTool).IsAssignableFrom(type))
+                .Where(type => !type.IsAbstract && !type.IsInterface)
+                .ToArray();
 
             List<IUnityCliLoopTool> tools = new();
             foreach (Type type in toolTypes)
