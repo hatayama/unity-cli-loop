@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -11,6 +12,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class ScreenshotFileWriter
     {
+        private const string InvalidFileNameCharacters = "<>:\"/\\|?*";
+
         internal static string EnsureOutputDirectoryExists(string outputDirectory)
         {
             string resolvedDirectory;
@@ -32,13 +35,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static string SanitizeFileName(string name)
         {
-            char[] invalidChars = Path.GetInvalidFileNameChars();
-            string sanitized = name;
-            foreach (char c in invalidChars)
+            StringBuilder sanitized = new StringBuilder(name.Length);
+            foreach (char character in name)
             {
-                sanitized = sanitized.Replace(c, '_');
+                bool isInvalid = character < ' '
+                    || InvalidFileNameCharacters.IndexOf(character) >= 0;
+                sanitized.Append(isInvalid ? '_' : character);
             }
-            return sanitized;
+
+            return sanitized.ToString();
         }
 
         internal static void SaveTextureAsPng(Texture2D texture, string fullPath)

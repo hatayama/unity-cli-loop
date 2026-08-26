@@ -214,15 +214,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Pins file-name sanitization replacing platform-invalid path characters with underscores.
+        /// Pins file-name sanitization replacing the fixed cross-platform invalid set with underscores.
         /// </summary>
         [Test]
         public void SanitizeFileName_WhenNameContainsInvalidChars_ShouldReplaceWithUnderscore()
         {
-            // why: on this Unity/macOS runtime Path.GetInvalidFileNameChars is only NUL and '/', so ':' stays
             string sanitized = ScreenshotCaptureResults.SanitizeFileName("Game/View:Main");
 
-            Assert.That(sanitized, Is.EqualTo("Game_View:Main"));
+            Assert.That(sanitized, Is.EqualTo("Game_View_Main"));
         }
     }
 }

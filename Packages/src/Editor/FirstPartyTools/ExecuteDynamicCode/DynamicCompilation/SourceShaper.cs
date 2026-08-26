@@ -303,7 +303,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int originalLineNumber1Based = GetLineNumber1Based(source, pos);
             PadTopLevelBodyBuilderToOriginalLine(result, originalLineNumber1Based);
             string statementText = source.Substring(pos, stmtEnd - pos + 1).TrimEnd();
-            result.TopLevelBodyBuilder.AppendLine(statementText);
+            result.TopLevelBodyBuilder.Append(statementText);
+            result.TopLevelBodyBuilder.Append('\n');
             result.NextBodyLineNumber1Based = originalLineNumber1Based + CountLinesInText(statementText);
             return new SourceTopLevelStep(stmtEnd + 1, nextBraceDepth);
         }
@@ -314,7 +315,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             while (result.NextBodyLineNumber1Based < originalLineNumber1Based)
             {
-                result.TopLevelBodyBuilder.AppendLine();
+                result.TopLevelBodyBuilder.Append('\n');
                 result.NextBodyLineNumber1Based++;
             }
         }
