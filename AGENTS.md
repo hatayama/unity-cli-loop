@@ -64,6 +64,12 @@ These files are generated copies. Update the source skill definitions instead, t
 - Sources: `Packages/src/Editor/FirstPartyTools/<Tool>/Skill/SKILL.md` and `Packages/src/Editor/CliOnlyTools~/<Tool>/Skill/SKILL.md` (plus each skill's `references/` files, which are copied along with it).
 - Regenerate: `dist/darwin-arm64/uloop skills install --claude --agents` from the project root, substituting the binary for your platform (e.g. `dist/windows-amd64/uloop.exe` on Windows). Only `.claude/` and `.agents/` are tracked in git; other targets are local-only.
 
+Every `SKILL.md` must stay at or under 8,000 bytes as a whole file (frontmatter included):
+Codex truncates larger skill files to that size when injecting them into the model prompt.
+Move detail into `references/` files beside the skill instead of growing the body. CI fails
+the pull request via `go run ./cmd/check-skill-size` in `cli/release-automation`
+(`build-and-test.yml`); run it locally after editing any skill.
+
 ## Generated Tool Catalog
 
 `cli/common/tools/default-tools.json` is generated from the skill parameter tables — it is what
