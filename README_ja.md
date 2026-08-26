@@ -98,6 +98,17 @@ v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode
 <summary>CLIだけをterminalからinstallする場合はこちら</summary>
 
 Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
+
+### Homebrew（macOS）
+
+```bash
+brew install hatayama/tap/uloop
+```
+
+更新は `brew upgrade uloop` で行います。formula は dispatcher の release ごとに自動で更新されます。
+
+### Shell installer（curl / PowerShell）
+
 インストーラは `Packages/src/project-runner-pin.json` の digest 一覧でアーカイブを検証します（Unity の **Install CLI** ボタンと同じ pin）。
 任意の環境変数: `ULOOP_REF`（pin を取る git ref。既定は `main`）、`ULOOP_INSTALL_DIR`。
 `ULOOP_VERSION` は pin の `dispatcherReleaseTag` と一致する場合のみ有効です。
@@ -111,6 +122,8 @@ macOS、Windows Git Bash の場合:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
 ```
+
+Windows Git Bash では、インストーラは dispatcher の zip を `unzip`、`tar`（bsdtar / Windows の tar.exe）、PowerShell の `Expand-Archive` の順に試して展開します。フォールバックが使える環境では `unzip` は必須ではありません。
 
 Windows PowerShell の場合:
 

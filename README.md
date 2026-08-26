@@ -114,6 +114,11 @@ The installer verifies the downloaded archive against the digest list in
 Optional env: `ULOOP_REF` (git ref for the pin; default `main`), `ULOOP_INSTALL_DIR`.
 `ULOOP_VERSION` is accepted only when it matches the pin's `dispatcherReleaseTag`.
 
+> [!NOTE]
+> The terminal install trusts the same repository pin as the Unity GUI. The manual flow that
+> passes an explicit `ULOOP_ARCHIVE_MANIFEST` (derived from Sigstore verification) remains as a
+> hardened option for choosing an arbitrary release tag.
+
 On macOS or Windows Git Bash:
 
 ```sh
