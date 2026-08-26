@@ -4,6 +4,8 @@ English | [日本語](whats-new-v3_ja.md)
 
 V3 replaces the npm-distributed CLI with a native Go binary and moves the transport from TCP port management to OS-native IPC. Driving Unity from an AI agent no longer needs a Node.js setup or any port management. Connection reliability is also improved: connections stay stable while Unity sits in the background, and across multiple Editors running in parallel.
 
+CLI version management is gone, too. V2 required manually reinstalling a CLI that matched the package on every update; in V3 you install the CLI once and it updates itself from then on. It also selects the right CLI version per project automatically, so working on projects with different package versions in parallel never requires switching CLIs by hand.
+
 The headline new capabilities are `hot-reload` and `pause-point`. `hot-reload` applies edited method bodies to the running Editor instantly, without a recompile or a Domain Reload in between. `pause-point` stops PlayMode at any source line and reads the variables at that moment, without editing source or recompiling. It is also handy for taking a screenshot of a specific moment, or inspecting the Hierarchy at a specific moment.
 
 MCP support has been removed; the CLI plus Skills is now the only integration path. The sections below carry the details of each change.
