@@ -19,7 +19,7 @@ uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seco
 ```
 
 3. Read `CapturedVariables` in the hit response first, then gather extra evidence while still paused (`execute-dynamic-code`, one screenshot).
-4. A `single-shot` marker (the default) disarms after the hit; clear other modes with `uloop clear-pause-point --all`.
+4. A `single-shot` marker (the default) disarms after the hit; clear other modes with `uloop clear-pause-point --id <marker-id>`.
 
 A hit pauses Unity at the next frame boundary — the rest of that frame still runs. Only `CapturedVariables` is evidence of the values at the patched line. Before deviating from this template, read `references/quick-check-template.md`.
 
