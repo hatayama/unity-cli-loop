@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         private const string LOG_FILE_PREFIX = "unity_vibe";
         private const int MAX_FILE_SIZE_MB = 10;
         private const int MAX_MEMORY_LOGS = 1000;
-        private const int MAX_LOG_FILES = 3;
+        internal const int MAX_LOG_FILES = 20;
         private const int UNINITIALIZED_MAIN_THREAD_ID = 0;
         private const string DOMAIN_RELOAD_STATE_IN_PROGRESS = "InProgress";
         private const string DOMAIN_RELOAD_STATE_IDLE = "Idle";
@@ -260,6 +260,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
             
             string fileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd}.json";
             string filePath = Path.Combine(logDirectory, fileName);
+            bool shouldPruneAfterWrite = !File.Exists(filePath);
             
             // Check file size and rotate if necessary
             if (File.Exists(filePath))
@@ -270,9 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                     string rotatedFileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json";
                     string rotatedFilePath = Path.Combine(logDirectory, rotatedFileName);
                     File.Move(filePath, rotatedFilePath);
-                    
-                    // Clean up old files after rotation
-                    CleanupOldLogFiles();
+                    shouldPruneAfterWrite = true;
                 }
             }
             
@@ -291,8 +290,14 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                     {
                         writer.Write(jsonLog);
                         writer.Flush();
-                        return; // Success - exit retry loop
                     }
+
+                    if (shouldPruneAfterWrite)
+                    {
+                        CleanupOldLogFiles();
+                    }
+
+                    return; // Success - exit retry loop
                 }
                 catch (IOException ex) when (IsFileSharingViolation(ex) && retry < maxRetries - 1)
                 {
@@ -329,32 +334,30 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
             try
             {
-                if (!Directory.Exists(logDirectory))
-                    return;
-                    
-                // Get all vibe log files, sorted by creation time (newest first)
-                FileInfo[] logFiles = Directory.GetFiles(logDirectory, $"{LOG_FILE_PREFIX}_*.json")
-                    .Select(file => new FileInfo(file))
-                    .OrderByDescending(file => file.CreationTime)
-                    .ToArray();
-                    
-                // Delete files beyond the limit
-                for (int i = MAX_LOG_FILES; i < logFiles.Length; i++)
-                {
-                    try
-                    {
-                        logFiles[i].Delete();
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log deletion failure but don't crash
-                        UnityEngine.Debug.LogWarning($"[VibeLogger] Failed to delete old log file {logFiles[i].Name}: {ex.Message}");
-                    }
-                }
+                DeleteOldestLogFilesBeyondLimit(logDirectory);
             }
             catch (Exception ex)
             {
                 UnityEngine.Debug.LogWarning($"[VibeLogger] Failed to cleanup old log files: {ex.Message}");
+            }
+        }
+
+        internal static void DeleteOldestLogFilesBeyondLimit(string logDirectory)
+        {
+            if (!Directory.Exists(logDirectory))
+            {
+                return;
+            }
+
+            FileInfo[] logFiles = Directory.GetFiles(logDirectory, $"{LOG_FILE_PREFIX}_*.json")
+                .Select(file => new FileInfo(file))
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .ThenByDescending(file => file.Name, StringComparer.Ordinal)
+                .ToArray();
+
+            for (int index = MAX_LOG_FILES; index < logFiles.Length; index++)
+            {
+                logFiles[index].Delete();
             }
         }
         
