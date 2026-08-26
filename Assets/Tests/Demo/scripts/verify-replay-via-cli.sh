@@ -153,19 +153,19 @@ echo "========================================="
 # ---- Phase 1: Record human input through the Recordings window ----
 
 echo ""
-echo "[1/9] Loading replay verification scene..."
+echo "[1/8] Loading replay verification scene..."
 initialize_replay_scene
 
-echo "[2/9] Starting PlayMode..."
+echo "[2/8] Starting PlayMode..."
 run_uloop_json control-play-mode --action Play >/dev/null
 echo "  Waiting for Unity..."
 sleep 6
 wait_for_unity
 
-echo "[3/9] Activating controller..."
+echo "[3/8] Activating controller..."
 activate_for_record
 
-echo "[4/9] Recording input with the Recordings window..."
+echo "[4/8] Recording input with the Recordings window..."
 echo ""
 echo "========================================="
 echo "  Open Window > Unity CLI Loop > Recordings."
@@ -180,13 +180,13 @@ echo "========================================="
 echo ""
 read -r _
 
-echo "[6/9] Saving recording event log..."
+echo "[5/8] Saving recording event log..."
 save_log "$RECORDING_LOG"
 [ -s "$RECORDING_LOG" ] || fail "Recording event log is empty"
 
 # ---- Phase 2: Replay via CLI ----
 
-echo "[7/9] Restarting PlayMode..."
+echo "[6/8] Restarting PlayMode..."
 run_uloop_json control-play-mode --action Stop >/dev/null
 sleep 3
 run_uloop_json control-play-mode --action Play >/dev/null
@@ -194,7 +194,7 @@ echo "  Waiting for Unity..."
 sleep 6
 wait_for_unity
 
-echo "[8/9] Activating controller + starting replay via CLI..."
+echo "[7/8] Activating controller + starting replay via CLI..."
 activate_for_replay
 echo "  Starting replay of the latest Recordings window file..."
 REPLAY_RESULT=$(run_uloop replay-input --action Start 2>&1) || true
@@ -226,7 +226,7 @@ if [ $waited -ge 60 ]; then
 fi
 sleep 1
 
-echo "[9/9] Saving replay event log..."
+echo "[8/8] Saving replay event log..."
 save_log "$REPLAY_LOG"
 [ -s "$REPLAY_LOG" ] || fail "Replay event log is empty"
 

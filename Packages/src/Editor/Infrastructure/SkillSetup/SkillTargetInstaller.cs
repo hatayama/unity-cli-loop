@@ -23,7 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             "uloop-get-menu-items",
             "uloop-get-unity-search-providers",
             "uloop-execute-menu-item",
-            "uloop-raycast"
+            "uloop-raycast",
+            "uloop-record-input"
         };
 
         private enum SkillSyncScope
