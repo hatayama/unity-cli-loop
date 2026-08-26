@@ -362,6 +362,48 @@ return SceneManager.GetActiveScene().path;
     Assert-EqualText -Actual $result.Result -Expected $ScenePath -Context "Active scene"
 }
 
+function Select-FullHdGameView {
+    [pscustomobject]$response = Invoke-UloopJson -CommandArguments @(
+        "set-game-view-size",
+        "--width",
+        "1920",
+        "--height",
+        "1080"
+    )
+
+    if ($response.Success -ne $true) {
+        throw "Set Full HD Game View failed: $($response.Message)"
+    }
+
+    Assert-EqualText -Actual ([string]$response.CurrentWidth) -Expected "1920" -Context "Game View width"
+    Assert-EqualText -Actual ([string]$response.CurrentHeight) -Expected "1080" -Context "Game View height"
+    Write-Host "    $($response.CurrentWidth)x$($response.CurrentHeight) (previous: $($response.PreviousWidth)x$($response.PreviousHeight))"
+    Start-Sleep -Seconds 1
+
+    return [pscustomobject]@{
+        Width = [int]$response.PreviousWidth
+        Height = [int]$response.PreviousHeight
+    }
+}
+
+function Restore-GameViewSize {
+    param(
+        [pscustomobject]$OriginalSize
+    )
+
+    if ($null -eq $OriginalSize) {
+        return
+    }
+
+    Invoke-UloopCapture -CommandArguments @(
+        "set-game-view-size",
+        "--width",
+        $OriginalSize.Width.ToString([Globalization.CultureInfo]::InvariantCulture),
+        "--height",
+        $OriginalSize.Height.ToString([Globalization.CultureInfo]::InvariantCulture)
+    ) | Out-Null
+}
+
 function Get-AnnotatedElements {
     [pscustomobject]$response = Invoke-UloopJson -CommandArguments @(
         "screenshot",
@@ -390,16 +432,23 @@ Write-Host "========================================="
 
 Wait-UnityReady
 
+[pscustomobject]$originalGameViewSize = $null
+
 try {
-    Write-Host "[1/7] Loading SimulateMouse demo scene..."
+    Write-Host "[1/8] Loading SimulateMouse demo scene..."
     Initialize-DemoScene
 
-    Write-Host "[2/7] Starting PlayMode..."
+    Write-Host "[2/8] Starting PlayMode..."
     Invoke-UloopJson -CommandArguments @("control-play-mode", "--action", "Play") | Out-Null
     Wait-PlayMode
     Start-Sleep -Seconds 1
 
-    Write-Host "[3/7] Reading annotated UI coordinates..."
+    # why: the demo Canvas mixes top-anchored buttons with a center-anchored DropZone,
+    # so a short Game View makes the DropZone cover ClickButton2 and drop it from annotations.
+    Write-Host "[3/8] Selecting Full HD Game View resolution..."
+    $originalGameViewSize = Select-FullHdGameView
+
+    Write-Host "[4/8] Reading annotated UI coordinates..."
     [object[]]$elements = Get-AnnotatedElements
     [pscustomobject]$clickButton1 = Get-UiElement -Elements $elements -Name "ClickButton1"
     [pscustomobject]$clickButton2 = Get-UiElement -Elements $elements -Name "ClickButton2"
@@ -410,7 +459,7 @@ try {
     [pscustomobject]$dropZone = Get-UiElement -Elements $elements -Name "DropZone"
     [pscustomobject]$virtualPad = Get-UiElement -Elements $elements -Name "VirtualPadBackground"
 
-    Write-Host "[4/7] Clicking counter buttons..."
+    Write-Host "[5/8] Clicking counter buttons..."
     Invoke-MouseUi -Action "Click" -X $clickButton1.SimX -Y $clickButton1.SimY -TargetPath $clickButton1.Path -ExpectedHit "ClickButton1" | Out-Null
     Invoke-MouseUi -Action "Click" -X $clickButton2.SimX -Y $clickButton2.SimY -TargetPath $clickButton2.Path -ExpectedHit "ClickButton2" | Out-Null
     Invoke-MouseUi -Action "Click" -X $clickButton1.SimX -Y $clickButton1.SimY -TargetPath $clickButton1.Path -ExpectedHit "ClickButton1" | Out-Null
@@ -418,12 +467,12 @@ try {
     [string]$counterText = Get-TextFromScene -ObjectName "CounterText"
     Assert-EqualText -Actual $counterText -Expected "Total Clicks: 4" -Context "CounterText"
 
-    Write-Host "[5/7] Long-pressing the hold button..."
+    Write-Host "[6/8] Long-pressing the hold button..."
     Invoke-MouseUi -Action "LongPress" -X $longPressButton.SimX -Y $longPressButton.SimY -Duration 3.2 -TargetPath $longPressButton.Path -ExpectedHit "LongPressButton" | Out-Null
     [string]$longPressText = Get-LongPressButtonText
     Assert-EqualText -Actual $longPressText -Expected "Activated!" -Context "LongPressButton label"
 
-    Write-Host "[6/7] Dragging boxes into the DropZone..."
+    Write-Host "[7/8] Dragging boxes into the DropZone..."
     Invoke-MouseUi -Action "Drag" -FromX $redBox.SimX -FromY $redBox.SimY -X $dropZone.SimX -Y $dropZone.SimY -DragSpeed 900 -TargetPath $redBox.Path -DropTargetPath $dropZone.Path -ExpectedHit "RedBox" | Out-Null
     Assert-EqualText -Actual (Get-DropZoneStatus) -Expected "Dropped: RedBox" -Context "DropZone after RedBox"
 
@@ -436,7 +485,7 @@ try {
     Invoke-MouseUi -Action "Drag" -FromX $blueBox.SimX -FromY $blueBox.SimY -X $dropZone.SimX -Y $dropZone.SimY -DragSpeed 900 -TargetPath $blueBox.Path -DropTargetPath $dropZone.Path -ExpectedHit "BlueBox" | Out-Null
     Assert-EqualText -Actual (Get-DropZoneStatus) -Expected "Dropped: BlueBox" -Context "DropZone after BlueBox"
 
-    Write-Host "[7/7] Exercising the virtual pad..."
+    Write-Host "[8/8] Exercising the virtual pad..."
     [double]$padWidth = $virtualPad.BoundsMaxX - $virtualPad.BoundsMinX
     [double]$padHeight = $virtualPad.BoundsMaxY - $virtualPad.BoundsMinY
     [double]$padOffset = [Math]::Min($padWidth, $padHeight) * 0.28
@@ -456,4 +505,5 @@ try {
 }
 finally {
     Invoke-UloopCapture -CommandArguments @("control-play-mode", "--action", "Stop") | Out-Null
+    Restore-GameViewSize -OriginalSize $originalGameViewSize
 }
