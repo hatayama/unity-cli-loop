@@ -30,7 +30,7 @@ Unity CLI Loopは、「AIがUnityプロジェクトの実装をできるだけ�
 
 Unity CLI Loopのコアとなるコンセプトは次の4つです。
 
-1. **AIが自律的にビルド・テスト・ログ解析・修正を回し続ける「自律開発ループ」** — コードを書き換えずに任意の行で実行を止め、その瞬間の変数を読み取って原因を特定することもできます。メソッド本体の修正はDomain Reloadを待たずに実行中のゲームへ即時反映できます。`compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`, `hot-reload`
+1. **AIが自律的にビルド・テスト・ログ解析・修正を回し続ける「自律開発ループ」** — コードを書き換えずに任意の行で実行を止め、その瞬間の変数を読み取って原因を特定することもできます。メソッド本体の修正は再コンパイルを待たずに実行中のゲームへ即時反映できます。`compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`, `hot-reload`
 2. **シーン構築、オブジェクト操作、メニュー実行、スクリーンショットからのUI改善など、Unity Editorの操作をAIに委任** — `execute-dynamic-code`, `screenshot`
 3. **PlayMode中の自動テスト — ボタンクリック、ドラッグ、キーボード入力、入力の記録・再生、ゲーム動作の検証をAIが実行** — `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `record-input`, `replay-input`, `execute-dynamic-code`, `screenshot`
 4. **上記を最小限のツール数で実現する** → [設計思想](#設計思想)
@@ -241,7 +241,7 @@ uloop skills install --output-dir path/to/skills
 |---|---|
 | 「このプロジェクトのUnityを起動して」 | `/uloop-launch` |
 | 「コンパイルエラーを直して」 | `/uloop-compile` |
-| 「この修正をDomain Reloadなしで今すぐ反映して」 | `/uloop-hot-reload` |
+| 「この修正をコンパイルせずに今すぐ反映して」 | `/uloop-hot-reload` |
 | 「テストを実行して失敗原因を教えて」 | `/uloop-run-tests` + `/uloop-get-logs` |
 | 「シーンの階層構造を確認して」 | `/uloop-get-hierarchy` |
 | 「Unityを再生させて、Unityを前面に出して」 | `/uloop-control-play-mode` + `/uloop-focus-window` |
@@ -259,7 +259,7 @@ uloop skills install --output-dir path/to/skills
 - `/uloop-compile` - コンパイルの実行
 - `/uloop-get-logs` - Consoleログの取得
 - `/uloop-run-tests` - テストの実行
-- `/uloop-hot-reload` - メソッド本体の変更をDomain Reloadなしで実行中のコードへ即時適用
+- `/uloop-hot-reload` - メソッド本体の変更を再コンパイルなしで実行中のコードへ即時適用
 - `/uloop-clear-console` - Consoleのクリア
 - `/uloop-focus-window` - Unity Editorを前面に表示
 - `/uloop-get-hierarchy` - シーン階層の取得
@@ -301,7 +301,7 @@ uloop compile
 # Domain Reloadを待たずにコンパイルを開始
 uloop compile --no-wait-for-domain-reload
 
-# 変更した.csのメソッド本体をDomain Reloadなしで実行中のコードへ適用
+# 変更した.csのメソッド本体を再コンパイルなしで実行中のコードへ適用
 uloop hot-reload
 
 # ログを取得
@@ -360,7 +360,7 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 - `compile` - コンパイルを実行し、エラー・警告を返す
 - `get-logs` - Consoleと同じ内容のログを、種類や検索文字列で絞り込んで取得
 - `run-tests` - Unity Test Runnerを実行（PlayMode / EditMode対応）
-- `hot-reload` - メソッド本体の変更をDomain Reloadなしで実行中のコードへ即時適用
+- `hot-reload` - メソッド本体の変更を再コンパイルなしで実行中のコードへ即時適用
 - `pause-point` - コードを書き換えずに任意の行でPlayModeを止め、その瞬間の変数を読む
 
 ## Unity Editor 自動化・探索ツール
