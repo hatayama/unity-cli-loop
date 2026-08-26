@@ -49,13 +49,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool updatedValue = DrawSuppressToggle(currentValue);
 
             EditorGUILayout.Space(2f);
-            EditorGUILayout.LabelField(
+            EditorGUILayout.HelpBox(
                 "When enabled, the Setup Wizard window no longer opens automatically after this "
                     + "package is installed or updated. This applies to everyone on the project: "
                     + "the value is saved to ProjectSettings/Packages/"
                     + ToolContracts.UnityCliLoopConstants.PACKAGE_NAME
                     + "/settings.json, so commit that file to share the setting with your team.",
-                EditorStyles.wordWrappedMiniLabel);
+                MessageType.Info);
 
             if (updatedValue == currentValue) return;
 
