@@ -46,7 +46,14 @@ This is also a strategy to avoid consuming context.
 > During PlayMode test execution, Domain Reload is forcibly turned OFF. (Settings are restored after test completion)
 > Note that static variables will not be reset during this period.
 
-### 4. pause-point - Pause at Any Line and Read Variables Without Editing Code
+### 4. hot-reload - Apply Method-Body Changes Instantly Without Recompiling
+Applies the method bodies of edited `.cs` files directly to the running Editor (EditMode / PlayMode) without a recompile or a Domain Reload in between. No attributes or source markers are required, and access to private / internal members, static methods, async methods, and iterators all work. You can fix game logic without leaving PlayMode and see the new behavior on the spot.
+
+Adding new methods and fields is also supported (added members are visible only to edited code in the same file). Adding new types, or members referenced from other files, requires `compile`. Methods that cannot be applied are reported per method as `Skipped` / `Failed`, and one failing method does not stop the rest from applying.
+
+Requiring no prior setup is another distinguishing point. Some existing hot-reload approaches require tagging target methods with an attribute ahead of time and compiling them in, or limit which kinds of methods can be targeted. uloop's hot reload needs none of that preparation and applies to any method of an already-running PlayMode after the fact. Beyond method-body edits, it can also apply changes to local variable types and to method signatures such as return types and parameters.
+
+### 5. pause-point - Pause at Any Line and Read Variables Without Editing Code
 Pauses PlayMode at any source `file:line` without editing source or recompiling. It patches the already-compiled method directly, so it can be armed in the middle of a PlayMode session.
 
 The hit response carries `CapturedVariables` — the method's locals, its parameters, and the `this` instance fields, captured **immediately before** the target line runs, exactly like an IDE breakpoint. Because the values are point-in-time strings rather than live references, they remain valid evidence after Unity resumes. This removes the round trip of sprinkling `Debug.Log` and recompiling.
@@ -65,14 +72,14 @@ Three capture modes are available. `single-shot` (the default) disarms after the
 
 ## Unity Editor Automation & Discovery Tools
 
-### 5. clear-console - Log Cleanup
+### 6. clear-console - Log Cleanup
 Clear logs that become noise during log searches.
 ```text
 → clear-console
 → Start new debug session
 ```
 
-### 6. find-game-objects - Search Scene Objects
+### 7. find-game-objects - Search Scene Objects
 Retrieve objects and examine component parameters. Also retrieve information about currently selected GameObjects (multiple selection supported) in Unity Editor.
 ```text
 → find-game-objects (RequiredComponents: ["Camera"])
@@ -82,7 +89,7 @@ Retrieve objects and examine component parameters. Also retrieve information abo
 → Get detailed information about currently selected GameObjects in Unity Editor (supports multiple selection)
 ```
 
-### 7. get-hierarchy - Analyze Scene Structure
+### 8. get-hierarchy - Analyze Scene Structure
 Retrieve information about the currently active Hierarchy in nested JSON format. Works at runtime as well.
 **Automatic File Export**: Retrieved hierarchy data is always saved as JSON in `{project_root}/.uloop/outputs/HierarchyResults/` directory. The response only returns the file path, minimizing token consumption even for large datasets.
 **Selection Mode**: Use `uloop get-hierarchy --use-selection` to get hierarchy starting from currently selected GameObject(s) in Unity Editor. Supports multiple selection - when parent and child are both selected, only the parent is used as root to avoid duplicate traversal.
@@ -93,11 +100,11 @@ Retrieve information about the currently active Hierarchy in nested JSON format.
 → Get hierarchy of currently selected GameObjects without specifying paths manually
 ```
 
-### 8. focus-window - Bring Unity Editor Window to Front (macOS & Windows)
+### 9. focus-window - Bring Unity Editor Window to Front (macOS & Windows)
 Ensures the Unity Editor window becomes the foreground application on macOS and Windows Editor builds.
 Great for keeping visual feedback in sync after other apps steal focus. (Linux is currently unsupported.)
 
-### 9. screenshot - Take a Screenshot of EditorWindow
+### 10. screenshot - Take a Screenshot of EditorWindow
 Take a screenshot of any EditorWindow as a PNG. Specify the window name (the text displayed in the title bar/tab) to capture.
 When multiple windows of the same type are open (e.g., 3 Inspector windows), all windows are saved with numbered filenames.
 Supports three matching modes: `exact` (default), `prefix`, and `contains` - all case-insensitive.
@@ -112,7 +119,7 @@ Use `uloop set-game-view-size --width 1920 --height 1080` to pin a custom Game V
 → Provide visual feedback to AI
 ```
 
-### 10. control-play-mode - Control Play Mode
+### 11. control-play-mode - Control Play Mode
 Control Unity Editor's Play Mode. Supports three actions: Play (start/resume), Stop, and Pause.
 ```text
 → control-play-mode (Action: Play)
@@ -121,7 +128,7 @@ Control Unity Editor's Play Mode. Supports three actions: Play (start/resume), S
 → Pause to inspect state
 ```
 
-### 11. execute-dynamic-code - Dynamic C# Code Execution
+### 12. execute-dynamic-code - Dynamic C# Code Execution
 Execute C# code dynamically within Unity Editor.
 
 Async support:
@@ -137,7 +144,7 @@ When enabled, dynamic code execution runs with full Unity Editor process permiss
 
 ## PlayMode Automated Testing Tools
 
-### 12. simulate-mouse-ui - Simulate Mouse Input on PlayMode UI
+### 13. simulate-mouse-ui - Simulate Mouse Input on PlayMode UI
 Simulate mouse click, long-press, and drag on PlayMode UI elements. Uses EventSystem and ExecuteEvents to dispatch pointer events directly — works independently of both old and new Input System. For game logic that reads Input System (e.g. `Mouse.current.leftButton.wasPressedThisFrame`), use `simulate-mouse-input` instead.
 
 Supports 6 actions: Click, LongPress, Drag (one-shot), DragStart/DragMove/DragEnd (split drag).
@@ -154,7 +161,7 @@ Supports 6 actions: Click, LongPress, Drag (one-shot), DragStart/DragMove/DragEn
 ```
 https://github.com/user-attachments/assets/c7ee9103-c282-4f90-8b01-64bb17400f3e
 
-### 13. simulate-mouse-input - Simulate Mouse Input in PlayMode via Input System
+### 14. simulate-mouse-input - Simulate Mouse Input in PlayMode via Input System
 Simulate mouse input in PlayMode via Input System. Injects button clicks, mouse delta, and scroll wheel directly into `Mouse.current`. Unlike `simulate-mouse-ui`, which fires EventSystem pointer events, this tool targets game logic that reads `Mouse.current` directly. It is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings.
 
 Supports 5 actions: Click, LongPress, MoveDelta, SmoothDelta, Scroll.
@@ -171,7 +178,7 @@ Add `--dry-run` to check what a Game View coordinate hits in 3D physics (GameObj
 → simulate-mouse-input (Action: SmoothDelta, DeltaX: 300, DeltaY: 0, Duration: 0.5)
 ```
 
-### 14. simulate-keyboard - Simulate Keyboard Input in PlayMode
+### 15. simulate-keyboard - Simulate Keyboard Input in PlayMode
 Simulate keyboard key input in PlayMode via Input System. Supports single key taps, sustained holds, and multi-key combinations (e.g. Shift+W for sprinting). This tool is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings. Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`.
 
 Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down), KeyUp (release held key). Use Press for edge-triggered gameplay such as `Keyboard.current.spaceKey.wasPressedThisFrame`; KeyDown emits only one initial press edge and then becomes held state, so use KeyDown/KeyUp only when the test intentionally needs a held key.
@@ -186,18 +193,8 @@ Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down),
 → simulate-keyboard (Action: KeyUp, Key: LeftShift)
 ```
 
-### 15. record-input - Record Input During PlayMode
-Record keyboard and mouse input during PlayMode frame-by-frame into a JSON file. Captures key presses, mouse movement, clicks, and scroll events via Input System device state diffing. This tool is available only when the Input System package is installed.
-
-```text
-→ record-input (Action: Start)
-→ record-input (Action: Start, Keys: "W,A,S,D,Space")
-→ record-input (Action: Stop)
-→ JSON file saved to .uloop/outputs/InputRecordings/
-```
-
 ### 16. replay-input - Replay Recorded Input During PlayMode
-Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording and injects input frame-by-frame via Input System. Supports looping and progress monitoring. This tool is available only when the Input System package is installed.
+Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording and injects input frame-by-frame via Input System. Supports looping and progress monitoring. This tool is available only when the Input System package is installed. Create recording files first in the Unity Editor from **Window > Unity CLI Loop > Recordings** using **Start Recording** and **Stop Recording**. There is no CLI command for recording input.
 
 ```text
 → replay-input (Action: Start)
@@ -213,4 +210,4 @@ sh scripts/run-posix-e2e.sh --project-path /path/to/unity-project
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows-e2e.ps1
 ```
 
-`run-posix-e2e.sh` uses the built native CLI binary by default, passes an explicit `--project-path` to every `uloop` invocation, and runs CLI recovery/readiness, input record/replay, and simulate-mouse UI coverage in one sequence.
+`run-posix-e2e.sh` uses the built native CLI binary by default, passes an explicit `--project-path` to every `uloop` invocation, and runs CLI recovery/readiness and simulate-mouse UI coverage in one sequence. To verify `replay-input` against a JSON created in the Recordings window, run `verify-replay-via-cli.sh` separately.
