@@ -24,6 +24,10 @@ point it at a large production project for the most realistic signal.
 - The Unity Editor does not have to be running: if no editor has the target
   project open, the harness launches one via `uloop launch`; a running but
   busy editor (importing/compiling) is waited on for up to 15 minutes.
+- When the PlayMode cycle is enabled (`--pause-every` > 0 or `-PauseEvery` >
+  0), the target project must have `com.unity.inputsystem` and `com.unity.ugui`
+  installed. Active Input Handling must be set to **Input System Package
+  (New)** or **Both**.
 - macOS/Linux (`soak-loop.sh`): POSIX sh, plus `jq` when the PlayMode cycle is
   enabled (`--pause-every` > 0). Metrics are sampled with `ps`/`pgrep`/`perl`,
   so this variant is not expected to run on Windows.
@@ -208,6 +212,9 @@ editor.
 
 The harness leaves `Assets/UloopSoak/` (scratch script, ticker, button probe,
 scene) in the target project so a follow-up run can be compared against the
-same state. Delete that folder and its `.meta` manually when finished. Do not
-revert the target project's `manifest.json`/`packages-lock.json` changes if
-they came from installing the uloop package itself.
+same state. At normal completion or after an abort, the harness opens a fresh
+empty scene when the active scene is still under `Assets/UloopSoak/`; it never
+replaces an active user scene during cleanup. Delete the generated folder and
+its `.meta` manually after the reminder. Do not revert the target project's
+`manifest.json`/`packages-lock.json` changes if they came from installing the
+uloop package itself.
