@@ -11,6 +11,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     internal static class UnityCliLoopProjectSettingsProvider
     {
         private const string SETTINGS_MENU_PATH = "Project/Unity CLI Loop";
+        private const string SUPPRESS_TOGGLE_LABEL = "Suppress Setup Wizard popup";
+        private const float TOGGLE_WIDTH = 16f;
+        private const float TOGGLE_LABEL_GAP = 4f;
         private const float HELP_BOX_ICON_SIZE = 32f;
         private const float HELP_BOX_TEXT_WIDTH_MARGIN = 80f;
         private const float MINIMUM_HELP_BOX_TEXT_WIDTH = 120f;
@@ -97,12 +100,34 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static bool DrawSuppressToggle(bool currentValue)
         {
             EditorGUILayout.BeginHorizontal();
-            bool updatedValue = EditorGUILayout.Toggle(currentValue, GUILayout.Width(16f));
-            GUILayout.Space(4f);
-            GUILayout.Label("Suppress Setup Wizard popup");
+            bool updatedValue = EditorGUILayout.Toggle(currentValue, GUILayout.Width(TOGGLE_WIDTH));
+            GUILayout.Space(TOGGLE_LABEL_GAP);
+            GUILayout.Label(SUPPRESS_TOGGLE_LABEL, GUILayout.ExpandWidth(false));
+            Rect labelRect = GUILayoutUtility.GetLastRect();
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
+
+            if (ConsumeLabelClick(labelRect))
+            {
+                updatedValue = !updatedValue;
+            }
+
             return updatedValue;
+        }
+
+        // The label is a plain GUILayout.Label, so clicking it must be turned into a toggle
+        // the way the stock ToggleLeft control does.
+        private static bool ConsumeLabelClick(Rect labelRect)
+        {
+            EditorGUIUtility.AddCursorRect(labelRect, MouseCursor.Link);
+
+            Event currentEvent = Event.current;
+            if (currentEvent.type != EventType.MouseDown) return false;
+            if (currentEvent.button != 0) return false;
+            if (!labelRect.Contains(currentEvent.mousePosition)) return false;
+
+            currentEvent.Use();
+            return true;
         }
     }
 }
