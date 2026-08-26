@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.77](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.76...v3.0.0-beta.77) (2026-08-26)
+
+
+### Bug Fixes
+
+* normalize cross-platform behavior found by pre-release Windows verification ([#2428](https://github.com/hatayama/unity-cli-loop/issues/2428)) ([c15576c](https://github.com/hatayama/unity-cli-loop/commit/c15576c7cfed90ac3acfc15dd76775e6d6f60d58))
+
 ## [3.0.0-beta.76](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.75...v3.0.0-beta.76) (2026-08-26)
 
 
