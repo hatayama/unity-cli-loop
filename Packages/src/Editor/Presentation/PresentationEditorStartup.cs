@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 thirdPartyToolMigrationAutoScanSeedRepository,
                 skillSetupUseCase,
                 thirdPartyToolMigrationUseCase);
+            UnityCliLoopProjectSettingsProvider.InitializeEditorServices(projectSettingsPort);
             SetupWizardWindow.InitializeForEditorStartup(
                 editorSettingsPort,
                 projectSettingsPort,
