@@ -426,32 +426,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void InputRecordingTypes_WhenLoaded_CompileUnderFirstPartyToolsAssembly()
+        public void ReplayInputTypes_WhenLoaded_CompileUnderFirstPartyToolsAssembly()
         {
-            // Tests that bundled input recording contracts stay inside the first-party tool assembly.
-            string recordSchemaAssemblyName = typeof(RecordInputSchema).Assembly.GetName().Name;
-            string recordResponseAssemblyName = typeof(RecordInputResponse).Assembly.GetName().Name;
+            // Tests that replay-input contracts stay inside the first-party tool assembly.
             string replaySchemaAssemblyName = typeof(ReplayInputSchema).Assembly.GetName().Name;
             string replayResponseAssemblyName = typeof(ReplayInputResponse).Assembly.GetName().Name;
-            string recordActionAssemblyName = typeof(RecordInputAction).Assembly.GetName().Name;
             string replayActionAssemblyName = typeof(ReplayInputAction).Assembly.GetName().Name;
 
-            Assert.That(recordSchemaAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(recordResponseAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
             Assert.That(replaySchemaAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
             Assert.That(replayResponseAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
-            Assert.That(recordActionAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
             Assert.That(replayActionAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
         }
 
         [Test]
-        public void InputRecordingUseCases_WhenLoaded_CompileUnderApplicationAssembly()
+        public void ReplayInputUseCase_WhenLoaded_CompilesUnderApplicationAssembly()
         {
-            // Tests that the bundled tools own the record/replay implementations.
-            string recordUseCaseAssemblyName = typeof(RecordInputUseCase).Assembly.GetName().Name;
+            // Tests that replay-input owns its implementation in the first-party tool assembly.
             string replayUseCaseAssemblyName = typeof(ReplayInputUseCase).Assembly.GetName().Name;
 
-            Assert.That(recordUseCaseAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
             Assert.That(replayUseCaseAssemblyName, Does.StartWith(FirstPartyToolsAssemblyNamePrefix));
         }
 

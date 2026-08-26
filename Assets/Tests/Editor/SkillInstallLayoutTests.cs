@@ -298,12 +298,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(screenshotSkill.ToolName, Is.EqualTo("screenshot"));
             Assert.That(screenshotSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
 
-            SkillInstallLayout.SkillSourceInfo recordInputSkill = skillSources
-                .Single(skill => skill.Name == "uloop-record-input");
-
-            Assert.That(recordInputSkill.ToolName, Is.EqualTo("record-input"));
-            Assert.That(recordInputSkill.SkillFiles.Keys, Does.Contain(SkillInstallLayout.SkillFileName));
-
             SkillInstallLayout.SkillSourceInfo replayInputSkill = skillSources
                 .Single(skill => skill.Name == "uloop-replay-input");
 

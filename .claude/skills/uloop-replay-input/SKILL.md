@@ -8,6 +8,8 @@ description: "Replay recorded PlayMode keyboard and mouse input. Use for exact g
 
 Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording and injects input frame-by-frame via Input System with zero CLI overhead. Supports looping and progress monitoring.
 
+Create recording JSON files in the Unity Editor from **Window > Unity CLI Loop > Recordings** with **Start Recording** and **Stop Recording**. There is no CLI command for recording input.
+
 ## Usage
 
 ```bash

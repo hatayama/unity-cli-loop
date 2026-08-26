@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void RequireActiveAndNotPaused_WhenEditModeIsNotPlaying_ReturnsNotActiveFailure()
         {
             // Verifies the paused-aware preflight also fails with the exact not-active message when PlayMode is inactive.
-            PlayModeToolPreflightResult result = PlayModeToolPreflightService.RequireActiveAndNotPaused(RecordInputUseCase.PausedActionDescription);
+            PlayModeToolPreflightResult result = PlayModeToolPreflightService.RequireActiveAndNotPaused(ReplayInputUseCase.PausedActionDescription);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo(ExpectedNotActiveMessage));
@@ -39,15 +39,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 PlayModeToolPreflightService.PlayModeNotActiveMessage,
                 Is.EqualTo(ExpectedNotActiveMessage));
-        }
-
-        [Test]
-        public void FormatPausedMessage_WithRecordInputSuffix_ReturnsExpectedWireString()
-        {
-            // Verifies RecordInput's paused preflight message stays byte-identical, including the suffix the use case actually passes.
-            Assert.That(
-                PlayModeToolPreflightService.FormatPausedMessage(RecordInputUseCase.PausedActionDescription),
-                Is.EqualTo("PlayMode is paused. Resume PlayMode before recording input."));
         }
 
         [Test]

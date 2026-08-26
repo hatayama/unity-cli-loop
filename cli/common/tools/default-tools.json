@@ -668,44 +668,6 @@
       }
     },
     {
-      "name": "record-input",
-      "description": "Record PlayMode keyboard and mouse input to JSON. Use to capture gameplay, bug repro, or E2E input sequences for replay.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "Action": {
-            "type": "string",
-            "enum": [
-              "Start",
-              "Stop"
-            ],
-            "description": "Start - begin recording input, Stop - stop recording and save to file",
-            "default": "Start"
-          },
-          "OutputPath": {
-            "type": "string",
-            "description": "Save path for the recording JSON. When empty, auto-generates under .uloop/outputs/InputRecordings/",
-            "default": ""
-          },
-          "Keys": {
-            "type": "string",
-            "description": "Comma-separated key filter of Input System Key enum names (for example W,A,S,D,Space). Case-insensitive. Digit keys use Digit0-Digit9 or Numpad0-Numpad9, not bare 0-9; a name that matches no key fails the command instead of being dropped from the filter. Empty records all common game keys",
-            "default": ""
-          },
-          "DelaySeconds": {
-            "type": "number",
-            "description": "Countdown delay in seconds before recording starts (0-10). Gives time to switch focus to Game View.",
-            "default": 3
-          },
-          "ShowOverlay": {
-            "type": "boolean",
-            "description": "Hide the recording countdown and REC indicator overlay",
-            "default": true
-          }
-        }
-      }
-    },
-    {
       "name": "replay-input",
       "description": "Replay recorded PlayMode keyboard and mouse input. Use for exact gameplay reproduction, E2E runs, or consistent demos from JSON recordings.",
       "inputSchema": {
