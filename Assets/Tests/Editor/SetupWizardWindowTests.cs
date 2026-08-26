@@ -46,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UnityCliLoopEditorSessionStateTestFactory.ClearAll();
             SetupWizardWindow.InitializeEditorServices(
                 _editorSettingsPort,
+                CreateProjectSettingsPort(),
                 CreateCliSetupApplicationService(),
                 CreateSkillSetupUseCase());
             _editorSettingsRepository.InvalidateCache();
@@ -781,6 +782,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 File.Delete(path);
             }
+        }
+
+        // The port writes only when a toggle is used, so pointing it at a temp directory
+        // keeps these tests from touching the real ProjectSettings folder.
+        private static IUnityCliLoopProjectSettingsPort CreateProjectSettingsPort()
+        {
+            string settingsDirectory = Path.Combine(
+                Path.GetTempPath(),
+                "SetupWizardWindowTests_ProjectSettings_" + Path.GetRandomFileName());
+            return new UnityCliLoopProjectSettingsRepository(settingsDirectory);
         }
 
         private static CliSetupApplicationService CreateCliSetupApplicationService()

@@ -24,11 +24,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const string GITHUB_ICON_RELATIVE_PATH = "Editor/Presentation/Setup/GitHub_Invertocat_White.png";
         internal const bool ForceFlatSkillInstall = true;
         private static IUnityCliLoopEditorSettingsPort RegisteredEditorSettingsPort;
+        private static IUnityCliLoopProjectSettingsPort RegisteredProjectSettingsPort;
         private static CliSetupApplicationService RegisteredCliSetupApplicationService;
         private static SkillSetupUseCase RegisteredSkillSetupUseCase;
 
         internal static void InitializeForEditorStartup(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
+            IUnityCliLoopProjectSettingsPort projectSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
             IThirdPartyToolMigrationAutoScanSeedRepository autoScanSeedRepository,
             CliSetupApplicationService cliSetupApplicationService,
@@ -37,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             InitializeEditorServices(
                 editorSettingsPort,
+                projectSettingsPort,
                 cliSetupApplicationService,
                 skillSetupUseCase);
 
@@ -45,6 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             SetupWizardStartupFlow startupFlow = new(
                 editorSettingsPort,
+                projectSettingsPort,
                 sessionFlagsRepository,
                 autoScanSeedRepository,
                 cliSetupApplicationService,
@@ -72,15 +76,19 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void InitializeEditorServices(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
+            IUnityCliLoopProjectSettingsPort projectSettingsPort,
             CliSetupApplicationService cliSetupApplicationService,
             SkillSetupUseCase skillSetupUseCase)
         {
             Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
+            Debug.Assert(projectSettingsPort != null, "projectSettingsPort must not be null");
             Debug.Assert(cliSetupApplicationService != null, "cliSetupApplicationService must not be null");
             Debug.Assert(skillSetupUseCase != null, "skillSetupUseCase must not be null");
 
             RegisteredEditorSettingsPort = editorSettingsPort
                 ?? throw new System.ArgumentNullException(nameof(editorSettingsPort));
+            RegisteredProjectSettingsPort = projectSettingsPort
+                ?? throw new System.ArgumentNullException(nameof(projectSettingsPort));
             RegisteredCliSetupApplicationService = cliSetupApplicationService
                 ?? throw new System.ArgumentNullException(nameof(cliSetupApplicationService));
             RegisteredSkillSetupUseCase = skillSetupUseCase
@@ -182,6 +190,16 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return RegisteredEditorSettingsPort;
         }
 
+        private static IUnityCliLoopProjectSettingsPort GetProjectSettingsPort()
+        {
+            if (RegisteredProjectSettingsPort == null)
+            {
+                throw new System.InvalidOperationException("Unity CLI Loop project settings port is not registered.");
+            }
+
+            return RegisteredProjectSettingsPort;
+        }
+
         private static CliSetupApplicationService GetCliSetupApplicationService()
         {
             if (RegisteredCliSetupApplicationService == null)
@@ -205,6 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         private Button _refreshButton;
         private Toggle _suppressAutoShowToggle;
+        private Toggle _suppressProjectAutoShowToggle;
         private Button _openSettingsButton;
         private Button _closeButton;
         private VisualElement _githubLinkRow;
@@ -217,6 +236,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private bool _shouldRecordLastSeenVersionAfterCreateGui;
         private SkillSetupUseCase _skillSetupUseCase;
         private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
+        private IUnityCliLoopProjectSettingsPort _projectSettingsPort;
         private CliSetupApplicationService _cliSetupApplicationService;
         private SetupWizardWindowResizer _resizer;
 
@@ -238,6 +258,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _skillSetupUseCase = GetSkillSetupUseCase();
             _editorSettingsPort = GetEditorSettingsPort();
+            _projectSettingsPort = GetProjectSettingsPort();
             _cliSetupApplicationService = GetCliSetupApplicationService();
         }
 
@@ -311,6 +332,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 refreshSkillsStateButton);
 
             _suppressAutoShowToggle = rootVisualElement.Q<Toggle>("suppress-auto-show-toggle");
+            _suppressProjectAutoShowToggle = rootVisualElement.Q<Toggle>("suppress-auto-show-project-toggle");
             _openSettingsButton = rootVisualElement.Q<Button>("open-settings-button");
             _closeButton = rootVisualElement.Q<Button>("close-button");
             _githubLinkRow = rootVisualElement.Q<VisualElement>("github-link-row");
@@ -330,8 +352,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 installProgressLabel,
                 skillsSetupPanelView,
                 _suppressAutoShowToggle,
+                _suppressProjectAutoShowToggle,
                 _skillSetupUseCase,
                 _editorSettingsPort,
+                _projectSettingsPort,
                 _cliSetupApplicationService,
                 ScheduleResizeToContent);
         }
@@ -341,6 +365,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _refreshButton.clicked += () => _controller.RefreshUI();
             _controller.InitializeGroupSkillsToggle();
             _suppressAutoShowToggle.RegisterValueChangedCallback(evt => HandleSuppressAutoShowChanged(evt.newValue));
+            _suppressProjectAutoShowToggle.RegisterValueChangedCallback(
+                evt => HandleSuppressProjectAutoShowChanged(evt.newValue));
             _openSettingsButton.clicked += HandleOpenSettings;
             _closeButton.clicked += HandleClose;
             _githubLinkRow.RegisterCallback<ClickEvent>(_ => HandleOpenGitHub());
@@ -410,6 +436,20 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private void HandleSuppressAutoShowChanged(bool suppressAutoShow)
         {
             _editorSettingsPort.SetSuppressSetupWizardAutoShow(suppressAutoShow);
+            SetupWizardStartupFlow.MaybeRecordSuppressedSetupWizardState(
+                _editorSettingsPort,
+                suppressAutoShow,
+                UnityCliLoopConstants.PackageInfo.version,
+                GetMinimumRequiredCliVersion());
+            ScheduleResizeToContent();
+        }
+
+        // The project-scoped flag is committed to git and suppresses the wizard for the whole
+        // team; the last-seen state is still recorded per user so a later opt-out does not
+        // immediately re-show the wizard for the current version.
+        private void HandleSuppressProjectAutoShowChanged(bool suppressAutoShow)
+        {
+            _projectSettingsPort.SetSuppressSetupWizardAutoShow(suppressAutoShow);
             SetupWizardStartupFlow.MaybeRecordSuppressedSetupWizardState(
                 _editorSettingsPort,
                 suppressAutoShow,

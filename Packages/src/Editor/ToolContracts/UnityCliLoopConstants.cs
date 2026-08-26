@@ -38,6 +38,12 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string SETTINGS_FILE_NAME = "UnityCliLoopSettings.json";
         public const string LEGACY_SETTINGS_FILE_NAME = "UnityMcpSettings.json";
         public const string USER_SETTINGS_FOLDER = "UserSettings";
+
+        // Project-scoped (git-shared) settings, stored under the Unity convention
+        // ProjectSettings/Packages/<package-name>/settings.json so teams can commit them.
+        public const string PROJECT_SETTINGS_FOLDER = "ProjectSettings";
+        public const string PROJECT_SETTINGS_PACKAGES_FOLDER = "Packages";
+        public const string PROJECT_SETTINGS_FILE_NAME = "settings.json";
         
         // Scripting define symbols
         public const string SCRIPTING_DEFINE_ULOOP_DEBUG = "ULOOP_DEBUG";

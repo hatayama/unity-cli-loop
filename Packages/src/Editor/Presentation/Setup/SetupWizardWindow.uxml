@@ -49,6 +49,11 @@
                 name="suppress-auto-show-toggle"
                 text="Don't show this after updates"
                 class="setup-footer__toggle" />
+            <ui:Toggle
+                name="suppress-auto-show-project-toggle"
+                text="Don't show this for the whole team"
+                tooltip="Saved to ProjectSettings/Packages and shared via version control."
+                class="setup-footer__toggle" />
             <ui:Label
                 text="Reopen this from&#10;Window &gt; Unity CLI Loop &gt; Setup Wizard."
                 class="setup-footer__hint-label" />

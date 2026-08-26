@@ -17,6 +17,12 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             VibeLogger.InitializeForEditorStartup();
             IToolSettingsPort toolSettingsPort = new ToolSettingsRepository();
             IUnityCliLoopEditorSettingsPort editorSettingsPort = new UnityCliLoopEditorSettingsRepository();
+            string projectSettingsDirectory = System.IO.Path.Combine(
+                UnityCliLoopConstants.PROJECT_SETTINGS_FOLDER,
+                UnityCliLoopConstants.PROJECT_SETTINGS_PACKAGES_FOLDER,
+                UnityCliLoopConstants.PACKAGE_NAME);
+            IUnityCliLoopProjectSettingsPort projectSettingsPort =
+                new UnityCliLoopProjectSettingsRepository(projectSettingsDirectory);
             ISessionFlagsRepository sessionFlagsRepository = new UnityCliLoopSessionFlagsRepository();
             ICompileResultSessionRepository compileResultSessionRepository =
                 new UnityCliLoopCompileResultSessionRepository();
@@ -104,6 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             return new UnityCliLoopApplicationServices(
                 domainReloadDetectionService,
                 editorSettingsPort,
+                projectSettingsPort,
                 sessionFlagsRepository,
                 thirdPartyToolMigrationAutoScanSeedRepository,
                 applicationService,
@@ -119,6 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         internal UnityCliLoopApplicationServices(
             IDomainReloadDetectionService domainReloadDetectionService,
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
+            IUnityCliLoopProjectSettingsPort projectSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
             IThirdPartyToolMigrationAutoScanSeedRepository thirdPartyToolMigrationAutoScanSeedRepository,
             UnityCliLoopServerApplicationService serverApplicationService,
@@ -129,6 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
         {
             DomainReloadDetectionService = domainReloadDetectionService;
             EditorSettingsPort = editorSettingsPort;
+            ProjectSettingsPort = projectSettingsPort;
             SessionFlagsRepository = sessionFlagsRepository;
             ThirdPartyToolMigrationAutoScanSeedRepository = thirdPartyToolMigrationAutoScanSeedRepository;
             ServerApplicationService = serverApplicationService;
@@ -140,6 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
 
         internal IDomainReloadDetectionService DomainReloadDetectionService { get; }
         internal IUnityCliLoopEditorSettingsPort EditorSettingsPort { get; }
+        internal IUnityCliLoopProjectSettingsPort ProjectSettingsPort { get; }
         internal ISessionFlagsRepository SessionFlagsRepository { get; }
         internal IThirdPartyToolMigrationAutoScanSeedRepository ThirdPartyToolMigrationAutoScanSeedRepository { get; }
         internal UnityCliLoopServerApplicationService ServerApplicationService { get; }
