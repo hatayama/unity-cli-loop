@@ -368,7 +368,20 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
             for (int index = MAX_LOG_FILES; index < logFiles.Length; index++)
             {
-                logFiles[index].Delete();
+                DeleteLogFileSafely(logFiles[index]);
+            }
+        }
+
+        private static void DeleteLogFileSafely(FileInfo logFile)
+        {
+            try
+            {
+                logFile.Delete();
+            }
+            catch (Exception ex)
+            {
+                // A locked or inaccessible file must not stop pruning of the remaining files.
+                UnityEngine.Debug.LogWarning($"[VibeLogger] Failed to delete old log file {logFile.Name}: {ex.Message}");
             }
         }
         
