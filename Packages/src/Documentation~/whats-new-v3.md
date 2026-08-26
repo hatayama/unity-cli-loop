@@ -4,7 +4,7 @@ English | [日本語](whats-new-v3_ja.md)
 
 V3 replaces the npm-distributed CLI with a native Go binary and moves the transport from TCP port management to OS-native IPC. Driving Unity from an AI agent no longer needs a Node.js setup or any port management. Connection reliability is also improved: connections stay stable while Unity sits in the background, and across multiple Editors running in parallel.
 
-The headline new capability is `pause-point`: stop PlayMode at any source line and read the variables at that moment, without editing source or recompiling. It is also handy for taking a screenshot of a specific moment, or inspecting the Hierarchy at a specific moment.
+The headline new capabilities are `hot-reload` and `pause-point`. `hot-reload` applies edited method bodies to the running Editor instantly, without a recompile or a Domain Reload in between. `pause-point` stops PlayMode at any source line and reads the variables at that moment, without editing source or recompiling. It is also handy for taking a screenshot of a specific moment, or inspecting the Hierarchy at a specific moment.
 
 MCP support has been removed; the CLI plus Skills is now the only integration path. The sections below carry the details of each change.
 
@@ -17,6 +17,26 @@ The new `uloop` command is also compatible with V2 projects. When a project stil
 You only need the migration guide if you wrote your own integrations: C# custom tools built on the V2 extension API, or your own `SKILL.md` files, Markdown docs, shell scripts, or PowerShell scripts that invoke `uloop`. In that case read [Migrating Custom Tools and Skills to V3](migration-v2-to-v3.md) before you start fixing anything by hand.
 
 ## New Tools
+
+### `hot-reload` — apply method-body edits instantly without recompiling
+
+`hot-reload` applies the method bodies of edited `.cs` files directly to the running Editor (EditMode / PlayMode) without a recompile or a Domain Reload in between. No attributes or source markers are required, and access to private / internal members, static methods, async methods, and iterators all work. You can fix game logic without leaving PlayMode and see the new behavior on the spot.
+
+Adding new methods and fields is also supported (added members are visible only to edited code in the same file). Adding new types, or members referenced from other files, still requires `uloop compile`. Methods that cannot be applied are reported per method as `Skipped` / `Failed`, and one failing method does not stop the rest from applying.
+
+```bash
+# Apply the method bodies of the given files to the running Editor
+uloop hot-reload --files Assets/Scripts/Enemy.cs
+
+# With no arguments, auto-select the .cs files changed since the last compile
+uloop hot-reload
+
+# List the currently applied changes, and revert all of them
+uloop hot-reload --status
+uloop hot-reload --revert-all
+```
+
+Treat hot reload as the exploration phase and `uloop compile` as the landing phase. A compile or a Domain Reload reverts every change applied by hot reload (the source edits themselves remain and land normally through the compile).
 
 ### `pause-point` — stop at a line and read the frame
 
@@ -51,6 +71,7 @@ uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"
 
 - **MCP connection** — removed. Use the CLI together with the bundled Skills; every capability that was exposed over MCP is reachable through `uloop` commands.
 - **`get-version`, `get-project-info`** — removed as user commands. They were internal diagnostics and were never installed as agent skills, but V2 scripts could still invoke them. Use `uloop --version` for the CLI version, or `execute-dynamic-code` for Unity and project metadata.
+- **`record-input`** — removed. Record input in the Unity Editor from **Window > Unity CLI Loop > Recordings**, then play the resulting JSON back with `replay-input`.
 
 ## Breaking Changes
 

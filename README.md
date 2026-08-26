@@ -21,7 +21,7 @@ Let an AI agent compile, test, and operate your Unity project from popular LLM t
 Designed to keep AI-driven development loops running autonomously inside your existing Unity projects.
 
 > [!IMPORTANT]
-> - **[What's New in V3](Packages/src/Documentation~/whats-new-v3.md)** — what changed since V2: the move to a native Go CLI, the end of port management, the new `pause-point` tool, and connections that stay stable with Unity in the background or several Editors running in parallel
+> - **[What's New in V3](Packages/src/Documentation~/whats-new-v3.md)** — what changed since V2: the move to a native Go CLI, the end of port management, the new `hot-reload` / `pause-point` tools, and connections that stay stable with Unity in the background or several Editors running in parallel
 > - **[Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md)** — for anyone with C# custom tools or hand-written skills/scripts that invoke `uloop`. Everyone else migrates just by updating the package and the CLI
 
 # Concept
@@ -30,9 +30,9 @@ Tasks that humans typically handle manually — compiling, running the Test Runn
 
 Unity CLI Loop is built around four core ideas:
 
-1. **A self-hosted development loop where AI autonomously compiles, tests, inspects logs, and fixes issues** — it can even pause execution at any source line without editing code and read the variables at that moment to pin down a cause. Uses `compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`.
+1. **A self-hosted development loop where AI autonomously compiles, tests, inspects logs, and fixes issues** — it can even pause execution at any source line without editing code and read the variables at that moment to pin down a cause. Method-body fixes can be applied instantly to the running game without waiting for a recompile. Uses `compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`, `hot-reload`.
 2. **AI-driven Unity Editor operation — scene building, object manipulation, menu execution, and UI refinement from screenshots.** Uses `execute-dynamic-code`, `screenshot`.
-3. **PlayMode automated testing — AI clicks buttons, drags elements, presses keys, records and replays input, and verifies game behavior.** Uses `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `record-input`, `replay-input`, `execute-dynamic-code`, `screenshot`.
+3. **PlayMode automated testing — AI clicks buttons, drags elements, presses keys, replays recorded input, and verifies game behavior.** Uses `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `replay-input`, `execute-dynamic-code`, `screenshot`.
 4. **Achieving the above with a minimal set of tools.** See [Design Philosophy](#design-philosophy).
 
 https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
@@ -113,6 +113,11 @@ The installer verifies the downloaded archive against the digest list in
 `Packages/src/project-runner-pin.json` (same pin Unity's **Install CLI** button uses).
 Optional env: `ULOOP_REF` (git ref for the pin; default `main`), `ULOOP_INSTALL_DIR`.
 `ULOOP_VERSION` is accepted only when it matches the pin's `dispatcherReleaseTag`.
+
+> [!NOTE]
+> The terminal install trusts the same repository pin as the Unity GUI. The manual flow that
+> passes an explicit `ULOOP_ARCHIVE_MANIFEST` (derived from Sigstore verification) remains as a
+> hardened option for choosing an arbitrary release tag.
 
 On macOS or Windows Git Bash:
 
@@ -238,12 +243,12 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 |---|---|
 | "Launch Unity for this project" | `/uloop-launch` |
 | "Fix the compile errors" | `/uloop-compile` |
+| "Apply this fix right now without compiling" | `/uloop-hot-reload` |
 | "Run the tests and tell me why they failed" | `/uloop-run-tests` + `/uloop-get-logs` |
 | "Check the scene hierarchy" | `/uloop-get-hierarchy` |
 | "Play the game and bring Unity to the front" | `/uloop-control-play-mode` + `/uloop-focus-window` |
 | "Bulk-update prefab parameters" | `/uloop-execute-dynamic-code` |
 | "Take a screenshot of Game View and adjust the UI layout" | `/uloop-screenshot` + `/uloop-execute-dynamic-code` |
-| "Record my gameplay input" | `/uloop-record-input` |
 | "Replay the recorded input" | `/uloop-replay-input` |
 | "Pause at this line and investigate the bug" | `/uloop-pause-point` |
 
@@ -255,6 +260,7 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 - `/uloop-compile` - Execute compilation
 - `/uloop-get-logs` - Get console logs
 - `/uloop-run-tests` - Run tests
+- `/uloop-hot-reload` - Apply method-body changes to running code instantly, without recompiling
 - `/uloop-clear-console` - Clear console
 - `/uloop-focus-window` - Bring Unity Editor to front
 - `/uloop-get-hierarchy` - Get scene hierarchy
@@ -265,8 +271,7 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 - `/uloop-simulate-mouse-ui` - Simulate mouse click, long-press, and drag on PlayMode UI elements
 - `/uloop-simulate-mouse-input` - Simulate mouse input in PlayMode via Input System
 - `/uloop-simulate-keyboard` - Simulate keyboard input in PlayMode via Input System
-- `/uloop-record-input` - Record keyboard and mouse input during PlayMode
-- `/uloop-replay-input` - Replay recorded input during PlayMode
+- `/uloop-replay-input` - Replay input recorded in the Recordings window during PlayMode
 - `/uloop-control-play-mode` - Control Play Mode
 - `/uloop-execute-dynamic-code` - Execute dynamic C# code
 
@@ -295,6 +300,9 @@ uloop compile
 
 # Compile without waiting for Domain Reload
 uloop compile --no-wait-for-domain-reload
+
+# Apply the method bodies of changed .cs files to running code without recompiling
+uloop hot-reload
 
 # Get logs
 uloop get-logs --max-count 10
@@ -352,6 +360,7 @@ For detailed descriptions and usage examples of every tool, see the **[Tool Refe
 - `compile` - Run compilation and return errors and warnings
 - `get-logs` - Retrieve the same logs as the Console, filtered by type or search string
 - `run-tests` - Run Unity Test Runner (PlayMode / EditMode)
+- `hot-reload` - Apply method-body changes to running code instantly, without recompiling
 - `pause-point` - Pause PlayMode at any line without editing code and read the variables at that moment
 
 ## Unity Editor Automation & Discovery Tools
@@ -360,6 +369,7 @@ For detailed descriptions and usage examples of every tool, see the **[Tool Refe
 - `get-hierarchy` - Retrieve the scene structure as JSON
 - `focus-window` - Bring the Unity Editor window to the front
 - `screenshot` - Save screenshots of EditorWindows or the Game View
+- `set-game-view-size` - Read and set the Game View custom resolution
 - `control-play-mode` - Play, stop, and pause Play Mode
 - `execute-dynamic-code` - Execute dynamic C# code
 
@@ -367,7 +377,7 @@ For detailed descriptions and usage examples of every tool, see the **[Tool Refe
 - `simulate-mouse-ui` - Simulate mouse operations on UI elements (via EventSystem)
 - `simulate-mouse-input` - Simulate mouse input via Input System
 - `simulate-keyboard` - Simulate keyboard input via Input System
-- `record-input` / `replay-input` - Record and replay input during PlayMode
+- `replay-input` - Replay input recorded in the Recordings window during PlayMode
 
 ## Unity CLI Loop Extension Development
 

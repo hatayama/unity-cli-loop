@@ -126,8 +126,6 @@ For any boolean not listed below, run `uloop <command> --help`: every V3 flag pr
 | `uloop compile` | `--reload-external-scene-changes false` | `--stop-on-external-scene-changes` |
 | `uloop run-tests` | `--save-before-run true` or bare | remove |
 | `uloop run-tests` | `--save-before-run false` | `--fail-on-unsaved-changes` |
-| `uloop record-input` | `--show-overlay true` | remove |
-| `uloop record-input` | `--show-overlay false` | `--no-show-overlay` |
 | `uloop replay-input` | `--show-overlay true` | remove |
 | `uloop replay-input` | `--show-overlay false` | `--no-show-overlay` |
 | `uloop get-hierarchy` | `--include-components true` | remove |
@@ -154,6 +152,7 @@ The six commands from `capture-window` through `get-menu-items` were already rem
 | `uloop get-menu-items` | Removed. Use `uloop execute-dynamic-code`. |
 | `uloop get-version` | Removed as a user command. Use `uloop --version` for the CLI version, or `uloop execute-dynamic-code` for the Unity Editor version. |
 | `uloop get-project-info` | Removed. Use `uloop execute-dynamic-code` to read the project metadata you need. |
+| `uloop record-input` | Removed in V3. Record input in the Unity Editor from **Window > Unity CLI Loop > Recordings**. |
 
 The migration skill reports these as candidates rather than rewriting them, because the replacement depends on what your script was doing.
 

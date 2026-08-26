@@ -21,7 +21,7 @@ CLIを通じて、AIエージェントがUnityプロジェクトのコンパイ�
 AI駆動の開発ループを既存のUnityプロジェクト内で自律的に回し続けるために設計されています。
 
 > [!IMPORTANT]
-> - **[V3の新機能](Packages/src/Documentation~/whats-new-v3_ja.md)** — ネイティブGo CLIへの移行、ポート管理の廃止、`pause-point` の追加、Unityがバックグラウンドにあっても複数のUnityを並列で動かしても接続が安定し続ける信頼性の向上など、V2からの変更点
+> - **[V3の新機能](Packages/src/Documentation~/whats-new-v3_ja.md)** — ネイティブGo CLIへの移行、ポート管理の廃止、`hot-reload` / `pause-point` の追加、Unityがバックグラウンドにあっても複数のUnityを並列で動かしても接続が安定し続ける信頼性の向上など、V2からの変更点
 > - **[カスタムツール／スキルのV3移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md)** — C#カスタムツールや、`uloop` を呼び出す自作スキル／スクリプトを持っている人向け。それ以外の人は、パッケージとCLIを更新するだけで移行できます
 
 # コンセプト
@@ -30,7 +30,7 @@ Unity CLI Loopは、「AIがUnityプロジェクトの実装をできるだけ�
 
 Unity CLI Loopのコアとなるコンセプトは次の4つです。
 
-1. **AIが自律的にビルド・テスト・ログ解析・修正を回し続ける「自律開発ループ」** — コードを書き換えずに任意の行で実行を止め、その瞬間の変数を読み取って原因を特定することもできます。`compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`
+1. **AIが自律的にビルド・テスト・ログ解析・修正を回し続ける「自律開発ループ」** — コードを書き換えずに任意の行で実行を止め、その瞬間の変数を読み取って原因を特定することもできます。メソッド本体の修正は再コンパイルを待たずに実行中のゲームへ即時反映できます。`compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`, `hot-reload`
 2. **シーン構築、オブジェクト操作、メニュー実行、スクリーンショットからのUI改善など、Unity Editorの操作をAIに委任** — `execute-dynamic-code`, `screenshot`
 3. **PlayMode中の自動テスト — ボタンクリック、ドラッグ、キーボード入力、記録済み入力の再生、ゲーム動作の検証をAIが実行** — `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `replay-input`, `execute-dynamic-code`, `screenshot`
 4. **上記を最小限のツール数で実現する** → [設計思想](#設計思想)
@@ -98,6 +98,17 @@ v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode
 <summary>CLIだけをterminalからinstallする場合はこちら</summary>
 
 Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
+
+### Homebrew（macOS）
+
+```bash
+brew install hatayama/tap/uloop
+```
+
+更新は `brew upgrade uloop` で行います。formula は dispatcher の release ごとに自動で更新されます。
+
+### Shell installer（curl / PowerShell）
+
 インストーラは `Packages/src/project-runner-pin.json` の digest 一覧でアーカイブを検証します（Unity の **Install CLI** ボタンと同じ pin）。
 任意の環境変数: `ULOOP_REF`（pin を取る git ref。既定は `main`）、`ULOOP_INSTALL_DIR`。
 `ULOOP_VERSION` は pin の `dispatcherReleaseTag` と一致する場合のみ有効です。
@@ -111,6 +122,8 @@ macOS、Windows Git Bash の場合:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
 ```
+
+Windows Git Bash では、インストーラは dispatcher の zip を `unzip`、`tar`（bsdtar / Windows の tar.exe）、PowerShell の `Expand-Archive` の順に試して展開します。フォールバックが使える環境では `unzip` は必須ではありません。
 
 Windows PowerShell の場合:
 
@@ -241,6 +254,7 @@ uloop skills install --output-dir path/to/skills
 |---|---|
 | 「このプロジェクトのUnityを起動して」 | `/uloop-launch` |
 | 「コンパイルエラーを直して」 | `/uloop-compile` |
+| 「この修正をコンパイルせずに今すぐ反映して」 | `/uloop-hot-reload` |
 | 「テストを実行して失敗原因を教えて」 | `/uloop-run-tests` + `/uloop-get-logs` |
 | 「シーンの階層構造を確認して」 | `/uloop-get-hierarchy` |
 | 「Unityを再生させて、Unityを前面に出して」 | `/uloop-control-play-mode` + `/uloop-focus-window` |
@@ -251,12 +265,13 @@ uloop skills install --output-dir path/to/skills
 
 
 <details>
-<summary>バンドルされている全17個のSkills一覧</summary>
+<summary>バンドルされている全18個のSkills一覧</summary>
 
 - `/uloop-launch` - 正しいバージョンでUnityを起動
 - `/uloop-compile` - コンパイルの実行
 - `/uloop-get-logs` - Consoleログの取得
 - `/uloop-run-tests` - テストの実行
+- `/uloop-hot-reload` - メソッド本体の変更を再コンパイルなしで実行中のコードへ即時適用
 - `/uloop-clear-console` - Consoleのクリア
 - `/uloop-focus-window` - Unity Editorを前面に表示
 - `/uloop-get-hierarchy` - シーン階層の取得
@@ -296,6 +311,9 @@ uloop compile
 
 # Domain Reloadを待たずにコンパイルを開始
 uloop compile --no-wait-for-domain-reload
+
+# 変更した.csのメソッド本体を再コンパイルなしで実行中のコードへ適用
+uloop hot-reload
 
 # ログを取得
 uloop get-logs --max-count 10
@@ -353,6 +371,7 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 - `compile` - コンパイルを実行し、エラー・警告を返す
 - `get-logs` - Consoleと同じ内容のログを、種類や検索文字列で絞り込んで取得
 - `run-tests` - Unity Test Runnerを実行（PlayMode / EditMode対応）
+- `hot-reload` - メソッド本体の変更を再コンパイルなしで実行中のコードへ即時適用
 - `pause-point` - コードを書き換えずに任意の行でPlayModeを止め、その瞬間の変数を読む
 
 ## Unity Editor 自動化・探索ツール
@@ -361,6 +380,7 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 - `get-hierarchy` - シーン構造をJSONで取得
 - `focus-window` - Unity Editorウィンドウを前面化
 - `screenshot` - EditorWindowやGame Viewのスクリーンショットを保存
+- `set-game-view-size` - Game Viewのカスタム解像度を取得・設定
 - `control-play-mode` - Play Modeの再生・停止・一時停止
 - `execute-dynamic-code` - 動的C#コード実行
 
