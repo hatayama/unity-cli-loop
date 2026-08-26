@@ -126,8 +126,6 @@ V3のbooleanオプションは値を取りません。V2の呼び出しをどう
 | `uloop compile` | `--reload-external-scene-changes false` | `--stop-on-external-scene-changes` |
 | `uloop run-tests` | `--save-before-run true` またはフラグのみ | 削除 |
 | `uloop run-tests` | `--save-before-run false` | `--fail-on-unsaved-changes` |
-| `uloop record-input` | `--show-overlay true` | 削除 |
-| `uloop record-input` | `--show-overlay false` | `--no-show-overlay` |
 | `uloop replay-input` | `--show-overlay true` | 削除 |
 | `uloop replay-input` | `--show-overlay false` | `--no-show-overlay` |
 | `uloop get-hierarchy` | `--include-components true` | 削除 |
@@ -154,6 +152,7 @@ V3のbooleanオプションは値を取りません。V2の呼び出しをどう
 | `uloop get-menu-items` | 削除。`uloop execute-dynamic-code` を使う。 |
 | `uloop get-version` | ユーザー向けコマンドとしては削除。CLIのバージョンは `uloop --version`、Unity Editorのバージョンは `uloop execute-dynamic-code` で取得する。 |
 | `uloop get-project-info` | 削除。必要なプロジェクト情報は `uloop execute-dynamic-code` で取得する。 |
+| `uloop record-input` | V3で削除。入力記録は Unity Editor の **Window > Unity CLI Loop > Recordings** で行う。 |
 
 移行スキルはこれらを自動で書き換えず、移行候補として報告するだけです。スクリプトが何をしていたかによって適切な代替手段が変わるためです。
 

@@ -42,8 +42,9 @@ Prefer `rg` for searches when available. If `rg` is unavailable, use the best av
   before deciding whether `false` means removal, a `--no-*` flag, or a
   renamed option.
 - For first-party tools, use the reference table. `compile`, `run-tests`,
-  `get-hierarchy`, `record-input`, and `replay-input` have special renamed
+  `get-hierarchy`, and `replay-input` have special renamed
   negative flags.
+- `record-input` is removed. Direct users to create recordings in **Window > Unity CLI Loop > Recordings** instead of translating its options.
 - For first-party boolean options that are not in the reference tables, run
   `uloop <command> --help` and apply the boolean rules to the printed
   default: `default: enabled` means the V3 default is true, and
@@ -75,7 +76,7 @@ Prefer `rg` for searches when available. If `rg` is unavailable, use the best av
 - `uloop` command lines and examples.
 - Boolean-looking CLI options: `--* true`, `--*=true`, `--* false`, `--*=false`.
 - First-party renamed options from the reference, including bare flags.
-- Removed or renamed commands: `get-project-info`, `get-version`,
+- Removed or renamed commands: `get-project-info`, `get-version`, `record-input`,
   `unity-search`, `execute-menu-item`, `get-menu-items`,
   `get-unity-search-providers`, `get-provider-details`, and `capture-window`
   (renamed to `screenshot`). Report these as out-of-scope command migration

@@ -1,22 +1,20 @@
 <#
-E2E verification: human plays freely, then CLI replays and verifies.
+E2E verification: human records through the Recordings window, then CLI replays and verifies.
 
 Usage:
   powershell -NoProfile -ExecutionPolicy Bypass -File .\Assets\Tests\Demo\scripts\verify-replay-via-cli.ps1
   powershell -NoProfile -ExecutionPolicy Bypass -File .\Assets\Tests\Demo\scripts\verify-replay-via-cli.ps1 -ProjectPath C:\path\to\project
-  powershell -NoProfile -ExecutionPolicy Bypass -File .\Assets\Tests\Demo\scripts\verify-replay-via-cli.ps1 -AutomatedInput
-
 Prerequisites:
   - Unity Editor running with InputReplayVerificationScene loaded
   - PlayMode is not running because this script starts it
+  - Record input with Window > Unity CLI Loop > Recordings when prompted
 #>
 
 [CmdletBinding()]
 param(
     [string]$ProjectPath = "",
     [int]$UnityWaitAttempts = 15,
-    [int]$ReplayTimeoutSeconds = 60,
-    [switch]$AutomatedInput
+    [int]$ReplayTimeoutSeconds = 60
 )
 
 Set-StrictMode -Version Latest
@@ -247,15 +245,6 @@ return "OK: activated for replay";
     Assert-DynamicCodeResult -Result $result -ExpectedResult "OK: activated for replay" -Context "Activate replay controller"
 }
 
-function Invoke-AutomatedInput {
-    Invoke-UloopJsonChecked -CommandArguments @("simulate-mouse-input", "--action", "SmoothDelta", "--delta-x", "96", "--delta-y", "0", "--duration", "0.25") | Out-Null
-    Start-Sleep -Milliseconds 300
-    Invoke-UloopJsonChecked -CommandArguments @("simulate-mouse-input", "--action", "Click", "--x", "400", "--y", "300") | Out-Null
-    Start-Sleep -Milliseconds 300
-    Invoke-UloopJsonChecked -CommandArguments @("simulate-mouse-input", "--action", "Scroll", "--scroll-y", "120") | Out-Null
-    Start-Sleep -Milliseconds 500
-}
-
 function Save-EventLog {
     param(
         [string]$Path
@@ -287,35 +276,6 @@ function Restart-PlayMode {
     Write-Host "  Waiting for Unity..."
     Start-Sleep -Seconds 6
     Wait-UnityReady
-}
-
-function Invoke-ReplayToLog {
-    param(
-        [string]$LogPath,
-        [string]$InputPath
-    )
-
-    Restart-PlayMode
-    Invoke-ActivateForReplay
-    Write-Host "  Starting replay..."
-
-    [string[]]$replayStartArgs = @("replay-input", "--action", "Start")
-    if (-not [string]::IsNullOrWhiteSpace($InputPath)) {
-        $replayStartArgs += @("--input-path", $InputPath)
-    }
-    if ($AutomatedInput) {
-        $replayStartArgs += @("--no-show-overlay")
-    }
-
-    [bool]$replayStartAccepted = Start-ReplayInput -ReplayStartArgs $replayStartArgs
-
-    Write-Host "  Waiting for replay to finish..."
-    Start-Sleep -Seconds 2
-    Wait-ReplayCompleted -ReplayStartAccepted $replayStartAccepted
-    Write-Host ""
-
-    Start-Sleep -Seconds 1
-    Save-EventLog -Path $LogPath
 }
 
 function Start-ReplayInput {
@@ -473,7 +433,7 @@ function Compare-NormalizedLogs {
 
 Write-Host ""
 Write-Host "========================================="
-Write-Host "  Input Record/Replay E2E Verification"
+Write-Host "  Input Replay E2E Verification"
 Write-Host "========================================="
 
 Write-Host ""
@@ -489,79 +449,41 @@ Wait-UnityReady
 Write-Host "[2/8] Activating controller..."
 Invoke-ActivateForRecord
 
-Write-Host "[3/8] Starting recording via CLI..."
-[string[]]$recordStartArgs = @("record-input", "--action", "Start")
-if ($AutomatedInput) {
-    $recordStartArgs += @("--delay-seconds", "0", "--no-show-overlay")
-}
+Write-Host "[3/8] Recording input with the Recordings window..."
+Write-Host ""
+Write-Host "========================================="
+Write-Host "  Open Window > Unity CLI Loop > Recordings."
+Write-Host "  Click Start Recording, play in the Game View, then click Stop Recording."
+Write-Host ""
+Write-Host "  WASD: move | Mouse: rotate"
+Write-Host "  Left click: red | Right click: blue"
+Write-Host "  Scroll: scale"
+Write-Host ""
+Write-Host "  Press ENTER here after the recording has stopped."
+Write-Host "========================================="
+Write-Host ""
+Read-Host | Out-Null
 
-Invoke-UloopJsonChecked -CommandArguments $recordStartArgs | Out-Null
+Write-Host "[4/8] Saving recording event log..."
+Save-EventLog -Path $RecordingLogPath
 
-if ($AutomatedInput) {
-    Write-Host "  Running automated input sequence..."
-    Start-Sleep -Milliseconds 500
-    Invoke-AutomatedInput
-} else {
-    Write-Host ""
-    Write-Host "========================================="
-    Write-Host "  Recording is active!"
-    Write-Host "  Go to the Unity Game View and play."
-    Write-Host ""
-    Write-Host "  WASD: move | Mouse: rotate"
-    Write-Host "  Left click: red | Right click: blue"
-    Write-Host "  Scroll: scale"
-    Write-Host ""
-    Write-Host "  Press ENTER here when done."
-    Write-Host "========================================="
-    Write-Host ""
-    Read-Host | Out-Null
-}
+Write-Host "[5/8] Restarting PlayMode..."
+Restart-PlayMode
 
-Write-Host "[4/8] Stopping recording via CLI..."
-[pscustomobject]$recordStopResult = Invoke-UloopCapture -CommandArguments @("record-input", "--action", "Stop")
-Write-Host "  $($recordStopResult.Text)"
-if ($recordStopResult.ExitCode -ne 0) {
-    throw "record-input Stop failed"
-}
+Write-Host "[6/8] Activating controller + starting replay via CLI..."
+Invoke-ActivateForReplay
+Write-Host "  Starting replay of the latest Recordings window file..."
+[bool]$replayStartAccepted = Start-ReplayInput -ReplayStartArgs @("replay-input", "--action", "Start")
 
-[pscustomobject]$recordStopJson = $recordStopResult.Text | ConvertFrom-Json
-if ($recordStopJson.success -ne $true) {
-    throw "record-input Stop reported failure: $($recordStopResult.Text)"
-}
+Write-Host "  Waiting for replay to finish..."
+Start-Sleep -Seconds 2
+Wait-ReplayCompleted -ReplayStartAccepted $replayStartAccepted
+Write-Host ""
 
-[string]$recordingInputPath = ""
-if ($null -ne $recordStopJson.outputPath) {
-    $recordingInputPath = $recordStopJson.outputPath.ToString()
-}
+Start-Sleep -Seconds 1
 
-if ($AutomatedInput) {
-    Write-Host "[5/8] Saving recording event log..."
-    Save-EventLog -Path $RecordingLogPath
-
-    Write-Host "[6/8] Replaying recorded input via CLI..."
-    Invoke-ReplayToLog -LogPath $ReplayLogPath -InputPath $recordingInputPath
-} else {
-    Write-Host "[5/8] Saving recording event log..."
-    Save-EventLog -Path $RecordingLogPath
-
-    Write-Host "[5/8] Restarting PlayMode..."
-    Restart-PlayMode
-
-    Write-Host "[6/8] Activating controller + starting replay via CLI..."
-    Invoke-ActivateForReplay
-    Write-Host "  Starting replay..."
-    [bool]$replayStartAccepted = Start-ReplayInput -ReplayStartArgs @("replay-input", "--action", "Start")
-
-    Write-Host "  Waiting for replay to finish..."
-    Start-Sleep -Seconds 2
-    Wait-ReplayCompleted -ReplayStartAccepted $replayStartAccepted
-    Write-Host ""
-
-    Start-Sleep -Seconds 1
-
-    Write-Host "[7/8] Saving replay event log..."
-    Save-EventLog -Path $ReplayLogPath
-}
+Write-Host "[7/8] Saving replay event log..."
+Save-EventLog -Path $ReplayLogPath
 
 Write-Host ""
 Write-Host "[8/8] Comparing logs..."

@@ -18,9 +18,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "simulate-mouse-input",
             "simulate-mouse-input requires the Input System package (com.unity.inputsystem). Install it via Package Manager and set Active Input Handling to 'Input System Package (New)' or 'Both' in Player Settings.")]
         [TestCase(
-            "record-input",
-            "record-input requires the Input System package (com.unity.inputsystem). Install it via Package Manager and set Active Input Handling to 'Input System Package (New)' or 'Both' in Player Settings.")]
-        [TestCase(
             "replay-input",
             "replay-input requires the Input System package (com.unity.inputsystem). Install it via Package Manager and set Active Input Handling to 'Input System Package (New)' or 'Both' in Player Settings.")]
         public void Format_WithToolName_ReturnsExistingWarningMessage(string toolName, string expected)

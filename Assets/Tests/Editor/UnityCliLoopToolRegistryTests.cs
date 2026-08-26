@@ -68,11 +68,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(registry.IsToolRegistered("run-tests"), Is.True);
             Assert.That(registry.IsToolRegistered("find-game-objects"), Is.True);
             Assert.That(registry.IsToolRegistered("screenshot"), Is.True);
-            Assert.That(registry.IsToolRegistered("record-input"), Is.True);
             Assert.That(registry.IsToolRegistered("replay-input"), Is.True);
             Assert.That(registry.IsToolRegistered("simulate-keyboard"), Is.True);
             Assert.That(registry.IsToolRegistered("simulate-mouse-input"), Is.True);
             Assert.That(registry.IsToolRegistered("simulate-mouse-ui"), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies the retired Recordings CLI command is not registered as a bundled tool.
+        /// </summary>
+        [Test]
+        public void IsToolRegistered_WhenRecordInputCliIsRetired_ReturnsFalse()
+        {
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+
+            Assert.That(registry.IsToolRegistered("record-input"), Is.False);
         }
 
         [Test]
@@ -189,19 +199,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(toolType, Is.Not.Null);
             Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(ScreenshotAssemblyName));
-            AssertThirdPartyTool(toolType, false);
-        }
-
-        [Test]
-        public void GetToolType_WhenRecordInputComesFromFirstPartyToolsAssembly_ReturnsBundledPluginType()
-        {
-            // Tests that record-input is a bundled plugin instead of an application-layer tool.
-            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
-
-            System.Type toolType = registry.GetToolType("record-input");
-
-            Assert.That(toolType, Is.Not.Null);
-            Assert.That(toolType.Assembly.GetName().Name, Is.EqualTo(RecordInputAssemblyName));
             AssertThirdPartyTool(toolType, false);
         }
 

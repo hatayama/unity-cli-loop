@@ -9,7 +9,6 @@ ULOOP_PATH="${ULOOP_BIN:-}"
 TIMEOUT_SECONDS=120
 LAUNCH_TIMEOUT_SECONDS=240
 SKIP_RECOVERY_READINESS=false
-SKIP_INPUT_REPLAY=false
 SKIP_SIMULATE_MOUSE=false
 
 fail() {
@@ -27,7 +26,6 @@ Options:
   --timeout <seconds>                Per-command smoke timeout. Default: 120.
   --launch-timeout <seconds>         Launch/reuse smoke timeout. Default: 240.
   --skip-recovery-readiness          Skip recovery/readiness smoke.
-  --skip-input-replay                Skip record/replay E2E.
   --skip-simulate-mouse              Skip simulate-mouse UI E2E.
   -h, --help                         Show this help.
 EOF
@@ -57,10 +55,6 @@ while [ "$#" -gt 0 ]; do
             ;;
         --skip-recovery-readiness)
             SKIP_RECOVERY_READINESS=true
-            shift
-            ;;
-        --skip-input-replay)
-            SKIP_INPUT_REPLAY=true
             shift
             ;;
         --skip-simulate-mouse)
@@ -139,13 +133,6 @@ if [ "$SKIP_RECOVERY_READINESS" = false ]; then
             --uloop-path "$ULOOP_PATH" \
             --timeout "$TIMEOUT_SECONDS" \
             --launch-timeout "$LAUNCH_TIMEOUT_SECONDS"
-fi
-
-if [ "$SKIP_INPUT_REPLAY" = false ]; then
-    run_step "Input record/replay" \
-        sh "$ROOT_DIR/Assets/Tests/Demo/scripts/verify-replay-via-cli.sh" \
-            --project-path "$PROJECT_PATH" \
-            --automated-input
 fi
 
 if [ "$SKIP_SIMULATE_MOUSE" = false ]; then

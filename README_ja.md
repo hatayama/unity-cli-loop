@@ -32,7 +32,7 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 
 1. **AIが自律的にビルド・テスト・ログ解析・修正を回し続ける「自律開発ループ」** — コードを書き換えずに任意の行で実行を止め、その瞬間の変数を読み取って原因を特定することもできます。メソッド本体の修正は再コンパイルを待たずに実行中のゲームへ即時反映できます。`compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`, `hot-reload`
 2. **シーン構築、オブジェクト操作、メニュー実行、スクリーンショットからのUI改善など、Unity Editorの操作をAIに委任** — `execute-dynamic-code`, `screenshot`
-3. **PlayMode中の自動テスト — ボタンクリック、ドラッグ、キーボード入力、入力の記録・再生、ゲーム動作の検証をAIが実行** — `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `record-input`, `replay-input`, `execute-dynamic-code`, `screenshot`
+3. **PlayMode中の自動テスト — ボタンクリック、ドラッグ、キーボード入力、記録済み入力の再生、ゲーム動作の検証をAIが実行** — `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `replay-input`, `execute-dynamic-code`, `screenshot`
 4. **上記を最小限のツール数で実現する** → [設計思想](#設計思想)
 
 https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
@@ -247,13 +247,12 @@ uloop skills install --output-dir path/to/skills
 | 「Unityを再生させて、Unityを前面に出して」 | `/uloop-control-play-mode` + `/uloop-focus-window` |
 | 「Prefabのパラメータを一括修正して」 | `/uloop-execute-dynamic-code` |
 | 「Game Viewのスクショを撮って、UIレイアウトを調整して」 | `/uloop-screenshot` + `/uloop-execute-dynamic-code` |
-| 「ゲームプレイの入力を記録して」 | `/uloop-record-input` |
 | 「記録した入力を再生して」 | `/uloop-replay-input` |
 | 「バグの原因をこの行で止めて調べて」 | `/uloop-pause-point` |
 
 
 <details>
-<summary>バンドルされている全19個のSkills一覧</summary>
+<summary>バンドルされている全18個のSkills一覧</summary>
 
 - `/uloop-launch` - 正しいバージョンでUnityを起動
 - `/uloop-compile` - コンパイルの実行
@@ -270,8 +269,7 @@ uloop skills install --output-dir path/to/skills
 - `/uloop-simulate-mouse-ui` - PlayMode UI要素のクリック・長押し・ドラッグシミュレーション
 - `/uloop-simulate-mouse-input` - Input System経由のPlayModeマウス入力シミュレーション
 - `/uloop-simulate-keyboard` - Input System経由のPlayModeキーボード入力シミュレーション
-- `/uloop-record-input` - PlayMode中のキーボード・マウス入力の記録
-- `/uloop-replay-input` - 記録された入力のPlayMode再生
+- `/uloop-replay-input` - Recordingsウィンドウで記録した入力のPlayMode再生
 - `/uloop-control-play-mode` - Play Modeの制御
 - `/uloop-execute-dynamic-code` - 動的C#コード実行
 
@@ -377,7 +375,7 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 - `simulate-mouse-ui` - UI要素へのマウス操作シミュレーション（EventSystem経由）
 - `simulate-mouse-input` - Input System経由のマウス入力シミュレーション
 - `simulate-keyboard` - Input System経由のキーボード入力シミュレーション
-- `record-input` / `replay-input` - PlayMode中の入力の記録と再生
+- `replay-input` - Recordingsウィンドウで記録した入力のPlayMode再生
 
 ## Unity CLI Loop 拡張ツールの開発
 

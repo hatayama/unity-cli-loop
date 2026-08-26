@@ -551,10 +551,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Directory.CreateDirectory(skillsRoot);
             string disabledSkillDir = Path.Combine(skillsRoot, "uloop-disabled-skill");
             string deprecatedSkillDir = Path.Combine(skillsRoot, "uloop-capture-window");
+            string retiredRecordInputSkillDir = Path.Combine(skillsRoot, "uloop-record-input");
             string unrelatedSkillDir = Path.Combine(skillsRoot, "uloop-unrelated-skill");
             string thirdPartySkillDir = Path.Combine(skillsRoot, "acme-third-party");
             WriteSkillFile(disabledSkillDir, "---\nname: uloop-disabled-skill\n---\n");
             WriteSkillFile(deprecatedSkillDir, "---\nname: uloop-capture-window\n---\n");
+            WriteSkillFile(retiredRecordInputSkillDir, "---\nname: uloop-record-input\n---\n");
             WriteSkillFile(unrelatedSkillDir, "---\nname: uloop-unrelated-skill\n---\n");
             File.WriteAllText(Path.Combine(unrelatedSkillDir, "reference.md"), "old-unrelated-reference");
             WriteSkillFile(
@@ -575,6 +577,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(File.ReadAllText(Path.Combine(enabledSkillDir, "reference.md")), Is.EqualTo("enabled-reference"));
             Assert.That(Directory.Exists(disabledSkillDir), Is.False);
             Assert.That(Directory.Exists(deprecatedSkillDir), Is.False);
+            Assert.That(Directory.Exists(retiredRecordInputSkillDir), Is.False);
             Assert.That(
                 File.ReadAllText(Path.Combine(unrelatedSkillDir, "reference.md")),
                 Is.EqualTo("old-unrelated-reference"));
@@ -1354,7 +1357,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SkillInstallLayout.ManagedSkillsDirName,
                 "uloop-execute-menu-item");
             WriteSkillFile(executeMenuItemSkillDir, "---\nname: uloop-execute-menu-item\n---\n");
-
             ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
                     temporaryRoot,
                     requireSkillsDirectory: true,
@@ -1392,6 +1394,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 SkillInstallLayout.ManagedSkillsDirName,
                 "uloop-execute-menu-item");
             WriteSkillFile(executeMenuItemSkillDir, "---\nname: uloop-execute-menu-item\n---\n");
+            string flatRetiredRecordInputSkillDir = Path.Combine(
+                targetRoot,
+                SkillInstallLayout.SkillsDirName,
+                "uloop-record-input");
+            string groupedRetiredRecordInputSkillDir = Path.Combine(
+                targetRoot,
+                SkillInstallLayout.SkillsDirName,
+                SkillInstallLayout.ManagedSkillsDirName,
+                "uloop-record-input");
+            WriteSkillFile(flatRetiredRecordInputSkillDir, "---\nname: uloop-record-input\n---\n");
+            WriteSkillFile(groupedRetiredRecordInputSkillDir, "---\nname: uloop-record-input\n---\n");
 
             ToolSkillSynchronizer.SkillTargetInfo target = new(
                 "Claude Code",
@@ -1418,6 +1431,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.IsSuccessful, Is.True);
             Assert.That(Directory.Exists(deprecatedSkillDir), Is.False);
             Assert.That(Directory.Exists(executeMenuItemSkillDir), Is.False);
+            Assert.That(Directory.Exists(flatRetiredRecordInputSkillDir), Is.False);
+            Assert.That(Directory.Exists(groupedRetiredRecordInputSkillDir), Is.False);
             Assert.That(File.Exists(Path.Combine(installedSkillDir, SkillInstallLayout.SkillFileName)), Is.True);
             Assert.That(File.ReadAllText(Path.Combine(installedSkillDir, "reference.md")), Is.EqualTo("reference"));
         }

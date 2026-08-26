@@ -76,6 +76,7 @@ var deprecatedSkillNames = []string{
 	"uloop-get-unity-search-providers",
 	"uloop-execute-menu-item",
 	"uloop-raycast",
+	"uloop-record-input",
 }
 
 type skillTarget struct {

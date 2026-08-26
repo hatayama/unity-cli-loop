@@ -241,19 +241,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(source, Does.Contain("StartDelayedRecordingAsync(int delayMilliseconds, int generation, CancellationToken ct)"));
         }
 
+        /// <summary>
+        /// Verifies stale UI recording callbacks cannot clear a newer countdown instance.
+        /// </summary>
         [Test]
-        public void RecordInputDelayedStarts_WhenCallbackIsStale_DoNotClearCurrentCountdown()
+        public void RecordingsDelayedStarts_WhenCallbackIsStale_DoNotClearCurrentCountdown()
         {
-            // Tests that stale delayed-recording callbacks cannot clear a newer countdown instance.
             string facadeSource = ReadSourceFile(
                 "Packages/src/Editor/FirstPartyTools/RecordInput/Application/RecordingsApplicationFacade.cs");
-            string useCaseSource = ReadSourceFile(
-                "Packages/src/Editor/FirstPartyTools/RecordInput/RecordInputUseCase.cs");
 
             Assert.That(facadeSource, Does.Contain("if (generation != _countdownGeneration)\n            {\n                return;\n            }"));
-            Assert.That(useCaseSource, Does.Contain("int generation = Interlocked.Increment(ref _delayedStartGeneration);"));
-            Assert.That(useCaseSource, Does.Contain("QueueCountdownCleanup(generation);"));
-            Assert.That(useCaseSource, Does.Contain("if (!IsCurrentDelayedStartGeneration(generation))"));
         }
 
         [Test]

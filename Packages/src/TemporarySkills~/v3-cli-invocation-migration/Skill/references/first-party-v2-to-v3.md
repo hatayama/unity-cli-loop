@@ -25,7 +25,7 @@ Prefer `rg` when available, but any repository search tool is acceptable.
   `include-inactive` also exist as valid V3 positive flags on other
   commands; check Same-Name Options on Other Commands before editing them.
 - Search removed or renamed first-party commands only to report them as
-  out-of-scope command migration candidates: `get-project-info`, `get-version`,
+  out-of-scope command migration candidates: `get-project-info`, `get-version`, `record-input`,
   `unity-search`, `execute-menu-item`, `get-menu-items`,
   `get-unity-search-providers`, `get-provider-details`, and `capture-window`.
 - Skip generated installed skill copies under `.agents`, `.claude`, `.codex`, `.cursor`, `.gemini`, `.windsurf`, `.agent`, or equivalent target folders unless the user explicitly asks to migrate installed copies.
@@ -62,8 +62,6 @@ For third-party tools, inspect the current tool schema or docs before choosing t
 | `uloop compile` | `--reload-external-scene-changes false` | `--stop-on-external-scene-changes` |
 | `uloop run-tests` | `--save-before-run true` or bare `--save-before-run` | remove |
 | `uloop run-tests` | `--save-before-run false` | `--fail-on-unsaved-changes` |
-| `uloop record-input` | `--show-overlay true` | remove |
-| `uloop record-input` | `--show-overlay false` | `--no-show-overlay` |
 | `uloop replay-input` | `--show-overlay true` | remove |
 | `uloop replay-input` | `--show-overlay false` | `--no-show-overlay` |
 | `uloop get-hierarchy` | `--include-components true` | remove |
@@ -95,6 +93,7 @@ Bare `--force-recompile` on `uloop compile` and bare `--compile-only` on
 | --- | --- |
 | `uloop get-project-info` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
 | `uloop get-version` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
+| `uloop record-input` | Removed. Create recordings in the Unity Editor from **Window > Unity CLI Loop > Recordings**. Report only unless the user explicitly asks for removed command migration. |
 | `uloop unity-search` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
 | `uloop execute-menu-item` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
 | `uloop get-menu-items` | Report only unless the user explicitly asks for removed command migration. Do not guess from the command name alone. |
