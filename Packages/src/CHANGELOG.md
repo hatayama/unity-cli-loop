@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.76](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.75...v3.0.0-beta.76) (2026-08-26)
+
+
+### Bug Fixes
+
+* keep every SKILL.md under the Codex 8KB prompt cap and enforce it in CI ([#2424](https://github.com/hatayama/unity-cli-loop/issues/2424)) ([2679d03](https://github.com/hatayama/unity-cli-loop/commit/2679d03e6340122eb0ffffc15ab06fa2e95829f7))
+
 ## [3.0.0-beta.75](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.74...v3.0.0-beta.75) (2026-08-25)
 
 
