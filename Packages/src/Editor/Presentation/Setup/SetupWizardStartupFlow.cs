@@ -85,6 +85,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new System.ArgumentNullException(nameof(showThirdPartyMigrationAutoScan));
         }
 
+        /// <summary>
+        /// Combines the personal (UserSettings) and project-scoped (ProjectSettings, git-shared)
+        /// suppression flags. Either one is enough to keep the wizard from auto-showing.
+        /// </summary>
+        internal static bool ShouldSuppressAutoShow(bool personalSuppress, bool projectSuppress)
+        {
+            return personalSuppress || projectSuppress;
+        }
+
         internal static bool ShouldAutoShowForVersion(
             string currentVersion,
             string lastSeenVersion,
@@ -225,10 +234,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
             string currentMinimumDispatcherVersion = _cliSetupApplicationService.GetMinimumRequiredCliVersion();
             UnityCliLoopEditorSettingsData settings = _editorSettingsPort.GetSettings();
-            // Personal (UserSettings) and project-scoped (ProjectSettings, git-shared) flags are
-            // OR-combined: either one is enough to keep the wizard from auto-showing.
-            bool suppressAutoShow = settings.suppressSetupWizardAutoShow
-                || _projectSettingsPort.GetSuppressSetupWizardAutoShow();
+            bool suppressAutoShow = ShouldSuppressAutoShow(
+                settings.suppressSetupWizardAutoShow,
+                _projectSettingsPort.GetSuppressSetupWizardAutoShow());
             string lastSeenVersion = settings.lastSeenSetupWizardVersion ?? string.Empty;
             string lastSeenMinimumDispatcherVersion =
                 settings.lastSeenSetupWizardMinimumDispatcherVersion ?? string.Empty;

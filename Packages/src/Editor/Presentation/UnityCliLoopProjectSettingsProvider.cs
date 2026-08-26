@@ -19,6 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private const float MINIMUM_HELP_BOX_TEXT_WIDTH = 120f;
 
         private static IUnityCliLoopProjectSettingsPort RegisteredProjectSettingsPort;
+        private static bool CachedSuppressSetupWizardAutoShow;
+        private static bool HasCachedSettings;
 
         internal static void InitializeEditorServices(IUnityCliLoopProjectSettingsPort projectSettingsPort)
         {
@@ -33,9 +35,21 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             return new SettingsProvider(SETTINGS_MENU_PATH, SettingsScope.Project)
             {
+                activateHandler = (_, _) => ReloadCachedSettings(),
+                deactivateHandler = () => HasCachedSettings = false,
                 guiHandler = _ => DrawSettings(),
                 keywords = new[] { "uloop", "CLI", "Setup", "Wizard", "popup", "suppress" }
             };
+        }
+
+        // guiHandler runs on every layout and repaint event, so the value is read from disk when
+        // the page is opened rather than on each of those events.
+        private static void ReloadCachedSettings()
+        {
+            if (RegisteredProjectSettingsPort == null) return;
+
+            CachedSuppressSetupWizardAutoShow = RegisteredProjectSettingsPort.GetSuppressSetupWizardAutoShow();
+            HasCachedSettings = true;
         }
 
         private static void DrawSettings()
@@ -48,10 +62,17 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return;
             }
 
+            // The page can be activated before the port is registered, which leaves the cache
+            // unloaded; that first draw after registration fills it.
+            if (!HasCachedSettings)
+            {
+                ReloadCachedSettings();
+            }
+
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Setup Wizard", EditorStyles.boldLabel);
 
-            bool currentValue = RegisteredProjectSettingsPort.GetSuppressSetupWizardAutoShow();
+            bool currentValue = CachedSuppressSetupWizardAutoShow;
             bool updatedValue = DrawSuppressToggle(currentValue);
 
             EditorGUILayout.Space(2f);
@@ -64,6 +85,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (updatedValue == currentValue) return;
 
+            CachedSuppressSetupWizardAutoShow = updatedValue;
             RegisteredProjectSettingsPort.SetSuppressSetupWizardAutoShow(updatedValue);
         }
 

@@ -184,7 +184,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             return RegisteredEditorSettingsPort;
         }
 
-
         private static CliSetupApplicationService GetCliSetupApplicationService()
         {
             if (RegisteredCliSetupApplicationService == null)
@@ -420,7 +419,6 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 GetMinimumRequiredCliVersion());
             ScheduleResizeToContent();
         }
-
 
         private void HandleClose()
         {
