@@ -258,10 +258,20 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                 }
             }
             
+            string jsonLog = JsonConvert.SerializeObject(logEntry) + "\n";
+            AppendLogLineWithRetention(logDirectory, jsonLog);
+        }
+
+        /// <summary>
+        /// Append one log line to the current day file, rotating oversized files and
+        /// pruning the directory to the retention limit when a new file appears.
+        /// </summary>
+        internal static void AppendLogLineWithRetention(string logDirectory, string jsonLog)
+        {
             string fileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd}.json";
             string filePath = Path.Combine(logDirectory, fileName);
             bool shouldPruneAfterWrite = !File.Exists(filePath);
-            
+
             // Check file size and rotate if necessary
             if (File.Exists(filePath))
             {
@@ -274,13 +284,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
                     shouldPruneAfterWrite = true;
                 }
             }
-            
-            string jsonLog = JsonConvert.SerializeObject(logEntry) + "\n";
-            
+
             // Use file locking with retry mechanism to handle concurrent access
             int maxRetries = 3;
             int retryDelayMs = 50;
-            
+
             for (int retry = 0; retry < maxRetries; retry++)
             {
                 try
@@ -294,7 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
 
                     if (shouldPruneAfterWrite)
                     {
-                        CleanupOldLogFiles();
+                        PruneLogDirectory(logDirectory);
                     }
 
                     return; // Success - exit retry loop
@@ -330,8 +338,11 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// </summary>
         private void CleanupOldLogFiles()
         {
-            string logDirectory = GetLogDirectory();
+            PruneLogDirectory(GetLogDirectory());
+        }
 
+        private static void PruneLogDirectory(string logDirectory)
+        {
             try
             {
                 DeleteOldestLogFilesBeyondLimit(logDirectory);
