@@ -104,3 +104,17 @@ Each hit records up to `--max-caller-frames` managed caller frames (`CallerFrame
 - The frames are the synchronous call chain at the moment the marker line ran. A marker that resumes after an `await` does not see its original awaiting caller — only dispatch machinery remains, so expect a method-only engine frame (or an empty array); the awaiting method itself never appears. After a synchronization-context resume that frame is typically `UnityEngine.UnitySynchronizationContext`; after `await Awaitable.NextFrameAsync` it is typically an Awaitable continuation such as `` UnityEngine.Awaitable+AwaitableAsyncMethodBuilder+StateMachineBox`1.DoMoveNext `` or `UnityEngine.Awaitable.RunOrScheduleContinuation`. The engine-direct case (an `Update` marker) is a plain empty array.
 
 Capturing the frames costs on the order of 0.1 ms per hit, which also bounds the extra trace-mode overhead per recorded hit.
+
+## Name Filters and Expectations (`--expect`, `--captured-variable-names`)
+
+- `--captured-variables` defaults to `full`, which keeps each captured entry's `Value` (capture caps still apply — watch `CapturedVariablesTruncated`). When that dump is noisy, trim it with `--captured-variable-names` or `--captured-variables names`.
+- When the response would be dominated by variables you do not need, pass `--captured-variable-names velocity,this` (comma-separated, exact match on `Name`) to keep only those entries; it composes with `--captured-variables full|names`. `CapturedVariablesTruncated` reports truncation at Unity-side capture time and is independent of this name filter — it can stay `true` even when every listed variable is complete, if a truncated variable was excluded by the filter. In that case the CLI sets `CapturedVariablesTruncatedNote`. Requested names that matched nothing are listed in `CapturedVariableNamesNotFound`, so a partial match is visible without comparing the response against the request by hand.
+- Pass `--expect 'name=value'` (repeatable; on `await-pause-point`, `enable-pause-point --await`, and `pause-point-status`) to have the CLI compare captured variables against expected values; the response includes an `Expectations` array and `AllExpectationsPassed`, so you do not need to eyeball the JSON. Matching is string equality against the serialized value. On `pause-point-status` a marker that has not been hit yet reports each expectation as not found, and the verdict never changes the exit code — a polling loop reads `AllExpectationsPassed`, not the exit status.
+  Serialized `value` forms that match in practice (string equality against `CapturedVariables[].Value`):
+  - bool: `True` / `False` (C# form, capital first letter)
+  - float: `7` when the value is exactly an integer (not `7.0`)
+  - Vector2/3 and custom structs via `ToString()`: `(2.31, 6.61)` (one space after each comma)
+  - enum: `Grass` (member name only)
+  - `List<int>` / arrays: `[19]`, `[0,1,2,3]` (numeric elements unquoted)
+  - `List<Vector2Int>` and other element-`ToString()` collections: `["(9, 3)","(9, 2)"]` (elements quoted)
+  When unsure, hit once and copy the `Value` string from `CapturedVariables` into `--expect` verbatim.

@@ -102,6 +102,10 @@ jobs:
         working-directory: cli/release-automation
         run: go run ./cmd/sync-tool-docs --check --repository-root "$GITHUB_WORKSPACE"
 
+      - name: Check SKILL.md size against the Codex prompt cap
+        working-directory: cli/release-automation
+        run: go run ./cmd/check-skill-size --root "$GITHUB_WORKSPACE"
+
       # The stamp script derives its manifest from git ls-files, so a stamp generated before a new
       # input file was git-added is silently stale; check-release-triggers only checks that the
       # stamp files were touched, not that their values are current. Regenerate and diff instead.
