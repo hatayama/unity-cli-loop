@@ -265,6 +265,11 @@
     margin-top: 6px;
 }
 
+/* Keep a readable gap between the checkbox and its label text. */
+.setup-footer__toggle .unity-toggle__text {
+    margin-left: 5px;
+}
+
 .setup-footer__hint-label {
     font-size: 11px;
     color: var(--setup-color-muted);

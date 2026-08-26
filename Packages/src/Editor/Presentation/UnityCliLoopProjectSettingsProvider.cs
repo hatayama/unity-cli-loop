@@ -43,16 +43,36 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             }
 
             EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Setup Wizard", EditorStyles.boldLabel);
+
             bool currentValue = RegisteredProjectSettingsPort.GetSuppressSetupWizardAutoShow();
-            GUIContent label = new(
-                "Suppress Setup Wizard popup",
-                "Stops the Setup Wizard from opening automatically after package install or update "
-                    + "for everyone on this project. Saved to ProjectSettings/Packages and shared "
-                    + "via version control.");
-            bool updatedValue = EditorGUILayout.ToggleLeft(label, currentValue);
+            bool updatedValue = DrawSuppressToggle(currentValue);
+
+            EditorGUILayout.Space(2f);
+            EditorGUILayout.LabelField(
+                "When enabled, the Setup Wizard window no longer opens automatically after this "
+                    + "package is installed or updated. This applies to everyone on the project: "
+                    + "the value is saved to ProjectSettings/Packages/"
+                    + ToolContracts.UnityCliLoopConstants.PACKAGE_NAME
+                    + "/settings.json, so commit that file to share the setting with your team.",
+                EditorStyles.wordWrappedMiniLabel);
+
             if (updatedValue == currentValue) return;
 
             RegisteredProjectSettingsPort.SetSuppressSetupWizardAutoShow(updatedValue);
+        }
+
+        // ToggleLeft draws the label flush against the checkbox, so the toggle and label are
+        // laid out manually to leave a readable gap between them.
+        private static bool DrawSuppressToggle(bool currentValue)
+        {
+            EditorGUILayout.BeginHorizontal();
+            bool updatedValue = EditorGUILayout.Toggle(currentValue, GUILayout.Width(16f));
+            GUILayout.Space(4f);
+            GUILayout.Label("Suppress Setup Wizard popup");
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+            return updatedValue;
         }
     }
 }
