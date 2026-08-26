@@ -329,7 +329,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int lineNumber = 1;
             for (int position = 0; position < index && position < source.Length; position++)
             {
-                if (source[position] == '\n')
+                // A standalone CR is a line break too; CRLF must count as one break,
+                // matching the LF-normalized text the body builder emits.
+                if (source[position] == '\r')
+                {
+                    lineNumber++;
+                    if (position + 1 < index && source[position + 1] == '\n')
+                    {
+                        position++;
+                    }
+                }
+                else if (source[position] == '\n')
                 {
                     lineNumber++;
                 }

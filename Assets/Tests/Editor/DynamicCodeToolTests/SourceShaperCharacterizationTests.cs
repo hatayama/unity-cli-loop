@@ -42,6 +42,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Verifies CR-only line breaks are counted when padding the body to original line numbers,
+        /// so diagnostics keep pointing at the right source line for CR-only input.
+        /// </summary>
+        [Test]
+        public void Analyze_WhenCrOnlyBlankLinePrecedesStatement_ShouldPadToOriginalLine()
+        {
+            string source = "\r\rreturn 1;";
+
+            SourceShapeResult result = SourceShaper.Analyze(source);
+
+            string body = result.TopLevelBodyBuilder.ToString();
+            Assert.That(body, Does.Not.Contain("\r"));
+            Assert.That(body, Does.StartWith("\n\nreturn 1;"));
+        }
+
+        /// <summary>
         /// Pins using-directive extraction and remaining body content.
         /// </summary>
         [Test]
