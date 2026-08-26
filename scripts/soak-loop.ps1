@@ -32,7 +32,8 @@ All generated files live under Assets/UloopSoak/ in the target project (the
 recompile scratch script, the PlayMode ticker script, and the pause-point
 scene) and are left behind after the run - delete the folder and its .meta
 manually when done. When -PauseEvery > 0, the harness opens its generated
-scene and keeps it open, so save your own scene changes before running.
+scene during the run and releases it before the cleanup reminder, so save
+your own scene changes before running.
 #>
 
 [CmdletBinding()]
@@ -738,6 +739,8 @@ function Reset-EditorState {
         $null = Invoke-Uloop -CommandArguments @("control-play-mode", "--action", "Stop")
         # Only after PlayMode has stopped: Unity refuses to recompile while playing.
         Restore-CodeOptimization
+        [string]$releaseSoakSceneCode = 'string activeScenePath = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (!activeScenePath.StartsWith("Assets/UloopSoak/", System.StringComparison.Ordinal)) { return "not-soak-scene"; } UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single); return "released";'
+        $null = Invoke-Uloop -CommandArguments @("execute-dynamic-code", "--code", $releaseSoakSceneCode)
     }
     catch {
         Write-SoakLog -Message "Editor state cleanup failed: $($_.Exception.Message)"
@@ -770,7 +773,7 @@ function Write-Summary {
         Add-TextLine -Path $RunLog -Line $line
     }
 
-    Write-SoakLog -Message "Reminder: delete $SoakAssetsDir (and its .meta) from the target project when finished."
+    Write-SoakLog -Message "Reminder: the harness released the soak scene if it was still active; delete $SoakAssetsDir (and its .meta) from the target project when finished."
 }
 
 # Reads the SoakButton's simulation coordinates out of an annotated screenshot
