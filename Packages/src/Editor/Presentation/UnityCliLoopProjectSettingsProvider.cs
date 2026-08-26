@@ -11,6 +11,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     internal static class UnityCliLoopProjectSettingsProvider
     {
         private const string SETTINGS_MENU_PATH = "Project/Unity CLI Loop";
+        private const float HELP_BOX_ICON_SIZE = 32f;
+        private const float HELP_BOX_TEXT_WIDTH_MARGIN = 80f;
+        private const float MINIMUM_HELP_BOX_TEXT_WIDTH = 120f;
 
         private static IUnityCliLoopProjectSettingsPort RegisteredProjectSettingsPort;
 
@@ -49,17 +52,44 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool updatedValue = DrawSuppressToggle(currentValue);
 
             EditorGUILayout.Space(2f);
-            EditorGUILayout.HelpBox(
+            DrawSelectableHelpBox(
                 "When enabled, the Setup Wizard window no longer opens automatically after this "
                     + "package is installed or updated. This applies to everyone on the project: "
                     + "the value is saved to ProjectSettings/Packages/"
                     + ToolContracts.UnityCliLoopConstants.PACKAGE_NAME
-                    + "/settings.json, so commit that file to share the setting with your team.",
-                MessageType.Info);
+                    + "/settings.json, so commit that file to share the setting with your team.");
 
             if (updatedValue == currentValue) return;
 
             RegisteredProjectSettingsPort.SetSuppressSetupWizardAutoShow(updatedValue);
+        }
+
+        // EditorGUILayout.HelpBox renders its message as a plain label, which cannot be selected
+        // or copied. The box is drawn manually so the text can be a SelectableLabel while the
+        // icon and framing still match a stock info HelpBox.
+        private static void DrawSelectableHelpBox(string message)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(message), "message must not be null or empty");
+
+            GUIStyle textStyle = EditorStyles.wordWrappedMiniLabel;
+            float textWidth = Mathf.Max(
+                MINIMUM_HELP_BOX_TEXT_WIDTH,
+                EditorGUIUtility.currentViewWidth - HELP_BOX_TEXT_WIDTH_MARGIN);
+            // SelectableLabel is a text field underneath, so it never grows to fit wrapped
+            // content the way a Label does and needs its height measured up front.
+            float textHeight = textStyle.CalcHeight(new GUIContent(message), textWidth);
+
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            GUILayout.Label(
+                EditorGUIUtility.IconContent("console.infoicon"),
+                GUILayout.Width(HELP_BOX_ICON_SIZE),
+                GUILayout.Height(HELP_BOX_ICON_SIZE));
+            EditorGUILayout.SelectableLabel(
+                message,
+                textStyle,
+                GUILayout.Height(textHeight),
+                GUILayout.ExpandWidth(true));
+            EditorGUILayout.EndHorizontal();
         }
 
         // ToggleLeft draws the label flush against the checkbox, so the toggle and label are
