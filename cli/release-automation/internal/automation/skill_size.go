@@ -9,10 +9,12 @@ import (
 	"sort"
 )
 
-// MaxSkillFileBytes mirrors Codex's MAX_SKILL_PROMPT_BYTES: Codex truncates the
-// whole SKILL.md file (frontmatter included) to 8,000 bytes when injecting it
-// into the model prompt, so any byte past this limit is silently lost to Codex
-// agents even though other agent CLIs read the full file.
+// MaxSkillFileBytes mirrors Codex's MAX_SKILL_PROMPT_BYTES, the strictest
+// skill-injection byte cap in the Codex source (whole file, frontmatter
+// included; enforced on its agent-plugin and extension injection paths).
+// Released Codex builds have also been observed to silently truncate large
+// skill bodies at a token-based limit, so staying under the strictest
+// documented cap keeps skills intact across Codex versions and paths.
 const MaxSkillFileBytes = 8000
 
 // skillFileRoots are the trees that contain SKILL.md files: the two source
@@ -86,7 +88,7 @@ func RunSkillSizeCheck(stdout io.Writer, stderr io.Writer, options SkillSizeChec
 	for _, finding := range findings {
 		_, _ = fmt.Fprintf(stdout, "%s: %d bytes (limit %d)\n", finding.Path, finding.Bytes, maxBytes)
 	}
-	_, _ = fmt.Fprintf(stdout, "%d SKILL.md files exceeded the %d-byte limit; Codex truncates them silently — move detail into references/ files.\n", len(findings), maxBytes)
+	_, _ = fmt.Fprintf(stdout, "%d SKILL.md files exceeded the %d-byte limit; Codex skill injection can silently truncate oversized files — move detail into references/ files.\n", len(findings), maxBytes)
 	return 1
 }
 
