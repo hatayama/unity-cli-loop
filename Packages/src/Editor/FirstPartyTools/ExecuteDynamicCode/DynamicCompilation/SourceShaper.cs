@@ -302,7 +302,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int stmtEnd = SourceTokenScanner.FindStatementEnd(source, pos, ref nextBraceDepth);
             int originalLineNumber1Based = GetLineNumber1Based(source, pos);
             PadTopLevelBodyBuilderToOriginalLine(result, originalLineNumber1Based);
-            string statementText = source.Substring(pos, stmtEnd - pos + 1).TrimEnd();
+            // Multi-line statements are copied verbatim, so CRLF input would leak
+            // platform line endings into the emitted body unless normalized here.
+            string statementText = source.Substring(pos, stmtEnd - pos + 1).TrimEnd()
+                .Replace("\r\n", "\n")
+                .Replace('\r', '\n');
             result.TopLevelBodyBuilder.Append(statementText);
             result.TopLevelBodyBuilder.Append('\n');
             result.NextBodyLineNumber1Based = originalLineNumber1Based + CountLinesInText(statementText);
