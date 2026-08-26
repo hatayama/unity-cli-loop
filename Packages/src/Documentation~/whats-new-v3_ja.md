@@ -51,6 +51,7 @@ uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"
 
 - **MCP接続** — 削除されました。CLIとバンドルSkillsを組み合わせて使ってください。MCPで公開していた機能はすべて `uloop` コマンドから利用できます。
 - **`get-version`, `get-project-info`** — ユーザー向けコマンドとしては削除されました。どちらも内部診断用でエージェント向けSkillとしては配布されていませんでしたが、V2ではスクリプトから呼び出せていました。CLIのバージョンは `uloop --version`、Unityやプロジェクトの情報は `execute-dynamic-code` で取得してください。
+- **`record-input`** — 削除されました。入力記録は Unity Editor の **Window > Unity CLI Loop > Recordings** で行い、作成したJSONを `replay-input` で再生してください。
 
 ## 破壊的変更
 

@@ -186,18 +186,8 @@ Input System経由でPlayMode中のキーボード入力をシミュレーショ
 → simulate-keyboard (Action: KeyUp, Key: LeftShift)
 ```
 
-### 15. record-input - PlayMode中の入力記録
-PlayMode中のキーボード・マウス入力をフレーム単位でJSONファイルに記録します。Input Systemのデバイス状態差分によりキー押下、マウス移動、クリック、スクロールイベントをキャプチャします。このツールは Input System パッケージ導入時のみ利用可能です。
-
-```text
-→ record-input (Action: Start)
-→ record-input (Action: Start, Keys: "W,A,S,D,Space")
-→ record-input (Action: Stop)
-→ JSONファイルが .uloop/outputs/InputRecordings/ に保存される
-```
-
-### 16. replay-input - 記録された入力のPlayMode再生
-記録されたキーボード・マウス入力をPlayMode中に再生します。JSON記録を読み込み、Input System経由でフレーム単位で入力を注入します。ループ再生と進捗モニタリングに対応しています。このツールは Input System パッケージ導入時のみ利用可能です。
+### 15. replay-input - 記録された入力のPlayMode再生
+記録されたキーボード・マウス入力をPlayMode中に再生します。JSON記録を読み込み、Input System経由でフレーム単位で入力を注入します。ループ再生と進捗モニタリングに対応しています。このツールは Input System パッケージ導入時のみ利用可能です。記録ファイルは、まず Unity Editor の **Window > Unity CLI Loop > Recordings** で **Start Recording** と **Stop Recording** を使って作成します。CLI に記録コマンドはありません。
 
 ```text
 → replay-input (Action: Start)
@@ -213,4 +203,4 @@ sh scripts/run-posix-e2e.sh --project-path /path/to/unity-project
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-windows-e2e.ps1
 ```
 
-`run-posix-e2e.sh` は、デフォルトでチェックイン済みのネイティブCLIバイナリを使い、すべての `uloop` 呼び出しに明示的な `--project-path` を渡します。CLI recovery/readiness、input record/replay、simulate-mouse UI を1つの流れで検証します。
+`run-posix-e2e.sh` は、デフォルトでチェックイン済みのネイティブCLIバイナリを使い、すべての `uloop` 呼び出しに明示的な `--project-path` を渡します。CLI recovery/readiness と simulate-mouse UI を1つの流れで検証します。Recordingsウィンドウで作成したJSONの replay-input 検証は `verify-replay-via-cli.sh` を個別に実行します。

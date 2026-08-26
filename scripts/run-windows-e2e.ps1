@@ -431,13 +431,6 @@ try {
         }
         Stop-PlayMode
     }
-    Invoke-Step -Name "Input Record Replay E2E" -Body {
-        Invoke-ScriptChecked -ScriptPath (Resolve-ProjectRelativePath -RelativePath "Assets\Tests\Demo\scripts\verify-replay-via-cli.ps1") -Arguments @(
-            "-ProjectPath",
-            $ResolvedProjectPath,
-            "-AutomatedInput"
-        )
-    }
     Invoke-Step -Name "Simulate Mouse UI E2E" -Body {
         Invoke-ScriptChecked -ScriptPath (Resolve-ProjectRelativePath -RelativePath "scripts\test-simulate-mouse-demo.ps1") -Arguments @(
             "-ProjectPath",

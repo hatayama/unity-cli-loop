@@ -45,16 +45,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void RecordInputResponse_WhenRejectedByPausePoint_SerializesTheRejectionField()
-        {
-            // Verifies record-input reports the same structured rejection, since it shares the preflight that refuses it.
-            string json = JsonConvert.SerializeObject(
-                new RecordInputResponse { Success = false, RejectedByActivePausePointId = "marker" });
-
-            Assert.That(json, Does.Contain(ExpectedJsonFragment));
-        }
-
-        [Test]
         public void ReplayInputResponse_WhenRejectedByPausePoint_SerializesTheRejectionField()
         {
             // Verifies replay-input reports the same structured rejection: it is a realistic --trigger target.

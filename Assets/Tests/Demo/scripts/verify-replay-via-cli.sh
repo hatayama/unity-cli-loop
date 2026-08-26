@@ -1,17 +1,17 @@
 #!/bin/sh
-# E2E verification: record input, replay it through the CLI, and compare behavior.
+# E2E verification: record input through the Recordings window, replay it through the CLI, and compare behavior.
 #
-# Usage: sh verify-replay-via-cli.sh [--project-path <path>] [--automated-input]
+# Usage: sh verify-replay-via-cli.sh [--project-path <path>]
 #
 # Prerequisites:
 #   - Unity Editor running for the target project
 #   - PlayMode is not running because this script starts it
+#   - Record input with Window > Unity CLI Loop > Recordings when prompted
 
 set -e
 
 PROJECT_PATH=""
 ULOOP_PATH="${ULOOP_BIN:-uloop}"
-AUTOMATED_INPUT=false
 SCENE_PATH="Assets/Scenes/InputReplayVerificationScene.unity"
 
 fail() {
@@ -31,12 +31,8 @@ while [ "$#" -gt 0 ]; do
             ULOOP_PATH=$2
             shift 2
             ;;
-        --automated-input)
-            AUTOMATED_INPUT=true
-            shift
-            ;;
         -h|--help)
-            echo "Usage: sh verify-replay-via-cli.sh [--project-path <path>] [--uloop-path <path>] [--automated-input]"
+            echo "Usage: sh verify-replay-via-cli.sh [--project-path <path>] [--uloop-path <path>]"
             exit 0
             ;;
         *)
@@ -149,74 +145,48 @@ return SceneManager.GetActiveScene().path;
     assert_json_result "$json" "$SCENE_PATH" "Load replay verification scene"
 }
 
-invoke_automated_input() {
-    run_uloop_json simulate-mouse-input --action SmoothDelta --delta-x 96 --delta-y 0 --duration 0.25 >/dev/null
-    sleep 1
-    run_uloop_json simulate-mouse-input --action Click --x 400 --y 300 >/dev/null
-    sleep 1
-    run_uloop_json simulate-mouse-input --action Scroll --scroll-y 120 >/dev/null
-    sleep 1
-}
-
 echo ""
 echo "========================================="
-echo "  Input Record/Replay E2E Verification"
+echo "  Input Replay E2E Verification"
 echo "========================================="
 
-# ---- Phase 1: Record human input ----
+# ---- Phase 1: Record human input through the Recordings window ----
 
 echo ""
-echo "[1/9] Loading replay verification scene..."
+echo "[1/8] Loading replay verification scene..."
 initialize_replay_scene
 
-echo "[2/9] Starting PlayMode..."
+echo "[2/8] Starting PlayMode..."
 run_uloop_json control-play-mode --action Play >/dev/null
 echo "  Waiting for Unity..."
 sleep 6
 wait_for_unity
 
-echo "[3/9] Activating controller..."
+echo "[3/8] Activating controller..."
 activate_for_record
 
-echo "[4/9] Starting recording via CLI..."
-if [ "$AUTOMATED_INPUT" = true ]; then
-    run_uloop_json record-input --action Start --delay-seconds 0 --no-show-overlay >/dev/null
-else
-    run_uloop_json record-input --action Start >/dev/null
-fi
+echo "[4/8] Recording input with the Recordings window..."
+echo ""
+echo "========================================="
+echo "  Open Window > Unity CLI Loop > Recordings."
+echo "  Click Start Recording, play in the Game View, then click Stop Recording."
+echo ""
+echo "  WASD: move | Mouse: rotate"
+echo "  Left click: red | Right click: blue"
+echo "  Scroll: scale"
+echo ""
+echo "  Press ENTER here after the recording has stopped."
+echo "========================================="
+echo ""
+read -r _
 
-if [ "$AUTOMATED_INPUT" = true ]; then
-    echo "  Running automated input sequence..."
-    sleep 1
-    invoke_automated_input
-else
-    echo ""
-    echo "========================================="
-    echo "  Recording is active!"
-    echo "  Go to the Unity Game View and play."
-    echo ""
-    echo "  WASD: move | Mouse: rotate"
-    echo "  Left click: red | Right click: blue"
-    echo "  Scroll: scale"
-    echo ""
-    echo "  Press ENTER here when done."
-    echo "========================================="
-    echo ""
-    read -r _
-fi
-
-echo "[5/9] Stopping recording via CLI..."
-RECORD_STOP_RESULT=$(run_uloop_json record-input --action Stop)
-echo "  $RECORD_STOP_RESULT"
-RECORDING_INPUT_PATH=$(printf '%s\n' "$RECORD_STOP_RESULT" | sed -n 's/.*"OutputPath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
-
-echo "[6/9] Saving recording event log..."
+echo "[5/8] Saving recording event log..."
 save_log "$RECORDING_LOG"
 [ -s "$RECORDING_LOG" ] || fail "Recording event log is empty"
 
 # ---- Phase 2: Replay via CLI ----
 
-echo "[7/9] Restarting PlayMode..."
+echo "[6/8] Restarting PlayMode..."
 run_uloop_json control-play-mode --action Stop >/dev/null
 sleep 3
 run_uloop_json control-play-mode --action Play >/dev/null
@@ -224,14 +194,10 @@ echo "  Waiting for Unity..."
 sleep 6
 wait_for_unity
 
-echo "[8/9] Activating controller + starting replay via CLI..."
+echo "[7/8] Activating controller + starting replay via CLI..."
 activate_for_replay
-echo "  Starting replay..."
-if [ "$AUTOMATED_INPUT" = true ] && [ -n "$RECORDING_INPUT_PATH" ]; then
-    REPLAY_RESULT=$(run_uloop replay-input --action Start --input-path "$RECORDING_INPUT_PATH" --no-show-overlay 2>&1) || true
-else
-    REPLAY_RESULT=$(run_uloop replay-input --action Start 2>&1) || true
-fi
+echo "  Starting replay of the latest Recordings window file..."
+REPLAY_RESULT=$(run_uloop replay-input --action Start 2>&1) || true
 echo "  $REPLAY_RESULT"
 
 echo "  Waiting for replay to finish..."
@@ -260,7 +226,7 @@ if [ $waited -ge 60 ]; then
 fi
 sleep 1
 
-echo "[9/9] Saving replay event log..."
+echo "[8/8] Saving replay event log..."
 save_log "$REPLAY_LOG"
 [ -s "$REPLAY_LOG" ] || fail "Replay event log is empty"
 
