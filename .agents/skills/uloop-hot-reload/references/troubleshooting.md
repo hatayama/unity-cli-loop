@@ -30,8 +30,10 @@ error logged while the reload applied, appears there immediately and explains
 the patch, confirm the method is actually reached: arm `uloop enable-pause-point --mode
 trace` on a line inside the edited method body — it resolves against the patched body
 directly (see [pause-point-interaction.md](pause-point-interaction.md)) — drive the game, and check the hit
-count: zero hits means the calling path never reached the method, which no patch (or
-compile) can fix. To chase an early return inside the method, arm a second marker on the
+count: zero hits usually means the calling path never reached the method, which no patch
+(or compile) can fix — but cached dispatch (a physics message or a pre-bound delegate
+resolved before arming) can bypass the marker, so treat zero hits as inconclusive there
+and use the log-line fallback in [pause-point-interaction.md](pause-point-interaction.md). To chase an early return inside the method, arm a second marker on the
 suspected early-return line. The other known cause is JIT inlining, which the response flags
 with a single aggregated warning listing the at-risk methods: `[AggressiveInlining]` methods
 always, tiny bodies only when the Editor's Code Optimization mode is Release (the default

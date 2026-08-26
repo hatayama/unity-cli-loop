@@ -31,9 +31,9 @@ Edit the file and reload again to apply new changes.
   protected by skip or warning.
   (Added methods and fields are reflected per the rules in [scope-and-limits.md](scope-and-limits.md), but only for the
   current Editor session and only within their own file.)
-- A run with `Failed` outcomes still applies every other patch — outcomes are
-  per-method and there is no run-level rollback. `Methods` is the authoritative
-  record of which bodies changed.
+- A run with `Failed` outcomes still applies the patches from other files — a
+  file containing a `Failed` method is left unapplied as a whole, and there is no
+  run-level rollback. `Methods` is the authoritative record of which bodies changed.
 
 ## Editor-Code Iteration Without PlayMode
 

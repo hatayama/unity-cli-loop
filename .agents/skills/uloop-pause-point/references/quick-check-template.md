@@ -2,7 +2,7 @@
 
 The full standard loop for one representative frame, with the complete `--trigger`, `--await`, split-step, and timeout-sizing rules.
 
-Use this small loop for one representative frame you care about. No source edit and no recompile: the pause point is patched into the already-compiled code and can be enabled mid-PlayMode.
+Use this small loop for one representative frame you care about. No source edit: the pause point is patched into the already-compiled code and can be enabled mid-PlayMode. Arming can still trigger one recompile when it switches Code Optimization from Release to Debug.
 
 1. Enter PlayMode, then decide before anything else: does the game progress on its own (timers, gravity, spawners)? If yes, pause it right away with `control-play-mode --action Pause`, arrange any scenario state while paused, and add `--resume-play` to the command in step 2 — see [fast-progressing-games.md](fast-progressing-games.md).
 2. Run one foreground command that arms the pause point, fires the input, and waits for the hit:

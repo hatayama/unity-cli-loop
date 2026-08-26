@@ -5,7 +5,7 @@ description: "Pauses Unity playback at any source file:line without editing code
 
 # uloop await-pause-point
 
-A pause point is the standard frame proof for verifying simulated input, physics, or UI transitions; sleeps and after-the-fact reads are not substitutes. Skip it only for persistent-state checks that do not validate input delivery, event ordering, or transition-frame fidelity. It is patched into the already-compiled code — no source edit, no recompile — and captures locals and branch reasons `execute-dynamic-code` cannot reach.
+A pause point is the standard frame proof for verifying simulated input, physics, or UI transitions; sleeps and after-the-fact reads are not substitutes. Skip it only for persistent-state checks that do not validate input delivery, event ordering, or transition-frame fidelity. It is patched into the already-compiled code — no source edit — and captures locals and branch reasons `execute-dynamic-code` cannot reach.
 
 ## Quick Check
 
@@ -19,7 +19,7 @@ uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seco
 ```
 
 3. Read `CapturedVariables` in the hit response first, then gather extra evidence while still paused (`execute-dynamic-code`, one screenshot).
-4. A `single-shot` marker (the default) disarms after the hit; clear other modes with `uloop clear-pause-point`.
+4. A `single-shot` marker (the default) disarms after the hit; clear other modes with `uloop clear-pause-point --all`.
 
 A hit pauses Unity at the next frame boundary — the rest of that frame still runs. Only `CapturedVariables` is evidence of the values at the patched line. Before deviating from this template, read `references/quick-check-template.md`.
 

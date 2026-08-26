@@ -9,7 +9,7 @@ entry at all** and are silently not applied — use `uloop compile` for those.
 Adding a constructor, operator, or explicit event accessor is reported as
 `Skipped` as well, same as an edit to an existing one.
 
-### Added methods and fields
+## Added methods and fields
 
 Hot reload can add new methods and fields alongside body edits, under one hard rule:
 an added member is visible only to edited code in the same file. Compiled, unedited
@@ -71,7 +71,7 @@ entry as well (handled added members and reported removed members are excluded
 from this generic warning); without a baseline it stays silent. Either way, use
 `uloop compile` for such edits.
 
-### Signature changes: return type, rename, parameters
+## Signature changes: return type, rename, parameters
 
 Changing a compiled method's return type is applied as a remove-plus-add: the old
 method stays in the compiled assembly (like any removed member), the new signature
@@ -105,7 +105,7 @@ Field declarations are stricter: when a compiled field's type — or its `static
 or writes that field is `Skipped` with a per-method reason. Retyped storage has no
 session illusion; run `uloop compile`.
 
-### Explore with hot reload, land structure with compile
+## Explore with hot reload, land structure with compile
 
 Treat hot reload as the exploration phase and `uloop compile` as the landing phase. While
 diagnosing or tuning, keep every edit inside existing method bodies — inline a would-be
@@ -118,7 +118,7 @@ and resets the running PlayMode session, so compiling member-by-member pays that
 repeatedly. After the one compile, re-enter PlayMode and continue exploring on the freshly
 compiled code.
 
-### One-shot code: a patch only changes the next call
+## One-shot code: a patch only changes the next call
 
 Hot reload changes what a method does on its *next* call — it never re-runs a call that
 already happened. Methods that run exactly once per session (`Awake`, `Start`, `OnEnable`,
@@ -135,7 +135,7 @@ next session. Better, keep values you expect to
 tune out of one-shot paths entirely: read them in a body that runs per frame or per event,
 and patch that body instead.
 
-### Tunable values: prefer a getter over a const
+## Tunable values: prefer a getter over a const
 
 `const` edits never take effect through hot reload: C# bakes const values into every
 call site at compile time. When you expect to tune a value while Play Mode is running
@@ -145,7 +145,9 @@ call site at compile time. When you expect to tune a value while Play Mode is ru
 
 A getter body is an ordinary patchable method body, so editing the literal and running
 `uloop hot-reload` updates every consumer on its next call — across all files, without
-restarting Play Mode. Keep `const` for values you never tune at runtime.
+restarting Play Mode. JIT-inlined call sites are the exception — the reload response's
+`Warnings` lists the at-risk methods (see [troubleshooting.md](troubleshooting.md)).
+Keep `const` for values you never tune at runtime.
 
 This works only for consumers that read the getter on a live call path — a per-frame
 `Update`, a physics step, an event handler. A consumer that read the getter once during
@@ -176,7 +178,7 @@ Subscribing to or unsubscribing from a field-like event (`+=`/`-=`) inside an ed
 body works. Methods that raise the event are reported as `Skipped` (see the table
 below) — raising is only expressible inside the declaring type, which a shim is not.
 
-### Skipped — reported per method, never flips `Success`
+## Skipped — reported per method, never flips `Success`
 
 | Condition | Why |
 |-----------|-----|
@@ -192,7 +194,7 @@ below) — raising is only expressible inside the declaring type, which a shim i
 | Constructor (instance or static), operator, conversion operator, or explicit event accessor (add/remove) | Out of scope for v1; `uloop compile` applies these edits |
 | Method raises, invokes, or reads a field-like event (anything beyond `+=`/`-=`) | C# only allows `+=`/`-=` on an event outside its declaring type, so the raising body cannot compile from the shim assembly |
 
-### Failed — flips `Success` to `false`
+## Failed — flips `Success` to `false`
 
 | Condition | Notes |
 |-----------|-------|

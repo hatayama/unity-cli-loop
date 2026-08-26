@@ -71,14 +71,14 @@ and a patched body that matches the baseline again is unpatched on that run.
   types, cross-file references, reflection, serialization, and Unity message discovery
   need `uloop compile`.
 - Signature changes (return type, rename, parameters) follow the added-member rules; a
-  gate skips a return-type change unless the same reload patches every live compiled
-  caller of the old signature.
+  gate skips a return-type change unless the same reload — or an earlier one — has
+  patched every live compiled caller of the old signature.
 - Constructors, operators, setter/init/indexer accessors, and event accessors are
   `Skipped`; finalizers and interface members are silently not applied. `const` and
   other outside-body edits never change runtime behavior (drift is warned where
   detectable).
 - A reload applies each file all-or-nothing: any `Failed` method leaves that file
-  unapplied.
+  unapplied; patches in other files still apply.
 
 Full rules and the `Skipped`/`Failed` condition tables: `references/scope-and-limits.md`.
 
