@@ -739,7 +739,7 @@ function Reset-EditorState {
         $null = Invoke-Uloop -CommandArguments @("control-play-mode", "--action", "Stop")
         # Only after PlayMode has stopped: Unity refuses to recompile while playing.
         Restore-CodeOptimization
-        [string]$releaseSoakSceneCode = 'string activeScenePath = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (!activeScenePath.StartsWith("Assets/UloopSoak/", System.StringComparison.Ordinal)) { return "not-soak-scene"; } UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single); return "released";'
+        [string]$releaseSoakSceneCode = 'string activeScenePath = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (!System.String.Equals(activeScenePath, "Assets/UloopSoak/UloopSoak.unity", System.StringComparison.Ordinal)) { return "not-soak-scene"; } UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single); return "released";'
         $null = Invoke-Uloop -CommandArguments @("execute-dynamic-code", "--code", $releaseSoakSceneCode)
     }
     catch {

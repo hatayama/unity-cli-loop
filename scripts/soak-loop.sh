@@ -284,7 +284,7 @@ cleanup_editor_state() {
     if [ "$PAUSE_EVERY" -gt 0 ]; then
         run_uloop clear-pause-point --all > /dev/null 2>&1 || true
         run_uloop control-play-mode --action Stop > /dev/null 2>&1 || true
-        run_uloop execute-dynamic-code --code 'string activeScenePath = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (!activeScenePath.StartsWith("Assets/UloopSoak/", System.StringComparison.Ordinal)) { return "not-soak-scene"; } UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single); return "released";' > /dev/null 2>&1 || true
+        run_uloop execute-dynamic-code --code 'string activeScenePath = UnityEngine.SceneManagement.SceneManager.GetActiveScene().path; if (!System.String.Equals(activeScenePath, "Assets/UloopSoak/UloopSoak.unity", System.StringComparison.Ordinal)) { return "not-soak-scene"; } UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single); return "released";' > /dev/null 2>&1 || true
     fi
 }
 
