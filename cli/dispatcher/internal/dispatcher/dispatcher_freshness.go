@@ -242,6 +242,10 @@ func markDispatcherSelfUpdateCheckedWithDeps(deps dispatcherRunDeps) {
 }
 
 func runDispatcherUpdateCommand(ctx context.Context) (bool, error) {
+	return runDispatcherUpdateCommandForOS(ctx, runtime.GOOS)
+}
+
+func runDispatcherUpdateCommandForOS(ctx context.Context, goos string) (bool, error) {
 	resolved, err := resolveUpdateTargetVersionFunc(ctx, sharedupdate.Options{
 		CurrentVersion: dispatcherVersion,
 	})
@@ -252,7 +256,7 @@ func runDispatcherUpdateCommand(ctx context.Context) (bool, error) {
 	if !targetChanged {
 		return false, nil
 	}
-	command, err := sharedupdate.CommandForOS(runtime.GOOS, resolved)
+	command, err := sharedupdate.CommandForOS(goos, resolved)
 	if err != nil {
 		return false, err
 	}

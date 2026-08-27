@@ -657,6 +657,9 @@ func TestEnforceDispatcherFreshnessRunsInstallerWhenOptionalTargetIsNewer(t *tes
 		return "/tmp/uloop", nil
 	}
 	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(ctx context.Context) (bool, error) {
+		return runDispatcherUpdateCommandForOS(ctx, "darwin")
+	}
 
 	var stderr bytes.Buffer
 	handled, code := enforceDispatcherFreshnessWithDeps(

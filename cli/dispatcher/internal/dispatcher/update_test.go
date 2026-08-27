@@ -370,7 +370,6 @@ func TestTryHandleUpdateRequestReportsAlreadyCurrentVersion(t *testing.T) {
 
 func TestTryHandleUpdateRequestSkipsInstallerWhenResolvedTargetIsCurrent(t *testing.T) {
 	// Verifies a resolved target matching the current dispatcher exits successfully without running the installer.
-	skipWhenNativeUpdateIsUnsupported(t)
 	previousRunner := updateRunCommand
 	previousResolver := resolveUpdateTargetVersionFunc
 	previousExecutablePath := resolveUpdateExecutablePathFunc
@@ -406,7 +405,6 @@ func TestTryHandleUpdateRequestSkipsInstallerWhenResolvedTargetIsCurrent(t *test
 
 func TestTryHandleUpdateRequestSkipsInstallerWhenRequestedTargetIsCurrent(t *testing.T) {
 	// Verifies an explicit current --to-version target exits successfully without running the installer.
-	skipWhenNativeUpdateIsUnsupported(t)
 	previousRunner := updateRunCommand
 	previousResolver := resolveUpdateTargetVersionFunc
 	previousExecutablePath := resolveUpdateExecutablePathFunc
