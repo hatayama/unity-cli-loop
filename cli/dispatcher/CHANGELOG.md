@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.35](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.34...dispatcher-v3.0.0-beta.35) (2026-08-27)
+
+
+### Bug Fixes
+
+* skip dispatcher update download when already at the target version ([#2438](https://github.com/hatayama/unity-cli-loop/issues/2438)) ([cec5d09](https://github.com/hatayama/unity-cli-loop/commit/cec5d09584a51bcddcc4211d877508cc40b8ba29))
+
 ## [3.0.0-beta.34](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.33...dispatcher-v3.0.0-beta.34) (2026-08-27)
 
 
