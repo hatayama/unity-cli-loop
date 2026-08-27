@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.79](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.78...v3.0.0-beta.79) (2026-08-27)
+
+
+### Bug Fixes
+
+* complete stub .cs.meta files shipped in the package ([#2441](https://github.com/hatayama/unity-cli-loop/issues/2441)) ([14dba70](https://github.com/hatayama/unity-cli-loop/commit/14dba709e5a646779b31ef533f3a8f2e0399fa04))
+
 ## [3.0.0-beta.78](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.77...v3.0.0-beta.78) (2026-08-27)
 
 
