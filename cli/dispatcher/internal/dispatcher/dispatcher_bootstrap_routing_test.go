@@ -82,11 +82,11 @@ func TestRunDispatcherUpdateRunsInDispatcherProcess(t *testing.T) {
 		return nil
 	}
 	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
-		return dispatcherVersion, nil
+		return "999.0.0", nil
 	}
 	resolveUpdateTargetVersionFunc = func(ctx context.Context, options update.Options) (update.Options, error) {
 		if options.TargetVersion == "" {
-			options.TargetVersion = dispatcherVersion
+			options.TargetVersion = "999.0.0"
 		}
 		return options, nil
 	}
