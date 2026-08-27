@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.68](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.67...uloop-project-runner-v3.0.0-beta.68) (2026-08-27)
+
+
+### Features
+
+* retire the record-input CLI tool in favor of the Recordings window ([#2430](https://github.com/hatayama/unity-cli-loop/issues/2430)) ([54afc07](https://github.com/hatayama/unity-cli-loop/commit/54afc07bff66933dfcd23607e60317ce4c1419a5))
+
 ## [3.0.0-beta.67](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.66...uloop-project-runner-v3.0.0-beta.67) (2026-08-25)
 
 
