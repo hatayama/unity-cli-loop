@@ -511,6 +511,47 @@ func TestUpdateRefusesHomebrewManagedExecutable(t *testing.T) {
 	}
 }
 
+func TestUpdateRefusesCurrentTargetForHomebrewManagedExecutable(t *testing.T) {
+	// Verifies the Homebrew guard keeps brew guidance ahead of current-target resolution.
+	previousExecutablePath := resolveUpdateExecutablePathFunc
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousRunner := updateRunCommand
+	defer func() {
+		resolveUpdateExecutablePathFunc = previousExecutablePath
+		resolveUpdateTargetVersionFunc = previousResolver
+		updateRunCommand = previousRunner
+	}()
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/opt/homebrew/Cellar/uloop/3.0.0/bin/uloop", nil
+	}
+	resolveUpdateTargetVersionFunc = func(context.Context, update.Options) (update.Options, error) {
+		t.Fatal("target resolution must not run before the Homebrew guard")
+		return update.Options{}, nil
+	}
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		t.Fatal("updateRunCommand must not run for a Homebrew-managed current target")
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(
+		context.Background(),
+		[]string{clicore.UpdateCommandName, "--to-version", dispatcherVersion},
+		&stdout,
+		&stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "brew upgrade uloop") {
+		t.Fatalf("expected brew upgrade guidance in stderr, got: %s", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected no stdout output, got: %s", stdout.String())
+	}
+}
+
 func TestUpdateFailsWhenExecutablePathResolutionFails(t *testing.T) {
 	// Verifies update aborts when the dispatcher executable path cannot be resolved.
 	previousResolver := resolveUpdateExecutablePathFunc
