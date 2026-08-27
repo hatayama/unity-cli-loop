@@ -338,6 +338,15 @@ function Invoke-Uloop {
     "Dynamic-code runtime was disposed during a server reset or domain reload" = "DYNAMIC_CODE_RUNTIME_RESTARTING"
 }
 
+# uloop marks every launch failure SafeToRetry:true, and for the CLI that is
+# correct - re-running launch cannot double-apply anything. It is wrong for
+# this harness. Re-issuing `launch -r` restarts the editor again, minutes at a
+# time, and restart recovery is already owned here (Wait-Editor after every
+# scheduled restart, plus the consecutive-failure recovery restart). Left to
+# the generic wait, one failed restart would become up to twenty, and the
+# failure a soak exists to measure would be retried out of the results.
+[string[]]$NeverAutoRetryCommands = @("launch")
+
 # Returns a short name for the transient state a payload reports, or an empty
 # string when the payload is not something this harness may re-issue.
 function Get-TransientRetryReason {
@@ -451,7 +460,7 @@ function Invoke-TimedUloop {
         $end = Get-EpochMilliseconds
 
         [string]$retryReason = ""
-        if ($result.ExitCode -ne 0) {
+        if ($result.ExitCode -ne 0 -and ($CommandArguments.Count -eq 0 -or $NeverAutoRetryCommands -notcontains $CommandArguments[0])) {
             $retryReason = Get-TransientRetryReason -Text $result.Text
         }
 

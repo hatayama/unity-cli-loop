@@ -119,6 +119,14 @@ request. Because the harness re-issues commands that mutate project and scene
 state, anything marked `SafeToRetry: false` is reported as a failure rather
 than retried.
 
+`launch` is excluded from the wait regardless of what uloop reports. Every
+launch failure path is marked `SafeToRetry: true`, which is correct for the
+CLI — re-running launch cannot double-apply anything — but re-issuing
+`launch -r` restarts the editor again, minutes at a time, and this harness
+already owns restart recovery. Left to the generic wait, one failed restart
+would become up to twenty, and the failure a soak exists to measure would be
+retried out of the results.
+
 `SafeToRetry` only classifies errors the CLI itself raises. A tool that ran
 inside Unity answers with its own response envelope, which has no such field,
 so a transient reported there is recognised by its message instead — the
