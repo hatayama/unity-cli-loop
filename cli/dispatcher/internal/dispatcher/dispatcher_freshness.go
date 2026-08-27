@@ -252,7 +252,10 @@ func runDispatcherUpdateCommandForOS(ctx context.Context, goos string) (bool, er
 	if err != nil {
 		return false, err
 	}
-	_, _, targetChanged := normalizedDispatcherUpdateVersions(dispatcherVersion, resolved.TargetVersion)
+	_, targetVersion, targetChanged := normalizedDispatcherUpdateVersions(dispatcherVersion, resolved.TargetVersion)
+	if err := validateDispatcherProjectRunnerVersion(targetVersion); err != nil {
+		return false, err
+	}
 	if !targetChanged {
 		return false, nil
 	}

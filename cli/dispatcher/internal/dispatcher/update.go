@@ -64,6 +64,10 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		return true, 1
 	}
 	_, targetVersion, targetChanged := normalizedDispatcherUpdateVersions(dispatcherVersion, resolvedOptions.TargetVersion)
+	if err := validateDispatcherProjectRunnerVersion(targetVersion); err != nil {
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.UpdateCommandName})
+		return true, 1
+	}
 	if !targetChanged {
 		clicore.WriteLine(stdout, "uloop dispatcher is already up to date ("+targetVersion+").")
 		return true, 0

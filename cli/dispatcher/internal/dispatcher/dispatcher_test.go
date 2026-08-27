@@ -676,6 +676,74 @@ func TestEnforceDispatcherFreshnessRunsInstallerWhenOptionalTargetIsNewer(t *tes
 	}
 }
 
+func TestRunDispatcherUpdateCommandRejectsInvalidResolvedTarget(t *testing.T) {
+	// Verifies freshness updates fail fast before installer execution when resolution returns an invalid version.
+	tests := []struct {
+		name          string
+		targetVersion string
+	}{
+		{name: "empty target"},
+		{name: "invalid semantic version", targetVersion: "not-a-version"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			previousRunner := updateRunCommand
+			previousResolver := resolveUpdateTargetVersionFunc
+			defer func() {
+				updateRunCommand = previousRunner
+				resolveUpdateTargetVersionFunc = previousResolver
+			}()
+			updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+				t.Fatal("updateRunCommand must not run for an invalid resolved target")
+				return nil
+			}
+			resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
+				options.TargetVersion = tt.targetVersion
+				return options, nil
+			}
+
+			updated, err := runDispatcherUpdateCommandForOS(context.Background(), "darwin")
+
+			if err == nil || !strings.Contains(err.Error(), "expected semantic version") {
+				t.Fatalf("expected invalid resolved target error, got: %v", err)
+			}
+			if updated {
+				t.Fatal("invalid resolved target must not report installer execution")
+			}
+		})
+	}
+}
+
+func TestRequiredDispatcherFreshnessStillRequiresRetryWhenUpdateWasSkipped(t *testing.T) {
+	// Verifies required freshness keeps its retry contract even if the update dependency reports no installation.
+	previousReader := dispatcherReadInstalledVersion
+	defer func() {
+		dispatcherReadInstalledVersion = previousReader
+	}()
+	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
+		return dispatcherVersion, nil
+	}
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(context.Context) (bool, error) {
+		return false, nil
+	}
+
+	var stderr bytes.Buffer
+	handled, code := runDispatcherFreshnessUpdate(
+		context.Background(),
+		dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: "999.0.0"},
+		&stderr,
+		deps)
+
+	if !handled || code != 1 {
+		t.Fatalf("required freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Retry the same uloop command.") {
+		t.Fatalf("required freshness retry guidance missing: %s", stderr.String())
+	}
+}
+
 func TestEnforceDispatcherFreshnessReportsRequiredUpdateVersionChange(t *testing.T) {
 	// Verifies required dispatcher self-updates include the version change before asking for a retry.
 	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
