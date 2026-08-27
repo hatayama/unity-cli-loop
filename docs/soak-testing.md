@@ -103,6 +103,31 @@ the harness's own previous command, not a defect: the PowerShell variant waits
 (up to 20 tries, 30s apart) and records only the decisive attempt, so one slow
 compile no longer fails every command behind it.
 
+Busy is not the only transient state a soak crosses, so the wait is driven by
+uloop's own `SafeToRetry` classification rather than by one error code. An
+editor whose domain reload has torn the IPC pipe down answers
+`UNITY_NOT_REACHABLE` until the reload finishes — minutes, on a large project —
+and the harness used to report that as a defect. It is the reason a scheduled
+restart could fail every command behind it: switching code optimization back to
+Debug after the restart recompiles every assembly, and the reload that follows
+takes the pipe with it.
+
+`SafeToRetry`, not `Retryable`, is the axis. `Retryable` says the condition is
+transient; `SafeToRetry` says re-issuing cannot double-apply the command, and
+`cli/common/errors` clears it whenever Unity may already have received the
+request. Because the harness re-issues commands that mutate project and scene
+state, anything marked `SafeToRetry: false` is reported as a failure rather
+than retried.
+
+`SafeToRetry` only classifies errors the CLI itself raises. A tool that ran
+inside Unity answers with its own response envelope, which has no such field,
+so a transient reported there is recognised by its message instead — the
+harness keeps that list in `$ToolTransientReasons`. Waiting out the IPC outage
+is not enough by itself: once the pipe is back, `execute-dynamic-code` can
+still answer that its runtime was disposed by the same domain reload, which
+the tool reports with its own advice to retry shortly. Add a message to that
+list only when the tool's own guidance says the command did not run.
+
 Heavy operations are also kept off the same iteration: a `run-tests` due on the
 same iteration as `compile --force-recompile` is deferred by one iteration
 (except on the last iteration, where deferring would drop the run entirely).
@@ -198,6 +223,14 @@ The output directory contains:
 - `metrics.csv` — `epoch_ms,iteration,unity_rss_kb,project_runner_procs,outputs_dir_kb`
   per iteration. Look for monotonic RSS growth (leak), runner processes that
   never return to 0, or unbounded outputs growth.
+- `failures/` (PowerShell variant) — one file per failed or tolerated command,
+  holding the invoked arguments and the complete stdout+stderr payload. The
+  `run.log` line for the same command is only a 200-character excerpt, which
+  is rarely enough to tell apart the several paths that return exit 1, so this
+  is where a post-mortem starts. Files are numbered in failure order
+  (`0007-iter24-launch-restart-exit1.txt`), so a cascade can be read top to
+  bottom. Tolerated outcomes are kept too: a matched pattern proves the payload
+  contains a known-benign string, not that nothing else went wrong with it.
 
 ## Parallel soaks
 

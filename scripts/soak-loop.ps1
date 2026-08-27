@@ -122,6 +122,7 @@ $null = New-Item -ItemType Directory -Path $OutDir -Force
 [string]$StdErrFile = Join-Path $ResolvedOutDir ".last-stderr"
 [string]$SceneSetupFile = Join-Path $ResolvedOutDir "setup-scene.cs"
 [string]$SceneSetupForceFile = Join-Path $ResolvedOutDir "setup-scene-force.cs"
+[string]$FailuresDir = Join-Path $ResolvedOutDir "failures"
 
 [string]$SoakAssetsDir = Join-Path $ResolvedProjectPath "Assets\UloopSoak"
 [string]$ScratchDir = Join-Path $SoakAssetsDir "Editor"
@@ -298,21 +299,131 @@ function Invoke-Uloop {
 [hashtable]$ToleratedCounts = @{}
 
 # uloop is single-flight: while Unity runs one tool, every other command is
-# refused at dispatch with UNITY_SERVER_BUSY (Retryable: true). That is
-# back-pressure from work the harness itself started - a compile that outlived
-# the runner's own wait keeps the editor busy for minutes - not a defect, and
-# counting it would fail a whole iteration's worth of commands over one slow
-# compile. Busy attempts are waited out instead, and only the decisive attempt
-# is recorded, so commands.csv keeps one row per intended invocation.
-[string]$BusyErrorCode = '"ErrorCode": "UNITY_SERVER_BUSY"'
+# refused at dispatch with UNITY_SERVER_BUSY. That is back-pressure from work
+# the harness itself started - a compile that outlived the runner's own wait
+# keeps the editor busy for minutes - not a defect, and counting it would fail
+# a whole iteration's worth of commands over one slow compile. Such attempts
+# are waited out instead, and only the decisive attempt is recorded, so
+# commands.csv keeps one row per intended invocation.
+#
+# The wait is driven by uloop's own SafeToRetry classification rather than by
+# matching one hardcoded error code. Busy is not the only transient state a
+# soak crosses: an editor whose domain reload has torn the IPC pipe down
+# answers UNITY_NOT_REACHABLE (Phase "connection") for as long as the reload
+# runs, which on a large project is minutes. Matching only UNITY_SERVER_BUSY
+# reported those as defects - measured 3 of 3 post-restart scene restores
+# against a large project, all of them false positives.
+#
+# SafeToRetry, not Retryable, is the right axis. Both are set by
+# cli/common/errors: Retryable says the condition is transient, while
+# SafeToRetry says re-issuing cannot double-apply the command. Unity may
+# already have received a request that failed after dispatch, and this harness
+# re-issues commands that mutate project and scene state, so anything uloop
+# marks SafeToRetry:false is reported as a failure instead of being retried.
+[regex]$SafeToRetryPattern = [regex]::new('"SafeToRetry"\s*:\s*true', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+[regex]$ErrorCodePattern = [regex]::new('"ErrorCode"\s*:\s*"([^"]+)"')
 [int]$BusyRetryLimit = 20
 [int]$BusyRetryDelaySeconds = 30
+
+# SafeToRetry only classifies errors the CLI itself raises. A tool that ran
+# inside Unity answers with its own response envelope, which carries no such
+# field, so a transient reported there has to be recognised by its message.
+# Waiting out the IPC outage is not enough on its own: once the pipe is back,
+# execute-dynamic-code can still answer that its runtime was disposed by the
+# same domain reload (ExecuteDynamicCodeUseCase maps ObjectDisposedException
+# at the UseCase boundary). The code never ran, and the tool's own guidance is
+# to retry shortly, so this is waited out the same way. Keyed by the message
+# with the constant's name as the value, so the run log can name the wait.
+[hashtable]$ToolTransientReasons = @{
+    "Dynamic-code runtime was disposed during a server reset or domain reload" = "DYNAMIC_CODE_RUNTIME_RESTARTING"
+}
+
+# Returns a short name for the transient state a payload reports, or an empty
+# string when the payload is not something this harness may re-issue.
+function Get-TransientRetryReason {
+    param(
+        [string]$Text
+    )
+
+    if ($SafeToRetryPattern.IsMatch($Text)) {
+        return (Get-PayloadErrorCode -Text $Text)
+    }
+
+    foreach ($message in $ToolTransientReasons.Keys) {
+        if ($Text.Contains($message)) {
+            return $ToolTransientReasons[$message]
+        }
+    }
+
+    return ""
+}
+
+# The error code is only pulled out to name the wait in the run log: a soak
+# that stalls for ten minutes must say which transient state it is waiting on.
+function Get-PayloadErrorCode {
+    param(
+        [string]$Text
+    )
+
+    [System.Text.RegularExpressions.Match]$match = $ErrorCodePattern.Match($Text)
+    if (-not $match.Success) {
+        return "unknown"
+    }
+
+    return $match.Groups[1].Value
+}
 
 # Documented outcomes that are expected to fail without being a defect.
 # CompileCollisionPattern is the only one worth retrying - the others describe
 # a finished command whose result is simply not a clean success.
 [string]$CompileCollisionPattern = "Compilation is already in progress"
 [string]$ForcedUnknownResultPattern = "definitive result"
+
+# A failing command's payload is the only thing that identifies which of the
+# several exit-1 paths a command actually took, and the run log deliberately
+# keeps just a 200-character excerpt so the log stays readable. The full text
+# used to survive only in .last-stdout/.last-stderr, which the very next
+# command overwrites - so by the time a soak finished, the evidence for every
+# failure but the last was gone. Each failure is written to its own file here
+# instead, which is what makes an unattended overnight soak diagnosable.
+[int]$FailurePayloadCount = 0
+
+function Save-FailurePayload {
+    param(
+        [int]$Iteration,
+        [string]$Label,
+        [string]$Kind,
+        [pscustomobject]$Result
+    )
+
+    $script:FailurePayloadCount = $script:FailurePayloadCount + 1
+    # Zero-padded so the files sort in the order the failures happened, which
+    # is the order they have to be read in to follow a cascade.
+    [string]$sequence = "{0:d4}" -f $FailurePayloadCount
+    [string]$safeLabel = ($Label -replace '[^A-Za-z0-9._-]', '-')
+    [string]$path = Join-Path $FailuresDir "$sequence-iter$Iteration-$safeLabel-exit$($Result.ExitCode).txt"
+
+    try {
+        $null = New-Item -ItemType Directory -Path $FailuresDir -Force
+        [string[]]$lines = @(
+            "kind: $Kind",
+            "iteration: $Iteration",
+            "label: $Label",
+            "exit_code: $($Result.ExitCode)",
+            "payload_bytes: $($Result.Bytes)",
+            "utc: $([DateTimeOffset]::UtcNow.ToString('o'))",
+            "command: $(($Result.Arguments) -join ' ')",
+            "",
+            "----- payload (stdout + stderr) -----",
+            $Result.Text
+        )
+        Write-TextFile -Path $path -Content ($lines -join "`r`n")
+    }
+    catch {
+        # Never let diagnostics collection end a soak that is otherwise healthy.
+        Write-SoakLog -Message "could not save failure payload for iter=$Iteration $Label : $($_.Exception.Message)"
+    }
+}
 
 # Runs one uloop command, appends a CSV row, and returns the command result.
 # ToleratedPatterns names the documented outcomes for this command that are
@@ -333,18 +444,29 @@ function Invoke-TimedUloop {
     [int64]$end = 0
     [pscustomobject]$result = $null
     [bool]$waitedForEditor = $false
+    [string]$lastRetryReason = ""
     for ([int]$attempt = 1; $attempt -le $BusyRetryLimit; $attempt++) {
         $start = Get-EpochMilliseconds
         $result = Invoke-Uloop -CommandArguments $CommandArguments
         $end = Get-EpochMilliseconds
 
-        if ($result.ExitCode -eq 0 -or -not $result.Text.Contains($BusyErrorCode) -or $attempt -eq $BusyRetryLimit) {
+        [string]$retryReason = ""
+        if ($result.ExitCode -ne 0) {
+            $retryReason = Get-TransientRetryReason -Text $result.Text
+        }
+
+        if ($result.ExitCode -eq 0 -or [string]::IsNullOrEmpty($retryReason) -or $attempt -eq $BusyRetryLimit) {
             break
         }
 
-        if (-not $waitedForEditor) {
+        # Logged again whenever the reason changes, not just on the first wait:
+        # one restart can walk through several transients in a row (busy, then
+        # an unreachable pipe, then a disposed dynamic-code runtime), and a log
+        # naming only the first hides how the editor actually recovered.
+        if ($retryReason -ne $lastRetryReason) {
             $waitedForEditor = $true
-            Write-SoakLog -Message "iter=$Iteration $Label deferred: Unity is busy with an earlier command, retrying every ${BusyRetryDelaySeconds}s"
+            $lastRetryReason = $retryReason
+            Write-SoakLog -Message "iter=$Iteration $Label deferred on $retryReason (uloop reports it safe to retry), retrying every ${BusyRetryDelaySeconds}s"
         }
         Start-Sleep -Seconds $BusyRetryDelaySeconds
     }
@@ -378,9 +500,14 @@ function Invoke-TimedUloop {
             }
             $ToleratedCounts[$Label] = $ToleratedCounts[$Label] + 1
             Write-SoakLog -Message "TOLERATED iter=$Iteration $Label exit=$($result.ExitCode) ($excerpt)"
+            # Tolerated outcomes are saved too: a pattern match only proves the
+            # payload contains a known-benign string, not that nothing else
+            # went wrong alongside it.
+            Save-FailurePayload -Iteration $Iteration -Label $Label -Kind "TOLERATED" -Result $result
         }
         else {
             Write-SoakLog -Message "FAIL iter=$Iteration $Label exit=$($result.ExitCode) ($excerpt)"
+            Save-FailurePayload -Iteration $Iteration -Label $Label -Kind "FAIL" -Result $result
         }
     }
 
@@ -750,6 +877,9 @@ function Reset-EditorState {
 function Write-Summary {
     Reset-EditorState
     Write-SoakLog -Message "Results: $ResolvedOutDir"
+    if ($FailurePayloadCount -gt 0) {
+        Write-SoakLog -Message "Full payloads for $FailurePayloadCount failed/tolerated commands: $FailuresDir"
+    }
 
     [object[]]$rows = @(Import-Csv -LiteralPath $CommandsCsv)
     [string]$header = "{0,-20} {1,8} {2,8} {3,10} {4,10}" -f "command", "runs", "fails", "tolerated", "avg_ms"
@@ -1102,7 +1232,13 @@ try {
 
         if ($consecutiveFails -ge 3) {
             Write-SoakLog -Message "3 consecutive failing iterations - attempting one recovery restart."
-            $null = Invoke-Uloop -CommandArguments @("launch", "-r")
+            # Not routed through Invoke-TimedUloop on purpose (the recovery is
+            # not one of the measured samples), but its payload is still the
+            # record of why a soak had to recover, so it is kept when it fails.
+            [pscustomobject]$recoveryResult = Invoke-Uloop -CommandArguments @("launch", "-r")
+            if ($recoveryResult.ExitCode -ne 0) {
+                Save-FailurePayload -Iteration $i -Label "recovery-restart" -Kind "FAIL" -Result $recoveryResult
+            }
             if (-not (Wait-Editor)) {
                 Write-SoakLog -Message "Recovery restart failed - aborting soak."
                 exit 1
