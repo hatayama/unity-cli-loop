@@ -29,6 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal static void InitializeForEditorStartup(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
+            IUnityCliLoopProjectSettingsPort projectSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
             IThirdPartyToolMigrationAutoScanSeedRepository autoScanSeedRepository,
             CliSetupApplicationService cliSetupApplicationService,
@@ -45,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             SetupWizardStartupFlow startupFlow = new(
                 editorSettingsPort,
+                projectSettingsPort,
                 sessionFlagsRepository,
                 autoScanSeedRepository,
                 cliSetupApplicationService,

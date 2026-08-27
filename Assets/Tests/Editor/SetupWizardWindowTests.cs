@@ -94,6 +94,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(shouldAutoShow, Is.EqualTo(expected));
         }
 
+        [TestCase(false, false, false)]
+        [TestCase(true, false, true)]
+        [TestCase(false, true, true)]
+        [TestCase(true, true, true)]
+        public void ShouldSuppressAutoShow_ReturnsExpectedValue(
+            bool personalSuppress,
+            bool projectSuppress,
+            bool expected)
+        {
+            // Verifies that the personal and the project-scoped suppression flags are OR-combined,
+            // so the project-scoped flag alone suppresses the wizard for everyone on the project.
+            bool shouldSuppress =
+                SetupWizardStartupFlow.ShouldSuppressAutoShow(personalSuppress, projectSuppress);
+
+            Assert.That(shouldSuppress, Is.EqualTo(expected));
+        }
+
         [Test]
         public void HasSkillUpdateForSetupWizard_WhenOutdatedTargetHasSkillsDirectory_ReturnsTrue()
         {

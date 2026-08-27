@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private static readonly char[] VersionMajorSeparators = { '.', '-' };
 
         private readonly IUnityCliLoopEditorSettingsPort _editorSettingsPort;
+        private readonly IUnityCliLoopProjectSettingsPort _projectSettingsPort;
         private readonly ISessionFlagsRepository _sessionFlagsRepository;
         private readonly IThirdPartyToolMigrationAutoScanSeedRepository _autoScanSeedRepository;
         private readonly CliSetupApplicationService _cliSetupApplicationService;
@@ -44,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
         internal SetupWizardStartupFlow(
             IUnityCliLoopEditorSettingsPort editorSettingsPort,
+            IUnityCliLoopProjectSettingsPort projectSettingsPort,
             ISessionFlagsRepository sessionFlagsRepository,
             IThirdPartyToolMigrationAutoScanSeedRepository autoScanSeedRepository,
             CliSetupApplicationService cliSetupApplicationService,
@@ -53,6 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             System.Action showThirdPartyMigrationAutoScan)
         {
             Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
+            Debug.Assert(projectSettingsPort != null, "projectSettingsPort must not be null");
             Debug.Assert(sessionFlagsRepository != null, "sessionFlagsRepository must not be null");
             Debug.Assert(autoScanSeedRepository != null, "autoScanSeedRepository must not be null");
             Debug.Assert(cliSetupApplicationService != null, "cliSetupApplicationService must not be null");
@@ -65,6 +68,8 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             _editorSettingsPort = editorSettingsPort
                 ?? throw new System.ArgumentNullException(nameof(editorSettingsPort));
+            _projectSettingsPort = projectSettingsPort
+                ?? throw new System.ArgumentNullException(nameof(projectSettingsPort));
             _sessionFlagsRepository = sessionFlagsRepository
                 ?? throw new System.ArgumentNullException(nameof(sessionFlagsRepository));
             _autoScanSeedRepository = autoScanSeedRepository
@@ -78,6 +83,15 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 ?? throw new System.ArgumentNullException(nameof(showWindowOnVersionChange));
             _showThirdPartyMigrationAutoScan = showThirdPartyMigrationAutoScan
                 ?? throw new System.ArgumentNullException(nameof(showThirdPartyMigrationAutoScan));
+        }
+
+        /// <summary>
+        /// Combines the personal (UserSettings) and project-scoped (ProjectSettings, git-shared)
+        /// suppression flags. Either one is enough to keep the wizard from auto-showing.
+        /// </summary>
+        internal static bool ShouldSuppressAutoShow(bool personalSuppress, bool projectSuppress)
+        {
+            return personalSuppress || projectSuppress;
         }
 
         internal static bool ShouldAutoShowForVersion(
@@ -220,7 +234,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string currentVersion = UnityCliLoopConstants.PackageInfo.version;
             string currentMinimumDispatcherVersion = _cliSetupApplicationService.GetMinimumRequiredCliVersion();
             UnityCliLoopEditorSettingsData settings = _editorSettingsPort.GetSettings();
-            bool suppressAutoShow = settings.suppressSetupWizardAutoShow;
+            bool suppressAutoShow = ShouldSuppressAutoShow(
+                settings.suppressSetupWizardAutoShow,
+                _projectSettingsPort.GetSuppressSetupWizardAutoShow());
             string lastSeenVersion = settings.lastSeenSetupWizardVersion ?? string.Empty;
             string lastSeenMinimumDispatcherVersion =
                 settings.lastSeenSetupWizardMinimumDispatcherVersion ?? string.Empty;

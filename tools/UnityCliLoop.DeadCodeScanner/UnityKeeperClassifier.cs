@@ -22,6 +22,8 @@ namespace UnityCliLoop.DeadCodeScanner
             "RuntimeInitializeOnLoadMethodAttribute",
             "MenuItem",
             "MenuItemAttribute",
+            "SettingsProvider",
+            "SettingsProviderAttribute",
             "SerializeField",
             "SerializeFieldAttribute",
             "JsonProperty",

@@ -150,6 +150,9 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                 && issue.FullName.Contains("RuntimeReset", StringComparison.Ordinal)), Is.True);
             Assert.That(issues.Any(issue =>
                 issue.Category == DeadCodeCategory.KeptByUnityOrReflection
+                && issue.FullName.Contains("CreateSettingsPage", StringComparison.Ordinal)), Is.True);
+            Assert.That(issues.Any(issue =>
+                issue.Category == DeadCodeCategory.KeptByUnityOrReflection
                 && issue.SymbolKind == "type"
                 && issue.FullName.Contains("UsedProductionApi", StringComparison.Ordinal)), Is.True);
         }
@@ -373,6 +376,10 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                     {
                     }
 
+                    public sealed class SettingsProviderAttribute : Attribute
+                    {
+                    }
+
                     [UnityCliLoopTool]
                     public sealed class SampleTool
                     {
@@ -402,6 +409,12 @@ namespace UnityCliLoop.DeadCodeScanner.Tests
                         [RuntimeInitializeOnLoadMethod]
                         private static void RuntimeReset()
                         {
+                        }
+
+                        [SettingsProvider]
+                        private static object CreateSettingsPage()
+                        {
+                            return null;
                         }
                     }
 
