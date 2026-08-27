@@ -161,3 +161,8 @@ eslint-results.xml
 .claude/plans
 .claude/skills/*-workspace/
 .claude/skill-tuning/
+
+# Soak harness output (scripts/soak-loop.*) - the default --out-dir lands here
+# when the harness is run from the repository root. One run leaves CSVs, logs,
+# and a failures/ payload dump per failed command.
+uloop-soak-results/
