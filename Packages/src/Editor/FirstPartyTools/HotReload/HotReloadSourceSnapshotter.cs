@@ -37,8 +37,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
             {
-                CaptureAssemblyIfNeeded(projectRoot, snapshotRoot, assembly);
+                try
+                {
+                    CaptureAssemblyIfNeeded(projectRoot, snapshotRoot, assembly);
+                }
+                catch (Exception ex) when (IsSkippableAssemblyCaptureException(ex))
+                {
+                    // Approved deviation from the no-try-catch rule: one assembly's transient IO
+                    // or Cecil read failure must not deprive every remaining assembly of a baseline.
+                    // Continuing preserves the fail-closed invariant because missing snapshots are
+                    // rejected by PDB checksum validation rather than used for an incorrect diff.
+                    UnityEngine.Debug.LogWarning(
+                        $"[UnityCliLoop] Snapshot capture failed for assembly {assembly.name}: {ex.Message}");
+                }
             }
+        }
+
+        private static bool IsSkippableAssemblyCaptureException(Exception ex)
+        {
+            Debug.Assert(ex != null, "ex must not be null");
+
+            return ex is IOException ||
+                   ex is UnauthorizedAccessException ||
+                   ex is BadImageFormatException;
         }
 
         private static void CaptureAssemblyIfNeeded(
@@ -84,10 +105,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblySnapshotDirectory = Path.Combine(snapshotRoot, assembly.name + "-" + mvid);
             if (!Directory.Exists(assemblySnapshotDirectory))
             {
-                CaptureAssemblySourcesAtomically(projectRoot, assemblySnapshotDirectory, sourceFiles);
+                CaptureAssemblySourcesAtomically(
+                    projectRoot,
+                    assemblySnapshotDirectory,
+                    sourceFiles,
+                    assembly.name);
                 DeleteStaleSnapshotDirectories(snapshotRoot, assembly.name, assemblySnapshotDirectory);
             }
 
+            // Write the stamp even when individual sources were skipped: retrying every domain
+            // reload would only repeat IO and warning spam. The partial snapshot remains fail-closed
+            // because PDB checksum validation requires a matching baseline, and a changed DLL
+            // invalidates this stamp through its mtime or length before the next capture.
             WriteStamp(stampPath, mvid, dllMtimeTicks, dllByteLength);
         }
 
@@ -160,10 +189,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return assemblyDefinition.MainModule.Mvid.ToString("N");
         }
 
-        private static void CaptureAssemblySourcesAtomically(
+        internal static void CaptureAssemblySourcesAtomically(
             string projectRoot,
             string assemblySnapshotDirectory,
-            string[] sourceFiles)
+            string[] sourceFiles,
+            string assemblyName)
         {
             // Why temp + Move: Directory.Exists is the "complete" signal. Copying into the final
             // directory first would leave a partial tree on interrupt that later reloads treat as
@@ -176,30 +206,62 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Directory.CreateDirectory(temporaryDirectory);
+            int skippedSourceCount = 0;
+            string firstSkippedSourcePath = null;
             foreach (string projectRelativeSourcePath in sourceFiles)
             {
-                CopySourceFileByteExact(projectRoot, temporaryDirectory, projectRelativeSourcePath);
+                if (!CopySourceFileByteExact(projectRoot, temporaryDirectory, projectRelativeSourcePath))
+                {
+                    skippedSourceCount++;
+                    firstSkippedSourcePath ??= projectRelativeSourcePath;
+                }
             }
 
             Directory.Move(temporaryDirectory, assemblySnapshotDirectory);
+            if (skippedSourceCount > 0)
+            {
+                UnityEngine.Debug.LogWarning(
+                    $"[UnityCliLoop] Skipped {skippedSourceCount} unreadable source(s) while snapshotting " +
+                    $"{assemblyName}: {firstSkippedSourcePath}");
+            }
         }
 
-        private static void CopySourceFileByteExact(
+        private static bool CopySourceFileByteExact(
             string projectRoot,
             string assemblySnapshotDirectory,
             string projectRelativeSourcePath)
         {
             string normalizedRelativePath = projectRelativeSourcePath.Replace('\\', '/');
             string absoluteSourcePath = Path.Combine(projectRoot, normalizedRelativePath.Replace('/', Path.DirectorySeparatorChar));
-            if (!File.Exists(absoluteSourcePath))
+            string fileSystemSourcePath = HotReloadFileSystemPath.GetFileSystemPath(absoluteSourcePath);
+            if (!File.Exists(fileSystemSourcePath))
             {
-                return;
+                return true;
             }
 
-            string snapshotFileName = HashProjectRelativePath(normalizedRelativePath) + ".cs";
-            string destinationPath = Path.Combine(assemblySnapshotDirectory, snapshotFileName);
-            byte[] bytes = File.ReadAllBytes(absoluteSourcePath);
-            File.WriteAllBytes(destinationPath, bytes);
+            try
+            {
+                string snapshotFileName = HashProjectRelativePath(normalizedRelativePath) + ".cs";
+                string destinationPath = Path.Combine(assemblySnapshotDirectory, snapshotFileName);
+                byte[] bytes = File.ReadAllBytes(fileSystemSourcePath);
+                File.WriteAllBytes(destinationPath, bytes);
+                return true;
+            }
+            catch (Exception ex) when (IsSkippableSourceReadException(ex))
+            {
+                // Approved deviation from the no-try-catch rule: source IO can fail independently
+                // while an assembly is being snapshotted. Skipping preserves the fail-closed
+                // invariant because PDB checksum validation rejects any missing baseline at use time.
+                return false;
+            }
+        }
+
+        private static bool IsSkippableSourceReadException(Exception ex)
+        {
+            Debug.Assert(ex != null, "ex must not be null");
+
+            return ex is IOException ||
+                   ex is UnauthorizedAccessException;
         }
 
         internal static string HashProjectRelativePath(string slashNormalizedProjectRelativePath)
@@ -253,13 +315,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 // Why: the glob is a prefix match, so hyphenated sibling assembly names also match.
-                // Only delete when the suffix after "<assemblyName>-" is exactly an Mvid in "N" format.
+                // Only delete when the suffix after "<assemblyName>-" is exactly an Mvid in "N"
+                // format, optionally followed by the capture-only .tmp suffix.
                 string mvidCandidate = directoryName.Substring(prefix.Length);
+                if (mvidCandidate.EndsWith(
+                        IncompleteSnapshotDirectorySuffix,
+                        StringComparison.Ordinal))
+                {
+                    mvidCandidate = mvidCandidate.Substring(
+                        0,
+                        mvidCandidate.Length - IncompleteSnapshotDirectorySuffix.Length);
+                }
+
                 if (!Guid.TryParseExact(mvidCandidate, "N", out Guid _))
                 {
                     continue;
                 }
 
+                // Capture and cleanup run serially on the main thread, and cleanup starts only
+                // after the current capture's Move succeeds, so no active .tmp can be removed here.
                 Directory.Delete(candidateDirectory, recursive: true);
             }
         }
