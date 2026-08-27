@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -13,6 +14,7 @@ using NUnit.Framework;
 using UnityEditor.Compilation;
 
 using UnityEngine;
+using UnityEngine.TestTools;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -231,10 +233,151 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: stale MVID snapshot directories for the same assembly name are pruned, while hyphenated sibling assembly names and non-MVID suffixes are kept.
+        /// What: on Windows, an extended-length source created beyond legacy MAX_PATH is captured byte-exactly from its unprefixed project-relative path.
         /// </summary>
         [Test]
-        public void DeleteStaleSnapshotDirectories_RemovesOnlyExactMvidSiblings()
+        public void CaptureAssemblySourcesAtomically_LongWindowsSource_CapturesByteExactSnapshot()
+        {
+            if (Path.DirectorySeparatorChar != '\\')
+            {
+                Assert.Pass("Windows extended-length path handling applies only on Windows.");
+                return;
+            }
+
+            string root = Path.Combine(
+                Path.GetTempPath(),
+                "uloop-hot-reload-long-path-" + Guid.NewGuid().ToString("N"));
+            string sourceRelativePath = Path.Combine(
+                "Sources",
+                new string('a', 80),
+                new string('b', 80),
+                new string('c', 80),
+                "LongPath.cs");
+            string absoluteSourcePath = Path.Combine(root, sourceRelativePath);
+            string fileSystemSourcePath = HotReloadFileSystemPath.GetFileSystemPath(absoluteSourcePath);
+            string snapshotDirectory = Path.Combine(root, "snapshot");
+            const string sourceText = "internal static class LongPathFixture { }\n";
+
+            try
+            {
+                Assert.That(absoluteSourcePath.Length, Is.GreaterThan(260));
+                Directory.CreateDirectory(Path.GetDirectoryName(fileSystemSourcePath));
+                File.WriteAllText(
+                    fileSystemSourcePath,
+                    sourceText,
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+                HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+                    root,
+                    snapshotDirectory,
+                    new[] { sourceRelativePath },
+                    "LongPathAssembly");
+
+                string normalizedRelativePath = sourceRelativePath.Replace('\\', '/');
+                string snapshotPath = Path.Combine(
+                    snapshotDirectory,
+                    HotReloadSourceSnapshotter.HashProjectRelativePath(normalizedRelativePath) + ".cs");
+                Assert.That(File.Exists(snapshotPath), Is.True);
+                Assert.That(
+                    File.ReadAllBytes(snapshotPath).SequenceEqual(File.ReadAllBytes(fileSystemSourcePath)),
+                    Is.True);
+            }
+            finally
+            {
+                string extendedRoot = @"\\?\" + Path.GetFullPath(root);
+                if (Directory.Exists(extendedRoot))
+                {
+                    Directory.Delete(extendedRoot, recursive: true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: an unreadable source is skipped with one warning while readable siblings still complete the atomic snapshot.
+        /// </summary>
+        [Test]
+        public void CaptureAssemblySourcesAtomically_OneLockedSource_CompletesWithReadableSnapshots()
+        {
+            if (Path.DirectorySeparatorChar != '\\')
+            {
+                // FileShare.None enforcement is only guaranteed by the Windows IO stack; POSIX
+                // Mono may allow the second open, which would leave the expected warning unmet.
+                Assert.Pass("Sharing-violation-driven skip can only be provoked reliably on Windows.");
+                return;
+            }
+
+            string root = Path.Combine(
+                Path.GetTempPath(),
+                "uloop-hot-reload-snapshot-skip-" + Guid.NewGuid().ToString("N"));
+            string sourceDirectory = Path.Combine(root, "Sources");
+            string snapshotDirectory = Path.Combine(root, "snapshot");
+            string[] sourceRelativePaths =
+            {
+                "Sources/First.cs",
+                "Sources/Locked.cs",
+                "Sources/Last.cs"
+            };
+            UTF8Encoding encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            Directory.CreateDirectory(sourceDirectory);
+            foreach (string sourceRelativePath in sourceRelativePaths)
+            {
+                File.WriteAllText(
+                    Path.Combine(root, sourceRelativePath.Replace('/', Path.DirectorySeparatorChar)),
+                    "internal static class Fixture { }\n",
+                    encoding);
+            }
+
+            try
+            {
+                string lockedSourcePath = Path.Combine(root, "Sources", "Locked.cs");
+                using (new FileStream(
+                           lockedSourcePath,
+                           FileMode.Open,
+                           FileAccess.Read,
+                           FileShare.None))
+                {
+                    LogAssert.Expect(
+                        LogType.Warning,
+                        "[UnityCliLoop] Skipped 1 unreadable source(s) while snapshotting " +
+                        "LockedSourceAssembly: Sources/Locked.cs");
+                    HotReloadSourceSnapshotter.CaptureAssemblySourcesAtomically(
+                        root,
+                        snapshotDirectory,
+                        sourceRelativePaths,
+                        "LockedSourceAssembly");
+                }
+
+                Assert.That(Directory.Exists(snapshotDirectory), Is.True);
+                Assert.That(
+                    File.Exists(Path.Combine(
+                        snapshotDirectory,
+                        HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/First.cs") + ".cs")),
+                    Is.True);
+                Assert.That(
+                    File.Exists(Path.Combine(
+                        snapshotDirectory,
+                        HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Locked.cs") + ".cs")),
+                    Is.False);
+                Assert.That(
+                    File.Exists(Path.Combine(
+                        snapshotDirectory,
+                        HotReloadSourceSnapshotter.HashProjectRelativePath("Sources/Last.cs") + ".cs")),
+                    Is.True);
+            }
+            finally
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: stale MVID and orphaned temporary snapshot directories are pruned, while the current snapshot, hyphenated sibling assembly, and non-MVID suffix are kept.
+        /// </summary>
+        [Test]
+        public void DeleteStaleSnapshotDirectories_StaleAndOrphanTemp_RemovesOnlyExactMvidSiblings()
         {
             string tempRoot = Path.Combine(
                 Path.GetTempPath(),
@@ -244,10 +387,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string mvidA = Guid.NewGuid().ToString("N");
             string mvidB = Guid.NewGuid().ToString("N");
             string mvidC = Guid.NewGuid().ToString("N");
-            string currentDir = Path.Combine(tempRoot, "Foo-" + mvidA);
+            string mvidD = Guid.NewGuid().ToString("N");
+            string orphanTempDir = Path.Combine(tempRoot, "Foo-" + mvidA + ".tmp");
             string staleDir = Path.Combine(tempRoot, "Foo-" + mvidB);
-            string siblingAssemblyDir = Path.Combine(tempRoot, "Foo-Bar-" + mvidC);
+            string currentDir = Path.Combine(tempRoot, "Foo-" + mvidC);
+            string siblingAssemblyDir = Path.Combine(tempRoot, "Foo-Bar-" + mvidD);
             string nonMvidDir = Path.Combine(tempRoot, "Foo-notamvid");
+            Directory.CreateDirectory(orphanTempDir);
             Directory.CreateDirectory(currentDir);
             Directory.CreateDirectory(staleDir);
             Directory.CreateDirectory(siblingAssemblyDir);
@@ -257,8 +403,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 HotReloadSourceSnapshotter.DeleteStaleSnapshotDirectories(tempRoot, "Foo", currentDir);
 
-                Assert.That(Directory.Exists(currentDir), Is.True);
+                Assert.That(Directory.Exists(orphanTempDir), Is.False);
                 Assert.That(Directory.Exists(staleDir), Is.False);
+                Assert.That(Directory.Exists(currentDir), Is.True);
                 Assert.That(Directory.Exists(siblingAssemblyDir), Is.True);
                 Assert.That(Directory.Exists(nonMvidDir), Is.True);
             }
