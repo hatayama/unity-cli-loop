@@ -28,7 +28,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public event Action? RecordingStopped;
 
         public bool IsRecording => _isRecording;
-        public string? LastAutoSavePath { get; internal set; }
 
         public void Initialize()
         {
@@ -41,7 +40,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!_isRecording, "Cannot start recording while already recording");
             Debug.Assert(EditorApplication.isPlaying, "PlayMode must be active to start recording");
 
-            LastAutoSavePath = null;
             _recordedFrames = new List<InputFrameEvents>();
             _frameCapture.BeginCapture(keyFilter);
             _startFrameCount = Time.frameCount;
@@ -133,7 +131,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 InputRecordingData data = StopRecording();
                 string outputPath = InputRecordingFileHelper.ResolveOutputPath("");
                 InputRecordingFileHelper.Save(data, outputPath);
-                LastAutoSavePath = outputPath;
                 NotifyRecordingStopped();
                 Debug.LogWarning($"[InputRecorder] Recording auto-stopped after {RecordInputConstants.MAX_RECORDING_DURATION_SECONDS}s limit. Saved to {outputPath}");
                 return;
@@ -212,12 +209,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         public static bool IsRecording => ServiceValue.IsRecording;
-
-        public static string? LastAutoSavePath
-        {
-            get { return ServiceValue.LastAutoSavePath; }
-            internal set { ServiceValue.LastAutoSavePath = value; }
-        }
 
         public static void StartRecording(HashSet<Key>? keyFilter)
         {
