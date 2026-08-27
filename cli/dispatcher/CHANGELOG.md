@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.34](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.33...dispatcher-v3.0.0-beta.34) (2026-08-27)
+
+
+### Features
+
+* retire the record-input CLI tool in favor of the Recordings window ([#2430](https://github.com/hatayama/unity-cli-loop/issues/2430)) ([54afc07](https://github.com/hatayama/unity-cli-loop/commit/54afc07bff66933dfcd23607e60317ce4c1419a5))
+
 ## [3.0.0-beta.33](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.32...dispatcher-v3.0.0-beta.33) (2026-08-25)
 
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.0.0-beta.78](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.77...v3.0.0-beta.78) (2026-08-27)
+
+
+### Features
+
+* retire the record-input CLI tool in favor of the Recordings window ([#2430](https://github.com/hatayama/unity-cli-loop/issues/2430)) ([54afc07](https://github.com/hatayama/unity-cli-loop/commit/54afc07bff66933dfcd23607e60317ce4c1419a5))
+* Suppress the Setup Wizard popup for the whole team from Project Settings ([#2433](https://github.com/hatayama/unity-cli-loop/issues/2433)) ([4bed9ce](https://github.com/hatayama/unity-cli-loop/commit/4bed9ce8423671931c8af190ac2cc18d69f961af))
+
+
+### Bug Fixes
+
+* discover tools via TypeCache instead of scanning every loaded assembly ([#2435](https://github.com/hatayama/unity-cli-loop/issues/2435)) ([9dcb570](https://github.com/hatayama/unity-cli-loop/commit/9dcb570e45736f08ee1051cc1785c899c29a7744))
+* support long Windows paths in hot-reload snapshots ([#2437](https://github.com/hatayama/unity-cli-loop/issues/2437)) ([f2c690b](https://github.com/hatayama/unity-cli-loop/commit/f2c690b05861678c3ad1cf7069d4369db27963d4))
+
 ## [3.0.0-beta.77](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.76...v3.0.0-beta.77) (2026-08-26)
 
 
