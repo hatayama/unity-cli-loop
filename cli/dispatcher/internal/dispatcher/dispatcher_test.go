@@ -24,6 +24,7 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
 type dispatcherArchiveTestEntry struct {
@@ -430,9 +431,9 @@ func TestEnforceDispatcherFreshnessRequiresBrewUpgradeWhenHomebrewManagedAndUpda
 		return "/opt/homebrew/Cellar/uloop/3.0.0/bin/uloop", nil
 	}
 	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) error {
+	deps.runUpdate = func(context.Context) (bool, error) {
 		t.Fatal("runUpdate must not run for Homebrew-managed required freshness")
-		return nil
+		return false, nil
 	}
 
 	var stderr bytes.Buffer
@@ -465,9 +466,9 @@ func TestEnforceDispatcherFreshnessSkipsOptionalUpdateWhenHomebrewManaged(t *tes
 		return "/opt/homebrew/Cellar/uloop/3.0.0/bin/uloop", nil
 	}
 	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) error {
+	deps.runUpdate = func(context.Context) (bool, error) {
 		t.Fatal("runUpdate must not run for Homebrew-managed optional freshness")
-		return nil
+		return false, nil
 	}
 
 	var stderr bytes.Buffer
@@ -492,9 +493,9 @@ func TestEnforceDispatcherFreshnessMarksFailedOptionalUpdateChecked(t *testing.T
 
 	deps := defaultDispatcherRunDeps()
 	runnerCalls := 0
-	deps.runUpdate = func(context.Context) error {
+	deps.runUpdate = func(context.Context) (bool, error) {
 		runnerCalls++
-		return errors.New("network unavailable")
+		return false, errors.New("network unavailable")
 	}
 
 	var stderr bytes.Buffer
@@ -573,6 +574,173 @@ func TestEnforceDispatcherFreshnessSkipsOptionalUpdateMessageWhenVersionDidNotCh
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected no optional update output, got: %s", stderr.String())
+	}
+}
+
+func TestEnforceDispatcherFreshnessSkipsInstallerWhenOptionalTargetIsCurrent(t *testing.T) {
+	// Verifies an optional current target skips the installer, records the check, and continues silently.
+	cacheRoot := t.TempDir()
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+	previousRunner := updateRunCommand
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousExecutablePath := resolveUpdateExecutablePathFunc
+	defer func() {
+		updateRunCommand = previousRunner
+		resolveUpdateTargetVersionFunc = previousResolver
+		resolveUpdateExecutablePathFunc = previousExecutablePath
+	}()
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		t.Fatal("updateRunCommand must not run when the optional target is current")
+		return nil
+	}
+	resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
+		options.TargetVersion = "v" + dispatcherVersion
+		return options, nil
+	}
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/tmp/uloop", nil
+	}
+	deps := defaultDispatcherRunDeps()
+	checkedAt := time.Date(2026, time.August, 27, 12, 0, 0, 0, time.UTC)
+	deps.now = func() time.Time {
+		return checkedAt
+	}
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshnessWithDeps(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
+		&stderr,
+		deps)
+
+	if handled || code != 0 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no optional update output, got: %s", stderr.String())
+	}
+	statePath := filepath.Join(cacheRoot, dispatcherUpdateStateFileName)
+	if _, err := os.Stat(statePath); err != nil {
+		t.Fatalf("expected update state after current optional target: %v", err)
+	}
+	if dispatcherSelfUpdateDueWithDeps(deps) {
+		t.Fatal("expected the current optional target check to reset the update interval")
+	}
+}
+
+func TestEnforceDispatcherFreshnessRunsInstallerWhenOptionalTargetIsNewer(t *testing.T) {
+	// Verifies an optional newer target still runs the installer and continues successfully.
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
+	previousRunner := updateRunCommand
+	previousReader := dispatcherReadInstalledVersion
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousExecutablePath := resolveUpdateExecutablePathFunc
+	defer func() {
+		updateRunCommand = previousRunner
+		dispatcherReadInstalledVersion = previousReader
+		resolveUpdateTargetVersionFunc = previousResolver
+		resolveUpdateExecutablePathFunc = previousExecutablePath
+	}()
+	installerRan := false
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		installerRan = true
+		return nil
+	}
+	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
+		return "999.0.0", nil
+	}
+	resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
+		options.TargetVersion = "999.0.0"
+		return options, nil
+	}
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/tmp/uloop", nil
+	}
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(ctx context.Context) (bool, error) {
+		return runDispatcherUpdateCommandForOS(ctx, "darwin")
+	}
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshnessWithDeps(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
+		&stderr,
+		deps)
+
+	if handled || code != 0 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !installerRan {
+		t.Fatal("expected updateRunCommand to run for a newer optional target")
+	}
+}
+
+func TestRunDispatcherUpdateCommandRejectsInvalidResolvedTarget(t *testing.T) {
+	// Verifies freshness updates fail fast before installer execution when resolution returns an invalid version.
+	tests := []struct {
+		name          string
+		targetVersion string
+	}{
+		{name: "empty target"},
+		{name: "invalid semantic version", targetVersion: "not-a-version"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			previousRunner := updateRunCommand
+			previousResolver := resolveUpdateTargetVersionFunc
+			defer func() {
+				updateRunCommand = previousRunner
+				resolveUpdateTargetVersionFunc = previousResolver
+			}()
+			updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+				t.Fatal("updateRunCommand must not run for an invalid resolved target")
+				return nil
+			}
+			resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
+				options.TargetVersion = tt.targetVersion
+				return options, nil
+			}
+
+			updated, err := runDispatcherUpdateCommandForOS(context.Background(), "darwin")
+
+			if err == nil || !strings.Contains(err.Error(), "expected semantic version") {
+				t.Fatalf("expected invalid resolved target error, got: %v", err)
+			}
+			if updated {
+				t.Fatal("invalid resolved target must not report installer execution")
+			}
+		})
+	}
+}
+
+func TestRequiredDispatcherFreshnessStillRequiresRetryWhenUpdateWasSkipped(t *testing.T) {
+	// Verifies required freshness keeps its retry contract even if the update dependency reports no installation.
+	previousReader := dispatcherReadInstalledVersion
+	defer func() {
+		dispatcherReadInstalledVersion = previousReader
+	}()
+	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
+		return dispatcherVersion, nil
+	}
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(context.Context) (bool, error) {
+		return false, nil
+	}
+
+	var stderr bytes.Buffer
+	handled, code := runDispatcherFreshnessUpdate(
+		context.Background(),
+		dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: "999.0.0"},
+		&stderr,
+		deps)
+
+	if !handled || code != 1 {
+		t.Fatalf("required freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Retry the same uloop command.") {
+		t.Fatalf("required freshness retry guidance missing: %s", stderr.String())
 	}
 }
 
@@ -703,8 +871,8 @@ func stubDispatcherUpdateHooks(t *testing.T, updatedVersion string) (dispatcherR
 	previousReader := dispatcherReadInstalledVersion
 	previousExecutablePath := resolveUpdateExecutablePathFunc
 	deps := defaultDispatcherRunDeps()
-	deps.runUpdate = func(context.Context) error {
-		return nil
+	deps.runUpdate = func(context.Context) (bool, error) {
+		return true, nil
 	}
 	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
 		return updatedVersion, nil

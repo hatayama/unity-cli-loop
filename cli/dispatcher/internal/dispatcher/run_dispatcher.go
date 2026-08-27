@@ -37,7 +37,7 @@ type dispatcherRunDeps struct {
 	now        func() time.Time
 	runRealCLI func(context.Context, string, []string, io.Writer, io.Writer) int
 	runV2CLI   func(context.Context, string, []string, io.Writer, io.Writer) (int, error)
-	runUpdate  func(context.Context) error
+	runUpdate  func(context.Context) (bool, error)
 	launch     launchDeps
 }
 

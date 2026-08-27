@@ -134,14 +134,18 @@ func executeDispatcherFreshnessPlan(ctx context.Context, plan dispatcherFreshnes
 }
 
 func runDispatcherFreshnessUpdate(ctx context.Context, plan dispatcherFreshnessPlan, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
-	err := deps.runUpdate(ctx)
+	updated, err := deps.runUpdate(ctx)
 	if err == nil {
 		markDispatcherSelfUpdateCheckedWithDeps(deps)
-		updatedVersion := dispatcherInstalledVersionOrEmpty(ctx)
 		if plan.Action == dispatcherFreshnessRunRequiredUpdate {
+			updatedVersion := dispatcherInstalledVersionOrEmpty(ctx)
 			writeDispatcherSelfUpdateRequiredError(stderr, updatedVersion)
 			return true, 1
 		}
+		if !updated {
+			return false, 0
+		}
+		updatedVersion := dispatcherInstalledVersionOrEmpty(ctx)
 		writeOptionalDispatcherUpdateCompletion(stderr, dispatcherVersion, updatedVersion)
 		return false, 0
 	}
@@ -237,16 +241,30 @@ func markDispatcherSelfUpdateCheckedWithDeps(deps dispatcherRunDeps) {
 	_ = os.WriteFile(filepath.Join(cacheRoot, dispatcherUpdateStateFileName), content, 0o644)
 }
 
-func runDispatcherUpdateCommand(ctx context.Context) error {
+func runDispatcherUpdateCommand(ctx context.Context) (bool, error) {
+	return runDispatcherUpdateCommandForOS(ctx, runtime.GOOS)
+}
+
+func runDispatcherUpdateCommandForOS(ctx context.Context, goos string) (bool, error) {
 	resolved, err := resolveUpdateTargetVersionFunc(ctx, sharedupdate.Options{
 		CurrentVersion: dispatcherVersion,
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
-	command, err := sharedupdate.CommandForOS(runtime.GOOS, resolved)
+	_, targetVersion, targetChanged := normalizedDispatcherUpdateVersions(dispatcherVersion, resolved.TargetVersion)
+	if err := validateDispatcherProjectRunnerVersion(targetVersion); err != nil {
+		return false, err
+	}
+	if !targetChanged {
+		return false, nil
+	}
+	command, err := sharedupdate.CommandForOS(goos, resolved)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return runUpdateCommand(ctx, command, io.Discard, io.Discard)
+	if err := updateRunCommand(ctx, command, io.Discard, io.Discard); err != nil {
+		return false, err
+	}
+	return true, nil
 }

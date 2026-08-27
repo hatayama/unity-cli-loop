@@ -368,6 +368,157 @@ func TestTryHandleUpdateRequestReportsAlreadyCurrentVersion(t *testing.T) {
 	}
 }
 
+func TestTryHandleUpdateRequestSkipsInstallerWhenResolvedTargetIsCurrent(t *testing.T) {
+	// Verifies a resolved target matching the current dispatcher exits successfully without running the installer.
+	previousRunner := updateRunCommand
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousExecutablePath := resolveUpdateExecutablePathFunc
+	defer func() {
+		updateRunCommand = previousRunner
+		resolveUpdateTargetVersionFunc = previousResolver
+		resolveUpdateExecutablePathFunc = previousExecutablePath
+	}()
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		t.Fatal("updateRunCommand must not run when the resolved target is current")
+		return nil
+	}
+	resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
+		options.TargetVersion = "v" + dispatcherVersion
+		return options, nil
+	}
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/tmp/uloop", nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{clicore.UpdateCommandName}, &stdout, &stderr)
+
+	if !handled || code != 0 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	expected := "uloop dispatcher is already up to date (" + dispatcherVersion + ")."
+	if !strings.Contains(stdout.String(), expected) {
+		t.Fatalf("update output mismatch: %s", stdout.String())
+	}
+}
+
+func TestTryHandleUpdateRequestSkipsInstallerWhenRequestedTargetIsCurrent(t *testing.T) {
+	// Verifies an explicit current --to-version target exits successfully without running the installer.
+	previousRunner := updateRunCommand
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousExecutablePath := resolveUpdateExecutablePathFunc
+	defer func() {
+		updateRunCommand = previousRunner
+		resolveUpdateTargetVersionFunc = previousResolver
+		resolveUpdateExecutablePathFunc = previousExecutablePath
+	}()
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		t.Fatal("updateRunCommand must not run when --to-version selects the current dispatcher")
+		return nil
+	}
+	resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
+		return options, nil
+	}
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/tmp/uloop", nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(
+		context.Background(),
+		[]string{clicore.UpdateCommandName, "--to-version", dispatcherVersion},
+		&stdout,
+		&stderr)
+
+	if !handled || code != 0 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	expected := "uloop dispatcher is already up to date (" + dispatcherVersion + ")."
+	if !strings.Contains(stdout.String(), expected) {
+		t.Fatalf("update output mismatch: %s", stdout.String())
+	}
+}
+
+func TestTryHandleUpdateRequestRunsInstallerWhenResolvedTargetIsNewer(t *testing.T) {
+	// Verifies a resolved target newer than the current dispatcher still runs the installer.
+	skipWhenNativeUpdateIsUnsupported(t)
+	previousRunner := updateRunCommand
+	previousReader := dispatcherReadInstalledVersion
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousExecutablePath := resolveUpdateExecutablePathFunc
+	defer func() {
+		updateRunCommand = previousRunner
+		dispatcherReadInstalledVersion = previousReader
+		resolveUpdateTargetVersionFunc = previousResolver
+		resolveUpdateExecutablePathFunc = previousExecutablePath
+	}()
+	installerRan := false
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		installerRan = true
+		return nil
+	}
+	dispatcherReadInstalledVersion = func(context.Context) (string, error) {
+		return "999.0.0", nil
+	}
+	resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
+		options.TargetVersion = "999.0.0"
+		return options, nil
+	}
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/tmp/uloop", nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{clicore.UpdateCommandName}, &stdout, &stderr)
+
+	if !handled || code != 0 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !installerRan {
+		t.Fatal("expected updateRunCommand to run for a newer target")
+	}
+}
+
+func TestTryHandleUpdateRequestRejectsEmptyResolvedTarget(t *testing.T) {
+	// Verifies an empty resolved target fails instead of reporting a false already-current success.
+	previousRunner := updateRunCommand
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousExecutablePath := resolveUpdateExecutablePathFunc
+	defer func() {
+		updateRunCommand = previousRunner
+		resolveUpdateTargetVersionFunc = previousResolver
+		resolveUpdateExecutablePathFunc = previousExecutablePath
+	}()
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		t.Fatal("updateRunCommand must not run for an empty resolved target")
+		return nil
+	}
+	resolveUpdateTargetVersionFunc = func(_ context.Context, options update.Options) (update.Options, error) {
+		options.TargetVersion = ""
+		return options, nil
+	}
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/tmp/uloop", nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{clicore.UpdateCommandName}, &stdout, &stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "expected semantic version") {
+		t.Fatalf("expected invalid resolved target error, got: %s", stderr.String())
+	}
+	if strings.Contains(stdout.String(), "already up to date") {
+		t.Fatalf("empty resolved target must not report success: %s", stdout.String())
+	}
+}
+
 func TestUpdateRefusesHomebrewManagedExecutable(t *testing.T) {
 	// Verifies Homebrew-managed installs refuse self-update and point users at brew upgrade.
 	previousResolver := resolveUpdateExecutablePathFunc
@@ -394,6 +545,47 @@ func TestUpdateRefusesHomebrewManagedExecutable(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "brew upgrade uloop") {
 		t.Fatalf("expected brew upgrade guidance in stderr, got: %s", stderr.String())
+	}
+}
+
+func TestUpdateRefusesCurrentTargetForHomebrewManagedExecutable(t *testing.T) {
+	// Verifies the Homebrew guard keeps brew guidance ahead of current-target resolution.
+	previousExecutablePath := resolveUpdateExecutablePathFunc
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousRunner := updateRunCommand
+	defer func() {
+		resolveUpdateExecutablePathFunc = previousExecutablePath
+		resolveUpdateTargetVersionFunc = previousResolver
+		updateRunCommand = previousRunner
+	}()
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/opt/homebrew/Cellar/uloop/3.0.0/bin/uloop", nil
+	}
+	resolveUpdateTargetVersionFunc = func(context.Context, update.Options) (update.Options, error) {
+		t.Fatal("target resolution must not run before the Homebrew guard")
+		return update.Options{}, nil
+	}
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		t.Fatal("updateRunCommand must not run for a Homebrew-managed current target")
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(
+		context.Background(),
+		[]string{clicore.UpdateCommandName, "--to-version", dispatcherVersion},
+		&stdout,
+		&stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "brew upgrade uloop") {
+		t.Fatalf("expected brew upgrade guidance in stderr, got: %s", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("expected no stdout output, got: %s", stdout.String())
 	}
 }
 
