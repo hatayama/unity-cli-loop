@@ -125,10 +125,35 @@ func FindUnityProjectRootWithin(startPath string, maxDepth int) (string, error) 
 		return childProjects[0], nil
 	}
 	if len(childProjects) > 1 {
-		return "", fmt.Errorf("multiple Unity projects found under %s; use --project-path to choose one", currentPath)
+		return "", clierrors.MultipleProjectsFoundError{SearchRoot: currentPath}
 	}
 
 	return findUnityProjectRootInParents(currentPath)
+}
+
+// FindUnityProjectRootPreferringParents resolves the enclosing Unity project first and only
+// falls back to a child-directory search when no ancestor is one. Commands that edit an
+// existing project (package, skills) must not let a nested Unity-shaped folder (for example a
+// CI fixture) shadow the project the user is standing in.
+func FindUnityProjectRootPreferringParents(startPath string, maxDepth int) (string, error) {
+	currentPath, err := filepath.Abs(startPath)
+	if err != nil {
+		return "", err
+	}
+
+	projectRoot, parentErr := findUnityProjectRootInParents(currentPath)
+	if parentErr == nil {
+		return projectRoot, nil
+	}
+
+	childProjects := findUnityProjectsInChildren(currentPath, maxDepth)
+	if len(childProjects) == 1 {
+		return childProjects[0], nil
+	}
+	if len(childProjects) > 1 {
+		return "", clierrors.MultipleProjectsFoundError{SearchRoot: currentPath}
+	}
+	return "", parentErr
 }
 
 func findUnityProjectRootInParents(currentPath string) (string, error) {

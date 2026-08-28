@@ -126,15 +126,15 @@ func parsePackageStatusOptions(args []string) error {
 	return nil
 }
 
-// packageProjectSearchDepth matches the child-directory search depth used by `uloop launch`,
-// so both setup-time commands resolve the same project from a repository root.
-const packageProjectSearchDepth = 3
+// defaultProjectSearchDepth is the child-directory search depth shared by every setup-time
+// command (launch, package, skills), so they all resolve the same project from a repository root.
+const defaultProjectSearchDepth = 3
 
 func resolvePackageProjectRoot(startPath string, explicitProjectPath string) (string, error) {
 	if explicitProjectPath != "" {
 		return project.ResolveExplicitProjectRoot(explicitProjectPath)
 	}
-	return project.FindUnityProjectRootWithin(startPath, packageProjectSearchDepth)
+	return project.FindUnityProjectRootPreferringParents(startPath, defaultProjectSearchDepth)
 }
 
 func runPackageInstall(

@@ -80,7 +80,7 @@ func tryHandleLaunchRequestWithDeps(
 func parseLaunchOptions(args []string, globalProjectPath string) (launchOptions, error) {
 	options := launchOptions{
 		projectPath: globalProjectPath,
-		maxDepth:    3,
+		maxDepth:    defaultProjectSearchDepth,
 	}
 
 	for index := 0; index < len(args); index++ {
