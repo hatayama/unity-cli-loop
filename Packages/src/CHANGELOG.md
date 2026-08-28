@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.81](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.80...v3.0.0-beta.81) (2026-08-28)
+
+
+### Bug Fixes
+
+* hot reload no longer fails when an inactive #if region precedes the edited method ([#2450](https://github.com/hatayama/unity-cli-loop/issues/2450)) ([dd78fa3](https://github.com/hatayama/unity-cli-loop/commit/dd78fa3b97424b80ea06955a15a8ab203f380855))
+
 ## [3.0.0-beta.80](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.79...v3.0.0-beta.80) (2026-08-28)
 
 
