@@ -14,7 +14,7 @@ import (
 
 // Verifies the automatic Debug-switch warning gives the exact approved persistence guidance.
 func TestPausePointAutoDebugSwitchWarningRecommendsApprovedStartupCommand(t *testing.T) {
-	const expected = "Code Optimization was Release; switched to Debug and recompiled before arming the pause point. This setting reverts on every Editor restart, and each re-switch costs a full script recompile. After the current task is done, suggest making Debug permanent: with the user's approval, run uloop set-code-optimization debug --startup (machine-wide: applies to every Unity project on this machine; only your project's C# script execution slows down, mainly during Play Mode - the Unity Editor itself is not slowed)."
+	const expected = "Code Optimization was Release; switched to Debug and recompiled before arming the pause point. This setting reverts on every Editor restart, and each re-switch costs a full script recompile. Once the current task reaches a natural stopping point, suggest making Debug permanent: with the user's approval, run uloop set-code-optimization debug --startup (machine-wide: applies to every Unity project on this machine; only your project's C# script execution slows down, mainly during Play Mode - the Unity Editor itself is not slowed)."
 	if pausePointAutoDebugSwitchWarning != expected {
 		t.Fatalf("warning = %q, want %q", pausePointAutoDebugSwitchWarning, expected)
 	}

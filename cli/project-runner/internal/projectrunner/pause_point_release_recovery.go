@@ -16,7 +16,7 @@ import (
 
 const pausePointReleaseCodeOptimizationErrorCode = "PAUSE_POINT_RELEASE_CODE_OPTIMIZATION"
 
-const pausePointAutoDebugSwitchWarning = "Code Optimization was Release; switched to Debug and recompiled before arming the pause point. This setting reverts on every Editor restart, and each re-switch costs a full script recompile. After the current task is done, suggest making Debug permanent: with the user's approval, run uloop set-code-optimization debug --startup (machine-wide: applies to every Unity project on this machine; only your project's C# script execution slows down, mainly during Play Mode - the Unity Editor itself is not slowed)."
+const pausePointAutoDebugSwitchWarning = "Code Optimization was Release; switched to Debug and recompiled before arming the pause point. This setting reverts on every Editor restart, and each re-switch costs a full script recompile. Once the current task reaches a natural stopping point, suggest making Debug permanent: with the user's approval, run uloop set-code-optimization debug --startup (machine-wide: applies to every Unity project on this machine; only your project's C# script execution slows down, mainly during Play Mode - the Unity Editor itself is not slowed)."
 
 const pausePointRecoveryCompileBusyRetryInterval = 2 * time.Second
 

@@ -87,7 +87,7 @@ On a wait timeout or `PAUSE_POINT_EXPIRED`, read `Error.Details.Hint`, then `Rec
 
 ## Requirements & Safety
 
-- On the automatic Debug-switch warning: the pause point is already armed - do not interrupt the task or ask the user mid-flow. The setting reverts on every Editor restart and each re-switch costs a full script recompile, so after finishing the task, propose making Debug the startup default; only if the user approves, run `uloop set-code-optimization debug --startup` (without `--startup` the switch is session-only). It changes a machine-wide preference affecting every Unity project on this machine; only the project's C# script execution slows down, mainly during Play Mode - the Unity Editor itself is not slowed.
+- On the automatic Debug-switch warning: the pause point is already armed - do not interrupt the task or ask the user mid-flow. The setting reverts on every Editor restart and each re-switch costs a full script recompile, so at the next natural stopping point, propose making Debug the startup default; only if the user approves, run `uloop set-code-optimization debug --startup` (without `--startup` the switch is session-only). It changes a machine-wide preference affecting every Unity project on this machine; only the project's C# script execution slows down, mainly during Play Mode - the Unity Editor itself is not slowed.
 
 - Patches do not survive compiles or domain reloads — re-enable afterwards (a Play entry with Domain Reload enabled removes every source pause point; the enable response warns). `uloop compile` during PlayMode also resets the session.
 - Physics message methods, their helpers, and pre-bound delegates can miss hits on pre-existing GameObjects; the enable response warns where detectable.
