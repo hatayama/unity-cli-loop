@@ -29,8 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Emit_InactiveIfRegionBeforeMethod_DisabledTextDoesNotLeakIntoShim()
         {
-            string source = ReadFixtureSource();
-            TransformWorkerClientResult result = await RunWorkerOnFixtureAsync(source);
+            TransformWorkerClientResult result = await RunWorkerOnFixtureAsync();
             string shimSource = result.Output.shimSource;
 
             Assert.That(shimSource, Does.Not.Contain("_uloopDisabledGuardedField"));
@@ -38,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(shimSource, Does.Contain("GuardedNeighborMethod__shim"));
         }
 
-        private static async Task<TransformWorkerClientResult> RunWorkerOnFixtureAsync(string source)
+        private static async Task<TransformWorkerClientResult> RunWorkerOnFixtureAsync()
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string sourcePath = Path.Combine(projectRoot, ProjectRelativePath.Replace('/', Path.DirectorySeparatorChar));
@@ -49,13 +48,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.shimSource, Is.Not.Null.And.Not.Empty);
             return result;
-        }
-
-        private static string ReadFixtureSource()
-        {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string sourcePath = Path.Combine(projectRoot, ProjectRelativePath.Replace('/', Path.DirectorySeparatorChar));
-            return File.ReadAllText(sourcePath);
         }
 
         private static async Task<TransformWorkerClientResult> RunWorkerOnSourceAsync(
