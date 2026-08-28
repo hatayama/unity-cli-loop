@@ -52,16 +52,20 @@ internal static class ShimMethodFactory
 
     // Why strip directives: #if sits on the method's leading trivia while its matching #endif
     // belongs to the next token, so copied directives are unbalanced in the shim; #line mapping
-    // is injected later from annotations and needs no user directives.
+    // is injected later from annotations and needs no user directives. Disabled text from an
+    // inactive #if region would otherwise lose its guarding directives and become live code
+    // inside the static shim class, causing CS0708 for instance fields.
     private static SyntaxTriviaList StripDirectiveTrivia(SyntaxTriviaList trivia)
     {
         List<SyntaxTrivia> kept = new List<SyntaxTrivia>();
         foreach (SyntaxTrivia item in trivia)
         {
-            if (!item.IsDirective)
+            if (item.IsDirective || item.IsKind(SyntaxKind.DisabledTextTrivia))
             {
-                kept.Add(item);
+                continue;
             }
+
+            kept.Add(item);
         }
 
         return SyntaxFactory.TriviaList(kept);
