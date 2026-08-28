@@ -87,10 +87,7 @@ On a wait timeout or `PAUSE_POINT_EXPIRED`, read `Error.Details.Hint`, then `Rec
 
 ## Requirements & Safety
 
-- When an enable response carries the automatic Debug-switch warning, tell the user that the Debug setting reverts on every Editor restart and each re-switch costs a full script recompile, and propose making Debug the startup default. Run `uloop set-code-optimization debug --startup` only after the user approves - it changes a machine-wide preference that affects every Unity project on this machine. Reassure the user that only the project's C# script execution slows down (mainly during Play Mode); the Unity Editor itself is not slowed.
-
-`uloop set-code-optimization debug` switches only the current session (it reverts on restart);
-with `--startup` it also makes Debug the machine-wide startup default.
+- On the automatic Debug-switch warning: the setting reverts on every Editor restart and each re-switch costs a full script recompile. Propose making Debug the startup default; only after the user approves, run `uloop set-code-optimization debug --startup` (without `--startup` the switch is session-only). It changes a machine-wide preference affecting every Unity project on this machine; only the project's C# script execution slows down, mainly during Play Mode - the Unity Editor itself is not slowed.
 
 - Patches do not survive compiles or domain reloads — re-enable afterwards (a Play entry with Domain Reload enabled removes every source pause point; the enable response warns). `uloop compile` during PlayMode also resets the session.
 - Physics message methods, their helpers, and pre-bound delegates can miss hits on pre-existing GameObjects; the enable response warns where detectable.
@@ -102,11 +99,11 @@ with `--startup` it also makes Debug the machine-wide startup default.
 
 All live in `references/` beside this skill; read the one whose trigger matches:
 
-- `references/quick-check-template.md` — complete trigger/await loop and response fields.
-- `references/captured-variables.md` — captures, filters, expectations, caller frames, raw values.
-- `references/capture-modes-and-history.md` — modes, history, and hit conditions.
-- `references/line-placement.md` — choosing reliable lines.
+- `references/quick-check-template.md` — full `--trigger`/`--await`/`--resume-play` loop, timeouts, hit fields.
+- `references/captured-variables.md` — captures, name filters, `--expect` value forms, caller frames, raw values.
+- `references/capture-modes-and-history.md` — modes, history, `--max-history`, `--hit-when`.
+- `references/line-placement.md` — choosing the line: every-frame lines, held input, input+N frames.
 - `references/watch-expressions.md` — watch rules.
 - `references/condition-triggered-pause.md` — runtime-condition pauses.
-- `references/fast-progressing-games.md` — paused setup and resume.
+- `references/fast-progressing-games.md` — freezing self-progressing games, `--resume-play`.
 - `references/troubleshooting.md` — timeouts, missed hits, hot reload, failure codes.

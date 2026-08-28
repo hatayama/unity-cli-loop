@@ -1,3 +1,5 @@
+using UnityEditor;
+
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -7,7 +9,7 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Tests the persistent Code Optimization bridge contract without changing Editor preferences.
+    /// Tests the persistent Code Optimization bridge contract while restoring Editor preferences.
     /// </summary>
     [TestFixture]
     public sealed class SetCodeOptimizationBridgeCommandTests
@@ -22,6 +24,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 UnityCliLoopConstants.COMMAND_NAME_SET_CODE_OPTIMIZATION_DEBUG_STARTUP);
 
             Assert.That(isInternal, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies startup Debug persistence reports the previous value and confirms its readback.
+        /// </summary>
+        [Test]
+        public void PersistStartupDebugPreference_PersistsAndReportsVerifiedDebug()
+        {
+            const string editorPrefsKey = "ScriptDebugInfoEnabled";
+            bool hadOriginalValue = EditorPrefs.HasKey(editorPrefsKey);
+            bool originalValue = EditorPrefs.GetBool(editorPrefsKey, false);
+
+            try
+            {
+                EditorPrefs.SetBool(editorPrefsKey, false);
+
+                StartupDebugPreferenceResult result =
+                    SetCodeOptimizationDebugStartupBridgeCommand.PersistStartupDebugPreference();
+
+                Assert.That(result.Previous, Is.False);
+                Assert.That(result.Current, Is.True);
+                Assert.That(result.Verified, Is.True);
+                Assert.That(EditorPrefs.GetBool(editorPrefsKey, false), Is.True);
+            }
+            finally
+            {
+                if (hadOriginalValue)
+                {
+                    EditorPrefs.SetBool(editorPrefsKey, originalValue);
+                }
+                else
+                {
+                    EditorPrefs.DeleteKey(editorPrefsKey);
+                }
+            }
         }
 
         /// <summary>
