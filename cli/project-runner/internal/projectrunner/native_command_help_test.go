@@ -84,6 +84,36 @@ func TestRunProjectLocalPausePointStatusHelpOptionsSection(t *testing.T) {
 	assertNativeCommandHelpOptionsSection(t, "pause-point-status", expectedOptions)
 }
 
+// Verifies set-code-optimization help exposes its required debug mode and optional startup flag.
+func TestRunProjectLocalSetCodeOptimizationHelpOutput(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunProjectLocal(
+		context.Background(),
+		[]string{"set-code-optimization", "--help"},
+		&stdout,
+		&stderr)
+
+	if code != 0 {
+		t.Fatalf("set-code-optimization --help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	const expected = "Usage:\n" +
+		"  uloop set-code-optimization debug [options]\n" +
+		"\n" +
+		"Switch Unity's Code Optimization to Debug for this session or, with approval, as the machine-wide startup default\n" +
+		"\n" +
+		"Options:\n" +
+		"  --startup                          Also set the machine-wide startup preference to Debug\n" +
+		"\n" +
+		"Global options:\n" +
+		"  --project-path <path>   Run against a Unity project outside the current directory\n"
+	if stdout.String() != expected {
+		t.Fatalf("set-code-optimization --help output mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expected)
+	}
+}
+
 // Verifies list --help prints the complete names-only option contract, including the usage and
 // global options sections that callers need after the unknown-option recovery guidance.
 func TestRunProjectLocalListHelpOutput(t *testing.T) {

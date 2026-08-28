@@ -31,6 +31,14 @@ func runnerNativeCLIOnlyOptions(command string) []tooldocs.PausePointCLIOnlyOpti
 		return tooldocs.PausePointAwaitCLIOnlyOptions()
 	case clicore.PausePointStatusUserCommandName:
 		return tooldocs.PausePointStatusCLIOnlyOptions()
+	case clicore.SetCodeOptimizationCommandName:
+		return []tooldocs.PausePointCLIOnlyOption{
+			{
+				FlagName:    "startup",
+				Type:        "boolean",
+				Description: "Also set the machine-wide startup preference to Debug",
+			},
+		}
 	default:
 		return nil
 	}
@@ -56,7 +64,7 @@ func printNativeCommandHelp(command string, stdout io.Writer) {
 
 	clicore.WriteLine(stdout, "Usage:")
 	if len(helpEntries) > 0 {
-		clicore.WriteFormat(stdout, "  uloop %s [options]\n", command)
+		clicore.WriteFormat(stdout, "  %s\n", nativeCommandUsage(command, true))
 		clicore.WriteLine(stdout, "")
 		clicore.WriteLine(stdout, entry.Description)
 		clicore.WriteLine(stdout, "")
@@ -67,7 +75,7 @@ func printNativeCommandHelp(command string, stdout io.Writer) {
 			clicore.WriteFormat(stdout, "  %-34s %s\n", helpEntry.Usage, helpEntry.Description)
 		}
 	} else {
-		clicore.WriteFormat(stdout, "  uloop %s\n", command)
+		clicore.WriteFormat(stdout, "  %s\n", nativeCommandUsage(command, false))
 		clicore.WriteLine(stdout, "")
 		clicore.WriteLine(stdout, entry.Description)
 	}
@@ -82,6 +90,16 @@ func printNativeCommandHelp(command string, stdout io.Writer) {
 		clicore.WriteLine(stdout, "")
 		clicore.WriteLine(stdout, guidance)
 	}
+}
+
+func nativeCommandUsage(command string, hasOptions bool) string {
+	if command == clicore.SetCodeOptimizationCommandName {
+		return "uloop set-code-optimization debug [options]"
+	}
+	if hasOptions {
+		return "uloop " + command + " [options]"
+	}
+	return "uloop " + command
 }
 
 func sortedNativeCommandHelpEntries(entries []tooldocs.OptionHelpEntry) []tooldocs.OptionHelpEntry {

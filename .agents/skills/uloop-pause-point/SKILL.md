@@ -5,11 +5,9 @@ description: "Pauses Unity playback at any source file:line without editing code
 
 # uloop await-pause-point
 
-A pause point is the standard frame proof for verifying simulated input, physics, or UI transitions; sleeps and after-the-fact reads are not substitutes. Skip it only for persistent-state checks that do not validate input delivery, event ordering, or transition-frame fidelity. It is patched into the already-compiled code — no source edit — and captures locals and branch reasons `execute-dynamic-code` cannot reach.
+A pause point captures locals and branch reasons at an exact frame without a source edit. Use it instead of sleeps or after-the-fact reads when input delivery, event ordering, or transition-frame fidelity matters.
 
 ## Quick Check
-
-The standard loop for one representative frame:
 
 1. Enter PlayMode. If the game progresses on its own, pause it with `control-play-mode --action Pause`, arrange the scenario while paused, and add `--resume-play` in step 2.
 2. Arm the marker, fire the input, and wait for the hit in one foreground command:
@@ -85,11 +83,15 @@ Clear one or all registered C# watch expressions
 
 `uloop pause-point-status` with no target lists every marker; inspect one with `--id "<file>:<line>"` or with `--file`/`--line` together (never both). `await-pause-point` takes the same two forms but always requires a target.
 
-On a wait timeout or `PAUSE_POINT_EXPIRED`, read `Error.Details.Hint` first, then follow `RecommendedNextAction`; `MethodEntryCount` interpretation is in `references/troubleshooting.md`. After a hot reload of the target file, pass `--method <Type.Method>` so `--line` stays inside the intended method.
+On a wait timeout or `PAUSE_POINT_EXPIRED`, read `Error.Details.Hint`, then `RecommendedNextAction`; see `references/troubleshooting.md` for diagnosis. After hot reload, use `--method <Type.Method>` to constrain `--line`.
 
 ## Requirements & Safety
 
-- Release Code Optimization is switched to Debug (with a recompile) before arming; the switch reverts on the next Editor restart.
+- When an enable response carries the automatic Debug-switch warning, tell the user that the Debug setting reverts on every Editor restart and each re-switch costs a full script recompile, and propose making Debug the startup default. Run `uloop set-code-optimization debug --startup` only after the user approves - it changes a machine-wide preference that affects every Unity project on this machine. Reassure the user that only the project's C# script execution slows down (mainly during Play Mode); the Unity Editor itself is not slowed.
+
+`uloop set-code-optimization debug` switches only the current session (it reverts on restart);
+with `--startup` it also makes Debug the machine-wide startup default.
+
 - Patches do not survive compiles or domain reloads — re-enable afterwards (a Play entry with Domain Reload enabled removes every source pause point; the enable response warns). `uloop compile` during PlayMode also resets the session.
 - Physics message methods, their helpers, and pre-bound delegates can miss hits on pre-existing GameObjects; the enable response warns where detectable.
 - An `--id` marker waits on a hand-written `UloopPausePoint.Pause(id)` call; its hits record no `CapturedVariables`.
@@ -100,11 +102,11 @@ On a wait timeout or `PAUSE_POINT_EXPIRED`, read `Error.Details.Hint` first, the
 
 All live in `references/` beside this skill; read the one whose trigger matches:
 
-- `references/quick-check-template.md` — full loop: `--trigger`/`--await`/`--resume-play`, split steps, timeouts, hit fields.
-- `references/captured-variables.md` — `CapturedVariables`, previews/truncation, name filters, `--expect` value forms, caller frames, raw capture API.
-- `references/capture-modes-and-history.md` — mode details, history, `--max-history`, `--hit-when`.
-- `references/line-placement.md` — choosing the line to arm, every-frame lines, held input, input+N frames.
-- `references/watch-expressions.md` — watch evaluation rules.
-- `references/condition-triggered-pause.md` — pausing on a runtime condition (id-only marker + watcher).
-- `references/fast-progressing-games.md` — freezing self-progressing games, `--resume-play`, `ResumePlayResult`.
-- `references/troubleshooting.md` — timeouts, `HitCount` 0, physics misses, hot-reload line resolution, failure codes.
+- `references/quick-check-template.md` — complete trigger/await loop and response fields.
+- `references/captured-variables.md` — captures, filters, expectations, caller frames, raw values.
+- `references/capture-modes-and-history.md` — modes, history, and hit conditions.
+- `references/line-placement.md` — choosing reliable lines.
+- `references/watch-expressions.md` — watch rules.
+- `references/condition-triggered-pause.md` — runtime-condition pauses.
+- `references/fast-progressing-games.md` — paused setup and resume.
+- `references/troubleshooting.md` — timeouts, missed hits, hot reload, failure codes.
