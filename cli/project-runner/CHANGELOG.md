@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.70](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.69...uloop-project-runner-v3.0.0-beta.70) (2026-08-28)
+
+
+### Bug Fixes
+
+* package install now finds the Unity project from the repository root ([#2448](https://github.com/hatayama/unity-cli-loop/issues/2448)) ([84e38db](https://github.com/hatayama/unity-cli-loop/commit/84e38dbc726110fbc37167b5dabd41608b59df7e))
+
 ## [3.0.0-beta.69](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.68...uloop-project-runner-v3.0.0-beta.69) (2026-08-28)
 
 

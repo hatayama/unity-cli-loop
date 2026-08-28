@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.37](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.36...dispatcher-v3.0.0-beta.37) (2026-08-28)
+
+
+### Bug Fixes
+
+* package install now finds the Unity project from the repository root ([#2448](https://github.com/hatayama/unity-cli-loop/issues/2448)) ([84e38db](https://github.com/hatayama/unity-cli-loop/commit/84e38dbc726110fbc37167b5dabd41608b59df7e))
+
 ## [3.0.0-beta.36](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.35...dispatcher-v3.0.0-beta.36) (2026-08-28)
 
 
