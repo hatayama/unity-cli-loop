@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0-beta.69](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.68...uloop-project-runner-v3.0.0-beta.69) (2026-08-28)
+
+
+### Features
+
+* add set-code-optimization command and recommend permanent Debug for pause-point ([#2442](https://github.com/hatayama/unity-cli-loop/issues/2442)) ([3c54031](https://github.com/hatayama/unity-cli-loop/commit/3c540310a4e5a6a51ecccc5e04a47c6951a3352a))
+
 ## [3.0.0-beta.68](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.67...uloop-project-runner-v3.0.0-beta.68) (2026-08-27)
 
 
