@@ -91,6 +91,51 @@ func TestFindUnityProjectRootWithinRejectsAmbiguousNestedProjects(t *testing.T) 
 	}
 }
 
+// Verifies parents-first resolution prefers the enclosing Unity project over a nested
+// Unity-shaped child folder (for example a CI fixture) when starting from a subdirectory.
+func TestFindUnityProjectRootPreferringParentsPrefersEnclosingProject(t *testing.T) {
+	projectRoot := t.TempDir()
+	createUnityProject(t, projectRoot)
+	createUnityProject(t, filepath.Join(projectRoot, "ci", "fixtures", "NestedApp"))
+
+	resolved, err := FindUnityProjectRootPreferringParents(filepath.Join(projectRoot, "ci"), 3)
+	if err != nil {
+		t.Fatalf("FindUnityProjectRootPreferringParents failed: %v", err)
+	}
+	if resolved != projectRoot {
+		t.Fatalf("must resolve enclosing project, got: %s", resolved)
+	}
+}
+
+// Verifies parents-first resolution falls back to the child search when no ancestor is a Unity project.
+func TestFindUnityProjectRootPreferringParentsFallsBackToChildSearch(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	projectRoot := filepath.Join(workspaceRoot, "nested", "Game")
+	createUnityProject(t, projectRoot)
+
+	resolved, err := FindUnityProjectRootPreferringParents(workspaceRoot, 3)
+	if err != nil {
+		t.Fatalf("FindUnityProjectRootPreferringParents failed: %v", err)
+	}
+	if resolved != projectRoot {
+		t.Fatalf("project root mismatch: %s", resolved)
+	}
+}
+
+// Verifies the ambiguous child fallback classifies as MultipleProjectsFoundError instead of an internal error.
+func TestFindUnityProjectRootPreferringParentsRejectsAmbiguousChildren(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	createUnityProject(t, filepath.Join(workspaceRoot, "first", "Game"))
+	createUnityProject(t, filepath.Join(workspaceRoot, "second", "Game"))
+
+	_, err := FindUnityProjectRootPreferringParents(workspaceRoot, 3)
+
+	var multipleErr clierrors.MultipleProjectsFoundError
+	if !stderrors.As(err, &multipleErr) {
+		t.Fatalf("expected MultipleProjectsFoundError, got %T: %v", err, err)
+	}
+}
+
 func TestFindUnityProjectRootWithinHonorsMaxDepth(t *testing.T) {
 	workspaceRoot := t.TempDir()
 	projectRoot := filepath.Join(workspaceRoot, "nested", "Game")

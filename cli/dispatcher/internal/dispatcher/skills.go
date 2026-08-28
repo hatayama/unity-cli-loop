@@ -204,13 +204,13 @@ func resolveSkillsProjectRoot(startPath string, explicitProjectPath string, glob
 		return project.ResolveExplicitProjectRoot(explicitProjectPath)
 	}
 	if global {
-		projectRoot, err := project.FindUnityProjectRoot(startPath)
+		projectRoot, err := project.FindUnityProjectRootPreferringParents(startPath, defaultProjectSearchDepth)
 		if err == nil {
 			return projectRoot, nil
 		}
 		return "", nil
 	}
-	return project.FindUnityProjectRoot(startPath)
+	return project.FindUnityProjectRootPreferringParents(startPath, defaultProjectSearchDepth)
 }
 
 func runSkillsList(projectRoot string, skills []skillDefinition, options skillCommandOptions, stdout io.Writer, stderr io.Writer) int {

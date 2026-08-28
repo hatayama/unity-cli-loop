@@ -14,6 +14,20 @@ func (err ProjectNotFoundError) ToCLIError(context ErrorContext) CLIError {
 	return projectResolveCLIError(err.Error(), context)
 }
 
+type MultipleProjectsFoundError struct {
+	SearchRoot string
+}
+
+func (err MultipleProjectsFoundError) Error() string {
+	return fmt.Sprintf(
+		"multiple Unity projects found under %s; use --project-path to choose one",
+		err.SearchRoot)
+}
+
+func (err MultipleProjectsFoundError) ToCLIError(context ErrorContext) CLIError {
+	return projectResolveCLIError(err.Error(), context)
+}
+
 type NotUnityProjectError struct {
 	ProjectRoot string
 	Suggestion  string
