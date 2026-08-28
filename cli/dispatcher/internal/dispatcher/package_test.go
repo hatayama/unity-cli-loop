@@ -490,3 +490,87 @@ func stubOpenUPMRegistry(t *testing.T, body string) func() {
 		packageRegistryHTTPClient = previousClient
 	}
 }
+
+// Verifies install resolves a Unity project in a child directory when run from a repository root.
+func TestPackageInstallFindsProjectInChildDirectory(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
+		t.Fatalf("failed to create .git: %v", err)
+	}
+	projectRoot := filepath.Join(repoRoot, "client", "UnityApp")
+	createPackageProjectAt(t, projectRoot, barePackageManifest())
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(
+		context.Background(),
+		[]string{"package", "install", "--version", "9.9.9"},
+		&stdout,
+		&stderr,
+	)
+	if code != 0 {
+		t.Fatalf("package install failed: code=%d stderr=%s", code, stderr.String())
+	}
+
+	content := readPackageManifest(t, projectRoot)
+	if !strings.Contains(content, `"`+dispatcherUnityPackageName+`": "9.9.9"`) {
+		t.Fatalf("dependency missing from manifest:\n%s", content)
+	}
+}
+
+// Verifies install fails with guidance when multiple Unity projects exist under the start directory.
+func TestPackageInstallFailsWithMultipleChildProjects(t *testing.T) {
+	repoRoot := t.TempDir()
+	createPackageProjectAt(t, filepath.Join(repoRoot, "AppA"), barePackageManifest())
+	createPackageProjectAt(t, filepath.Join(repoRoot, "AppB"), barePackageManifest())
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(
+		context.Background(),
+		[]string{"package", "install", "--version", "9.9.9"},
+		&stdout,
+		&stderr,
+	)
+	if code == 0 {
+		t.Fatalf("package install must fail with multiple candidate projects: stdout=%s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "--project-path") {
+		t.Fatalf("error must guide toward --project-path:\n%s", stderr.String())
+	}
+}
+
+// Verifies status resolves a Unity project in a child directory when run from a repository root.
+func TestPackageStatusFindsProjectInChildDirectory(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755); err != nil {
+		t.Fatalf("failed to create .git: %v", err)
+	}
+	createPackageProjectAt(t, filepath.Join(repoRoot, "UnityApp"), barePackageManifest())
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := RunDispatcher(context.Background(), []string{"package", "status"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("package status failed: code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Dependency: not installed") {
+		t.Fatalf("status output unexpected:\n%s", stdout.String())
+	}
+}
+
+func createPackageProjectAt(t *testing.T, projectRoot string, manifest string) {
+	t.Helper()
+	for _, directory := range []string{"Assets", "ProjectSettings", "Packages"} {
+		if err := os.MkdirAll(filepath.Join(projectRoot, directory), 0o755); err != nil {
+			t.Fatalf("failed to create %s: %v", directory, err)
+		}
+	}
+	manifestPath := filepath.Join(projectRoot, "Packages", "manifest.json")
+	if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+}
