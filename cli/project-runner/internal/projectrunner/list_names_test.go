@@ -44,7 +44,7 @@ func TestRunResolvedProjectCommandListNamesWritesNativeAndLiveToolNames(t *testi
 		t.Fatalf("list --names failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 
-	const expected = "launch\nlist\nsync\nfocus-window\nawait-pause-point\npause-point-status\nskills\npackage\ninstall\nupdate\nuninstall\nversion\nenable-watch\nclear-watch\nget-watch-values\n"
+	const expected = "launch\nlist\nsync\nfocus-window\nawait-pause-point\npause-point-status\nset-code-optimization\nskills\npackage\ninstall\nupdate\nuninstall\nversion\nenable-watch\nclear-watch\nget-watch-values\n"
 	if stdout.String() != expected {
 		t.Fatalf("list --names output mismatch:\n got:\n%s\nwant:\n%s", stdout.String(), expected)
 	}
@@ -58,7 +58,7 @@ func TestRunResolvedProjectCommandListNamesWritesNativeAndLiveToolNames(t *testi
 // Verifies list accepts repeated names selectors but rejects value assignment and positional
 // arguments with the complete stable INVALID_ARGUMENT envelope.
 func TestRunListOptionBoundaries(t *testing.T) {
-	const namesOutput = "launch\nlist\nsync\nfocus-window\nawait-pause-point\npause-point-status\nskills\npackage\ninstall\nupdate\nuninstall\nversion\n"
+	const namesOutput = "launch\nlist\nsync\nfocus-window\nawait-pause-point\npause-point-status\nset-code-optimization\nskills\npackage\ninstall\nupdate\nuninstall\nversion\n"
 	const namesAssignmentError = "{\n" +
 		"  \"Success\": false,\n" +
 		"  \"Error\": {\n" +

@@ -205,7 +205,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Automatic Debug switch and recompile did not succeed. Confirm Code Optimization is Debug "
             + "(the bug icon in the main toolbar), run uloop compile, then retry enable-pause-point. "
             + "Note: the Debug setting reverts to the 'Code Optimization On Startup' preference "
-            + "whenever the Editor restarts, including uloop launch -r.";
+            + "whenever the Editor restarts, including uloop launch -r. "
+            + "To make Unity start in Debug permanently, run: uloop set-code-optimization debug --startup "
+            + "(machine-wide: applies to every Unity project on this machine; only your project's C# script "
+            + "execution slows down, mainly during Play Mode - the Unity Editor itself is not slowed).";
 
         // Why fill when empty: some Expired snapshots reach the response with no next
         // action, and agents then have no recovery for a timeout that fired during setup.
