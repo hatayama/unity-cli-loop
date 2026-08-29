@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - v3-beta
   # Enable manual execution via "Run workflow" button in browser
   workflow_dispatch:
     inputs:
@@ -105,14 +104,14 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Go for release PR automation
-        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'
+        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
           go-version-file: cli/.go-version
           cache-dependency-path: '**/go.sum'
 
       - name: Dispatch release PR checks
-        if: steps.target.outputs.branch == 'v3-beta' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'
+        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'
         working-directory: cli/release-automation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

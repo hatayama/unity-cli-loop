@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - v3-beta
   workflow_dispatch:
     inputs:
       dry-run:
@@ -19,7 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
       actions: write
@@ -185,7 +184,7 @@ jobs:
             echo "Build SHA and release target must match the approved event commit." >&2
             exit 1
           fi
-          if [ "${event_ref}" != "refs/heads/main" ] && [ "${event_ref}" != "refs/heads/v3-beta" ]; then
+          if [ "${event_ref}" != "refs/heads/main" ]; then
             echo "Unsupported release ref ${event_ref}." >&2
             exit 1
           fi
