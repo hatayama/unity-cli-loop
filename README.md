@@ -21,8 +21,8 @@ Let an AI agent compile, test, and operate your Unity project from popular LLM t
 Designed to keep AI-driven development loops running autonomously inside your existing Unity projects.
 
 > [!IMPORTANT]
-> - **[What's New in V3](Packages/src/Documentation~/whats-new-v3.md)** — the move to a native Go CLI, the end of port management, the new `hot-reload` / `pause-point` tools, automatic CLI updates with per-project version selection, and connections that stay stable with Unity in the background or several Editors running in parallel
-> - **[Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md)** — for anyone with C# custom tools or hand-written skills/scripts that invoke `uloop`. Everyone else migrates just by updating the package and the CLI
+> - **[What's New in V3](Packages/src/Documentation~/whats-new-v3.md)** — no more Node.js setup or port management, the new `hot-reload` / `pause-point` tools, automatic CLI updates with per-project version selection, and improved connection stability
+> - **[Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md)** — for anyone who has written C# custom tools, or skills and scripts that call the `uloop` command. Everyone else migrates just by updating the package and the CLI
 
 # Concept
 Unity CLI Loop is a Unity integration tool designed so that **AI can drive your Unity project forward with minimal human intervention**.
@@ -37,204 +37,131 @@ Unity CLI Loop is built around four core ideas:
 
 https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
-# Installation
-
-This section installs the Unity package. The CLI itself (a native binary) is installed after the package, in [Quickstart Step 1](#step-1-install-the-cli). A terminal-only way to install the CLI without going through Unity is folded into the same step.
-
-## Via Unity Package Manager
-
-1. Open Unity Editor
-2. Open Window > Package Manager
-3. Click the "+" button
-4. Select "Add package from git URL"
-5. Enter the following URL:
-```text
-https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
-```
-
-## Via OpenUPM (Recommended)
-
-After the global `uloop` CLI is on PATH, install the Unity package from a terminal at the project root (or pass `--project-path`):
-
-```bash
-uloop package install
-uloop package status
-```
-
-`uloop package install` writes the OpenUPM scoped registry and the `io.github.hatayama.uloopmcp` dependency into `Packages/manifest.json`. Pass `--version <x.y.z>` to pin a specific package version instead of OpenUPM `dist-tags.latest`. Use `uloop package status` to confirm the registry and dependency are present.
-
-### Manual setup in Unity Package Manager
-
-1. Open Project Settings window and go to Package Manager page
-2. Add the following entry to the Scoped Registries list:
-```text
-Name: OpenUPM
-URL: https://package.openupm.com
-Scope(s): io.github.hatayama.uloopmcp
-```
-
-3. Open Package Manager window and select OpenUPM in the My Registries section. Unity CLI Loop will be displayed.
-
 # Quickstart
 
-## Step 1: Install the CLI
+This guide installs three things — the CLI, the Unity package, and the skills — so that your LLM tool can drive Unity. You can install everything from the terminal or from the Unity UI; either path is complete on its own.
 
-Select Window > Unity CLI Loop > Settings. A dedicated window will open. If the **CLI** button is not highlighted in blue, press **Install CLI**.
+## Before you begin
 
-The installer places the global `uloop` command on PATH. Project-specific `uloop-project-runner` binaries are downloaded into the user cache automatically from each project's `.uloop/project-runner-pin.json`.
+Make sure you have:
 
-<details>
-<summary>Working with V2 projects side by side</summary>
-
-Keep the v3 dispatcher installed when working with both v2 and v3 projects. If Unity resolves a project to a v2 `io.github.hatayama.uloopmcp` package, the dispatcher automatically installs the matching v2 `uloop-cli` release into its versioned user cache and delegates the command to it. The resolved package version takes precedence over a stale v3 project-runner pin left after a downgrade. The initial npm installation and the v2-mode notice are written to stderr so stdout remains the delegated command's output. V3 projects continue to use the project runner selected by their pin.
-
-The global `install`, `update`, `uninstall`, and `launch` commands remain owned by the v3 dispatcher in every project. Other project commands and help are delegated for detected v2 projects. The version request is delegated to the v2 CLI (or forwarded to the pinned project runner in a v3 project) only when stdout is not a terminal, so the version parsed by the Unity Settings window stays unchanged; in an interactive terminal `uloop -v` instead prints the dispatcher's own version followed by one line naming the CLI generation that serves the current project.
-
-V2 delegation requires Node.js 22 or later, including npm for the first command that populates the cache. Do not press **Update CLI** or **Downgrade CLI** in a v2 project's Settings window. These buttons are normally hidden because the delegated CLI reports the matching v2 version, but using one can restore a global npm CLI that hides the v3 dispatcher depending on PATH order.
-
-</details>
-
-<details>
-<summary>CLI-only terminal install</summary>
-
-Use this only when you want to install the standalone global CLI without opening Unity package setup.
-
-### Homebrew (macOS)
-
-```bash
-brew install hatayama/tap/uloop
-```
-
-Updates are managed by `brew upgrade uloop`. The formula is refreshed automatically on every dispatcher release.
-
-### Shell installer (curl / PowerShell)
-
-The installer verifies the downloaded archive against the digest list in
-`Packages/src/project-runner-pin.json` (same pin Unity's **Install CLI** button uses).
-Optional env: `ULOOP_REF` (git ref for the pin; default `main`), `ULOOP_INSTALL_DIR`.
-`ULOOP_VERSION` is accepted only when it matches the pin's `dispatcherReleaseTag`.
+- A Unity project on Unity 2022.3 or later
+- An LLM tool that can load skills, such as Claude Code or Codex
 
 > [!NOTE]
-> The terminal install trusts the same repository pin as the Unity GUI. The manual flow that
-> passes an explicit `ULOOP_ARCHIVE_MANIFEST` (derived from Sigstore verification) remains as a
-> hardened option for choosing an arbitrary release tag.
+> **Upgrading from V2**: if the project has custom tools written against the V2 API, compile errors appear right after the V3 package is installed. This is expected. Do not fix them by hand: choose `Ignore` in Unity's Safe Mode prompt on startup, then press **Migrate** in the migration window that opens automatically (`Window > Unity CLI Loop > Custom Tool Migration`). See [Migrating Custom Tools and Skills to V3](Packages/src/Documentation~/migration-v2-to-v3.md) for the full procedure.
 
-On macOS or Windows Git Bash:
+## Install from the terminal
+
+### Step 1: Install the CLI
+
+**macOS, Windows Git Bash:**
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
 ```
 
-On Windows Git Bash the installer extracts the dispatcher zip with `unzip`, then `tar` (bsdtar / Windows tar.exe), then PowerShell `Expand-Archive`. `unzip` is not required when a fallback is available.
-
-On Windows PowerShell:
+**Windows PowerShell:**
 
 ```powershell
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-### Manual attestation-verified install (choose your own release tag)
-
-Install `gh` and `jq` through your operating-system or package channel first. The bootstrap does not install
-or fall back from `gh`. Select the immutable dispatcher Release tag and its source branch; use
-`refs/heads/main` for a main release or `refs/heads/v3-beta` for a v3-beta release.
-
-On macOS or Windows Git Bash:
+**Homebrew (macOS):**
 
 ```bash
-REPOSITORY=hatayama/unity-cli-loop
-RELEASE_TAG=dispatcher-v<RELEASE_VERSION>
-SOURCE_REF=refs/heads/v3-beta
-tmp_dir=$(mktemp -d)
-gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sigstore.json' --dir "$tmp_dir" && \
-tag_sha=$(gh api "repos/$REPOSITORY/commits/$RELEASE_TAG" --jq .sha) && \
-gh attestation verify "$tmp_dir/install.sh" --bundle "$tmp_dir/install.sh.sigstore.json" --repo "$REPOSITORY" --signer-workflow "$REPOSITORY/.github/workflows/dispatcher-publish.yml" --source-ref "$SOURCE_REF" --source-digest "$tag_sha" && \
-manifest=$(jq -r '.dsseEnvelope.payload | @base64d | fromjson | .subject[] | "\(.digest.sha256)  \(.name)"' "$tmp_dir/install.sh.sigstore.json" | LC_ALL=C sort) && \
-ULOOP_VERSION="$RELEASE_TAG" ULOOP_ARCHIVE_MANIFEST="$manifest" sh "$tmp_dir/install.sh"
+brew install hatayama/tap/uloop
 ```
 
-On Windows PowerShell:
+### Step 2: Install the Unity package
 
-```powershell
-$repository = 'hatayama/unity-cli-loop'
-$releaseTag = 'dispatcher-v<RELEASE_VERSION>'
-$sourceRef = 'refs/heads/v3-beta'
-$temporaryDirectory = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
-gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --dir $temporaryDirectory.FullName
-if ($LASTEXITCODE -ne 0) { throw 'Installer download failed.' }
-$tagSha = gh api "repos/$repository/commits/$releaseTag" --jq .sha
-if ($LASTEXITCODE -ne 0) { throw 'Release tag resolution failed.' }
-gh attestation verify (Join-Path $temporaryDirectory.FullName 'install.ps1') --bundle (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') --repo $repository --signer-workflow "$repository/.github/workflows/dispatcher-publish.yml" --source-ref $sourceRef --source-digest $tagSha
-if ($LASTEXITCODE -ne 0) { throw 'Installer attestation verification failed.' }
-$bundle = Get-Content -Raw -Encoding UTF8 (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') | ConvertFrom-Json
-$statement = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($bundle.dsseEnvelope.payload)) | ConvertFrom-Json
-$manifest = [string]::Join("`n", @($statement.subject | ForEach-Object { "$($_.digest.sha256)  $($_.name)" } | Sort-Object))
-$env:ULOOP_VERSION = $releaseTag
-$env:ULOOP_ARCHIVE_MANIFEST = $manifest
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $temporaryDirectory.FullName 'install.ps1')
-```
-
-After installing the native CLI, the installer automatically tries to remove the old npm package with `npm uninstall -g uloop-cli`.
-If npm is unavailable or the old command belongs to a different Node prefix, the installer prints the manual command to run:
+Run this in the root of your Unity project:
 
 ```bash
-npm uninstall -g uloop-cli
+uloop package install
 ```
 
-Do not install a v2 CLI globally to switch projects. If your terminal resolves `uloop` to an old npm installation instead of the native dispatcher, remove the npm installation and reinstall the native dispatcher:
+This adds the OpenUPM scoped registry and the `io.github.hatayama.uloopmcp` dependency to `Packages/manifest.json`. Add `--version <x.y.z>` to pin a specific version.
+
+### Step 3: Install the skills
+
+Run the command for your LLM tool in the root of your Unity project:
 
 ```bash
-npm uninstall -g uloop-cli
-# Run the verified native installer above again.
-which uloop
-uloop --version
+# Claude Code
+uloop skills install --claude
+
+# Codex and other tools that read .agents/skills
+uloop skills install --agents
+
+# Install globally instead of into the project
+uloop skills install --claude --global
+
+# Sync into any directory (e.g. an external skill-package store)
+uloop skills install --output-dir path/to/skills
 ```
 
-On Windows PowerShell:
+### Step 4: Verify the setup
 
-```powershell
-npm uninstall -g uloop-cli
-# Run the verified native installer above again.
-Get-Command uloop
-uloop --version
+With the project open in Unity, run this in the project root:
+
+```bash
+uloop -v
 ```
+
+You are done when the CLI version is followed by the project runner version this project uses:
+
+```text
+3.0.1
+This Unity project pins uloop project runner 3.0.0.
+```
+
+## Install from the Unity UI
+
+### Step 1: Install the Unity package
+
+In `Window > Package Manager`, press "+", choose **Add package from git URL**, and enter:
+
+```text
+https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
+```
+
+<details>
+<summary>Installing from the OpenUPM scoped registry</summary>
+
+1. In `Project Settings > Package Manager`, add this entry to Scoped Registries:
+```text
+Name: OpenUPM
+URL: https://package.openupm.com
+Scope(s): io.github.hatayama.uloopmcp
+```
+2. In `Window > Package Manager`, select OpenUPM under My Registries and install Unity CLI Loop.
 
 </details>
 
+### Step 2: Install the CLI
 
-<img width="350" alt="The Settings window with the CLI not yet installed, showing the Install CLI button" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
+Open `Window > Unity CLI Loop > Settings` and press **Install CLI**:
 
-The Settings window shows whether the global `uloop` command is detected.
+<img width="350" alt="Settings window before the CLI is installed, showing the Install CLI button" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
 
-If you see the following display, the installation was successful.
+You are done when the button disappears and the CLI version is shown:
 
-<img width="350" alt="The Settings window after successful CLI detection, showing a green indicator and the CLI version" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
+<img width="350" alt="Settings window after CLI detection succeeds, showing a green indicator and the CLI version" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
 
-## Step 2: Install Skills
+### Step 3: Install the skills
 
-Select your target (Claude Code, Codex, etc.) and press the **Install Skills** button.
+In the same Settings window, select your target (Claude Code, Codex, etc.) and press **Install Skills**:
 
 <img width="350" alt="The Skills section of the Settings window, with a target selected and the Install Skills button ready" src="Packages/src/Documentation~/images/settings-skills-install.png" />
 
+<details>
+<summary>Working alongside V2 projects</summary>
 
-<details> 
-<summary>To install from terminal</summary>
+Projects on the V2 package and V3 projects can coexist on the same machine. Keep the V3 CLI installed: in a V2 project, the `uloop` command automatically uses the V2 CLI (downloaded on first use; Node.js 22 or later is required).
 
-```bash
-# Install for Claude Code project
-uloop skills install --claude
+Do not press **Update CLI** or **Downgrade CLI** in a V2 project's Settings window, and do not reinstall the V2 CLI with `npm install -g uloop-cli`. The old npm `uloop` would hide the V3 CLI. If that has already happened, run `npm uninstall -g uloop-cli` and then repeat the Step 1 install.
 
-# Install for OpenAI Codex project
-uloop skills install --codex
-
-# Or install globally
-uloop skills install --claude --global
-
-# Or sync into a custom directory (e.g. an external skill-package store),
-# flat as <path>/<skill-name>; unmanaged top-level files there are left
-# untouched (skill-owned directories such as references/ are replaced wholly)
-uloop skills install --output-dir path/to/skills
-```
 </details>
 
 That's it! After installing Skills, LLM tools can automatically handle instructions like these:

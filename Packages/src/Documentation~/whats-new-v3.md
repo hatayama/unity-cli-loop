@@ -2,7 +2,7 @@
 
 English | [日本語](whats-new-v3_ja.md)
 
-V3 replaces the npm-distributed CLI with a native Go binary and moves the transport from TCP port management to OS-native IPC. Driving Unity from an AI agent no longer needs a Node.js setup or any port management. Connection reliability is also improved: connections stay stable while Unity sits in the background, and across multiple Editors running in parallel.
+In V3, driving Unity from an AI agent no longer needs a Node.js setup or any port management. Connection stability is also improved.
 
 CLI version management is gone, too. V2 required manually reinstalling a CLI that matched the package on every update; in V3 you install the CLI once and it updates itself from then on. It also selects the right CLI version per project automatically, so working on projects with different package versions in parallel never requires switching CLIs by hand.
 
