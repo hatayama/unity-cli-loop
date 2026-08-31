@@ -73,6 +73,14 @@ irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/insta
 brew install hatayama/tap/uloop
 ```
 
+Check that the install worked:
+
+```bash
+uloop -v
+```
+
+The install succeeded when the first line shows the CLI version (for example `3.0.1`).
+
 ### Step 2: Install the Unity package
 
 Run this in the root of your Unity project:
@@ -108,23 +116,6 @@ uloop skills install --claude --global
 # Sync into any directory (e.g. an external skill-package store)
 uloop skills install --output-dir path/to/skills
 ```
-
-### Step 4: Verify the setup
-
-With the project open in Unity, run this in the project root:
-
-```bash
-uloop -v
-```
-
-You are done when the CLI version is followed by the project runner version this project uses:
-
-```text
-3.0.1
-This Unity project pins uloop project runner 3.0.0.
-```
-
-When the output is captured instead of shown in a terminal — for example when an AI agent runs the command — only the version line is printed. That is also success.
 
 ## Install from the Unity UI
 
