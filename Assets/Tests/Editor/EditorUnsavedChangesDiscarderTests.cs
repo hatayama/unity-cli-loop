@@ -67,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(failures, Is.Empty);
             Assert.That(reloaded.IsValid(), Is.True);
             Assert.That(reloaded.isDirty, Is.False);
+            Assert.That(GameObject.Find("DiscarderProbe"), Is.Null);
             Assert.That(File.GetLastWriteTimeUtc(TempScenePath), Is.EqualTo(mtimeBefore));
         }
 
@@ -88,6 +89,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(current.scene.isDirty, Is.False);
             Assert.That(File.GetLastWriteTimeUtc(TempPrefabPath), Is.EqualTo(mtimeBefore));
             Assert.That(stage, Is.Not.EqualTo(current));
+        }
+
+        /// <summary>
+        /// Verifies discard restores both a dirty Prefab Stage and a dirty saved Scene without writing either file.
+        /// </summary>
+        [Test]
+        public void DiscardUnsavedEditorChanges_WithDirtyPrefabStageAndDirtySavedScene_RestoresBothWithoutWritingFiles()
+        {
+            Scene scene = CreateSavedActiveScene();
+            MakeSceneDirty(scene);
+            OpenDirtyPrefabStage();
+            DateTime sceneMtimeBefore = File.GetLastWriteTimeUtc(TempScenePath);
+            DateTime prefabMtimeBefore = File.GetLastWriteTimeUtc(TempPrefabPath);
+
+            string[] failures = _discarder.DiscardUnsavedEditorChanges();
+
+            PrefabStage current = PrefabStageUtility.GetCurrentPrefabStage();
+            Scene reloaded = SceneManager.GetSceneByPath(TempScenePath);
+            Assert.That(failures, Is.Empty);
+            Assert.That(current, Is.Not.Null);
+            Assert.That(current.assetPath, Is.EqualTo(TempPrefabPath));
+            Assert.That(current.scene.isDirty, Is.False);
+            Assert.That(reloaded.IsValid(), Is.True);
+            Assert.That(reloaded.isLoaded, Is.True);
+            Assert.That(reloaded.isDirty, Is.False);
+            Assert.That(GameObject.Find("DiscarderProbe"), Is.Null);
+            Assert.That(File.GetLastWriteTimeUtc(TempScenePath), Is.EqualTo(sceneMtimeBefore));
+            Assert.That(File.GetLastWriteTimeUtc(TempPrefabPath), Is.EqualTo(prefabMtimeBefore));
         }
 
         /// <summary>

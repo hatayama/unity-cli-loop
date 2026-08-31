@@ -20,8 +20,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return failures.ToArray();
             }
 
-            DiscardDirtyPrefabStage(failures);
+            // OpenScene leaves Prefab Stage: Unity's StageNavigationManager.OnSceneOpened
+            // returns to MainStage for every OpenSceneMode. Close the dirty stage first,
+            // reload scenes, then reopen the prefab last.
+            string prefabAssetPath = CloseDirtyPrefabStage(failures);
             ReloadDirtySavedScenes();
+            ReopenPrefabStage(prefabAssetPath, failures);
             return failures.ToArray();
         }
 
@@ -46,14 +50,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static void DiscardDirtyPrefabStage(List<string> failures)
+        private static string CloseDirtyPrefabStage(List<string> failures)
         {
             Debug.Assert(failures != null, "failures must not be null");
 
             PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
             if (prefabStage == null || !prefabStage.scene.IsValid() || !prefabStage.scene.isDirty)
             {
-                return;
+                return null;
             }
 
             string assetPath = prefabStage.assetPath;
@@ -61,11 +65,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 // OpenPrefab requires a disk path; leaving the stage alone avoids a prompt-less dead end.
                 failures.Add("Prefab Stage: " + GetPrefabStageDisplayPath(prefabStage));
-                return;
+                return null;
             }
 
             prefabStage.ClearDirtiness();
             StageUtility.GoBackToPreviousStage();
+            return assetPath;
+        }
+
+        private static void ReopenPrefabStage(string assetPath, List<string> failures)
+        {
+            Debug.Assert(failures != null, "failures must not be null");
+            if (string.IsNullOrEmpty(assetPath))
+            {
+                return;
+            }
+
             PrefabStage reopened = PrefabStageUtility.OpenPrefab(assetPath);
             if (reopened == null)
             {
@@ -81,12 +96,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             List<LoadedSceneSnapshot> snapshots = SnapshotLoadedScenes();
-            Debug.Assert(snapshots.Count > 0, "dirty saved scenes must produce at least one path snapshot");
+            int firstLoadedIndex = IndexOfFirstLoadedSnapshot(snapshots);
+            Debug.Assert(firstLoadedIndex >= 0, "dirty saved scenes must include a loaded path snapshot");
 
             string activePath = SceneManager.GetActiveScene().path;
-            EditorSceneManager.OpenScene(snapshots[0].Path, OpenSceneMode.Single);
-            for (int i = 1; i < snapshots.Count; i++)
+            EditorSceneManager.OpenScene(snapshots[firstLoadedIndex].Path, OpenSceneMode.Single);
+            for (int i = 0; i < snapshots.Count; i++)
             {
+                if (i == firstLoadedIndex)
+                {
+                    continue;
+                }
+
                 OpenSceneMode mode = snapshots[i].IsLoaded
                     ? OpenSceneMode.Additive
                     : OpenSceneMode.AdditiveWithoutLoading;
@@ -108,6 +129,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return false;
+        }
+
+        private static int IndexOfFirstLoadedSnapshot(List<LoadedSceneSnapshot> snapshots)
+        {
+            Debug.Assert(snapshots != null, "snapshots must not be null");
+
+            for (int i = 0; i < snapshots.Count; i++)
+            {
+                if (snapshots[i].IsLoaded)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
         }
 
         private static List<LoadedSceneSnapshot> SnapshotLoadedScenes()
