@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// Default value test with default schema.
         /// </summary>
         [Test]
-        public void ParseParameters_WithNullParams_ShouldSaveBeforeRunByDefault()
+        public void ParseParameters_WithNullParams_ShouldUseSaveUnsavedChangesModeByDefault()
         {
             // Verifies that run-tests saves unsaved editor changes unless callers opt into a custom schema.
             
@@ -44,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(schema.TestMode, Is.EqualTo(UnityCliLoopTestMode.EditMode));
             Assert.That(schema.FilterType, Is.EqualTo(TestFilterType.all));
             Assert.That(schema.FilterValue ?? string.Empty, Is.EqualTo(string.Empty));
-            Assert.That(schema.SaveBeforeRun, Is.True);
+            Assert.That(schema.UnsavedChanges, Is.EqualTo(RunTestsUnsavedChangesMode.save));
         }
 
         /// <summary>

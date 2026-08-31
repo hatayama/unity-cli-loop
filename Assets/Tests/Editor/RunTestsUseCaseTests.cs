@@ -30,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsSchema parameters = new()
             {
                 TestMode = UnityCliLoopTestMode.EditMode,
-                SaveBeforeRun = true
+                UnsavedChanges = RunTestsUnsavedChangesMode.save
             };
 
             RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
@@ -47,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.FailedCount, Is.EqualTo(0));
             Assert.That(response.SkippedCount, Is.EqualTo(0));
             Assert.That(executionService.WasCalled, Is.False);
-            Assert.That(validationService.SaveBeforeRun, Is.True);
+            Assert.That(validationService.UnsavedChanges, Is.EqualTo(RunTestsUnsavedChangesMode.save));
         }
 
         [Test]
@@ -128,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task ExecuteAsync_WithDefaultRequest_ShouldSaveBeforeRun()
+        public async Task ExecuteAsync_WithDefaultRequest_ShouldUseSaveUnsavedChangesMode()
         {
             // Verifies default use-case requests preserve the run-tests auto-save behavior.
             StubTestExecutionService executionService = new();
@@ -144,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             await useCase.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(validationService.WasCalled, Is.True);
-            Assert.That(validationService.SaveBeforeRun, Is.True);
+            Assert.That(validationService.UnsavedChanges, Is.EqualTo(RunTestsUnsavedChangesMode.save));
             Assert.That(executionService.WasCalled, Is.True);
         }
 
@@ -166,7 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RunTestsSchema parameters = new()
             {
                 TestMode = UnityCliLoopTestMode.PlayMode,
-                SaveBeforeRun = true
+                UnsavedChanges = RunTestsUnsavedChangesMode.save
             };
 
             RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
@@ -1096,7 +1096,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             private readonly ValidationResult _result;
 
-            public bool SaveBeforeRun { get; private set; }
+            public RunTestsUnsavedChangesMode UnsavedChanges { get; private set; }
             public bool WasCalled { get; private set; }
 
             public StubTestExecutionStateValidationService(ValidationResult result)
@@ -1104,10 +1104,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _result = result;
             }
 
-            public override ValidationResult Validate(UnityCliLoopTestMode testMode, bool saveBeforeRun)
+            public override ValidationResult Validate(UnityCliLoopTestMode testMode, RunTestsUnsavedChangesMode unsavedChanges)
             {
                 WasCalled = true;
-                SaveBeforeRun = saveBeforeRun;
+                UnsavedChanges = unsavedChanges;
                 return _result;
             }
         }
