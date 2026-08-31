@@ -83,7 +83,7 @@ uloop package install
 
 This adds the OpenUPM scoped registry and the `io.github.hatayama.uloopmcp` dependency to `Packages/manifest.json`. Add `--version <x.y.z>` to pin a specific version.
 
-Then launch Unity. The command waits for Unity to start, then exits. If Unity is already running, it focuses that window instead:
+Then launch Unity. `uloop launch` waits for Unity to start, then exits. If Unity is already running, it focuses that window instead:
 
 ```bash
 uloop launch
