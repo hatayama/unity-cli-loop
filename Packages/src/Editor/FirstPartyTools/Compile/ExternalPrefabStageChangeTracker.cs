@@ -161,10 +161,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (null, PrefabStage.Mode.InIsolation);
         }
 
-        internal static string[] SaveDirty()
+        /// <summary>
+        /// Saves the current dirty Prefab Stage only when its asset file changed or disappeared on disk.
+        /// </summary>
+        internal static string[] SaveDirtyIfChangedExternally()
         {
             PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
             if (!IsTrackable(prefabStage) || !prefabStage.scene.isDirty)
+            {
+                return Array.Empty<string>();
+            }
+
+            string assetPath = ExternalSceneChangeTracker.NormalizeAssetPath(prefabStage.assetPath);
+            string[] assetPathsToSave = ExternalAssetFocusReturnSavePolicy.SelectDirtyAssetsToSave(
+                new[] { (AssetPath: assetPath, IsDirty: true) },
+                PrefabStageSnapshots,
+                ExternalSceneChangeTracker.ReadAssetFileFingerprint);
+            if (assetPathsToSave.Length == 0)
             {
                 return Array.Empty<string>();
             }
@@ -199,12 +212,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new[] { GetDisplayPath(prefabStage) };
-        }
-
-        internal static bool IsCurrentDirty()
-        {
-            PrefabStage prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
-            return IsTrackable(prefabStage) && prefabStage.scene.isDirty;
         }
 
         private static bool TrySave(PrefabStage prefabStage)
