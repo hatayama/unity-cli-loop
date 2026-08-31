@@ -14,11 +14,6 @@ type releaseWorkflowRun struct {
 	CreatedAt  string `json:"createdAt"`
 }
 
-func dispatchReleasePRCheckWorkflow(ctx context.Context, config releasePRCheckConfig, workflow string, releasePR releasePullRequest, deps releasePRCheckDeps) error {
-	_, err := deps.runOutput(ctx, "gh", "workflow", "run", workflow, "--repo", config.repository, "--ref", releasePR.HeadRefName)
-	return err
-}
-
 func findDispatchedReleasePRCheckRun(
 	ctx context.Context,
 	config releasePRCheckConfig,

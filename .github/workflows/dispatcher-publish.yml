@@ -27,6 +27,7 @@ jobs:
       should_release: ${{ steps.release.outputs.release }}
       dry_run: ${{ steps.release.outputs.dry_run }}
       release_tag: ${{ steps.release.outputs.tag }}
+      release_prerelease: ${{ steps.release.outputs.prerelease }}
     steps:
       - name: Checkout approved event commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -392,6 +393,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
+      actions: write
     steps:
       - name: Checkout approved event commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -423,3 +426,23 @@ jobs:
           --repo "${{ github.repository }}"
           --tag "${{ needs.build.outputs.release_tag }}"
           --tap-repo hatayama/homebrew-tap
+
+      # Fresh installs follow the package pin, so a published stable dispatcher
+      # only reaches new users once the pin records it. Pre-releases are never
+      # stamped on main.
+      - name: Open dispatcher pin stamp pull request
+        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+        run: |
+          set -eu
+          # The checkout kept no credentials, so give git the workflow token
+          # without ever printing it.
+          gh auth setup-git
+          go run ./cmd/open-dispatcher-pin-pr \
+            --repo "${GITHUB_REPOSITORY}" \
+            --tag "${RELEASE_TAG}" \
+            --base-branch main

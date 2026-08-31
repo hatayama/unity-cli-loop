@@ -147,14 +147,12 @@ func dispatchAndWatchReleasePRCheckWorkflows(
 	releasePR releasePullRequest,
 	deps releasePRCheckDeps,
 ) (string, int) {
-	dispatchedAt := deps.now().UTC().Truncate(time.Second)
-	for _, workflow := range config.workflows {
-		writeReleasePRCheckLine(stdout, fmt.Sprintf("Dispatching %s for release PR #%d: %s", workflow, releasePR.Number, releasePR.URL))
-		err := dispatchReleasePRCheckWorkflow(ctx, config, workflow, releasePR, deps)
-		if err != nil {
-			writeReleasePRCheckLine(stderr, err)
-			return "", 1
-		}
+	description := fmt.Sprintf("release PR #%d: %s", releasePR.Number, releasePR.URL)
+	dispatchedAt, err := dispatchPullRequestCheckWorkflows(
+		ctx, stdout, config.repository, releasePR.HeadRefName, description, config.workflows, deps)
+	if err != nil {
+		writeReleasePRCheckLine(stderr, err)
+		return "", 1
 	}
 
 	checkedHeadSHA := ""
@@ -394,7 +392,7 @@ func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig,
 		return false, nil
 	}
 
-	bodyFile, cleanup, err := writeReleasePRCheckBodyFile(clarifiedBody)
+	bodyFile, cleanup, err := writePullRequestBodyFile(clarifiedBody)
 	if err != nil {
 		return false, err
 	}
@@ -405,26 +403,6 @@ func clarifyReleasePRCheckBody(ctx context.Context, config releasePRCheckConfig,
 		return false, err
 	}
 	return true, nil
-}
-
-func writeReleasePRCheckBodyFile(body string) (string, func(), error) {
-	bodyFile, err := os.CreateTemp("", "uloop-release-pr-body-*.md")
-	if err != nil {
-		return "", func() {}, fmt.Errorf("failed to create release PR body file: %w", err)
-	}
-
-	cleanup := func() { _ = os.Remove(bodyFile.Name()) }
-	_, writeErr := bodyFile.WriteString(body)
-	closeErr := bodyFile.Close()
-	if writeErr != nil {
-		cleanup()
-		return "", func() {}, fmt.Errorf("failed to write release PR body file: %w", writeErr)
-	}
-	if closeErr != nil {
-		cleanup()
-		return "", func() {}, fmt.Errorf("failed to close release PR body file: %w", closeErr)
-	}
-	return bodyFile.Name(), cleanup, nil
 }
 
 func verifyReleasePRCheckHeadMatchesRun(
