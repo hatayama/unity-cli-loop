@@ -34,20 +34,22 @@ type dispatcherUpdateState struct {
 }
 
 type dispatcherRunDeps struct {
-	now        func() time.Time
-	runRealCLI func(context.Context, string, []string, io.Writer, io.Writer) int
-	runV2CLI   func(context.Context, string, []string, io.Writer, io.Writer) (int, error)
-	runUpdate  func(context.Context) (bool, error)
-	launch     launchDeps
+	now              func() time.Time
+	runRealCLI       func(context.Context, string, []string, io.Writer, io.Writer) int
+	runV2CLI         func(context.Context, string, []string, io.Writer, io.Writer) (int, error)
+	runUpdate        func(context.Context) (bool, error)
+	stdoutIsTerminal func(io.Writer) bool
+	launch           launchDeps
 }
 
 func defaultDispatcherRunDeps() dispatcherRunDeps {
 	return dispatcherRunDeps{
-		now:        time.Now,
-		runRealCLI: runRealCLICommand,
-		runV2CLI:   runDispatcherV2CLI,
-		runUpdate:  runDispatcherUpdateCommand,
-		launch:     defaultLaunchDeps(),
+		now:              time.Now,
+		runRealCLI:       runRealCLICommand,
+		runV2CLI:         runDispatcherV2CLI,
+		runUpdate:        runDispatcherUpdateCommand,
+		stdoutIsTerminal: isTerminalWriter,
+		launch:           defaultLaunchDeps(),
 	}
 }
 
@@ -81,6 +83,9 @@ func tryHandleDispatcherHelpOrVersion(
 ) (bool, int) {
 	if len(args) != 0 && !clicore.IsHelpRequest(remainingArgs) && !clicore.IsVersionRequest(remainingArgs) && !clicore.IsVersionJSONRequest(remainingArgs) {
 		return false, 0
+	}
+	if handled, code := tryHandleDispatcherHumanVersionRequest(remainingArgs, projectPath, stdout, deps); handled {
+		return true, code
 	}
 	if startPath, workingDirectoryErr := os.Getwd(); workingDirectoryErr == nil {
 		if projectRoot, resolveErr := resolveDispatcherProjectRoot(startPath, projectPath, remainingArgs); resolveErr == nil {

@@ -89,8 +89,11 @@ func dispatcherV2ProjectDetectedError(projectRoot string, v2Project dispatcherV2
 
 // dispatcherV2ModeNotice builds the stderr notice announcing delegation to the V2 CLI.
 // Why: delegation happens implicitly, so the executed CLI generation and version are otherwise invisible to the caller.
+// Why the dispatcher version is named too: the delegated V2 CLI prints its own version on stdout, which
+// otherwise hides the dispatcher generation actually installed on this machine.
 func dispatcherV2ModeNotice(version string) string {
-	return "uloop: executing in V2 mode (" + dispatcherV2CLIPackageName + "@" + version + ")\n"
+	return "uloop: executing in V2 mode (" + dispatcherV2CLIPackageName + "@" + version +
+		") via uloop dispatcher " + dispatcherVersion + "\n"
 }
 
 // runDispatcherV2CLI installs and executes the V2 CLI while preserving the original command arguments.
