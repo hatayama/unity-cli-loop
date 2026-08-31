@@ -15,7 +15,8 @@ for cross-component version requirements. Its required fields:
   release used for first installation and its verified asset hashes. Stamped by automation
   against a published release: publishing a **stable** dispatcher release makes the
   `dispatcher-publish` workflow open a pull request that carries the new stamp (pre-releases are
-  never stamped on `main`). Never edit by hand — `VerifyDispatcherPinSubjects` requires the
+  never stamped on `main`), and CI on `main` fails through `check-dispatcher-pin-freshness` for as
+  long as `dispatcherReleaseTag` lags the newest published stable dispatcher release. Never edit by hand — `VerifyDispatcherPinSubjects` requires the
   manifest to match the published release's verified subjects exactly, so a hand-written value
   cannot pass CI (see `docs/dispatcher-pin-release-order.md`). Consumers: Unity's **Install CLI**
   path (via `CliPinReader` / `NativeCliCommandBuilder`) and the terminal installers
