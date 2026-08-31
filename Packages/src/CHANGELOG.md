@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.1.0](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0...v3.1.0) (2026-08-31)
+
+
+### Features
+
+* run-tests can now keep, fail on, or discard unsaved editor changes ([#2478](https://github.com/hatayama/unity-cli-loop/issues/2478)) ([758fb12](https://github.com/hatayama/unity-cli-loop/commit/758fb12bc0c9ea7f199f59bcbfa6002485d6b41b))
+
+
+### Bug Fixes
+
+* Unsaved Scene and Prefab Stage edits are no longer saved automatically when Unity regains focus ([#2476](https://github.com/hatayama/unity-cli-loop/issues/2476)) ([75308ba](https://github.com/hatayama/unity-cli-loop/commit/75308ba84e3820c5fce5c32e47063e0e1d4b5aae))
+
 ## [3.0.0](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.81...v3.0.0) (2026-08-31)
 
 
