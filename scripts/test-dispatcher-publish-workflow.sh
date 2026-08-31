@@ -97,7 +97,8 @@ test_unprivileged_build_uses_only_the_approved_event_commit() {
   assert_not_contains "INPUT_REF"
   assert_contains '          ref: ${{ github.sha }}'
   assert_count 2 "          persist-credentials: false"
-  assert_contains "github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'"
+  assert_contains "if: github.ref == 'refs/heads/main'"
+  assert_not_contains "github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'"
 }
 
 test_publish_validates_metadata_without_checking_out_source() {
