@@ -39,20 +39,21 @@ https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
 # クイックスタート
 
-このガイドでは、CLI、Unity パッケージ、スキルの 3 つをインストールし、LLM ツールから Unity を操作できる状態にします。
+このガイドでは、CLI、Unity パッケージ、スキルの 3 つをインストールし、LLM ツールから Unity を操作できる状態にします。ターミナルから入れる方法と Unity の UI から入れる方法があり、どちらか一方で完了します。
 
 ## 始める前に
 
 以下を確認してください：
 
 - Unity 2022.3 以降のプロジェクトがある
-- ターミナルまたは PowerShell が開いている
 - Claude Code、Codex など、スキルを読み込める LLM ツールを使っている
 
 > [!NOTE]
 > **V2 からアップグレードする場合**: V2 API で作ったカスタムツールがあるプロジェクトでは、V3 パッケージを入れた直後にコンパイルエラーが出ます。これは想定内の挙動です。手で直さず、Unity 起動時の Safe Mode の問い合わせで `Ignore` を選び、自動で開く移行ウィンドウ（`Window > Unity CLI Loop > Custom Tool Migration`）で **Migrate** を押してください。手順は [カスタムツール／スキルの V3 移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md) を参照してください。
 
-## ステップ 1：CLI をインストールする
+## ターミナルから入れる場合
+
+### ステップ 1：CLI をインストールする
 
 **macOS、Windows Git Bash:**
 
@@ -72,9 +73,7 @@ irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/insta
 brew install hatayama/tap/uloop
 ```
 
-Unity の UI からインストールする場合は、ステップ 2 の後に `Window > Unity CLI Loop > Settings` を開き、**Install CLI** を押します。
-
-## ステップ 2：Unity パッケージをインストールする
+### ステップ 2：Unity パッケージをインストールする
 
 Unity プロジェクトのルートで実行します：
 
@@ -84,26 +83,7 @@ uloop package install
 
 OpenUPM の scoped registry と `io.github.hatayama.uloopmcp` の依存を `Packages/manifest.json` に追加します。バージョンを固定するには `--version <x.y.z>` を付けます。
 
-**Package Manager から入れる場合:** `Window > Package Manager` の「+」から **Add package from git URL** を選び、次の URL を入力します。
-
-```text
-https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
-```
-
-<details>
-<summary>OpenUPM の scoped registry を手動で設定する場合</summary>
-
-1. `Project Settings > Package Manager` の Scoped Registries に以下を追加します：
-```text
-Name: OpenUPM
-URL: https://package.openupm.com
-Scope(s): io.github.hatayama.uloopmcp
-```
-2. `Window > Package Manager` で My Registries の OpenUPM を選び、Unity CLI Loop をインストールします。
-
-</details>
-
-## ステップ 3：スキルをインストールする
+### ステップ 3：スキルをインストールする
 
 使っている LLM ツールに合わせて、Unity プロジェクトのルートで実行します：
 
@@ -121,19 +101,46 @@ uloop skills install --claude --global
 uloop skills install --output-dir path/to/skills
 ```
 
-Unity の UI からインストールする場合は、Settings ウィンドウで対象を選び、**Install Skills** を押します。
-
-## ステップ 4：接続を確認する
+### ステップ 4：接続を確認する
 
 `Window > Unity CLI Loop > Settings` を開きます。CLI が検出されていれば、次のように表示されます：
 
 <img width="350" alt="CLI検出に成功したSettingsウィンドウ。緑のインジケータとCLIバージョンが表示されている" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
 
-**Install CLI** ボタンが表示されている場合は、CLI がまだ検出されていません。ボタンを押すか、ステップ 1 をやり直してください。
+## Unity の UI から入れる場合
+
+### ステップ 1：Unity パッケージをインストールする
+
+`Window > Package Manager` の「+」から **Add package from git URL** を選び、次の URL を入力します：
+
+```text
+https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
+```
+
+<details>
+<summary>OpenUPM の scoped registry から入れる場合</summary>
+
+1. `Project Settings > Package Manager` の Scoped Registries に以下を追加します：
+```text
+Name: OpenUPM
+URL: https://package.openupm.com
+Scope(s): io.github.hatayama.uloopmcp
+```
+2. `Window > Package Manager` で My Registries の OpenUPM を選び、Unity CLI Loop をインストールします。
+
+</details>
+
+### ステップ 2：CLI をインストールする
+
+`Window > Unity CLI Loop > Settings` を開き、**Install CLI** を押します：
 
 <img width="350" alt="CLI未インストール状態のSettingsウィンドウ。Install CLIボタンが表示されている" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
 
-同じウィンドウの Skills セクションで、スキルの導入先も確認できます。
+ボタンが消えて CLI のバージョンが表示されれば完了です。
+
+### ステップ 3：スキルをインストールする
+
+同じ Settings ウィンドウで、Claude Code、Codex など対象を選び、**Install Skills** を押します：
 
 <img width="350" alt="SettingsウィンドウのSkillsセクション。対象を選択してInstall Skillsボタンが押せる状態" src="Packages/src/Documentation~/images/settings-skills-install.png" />
 
