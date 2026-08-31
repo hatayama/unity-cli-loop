@@ -158,13 +158,9 @@ Scope(s): io.github.hatayama.uloopmcp
 <details>
 <summary>V2 プロジェクトと併用する場合</summary>
 
-v2とv3のプロジェクトを併用するときも、v3 dispatcherをインストールしたままにしてください。Unityがプロジェクトをv2系の`io.github.hatayama.uloopmcp` packageへ解決している場合、dispatcherは同じバージョンのv2 `uloop-cli` releaseをバージョン別user cacheへ自動的にインストールし、コマンドを委譲します。解決済みpackageのバージョンは、downgrade後に残った古いv3 project-runner pinより優先されます。初回のnpmインストールとv2モードの注記はstderrへ出力されるため、stdoutには委譲先コマンドの出力だけが残ります。v3プロジェクトはpinで選ばれたproject runnerを引き続き使用します。
+V2 のパッケージを使っているプロジェクトと V3 のプロジェクトは、同じマシンで併用できます。V3 の CLI をインストールしたままにしておけば、V2 のプロジェクトでは `uloop` コマンドが自動的に V2 の CLI を使います（初回に自動でダウンロードされます。Node.js 22 以降が必要です）。
 
-グローバルな`install`、`update`、`uninstall`、`launch`コマンドは、どのプロジェクトでもv3 dispatcherが処理します。検出されたv2プロジェクトでは、それ以外のプロジェクトコマンド、help、プロジェクトスコープのversion表示が委譲されます。
-
-v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode.js 22以降が必要です。v2プロジェクトのSettingsウィンドウでは、**Update CLI**または**Downgrade CLI**を押さないでください。委譲先CLIが同じv2バージョンを返すため通常はボタン自体が表示されませんが、使用するとグローバルnpm版CLIが復活し、PATHの順序によってv3 dispatcherが隠れる可能性があります。
-
-同じ理由で、v2 CLIをグローバルにnpmインストールし直さないでください。インストーラは古いnpm版 `uloop-cli` を自動で削除しようとし、できない場合は手動で実行するコマンドを表示します。terminalの `uloop` が古いnpm版を指している場合は `npm uninstall -g uloop-cli` を実行してから、上記のインストーラをもう一度実行してください。
+V2 のプロジェクトの Settings ウィンドウで **Update CLI** や **Downgrade CLI** を押したり、V2 の CLI を `npm install -g uloop-cli` で入れ直したりしないでください。古い npm 版の `uloop` が V3 の CLI を隠してしまいます。すでにそうなっている場合は `npm uninstall -g uloop-cli` を実行してから、ステップ 1 のインストールをもう一度実行してください。
 
 </details>
 
