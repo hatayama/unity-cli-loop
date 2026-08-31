@@ -73,6 +73,14 @@ irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/insta
 brew install hatayama/tap/uloop
 ```
 
+インストールできたか確認します：
+
+```bash
+uloop -v
+```
+
+最初の行に CLI のバージョン（例: `3.0.1`）が表示されれば成功です。
+
 ### ステップ 2：Unity パッケージをインストールする
 
 Unity プロジェクトのルートで実行します：
@@ -108,23 +116,6 @@ uloop skills install --claude --global
 # 任意のディレクトリ（外部のスキルパッケージストアなど）へ
 uloop skills install --output-dir path/to/skills
 ```
-
-### ステップ 4：動作を確認する
-
-Unity でプロジェクトを開いた状態で、プロジェクトのルートで実行します：
-
-```bash
-uloop -v
-```
-
-CLI のバージョンに続いて、このプロジェクトが使う project runner のバージョンが表示されれば完了です：
-
-```text
-3.0.1
-This Unity project pins uloop project runner 3.0.0.
-```
-
-ターミナルに表示せず出力を受け取る場合（AI エージェントがコマンドを実行する場合など）はバージョンの行だけが表示されます。これも成功です。
 
 ## Unity の UI から入れる場合
 
