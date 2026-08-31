@@ -23,7 +23,11 @@ return each asset falls into exactly one of these cases:
 | any | no fingerprint recorded | record one, nothing else |
 
 The `dirty + changed` row is the only place where the package writes a user's unsaved edits
-to disk on its own. It does so because the alternative is a modal conflict dialog, and the
+to disk on its own, with one multi-Scene exception: when a *clean* open Scene changed on disk,
+the reload goes through `EditorSceneManager.RestoreSceneManagerSetup`, which reloads every
+open Scene, so the resolver saves all dirty Scenes first rather than lose their edits. That
+still requires an external change to some open Scene; with nothing changed on disk, nothing
+is saved. It does so because the alternative is a modal conflict dialog, and the
 in-memory state is treated as authoritative there. The decision is isolated in
 `ExternalAssetFocusReturnSavePolicy` so it can be unit-tested without Unity Scene APIs
 (`Assets/Tests/Editor/ExternalAssetFocusReturnSavePolicyTests.cs`).
