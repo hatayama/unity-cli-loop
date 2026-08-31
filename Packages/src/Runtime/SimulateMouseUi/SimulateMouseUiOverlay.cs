@@ -4,14 +4,23 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     // Canvas-based overlay that visualizes SimulateMouseUi cursor position and drag state on Game View.
     // Animation is driven externally via SetCursorScale/SetAlpha from async functions in SimulateMouseUiTool.
+    /// <summary>
+    /// Drives the runtime overlay used by Simulate Mouse UI behavior.
+    /// </summary>
     public class SimulateMouseUiOverlay : MonoBehaviour
     {
         private const float WAYPOINT_MARKER_DIAMETER = 12f;
         private const float LINE_THICKNESS = 2f;
+        private const string CircleName = "Circle";
+        private const string CrosshairHName = "CrosshairH";
+        private const string CrosshairVName = "CrosshairV";
+        private const string CursorGroupName = "CursorGroup";
+        private const string DragStartMarkerName = "DragStartMarker";
+        private const string LongPressTextName = "LongPressText";
 
         private static readonly Color CLICK_COLOR = new Color(0f, 1f, 0.4f, 0.9f);
         private static readonly Color DRAG_COLOR = new Color(1f, 0.6f, 0f, 0.9f);
@@ -38,6 +47,8 @@ namespace io.github.hatayama.uLoopMCP
 
         private void Awake()
         {
+            RestoreMissingReferences();
+
             Debug.Assert(_canvasGroup != null, "_canvasGroup must be assigned in prefab");
             Debug.Assert(_cursorGroup != null, "_cursorGroup must be assigned in prefab");
             Debug.Assert(_circleImage != null, "_circleImage must be assigned in prefab");
@@ -48,6 +59,47 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Assert(_circleSprite != null, "_circleSprite must be assigned in prefab");
 
             _canvasGroup!.alpha = 0;
+        }
+
+        private void RestoreMissingReferences()
+        {
+            RestoreMissingReference(ref _canvasGroup, GetComponent<CanvasGroup>);
+            RestoreMissingReference(ref _cursorGroup, () => FindChildComponent<RectTransform>(CursorGroupName));
+            RestoreMissingReference(ref _circleImage, () => FindChildComponent<Image>(CircleName));
+            RestoreMissingReference(ref _crosshairH, () => FindChildComponent<Image>(CrosshairHName));
+            RestoreMissingReference(ref _crosshairV, () => FindChildComponent<Image>(CrosshairVName));
+            RestoreMissingReference(ref _longPressText, () => FindChildComponent<Text>(LongPressTextName));
+            RestoreMissingReference(ref _dragStartMarker, () => FindChildComponent<Image>(DragStartMarkerName));
+
+            if (_circleSprite == null && _circleImage != null)
+            {
+                _circleSprite = _circleImage.sprite;
+            }
+        }
+
+        private void RestoreMissingReference<T>(ref T reference, System.Func<T> resolveReference)
+            where T : UnityEngine.Object
+        {
+            if (reference != null)
+            {
+                return;
+            }
+
+            reference = resolveReference();
+        }
+
+        private T FindChildComponent<T>(string childName) where T : Component
+        {
+            T[] children = GetComponentsInChildren<T>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == childName)
+                {
+                    return children[i];
+                }
+            }
+
+            return null!;
         }
 
         private void LateUpdate()
@@ -303,7 +355,7 @@ namespace io.github.hatayama.uLoopMCP
 
         private static Image CreateImage(string name, Transform parent)
         {
-            GameObject go = new GameObject(name);
+            GameObject go = new(name);
             go.transform.SetParent(parent, false);
             RectTransform rect = go.AddComponent<RectTransform>();
             rect.anchorMin = Vector2.zero;

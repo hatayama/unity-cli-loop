@@ -1,7 +1,12 @@
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Dynamic Code Source Preparer behavior.
+    /// </summary>
     [TestFixture]
     public class DynamicCodeSourcePreparerTests
     {
@@ -42,6 +47,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void Prepare_WhenScriptUsesBareUnityObject_ShouldAddObjectAlias()
         {
+            // Verifies a bare "Object" call resolves to UnityEngine.Object via an injected alias.
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
                 "GameObject go = new GameObject(\"source\");\nObject.Instantiate(go);\nreturn null;",
                 DynamicCodeConstants.DEFAULT_NAMESPACE,
@@ -54,6 +60,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void Prepare_WhenObjectAliasAlreadyExists_ShouldNotAddDuplicateAlias()
         {
+            // Verifies the default Object alias is not injected a second time when the user already declared it.
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
                 "using Object = UnityEngine.Object;\nObject.Instantiate(new GameObject(\"source\"));\nreturn null;",
                 DynamicCodeConstants.DEFAULT_NAMESPACE,
@@ -68,6 +75,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void Prepare_WhenCustomObjectAliasAlreadyExists_ShouldRespectUserAlias()
         {
+            // Verifies a user-defined "Object" alias to a different type is preserved, not overridden by the default.
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
                 "using Object = System.Object;\nreturn new Object();",
                 DynamicCodeConstants.DEFAULT_NAMESPACE,
@@ -82,6 +90,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void Prepare_WhenVerbatimObjectAliasAlreadyExists_ShouldRespectUserAlias()
         {
+            // Verifies a verbatim "@Object" alias is detected so the default Object alias is skipped.
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
                 "using @Object = System.Object;\nreturn new @Object();",
                 DynamicCodeConstants.DEFAULT_NAMESPACE,
@@ -97,6 +106,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void Prepare_WhenScriptUsesBareUnityRandom_ShouldAddRandomAlias()
         {
+            // Verifies a bare "Random" call resolves to UnityEngine.Random via an injected alias.
             PreparedDynamicCode prepared = DynamicCodeSourcePreparer.Prepare(
                 "int value = Random.Range(0, 10);\nreturn value;",
                 DynamicCodeConstants.DEFAULT_NAMESPACE,
@@ -109,6 +119,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void CountSubstring_WhenTargetIsEmpty_ShouldReturnZero()
         {
+            // Verifies the shared string-counting test helper treats an empty target as zero matches.
             int count = DynamicCodeTestStringUtility.CountSubstring("source", "");
 
             Assert.AreEqual(0, count);
@@ -303,6 +314,114 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             Assert.IsNotNull(prepared.PreparedSource);
             Assert.AreEqual(0, prepared.HoistedLiteralBindings.Count);
             StringAssert.Contains("return 3000000000;", prepared.PreparedSource);
+        }
+
+        /// <summary>
+        /// Verifies body line padding preserves original line numbers when a leading using is extracted.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenLeadingUsingDirectiveIsExtracted_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "using UnityEngine;\nreturn null;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            Assert.That(GetWrappedUserSnippetLines(prepared.PreparedSource)[1], Is.EqualTo("return null;"));
+        }
+
+        /// <summary>
+        /// Verifies a blank line between an extracted using and the first statement keeps the statement on its original line.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenBlankLineFollowsExtractedUsing_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "using UnityEngine;\n\nreturn null;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            Assert.That(GetWrappedUserSnippetLines(prepared.PreparedSource)[2], Is.EqualTo("return null;"));
+        }
+
+        /// <summary>
+        /// Verifies a skipped leading comment and extracted using both preserve later statement line numbers.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenLeadingCommentPrecedesExtractedUsing_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "// setup\nusing UnityEngine;\nreturn null;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            Assert.That(GetWrappedUserSnippetLines(prepared.PreparedSource)[2], Is.EqualTo("return null;"));
+        }
+
+        /// <summary>
+        /// Verifies multiple extracted usings separated by a blank line preserve the first statement line number.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenMultipleExtractedUsingsAreSeparatedByBlankLine_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "using System;\n\nusing UnityEngine;\nreturn null;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            Assert.That(GetWrappedUserSnippetLines(prepared.PreparedSource)[3], Is.EqualTo("return null;"));
+        }
+
+        /// <summary>
+        /// Verifies a blank line between top-level statements preserves the later statement line number.
+        /// </summary>
+        [Test]
+        public void Prepare_WhenBlankLineSeparatesTopLevelStatements_ShouldPreserveUserSnippetLineNumbers()
+        {
+            string source = "int a = 1;\n\nreturn null;";
+            PreparedDynamicCode prepared = DynamicCodeSourcePreparer.PrepareWithoutLiteralHoisting(
+                source,
+                DynamicCodeConstants.DEFAULT_NAMESPACE,
+                DynamicCodeConstants.DEFAULT_CLASS_NAME);
+
+            AssertUserSnippetLineAlignment(source, prepared.PreparedSource);
+            string[] wrappedLines = GetWrappedUserSnippetLines(prepared.PreparedSource);
+            Assert.That(wrappedLines[0], Is.EqualTo("int a = 1;"));
+            Assert.That(wrappedLines[2], Is.EqualTo("return null;"));
+        }
+
+        private static string[] GetWrappedUserSnippetLines(string preparedSource)
+        {
+            WrappedDynamicCodeUserSnippetExtractor.TryExtract(preparedSource, out string snippet);
+            return WrappedDynamicCodeUserSnippetExtractor.SplitNormalizedLines(snippet);
+        }
+
+        private static void AssertUserSnippetLineAlignment(string originalSource, string preparedSource)
+        {
+            string[] originalLines = DynamicCodeUserSnippetLines.Split(originalSource);
+            string[] wrappedLines = GetWrappedUserSnippetLines(preparedSource);
+            Assert.That(wrappedLines.Length, Is.EqualTo(originalLines.Length));
+
+            for (int lineIndex = 0; lineIndex < originalLines.Length; lineIndex++)
+            {
+                string originalLine = originalLines[lineIndex];
+                string trimmedStart = originalLine.TrimStart();
+                if (trimmedStart.StartsWith("using ", System.StringComparison.Ordinal)
+                    || trimmedStart.StartsWith("global using ", System.StringComparison.Ordinal)
+                    || trimmedStart.StartsWith("//", System.StringComparison.Ordinal)
+                    || originalLine.Length == 0)
+                {
+                    Assert.That(wrappedLines[lineIndex], Is.Empty, $"Line {lineIndex + 1} should stay empty in the #line region.");
+                }
+            }
         }
     }
 }

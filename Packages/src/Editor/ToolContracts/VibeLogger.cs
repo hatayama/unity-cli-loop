@@ -1,0 +1,516 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using Newtonsoft.Json;
+using UnityEditor;
+using UnityEngine;
+
+namespace io.github.hatayama.UnityCliLoop.ToolContracts
+{
+    /// <summary>
+    /// AI-friendly structured logger for Unity CLI Loop.
+    /// 
+    /// Key features:
+    /// - Structured JSON logging with operation, context, correlation_id
+    /// - AI-friendly format for Claude Code analysis
+    /// - Automatic file rotation and memory management
+    /// - Correlation ID tracking for related operations
+    /// </summary>
+    public sealed class VibeLoggerService
+    {
+        private const string LOG_FILE_PREFIX = "unity_vibe";
+        private const int MAX_FILE_SIZE_MB = 10;
+        private const int MAX_MEMORY_LOGS = 1000;
+        internal const int MAX_LOG_FILES = 20;
+        private const int UNINITIALIZED_MAIN_THREAD_ID = 0;
+        private const string DOMAIN_RELOAD_STATE_IN_PROGRESS = "InProgress";
+        private const string DOMAIN_RELOAD_STATE_IDLE = "Idle";
+        private const string DOMAIN_RELOAD_STATE_UNAVAILABLE_OFF_MAIN_THREAD = "UnavailableOffMainThread";
+        
+        private readonly List<VibeLogEntry> _memoryLogs = new List<VibeLogEntry>();
+        private readonly object _lockObject = new object();
+        private string _logDirectory = string.Empty;
+        private int _mainThreadId = UNINITIALIZED_MAIN_THREAD_ID;
+        private bool _hasCleanedUpOnStartup = false;
+        
+        /// <summary>
+        /// Represents one Vibe Log entry in the owning workflow.
+        /// </summary>
+        [Serializable]
+        public class VibeLogEntry
+        {
+            public string timestamp;
+            public string level;
+            public string operation;
+            public string message;
+            public object context;
+            public string correlation_id;
+            public string source;
+            public string human_note;
+            public string ai_todo;
+            public string stack_trace;
+            public EnvironmentInfo environment;
+        }
+        
+        /// <summary>
+        /// Describes Environment information collected by the owning workflow.
+        /// </summary>
+        [Serializable]
+        public class EnvironmentInfo
+        {
+            public string domain_reload_state;
+        }
+
+        /// <summary>
+        /// Captures Unity main-thread-only logger state during editor startup.
+        /// </summary>
+        public void InitializeForEditorLoad()
+        {
+            Volatile.Write(ref _mainThreadId, Thread.CurrentThread.ManagedThreadId);
+            CacheUnityProjectLogDirectory();
+        }
+        
+        /// <summary>
+        /// Log an info level message with structured context
+        /// Only logs when ULOOP_DEBUG symbol is defined
+        /// </summary>
+        [Conditional(UnityCliLoopConstants.ENV_KEY_ULOOP_DEBUG)]
+        public void LogInfo(string operation, string message, object context = null, 
+                                  string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = false)
+        {
+            Log("INFO", operation, message, context, correlationId, humanNote, aiTodo, includeStackTrace);
+        }
+        
+        /// <summary>
+        /// Log a warning level message with structured context
+        /// Only logs when ULOOP_DEBUG symbol is defined
+        /// </summary>
+        [Conditional(UnityCliLoopConstants.ENV_KEY_ULOOP_DEBUG)]
+        public void LogWarning(string operation, string message, object context = null, 
+                                     string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = true)
+        {
+            Log("WARNING", operation, message, context, correlationId, humanNote, aiTodo, includeStackTrace);
+        }
+        
+        /// <summary>
+        /// Log an error level message with structured context
+        /// Only logs when ULOOP_DEBUG symbol is defined
+        /// </summary>
+        [Conditional(UnityCliLoopConstants.ENV_KEY_ULOOP_DEBUG)]
+        public void LogError(string operation, string message, object context = null, 
+                                   string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = true)
+        {
+            Log("ERROR", operation, message, context, correlationId, humanNote, aiTodo, includeStackTrace);
+        }
+        
+        /// <summary>
+        /// Log a debug level message with structured context
+        /// Only logs when ULOOP_DEBUG symbol is defined
+        /// </summary>
+        [Conditional(UnityCliLoopConstants.ENV_KEY_ULOOP_DEBUG)]
+        public void LogDebug(string operation, string message, object context = null, 
+                                   string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = false)
+        {
+            Log("DEBUG", operation, message, context, correlationId, humanNote, aiTodo, includeStackTrace);
+        }
+        
+        /// <summary>
+        /// Log an exception with structured context
+        /// Only logs when ULOOP_DEBUG symbol is defined
+        /// </summary>
+        [Conditional(UnityCliLoopConstants.ENV_KEY_ULOOP_DEBUG)]
+        public void LogException(string operation, Exception exception, object context = null, 
+                                       string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = true)
+        {
+            Dictionary<string, object> exceptionContext = new();
+            if (context != null)
+            {
+                exceptionContext["original_context"] = context;
+            }
+            
+            exceptionContext["exception"] = new
+            {
+                type = exception.GetType().Name,
+                message = exception.Message,
+                stack_trace = exception.StackTrace,
+                inner_exception = exception.InnerException?.Message
+            };
+            
+            Log("ERROR", operation, $"Exception occurred: {exception.Message}", exceptionContext, 
+                correlationId, humanNote, aiTodo, includeStackTrace);
+        }
+        
+        /// <summary>
+        /// Generate a new correlation ID for tracking related operations
+        /// </summary>
+        public string GenerateCorrelationId()
+        {
+            return $"unity_{Guid.NewGuid().ToString("N")[..8]}_{DateTime.Now:HHmmss}";
+        }
+        
+        /// <summary>
+        /// Get logs for AI analysis (formatted for Claude Code)
+        /// Output directory: {project_root}/.uloop/outputs/VibeLogs/
+        /// </summary>
+        public string GetLogsForAi(string operation = null, string correlationId = null, int maxCount = 100)
+        {
+            lock (_lockObject)
+            {
+                List<VibeLogEntry> filteredLogs = new(_memoryLogs);
+                
+                if (!string.IsNullOrEmpty(operation))
+                {
+                    filteredLogs = filteredLogs.FindAll(log => log.operation.Contains(operation));
+                }
+                
+                if (!string.IsNullOrEmpty(correlationId))
+                {
+                    filteredLogs = filteredLogs.FindAll(log => log.correlation_id == correlationId);
+                }
+                
+                if (filteredLogs.Count > maxCount)
+                {
+                    filteredLogs = filteredLogs.GetRange(filteredLogs.Count - maxCount, maxCount);
+                }
+                
+                return JsonConvert.SerializeObject(filteredLogs, Formatting.Indented);
+            }
+        }
+        
+        /// <summary>
+        /// Clear all memory logs
+        /// </summary>
+        public void ClearMemoryLogs()
+        {
+            lock (_lockObject)
+            {
+                _memoryLogs.Clear();
+            }
+        }
+        
+        /// <summary>
+        /// Core logging method
+        /// </summary>
+        private void Log(string level, string operation, string message, object context,
+                               string correlationId, string humanNote, string aiTodo, bool includeStackTrace = true)
+        {
+            VibeLogEntry logEntry = new()            {
+                timestamp = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss.fffzzz"),
+                level = level,
+                operation = operation,
+                message = message,
+                context = context,
+                correlation_id = correlationId ?? GenerateCorrelationId(),
+                source = "Unity",
+                human_note = humanNote,
+                ai_todo = aiTodo,
+                stack_trace = includeStackTrace ? new StackTrace(true).ToString() : null,
+                environment = GetEnvironmentInfo()
+            };
+            
+            // Add to memory logs
+            lock (_lockObject)
+            {
+                _memoryLogs.Add(logEntry);
+                
+                // Rotate memory logs if too many
+                if (_memoryLogs.Count > MAX_MEMORY_LOGS)
+                {
+                    _memoryLogs.RemoveAt(0);
+                }
+            }
+            
+            // Save to file
+            try
+            {
+                SaveLogToFile(logEntry);
+            }
+            catch (Exception ex)
+            {
+                // Fallback to Unity console if file logging fails
+                UnityEngine.Debug.LogError($"[VibeLogger] Failed to save log to file: {ex.Message}");
+                UnityEngine.Debug.Log($"[VibeLogger] {level} | {operation} | {message}");
+            }
+        }
+        
+        /// <summary>
+        /// Save log entry to file with file locking for concurrent access
+        /// </summary>
+        private void SaveLogToFile(VibeLogEntry logEntry)
+        {
+            string logDirectory = GetLogDirectory();
+
+            if (!Directory.Exists(logDirectory))
+            {
+                Directory.CreateDirectory(logDirectory);
+            }
+            
+            // Clean up old log files on first access only
+            lock (_lockObject)
+            {
+                if (!_hasCleanedUpOnStartup)
+                {
+                    CleanupOldLogFiles();
+                    _hasCleanedUpOnStartup = true;
+                }
+            }
+            
+            string jsonLog = JsonConvert.SerializeObject(logEntry) + "\n";
+            AppendLogLineWithRetention(logDirectory, jsonLog);
+        }
+
+        /// <summary>
+        /// Append one log line to the current day file, rotating oversized files and
+        /// pruning the directory to the retention limit when a new file appears.
+        /// </summary>
+        internal static void AppendLogLineWithRetention(string logDirectory, string jsonLog)
+        {
+            string fileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd}.json";
+            string filePath = Path.Combine(logDirectory, fileName);
+            bool shouldPruneAfterWrite = !File.Exists(filePath);
+
+            // Check file size and rotate if necessary
+            if (File.Exists(filePath))
+            {
+                FileInfo fileInfo = new(filePath);
+                if (fileInfo.Length > MAX_FILE_SIZE_MB * 1024 * 1024)
+                {
+                    string rotatedFileName = $"{LOG_FILE_PREFIX}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json";
+                    string rotatedFilePath = Path.Combine(logDirectory, rotatedFileName);
+                    File.Move(filePath, rotatedFilePath);
+                    shouldPruneAfterWrite = true;
+                }
+            }
+
+            // Use file locking with retry mechanism to handle concurrent access
+            int maxRetries = 3;
+            int retryDelayMs = 50;
+
+            for (int retry = 0; retry < maxRetries; retry++)
+            {
+                try
+                {
+                    using (FileStream fileStream = new FileStream(filePath, FileMode.Append, FileAccess.Write, FileShare.Read))
+                    using (StreamWriter writer = new StreamWriter(fileStream))
+                    {
+                        writer.Write(jsonLog);
+                        writer.Flush();
+                    }
+
+                    if (shouldPruneAfterWrite)
+                    {
+                        PruneLogDirectory(logDirectory);
+                    }
+
+                    return; // Success - exit retry loop
+                }
+                catch (IOException ex) when (IsFileSharingViolation(ex) && retry < maxRetries - 1)
+                {
+                    // Wait and retry for sharing violations
+                    System.Threading.Thread.Sleep(retryDelayMs * (retry + 1));
+                }
+                catch (Exception ex)
+                {
+                    // For other exceptions, throw immediately
+                    throw new InvalidOperationException($"Failed to write VibeLogger entry to file: {ex.Message}", ex);
+                }
+            }
+            
+            // If all retries failed, throw with sharing violation context
+            throw new InvalidOperationException($"Failed to write VibeLogger entry after {maxRetries} retries due to file sharing violations");
+        }
+        
+        /// <summary>
+        /// Check if exception is a file sharing violation
+        /// </summary>
+        private static bool IsFileSharingViolation(IOException ex)
+        {
+            // ERROR_SHARING_VIOLATION (0x80070020)
+            const int ERROR_SHARING_VIOLATION = unchecked((int)0x80070020);
+            return ex.HResult == ERROR_SHARING_VIOLATION;
+        }
+        
+        /// <summary>
+        /// Clean up old log files, keeping only the most recent MAX_LOG_FILES
+        /// </summary>
+        private void CleanupOldLogFiles()
+        {
+            PruneLogDirectory(GetLogDirectory());
+        }
+
+        private static void PruneLogDirectory(string logDirectory)
+        {
+            try
+            {
+                DeleteOldestLogFilesBeyondLimit(logDirectory);
+            }
+            catch (Exception ex)
+            {
+                UnityEngine.Debug.LogWarning($"[VibeLogger] Failed to cleanup old log files: {ex.Message}");
+            }
+        }
+
+        internal static void DeleteOldestLogFilesBeyondLimit(string logDirectory)
+        {
+            if (!Directory.Exists(logDirectory))
+            {
+                return;
+            }
+
+            FileInfo[] logFiles = Directory.GetFiles(logDirectory, $"{LOG_FILE_PREFIX}_*.json")
+                .Select(file => new FileInfo(file))
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .ThenByDescending(file => file.Name, StringComparer.Ordinal)
+                .ToArray();
+
+            for (int index = MAX_LOG_FILES; index < logFiles.Length; index++)
+            {
+                DeleteLogFileSafely(logFiles[index]);
+            }
+        }
+
+        private static void DeleteLogFileSafely(FileInfo logFile)
+        {
+            try
+            {
+                logFile.Delete();
+            }
+            catch (Exception ex)
+            {
+                // A locked or inaccessible file must not stop pruning of the remaining files.
+                UnityEngine.Debug.LogWarning($"[VibeLogger] Failed to delete old log file {logFile.Name}: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Get current environment information
+        /// </summary>
+        private EnvironmentInfo GetEnvironmentInfo()
+        {
+            if (!IsEditorMainThread)
+            {
+                return new EnvironmentInfo
+                {
+                    domain_reload_state = DOMAIN_RELOAD_STATE_UNAVAILABLE_OFF_MAIN_THREAD
+                };
+            }
+
+            // Why: timeout continuations can run off-thread, so UnityEditor state is read only
+            // after the cached editor main-thread check above confirms this call is safe.
+            bool isDomainReloadInProgress = EditorApplication.isCompiling;
+
+            return new EnvironmentInfo
+            {
+                domain_reload_state = isDomainReloadInProgress ? DOMAIN_RELOAD_STATE_IN_PROGRESS : DOMAIN_RELOAD_STATE_IDLE
+            };
+        }
+
+        private bool IsEditorMainThread
+        {
+            get
+            {
+                int mainThreadId = Volatile.Read(ref _mainThreadId);
+                return mainThreadId != UNINITIALIZED_MAIN_THREAD_ID
+                    && Thread.CurrentThread.ManagedThreadId == mainThreadId;
+            }
+        }
+
+        private string GetLogDirectory()
+        {
+            string logDirectory = Volatile.Read(ref _logDirectory);
+            if (!string.IsNullOrEmpty(logDirectory))
+            {
+                return logDirectory;
+            }
+
+            if (IsEditorMainThread)
+            {
+                return CacheUnityProjectLogDirectory();
+            }
+
+            return CreateLogDirectoryPath(Directory.GetCurrentDirectory());
+        }
+
+        private string CacheUnityProjectLogDirectory()
+        {
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            string logDirectory = CreateLogDirectoryPath(projectRoot);
+            Volatile.Write(ref _logDirectory, logDirectory);
+            return logDirectory;
+        }
+
+        private static string CreateLogDirectoryPath(string projectRoot)
+        {
+            return Path.Combine(
+                projectRoot,
+                UnityCliLoopConstants.OUTPUT_ROOT_DIR,
+                UnityCliLoopConstants.VIBE_LOGS_DIR);
+        }
+    }
+
+    /// <summary>
+    /// Provides Vibe Logger behavior for Unity CLI Loop.
+    /// </summary>
+    public static class VibeLogger
+    {
+        private static readonly VibeLoggerService ServiceValue = new VibeLoggerService();
+
+        public static void InitializeForEditorStartup()
+        {
+            ServiceValue.InitializeForEditorLoad();
+        }
+
+        [Conditional(UnityCliLoopConstants.ENV_KEY_ULOOP_DEBUG)]
+        public static void LogInfo(string operation, string message, object context = null,
+                                   string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = false)
+        {
+            ServiceValue.LogInfo(operation, message, context, correlationId, humanNote, aiTodo, includeStackTrace);
+        }
+
+        [Conditional(UnityCliLoopConstants.ENV_KEY_ULOOP_DEBUG)]
+        public static void LogWarning(string operation, string message, object context = null,
+                                      string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = true)
+        {
+            ServiceValue.LogWarning(operation, message, context, correlationId, humanNote, aiTodo, includeStackTrace);
+        }
+
+        [Conditional(UnityCliLoopConstants.ENV_KEY_ULOOP_DEBUG)]
+        public static void LogError(string operation, string message, object context = null,
+                                    string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = true)
+        {
+            ServiceValue.LogError(operation, message, context, correlationId, humanNote, aiTodo, includeStackTrace);
+        }
+
+        [Conditional(UnityCliLoopConstants.ENV_KEY_ULOOP_DEBUG)]
+        public static void LogDebug(string operation, string message, object context = null,
+                                    string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = false)
+        {
+            ServiceValue.LogDebug(operation, message, context, correlationId, humanNote, aiTodo, includeStackTrace);
+        }
+
+        [Conditional(UnityCliLoopConstants.ENV_KEY_ULOOP_DEBUG)]
+        public static void LogException(string operation, Exception exception, object context = null,
+                                        string correlationId = null, string humanNote = null, string aiTodo = null, bool includeStackTrace = true)
+        {
+            ServiceValue.LogException(operation, exception, context, correlationId, humanNote, aiTodo, includeStackTrace);
+        }
+
+        public static string GenerateCorrelationId()
+        {
+            return ServiceValue.GenerateCorrelationId();
+        }
+
+        public static string GetLogsForAi(string operation = null, string correlationId = null, int maxCount = 100)
+        {
+            return ServiceValue.GetLogsForAi(operation, correlationId, maxCount);
+        }
+
+        public static void ClearMemoryLogs()
+        {
+            ServiceValue.ClearMemoryLogs();
+        }
+    }
+}

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Keyboard input test script for UnityChan locomotion and action playback
+# Keyboard input test script for cube movement and action playback
 
 set -e
 
@@ -32,7 +32,7 @@ release() {
     uloop simulate-keyboard --action KeyUp --key "$1"
 }
 
-echo "=== UnityChan Keyboard Input Test ==="
+echo "=== Keyboard Cube Input Test ==="
 
 uloop control-play-mode --action Play
 sleep 2

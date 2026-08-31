@@ -1,6 +1,6 @@
 {
     "name": "ForDynamicAssemblyTest",
-    "rootNamespace": "",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests",
     "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],

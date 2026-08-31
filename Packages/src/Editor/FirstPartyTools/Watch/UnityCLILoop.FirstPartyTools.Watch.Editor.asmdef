@@ -1,0 +1,20 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.Watch.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:afe86dd49995e46baa33e099a4d2ee1d",
+        "GUID:94d8abc693f543a691a4645a5ff42e5c"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

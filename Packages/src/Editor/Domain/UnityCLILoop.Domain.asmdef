@@ -1,0 +1,24 @@
+{
+    "name": "UnityCLILoop.Domain",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Domain",
+    "references": [
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.test-framework",
+            "expression": "",
+            "define": "ULOOP_HAS_TEST_FRAMEWORK"
+        }
+    ],
+    "noEngineReferences": true
+}

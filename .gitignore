@@ -84,8 +84,6 @@ crashlytics-build.properties
 # AI
 .claude/settings.local.json
 .kiro
-.mcp.json
-.inspector.mcp.json
 .serena
 working-notes**
 
@@ -97,7 +95,8 @@ memo.md
 Packages/src/Docs/**
 
 # uloop CLI cache and outputs
-**/.uloop/
+**/.uloop/*
+!**/.uloop/project-runner-pin.json
 
 # Node.js / TypeScript
 **/node_modules/
@@ -108,13 +107,12 @@ yarn-error.log*
 .npm
 .yarn-integrity
 
-# TypeScript Server (exclude development builds, commit only production bundle)
-Packages/src/TypeScriptServer~/dist/*
-!Packages/src/TypeScriptServer~/dist/server.bundle.js
-!Packages/src/TypeScriptServer~/dist/server.bundle.js.map
+# .NET development tools
+**/[Bb]in/
+**/[Oo]bj/
 
-# CLI (published to npm separately, dist not committed)
-Packages/src/Cli~/dist/
+# Native Go CLI build and release outputs
+/dist/
 
 # Environment configuration files
 .env
@@ -163,3 +161,8 @@ eslint-results.xml
 .claude/plans
 .claude/skills/*-workspace/
 .claude/skill-tuning/
+
+# Soak harness output (scripts/soak-loop.*) - the default --out-dir lands here
+# when the harness is run from the repository root. One run leaves CSVs, logs,
+# and a failures/ payload dump per failed command.
+uloop-soak-results/

@@ -1,0 +1,186 @@
+package clierrors
+
+import (
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"syscall"
+	"testing"
+
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
+)
+
+// Test support type that exposes a typed cause behind an opaque message, simulating
+// platform-specific transport errors (e.g. Windows named pipes) whose text does not
+// contain the POSIX phrases the string fallback looks for.
+type opaqueCauseError struct {
+	cause error
+}
+
+func (err opaqueCauseError) Error() string {
+	return "transport failure (code 0x6d)"
+}
+
+func (err opaqueCauseError) Unwrap() error {
+	return err.cause
+}
+
+// Test support type that reports Timeout() without a recognizable message,
+// matching how go-winio surfaces named pipe deadline expiry.
+type timeoutOnlyError struct{}
+
+func (timeoutOnlyError) Error() string {
+	return "operation did not finish in time"
+}
+
+func (timeoutOnlyError) Timeout() bool {
+	return true
+}
+
+// Verifies that disconnect classification matches typed causes instead of relying on
+// platform- or locale-dependent error strings.
+func TestIsTransportDisconnectErrorMatchesTypedCauses(t *testing.T) {
+	typedCauses := []error{
+		io.EOF,
+		io.ErrUnexpectedEOF,
+		io.ErrClosedPipe,
+		net.ErrClosed,
+		syscall.ECONNRESET,
+		syscall.ECONNABORTED,
+		syscall.EPIPE,
+	}
+
+	for _, cause := range typedCauses {
+		if !IsTransportDisconnectError(opaqueCauseError{cause: cause}) {
+			t.Fatalf("typed cause was not classified as disconnect: %v", cause)
+		}
+	}
+}
+
+// Verifies that non-transport errors are not misclassified as disconnects.
+func TestIsTransportDisconnectErrorRejectsUnrelatedErrors(t *testing.T) {
+	unrelated := []error{
+		fmt.Errorf("unity error: compilation failed"),
+		opaqueCauseError{cause: fmt.Errorf("some inner failure")},
+	}
+
+	for _, err := range unrelated {
+		if IsTransportDisconnectError(err) {
+			t.Fatalf("unrelated error was classified as disconnect: %v", err)
+		}
+	}
+}
+
+// Verifies the legacy string fallback still classifies errors without a typed cause.
+func TestIsTransportDisconnectErrorKeepsStringFallback(t *testing.T) {
+	fallbackErrors := []error{
+		fmt.Errorf("read tcp 127.0.0.1:1: connection reset by peer"),
+	}
+
+	for _, err := range fallbackErrors {
+		if !IsTransportDisconnectError(err) {
+			t.Fatalf("string fallback did not classify: %v", err)
+		}
+	}
+}
+
+// Verifies a wrapped NoResponseError is classified as a disconnect even when the
+// outer error message no longer matches the legacy UNITY_NO_RESPONSE sentinel.
+func TestIsTransportDisconnectErrorMatchesWrappedNoResponseError(t *testing.T) {
+	wrapped := fmt.Errorf("rpc failed: %w", &unityipc.NoResponseError{})
+	if !IsTransportDisconnectError(wrapped) {
+		t.Fatalf("wrapped NoResponseError was not classified as disconnect: %v", wrapped)
+	}
+}
+
+// Verifies a connect() refused by the operating system is classified as permanent, so the
+// dial-retry loops abort instead of spending their window on an error that cannot clear.
+func TestIsPermanentConnectErrorMatchesRefusedSyscalls(t *testing.T) {
+	refusedSyscalls := []syscall.Errno{syscall.EPERM, syscall.EACCES}
+
+	for _, errno := range refusedSyscalls {
+		dialError := &net.OpError{
+			Op:   "dial",
+			Net:  "unix",
+			Addr: &net.UnixAddr{Name: "/tmp/uloop-501/UnityCliLoop-sample.sock", Net: "unix"},
+			Err:  os.NewSyscallError("connect", errno),
+		}
+		wrapped := &unityipc.ConnectionAttemptError{Cause: dialError}
+		if !IsPermanentConnectError(wrapped) {
+			t.Fatalf("refused connect was not classified as permanent: %v", wrapped)
+		}
+	}
+}
+
+// Verifies a named pipe access denial is classified as permanent too. go-winio reports it as a
+// path error whose cause maps to os.ErrPermission and to neither POSIX errno, so matching errnos
+// alone would leave Windows retrying a refusal that never clears.
+func TestIsPermanentConnectErrorMatchesNamedPipeAccessDenial(t *testing.T) {
+	deniedPipe := &unityipc.ConnectionAttemptError{
+		Cause: &os.PathError{
+			Op:   "open",
+			Path: `\\.\pipe\UnityCliLoop-sample`,
+			Err:  os.ErrPermission,
+		},
+	}
+
+	if !IsPermanentConnectError(deniedPipe) {
+		t.Fatalf("denied named pipe was not classified as permanent: %v", deniedPipe)
+	}
+}
+
+// Verifies a permission failure that is not a dial outcome stays out of this classification: the
+// same callers also surface project and endpoint file errors, and those must not abort a wait.
+func TestIsPermanentConnectErrorIgnoresPermissionErrorsOutsideDialing(t *testing.T) {
+	fileError := &os.PathError{
+		Op:   "open",
+		Path: "/tmp/MyProject/ProjectSettings/ProjectVersion.txt",
+		Err:  syscall.EACCES,
+	}
+
+	if IsPermanentConnectError(fileError) {
+		t.Fatalf("a file permission error was classified as a refused connect: %v", fileError)
+	}
+}
+
+// Verifies the errors a retry is meant to absorb — the socket not existing yet, nobody
+// listening yet, a deadline expiry — stay retryable.
+func TestIsPermanentConnectErrorRejectsTransientFailures(t *testing.T) {
+	transientErrors := []error{
+		nil,
+		&unityipc.ConnectionAttemptError{Cause: os.NewSyscallError("connect", syscall.ENOENT)},
+		&unityipc.ConnectionAttemptError{Cause: os.NewSyscallError("connect", syscall.ECONNREFUSED)},
+		&unityipc.ConnectionAttemptError{Cause: timeoutOnlyError{}},
+		fmt.Errorf("dial unix /tmp/uloop-501/UnityCliLoop-sample.sock: i/o timeout"),
+	}
+
+	for _, err := range transientErrors {
+		if IsPermanentConnectError(err) {
+			t.Fatalf("transient error was classified as permanent: %v", err)
+		}
+	}
+}
+
+// Verifies that final-response timeout classification matches typed deadline errors
+// and Timeout()-reporting errors instead of relying on the "i/o timeout" message.
+func TestIsFinalResponseTimeoutErrorMatchesTypedCauses(t *testing.T) {
+	if !IsFinalResponseTimeoutError(opaqueCauseError{cause: os.ErrDeadlineExceeded}) {
+		t.Fatal("wrapped deadline error was not classified as timeout")
+	}
+	if !IsFinalResponseTimeoutError(timeoutOnlyError{}) {
+		t.Fatal("Timeout()-reporting error was not classified as timeout")
+	}
+	if IsFinalResponseTimeoutError(fmt.Errorf("unity error: busy")) {
+		t.Fatal("unrelated error was classified as timeout")
+	}
+}
+
+// Verifies that a Timeout()-reporting error stays classified even when wrapped, which
+// is how go-winio's named pipe deadline error reaches the caller on Windows.
+func TestIsFinalResponseTimeoutErrorUnwrapsTimeoutCauses(t *testing.T) {
+	wrapped := opaqueCauseError{cause: timeoutOnlyError{}}
+	if !IsFinalResponseTimeoutError(wrapped) {
+		t.Fatal("wrapped Timeout()-reporting error was not classified as timeout")
+	}
+}

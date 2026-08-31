@@ -1,0 +1,105 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+using UnityEditor;
+using UnityEditor.PackageManager;
+
+using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+using Debug = System.Diagnostics.Debug;
+
+namespace io.github.hatayama.UnityCliLoop.Infrastructure
+{
+    /// <summary>
+    /// Resets Setup Wizard state when Unity removes this package from the project.
+    /// </summary>
+    internal sealed class UnityCliLoopPackageRemovalSettingsResetter
+    {
+        private readonly IUnityCliLoopEditorSettingsPort _editorSettingsPort;
+
+        internal UnityCliLoopPackageRemovalSettingsResetter(IUnityCliLoopEditorSettingsPort editorSettingsPort)
+        {
+            Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
+
+            _editorSettingsPort = editorSettingsPort
+                ?? throw new ArgumentNullException(nameof(editorSettingsPort));
+        }
+
+        internal void RegisterForEditorStartup()
+        {
+            if (AssetDatabase.IsAssetImportWorkerProcess())
+            {
+                return;
+            }
+
+            if (UnityEngine.Application.isBatchMode)
+            {
+                return;
+            }
+
+            // Unsubscribe first so a repeated registration cannot stack duplicate handlers,
+            // matching the guard pattern used by the other editor-lifetime subscriptions.
+            Events.registeringPackages -= HandleRegisteringPackages;
+            Events.registeringPackages += HandleRegisteringPackages;
+        }
+
+        internal static bool ShouldResetSetupWizardState(
+            IEnumerable<string> removedPackageNames,
+            string packageName)
+        {
+            Debug.Assert(removedPackageNames != null, "removedPackageNames must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(packageName), "packageName must not be null or empty");
+
+            return removedPackageNames.Any(
+                removedPackageName => string.Equals(removedPackageName, packageName, StringComparison.Ordinal));
+        }
+
+        internal static UnityCliLoopEditorSettingsData ResetSetupWizardState(UnityCliLoopEditorSettingsData settings)
+        {
+            Debug.Assert(settings != null, "settings must not be null");
+
+            return settings with
+            {
+                lastSeenSetupWizardVersion = string.Empty,
+                lastSeenSetupWizardMinimumDispatcherVersion = string.Empty,
+                suppressSetupWizardAutoShow = false
+            };
+        }
+
+        internal static void ResetSetupWizardStateIfPackageRemoved(
+            IUnityCliLoopEditorSettingsPort editorSettingsPort,
+            IEnumerable<string> removedPackageNames,
+            string packageName)
+        {
+            Debug.Assert(editorSettingsPort != null, "editorSettingsPort must not be null");
+            Debug.Assert(removedPackageNames != null, "removedPackageNames must not be null");
+            Debug.Assert(!string.IsNullOrEmpty(packageName), "packageName must not be null or empty");
+
+            if (!ShouldResetSetupWizardState(removedPackageNames, packageName))
+            {
+                return;
+            }
+
+            editorSettingsPort.UpdateSettings(ResetSetupWizardState);
+        }
+
+        private void HandleRegisteringPackages(PackageRegistrationEventArgs args)
+        {
+            Debug.Assert(args != null, "args must not be null");
+
+            IEnumerable<string> removedPackageNames = GetRemovedPackageNames(args);
+            ResetSetupWizardStateIfPackageRemoved(
+                _editorSettingsPort,
+                removedPackageNames,
+                UnityCliLoopConstants.PACKAGE_NAME);
+        }
+
+        private static IEnumerable<string> GetRemovedPackageNames(PackageRegistrationEventArgs args)
+        {
+            Debug.Assert(args != null, "args must not be null");
+
+            return args.removed.Select(packageInfo => packageInfo.name);
+        }
+    }
+}

@@ -1,8 +1,11 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 using System.Collections;
+using System.Threading;
 using System.Threading.Tasks;
-using io.github.hatayama.uLoopMCP;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
@@ -11,21 +14,28 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
-namespace Tests.PlayMode
+namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 {
+    /// <summary>
+    /// Test fixture that verifies mouse UI drags keep Mouse.current aligned with the simulated pointer position.
+    /// </summary>
     public class SimulateMouseUiInputSystemTests : InputTestFixture
     {
-        private const float POSITION_TOLERANCE = 0.01f;
+        private const float PositionTolerance = 0.01f;
 
         private GameObject canvasGo = null!;
         private GameObject eventSystemGo = null!;
+        private ExistingEventSystemDisableScope eventSystemDisableScope = null!;
         private SimulateMouseUiTool tool = null!;
         private SimulateMouseUiResponse lastResponse = null!;
 
         public override void Setup()
         {
             base.Setup();
+
+            eventSystemDisableScope = new ExistingEventSystemDisableScope();
 
             canvasGo = new GameObject("TestCanvas");
             Canvas canvas = canvasGo.AddComponent<Canvas>();
@@ -46,12 +56,14 @@ namespace Tests.PlayMode
             MouseDragState.Clear();
             Object.DestroyImmediate(canvasGo);
             Object.DestroyImmediate(eventSystemGo);
+            eventSystemDisableScope.Restore();
             base.TearDown();
         }
 
         [UnityTest]
         public IEnumerator DragOneShot_Should_UpdateMouseCurrentPositionToDragPosition()
         {
+            // Verifies a one-shot UI drag keeps Mouse.current aligned with PointerEventData at the drag end.
             MouseAwareDragTracker tracker = CreateDraggableElement(
                 "DragTarget", new Vector2(120f, 80f), new Vector2(200f, 100f));
             yield return null;
@@ -77,9 +89,56 @@ namespace Tests.PlayMode
             AssertPositionEquals(endScreenPosition, tracker.LastMousePosition, "Mouse.current position should match PointerEventData during drag.");
         }
 
+        [UnityTest]
+        public IEnumerator DragSplit_Should_UpdateMouseCurrentPositionOnEachDragStep()
+        {
+            // Verifies the incremental drag (DragStart/DragMove/DragEnd) path keeps Mouse.current aligned too,
+            // covering the InitiateDrag and InterpolateDragPosition sync points independently of one-shot drag.
+            MouseAwareDragTracker tracker = CreateDraggableElement(
+                "DragTarget", Vector2.zero, new Vector2(200f, 100f));
+            yield return null;
+
+            Vector2 startScreenPosition = GetScreenPosition(tracker.gameObject);
+            Vector2 moveScreenPosition = startScreenPosition + new Vector2(50f, 0f);
+            Vector2 endScreenPosition = startScreenPosition + new Vector2(100f, 0f);
+            Vector2 startInputPosition = ScreenToInput(startScreenPosition);
+            Vector2 moveInputPosition = ScreenToInput(moveScreenPosition);
+            Vector2 endInputPosition = ScreenToInput(endScreenPosition);
+            SetMousePosition(Vector2.zero);
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = MouseAction.DragStart.ToString(),
+                ["x"] = startInputPosition.x,
+                ["y"] = startInputPosition.y
+            });
+            Assert.IsTrue(lastResponse.Success);
+            AssertPositionEquals(startScreenPosition, GetMousePosition(), "Mouse.current position should match the drag start position.");
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = MouseAction.DragMove.ToString(),
+                ["x"] = moveInputPosition.x,
+                ["y"] = moveInputPosition.y,
+                ["dragSpeed"] = 0f
+            });
+            Assert.IsTrue(lastResponse.Success);
+            AssertPositionEquals(moveScreenPosition, GetMousePosition(), "Mouse.current position should match the drag move position.");
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = MouseAction.DragEnd.ToString(),
+                ["x"] = endInputPosition.x,
+                ["y"] = endInputPosition.y,
+                ["dragSpeed"] = 0f
+            });
+            Assert.IsTrue(lastResponse.Success);
+            AssertPositionEquals(endScreenPosition, GetMousePosition(), "Mouse.current position should match the drag end position.");
+        }
+
         private IEnumerator RunTool(JObject parameters)
         {
-            Task<BaseToolResponse> task = tool.ExecuteAsync(parameters);
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters, CancellationToken.None);
             float timeoutAt = Time.realtimeSinceStartup + 5f;
             yield return new WaitUntil(() =>
                 task.IsCompleted || Time.realtimeSinceStartup >= timeoutAt);
@@ -120,13 +179,23 @@ namespace Tests.PlayMode
             Set(currentMouse!.position, position);
         }
 
+        private Vector2 GetMousePosition()
+        {
+            Mouse? currentMouse = Mouse.current;
+            Assert.IsNotNull(currentMouse, "Mouse.current should exist after adding a Mouse device.");
+            return currentMouse!.position.ReadValue();
+        }
+
         private void AssertPositionEquals(Vector2 expected, Vector2 actual, string message)
         {
             float distance = Vector2.Distance(expected, actual);
-            Assert.LessOrEqual(distance, POSITION_TOLERANCE, $"{message} Expected {expected}, got {actual}.");
+            Assert.LessOrEqual(distance, PositionTolerance, $"{message} Expected {expected}, got {actual}.");
         }
     }
 
+    /// <summary>
+    /// Test support type that records both PointerEventData and Mouse.current positions observed during a drag.
+    /// </summary>
     public class MouseAwareDragTracker : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         public Vector2 LastPointerPosition { get; private set; }

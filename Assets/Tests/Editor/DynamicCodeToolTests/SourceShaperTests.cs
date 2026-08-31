@@ -1,7 +1,12 @@
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Source Shaper behavior.
+    /// </summary>
     [TestFixture]
     public class SourceShaperTests
     {
@@ -44,8 +49,21 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
 
         [Test]
+        public void Analyze_WhenAttributedTypeHasAccessModifier_ShouldDetectTypeDeclaration()
+        {
+            // Verifies attributed public types are not mistaken for top-level statements.
+            string source = "[System.Serializable] public sealed class Example {}";
+
+            SourceShapeResult result = SourceShaper.Analyze(source);
+
+            Assert.IsTrue(result.HasTypeDeclaration);
+            Assert.IsFalse(result.HasTopLevelStatements);
+        }
+
+        [Test]
         public void Analyze_WhenVerbatimUsingAlias_ShouldRecordNormalizedAliasName()
         {
+            // Verifies "using @Object = ..." records the alias name without the leading '@'.
             SourceShapeResult result = SourceShaper.Analyze(
                 "using @Object = System.Object;\nreturn new @Object();");
 
@@ -55,6 +73,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void Analyze_WhenGlobalUsingAliasHasComments_ShouldRecordAliasName()
         {
+            // Verifies comments between "global", "using", and the alias name do not block alias detection.
             SourceShapeResult result = SourceShaper.Analyze(
                 "global /* comment */ using /* comment */ Random /* comment */ = UnityEngine.Random;\nreturn Random.Range(0, 1);");
 
@@ -64,10 +83,23 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void Analyze_WhenUsingAliasHasComments_ShouldRecordAliasName()
         {
+            // Verifies comments between "using" and the alias name do not block alias detection.
             SourceShapeResult result = SourceShaper.Analyze(
                 "using /* comment */ Object /* comment */ = UnityEngine.Object;\nreturn null;");
 
             Assert.That(result.AliasedNames, Does.Contain("Object"));
+        }
+
+        [Test]
+        public void Analyze_WhenUsingVarHasCommentBeforeVar_ShouldTreatAsTopLevelStatement()
+        {
+            // Verifies a comment between "using" and "var" still resolves to a using-statement,
+            // not a using-directive (regression guard for the SkipWhitespaceAndComments fix).
+            SourceShapeResult result = SourceShaper.Analyze(
+                "using /* comment */ var scope = new System.IO.MemoryStream();\nreturn null;");
+
+            Assert.IsTrue(result.HasTopLevelStatements);
+            Assert.AreEqual(0, result.UsingDirectives.Count);
         }
     }
 }

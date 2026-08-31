@@ -21,6 +21,7 @@ None.
 ## Output
 
 Returns JSON with:
+
 - `ProjectName`: Application product name
 - `CompanyName`: Company name
 - `Version`: Application version
@@ -37,4 +38,4 @@ Returns JSON with:
 
 ## Notes
 
-This is a sample custom tool demonstrating how to create MCP tools.
+This is a sample custom tool demonstrating how to create Unity CLI Loop tools.

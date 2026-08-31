@@ -1,0 +1,971 @@
+using System.Threading;
+using System.Threading.Tasks;
+using NUnit.Framework;
+using UnityEditor;
+using UnityEditor.Compilation;
+
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
+{
+    /// <summary>
+    /// Test fixture that verifies Control Play Mode behavior without entering PlayMode.
+    /// </summary>
+    public sealed class ControlPlayModeUseCaseTests
+    {
+        [Test]
+        public void ControlPlayModeSchema_WhenCreated_UsesToolReadinessSizedTimeout()
+        {
+            // Verifies that PlayMode waits default to the repository's long-running tool readiness window.
+            ControlPlayModeSchema schema = new ControlPlayModeSchema();
+
+            Assert.That(schema.TimeoutSeconds, Is.EqualTo(ControlPlayModeUseCase.DefaultTimeoutSeconds));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStatusOnly_ReturnsCurrentPlayModeState()
+        {
+            // Verifies that the CLI can inspect PlayMode state without changing it during post-reload waits.
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase();
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                StatusOnly = true,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode status"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStatusOnlyPlayBlockedByCompileErrors_ReturnsSavedDiagnostics()
+        {
+            // Verifies polling can report compiler diagnostics when PlayMode becomes blocked after the first request.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            ControlPlayModeCompileError[] compileErrors =
+            {
+                new ControlPlayModeCompileError
+                {
+                    Message = "CS1525: invalid expression",
+                    File = "Assets/Scripts/Sample.cs",
+                    Line = 3
+                }
+            };
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(compileErrors),
+                new StubCompilationFailureGate(true));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+                StatusOnly = true,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.BlockedByCompileErrors, Is.True);
+            Assert.That(response.CompileErrorCount, Is.EqualTo(1));
+            Assert.That(response.CompileErrors[0].Message, Is.EqualTo("CS1525: invalid expression"));
+            Assert.That(response.Message, Is.EqualTo("Play mode could not start because Unity has compiler errors."));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStatusOnlyResumeBlockedByCompileErrors_ReturnsSavedDiagnostics()
+        {
+            // Verifies Resume is treated as a Play alias for StatusOnly compile-error blocking.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            ControlPlayModeCompileError[] compileErrors =
+            {
+                new ControlPlayModeCompileError
+                {
+                    Message = "CS1525: invalid expression",
+                    File = "Assets/Scripts/Sample.cs",
+                    Line = 3
+                }
+            };
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(compileErrors),
+                new StubCompilationFailureGate(true));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Resume,
+                StatusOnly = true,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.BlockedByCompileErrors, Is.True);
+            Assert.That(response.CompileErrorCount, Is.EqualTo(1));
+            Assert.That(response.Message, Is.EqualTo("Play mode could not start because Unity has compiler errors."));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStatusOnlyStopAndCompileFailed_ReturnsCurrentPlayModeState()
+        {
+            // Verifies compiler errors are only treated as a status polling blocker for Play requests.
+            ControlPlayModeCompileError[] compileErrors =
+            {
+                new ControlPlayModeCompileError
+                {
+                    Message = "CS1525: invalid expression",
+                    File = "Assets/Scripts/Sample.cs",
+                    Line = 3
+                }
+            };
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(compileErrors),
+                new StubCompilationFailureGate(true));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Stop,
+                StatusOnly = true,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.BlockedByCompileErrors, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Play mode status"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStatusAction_ReturnsCurrentStateWithoutSideEffects()
+        {
+            // Verifies the Status action is a pure read: it reports current state without
+            // saving dirty editor changes, entering PlayMode, or reporting Changed=true.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Status,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode status"));
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.IsPlaying, Is.True);
+            Assert.That(response.IsPaused, Is.False);
+            Assert.That(response.BlockedByCompileErrors, Is.False);
+            Assert.That(response.BlockedByUnsavedChanges, Is.False);
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(editorState.IsPausedSetCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStatusActionPaused_ReportsPausedStateWithoutSideEffects()
+        {
+            // Verifies Status reports a paused PlayMode session as-is, without resuming or stepping it.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: true);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                null,
+                editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Status,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.IsPlaying, Is.True);
+            Assert.That(response.IsPaused, Is.True);
+            Assert.That(response.BlockedByCompileErrors, Is.False);
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(editorState.IsPausedSetCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStatusActionAndCompileErrorsExist_ReportsCompileErrorBlocker()
+        {
+            // Verifies Status surfaces the current compile-error blocker (read-only) instead of
+            // always claiming no blockers, which would misreport a Play attempt's real outcome.
+            ControlPlayModeCompileError[] compileErrors =
+            {
+                new ControlPlayModeCompileError
+                {
+                    Message = "CS1525: invalid expression",
+                    File = "Assets/Scripts/Sample.cs",
+                    Line = 3
+                }
+            };
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(compileErrors),
+                new StubCompilationFailureGate(true),
+                null,
+                editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Status,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.BlockedByCompileErrors, Is.True);
+            Assert.That(response.CompileErrorCount, Is.EqualTo(1));
+            Assert.That(response.CompileErrors[0].Message, Is.EqualTo("CS1525: invalid expression"));
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(editorState.IsPausedSetCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStatusActionAndUnsavedChangesExist_DoesNotPredictUnsavedChangesBlocker()
+        {
+            // Verifies Status never predicts BlockedByUnsavedChanges: that field means "a save attempt
+            // during this request failed", and Status makes no save attempt, even when dirty changes exist.
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: new[] { "Assets/Scenes/Dirty.unity" });
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                null);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Status,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.BlockedByUnsavedChanges, Is.False);
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+            Assert.That(quietSaver.DetectCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStepOutsidePlayMode_ReturnsNoOpWithGuidance()
+        {
+            // Verifies Step refuses to run outside PlayMode instead of silently queuing a frame step.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase();
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Step,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode is not running. Step requires PlayMode; start it with --action Play first."));
+            Assert.That(response.Changed, Is.False);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStopAlreadyStopped_ReturnsNoOpState()
+        {
+            // Verifies Stop distinguishes a no-op from a state-changing PlayMode exit.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase();
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Stop,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode was already stopped"));
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.WasAlreadyStopped, Is.True);
+        }
+
+        [Test]
+        public void CompilationFailureService_WhenCompilationFails_StoresCompilerErrors()
+        {
+            // Verifies saved PlayMode diagnostics come from the compiler failure snapshot.
+            ControlPlayModeCompilationFailureService service = new ControlPlayModeCompilationFailureService();
+            CompilerMessage error = new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message = "CS1002: ; expected",
+                file = "Assets/Scripts/Sample.cs",
+                line = 12
+            };
+            CompilerMessage warning = new CompilerMessage
+            {
+                type = CompilerMessageType.Warning,
+                message = "CS0168: variable declared but never used",
+                file = "Assets/Scripts/Sample.cs",
+                line = 8
+            };
+
+            service.HandleCompilationStarted(null);
+            service.HandleAssemblyCompilationFinished("Assembly-CSharp.dll", new[] { error, warning });
+            service.HandleCompilationFinished(null);
+
+            ControlPlayModeCompileError[] errors = service.GetLastFailedErrors();
+            Assert.That(errors.Length, Is.EqualTo(1));
+            Assert.That(errors[0].Message, Is.EqualTo("CS1002: ; expected"));
+            Assert.That(errors[0].File, Is.EqualTo("Assets/Scripts/Sample.cs"));
+            Assert.That(errors[0].Line, Is.EqualTo(12));
+        }
+
+        [Test]
+        public void CompilationFailureService_WhenNextCompilationStarts_ClearsPreviousErrors()
+        {
+            // Verifies stale compiler diagnostics are discarded as soon as Unity starts compiling again.
+            ControlPlayModeCompilationFailureService service = new ControlPlayModeCompilationFailureService();
+            CompilerMessage error = new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message = "CS0103: name does not exist",
+                file = "Assets/Scripts/Sample.cs",
+                line = 3
+            };
+
+            service.HandleCompilationStarted(null);
+            service.HandleAssemblyCompilationFinished("Assembly-CSharp.dll", new[] { error });
+            service.HandleCompilationFinished(null);
+            service.HandleCompilationStarted(null);
+
+            ControlPlayModeCompileError[] errors = service.GetLastFailedErrors();
+            Assert.That(errors, Is.Empty);
+        }
+
+        [Test]
+        public void CompilationFailureService_WhenCompilationSucceeds_ClearsPreviousErrors()
+        {
+            // Verifies successful compilation removes the previous failure snapshot.
+            ControlPlayModeCompilationFailureService service = new ControlPlayModeCompilationFailureService();
+            CompilerMessage error = new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message = "CS0246: type not found",
+                file = "Assets/Scripts/Sample.cs",
+                line = 5
+            };
+
+            service.HandleCompilationStarted(null);
+            service.HandleAssemblyCompilationFinished("Assembly-CSharp.dll", new[] { error });
+            service.HandleCompilationFinished(null);
+            service.HandleCompilationStarted(null);
+            service.HandleAssemblyCompilationFinished("Assembly-CSharp.dll", System.Array.Empty<CompilerMessage>());
+            service.HandleCompilationFinished(null);
+
+            ControlPlayModeCompileError[] errors = service.GetLastFailedErrors();
+            Assert.That(errors, Is.Empty);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayBlockedByCompileErrors_ReturnsSavedDiagnostics()
+        {
+            // Verifies Play returns compiler diagnostics immediately instead of waiting for a state timeout.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            ControlPlayModeCompileError[] compileErrors =
+            {
+                new ControlPlayModeCompileError
+                {
+                    Message = "CS1002: ; expected",
+                    File = "Assets/Scripts/Sample.cs",
+                    Line = 12
+                }
+            };
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(compileErrors),
+                new StubCompilationFailureGate(true));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.BlockedByCompileErrors, Is.True);
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.IsPlaying, Is.False);
+            Assert.That(response.CompileErrorCount, Is.EqualTo(1));
+            Assert.That(response.CompileErrors[0].Message, Is.EqualTo("CS1002: ; expected"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayBlockedWithoutSavedErrors_ReturnsEmptyDiagnostics()
+        {
+            // Verifies Play still fails fast when Unity reports compilation failure but no snapshot is available.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(true));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.BlockedByCompileErrors, Is.True);
+            Assert.That(response.CompileErrorCount, Is.EqualTo(0));
+            Assert.That(response.CompileErrors, Is.Empty);
+            Assert.That(response.Message, Does.Contain("no saved compiler diagnostics"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartSaveFails_DoesNotEnterPlayMode()
+        {
+            // Verifies dirty Scene/Prefab save failure blocks Edit→Play instead of prompting or hanging.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: new[] { "Scene: Assets/Scenes/Sample.unity" },
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(1));
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.IsPlaying, Is.False);
+            Assert.That(response.BlockedByUnsavedChanges, Is.True);
+            Assert.That(response.Message, Does.Contain("could not be saved"));
+            Assert.That(response.Message, Does.Contain("Scene: Assets/Scenes/Sample.unity"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartLeavesUnsavedChanges_DoesNotEnterPlayMode()
+        {
+            // Verifies remaining dirty editor state after a quiet save still blocks Play start.
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: new[] { "Prefab Stage: Assets/Prefabs/Hud.prefab" });
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(1));
+            Assert.That(quietSaver.DetectCallCount, Is.EqualTo(1));
+            Assert.That(EditorApplication.isPlaying, Is.False);
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.BlockedByUnsavedChanges, Is.True);
+            Assert.That(response.Message, Does.Contain("unsaved scene or prefab changes"));
+            Assert.That(response.Message, Does.Contain("Prefab Stage: Assets/Prefabs/Hud.prefab"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayResumesFromPause_OnlyClearsPauseAndReportsResumed()
+        {
+            // Verifies a true resume (paused while still playing) only clears isPaused, never
+            // reassigns isPlaying or triggers a scene save, and reports ResumedFromPause with no warning.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: true);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider());
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode resumed"));
+            Assert.That(response.ResumedFromPause, Is.True);
+            Assert.That(response.Warning, Is.Empty);
+            Assert.That(editorState.IsPaused, Is.False);
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: Play while already running and not paused is a no-op with the already-running message.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayWhileAlreadyRunning_ReportsNoOpWithoutSideEffects()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider());
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Play mode was already running; nothing to start or resume."));
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.ResumedFromPause, Is.False);
+            Assert.That(response.Warning, Is.Empty);
+            Assert.That(response.IsPlaying, Is.True);
+            Assert.That(response.IsPaused, Is.False);
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(editorState.IsPausedSetCount, Is.EqualTo(0));
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: Resume while already running and not paused uses the same no-op contract as Play.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenResumeWhileAlreadyRunning_ReportsNoOpWithoutSideEffects()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider());
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Resume,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Play mode was already running; nothing to start or resume."));
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.ResumedFromPause, Is.False);
+            Assert.That(response.Warning, Is.Empty);
+            Assert.That(response.IsPlaying, Is.True);
+            Assert.That(response.IsPaused, Is.False);
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(editorState.IsPausedSetCount, Is.EqualTo(0));
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a failed compile gate does not replace the already-running no-op while Play is live.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayWhileAlreadyRunningAndCompileFailed_ReportsNoOpNotCompileBlock()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeCompileError[] compileErrors =
+            {
+                new ControlPlayModeCompileError
+                {
+                    Message = "CS1525: invalid expression",
+                    File = "Assets/Scripts/Sample.cs",
+                    Line = 3
+                }
+            };
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(compileErrors),
+                new StubCompilationFailureGate(true),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider());
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Play mode was already running; nothing to start or resume."));
+            Assert.That(response.Changed, Is.False);
+            Assert.That(response.ResumedFromPause, Is.False);
+            Assert.That(response.Warning, Is.Empty);
+            Assert.That(response.IsPlaying, Is.True);
+            Assert.That(response.IsPaused, Is.False);
+            Assert.That(response.BlockedByCompileErrors, Is.False);
+            Assert.That(response.CompileErrorCount, Is.EqualTo(0));
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(editorState.IsPausedSetCount, Is.EqualTo(0));
+            Assert.That(quietSaver.SaveCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartsFreshSession_SetsPlayingAndReportsWarning()
+        {
+            // Verifies a fresh Play start (not a resume) sets isPlaying and surfaces the
+            // fresh-start warning so callers expecting a resume notice their state was lost.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider());
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode started"));
+            Assert.That(response.ResumedFromPause, Is.False);
+            Assert.That(response.Warning, Is.EqualTo(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning));
+            Assert.That(editorState.IsPlaying, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies Edit-to-Play with active patches concatenates the fresh-start warning
+        /// and the domain-reload drop warning, separated by a single space.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartsWithActivePatches_AppendsDropWarningAfterFreshStart()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider(patchCount: 2));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            string dropWarning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                isDomainReloadDisabledOnEnterPlayMode: false,
+                activeHotReloadPatchCount: 2,
+                activePausePointCount: 0);
+            Assert.That(
+                response.Warning,
+                Is.EqualTo(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning + " " + dropWarning));
+        }
+
+        /// <summary>
+        /// Verifies resume from pause does not attach the domain-reload drop warning even when
+        /// patches exist, because that path does not reload the domain.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayResumesWithActivePatches_DoesNotAppendDropWarning()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: true);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider(patchCount: 2));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.ResumedFromPause, Is.True);
+            Assert.That(response.Warning, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies a fresh Play start with zero patches and pause points keeps only the
+        /// existing fresh-start warning.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartsWithZeroDropCounts_KeepsOnlyFreshStartWarning()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider());
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Warning, Is.EqualTo(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenPause_SetsPausedWithoutTouchingPlayingOrStep()
+        {
+            // Regression: Pause must only flip isPaused, leaving isPlaying and Step untouched.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                editorStateService: editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Pause,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode paused"));
+            Assert.That(response.Changed, Is.True);
+            Assert.That(editorState.IsPaused, Is.True);
+            Assert.That(editorState.IsPlayingSetCount, Is.EqualTo(0));
+            Assert.That(editorState.StepCallCount, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStop_ClearsPlayingAndPausedAndReportsChanged()
+        {
+            // Regression: Stop from a playing+paused state must clear both flags and report Changed.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: true);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                editorStateService: editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Stop,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Play mode stopped"));
+            Assert.That(response.Changed, Is.True);
+            Assert.That(response.WasAlreadyStopped, Is.False);
+            Assert.That(editorState.IsPlaying, Is.False);
+            Assert.That(editorState.IsPaused, Is.False);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WhenStepDuringPlayMode_AdvancesOneFrame()
+        {
+            // Regression: Step while playing must call through to the editor state service once.
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                editorStateService: editorState);
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Step,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Message, Is.EqualTo("Stepped one frame; play mode is paused."));
+            Assert.That(response.Changed, Is.True);
+            Assert.That(editorState.StepCallCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: Status returns the exact unfocused Editor hint when Play Mode is active.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenStatusIsPlayingAndEditorIsUnfocused_ReturnsExactHint()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                editorStateService: editorState,
+                editorFocusStateProvider: new FakeEditorFocusStateProvider(false));
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(
+                new ControlPlayModeSchema { Action = PlayModeAction.Status },
+                CancellationToken.None);
+
+            Assert.That(response.Warning, Is.EqualTo("The Unity Editor is unfocused while Play Mode is running, so Play Mode progress may be throttled. Run `uloop focus-window`, or use the `pause-point --await`/`--trigger` flow instead of polling for progress."));
+        }
+
+        /// <summary>
+        /// What: Status does not return the unfocused Editor hint when the Editor is focused.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenStatusEditorIsFocused_ReturnsNoHint()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: true, isPaused: false);
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                editorStateService: editorState,
+                editorFocusStateProvider: new FakeEditorFocusStateProvider(true));
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(
+                new ControlPlayModeSchema { Action = PlayModeAction.Status },
+                CancellationToken.None);
+
+            Assert.That(response.Warning, Is.Empty);
+        }
+
+        private sealed class FakeEditorFocusStateProvider : IEditorFocusStateProvider
+        {
+            public FakeEditorFocusStateProvider(bool isFocused)
+            {
+                IsFocused = isFocused;
+            }
+
+            public bool IsFocused { get; }
+        }
+
+        private sealed class FakeControlPlayModeEditorStateService : IControlPlayModeEditorStateService
+        {
+            private bool _isPlaying;
+            private bool _isPaused;
+
+            // Constructor sets initial state directly (bypassing the counting setters below), so
+            // IsPlayingSetCount/IsPausedSetCount only reflect writes the use case makes during the test.
+            public FakeControlPlayModeEditorStateService(bool isPlaying, bool isPaused)
+            {
+                _isPlaying = isPlaying;
+                _isPaused = isPaused;
+            }
+
+            public bool IsPlaying
+            {
+                get => _isPlaying;
+                set
+                {
+                    _isPlaying = value;
+                    IsPlayingSetCount++;
+                }
+            }
+
+            public bool IsPaused
+            {
+                get => _isPaused;
+                set
+                {
+                    _isPaused = value;
+                    IsPausedSetCount++;
+                }
+            }
+
+            public int IsPlayingSetCount { get; private set; }
+            public int IsPausedSetCount { get; private set; }
+            public int StepCallCount { get; private set; }
+
+            public void Step()
+            {
+                StepCallCount++;
+            }
+        }
+
+        private sealed class StubDomainReloadDropStateProvider : IControlPlayModeDomainReloadDropStateProvider
+        {
+            private readonly int _patchCount;
+            private readonly int _pausePointCount;
+            private readonly bool _isDomainReloadDisabled;
+
+            public StubDomainReloadDropStateProvider(
+                int patchCount = 0,
+                int pausePointCount = 0,
+                bool isDomainReloadDisabled = false)
+            {
+                _patchCount = patchCount;
+                _pausePointCount = pausePointCount;
+                _isDomainReloadDisabled = isDomainReloadDisabled;
+            }
+
+            public int GetActiveHotReloadPatchCount()
+            {
+                return _patchCount;
+            }
+
+            public int GetActivePausePointCount()
+            {
+                return _pausePointCount;
+            }
+
+            public bool IsDomainReloadDisabledOnEnterPlayMode()
+            {
+                return _isDomainReloadDisabled;
+            }
+        }
+
+        private sealed class StubCompilationFailureProvider : IControlPlayModeCompilationFailureProvider
+        {
+            private readonly ControlPlayModeCompileError[] _errors;
+
+            public StubCompilationFailureProvider(ControlPlayModeCompileError[] errors)
+            {
+                _errors = errors;
+            }
+
+            public ControlPlayModeCompileError[] GetLastFailedErrors()
+            {
+                return _errors;
+            }
+        }
+
+        private sealed class StubCompilationFailureGate : IControlPlayModeCompilationFailureGate
+        {
+            private readonly bool _hasScriptCompilationFailed;
+
+            public StubCompilationFailureGate(bool hasScriptCompilationFailed)
+            {
+                _hasScriptCompilationFailed = hasScriptCompilationFailed;
+            }
+
+            public bool HasScriptCompilationFailed()
+            {
+                return _hasScriptCompilationFailed;
+            }
+        }
+
+        private sealed class StubEditorUnsavedChangesQuietSaver : IEditorUnsavedChangesQuietSaver
+        {
+            private readonly string[] _saveFailures;
+            private readonly string[] _remainingAfterSave;
+
+            public int SaveCallCount { get; private set; }
+            public int DetectCallCount { get; private set; }
+
+            public StubEditorUnsavedChangesQuietSaver(string[] saveFailures, string[] remainingAfterSave)
+            {
+                _saveFailures = saveFailures;
+                _remainingAfterSave = remainingAfterSave;
+            }
+
+            public string[] DetectUnsavedEditorChanges()
+            {
+                DetectCallCount++;
+                return _remainingAfterSave;
+            }
+
+            public string[] SaveUnsavedEditorChanges()
+            {
+                SaveCallCount++;
+                return _saveFailures;
+            }
+        }
+    }
+}

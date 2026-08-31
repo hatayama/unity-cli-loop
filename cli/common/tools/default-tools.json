@@ -1,0 +1,746 @@
+{
+  "tools": [
+    {
+      "name": "compile",
+      "description": "Compile the Unity project and report errors/warnings. Use after C# edits.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ForceRecompile": {
+            "type": "boolean",
+            "description": "Full recompile plus domain reload. Almost never needed: a plain compile already detects externally edited files, and the forced reload can freeze large projects and come back as COMPILE_RESULT_UNKNOWN."
+          },
+          "WaitForDomainReload": {
+            "type": "boolean",
+            "description": "Return before Domain Reload completion",
+            "default": true
+          },
+          "ReloadExternalSceneChanges": {
+            "type": "boolean",
+            "description": "Stop before compilation if open Scene files changed externally instead of auto-reloading them",
+            "default": true
+          },
+          "TimeoutSeconds": {
+            "type": "integer",
+            "description": "Maximum seconds the CLI waits for the compile to finish before returning COMPILE_WAIT_TIMEOUT (default 600). Values above 1200 exceed the Unity-side result retention window (20 minutes) and weaken post-timeout recovery.",
+            "default": 600
+          }
+        }
+      }
+    },
+    {
+      "name": "get-logs",
+      "description": "Read current Unity Console entries from a running Editor. Use during bug investigation after compile, tests, PlayMode, dynamic code, or immediately after `uloop-pause-point`.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "LogType": {
+            "type": "string",
+            "description": "Log type filter: Error, Warning, Log, All",
+            "enum": [
+              "Error",
+              "Warning",
+              "Log",
+              "All"
+            ],
+            "default": "All"
+          },
+          "MaxCount": {
+            "type": "integer",
+            "description": "Maximum number of logs to retrieve",
+            "default": 100
+          },
+          "SearchText": {
+            "type": "string",
+            "description": "Text to search within logs"
+          },
+          "IncludeStackTrace": {
+            "type": "boolean",
+            "description": "Include stack trace in output",
+            "default": false
+          },
+          "UseRegex": {
+            "type": "boolean",
+            "description": "Use regex for search"
+          },
+          "SearchInStackTrace": {
+            "type": "boolean",
+            "description": "Search within stack trace"
+          }
+        }
+      }
+    },
+    {
+      "name": "run-tests",
+      "description": "Run Unity Test Runner and report detailed results. Use for EditMode/PlayMode tests, change verification, or failure diagnosis.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "TestMode": {
+            "type": "string",
+            "description": "Test mode: EditMode, PlayMode",
+            "enum": [
+              "EditMode",
+              "PlayMode"
+            ],
+            "default": "EditMode"
+          },
+          "FilterType": {
+            "type": "string",
+            "description": "Filter type: all, exact, regex, assembly",
+            "enum": [
+              "all",
+              "exact",
+              "regex",
+              "assembly"
+            ],
+            "default": "all"
+          },
+          "FilterValue": {
+            "type": "string",
+            "description": "Filter value (test name, pattern, or assembly)"
+          },
+          "SaveBeforeRun": {
+            "type": "boolean",
+            "description": "Fail before test execution if unsaved editor changes remain instead of auto-saving them",
+            "default": true
+          },
+          "TimeoutSeconds": {
+            "type": "integer",
+            "description": "Maximum seconds to wait for RunFinished before canceling the await (max 1500). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands",
+            "default": 600
+          }
+        }
+      }
+    },
+    {
+      "name": "clear-console",
+      "description": "Clear Unity Console entries. Use before compile, tests, or debugging when stale logs would hide the current result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "AddConfirmationMessage": {
+            "type": "boolean",
+            "description": "Add confirmation message after clearing"
+          }
+        }
+      }
+    },
+    {
+      "name": "focus-window",
+      "description": "Bring the Unity Editor window to front. Use when Unity must be visible for visual checks or user-facing interaction.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "get-hierarchy",
+      "description": "Get the Unity scene hierarchy as a structured tree. Use for parent-child structure, descendants, roots, or subtrees under objects the user currently selected.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "RootPath": {
+            "type": "string",
+            "description": "Root GameObject path to start from"
+          },
+          "MaxDepth": {
+            "type": "integer",
+            "description": "Maximum depth (-1 for unlimited)",
+            "default": -1
+          },
+          "IncludeComponents": {
+            "type": "boolean",
+            "description": "Exclude component information",
+            "default": true
+          },
+          "IncludeInactive": {
+            "type": "boolean",
+            "description": "Exclude inactive GameObjects",
+            "default": true
+          },
+          "IncludePaths": {
+            "type": "boolean",
+            "description": "Include full path information"
+          },
+          "UseComponentsLut": {
+            "type": "string",
+            "description": "Use LUT for components (auto, true, false)",
+            "default": "auto"
+          },
+          "UseSelection": {
+            "type": "boolean",
+            "description": "Use selected GameObject(s) as root(s). When set, --root-path is ignored.",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "find-game-objects",
+      "description": "Find or inspect Unity GameObjects, especially objects the user currently selected in the Hierarchy. Use for details, components, tags, layers, or name/path searches.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "NamePattern": {
+            "type": "string",
+            "description": "Name pattern to search"
+          },
+          "SearchMode": {
+            "type": "string",
+            "description": "Search mode: Exact, Path, Regex, Contains, Selected",
+            "enum": [
+              "Exact",
+              "Path",
+              "Regex",
+              "Contains",
+              "Selected"
+            ],
+            "default": "Exact"
+          },
+          "RequiredComponents": {
+            "type": "array",
+            "description": "Required components",
+            "items": {
+              "type": "string"
+            }
+          },
+          "Tag": {
+            "type": "string",
+            "description": "Tag filter"
+          },
+          "Layer": {
+            "type": "integer",
+            "description": "Layer filter (layer number)"
+          },
+          "MaxCount": {
+            "type": "integer",
+            "description": "Maximum number of results",
+            "default": 20
+          },
+          "IncludeInactive": {
+            "type": "boolean",
+            "description": "Include inactive GameObjects"
+          },
+          "IncludeInheritedProperties": {
+            "type": "boolean",
+            "description": "Include inherited properties in results"
+          }
+        }
+      }
+    },
+    {
+      "name": "screenshot",
+      "description": "Capture Unity Editor windows or Game View rendering as PNG. Use for visual checks, debugging, documentation, or annotated UI element coordinates.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "WindowName": {
+            "type": "string",
+            "description": "Window name to capture (for example Game, Scene, Console, Inspector). Ignored when the resolved capture mode is rendering (auto during Play Mode resolves to rendering). When the Game tab is Device Simulator and the title is Simulator, default Game falls back to Simulator.",
+            "default": "Game"
+          },
+          "ResolutionScale": {
+            "type": "number",
+            "description": "Resolution scale (0.1 to 1.0)",
+            "default": 1
+          },
+          "MatchMode": {
+            "type": "string",
+            "description": "Window name matching mode: exact, prefix, or contains. Ignored when the resolved capture mode is rendering (auto during Play Mode resolves to rendering).",
+            "enum": [
+              "exact",
+              "prefix",
+              "contains"
+            ],
+            "default": "exact"
+          },
+          "OutputDirectory": {
+            "type": "string",
+            "description": "Output directory path for saving screenshots. When empty, uses default path (.uloop/outputs/Screenshots/). Accepts absolute paths.",
+            "default": ""
+          },
+          "CaptureMode": {
+            "type": "string",
+            "description": "auto - rendering in PlayMode and window otherwise, window - capture EditorWindow including toolbar, rendering - capture game rendering only (PlayMode required), GameView - alias for rendering. Rendering screenshots return ScreenshotToInputFormula for converting raw image pixels before calling simulate-mouse-input (including --dry-run) or simulate-mouse-ui.",
+            "enum": [
+              "window",
+              "rendering",
+              "auto",
+              "GameView"
+            ],
+            "default": "auto"
+          },
+          "AnnotateElements": {
+            "type": "boolean",
+            "description": "Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). The response includes an AnnotatedElements array with element metadata sorted by z-order. Only works when the resolved capture mode is rendering (auto during Play Mode resolves to rendering) in PlayMode.",
+            "default": false
+          },
+          "ElementsOnly": {
+            "type": "boolean",
+            "description": "Return only annotated element JSON without capturing a screenshot image. Requires --annotate-elements or --annotate-raycast-grid, and the resolved capture mode to be rendering (auto during Play Mode resolves to rendering) in PlayMode.",
+            "default": false
+          },
+          "AnnotateRaycastGrid": {
+            "type": "boolean",
+            "description": "Annotate clustered 3D physics collider candidates as PhysicsCollider entries in AnnotatedElements. Uses Camera.main visibility and the same top-left Game View coordinates as simulate-mouse-input. Only works when the resolved capture mode is rendering (auto during Play Mode resolves to rendering) in PlayMode.",
+            "default": false
+          },
+          "RaycastLayerMask": {
+            "type": "string",
+            "description": "Comma-separated physics layer names to narrow which layers --annotate-raycast-grid clusters. Hits are limited to layers also visible to Camera.main.cullingMask. When omitted, clusters against Physics.DefaultRaycastLayers.",
+            "default": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "execute-dynamic-code",
+      "description": "Execute C# with Unity APIs when existing uloop tools cannot inspect or edit enough. Use for reachable scene/component state, scene/prefab/menu automation, and PlayMode checks",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Code": {
+            "type": "string",
+            "description": "Inline C# statements to execute. Direct statements only; return is optional, and using directives may appear at the top of the snippet."
+          },
+          "Parameters": {
+            "type": "object",
+            "description": "Shell-quoted JSON object literal for reusing a snippet with varying data or keeping values outside the code. Values are exposed as parameters[\"param0\"], parameters[\"param1\"], and so on. Omit for most snippets; never pass a JSON string value."
+          },
+          "CompileOnly": {
+            "type": "boolean",
+            "description": "Compile only without execution",
+            "hidden": true
+          },
+          "WaitForDomainReload": {
+            "type": "boolean",
+            "description": "Wait for Domain Reload recovery after snippets that intentionally trigger Unity script reload or import work. Omit for normal inspection and editor-state workflows.",
+            "default": false
+          },
+          "YieldToForegroundRequests": {
+            "type": "boolean",
+            "description": "Allow foreground requests to preempt this execution"
+          }
+        }
+      }
+    },
+    {
+      "name": "control-play-mode",
+      "description": "Control Unity Editor Play Mode. Use to Play (or Resume, its alias), Stop, Pause, or Step Play Mode, or query Status without side effects, for runtime behavior checks and frame inspection.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Action": {
+            "type": "string",
+            "description": "Play - start Play Mode, Stop - stop Play Mode, Pause - pause Play Mode, Step - advance one frame while paused, Status - report current state without changing anything, Resume - alias of Play in every state, including starting Play Mode when stopped",
+            "enum": [
+              "Play",
+              "Stop",
+              "Pause",
+              "Step",
+              "Status",
+              "Resume"
+            ],
+            "default": "Play"
+          },
+          "TimeoutSeconds": {
+            "type": "integer",
+            "description": "Maximum seconds to wait for the requested play mode state",
+            "default": 180
+          }
+        }
+      }
+    },
+    {
+      "name": "enable-pause-point",
+      "description": "Enable a pause point so Unity pauses when that code path is reached, either by a named UloopPausePoint.Pause marker (Id) or by resolving a source file and line (File+Line)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Named pause point id passed to UloopPausePoint.Pause. Mutually exclusive with File/Line"
+          },
+          "File": {
+            "type": "string",
+            "description": "Project-relative source file path to patch a pause point into. Requires Line; mutually exclusive with Id"
+          },
+          "Line": {
+            "type": "integer",
+            "description": "1-based source line to resolve within File. Requires File; mutually exclusive with Id"
+          },
+          "TimeoutSeconds": {
+            "type": "integer",
+            "description": "Seconds before the enable request expires and stops pausing late hits",
+            "default": 30
+          },
+          "Mode": {
+            "type": "string",
+            "description": "Capture mode: single-shot pauses once, continuous pauses on every hit, trace records hits without pausing",
+            "enum": [
+              "single-shot",
+              "continuous",
+              "trace"
+            ],
+            "default": "single-shot"
+          },
+          "MaxHistory": {
+            "type": "integer",
+            "description": "Maximum number of captured hit frames to retain (1-100)",
+            "default": 20
+          },
+          "HitWhen": {
+            "type": "string",
+            "description": "Conditional capture expression (<name> <op> <literal>). Only matching hits are captured; requires File and Line"
+          },
+          "MaxPreviewElements": {
+            "type": "integer",
+            "description": "Maximum number of elements to include in a captured collection's preview (1-1000). The value set at enable time also caps the previews in every later pause-point-status response for that marker; status has no flag to change it.",
+            "default": 10
+          },
+          "MaxCallerFrames": {
+            "type": "integer",
+            "description": "Maximum number of caller stack frames to record on each hit (0-8). 0 disables capture (CallerFrames stays an empty array). The value set at enable time also caps every later pause-point-status response for that marker; status has no flag to change it.",
+            "default": 2
+          },
+          "Method": {
+            "type": "string",
+            "description": "Optional method simple name or Type.Method. When set, --line resolves only inside matching methods"
+          }
+        }
+      }
+    },
+    {
+      "name": "clear-pause-point",
+      "description": "Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is the number of markers this call transitioned to Cleared: 0 or 1 for `--id`, and the number transitioned for `--all`. Auto-disarmed and expired markers still count as 1; the record stays readable via `pause-point-status` (`StatusBeforeClear` keeps the prior state).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Named pause point id to clear"
+          },
+          "All": {
+            "type": "boolean",
+            "description": "Clear every non-cleared pause point marker (armed, auto-disarmed, or expired)"
+          }
+        }
+      }
+    },
+    {
+      "name": "enable-watch",
+      "description": "Register a C# expression to evaluate on each paused Play Mode step",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Unique watch expression identifier"
+          },
+          "Expression": {
+            "type": "string",
+            "description": "C# expression returning an object; UloopPausePoint.TryGetCapturedValue can read the latest raw capture"
+          },
+          "MaxHistory": {
+            "type": "integer",
+            "description": "Maximum number of watch evaluations to retain (1-100)",
+            "default": 20
+          }
+        }
+      }
+    },
+    {
+      "name": "clear-watch",
+      "description": "Clear one or all registered C# watch expressions",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Watch expression identifier to clear"
+          },
+          "All": {
+            "type": "boolean",
+            "description": "Clear every registered watch expression"
+          }
+        }
+      }
+    },
+    {
+      "name": "get-watch-values",
+      "description": "Show registered watch expression values and bounded evaluation history",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Id": {
+            "type": "string",
+            "description": "Optional watch expression identifier; omit to return all watches"
+          }
+        }
+      }
+    },
+    {
+      "name": "simulate-mouse-ui",
+      "description": "Simulate PlayMode EventSystem UI mouse actions using screen coordinates. Use for UI clicks, long-presses, or drags from annotated screenshots.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Action": {
+            "type": "string",
+            "description": "Click - click at position, Drag - one-shot drag, DragStart - begin drag and hold, DragMove - move while holding drag, DragEnd - release drag, LongPress - press and hold for --duration seconds",
+            "enum": [
+              "Click",
+              "Drag",
+              "DragStart",
+              "DragMove",
+              "DragEnd",
+              "LongPress"
+            ],
+            "default": "Click"
+          },
+          "X": {
+            "type": "number",
+            "description": "Target X position in screen pixels (origin: top-left). For Drag action, this is the destination.",
+            "default": 0
+          },
+          "Y": {
+            "type": "number",
+            "description": "Target Y position in screen pixels (origin: top-left). For Drag action, this is the destination.",
+            "default": 0
+          },
+          "FromX": {
+            "type": "number",
+            "description": "Start X position for Drag action (origin: top-left). Drag starts here and moves to --x,--y.",
+            "default": 0
+          },
+          "FromY": {
+            "type": "number",
+            "description": "Start Y position for Drag action (origin: top-left). Drag starts here and moves to --x,--y.",
+            "default": 0
+          },
+          "DragSpeed": {
+            "type": "number",
+            "description": "Drag speed in pixels per second (0 for instant). 2000 is fast (default), 200 is slow enough to watch. Applies to Drag, DragMove, and DragEnd actions.",
+            "default": 2000
+          },
+          "Duration": {
+            "type": "number",
+            "description": "Hold duration in seconds for LongPress action (max 30).",
+            "default": 0.5
+          },
+          "Button": {
+            "type": "string",
+            "description": "Mouse button. Click and LongPress support Left, Right, and Middle. Drag actions support Left only; other buttons return an error.",
+            "enum": [
+              "Left",
+              "Right",
+              "Middle"
+            ],
+            "default": "Left"
+          },
+          "BypassRaycast": {
+            "type": "boolean",
+            "description": "For Click, LongPress, Drag, and DragStart, bypass EventSystem raycast and dispatch pointer events directly to --target-path. Use when a raycast-blocking overlay visually covers the intended target.",
+            "default": false
+          },
+          "TargetPath": {
+            "type": "string",
+            "description": "Hierarchy path of the target GameObject, for example Canvas/Panel/Button. Required when --bypass-raycast is used with Click, LongPress, Drag, or DragStart; prefer AnnotatedElements[].Path from screenshot JSON.",
+            "default": ""
+          },
+          "DropTargetPath": {
+            "type": "string",
+            "description": "Optional hierarchy path of a drop target for Drag or DragEnd, for example Canvas/DropZone. Use this when the drop zone is also behind a raycast blocker.",
+            "default": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "simulate-mouse-input",
+      "description": "Simulate Mouse.current input in PlayMode through Unity Input System. Use for gameplay mouse clicks, long-press (LongPress), movement delta (MoveDelta/SmoothDelta), or scroll. Use --dry-run to check what a Game View coordinate hits in 3D physics before clicking (works in EditMode; no Input System required). Use simulate-mouse-ui for UI. Requires the Input System package and Active Input Handling set to 'Input System Package (New)' or 'Both' (except --dry-run).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Action": {
+            "type": "string",
+            "description": "Click - inject button press+release, LongPress - inject button hold for --duration seconds, MoveDelta - inject mouse delta (one-shot), SmoothDelta - inject mouse delta smoothly over --duration seconds, Scroll - inject scroll wheel",
+            "enum": [
+              "Click",
+              "LongPress",
+              "MoveDelta",
+              "SmoothDelta",
+              "Scroll"
+            ],
+            "default": "Click"
+          },
+          "X": {
+            "type": "number",
+            "description": "Target X position in Game View pixels (origin: top-left). Used by Click, LongPress, and --dry-run. Use AnnotatedElements[].SimX, or raw image pixels converted with ScreenshotToInputFormula.",
+            "default": 0
+          },
+          "Y": {
+            "type": "number",
+            "description": "Target Y position in Game View pixels (origin: top-left). Used by Click, LongPress, and --dry-run. Use AnnotatedElements[].SimY, or raw image pixels converted with ScreenshotToInputFormula.",
+            "default": 0
+          },
+          "Button": {
+            "type": "string",
+            "description": "Mouse button: Left, Right, Middle. Used by Click and LongPress.",
+            "enum": [
+              "Left",
+              "Right",
+              "Middle"
+            ],
+            "default": "Left"
+          },
+          "Duration": {
+            "type": "number",
+            "description": "Hold duration for LongPress, or interpolation duration for SmoothDelta (seconds, max 30). For Click, 0 = one-shot tap.",
+            "default": 0
+          },
+          "DeltaX": {
+            "type": "number",
+            "description": "Delta X in pixels for MoveDelta/SmoothDelta. Positive = right.",
+            "default": 0
+          },
+          "DeltaY": {
+            "type": "number",
+            "description": "Delta Y in pixels for MoveDelta/SmoothDelta. Positive = up.",
+            "default": 0
+          },
+          "ScrollX": {
+            "type": "number",
+            "description": "Horizontal scroll delta for Scroll action.",
+            "default": 0
+          },
+          "ScrollY": {
+            "type": "number",
+            "description": "Vertical scroll delta for Scroll action. Positive = up, negative = down. Typically 120 per notch.",
+            "default": 0
+          },
+          "DryRun": {
+            "type": "boolean",
+            "description": "Query 3D physics at --x/--y without injecting mouse input. Works in EditMode and without the Input System package. Skips PlayMode / Input System preflight.",
+            "default": false
+          },
+          "LayerMask": {
+            "type": "integer",
+            "description": "Physics layer mask used by the raycast. Effective only with --dry-run.",
+            "default": -5
+          },
+          "MaxDistance": {
+            "type": "number",
+            "description": "Maximum raycast distance in world units. Effective only with --dry-run.",
+            "default": 1000
+          }
+        }
+      }
+    },
+    {
+      "name": "simulate-keyboard",
+      "description": "Simulate keyboard input in PlayMode through Unity Input System. Use for key presses, holds (via Press --duration or KeyDown/KeyUp), releases, and game controls such as WASD or Space. Requires the Input System package (com.unity.inputsystem).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Action": {
+            "type": "string",
+            "description": "Press - one-shot key tap (Down then Up), KeyDown - hold key down, KeyUp - release held key, ReleaseAll - force-release every tracked and device-pressed key (allowed while PlayMode is paused; use after a pause-point interruption leaves key state inconsistent)",
+            "enum": [
+              "Press",
+              "KeyDown",
+              "KeyUp",
+              "ReleaseAll"
+            ],
+            "default": "Press"
+          },
+          "Key": {
+            "type": "string",
+            "description": "Key name matching Input System Key enum (e.g. W, Space, LeftShift, A, Enter). Case-insensitive. Digit keys use Digit0-Digit9 or Numpad0-Numpad9, not bare 0-9. Not used by ReleaseAll."
+          },
+          "Duration": {
+            "type": "number",
+            "description": "Hold duration in seconds for Press action (0 = one-shot tap, max 30). Ignored by KeyDown/KeyUp/ReleaseAll.",
+            "default": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "replay-input",
+      "description": "Replay recorded PlayMode keyboard and mouse input. Use for exact gameplay reproduction, E2E runs, or consistent demos from JSON recordings.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Action": {
+            "type": "string",
+            "enum": [
+              "Start",
+              "Stop",
+              "Status"
+            ],
+            "description": "Start - begin replaying, Stop - stop mid-way, Status - check progress",
+            "default": "Start"
+          },
+          "InputPath": {
+            "type": "string",
+            "description": "Path to the recording JSON. When empty, auto-detects the latest recording in .uloop/outputs/InputRecordings/",
+            "default": ""
+          },
+          "ShowOverlay": {
+            "type": "boolean",
+            "description": "Hide replay progress overlay",
+            "default": true
+          },
+          "Loop": {
+            "type": "boolean",
+            "description": "Loop continuously",
+            "default": false
+          }
+        }
+      }
+    },
+    {
+      "name": "set-game-view-size",
+      "description": "Set or inspect the Unity Game View custom rendering resolution.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Width": {
+            "type": "integer",
+            "description": "Target Game View rendering width in pixels. Provide with --height to change the resolution."
+          },
+          "Height": {
+            "type": "integer",
+            "description": "Target Game View rendering height in pixels. Provide with --width to change the resolution."
+          }
+        }
+      }
+    },
+    {
+      "name": "hot-reload",
+      "description": "Hot reload applies method-body edits and can add new methods and fields (added members are visible only to edited code in the same file); it can also change signatures when the same reload covers the old signature's compiled callers. New types, or members other files must reference, require 'uloop compile'.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Files": {
+            "type": "array",
+            "description": "Project-relative .cs paths whose method bodies should be hot-reloaded. When omitted or empty on apply, selects the .cs sources whose bytes changed since the last compile snapshot, capped at 50 changed files per assembly with a warning when the cap trims the list; run uloop compile first when no snapshot exists, or pass explicit paths when no changed source is found",
+            "items": {
+              "type": "string"
+            }
+          },
+          "RevertAll": {
+            "type": "boolean",
+            "description": "Remove every active hot-reload patch and clear the patch ledger. When set, --files is ignored"
+          },
+          "Status": {
+            "type": "boolean",
+            "description": "Lists the currently active changes (patched methods and added members) without applying or reverting anything."
+          }
+        }
+      }
+    }
+  ]
+}

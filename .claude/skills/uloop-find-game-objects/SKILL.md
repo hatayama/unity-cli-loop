@@ -1,5 +1,6 @@
 ---
 name: uloop-find-game-objects
+toolName: find-game-objects
 description: "Find or inspect Unity GameObjects, especially objects the user currently selected in the Hierarchy. Use for details, components, tags, layers, or name/path searches."
 ---
 
@@ -24,66 +25,40 @@ uloop find-game-objects [options]
 | `--required-components` | array | - | Required components |
 | `--tag` | string | - | Tag filter |
 | `--layer` | integer | - | Layer filter (layer number) |
-| `--max-results` | integer | `20` | Maximum number of results |
-| `--include-inactive` | boolean | `false` | Include inactive GameObjects |
-| `--include-inherited-properties` | boolean | `false` | Include inherited properties in results |
+| `--max-count` | integer | `20` | Maximum number of results |
+| `--include-inactive` | flag | - | Include inactive GameObjects |
+| `--include-inherited-properties` | flag | - | Include inherited properties in results |
 
 ## Search Modes
 
 | Mode | Description |
 |------|-------------|
-| `Exact` | Exact name match (default) |
+| `Exact` | Exact name match (default). **Trap**: `--name-pattern "Camera"` will not match a GameObject named `"Main Camera"` — use `Contains` or `Regex` for partial matching. A zero-hit `Exact` search returns a `Message` hint pointing this out. |
 | `Path` | Hierarchy path search (e.g., `Canvas/Button`) |
 | `Regex` | Regular expression pattern |
 | `Contains` | Partial name match |
 | `Selected` | Get currently selected GameObjects in Unity Editor |
 
-## Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
-
-## Examples
-
-```bash
-# Find by name
-uloop find-game-objects --name-pattern "Player"
-
-# Find with component
-uloop find-game-objects --required-components Rigidbody
-
-# Find by tag
-uloop find-game-objects --tag "Enemy"
-
-# Regex search
-uloop find-game-objects --name-pattern "UI_.*" --search-mode Regex
-
-# Get selected GameObjects
-uloop find-game-objects --search-mode Selected
-
-# Get selected including inactive
-uloop find-game-objects --search-mode Selected --include-inactive
-```
-
 ## Output
 
 Returns JSON with:
-- `results` (array): Matching GameObjects, each containing:
-  - `name` (string): GameObject name
-  - `path` (string): Hierarchy path (e.g., `Canvas/Panel/Button`)
-  - `isActive` (boolean): Active state in hierarchy
-  - `tag` (string): GameObject tag
-  - `layer` (number): Layer index
-  - `components` (array): Each entry has `type` (short name, e.g., `Rigidbody`), `fullTypeName` (e.g., `UnityEngine.Rigidbody`), and `properties` (array of Inspector-visible `{name, type, value}` pairs)
-- `totalFound` (number): Number of results returned inline, or number exported for multi-selection file output. For search modes, this is after `--max-results` clipping and serialization.
-- `errorMessage` (string): Top-level failure summary (empty on success)
-- `processingErrors` (array): Selected-mode per-GameObject serialization failures, each `{gameObjectName, gameObjectPath, error}`. Omitted/null or empty on clean runs.
+
+- `Results` (array): Matching GameObjects, each containing:
+  - `Name` (string): GameObject name
+  - `Path` (string): Hierarchy path (e.g., `Canvas/Panel/Button`)
+  - `IsActive` (boolean): Active state in hierarchy
+  - `Tag` (string): GameObject tag
+  - `Layer` (number): Layer index
+  - `Components` (array): Each entry has `Type` (short name, e.g., `Rigidbody`), `FullTypeName` (e.g., `UnityEngine.Rigidbody`), and `Properties` (array of Inspector-visible `{Name, Type, Value}` pairs)
+- `TotalFound` (number): Results returned (after `--max-count` clipping). For multi-selection file export, this is the number exported.
+- `ErrorMessage` (string): Top-level failure summary (empty on success)
+- `ProcessingErrors` (array): Selected-mode per-GameObject serialization failures, each `{GameObjectName, GameObjectPath, Error}`. Omitted/null or empty on clean runs.
 
 ### Multi-selection file export
 
-For `Selected` mode with **multiple** successfully serialized GameObjects, inline `results` is not populated and the data is written to a file instead. Two extra fields appear:
-- `resultsFilePath` (string): Relative path under `.uloop/outputs/FindGameObjectsResults/`
-- `message` (string): Human-readable summary (e.g., "5 GameObjects exported")
+For `Selected` mode with **multiple** successfully serialized GameObjects, inline `Results` is not populated and the data is written to a file instead. Two extra fields appear:
 
-Single-selection and search-mode calls (`Exact`, `Path`, `Regex`, `Contains`) always return inline. No selection (`Selected` mode with empty selection) returns empty `results` plus a `message`.
+- `ResultsFilePath` (string): Relative path under `.uloop/outputs/FindGameObjectsResults/`
+- `Message` (string): Human-readable summary (e.g., "5 GameObjects exported")
+
+Single-selection and search-mode calls (`Exact`, `Path`, `Regex`, `Contains`) always return inline. No selection (`Selected` mode with empty selection) returns empty `Results` plus a `Message`.

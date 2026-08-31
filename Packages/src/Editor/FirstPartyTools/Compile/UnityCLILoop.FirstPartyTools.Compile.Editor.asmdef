@@ -1,0 +1,26 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.Compile.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "GUID:5c4588558a3624eacbce0f50007cf1eb",
+        "GUID:e5952ef560e1641f68b2687e6045bf5b",
+        "GUID:d427b32aad9cb44fc8e962437c9dbcd8",
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:527f26a36b5043c2bd4d4036d04cd76d",
+        "GUID:0cf5a90ce140e4729abd701bea48b00e"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "UnityCliLoop.0Harmony.dll",
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

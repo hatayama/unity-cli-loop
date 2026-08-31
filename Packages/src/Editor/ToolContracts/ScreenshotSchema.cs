@@ -1,0 +1,18 @@
+namespace io.github.hatayama.UnityCliLoop.ToolContracts
+{
+    /// <summary>
+    /// Describes the parameters accepted by the Screenshot tool.
+    /// </summary>
+    public class ScreenshotSchema : UnityCliLoopToolSchema
+    {
+        public string WindowName { get; set; } = UnityCliLoopConstants.SCREENSHOT_DEFAULT_WINDOW_NAME;
+        public float ResolutionScale { get; set; } = 1.0f;
+        public WindowMatchMode MatchMode { get; set; } = WindowMatchMode.exact;
+        public string OutputDirectory { get; set; } = "";
+        public CaptureMode CaptureMode { get; set; } = CaptureMode.auto;
+        public bool AnnotateElements { get; set; } = false;
+        public bool ElementsOnly { get; set; } = false;
+        public bool AnnotateRaycastGrid { get; set; } = false;
+        public string RaycastLayerMask { get; set; } = "";
+    }
+}

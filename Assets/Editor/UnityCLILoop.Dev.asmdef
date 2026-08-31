@@ -1,0 +1,38 @@
+{
+    "name": "UnityCLILoop.Dev",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Dev",
+    "references": [
+        "GUID:214998e563c124e8a88199b2dd1f522d",
+        "GUID:5c4588558a3624eacbce0f50007cf1eb",
+        "GUID:01082d2dd8b5b41d487dcc154c017098",
+        "GUID:aa8dd8c09aac9487db2e0b50381920dc",
+        "GUID:e5952ef560e1641f68b2687e6045bf5b",
+        "GUID:d427b32aad9cb44fc8e962437c9dbcd8",
+        "GUID:b21158f16291043699bc11600a45a9ee",
+        "GUID:f1a38fcd7e85047c5a86331a3e37ddfc",
+        "GUID:45d3617c96fa64d3e95383450e67f25a",
+        "GUID:a2d87883023de4cf59b7d1962d5dd8aa",
+        "GUID:aa7cf56cc5f074e57ba35272b877e116",
+        "GUID:a39242918a7ab45519b2c80f798dce33",
+        "GUID:afe86dd49995e46baa33e099a4d2ee1d",
+        "GUID:ee36dcf19655f43c08e0a7009ca7a624",
+        "GUID:54dfc5fd447794df2aa683025462d668",
+        "GUID:9ed21973545c44e28af522b049dec47d",
+        "GUID:a338f3f8ae84147109d351d16d557552",
+        "GUID:a0bdbd2c5705643fbb9aef9fac8fd46a",
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:c956a21f824994ef087b6de566690b3d",
+        "GUID:75469ad4d38634e559750d17036d5f7c"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

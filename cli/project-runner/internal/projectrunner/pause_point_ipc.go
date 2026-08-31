@@ -1,0 +1,134 @@
+package projectrunner
+
+import (
+	"context"
+	"encoding/json"
+
+	"github.com/hatayama/unity-cli-loop/common/clicontract"
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
+)
+
+const setCodeOptimizationDebugCommandName = "set-code-optimization-debug"
+
+func sendSetCodeOptimizationDebugFromUnity(
+	ctx context.Context,
+	connection unityipc.Connection,
+) error {
+	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
+	defer cancel()
+
+	_, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
+		probeContext,
+		setCodeOptimizationDebugCommandName,
+		map[string]any{},
+	)
+	return err
+}
+
+func sendPausePointStatusCommand(
+	ctx context.Context,
+	connection unityipc.Connection,
+	commandName string,
+	params map[string]any,
+) (pausePointStatusResponse, error) {
+	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
+	defer cancel()
+
+	result, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
+		probeContext,
+		commandName,
+		params,
+	)
+	if err != nil {
+		return pausePointStatusResponse{}, err
+	}
+
+	response := pausePointStatusResponse{}
+	if err := json.Unmarshal(result, &response); err != nil {
+		return pausePointStatusResponse{}, err
+	}
+	normalizePausePointCallerFrames(&response)
+	return response, nil
+}
+
+func queryPausePointStatusFromUnity(
+	ctx context.Context,
+	connection unityipc.Connection,
+	id string,
+) (pausePointStatusResponse, error) {
+	return sendPausePointStatusCommand(ctx, connection, pausePointStatusCommandName, map[string]any{"Id": id})
+}
+
+func queryPausePointStatusListFromUnity(
+	ctx context.Context,
+	connection unityipc.Connection,
+) (pausePointStatusListResponse, error) {
+	probeContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
+	defer cancel()
+
+	result, err := unityipc.NewClient(connection, clicontract.ProjectRunnerVersion()).Send(
+		probeContext,
+		pausePointStatusCommandName,
+		map[string]any{},
+	)
+	if err != nil {
+		return pausePointStatusListResponse{}, err
+	}
+
+	response := pausePointStatusListResponse{}
+	if err := json.Unmarshal(result, &response); err != nil {
+		return pausePointStatusListResponse{}, err
+	}
+	return response, nil
+}
+
+func clearPausePointStatusFromUnity(
+	ctx context.Context,
+	connection unityipc.Connection,
+	id string,
+) (pausePointStatusResponse, error) {
+	return sendPausePointStatusCommand(ctx, connection, pausePointClearStatusCommandName, map[string]any{
+		"Id":     id,
+		"Reason": pausePointAwaitTimeoutAutoClearReason,
+	})
+}
+
+func extendPausePointExpiryFromUnity(
+	ctx context.Context,
+	connection unityipc.Connection,
+	id string,
+	minimumRemainingSeconds int,
+) (pausePointStatusResponse, error) {
+	return sendPausePointStatusCommand(ctx, connection, pausePointExtendStatusCommandName, map[string]any{
+		"Id":                      id,
+		"MinimumRemainingSeconds": minimumRemainingSeconds,
+	})
+}
+
+func clearPausePointAfterWaitTimeout(ctx context.Context, connection unityipc.Connection, id string) bool {
+	clearContext, cancel := context.WithTimeout(ctx, pausePointStatusProbeTimeout)
+	defer cancel()
+	_, err := clearPausePointStatus(clearContext, connection, id)
+	return err == nil
+}
+
+// refreshPausePointStatusAfterWaitTimeoutAutoClear clears the marker then re-reads status so the
+// timeout envelope can report Cleared. A re-read failure keeps previous so the command still
+// returns a timeout error. The bool is whether the clear IPC itself succeeded: a failed clear
+// must not claim this command disarmed the marker.
+func refreshPausePointStatusAfterWaitTimeoutAutoClear(
+	ctx context.Context,
+	connection unityipc.Connection,
+	id string,
+	previous pausePointStatusResponse,
+) (pausePointStatusResponse, bool) {
+	cleared := clearPausePointAfterWaitTimeout(ctx, connection, id)
+	if !cleared {
+		return previous, false
+	}
+	refreshed, err := queryPausePointStatus(ctx, connection, id)
+	if err != nil {
+		return previous, true
+	}
+	return refreshed, true
+}

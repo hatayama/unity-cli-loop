@@ -1,52 +1,91 @@
-#nullable enable
-using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
-    /// Verifies that the shared input visualization prefab keeps attachable overlay components.
+    /// Test fixture that verifies the shared input visualization prefab contract.
     /// </summary>
     public sealed class InputVisualizationCanvasPrefabTests
     {
         private const string PrefabPath =
             "Packages/io.github.hatayama.uloopmcp/Runtime/Common/InputVisualizationCanvas.prefab";
         private const string RuntimeAssemblyDefinitionPath =
-            "Packages/src/Runtime/uLoopMCP.Runtime.asmdef";
-        private const string SimulateMouseInputOverlayPrefabPath =
-            "Packages/src/Runtime/SimulateMouseInput/SimulateMouseInputOverlay.prefab";
-        private const string DemoMouseInputOverlayTesterMetaPath =
-            "Assets/Tests/Demo/DemoMouseInputOverlayTester.cs.meta";
+            "Packages/src/Runtime/UnityCLILoop.Runtime.asmdef";
+        private const string RuntimeSourceDirectoryPath =
+            "Packages/src/Runtime";
+        private static readonly string[] PlayerVisibleNestedRuntimeAssemblyDefinitionPaths =
+        {
+            "Packages/src/Runtime/PausePoints/UnityCLILoop.PausePoints.Runtime.asmdef"
+        };
+        private static readonly string[] OverlayPrefabPaths =
+        {
+            "Packages/io.github.hatayama.uloopmcp/Runtime/Common/InputVisualizationCanvas.prefab",
+            "Packages/io.github.hatayama.uloopmcp/Runtime/SimulateMouseInput/SimulateMouseInputOverlay.prefab",
+            "Packages/io.github.hatayama.uloopmcp/Runtime/SimulateKeyboard/SimulateKeyboardOverlay.prefab",
+            "Packages/io.github.hatayama.uloopmcp/Runtime/SimulateMouseUi/SimulateMouseUiOverlay.prefab",
+            "Packages/io.github.hatayama.uloopmcp/Runtime/RecordInput/RecordInputOverlay.prefab",
+            "Packages/io.github.hatayama.uloopmcp/Runtime/ReplayInput/ReplayInputOverlay.prefab"
+        };
+
+        private static readonly string[] OverlayPrefabFilePaths =
+        {
+            "Packages/src/Runtime/Common/InputVisualizationCanvas.prefab",
+            "Packages/src/Runtime/SimulateMouseInput/SimulateMouseInputOverlay.prefab",
+            "Packages/src/Runtime/SimulateKeyboard/SimulateKeyboardOverlay.prefab",
+            "Packages/src/Runtime/SimulateMouseUi/SimulateMouseUiOverlay.prefab",
+            "Packages/src/Runtime/RecordInput/RecordInputOverlay.prefab",
+            "Packages/src/Runtime/ReplayInput/ReplayInputOverlay.prefab"
+        };
 
         [Test]
-        public void RuntimeAssemblyDefinition_WhenScanned_IsPrefabAttachableAndNotAutoReferenced()
+        public void RuntimeAssemblyDefinition_WhenScanned_IsAttachableAndNotAutoReferenced()
         {
-            // The runtime assembly must stay attachable for prefab scripts while avoiding implicit user assembly references.
-            JObject asmdef = JObject.Parse(ReadProjectText(RuntimeAssemblyDefinitionPath));
-            JToken? includePlatformsToken = asmdef["includePlatforms"];
+            // Verifies the overlay MonoBehaviours can attach to prefabs without becoming player auto-references.
+            JObject asmdef = JObject.Parse(ReadText(RuntimeAssemblyDefinitionPath));
+            JToken includePlatforms = asmdef["includePlatforms"];
 
-            Assert.That(includePlatformsToken, Is.Not.Null);
-            Assert.That(includePlatformsToken!.Type, Is.EqualTo(JTokenType.Array));
-            Assert.That(includePlatformsToken.HasValues, Is.False);
             Assert.That(asmdef["autoReferenced"]?.Value<bool>(), Is.False);
+            Assert.That(includePlatforms, Is.Not.Null);
+            Assert.That(includePlatforms!.Type, Is.EqualTo(JTokenType.Array));
+            Assert.That(includePlatforms!.HasValues, Is.False);
         }
 
         [Test]
-        public void InputVisualizationCanvasPrefab_WhenInstantiated_HasOverlayReferences()
+        public void InputVisualizationCanvasPrefab_WhenLoaded_HasRuntimeOverlayReferences()
         {
-            // Instantiation proves Unity can resolve the prefab scripts after import, not only in raw YAML.
+            // Verifies that overlay tools can instantiate the shared visualization canvas.
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
 
             Assert.That(prefab, Is.Not.Null);
 
-            UnityEngine.Object instantiatedObject = PrefabUtility.InstantiatePrefab(prefab);
-            Assert.That(instantiatedObject, Is.TypeOf<GameObject>());
+            InputVisualizationCanvas canvas = prefab.GetComponent<InputVisualizationCanvas>();
 
-            GameObject instance = (GameObject)instantiatedObject;
+            Assert.That(canvas, Is.Not.Null);
+            Assert.That(canvas.KeyboardOverlay, Is.Not.Null);
+            Assert.That(canvas.MouseUiOverlay, Is.Not.Null);
+            Assert.That(canvas.MouseInputOverlay, Is.Not.Null);
+            Assert.That(canvas.RecordInputOverlayPresenter, Is.Not.Null);
+            Assert.That(canvas.ReplayInputOverlay, Is.Not.Null);
+        }
+
+        [Test]
+        public void InputVisualizationCanvasPrefab_WhenInstantiated_HasRuntimeOverlayReferences()
+        {
+            // Verifies that stale prefab import artifacts do not leave runtime overlay references unassigned.
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+
+            Assert.That(prefab, Is.Not.Null);
+
+            GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             try
             {
                 InputVisualizationCanvas canvas = instance.GetComponent<InputVisualizationCanvas>();
@@ -57,6 +96,36 @@ namespace io.github.hatayama.uLoopMCP
                 Assert.That(canvas.MouseInputOverlay, Is.Not.Null);
                 Assert.That(canvas.RecordInputOverlayPresenter, Is.Not.Null);
                 Assert.That(canvas.ReplayInputOverlay, Is.Not.Null);
+
+                AssertSerializedReference(canvas.KeyboardOverlay, "_container");
+                AssertSerializedReference(canvas.KeyboardOverlay, "_containerImage");
+                AssertSerializedReference(canvas.MouseUiOverlay, "_canvasGroup");
+                AssertSerializedReference(canvas.MouseUiOverlay, "_cursorGroup");
+                AssertSerializedReference(canvas.MouseUiOverlay, "_circleImage");
+                AssertSerializedReference(canvas.MouseUiOverlay, "_crosshairH");
+                AssertSerializedReference(canvas.MouseUiOverlay, "_crosshairV");
+                AssertSerializedReference(canvas.MouseUiOverlay, "_longPressText");
+                AssertSerializedReference(canvas.MouseUiOverlay, "_dragStartMarker");
+                AssertSerializedReference(canvas.MouseUiOverlay, "_circleSprite");
+                AssertSerializedReference(canvas.MouseInputOverlay, "_leftButton");
+                AssertSerializedReference(canvas.MouseInputOverlay, "_rightButton");
+                AssertSerializedReference(canvas.MouseInputOverlay, "_scrollWheel");
+                AssertSerializedReference(canvas.MouseInputOverlay, "_scrollArrowTop");
+                AssertSerializedReference(canvas.MouseInputOverlay, "_scrollArrowBottom");
+                AssertSerializedReference(canvas.MouseInputOverlay, "_moveDirectionGroup");
+                AssertSerializedReference(canvas.RecordInputOverlayPresenter, "_view");
+
+                RecordInputOverlayView recordView =
+                    canvas.RecordInputOverlayPresenter.GetComponent<RecordInputOverlayView>();
+                Assert.That(recordView, Is.Not.Null);
+                AssertSerializedReference(recordView, "_canvasGroup");
+                AssertSerializedReference(recordView, "_countdownGroup");
+                AssertSerializedReference(recordView, "_countdownText");
+                AssertSerializedReference(recordView, "_recordingGroup");
+                AssertSerializedReference(recordView, "_recDotText");
+                AssertSerializedReference(recordView, "_statusText");
+                AssertSerializedReference(canvas.ReplayInputOverlay, "_statusText");
+                AssertSerializedReference(canvas.ReplayInputOverlay, "_progressBarFill");
             }
             finally
             {
@@ -65,39 +134,214 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
-        public void SimulateMouseInputOverlayPrefab_WhenSerialized_DoesNotReferenceDemoTester()
+        public void InputVisualizationPrefabs_WhenLoaded_HaveNoMissingScripts()
         {
-            // Package prefabs cannot reference demo/test scripts because consumers import only Packages/src.
-            string prefabText = ReadProjectText(SimulateMouseInputOverlayPrefabPath);
-            string demoTesterGuid = ReadMetaGuid(DemoMouseInputOverlayTesterMetaPath);
-
-            Assert.That(prefabText, Does.Not.Contain(demoTesterGuid));
-        }
-
-        private static string ReadProjectText(string relativePath)
-        {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string absolutePath = Path.Combine(projectRoot, relativePath);
-
-            return File.ReadAllText(absolutePath);
-        }
-
-        private static string ReadMetaGuid(string relativePath)
-        {
-            string[] lines = ReadProjectText(relativePath).Split('\n');
-            const string Prefix = "guid: ";
-
-            for (int i = 0; i < lines.Length; i++)
+            // Verifies that package Overlay prefabs do not emit missing-script warnings when instantiated.
+            for (int pathIndex = 0; pathIndex < OverlayPrefabPaths.Length; pathIndex++)
             {
-                string line = lines[i].Trim();
-                if (line.StartsWith(Prefix, StringComparison.Ordinal))
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(OverlayPrefabPaths[pathIndex]);
+
+                Assert.That(prefab, Is.Not.Null, OverlayPrefabPaths[pathIndex]);
+                AssertNoMissingScripts(prefab, OverlayPrefabPaths[pathIndex]);
+
+                GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+                try
                 {
-                    return line.Substring(Prefix.Length).Trim();
+                    AssertNoMissingScripts(instance, OverlayPrefabPaths[pathIndex]);
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(instance);
+                }
+            }
+        }
+
+        [Test]
+        public void InputVisualizationPrefabs_WhenLoaded_AreEditorOnly()
+        {
+            // Verifies that package Overlay prefabs are excluded from Player builds by Unity's EditorOnly tag.
+            for (int pathIndex = 0; pathIndex < OverlayPrefabPaths.Length; pathIndex++)
+            {
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(OverlayPrefabPaths[pathIndex]);
+
+                Assert.That(prefab, Is.Not.Null, OverlayPrefabPaths[pathIndex]);
+                AssertEditorOnlyTags(prefab, OverlayPrefabPaths[pathIndex]);
+            }
+        }
+
+        [Test]
+        public void InputVisualizationPrefabs_WhenScanned_DoNotReferenceProjectScripts()
+        {
+            // Verifies that package Overlay prefabs do not depend on scripts outside the package.
+            for (int pathIndex = 0; pathIndex < OverlayPrefabFilePaths.Length; pathIndex++)
+            {
+                string contents = ReadText(OverlayPrefabFilePaths[pathIndex]);
+                MatchCollection matches = Regex.Matches(contents, @"m_Script:\s*\{fileID:\s*11500000,\s*guid:\s*([0-9a-f]{32}),");
+
+                foreach (Match match in matches)
+                {
+                    string guid = match.Groups[1].Value;
+                    string assetPath = AssetDatabase.GUIDToAssetPath(guid);
+
+                    Assert.That(
+                        assetPath,
+                        Is.Not.Empty,
+                        $"{OverlayPrefabFilePaths[pathIndex]} contains unresolved script GUID {guid}");
+
+                    Assert.That(
+                        assetPath,
+                        Does.Not.StartWith("Assets/"),
+                        $"{OverlayPrefabFilePaths[pathIndex]} references project script GUID {guid} at {assetPath}");
+                }
+            }
+        }
+
+        [Test]
+        public void RootRuntimeSources_WhenScanned_AreEditorOnly()
+        {
+            // Verifies that root UnityCLILoop.Runtime sources cannot compile into Player assemblies.
+            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
+            string runtimeSourceDirectory = Path.Combine(projectRoot, RuntimeSourceDirectoryPath);
+            string[] runtimeSourcePaths = GetRootRuntimeAssemblySourcePaths(projectRoot, runtimeSourceDirectory);
+            System.Array.Sort(runtimeSourcePaths);
+
+            Assert.That(runtimeSourcePaths, Is.Not.Empty);
+
+            for (int pathIndex = 0; pathIndex < runtimeSourcePaths.Length; pathIndex++)
+            {
+                string contents = File.ReadAllText(runtimeSourcePaths[pathIndex]);
+
+                Assert.That(
+                    contents.TrimStart(),
+                    Does.StartWith("#if UNITY_EDITOR"),
+                    runtimeSourcePaths[pathIndex]);
+            }
+        }
+
+        private static string[] GetRootRuntimeAssemblySourcePaths(
+            string projectRoot,
+            string runtimeSourceDirectory)
+        {
+            string[] runtimeSourcePaths = Directory.GetFiles(runtimeSourceDirectory, "*.cs", SearchOption.AllDirectories);
+            string[] assemblyDefinitionPaths = Directory.GetFiles(runtimeSourceDirectory, "*.asmdef", SearchOption.AllDirectories);
+            string normalizedRuntimeSourceDirectory = NormalizeDirectorySeparators(
+                Path.GetFullPath(runtimeSourceDirectory));
+            HashSet<string> allowedNestedAssemblyDefinitionPaths =
+                GetAllowedNestedRuntimeAssemblyDefinitionPaths(projectRoot);
+            HashSet<string> nestedAssemblyDirectories = new();
+
+            for (int pathIndex = 0; pathIndex < assemblyDefinitionPaths.Length; pathIndex++)
+            {
+                string assemblyDefinitionPath = NormalizeDirectorySeparators(
+                    Path.GetFullPath(assemblyDefinitionPaths[pathIndex]));
+                string assemblyDefinitionDirectory = NormalizeDirectorySeparators(
+                    Path.GetDirectoryName(assemblyDefinitionPaths[pathIndex]));
+                if (assemblyDefinitionDirectory == normalizedRuntimeSourceDirectory)
+                {
+                    continue;
+                }
+
+                Assert.That(
+                    allowedNestedAssemblyDefinitionPaths,
+                    Does.Contain(assemblyDefinitionPath),
+                    $"{assemblyDefinitionPath} is a nested Runtime asmdef. Guard its sources with #if UNITY_EDITOR, " +
+                    "or add it to PlayerVisibleNestedRuntimeAssemblyDefinitionPaths when the nested assembly is intentionally player-visible.");
+
+                nestedAssemblyDirectories.Add(assemblyDefinitionDirectory);
+            }
+
+            List<string> rootRuntimeSourcePaths = new();
+            for (int pathIndex = 0; pathIndex < runtimeSourcePaths.Length; pathIndex++)
+            {
+                if (IsUnderNestedAssemblyDirectory(runtimeSourcePaths[pathIndex], nestedAssemblyDirectories))
+                {
+                    continue;
+                }
+
+                rootRuntimeSourcePaths.Add(runtimeSourcePaths[pathIndex]);
+            }
+
+            return rootRuntimeSourcePaths.ToArray();
+        }
+
+        private static HashSet<string> GetAllowedNestedRuntimeAssemblyDefinitionPaths(string projectRoot)
+        {
+            HashSet<string> allowedAssemblyDefinitionPaths = new();
+            for (int pathIndex = 0; pathIndex < PlayerVisibleNestedRuntimeAssemblyDefinitionPaths.Length; pathIndex++)
+            {
+                string assemblyDefinitionPath = Path.GetFullPath(
+                    Path.Combine(projectRoot, PlayerVisibleNestedRuntimeAssemblyDefinitionPaths[pathIndex]));
+                allowedAssemblyDefinitionPaths.Add(NormalizeDirectorySeparators(assemblyDefinitionPath));
+            }
+
+            return allowedAssemblyDefinitionPaths;
+        }
+
+        private static bool IsUnderNestedAssemblyDirectory(
+            string sourcePath,
+            HashSet<string> nestedAssemblyDirectories)
+        {
+            string normalizedSourcePath = NormalizeDirectorySeparators(sourcePath);
+            foreach (string nestedAssemblyDirectory in nestedAssemblyDirectories)
+            {
+                string nestedAssemblyPrefix = nestedAssemblyDirectory + "/";
+                if (normalizedSourcePath.StartsWith(nestedAssemblyPrefix, System.StringComparison.Ordinal))
+                {
+                    return true;
                 }
             }
 
-            Assert.Fail("Meta file must contain a guid line");
-            return string.Empty;
+            return false;
+        }
+
+        private static string NormalizeDirectorySeparators(string path)
+        {
+            return path.Replace('\\', '/');
+        }
+
+        private static void AssertEditorOnlyTags(GameObject root, string prefabPath)
+        {
+            Transform[] transforms = root.GetComponentsInChildren<Transform>(true);
+            for (int transformIndex = 0; transformIndex < transforms.Length; transformIndex++)
+            {
+                GameObject gameObject = transforms[transformIndex].gameObject;
+
+                Assert.That(
+                    gameObject.CompareTag("EditorOnly"),
+                    Is.True,
+                    $"{prefabPath} has non-EditorOnly tag on {gameObject.name}");
+            }
+        }
+
+        private static void AssertSerializedReference(UnityEngine.Object target, string propertyName)
+        {
+            SerializedObject serializedObject = new SerializedObject(target);
+            SerializedProperty property = serializedObject.FindProperty(propertyName);
+
+            Assert.That(property, Is.Not.Null, propertyName);
+            Assert.That(property.objectReferenceValue, Is.Not.Null, propertyName);
+        }
+
+        private static void AssertNoMissingScripts(GameObject root, string prefabPath)
+        {
+            Transform[] transforms = root.GetComponentsInChildren<Transform>(true);
+            for (int transformIndex = 0; transformIndex < transforms.Length; transformIndex++)
+            {
+                GameObject gameObject = transforms[transformIndex].gameObject;
+                int missingScriptCount = GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(gameObject);
+
+                Assert.That(
+                    missingScriptCount,
+                    Is.EqualTo(0),
+                    $"{prefabPath} has {missingScriptCount} missing script component(s) on {gameObject.name}");
+            }
+        }
+
+        private static string ReadText(string relativePath)
+        {
+            string absolutePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), relativePath);
+
+            return File.ReadAllText(absolutePath);
         }
     }
 }

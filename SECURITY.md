@@ -1,64 +1,111 @@
 # Security Policy
 
-## Supported Versions
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.50.x  | :white_check_mark: |
-| < 0.50  | :x:                |
-
 ## Reporting a Vulnerability
 
-We take security vulnerabilities seriously. If you discover a security issue, please follow these steps:
+Please do not create a public GitHub issue for security vulnerabilities.
 
-1. **DO NOT** create a public GitHub issue for security vulnerabilities
-2. Use GitHub's [Private Vulnerability Reporting](https://github.com/hatayama/uLoopMCP/security/advisories/new) feature
-3. Or contact the maintainer directly
+Use GitHub's [Private Vulnerability Reporting](https://github.com/hatayama/unity-cli-loop/security/advisories/new) feature instead.
 
-### What to Include
-
-When reporting a vulnerability, please provide:
+When reporting a vulnerability, please include:
 
 - A description of the vulnerability
 - Steps to reproduce the issue
-- Potential impact of the vulnerability
-- Any suggested fixes (if available)
+- Potential impact
+- Any suggested fixes, if available
 
-### Response Timeline
+## Trust Model and Known Risks
 
-- We will acknowledge receipt of your report within **3 business days**
-- We will provide an initial assessment within **7 business days**
-- We aim to release a fix within **30 days** for critical vulnerabilities
+### First-install provenance decision
 
-### Security Measures
+The repository owner approved the following first-install trust model
+(issue #2080 replaces the earlier decision that CLI-only install required `gh`
+and forbade a mutable-branch `curl | sh` / `irm | iex` path).
 
-This project implements several security measures:
+- The default CLI-only install trusts the repository pin
+  (`Packages/src/project-runner-pin.json` → `dispatcherArchiveManifest`).
+  Release automation stamps that digest list after verifying the published
+  release's attestation subjects, and CI requires an exact match. The
+  installer fetches the pin over TLS from `raw.githubusercontent.com` on a
+  protected branch (default `main`; override with `ULOOP_REF`) and enforces
+  those digests by SHA-256 before extraction.
+- An explicit `ULOOP_ARCHIVE_MANIFEST` (typically from a Sigstore-verified
+  attestation) always takes precedence over the pin. The README's
+  `gh attestation verify` + `jq` flow remains available as a hardened option
+  when choosing a release tag other than the pin.
+- Unity installation uses the same pin fields from the already-installed
+  package, so terminal and GUI share one trust root. Remaining gaps (Sigstore
+  chains to the signing workflow; repository trust chains to branch
+  protection) are identical across those paths — this change introduces no
+  new regression relative to the Unity GUI install.
+- Offline first installation is unsupported. Network failure, a missing or
+  malformed pin, an invalid `ULOOP_REF`, a tag/`ULOOP_VERSION` mismatch, and
+  digest mismatch all fail closed before script or binary execution. There is
+  no checksum-only fallback.
 
-- **Dynamic Code Execution Security Levels**: The `execute-dynamic-code` tool supports 3-tier security control (Disabled, Restricted, FullAccess)
-- **Security Settings UI**: Tools like `run-tests` and third-party tools are disabled by default
-- **Automated Security Scanning**: We use GitHub's security scanning features and custom security analysis tools
+OS-native signing remains a later defense-in-depth release improvement; it is
+not a prerequisite for this bootstrap verification work.
 
-### Scope
+Dispatcher Release assets referenced by a package pin must remain available
+permanently. Package releases depend on the pinned dispatcher installer in the
+same way that they depend on their pinned project-runner release. Release order
+is dispatcher publish, `stamp-dispatcher-pin`, then package release. If a
+dispatcher release must be revoked, publish a replacement, raise the package's
+`minimumDispatcherVersion`, stamp the replacement release, and publish a new
+package; never silently repoint or replace an existing Release asset.
 
-The following are considered in scope for security reports:
+### Pinned dispatcher release lifetime
 
-- Code injection vulnerabilities
-- Authentication/Authorization bypasses
-- Information disclosure
-- Denial of service vulnerabilities
-- Dependency vulnerabilities
+A package pin can continue to authenticate an older dispatcher Release after
+that dispatcher has a known vulnerability. Pinning proves provenance and
+integrity; it does not revoke already published content. The mitigation is the
+package's minimum dispatcher version gate: publish a fixed dispatcher, raise
+the minimum, stamp its digests, and publish an updated package. Treat Unity
+projects from untrusted sources as untrusted inputs because they can select
+their own pin and minimum-version requirements.
 
-### Out of Scope
+### Untrusted Unity projects can drive the runner version
 
-- Vulnerabilities that require physical access to the user's machine
-- Social engineering attacks
-- Issues in third-party dependencies (please report these to the respective maintainers)
+At runtime `uloop` looks up the project-runner pin from the current
+Unity project to decide which project-runner release to download and
+execute. The read order is `.uloop/project-runner-pin.json` first, then
+a fallback to `Packages/src/project-runner-pin.json`, and finally the
+installed package copy under `Packages/<package>/`. The authoring source
+is `Packages/src/project-runner-pin.json`; `CliPinSynchronizer` copies
+it byte-identically to `.uloop/project-runner-pin.json` when Unity
+opens the project, so the runtime lookup usually resolves inside
+`.uloop/` before the source ever gets consulted. The pin is
+project-local data: opening or cloning a third-party Unity project and
+running `uloop` inside it means the project's pin controls which
+release `uloop` will pull down and launch.
 
-## Security Best Practices for Users
+Concrete implications:
 
-When using uLoopMCP, we recommend:
+- A hostile project can pin the runner to a known-vulnerable published
+  release and downgrade you to it. `uloop` verifies the release's Sigstore
+  attestation before extracting the archive, so an attacker cannot forge a
+  new asset — but they *can* select an older release already published by
+  this repository.
+- Setting `ULOOP_DISABLE_SELF_UPDATE=1` only disables the dispatcher's own
+  auto-update. It does not disable pin-driven runner selection, because the
+  runner version is part of the project contract, not the dispatcher's
+  update policy.
+- Attestation verification (`Sigstore` bundles) rules out unpublished
+  binaries: an attacker cannot make `uloop` execute an archive that was
+  not built and signed by the official release workflow.
 
-1. **Use Restricted Mode**: Set Dynamic Code Security Level to "Restricted" (Level 1) unless you specifically need full access
-2. **Review Third-Party Tools**: Only enable "Allow Third-Party Tools" for trusted extensions
-3. **Sandbox Environment**: For AI-driven development, consider running in sandbox environments or containers
-4. **Keep Updated**: Always use the latest version to benefit from security patches
+Guidance:
+
+- Only run `uloop` inside Unity projects whose maintainers you trust to
+  choose your runner version.
+- When auditing a third-party project, inspect **both**
+  `.uloop/project-runner-pin.json` and
+  `Packages/src/project-runner-pin.json` before running any `uloop`
+  command in it. The two files must be byte-identical — any divergence
+  is itself a red flag, because the runtime path (`.uloop/`) is what
+  actually decides which release runs, and a mismatched source
+  (`Packages/src/`) means the mirror step never completed or was
+  bypassed.
+- `ULOOP_DISABLE_SELF_UPDATE=1` is still worth setting in one-off audit
+  environments because it prevents the dispatcher from silently
+  upgrading itself while you are investigating, but treat it as a
+  layered defense, not a substitute for reading the pin.

@@ -1,0 +1,111 @@
+/* Shared Skills setup panel — self-contained colors (no Setup Wizard CSS variables). */
+
+.skills-setup-panel {
+    flex-grow: 1;
+}
+
+.skill-target-status-list {
+    margin-bottom: 6px;
+}
+
+.skill-target-item {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2px;
+    margin-left: 4px;
+}
+
+.skill-target-item__label {
+    flex-grow: 1;
+    margin-right: 8px;
+}
+
+.skill-target-item__status {
+    flex-shrink: 0;
+    -unity-font-style: bold;
+}
+
+.skill-target-item__status--installed {
+    color: #4caf50;
+}
+
+.skill-target-item__status--checking {
+    color: #999999;
+}
+
+.skill-target-item__status--outdated {
+    color: #ffd200;
+}
+
+.skill-target-item__status--missing {
+    color: #999999;
+}
+
+.skill-target-item__status--different-layout {
+    color: #ffd200;
+}
+
+.skill-target-status-divider {
+    border-top-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.12);
+    margin-top: 6px;
+    margin-bottom: 12px;
+}
+
+.skill-target-status-summary {
+    margin-bottom: 4px;
+}
+
+.skills-no-targets-message {
+    white-space: normal;
+    color: #999999;
+    margin-bottom: 4px;
+}
+
+.skills-setup-panel__install-button {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.skills-setup-panel__foldout {
+    margin-left: -8px;
+    margin-top: 4px;
+}
+
+.skills-setup-panel__toggle-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.skills-setup-panel__target-row {
+    flex-direction: row;
+    align-items: center;
+    overflow: hidden;
+    margin-bottom: 4px;
+}
+
+.skills-setup-panel__target-label {
+    width: 50px;
+    flex-shrink: 0;
+    margin-right: 6px;
+}
+
+.skills-setup-panel__target-field {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.skills-setup-panel__refresh-button {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    margin: 0 3px 0 4px;
+    padding: 0;
+    font-size: 14px;
+    -unity-text-align: middle-center;
+    border-radius: 2px;
+}

@@ -1,4 +1,5 @@
-namespace io.github.hatayama.uLoopMCP
+#if UNITY_EDITOR
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     public enum MouseAction
     {
@@ -10,3 +11,4 @@ namespace io.github.hatayama.uLoopMCP
         LongPress = 5
     }
 }
+#endif

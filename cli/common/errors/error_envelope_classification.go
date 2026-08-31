@@ -1,0 +1,184 @@
+package clierrors
+
+import (
+	"encoding/json"
+	"errors"
+
+	"github.com/hatayama/unity-cli-loop/common/unityipc"
+)
+
+func ClassifyError(err error, context ErrorContext) CLIError {
+	if err == nil {
+		return InternalCLIError("unknown CLI error", context)
+	}
+
+	if classifiedError, ok := classifyTypedError(err, context); ok {
+		return classifiedError
+	}
+
+	return InternalCLIError(err.Error(), context)
+}
+
+// classifiableCLIError lets an error type self-classify into a CLIError envelope,
+// so classifyTypedError does not need a dedicated branch per error type.
+type classifiableCLIError interface {
+	ToCLIError(context ErrorContext) CLIError
+}
+
+func classifyTypedError(err error, context ErrorContext) (CLIError, bool) {
+	var classifiable classifiableCLIError
+	if errors.As(err, &classifiable) {
+		return classifiable.ToCLIError(context), true
+	}
+
+	if classifiedError, ok := classifyUnityConnectionError(err, context); ok {
+		return classifiedError, true
+	}
+
+	var rpcErr *unityipc.RPCError
+	if errors.As(err, &rpcErr) {
+		return classifyRPCError(rpcErr, context), true
+	}
+
+	return CLIError{}, false
+}
+
+func classifyUnityConnectionError(err error, context ErrorContext) (CLIError, bool) {
+	var endpointNotCreatedErr UnityEndpointNotCreatedError
+	if errors.As(err, &endpointNotCreatedErr) {
+		return unityEndpointNotCreatedCLIError(endpointNotCreatedErr, context), true
+	}
+
+	var notRespondingErr UnityServerNotRespondingError
+	if errors.As(err, &notRespondingErr) {
+		return unityServerNotRespondingCLIError(notRespondingErr, context), true
+	}
+
+	var editorUnresponsiveErr *unityipc.EditorUnresponsiveError
+	if errors.As(err, &editorUnresponsiveErr) {
+		return unityEditorUnresponsiveError(editorUnresponsiveErr, context), true
+	}
+
+	var connectionErr *unityipc.ConnectionAttemptError
+	if errors.As(err, &connectionErr) {
+		return connectionAttemptCLIError(connectionErr, context), true
+	}
+
+	return CLIError{}, false
+}
+
+func unityServerNotRespondingCLIError(err UnityServerNotRespondingError, context ErrorContext) CLIError {
+	return CLIError{
+		ErrorCode:   ErrorCodeUnityNotReachable,
+		Phase:       ErrorPhaseConnection,
+		Message:     "Unity is running for this project, but the Unity CLI Loop server is not responding.",
+		Retryable:   true,
+		SafeToRetry: true,
+		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),
+		Command:     context.Command,
+		NextActions: []string{
+			"Wait and retry; Unity may be starting, importing assets, compiling, or reloading scripts.",
+			"Run `uloop focus-window` if Unity appears stalled in the background.",
+			"Confirm that the command targets the intended Unity project and the Editor package is installed.",
+		},
+		Details: map[string]any{
+			"Endpoint": err.Endpoint,
+			"Cause":    err.causeText(),
+		},
+	}
+}
+
+func connectionAttemptCLIError(err *unityipc.ConnectionAttemptError, context ErrorContext) CLIError {
+	if IsPermanentConnectError(err) {
+		return refusedConnectionAttemptCLIError(err, context)
+	}
+	return CLIError{
+		ErrorCode:   ErrorCodeUnityNotReachable,
+		Phase:       ErrorPhaseConnection,
+		Message:     "The Unity CLI Loop server is not reachable for this project.",
+		Retryable:   true,
+		SafeToRetry: true,
+		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),
+		Command:     context.Command,
+		NextActions: []string{
+			"If Unity is closed, run `uloop launch`.",
+			"If Unity is starting, compiling, or reloading scripts, wait and retry.",
+			"Confirm that the command targets the intended Unity project.",
+		},
+		Details: map[string]any{
+			"Endpoint": err.Endpoint,
+			"Cause":    connectionAttemptCause(err),
+		},
+	}
+}
+
+// Reports a connect the operating system refused permanently. Waiting changes nothing here, so
+// the envelope states the syscall error as it came back and points at what actually blocks the
+// socket instead of repeating the reachability guidance.
+func refusedConnectionAttemptCLIError(err *unityipc.ConnectionAttemptError, context ErrorContext) CLIError {
+	return CLIError{
+		ErrorCode:   ErrorCodeUnityNotReachable,
+		Phase:       ErrorPhaseConnection,
+		Message:     "The operating system refused the connection to the Unity CLI Loop server for this project.",
+		Retryable:   false,
+		SafeToRetry: false,
+		ProjectRoot: firstNonEmpty(context.ProjectRoot, err.ProjectRoot),
+		Command:     context.Command,
+		NextActions: []string{
+			"Retrying will not help: the connection was refused before it reached Unity, and the Editor never saw it.",
+			"If this command ran inside a sandbox (for example an AI agent's sandboxed shell), the sandbox denied the connection; run it with sandboxing disabled for this command.",
+			"Otherwise check the ownership and permissions of the endpoint path in Details.",
+		},
+		Details: map[string]any{
+			"Endpoint": err.Endpoint,
+			"Cause":    connectionAttemptCause(err),
+		},
+	}
+}
+
+func classifyRPCError(rpcErr *unityipc.RPCError, context ErrorContext) CLIError {
+	details := rpcErrorDetails(rpcErr)
+	switch RPCDataType(rpcErr.Data) {
+	case "cli_update_required":
+		return cliUpdateRequiredError(rpcErr, details, decodeCliUpdateRequiredErrorData(rpcErr.Data), context)
+	case "server_busy":
+		return unityServerBusyError(rpcErr, details, decodeServerBusyErrorData(rpcErr.Data), context)
+	default:
+		return genericRPCError(rpcErr, details, context)
+	}
+}
+
+func rpcErrorDetails(rpcErr *unityipc.RPCError) map[string]any {
+	details := map[string]any{
+		"Code":    rpcErr.Code,
+		"Message": rpcErr.Message,
+	}
+	if len(rpcErr.Data) == 0 {
+		return details
+	}
+
+	var data any
+	if json.Unmarshal(rpcErr.Data, &data) != nil {
+		details["Data"] = string(rpcErr.Data)
+		return details
+	}
+
+	details["Data"] = data
+	return details
+}
+
+func genericRPCError(rpcErr *unityipc.RPCError, details map[string]any, context ErrorContext) CLIError {
+	return CLIError{
+		ErrorCode:   errorCodeUnityRPCError,
+		Phase:       errorPhaseUnityRPC,
+		Message:     rpcErr.Message,
+		Retryable:   false,
+		SafeToRetry: false,
+		ProjectRoot: context.ProjectRoot,
+		Command:     context.Command,
+		NextActions: []string{
+			"Read the Unity error details and fix the request or project state before retrying.",
+		},
+		Details: details,
+	}
+}

@@ -59,16 +59,6 @@
       "dependencies": {},
       "url": "https://packages.unity.com"
     },
-    "com.unity.film-internal-utilities": {
-      "version": "0.19.2-preview",
-      "depth": 1,
-      "source": "registry",
-      "dependencies": {
-        "com.unity.timeline": "1.2.18",
-        "com.unity.modules.uielements": "1.0.0"
-      },
-      "url": "https://packages.unity.com"
-    },
     "com.unity.ide.rider": {
       "version": "3.0.36",
       "depth": 0,
@@ -114,6 +104,13 @@
         "com.unity.profiling.core": "1.0.0",
         "com.unity.editorcoroutines": "1.0.0"
       },
+      "url": "https://packages.unity.com"
+    },
+    "com.unity.nuget.mono-cecil": {
+      "version": "1.11.6",
+      "depth": 1,
+      "source": "registry",
+      "dependencies": {},
       "url": "https://packages.unity.com"
     },
     "com.unity.nuget.newtonsoft-json": {
@@ -198,30 +195,8 @@
       },
       "url": "https://packages.unity.com"
     },
-    "com.unity.timeline": {
-      "version": "1.7.7",
-      "depth": 2,
-      "source": "registry",
-      "dependencies": {
-        "com.unity.modules.audio": "1.0.0",
-        "com.unity.modules.director": "1.0.0",
-        "com.unity.modules.animation": "1.0.0",
-        "com.unity.modules.particlesystem": "1.0.0"
-      },
-      "url": "https://packages.unity.com"
-    },
-    "com.unity.toonshader": {
-      "version": "0.12.0-preview",
-      "depth": 0,
-      "source": "registry",
-      "dependencies": {
-        "com.unity.render-pipelines.core": "10.0.0",
-        "com.unity.film-internal-utilities": "0.19.2-preview"
-      },
-      "url": "https://packages.unity.com"
-    },
     "com.unity.ugui": {
-      "version": "2.0.0",
+      "version": "1.0.0",
       "depth": 0,
       "source": "builtin",
       "dependencies": {
@@ -234,9 +209,9 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.unity.modules.physics": "1.0.0",
         "com.unity.ugui": "1.0.0",
-        "com.unity.nuget.newtonsoft-json": "3.2.1"
+        "com.unity.nuget.newtonsoft-json": "3.2.1",
+        "com.unity.nuget.mono-cecil": "1.11.6"
       }
     },
     "com.unity.modules.animation": {
@@ -244,21 +219,6 @@
       "depth": 0,
       "source": "builtin",
       "dependencies": {}
-    },
-    "com.unity.modules.audio": {
-      "version": "1.0.0",
-      "depth": 3,
-      "source": "builtin",
-      "dependencies": {}
-    },
-    "com.unity.modules.director": {
-      "version": "1.0.0",
-      "depth": 3,
-      "source": "builtin",
-      "dependencies": {
-        "com.unity.modules.audio": "1.0.0",
-        "com.unity.modules.animation": "1.0.0"
-      }
     },
     "com.unity.modules.imageconversion": {
       "version": "1.0.0",
@@ -278,15 +238,9 @@
       "source": "builtin",
       "dependencies": {}
     },
-    "com.unity.modules.particlesystem": {
-      "version": "1.0.0",
-      "depth": 3,
-      "source": "builtin",
-      "dependencies": {}
-    },
     "com.unity.modules.physics": {
       "version": "1.0.0",
-      "depth": 1,
+      "depth": 2,
       "source": "builtin",
       "dependencies": {}
     },

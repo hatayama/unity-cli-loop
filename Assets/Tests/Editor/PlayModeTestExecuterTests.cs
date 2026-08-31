@@ -1,8 +1,9 @@
 using NUnit.Framework;
 using UnityEditor.TestTools.TestRunner.Api;
-using io.github.hatayama.uLoopMCP;
 
-namespace io.github.hatayama.uLoopMCP
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Tests for PlayModeTestExecuter

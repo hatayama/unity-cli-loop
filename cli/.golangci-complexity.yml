@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - cyclop
+  settings:
+    cyclop:
+      max-complexity: 15
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+
+run:
+  timeout: 5m

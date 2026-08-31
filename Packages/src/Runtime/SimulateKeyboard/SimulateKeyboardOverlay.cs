@@ -4,12 +4,16 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
+    /// <summary>
+    /// Drives the runtime overlay used by Simulate Keyboard behavior.
+    /// </summary>
     public class SimulateKeyboardOverlay : MonoBehaviour
     {
         public const float CONTAINER_BACKGROUND_ALPHA = 0.8f;
 
+        private const string ContainerName = "Container";
         private const float PRESS_DISPLAY_DURATION = 0.5f;
         private const float FADE_DURATION = 0.2f;
         private const int FONT_SIZE = 48;
@@ -25,6 +29,8 @@ namespace io.github.hatayama.uLoopMCP
 
         private void Awake()
         {
+            RestoreMissingReferences();
+
             Debug.Assert(_container != null, "_container must be assigned in prefab");
             Debug.Assert(_containerImage != null, "_containerImage must be assigned in prefab");
 
@@ -35,6 +41,33 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             _container.SetActive(false);
+        }
+
+        private void RestoreMissingReferences()
+        {
+            if (_container == null)
+            {
+                _container = FindChildGameObject(ContainerName);
+            }
+
+            if (_containerImage == null && _container != null)
+            {
+                _containerImage = _container.GetComponent<Image>();
+            }
+        }
+
+        private GameObject FindChildGameObject(string childName)
+        {
+            Transform[] children = GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == childName)
+                {
+                    return children[i].gameObject;
+                }
+            }
+
+            return null!;
         }
 
         private void LateUpdate()
@@ -110,7 +143,7 @@ namespace io.github.hatayama.uLoopMCP
 
         private BadgeEntry CreateBadge()
         {
-            GameObject badge = new GameObject("KeyBadge");
+            GameObject badge = new("KeyBadge");
             badge.transform.SetParent(_container.transform, false);
 
             badge.AddComponent<RectTransform>();
@@ -121,7 +154,7 @@ namespace io.github.hatayama.uLoopMCP
 
             LayoutElement layoutElement = badge.AddComponent<LayoutElement>();
 
-            GameObject textGo = new GameObject("KeyText");
+            GameObject textGo = new("KeyText");
             textGo.transform.SetParent(badge.transform, false);
 
             RectTransform textRect = textGo.AddComponent<RectTransform>();

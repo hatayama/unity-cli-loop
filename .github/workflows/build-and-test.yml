@@ -1,177 +1,216 @@
-name: Build and Release uLoopMCP
+name: Build and Test Unity CLI Loop
 
 on:
   push:
-    tags: [ 'v*' ]
+    tags: ["v*", "uloop-project-runner-v*", "dispatcher-v*"]
   pull_request:
-    branches: [ main ]
+    branches: [main, v3-beta]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build-typescript-server:
+  build-cli:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v7.0.1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Setup Node.js
-      uses: actions/setup-node@v7
-      with:
-        node-version: '22'
-        cache: 'npm'
-        cache-dependency-path: 'Packages/src/TypeScriptServer~/package-lock.json'
-        
-    - name: Install TypeScript Server dependencies
-      working-directory: Packages/src/TypeScriptServer~
-      run: |
-        echo "Installing dependencies (node_modules will be created temporarily)..."
-        npm ci --ignore-scripts=false
-        echo "Dependencies installed successfully"
-        
-    - name: Type check TypeScript Server
-      working-directory: Packages/src/TypeScriptServer~
-      run: npx tsc --noEmit
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 0
 
-    - name: Install CLI dependencies
-      working-directory: Packages/src/Cli~
-      run: npm ci
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache: false
 
-    - name: Type check CLI
-      working-directory: Packages/src/Cli~
-      run: npx tsc --noEmit
+      - name: Test release automation shell helpers
+        run: |
+          sh -n cli/dispatcher/internal/install/scripts/install_darwin.sh
+          sh -n cli/dispatcher/internal/uninstall/scripts/uninstall_darwin.sh
+          scripts/test-go-cli-toolchain.sh
+          scripts/test-resolve-native-cli-release-target.sh
+          scripts/test-resolve-dispatcher-release-target.sh
+          scripts/test-is-release-please-release-commit.sh
+          scripts/test-release-please-config.sh
+          scripts/test-protocol-minimum-version-workflow.sh
+          scripts/test-security-scan-workflow.sh
+          scripts/test-verify-native-cli-release-assets.sh
+          scripts/test-verify-dispatcher-release-assets.sh
+          scripts/test-mark-release-pr-tagged.sh
+          scripts/test-sync-published-release-pr-labels.sh
+          scripts/test-sync-release-please-package-releases.sh
+          scripts/test-notify-release-workflow-failure.sh
+          scripts/test-native-cli-publish-workflow.sh
+          scripts/test-dispatcher-publish-workflow.sh
+          scripts/test-distribute-attestation-bundles.sh
+          scripts/test-install-release-filter.sh
+          scripts/test-install-pin-manifest.sh
+          scripts/test-install-archive-manifest.sh
+          scripts/test-install-version-format.sh
+          scripts/test-bootstrap-manifest-from-bundle.sh
 
-    - name: Run knip on TypeScript Server
-      working-directory: Packages/src/TypeScriptServer~
-      run: npx knip
+      - name: Check IPC protocol reminder
+        if: github.event_name == 'pull_request'
+        working-directory: cli/release-automation
+        run: go run ./cmd/check-ipc-protocol-reminder --base "origin/${{ github.base_ref }}" --head HEAD
 
-    - name: Run knip on CLI
-      working-directory: Packages/src/Cli~
-      run: npx knip
+      - name: Check protocol minimum version bump
+        if: github.event_name == 'pull_request' && !(startsWith(github.head_ref, 'release-please--branches--') && (github.event.pull_request.user.login == 'github-actions[bot]' || github.event.pull_request.user.login == 'release-please[bot]'))
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: go run ./cmd/check-protocol-minimum-version --base "origin/${{ github.base_ref }}" --head HEAD
 
-    - name: Run CLI unit tests
-      working-directory: Packages/src/Cli~
-      run: npm run test:unit
+      - name: Check dispatcher minimum version
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        working-directory: cli/release-automation
+        run: go run ./cmd/check-dispatcher-minimum-version
 
-    - name: Build TypeScript Server
-      working-directory: Packages/src/TypeScriptServer~
-      env:
-        ULOOPMCP_PRODUCTION: "true"
-        NODE_ENV: "production"
-      run: |
-        echo "Building TypeScript Server in production mode..."
-        echo "Environment: ULOOPMCP_PRODUCTION=$ULOOPMCP_PRODUCTION, NODE_ENV=$NODE_ENV"
-        npm run build:production
-        echo "Production build completed successfully"
-        
-    - name: Verify build output
-      working-directory: Packages/src/TypeScriptServer~
-      env:
-        ULOOPMCP_PRODUCTION: "true"
-        NODE_ENV: "production"
-      run: |
-        echo "Verifying build output..."
-        ls -la dist/
-        echo "Testing server startup in production mode..."
-        echo "Environment: ULOOPMCP_PRODUCTION=$ULOOPMCP_PRODUCTION, NODE_ENV=$NODE_ENV"
-        timeout 5s node dist/server.bundle.js || echo "Production server built successfully"
-        
-    - name: Clean up node_modules (optional verification)
-      working-directory: Packages/src/TypeScriptServer~
-      run: |
-        echo "node_modules size before cleanup:"
-        du -sh node_modules/ || echo "node_modules not found"
-        echo "Note: node_modules will be automatically cleaned up when GitHub Actions environment is destroyed"
-        
-    - name: Commit built files (if changed)
-      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
+      - name: Check dispatcher pin
+        if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+        working-directory: cli/release-automation
+        run: go run ./cmd/check-dispatcher-pin
 
-        # Validate and sanitize branch name to prevent shell injection
-        BRANCH_NAME="${{ github.head_ref }}"
-        if [[ ! "$BRANCH_NAME" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
-          echo "Error: Invalid branch name format: $BRANCH_NAME"
-          exit 1
-        fi
+      - name: Verify published dispatcher pin subjects
+        if: github.event_name == 'pull_request'
+        working-directory: cli/release-automation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: go run ./cmd/check-dispatcher-pin --base "origin/${{ github.base_ref }}" --head HEAD
 
-        # Save built artifacts before switching branches
-        TEMP_DIR=$(mktemp -d "$RUNNER_TEMP/server-bundle.XXXXXX")
-        cp Packages/src/TypeScriptServer~/dist/server.bundle.js "$TEMP_DIR/server.bundle.js"
-        cp Packages/src/TypeScriptServer~/dist/server.bundle.js.map "$TEMP_DIR/server.bundle.js.map"
+      - name: Verify published dispatcher pin subjects without a pull request diff
+        if: github.event_name != 'pull_request'
+        working-directory: cli/release-automation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: go run ./cmd/check-dispatcher-pin --network
 
-        echo "Fetching and switching to actual branch..."
-        git fetch origin "$BRANCH_NAME:$BRANCH_NAME"
-        git checkout "$BRANCH_NAME"
+      - name: Check release triggers
+        if: github.event_name == 'pull_request'
+        working-directory: cli/release-automation
+        run: go run ./cmd/check-release-triggers --base "origin/${{ github.base_ref }}" --head HEAD
 
-        # Restore built artifacts
-        cp "$TEMP_DIR/server.bundle.js" Packages/src/TypeScriptServer~/dist/server.bundle.js
-        cp "$TEMP_DIR/server.bundle.js.map" Packages/src/TypeScriptServer~/dist/server.bundle.js.map
-        rm -rf "$TEMP_DIR"
+      - name: Check tool documentation drift
+        working-directory: cli/release-automation
+        run: go run ./cmd/sync-tool-docs --check --repository-root "$GITHUB_WORKSPACE"
 
-        echo "Adding only dist/ files to git..."
-        git add Packages/src/TypeScriptServer~/dist/server.bundle.js Packages/src/TypeScriptServer~/dist/server.bundle.js.map
+      - name: Check SKILL.md size against the Codex prompt cap
+        working-directory: cli/release-automation
+        run: go run ./cmd/check-skill-size --root "$GITHUB_WORKSPACE"
 
-        echo "Checking for changes..."
-        if git diff --staged --quiet; then
-          echo "No changes to commit"
-        else
-          echo "Committing built files..."
-          git commit -m "chore: rebuild server bundle [skip ci]"
-          git push origin "$BRANCH_NAME"
-          echo "Built files committed successfully"
-        fi
+      # The stamp script derives its manifest from git ls-files, so a stamp generated before a new
+      # input file was git-added is silently stale; check-release-triggers only checks that the
+      # stamp files were touched, not that their values are current. Regenerate and diff instead.
+      - name: Check shared-inputs stamp drift
+        run: |
+          scripts/stamp-release-inputs.sh
+          git diff --exit-code -- cli/project-runner/shared-inputs-stamp.json cli/dispatcher/shared-inputs-stamp.json
 
-    - name: Verify built files are committed for fork PRs
-      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
-      run: |
-        echo "Fork PR detected; skipping automatic bundle commit."
-        echo "Verifying built server bundle matches committed files..."
-        if git diff --quiet -- Packages/src/TypeScriptServer~/dist/server.bundle.js Packages/src/TypeScriptServer~/dist/server.bundle.js.map; then
-          echo "Built server bundle is already committed."
-        else
-          echo "Built server bundle differs from committed files."
-          echo "Please commit Packages/src/TypeScriptServer~/dist/server.bundle.js and server.bundle.js.map."
-          git diff --stat -- Packages/src/TypeScriptServer~/dist/server.bundle.js Packages/src/TypeScriptServer~/dist/server.bundle.js.map
-          exit 1
-        fi
-        
+      - name: Install golangci-lint
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Check native Go CLI
+        run: scripts/check-go-cli.sh
+
+      - name: Package native Go CLI installers
+        run: scripts/package-go-cli.sh
+
+  test-windows-installers:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache: false
+
+      # Windows-only code paths (named pipe transport, winio deadlines, typed error
+      # classification, process management) are otherwise never executed by CI.
+      # Runs every go.work module: the formerly Windows-incompatible tests (POSIX-only
+      # fake executables, TCP-only fixtures, shell-script git/gh mocks) now install
+      # portable fixtures on Windows.
+      - name: Test native Go CLI on Windows
+        shell: bash
+        run: |
+          for module in common dispatcher project-runner release-automation; do
+            (cd "cli/$module" && go test ./...)
+          done
+
+      - name: Test install release filter in Git Bash
+        shell: bash
+        run: sh scripts/test-install-release-filter.sh
+
+      - name: Parse PowerShell installer in Windows PowerShell
+        shell: powershell
+        run: |
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 cli/dispatcher/internal/install/scripts/install_windows.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 cli/dispatcher/internal/uninstall/scripts/uninstall_windows_delete.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 cli/dispatcher/internal/uninstall/scripts/uninstall_windows_launch.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/install.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/check-release-installer.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-check-release-installer.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/run-windows-e2e.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-simulate-mouse-demo.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 Assets/Tests/Demo/scripts/verify-replay-via-cli.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-powershell51-native-argument-escaping.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-install-pin-resolution.ps1))
+
+      - name: Test release installer smoke helper
+        shell: powershell
+        run: .\scripts\test-check-release-installer.ps1
+
+      - name: Test Windows PowerShell native argument escaping
+        shell: powershell
+        run: .\scripts\test-powershell51-native-argument-escaping.ps1
+
+      - name: Test install pin resolution in Windows PowerShell
+        shell: powershell
+        run: .\scripts\test-install-pin-resolution.ps1
+
   test-unity-package:
     runs-on: ubuntu-latest
-    needs: build-typescript-server
-    
+    needs: build-cli
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v7.0.1
-      
-    - name: Validate Unity Package structure
-      run: |
-        echo "Validating Unity Package structure..."
-        
-        # Unity Package必須ファイルの存在確認
-        test -f "Packages/src/package.json" || exit 1
-        test -d "Packages/src/Editor" || exit 1
-        test -f "Packages/src/TypeScriptServer~/dist/server.bundle.js" || exit 1
-        
-        echo "✅ Unity Package structure is valid"
-        
-        # node_modulesが含まれていないことを確認
-        if [ -d "Packages/src/TypeScriptServer~/node_modules" ]; then
-          echo "❌ ERROR: node_modules should not be in the repository"
-          exit 1
-        else
-          echo "✅ node_modules correctly excluded from repository"
-        fi
-        
-    - name: Validate package.json
-      working-directory: Packages/src
-      run: |
-        echo "Validating package.json syntax..."
-        node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
-        echo "✅ package.json is valid"
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Validate Unity Package structure
+        run: |
+          echo "Validating Unity Package structure..."
+
+          test -f "Packages/src/package.json" || exit 1
+          test -d "Packages/src/Editor" || exit 1
+          test ! -d "Packages/src/Cli~" || exit 1
+          test -d "Packages/src/Editor/CliOnlyTools~" || exit 1
+          test -d "cli/project-runner" || exit 1
+          test -f "cli/project-runner/go.mod" || exit 1
+          test -d "cli/project-runner/cmd" || exit 1
+          test -d "cli/project-runner/internal" || exit 1
+
+          echo "✅ Unity Package structure is valid"
+
+      - name: Validate package.json
+        working-directory: Packages/src
+        run: |
+          echo "Validating package.json syntax..."
+          jq empty package.json
+          echo "✅ package.json is valid"

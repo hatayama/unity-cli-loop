@@ -1,0 +1,23 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.PausePoint.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:527f26a36b5043c2bd4d4036d04cd76d"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "UnityCliLoop.0Harmony.dll",
+        "Mono.Cecil.dll",
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

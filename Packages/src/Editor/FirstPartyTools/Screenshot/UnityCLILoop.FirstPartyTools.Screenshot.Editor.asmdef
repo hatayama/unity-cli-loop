@@ -1,0 +1,24 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.Screenshot.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "GUID:214998e563c124e8a88199b2dd1f522d",
+        "GUID:5079a8d3a72924a81aa1cbc25f65ed1b",
+        "GUID:a2d87883023de4cf59b7d1962d5dd8aa",
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:96b8d4624fb74ea2849fed17e7ad69d3",
+        "GUID:77087b1bb30a415e87a80cbf24e7430a",
+        "GUID:aa7cf56cc5f074e57ba35272b877e116"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

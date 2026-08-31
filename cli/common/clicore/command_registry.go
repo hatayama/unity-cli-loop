@@ -1,0 +1,85 @@
+package clicore
+
+const (
+	LaunchCommandName               = "launch"
+	InstallCommandName              = "install"
+	UpdateCommandName               = "update"
+	UninstallCommandName            = "uninstall"
+	VersionCommandName              = "version"
+	SkillsCommandName               = "skills"
+	PackageCommandName              = "package"
+	CompileCommandName              = "compile"
+	ExecuteDynamicCodeCommandName   = "execute-dynamic-code"
+	PausePointAwaitCommandName      = "await-pause-point"
+	PausePointStatusUserCommandName = "pause-point-status"
+	SetCodeOptimizationCommandName  = "set-code-optimization"
+	RunTestsCommandName             = "run-tests"
+)
+
+type NativeCommandEntry struct {
+	Name        string
+	Description string
+	Owner       CommandOwner
+}
+
+type CommandOwner string
+
+const (
+	DispatcherOwned CommandOwner = "dispatcher"
+	RunnerOwned     CommandOwner = "runner"
+)
+
+var NativeCommands = []NativeCommandEntry{
+	{Name: LaunchCommandName, Description: "Open this Unity project with the matching Editor version", Owner: DispatcherOwned},
+	{Name: "list", Description: "Show Unity tools currently exposed by the Editor", Owner: RunnerOwned},
+	{Name: "sync", Description: "Refresh .uloop/tools.json from the running Editor", Owner: RunnerOwned},
+	{Name: "focus-window", Description: "Bring the Unity Editor window to the foreground", Owner: RunnerOwned},
+	{Name: PausePointAwaitCommandName, Description: "Wait until a named UloopPausePoint.Pause marker pauses Unity", Owner: RunnerOwned},
+	{Name: PausePointStatusUserCommandName, Description: "Show one pause point marker's state, or list all registered markers when no target is given", Owner: RunnerOwned},
+	{Name: SetCodeOptimizationCommandName, Description: "Switch Unity's Code Optimization to Debug for this session or, with approval, as the machine-wide startup default", Owner: RunnerOwned},
+	{Name: SkillsCommandName, Description: "List, install, or uninstall agent skills", Owner: DispatcherOwned},
+	{Name: PackageCommandName, Description: "Install or inspect the Unity CLI Loop package in a project", Owner: DispatcherOwned},
+	{Name: InstallCommandName, Description: "Configure the global uloop dispatcher binary", Owner: DispatcherOwned},
+	{Name: UpdateCommandName, Description: "Update the global uloop dispatcher binary", Owner: DispatcherOwned},
+	{Name: UninstallCommandName, Description: "Remove the global uloop dispatcher binary", Owner: DispatcherOwned},
+	{Name: VersionCommandName, Description: "Show the installed uloop version", Owner: DispatcherOwned},
+}
+
+// IsDispatcherOwnedCommandName reports whether a native command belongs to the
+// global dispatcher's process. This is the single source of truth for the
+// dispatcher/runner command split: the dispatcher handles these in-process, and
+// the project runner must reject them instead of executing them.
+func IsDispatcherOwnedCommandName(command string) bool {
+	owner, ok := NativeCommandOwner(command)
+	return ok && owner == DispatcherOwned
+}
+
+func IsRunnerOwnedCommandName(command string) bool {
+	owner, ok := NativeCommandOwner(command)
+	return ok && owner == RunnerOwned
+}
+
+func NativeCommandOwner(command string) (CommandOwner, bool) {
+	entry, ok := NativeCommand(command)
+	if !ok {
+		return "", false
+	}
+	return entry.Owner, true
+}
+
+func NativeCommand(command string) (NativeCommandEntry, bool) {
+	for _, entry := range NativeCommands {
+		if entry.Name == command {
+			return entry, true
+		}
+	}
+	return NativeCommandEntry{}, false
+}
+
+func NativeCommandNamesForCompletion() []string {
+	names := make([]string, 0, len(NativeCommands))
+	for _, command := range NativeCommands {
+		names = append(names, command.Name)
+	}
+	return names
+}

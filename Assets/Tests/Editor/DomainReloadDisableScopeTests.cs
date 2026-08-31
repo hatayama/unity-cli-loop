@@ -1,9 +1,14 @@
+using System;
 using System.IO;
 
 using NUnit.Framework;
 using UnityEditor;
+using UnityEngine;
+using UnityEngine.TestTools;
 
-namespace io.github.hatayama.uLoopMCP
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Test fixture that verifies Enter Play Mode settings recovery for DomainReloadDisableScope.
@@ -111,7 +116,12 @@ namespace io.github.hatayama.uLoopMCP
 
             DomainReloadDisableScope abandonedScope = new DomainReloadDisableScope();
             Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
-            DomainReloadDisableScope.ResetActiveScopeCountForTests();
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
+
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(0));
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.False);
 
             DomainReloadDisableScope nextScope = new DomainReloadDisableScope();
             DomainReloadDisableScopeRecoveryData markerData = DomainReloadDisableScopeRecovery.ReadMarkerDataForTests();
@@ -128,26 +138,84 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
-        public void Constructor_RestoresStaleMarker_WhenPreviousScopeWasAbandonedInSameEditorSession()
+        public void RecoverAbandonedScopeBeforeNewRun_WhenCountIsPositiveWithoutMarker_ShouldClearPhantomCount()
         {
-            // Verifies same-session recovery after the abandoned scope is no longer alive.
+            // Verifies inconsistent abandoned counts cannot block the next run from saving a fresh marker.
             SetEnterPlayModeSettings(false, EnterPlayModeOptions.None);
+            DomainReloadDisableScope abandonedScope = new DomainReloadDisableScope();
+            DomainReloadDisableScopeRecovery.ClearPendingRestoreForTests();
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(1));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.False);
 
-            System.WeakReference abandonedScopeReference = CreateAbandonedScopeReference();
-            CollectGarbage();
-            Assert.That(abandonedScopeReference.IsAlive, Is.False);
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
+
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(0));
 
             DomainReloadDisableScope nextScope = new DomainReloadDisableScope();
-            DomainReloadDisableScopeRecoveryData markerData = DomainReloadDisableScopeRecovery.ReadMarkerDataForTests();
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
+            nextScope.Dispose();
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.False);
+            System.GC.KeepAlive(abandonedScope);
+        }
 
-            Assert.That(markerData.originalOptionsEnabled, Is.False);
-            Assert.That(markerData.originalOptions, Is.EqualTo((int)EnterPlayModeOptions.None));
+        [Test]
+        public void Dispose_AfterRecoverAbandonedScope_ShouldBeIdempotent()
+        {
+            // Verifies disposing a live instance after Recover no longer asserts or double-restores.
+            SetEnterPlayModeSettings(false, EnterPlayModeOptions.None);
+            DomainReloadDisableScope abandonedScope = new DomainReloadDisableScope();
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
+
+            Assert.DoesNotThrow(() => abandonedScope.Dispose());
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Dispose_OfAbandonedInstance_AfterNewScopeStarted_ShouldLeaveNewScopeIntact()
+        {
+            // Verifies a delayed Dispose from an abandoned scope cannot restore settings under a newer scope.
+            SetEnterPlayModeSettings(false, EnterPlayModeOptions.None);
+            DomainReloadDisableScope abandonedScope = new DomainReloadDisableScope();
+            int generationBeforeRecover = DomainReloadDisableScope.GetGenerationForTests();
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
+            Assert.That(DomainReloadDisableScope.GetGenerationForTests(), Is.EqualTo(generationBeforeRecover + 1));
+
+            DomainReloadDisableScope nextScope = new DomainReloadDisableScope();
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(1));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
+
+            abandonedScope.Dispose();
+
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(1));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.True);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
 
             nextScope.Dispose();
+            Assert.That(DomainReloadDisableScope.GetActiveScopeCountForTests(), Is.EqualTo(0));
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.False);
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
+        }
+
+        [Test]
+        public void RecoverAbandonedScopeBeforeNewRun_WhenCountIsZeroWithPendingMarker_ShouldRestoreSettings()
+        {
+            // Verifies domain-reload-like state (count reset, marker retained) is cleared before a new run.
+            SetEnterPlayModeSettings(false, EnterPlayModeOptions.None);
+            DomainReloadDisableScope abandonedScope = new DomainReloadDisableScope();
+            DomainReloadDisableScope.ResetActiveScopeCountForTests();
+            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
+
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
 
             Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.False);
             Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.None));
             Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.False);
+            System.GC.KeepAlive(abandonedScope);
         }
 
         [Test]
@@ -164,26 +232,49 @@ namespace io.github.hatayama.uLoopMCP
             System.GC.KeepAlive(scope);
         }
 
+        [Test]
+        public void RestoreIfPending_RejectsUnsupportedEnterPlayModeOptionBits()
+        {
+            // Verifies that corrupted markers cannot write unsupported option bits into EditorSettings.
+            SetEnterPlayModeSettings(true, EnterPlayModeOptions.DisableDomainReload);
+            string json = "{ \"originalOptionsEnabled\": false, \"originalOptions\": 1024 }";
+            File.WriteAllText(MarkerFilePath, json);
+
+            InvalidOperationException exception =
+                Assert.Throws<InvalidOperationException>(() => DomainReloadDisableScopeRecovery.RestoreIfPending());
+
+            Assert.That(exception.Message, Does.Contain("supported Enter Play Mode option bits"));
+            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.True);
+            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
+            Assert.That(File.Exists(MarkerFilePath), Is.False);
+        }
+
+        [Test]
+        public void SaveCurrentSettings_ThrowsAndKeepsExistingMarker_WhenMarkerAlreadyExists()
+        {
+            // Verifies that saving refuses to replace an unrecovered marker.
+            string directoryPath = Path.GetDirectoryName(MarkerFilePath);
+            if (!string.IsNullOrEmpty(directoryPath))
+            {
+                Directory.CreateDirectory(directoryPath);
+            }
+
+            string existingJson = "{ \"originalOptionsEnabled\": true, \"originalOptions\": 1 }";
+            File.WriteAllText(MarkerFilePath, existingJson);
+
+            LogAssert.Expect(LogType.Assert, "recovery marker must be restored before saving a new marker");
+            InvalidOperationException exception =
+                Assert.Throws<InvalidOperationException>(() => DomainReloadDisableScopeRecovery.SaveCurrentSettings());
+
+            Assert.That(exception.Message, Does.Contain("must be restored before saving"));
+            Assert.That(File.ReadAllText(MarkerFilePath), Is.EqualTo(existingJson));
+            Assert.That(File.Exists(TempFilePath), Is.False);
+        }
+
         private static void SetEnterPlayModeSettings(bool enabled, EnterPlayModeOptions options)
         {
             EditorSettings.enterPlayModeOptionsEnabled = enabled;
             EditorSettings.enterPlayModeOptions = options;
-        }
-
-        private static System.WeakReference CreateAbandonedScopeReference()
-        {
-            DomainReloadDisableScope scope = new DomainReloadDisableScope();
-            Assert.That(EditorSettings.enterPlayModeOptionsEnabled, Is.True);
-            Assert.That(EditorSettings.enterPlayModeOptions, Is.EqualTo(EnterPlayModeOptions.DisableDomainReload));
-            Assert.That(DomainReloadDisableScopeRecovery.HasPendingRestoreForTests(), Is.True);
-            return new System.WeakReference(scope);
-        }
-
-        private static void CollectGarbage()
-        {
-            System.GC.Collect();
-            System.GC.WaitForPendingFinalizers();
-            System.GC.Collect();
         }
 
         private static void RestoreFile(string filePath, bool fileExisted, string fileContent)

@@ -1,6 +1,8 @@
 using System;
 
-namespace io.github.hatayama.uLoopMCP
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Dev
 {
     /// <summary>
     /// Presenter class for LogGetterEditorWindow.
@@ -19,7 +21,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             LogDisplayDto displayData;
             
-            if (logType == McpLogType.All)
+            if (logType == UnityCliLoopLogType.All)
             {
                 displayData = LogGetter.GetAllConsoleLogs();
             }
@@ -33,7 +35,7 @@ namespace io.github.hatayama.uLoopMCP
 
         public void ClearLogs()
         {
-            LogDisplayDto displayData = new LogDisplayDto(new LogEntryDto[0], 0);
+            LogDisplayDto displayData = new(new LogEntryDto[0], 0);
             OnLogDataUpdated?.Invoke(displayData);
         }
 

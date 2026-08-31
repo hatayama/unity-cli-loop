@@ -1,0 +1,232 @@
+package projectrunner
+
+type pausePointStatusResponse struct {
+	Success                         bool                             `json:"Success"`
+	ErrorCode                       string                           `json:"ErrorCode,omitempty"`
+	Id                              string                           `json:"Id"`
+	Status                          string                           `json:"Status"`
+	IsEnabled                       bool                             `json:"IsEnabled"`
+	IsHit                           bool                             `json:"IsHit"`
+	HitCount                        int                              `json:"HitCount"`
+	MethodEntryCount                int                              `json:"MethodEntryCount"`
+	HitWhen                         string                           `json:"HitWhen"`
+	HitWhenSkippedCount             int                              `json:"HitWhenSkippedCount"`
+	HitWhenErrorNote                string                           `json:"HitWhenErrorNote"`
+	TimeoutSeconds                  int                              `json:"TimeoutSeconds"`
+	Mode                            string                           `json:"Mode"`
+	MaxHistory                      int                              `json:"MaxHistory"`
+	MaxPreviewElements              int                              `json:"MaxPreviewElements"`
+	MaxCallerFrames                 int                              `json:"MaxCallerFrames"`
+	CapturedVariableHistory         []pausePointCapturedHistoryFrame `json:"CapturedVariableHistory"`
+	HistoryDroppedCount             int                              `json:"HistoryDroppedCount"`
+	Expired                         bool                             `json:"Expired"`
+	EnabledAtUtc                    string                           `json:"EnabledAtUtc"`
+	ElapsedSinceEnabledMilliseconds int64                            `json:"ElapsedSinceEnabledMilliseconds"`
+	RemainingMilliseconds           int64                            `json:"RemainingMilliseconds"`
+	Generation                      int                              `json:"Generation"`
+	EditorState                     pausePointEditorState            `json:"EditorState"`
+	FirstHitAtUtc                   string                           `json:"FirstHitAtUtc"`
+	LastHitAtUtc                    string                           `json:"LastHitAtUtc"`
+	FirstHitSequence                int                              `json:"FirstHitSequence"`
+	LastHitSequence                 int                              `json:"LastHitSequence"`
+	Message                         string                           `json:"Message"`
+	RecommendedNextAction           string                           `json:"RecommendedNextAction"`
+
+	// SnapshotTiming is still enable-only on the Unity status DTO today, so --await copies it
+	// from the enable response on both hit and Expired. Method-name arms leave it empty, so
+	// omitempty keeps the historical await schema unchanged for those cases.
+	// Why before CapturedVariables: JSON object key order follows this struct, and agents
+	// should read SnapshotTiming and StatusNote before the variable dump.
+	SnapshotTiming string `json:"SnapshotTiming,omitempty"`
+
+	// StatusNote is set by the CLI, not Unity, when Status is Hit. Trace mode explains
+	// that Play Mode was not paused; other modes explain the frame-boundary pause.
+	// omitempty keeps the field off non-Hit statuses so the shared status contract
+	// fixture stays unchanged.
+	StatusNote string `json:"StatusNote,omitempty"`
+
+	// HitWhenNote is set by the CLI when the armed line ran but every capture was
+	// skipped by --hit-when. It stays separate from StatusNote because it applies
+	// before a Hit exists and must not replace mode-specific hit guidance.
+	HitWhenNote string `json:"HitWhenNote,omitempty"`
+
+	CapturedVariables          []pausePointCapturedVariable `json:"CapturedVariables"`
+	CallerFrames               []pausePointCallerFrame      `json:"CallerFrames"`
+	CapturedVariablesTruncated bool                         `json:"CapturedVariablesTruncated"`
+	TruncatedVariableNames     []string                     `json:"TruncatedVariableNames"`
+	TruncatedVariableCount     int                          `json:"TruncatedVariableCount"`
+
+	// CapturedVariablesTruncatedNote is set by the CLI, not Unity, when
+	// --captured-variable-names dropped every truncated variable so the remaining
+	// list is complete even though CapturedVariablesTruncated stays true.
+	// omitempty keeps the field off unfiltered Unity payloads so the shared
+	// status contract fixture stays unchanged.
+	CapturedVariablesTruncatedNote string `json:"CapturedVariablesTruncatedNote,omitempty"`
+
+	// CapturedVariablePreviewNote is set by the CLI, not Unity, when at least one
+	// remaining captured variable (current or history) has Truncated set. omitempty
+	// keeps the field off complete snapshots so the shared status contract fixture
+	// stays unchanged.
+	CapturedVariablePreviewNote string `json:"CapturedVariablePreviewNote,omitempty"`
+
+	ClearedReason               string `json:"ClearedReason"`
+	StatusBeforeClear           string `json:"StatusBeforeClear"`
+	LateHitDiscardedAfterClear  bool   `json:"LateHitDiscardedAfterClear"`
+	SuppressedByHotReload       bool   `json:"SuppressedByHotReload"`
+	RetargetedToHotReloadPatch  bool   `json:"RetargetedToHotReloadPatch"`
+	LineBasis                   string `json:"LineBasis,omitempty"`
+	SuppressedByHotReloadReason string `json:"SuppressedByHotReloadReason,omitempty"`
+
+	// Warning is set by Unity on enable/clear tool responses when this shared type decodes those
+	// envelopes. The status bridge sets it to SuppressedByHotReloadReason when suppressed.
+	// On enable-pause-point --await hits, that enable response text is exposed as EnableTimeWarning
+	// on the wait payload, not as hit-time Warning.
+	Warning string `json:"Warning,omitempty"`
+
+	// ResolvedLine / ResolvedLineText are merged as a pair on the --await hit path and the
+	// --await Expired path: when status carries a non-zero ResolvedLine (retarget-updated),
+	// both fields come from status; otherwise both fall back to the enable-pause-point response.
+	// ResolvedMethod is still enable-only on the Unity status DTO today, so --await copies it
+	// from the enable response on both hit and Expired. Method-name arms leave it empty on the
+	// Unity side, so omitempty keeps the historical await schema unchanged for those cases.
+	ResolvedLine     int    `json:"ResolvedLine,omitempty"`
+	ResolvedLineText string `json:"ResolvedLineText,omitempty"`
+	ResolvedMethod   string `json:"ResolvedMethod,omitempty"`
+
+	// CapturedVariableNameFilterNoMatch is set by the CLI, not Unity, when
+	// --captured-variable-names was passed but none of the requested names matched any
+	// captured variable (current or history), so an agent doesn't mistake an empty
+	// CapturedVariables array for "nothing was captured at this hit".
+	CapturedVariableNameFilterNoMatch bool `json:"CapturedVariableNameFilterNoMatch,omitempty"`
+
+	// CapturedVariableNamesNotFound is set by the CLI, not Unity: the requested
+	// --captured-variable-names that matched no captured variable, in the order they were
+	// requested. Without it a partial match is indistinguishable from a full one, since the
+	// response only carries the names that did match and CapturedVariableNameFilterNoMatch covers
+	// the all-or-nothing case. Both are emitted when nothing matched at all.
+	CapturedVariableNamesNotFound []string `json:"CapturedVariableNamesNotFound,omitempty"`
+
+	// CapturedVariableHistoryNote is set by the CLI, not Unity, when the latest-hit
+	// frame was dropped from CapturedVariableHistory because CapturedVariables already
+	// carries that hit. omitempty keeps the field off 0-hit and unfiltered responses.
+	CapturedVariableHistoryNote string `json:"CapturedVariableHistoryNote,omitempty"`
+
+	// TriggerResult is set by the CLI, not Unity, only when --trigger was passed. It is omitted
+	// entirely otherwise, so callers that never use --trigger see no schema change at all.
+	TriggerResult *pausePointTriggerResult `json:"TriggerResult,omitempty"`
+
+	// ResumePlayResult is set by the CLI, not Unity, only when --resume-play was passed. It is
+	// omitted entirely otherwise, matching TriggerResult's omit-when-unused contract.
+	ResumePlayResult *pausePointResumePlayResult `json:"ResumePlayResult,omitempty"`
+
+	// TriggerFailed is set by the CLI, not Unity, only when --trigger was passed and the trigger is
+	// known to have failed. It repeats at the top level what TriggerResult already carries three
+	// levels down, because the loss it guards against is a caller reading Success:true / Status:Hit
+	// and never opening TriggerResult at all. A pointer so the field is absent — rather than a
+	// misleading false — when no trigger ran or its outcome is unknown.
+	TriggerFailed *bool `json:"TriggerFailed,omitempty"`
+}
+
+// pausePointStatusListResponse is the compact response used when no individual marker is queried.
+type pausePointStatusListResponse struct {
+	Success     bool                               `json:"Success"`
+	Message     string                             `json:"Message"`
+	Count       int                                `json:"Count"`
+	PausePoints []pausePointStatusListItemResponse `json:"PausePoints"`
+	NextActions []string                           `json:"NextActions"`
+}
+
+// pausePointStatusListItemResponse keeps id-less status output bounded to the fields needed for selection.
+type pausePointStatusListItemResponse struct {
+	Id                    string `json:"Id"`
+	Status                string `json:"Status"`
+	Mode                  string `json:"Mode"`
+	HitCount              int    `json:"HitCount"`
+	RemainingMilliseconds int64  `json:"RemainingMilliseconds"`
+}
+
+// pausePointStatusResult wraps a status response with the CLI-evaluated --expect verdicts.
+// pause-point-status marshals the Unity response directly, so it needs this wrapper to carry the
+// two extra fields; the names match pausePointWaitResult's so one query shape reads both commands.
+type pausePointStatusResult struct {
+	pausePointStatusResponse
+
+	// Both fields are omitted unless --expect was passed, and AllExpectationsPassed is a pointer
+	// for the same reason as on pausePointWaitResult: to distinguish "no --expect given" from
+	// "the given expectations failed".
+	Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
+	AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
+}
+
+type pausePointEditorState struct {
+	IsPlaying  bool   `json:"IsPlaying"`
+	IsPaused   bool   `json:"IsPaused"`
+	CapturedAt string `json:"CapturedAt"`
+}
+
+// pausePointCapturedHistoryFrame mirrors the Unity-side history DTO field-for-field.
+type pausePointCapturedHistoryFrame struct {
+	HitSequence       int                          `json:"HitSequence"`
+	FrameCount        int                          `json:"FrameCount"`
+	HitAtUtc          string                       `json:"HitAtUtc"`
+	CapturedVariables []pausePointCapturedVariable `json:"CapturedVariables"`
+	Truncated         bool                         `json:"Truncated"`
+	CallerFrames      []pausePointCallerFrame      `json:"CallerFrames"`
+}
+
+// pausePointCallerFrame mirrors the Unity-side caller-frame DTO: Method is always
+// present; File and Line are omitted when debug symbols are unavailable. Note is
+// omitted when File is present.
+type pausePointCallerFrame struct {
+	Method string `json:"Method"`
+	File   string `json:"File,omitempty"`
+	Line   int    `json:"Line,omitempty"`
+	Note   string `json:"Note,omitempty"`
+}
+
+// pausePointCapturedVariable mirrors the flat Unity-side
+// PausePointStatusCapturedVariable/UloopCapturedVariable DTO field-for-field: one variable
+// captured at a source pause point (a local, a parameter, or a `this` instance field).
+//
+// UnityObjectKind is the discriminator for "is this a Unity object variable", not
+// UnityObjectInstanceId: Unity's SourcePausePointVariableFormatter hardcodes all three
+// UnityObject* fields to their zero value for non-Unity-object variables, but always sets a
+// non-empty Kind for Unity object variables (including destroyed ones). InstanceId can in
+// theory land on zero for a real Unity object on 6000.4+ (it is the lower 32 bits of an
+// EntityId there), so independent omitempty per field is safe: Kind still surfaces in that
+// case, and no consumer needs InstanceId==0 to mean "not a Unity object".
+type pausePointCapturedVariable struct {
+	Name     string `json:"Name"`
+	Scope    string `json:"Scope"`
+	TypeName string `json:"TypeName"`
+
+	// Value is a pointer so a genuinely empty string (e.g. a captured `string s = ""`) still
+	// serializes as "Value":"" in full mode, distinct from names mode setting it to nil to omit
+	// the field entirely. A plain string with `omitempty` cannot make that distinction, since an
+	// empty string and an absent value would both be omitted.
+	Value                 *string `json:"Value,omitempty"`
+	UnityObjectKind       string  `json:"UnityObjectKind,omitempty"`
+	UnityObjectPath       string  `json:"UnityObjectPath,omitempty"`
+	UnityObjectInstanceId int     `json:"UnityObjectInstanceId,omitempty"`
+	Truncated             bool    `json:"Truncated"`
+}
+
+// pausePointVariableValue returns a pointer to value for use in pausePointCapturedVariable
+// struct literals, where a plain string literal cannot have its address taken inline.
+func pausePointVariableValue(value string) *string {
+	return &value
+}
+
+// normalizePausePointCallerFrames replaces nil caller-frame slices with empty ones so a
+// payload from a package generation that predates CallerFrames still re-marshals as []
+// (the Unity contract shape) rather than null.
+func normalizePausePointCallerFrames(response *pausePointStatusResponse) {
+	if response.CallerFrames == nil {
+		response.CallerFrames = []pausePointCallerFrame{}
+	}
+	for i := range response.CapturedVariableHistory {
+		if response.CapturedVariableHistory[i].CallerFrames == nil {
+			response.CapturedVariableHistory[i].CallerFrames = []pausePointCallerFrame{}
+		}
+	}
+}

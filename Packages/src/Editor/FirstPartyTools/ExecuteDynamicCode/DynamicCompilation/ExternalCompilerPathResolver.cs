@@ -1,0 +1,556 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Newtonsoft.Json;
+using UnityEditor;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Resolves External Compiler Path values from the available runtime context.
+    /// </summary>
+    internal static class ExternalCompilerPathResolver
+    {
+        private const string NetCoreRuntimeDirectoryName = "NetCoreRuntime";
+        private const string DotNetSdkRoslynDirectoryName = "DotNetSdkRoslyn";
+        private const string DotNetSdkDirectoryName = "DotNetSdk";
+        private const string DotNetSdkSdkDirectoryName = "sdk";
+        private const string RoslynDirectoryName = "Roslyn";
+        private const string CompilerBincoreDirectoryName = "bincore";
+        private const string CompilerDllFileName = "csc.dll";
+        private const string CompilerRuntimeConfigFileName = "csc.runtimeconfig.json";
+        private const string CompilerDepsFileName = "csc.deps.json";
+        private const string CodeAnalysisDllFileName = "Microsoft.CodeAnalysis.dll";
+        private const string CodeAnalysisCSharpDllFileName = "Microsoft.CodeAnalysis.CSharp.dll";
+        private const string NetCoreRuntimeSharedDirectoryName = "shared";
+        private const string NetCoreRuntimeSharedFrameworkName = "Microsoft.NETCore.App";
+        private const string CscRuntimeConfigRuntimeOptionsPropertyName = "runtimeOptions";
+        private const string CscRuntimeConfigFrameworkPropertyName = "framework";
+        private const string CscRuntimeConfigVersionPropertyName = "version";
+
+        public static ExternalCompilerPaths Resolve()
+        {
+            string editorPath = EditorApplication.applicationPath;
+            if (string.IsNullOrEmpty(editorPath))
+            {
+                return null;
+            }
+
+            string contentsPath = ResolveEditorContentsPath(editorPath);
+            if (string.IsNullOrEmpty(contentsPath))
+            {
+                return null;
+            }
+
+            string scriptingRootPath = ResolveScriptingRootPath(contentsPath);
+            string dotnetHostFileName = UnityEngine.Application.platform == UnityEngine.RuntimePlatform.WindowsEditor
+                ? "dotnet.exe"
+                : "dotnet";
+            string effectiveScriptingRootPath = scriptingRootPath ?? contentsPath;
+            string compilerDirectoryPath = ResolveCompilerDirectoryPath(effectiveScriptingRootPath);
+
+            List<string> missingComponents = new();
+            if (string.IsNullOrEmpty(scriptingRootPath))
+            {
+                missingComponents.Add(Path.Combine(contentsPath, NetCoreRuntimeDirectoryName));
+                missingComponents.Add(Path.Combine(contentsPath, DotNetSdkRoslynDirectoryName));
+                missingComponents.Add(Path.Combine(contentsPath, DotNetSdkDirectoryName, DotNetSdkSdkDirectoryName, "*", RoslynDirectoryName, CompilerBincoreDirectoryName));
+                missingComponents.Add(Path.Combine(contentsPath, "Resources", "Scripting", NetCoreRuntimeDirectoryName));
+                missingComponents.Add(Path.Combine(contentsPath, "Resources", "Scripting", DotNetSdkRoslynDirectoryName));
+                missingComponents.Add(Path.Combine(contentsPath, "Resources", "Scripting", DotNetSdkDirectoryName, DotNetSdkSdkDirectoryName, "*", RoslynDirectoryName, CompilerBincoreDirectoryName));
+            }
+
+            if (string.IsNullOrEmpty(compilerDirectoryPath))
+            {
+                compilerDirectoryPath = Path.Combine(effectiveScriptingRootPath, DotNetSdkRoslynDirectoryName);
+                missingComponents.Add(compilerDirectoryPath);
+                missingComponents.Add(Path.Combine(effectiveScriptingRootPath, DotNetSdkDirectoryName, DotNetSdkSdkDirectoryName, "*", RoslynDirectoryName, CompilerBincoreDirectoryName));
+            }
+
+            string compilerDllPath = Path.Combine(compilerDirectoryPath, CompilerDllFileName);
+            string compilerRuntimeConfigPath = Path.Combine(compilerDirectoryPath, CompilerRuntimeConfigFileName);
+            string compilerDepsFilePath = Path.Combine(compilerDirectoryPath, CompilerDepsFileName);
+            string codeAnalysisDllPath = Path.Combine(compilerDirectoryPath, CodeAnalysisDllFileName);
+            string codeAnalysisCSharpDllPath = Path.Combine(compilerDirectoryPath, CodeAnalysisCSharpDllFileName);
+            ExternalCompilerRuntimePairing runtimePairing = ResolveRuntimePairing(
+                effectiveScriptingRootPath,
+                compilerDirectoryPath,
+                dotnetHostFileName);
+            string dotnetHostPath = runtimePairing.DotnetHostPath;
+            string netCoreRuntimeSharedDirectoryPath = runtimePairing.NetCoreRuntimeSharedDirectoryPath;
+            ExternalCompilerLayoutKind layoutKind = ResolveCompilerLayoutKind(
+                contentsPath,
+                effectiveScriptingRootPath,
+                compilerDirectoryPath);
+
+            if (!File.Exists(dotnetHostPath))
+            {
+                missingComponents.Add(dotnetHostPath);
+            }
+
+            if (!File.Exists(compilerDllPath))
+            {
+                missingComponents.Add(compilerDllPath);
+            }
+
+            if (!File.Exists(compilerRuntimeConfigPath))
+            {
+                missingComponents.Add(compilerRuntimeConfigPath);
+            }
+
+            if (!File.Exists(compilerDepsFilePath))
+            {
+                missingComponents.Add(compilerDepsFilePath);
+            }
+
+            if (!File.Exists(codeAnalysisDllPath))
+            {
+                missingComponents.Add(codeAnalysisDllPath);
+            }
+
+            if (!File.Exists(codeAnalysisCSharpDllPath))
+            {
+                missingComponents.Add(codeAnalysisCSharpDllPath);
+            }
+
+            if (string.IsNullOrEmpty(netCoreRuntimeSharedDirectoryPath))
+            {
+                missingComponents.Add(
+                    Path.Combine(
+                        effectiveScriptingRootPath,
+                        NetCoreRuntimeDirectoryName,
+                        NetCoreRuntimeSharedDirectoryName,
+                        NetCoreRuntimeSharedFrameworkName));
+            }
+
+            if (missingComponents.Count > 0)
+            {
+                DynamicCompilationHealthMonitor.ReportFastPathUnavailable(
+                    editorPath,
+                    contentsPath,
+                    missingComponents);
+                return null;
+            }
+
+            return new ExternalCompilerPaths(
+                contentsPath,
+                scriptingRootPath,
+                dotnetHostPath,
+                compilerDllPath,
+                compilerRuntimeConfigPath,
+                compilerDepsFilePath,
+                codeAnalysisDllPath,
+                codeAnalysisCSharpDllPath,
+                netCoreRuntimeSharedDirectoryPath,
+                layoutKind);
+        }
+
+        // Why NetCoreRuntime first: 6000.3/6000.5 already satisfy csc's required major from
+        // NetCoreRuntime, so switching on "DotNetSdk is a complete root" would change those
+        // layouts' host/shared bytes. Switch only when that major is unsatisfied.
+        internal static ExternalCompilerRuntimePairing ResolveRuntimePairing(
+            string effectiveScriptingRootPath,
+            string compilerDirectoryPath,
+            string dotnetHostFileName)
+        {
+            string netCoreHostPath = Path.Combine(
+                effectiveScriptingRootPath,
+                NetCoreRuntimeDirectoryName,
+                dotnetHostFileName);
+            string netCoreSharedRootPath = Path.Combine(
+                effectiveScriptingRootPath,
+                NetCoreRuntimeDirectoryName,
+                NetCoreRuntimeSharedDirectoryName,
+                NetCoreRuntimeSharedFrameworkName);
+            string netCoreSharedDirectoryPath =
+                ResolveNetCoreRuntimeSharedDirectoryPath(netCoreSharedRootPath);
+            ExternalCompilerRuntimePairing netCorePairing =
+                new ExternalCompilerRuntimePairing(netCoreHostPath, netCoreSharedDirectoryPath);
+
+            int? requiredMajor = ReadRequiredRuntimeMajor(compilerDirectoryPath);
+            if (requiredMajor == null
+                || SharedRootSatisfiesRequiredMajor(netCoreSharedRootPath, requiredMajor.Value))
+            {
+                return netCorePairing;
+            }
+
+            ExternalCompilerRuntimePairing dotNetSdkPairing = TryResolveDotNetSdkRuntimePairing(
+                compilerDirectoryPath,
+                dotnetHostFileName,
+                requiredMajor.Value);
+            if (dotNetSdkPairing == null)
+            {
+                return netCorePairing;
+            }
+
+            return dotNetSdkPairing;
+        }
+
+        internal static string ResolveScriptingRootPath(string contentsPath)
+        {
+            if (string.IsNullOrEmpty(contentsPath))
+            {
+                return null;
+            }
+
+            string resourcesScriptingRootPath = Path.Combine(contentsPath, "Resources", "Scripting");
+            if (ContainsExternalCompilerLayout(resourcesScriptingRootPath))
+            {
+                return resourcesScriptingRootPath;
+            }
+
+            if (ContainsExternalCompilerLayout(contentsPath))
+            {
+                return contentsPath;
+            }
+
+            return ResolveScriptingRootPathByScan(contentsPath);
+        }
+
+        internal static string ResolveNetCoreRuntimeSharedDirectoryPath(string netCoreRuntimeSharedRootPath)
+        {
+            if (!Directory.Exists(netCoreRuntimeSharedRootPath))
+            {
+                return null;
+            }
+
+            string[] runtimeDirectories = Directory.GetDirectories(netCoreRuntimeSharedRootPath);
+            if (runtimeDirectories.Length == 0)
+            {
+                return null;
+            }
+
+            string highestVersionDirectoryPath = runtimeDirectories
+                .Select(runtimeDirectoryPath => new
+                {
+                    Path = runtimeDirectoryPath,
+                    VersionText = Path.GetFileName(runtimeDirectoryPath)
+                })
+                .Where(candidate => Version.TryParse(candidate.VersionText, out _))
+                .OrderByDescending(candidate => new Version(candidate.VersionText))
+                .ThenByDescending(candidate => candidate.VersionText, StringComparer.Ordinal)
+                .Select(candidate => candidate.Path)
+                .FirstOrDefault();
+
+            if (!string.IsNullOrEmpty(highestVersionDirectoryPath))
+            {
+                return highestVersionDirectoryPath;
+            }
+
+            return runtimeDirectories
+                .OrderByDescending(Path.GetFileName, StringComparer.Ordinal)
+                .First();
+        }
+
+        private static bool ContainsExternalCompilerLayout(string rootPath)
+        {
+            return Directory.Exists(Path.Combine(rootPath, NetCoreRuntimeDirectoryName))
+                && !string.IsNullOrEmpty(ResolveCompilerDirectoryPath(rootPath));
+        }
+
+        internal static string ResolveCompilerDirectoryPath(string scriptingRootPath)
+        {
+            if (string.IsNullOrEmpty(scriptingRootPath))
+            {
+                return null;
+            }
+
+            string legacyCompilerDirectoryPath = Path.Combine(scriptingRootPath, DotNetSdkRoslynDirectoryName);
+            if (IsUsableCompilerDirectory(legacyCompilerDirectoryPath))
+            {
+                return legacyCompilerDirectoryPath;
+            }
+
+            return ResolveDotNetSdkCompilerDirectoryPath(scriptingRootPath);
+        }
+
+        internal static ExternalCompilerLayoutKind ResolveCompilerLayoutKind(
+            string contentsPath,
+            string scriptingRootPath,
+            string compilerDirectoryPath)
+        {
+            if (string.IsNullOrEmpty(contentsPath) ||
+                string.IsNullOrEmpty(scriptingRootPath) ||
+                string.IsNullOrEmpty(compilerDirectoryPath))
+            {
+                return ExternalCompilerLayoutKind.Unknown;
+            }
+
+            string resourcesScriptingRootPath = Path.Combine(contentsPath, "Resources", "Scripting");
+            if (PathsEqual(scriptingRootPath, resourcesScriptingRootPath))
+            {
+                return ExternalCompilerLayoutKind.ResourcesScripting;
+            }
+
+            if (!PathsEqual(scriptingRootPath, contentsPath))
+            {
+                return ExternalCompilerLayoutKind.Scanned;
+            }
+
+            string contentsRootLegacyCompilerDirectoryPath = Path.Combine(contentsPath, DotNetSdkRoslynDirectoryName);
+            if (PathsEqual(compilerDirectoryPath, contentsRootLegacyCompilerDirectoryPath))
+            {
+                return ExternalCompilerLayoutKind.ContentsRootDotNetSdkRoslyn;
+            }
+
+            return ExternalCompilerLayoutKind.ContentsRootDotNetSdk;
+        }
+
+        private static bool IsUsableCompilerDirectory(string compilerDirectoryPath)
+        {
+            return Directory.Exists(compilerDirectoryPath)
+                && File.Exists(Path.Combine(compilerDirectoryPath, CompilerDllFileName));
+        }
+
+        private static string ResolveDotNetSdkCompilerDirectoryPath(string scriptingRootPath)
+        {
+            string sdkRootPath = Path.Combine(scriptingRootPath, DotNetSdkDirectoryName, DotNetSdkSdkDirectoryName);
+            if (!Directory.Exists(sdkRootPath))
+            {
+                return null;
+            }
+
+            List<string> sdkDirectoryPaths = Directory.GetDirectories(sdkRootPath).ToList();
+            sdkDirectoryPaths.Sort(CompareSdkDirectoryPathsDescending);
+
+            foreach (string sdkDirectoryPath in sdkDirectoryPaths)
+            {
+                string compilerDirectoryPath = Path.Combine(sdkDirectoryPath, RoslynDirectoryName, CompilerBincoreDirectoryName);
+                if (Directory.Exists(compilerDirectoryPath))
+                {
+                    return compilerDirectoryPath;
+                }
+            }
+
+            return null;
+        }
+
+        private static int CompareSdkDirectoryPathsDescending(string leftPath, string rightPath)
+        {
+            string leftVersionText = Path.GetFileName(leftPath);
+            string rightVersionText = Path.GetFileName(rightPath);
+            bool leftIsVersion = Version.TryParse(leftVersionText, out Version leftVersion);
+            bool rightIsVersion = Version.TryParse(rightVersionText, out Version rightVersion);
+
+            if (leftIsVersion && rightIsVersion)
+            {
+                int versionComparison = rightVersion.CompareTo(leftVersion);
+                if (versionComparison != 0)
+                {
+                    return versionComparison;
+                }
+            }
+            else if (leftIsVersion)
+            {
+                return -1;
+            }
+            else if (rightIsVersion)
+            {
+                return 1;
+            }
+
+            return string.Compare(rightVersionText, leftVersionText, StringComparison.Ordinal);
+        }
+
+        private static bool PathsEqual(string leftPath, string rightPath)
+        {
+            if (string.IsNullOrEmpty(leftPath) || string.IsNullOrEmpty(rightPath))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                NormalizePath(leftPath),
+                NormalizePath(rightPath),
+                StringComparison.Ordinal);
+        }
+
+        private static string NormalizePath(string path)
+        {
+            return Path.GetFullPath(path)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        private static string ResolveScriptingRootPathByScan(string contentsPath)
+        {
+            if (!Directory.Exists(contentsPath))
+            {
+                return null;
+            }
+
+            Queue<(string Path, int Depth)> pendingDirectories = new Queue<(string Path, int Depth)>();
+            pendingDirectories.Enqueue((contentsPath, 0));
+
+            while (pendingDirectories.Count > 0)
+            {
+                (string currentPath, int depth) = pendingDirectories.Dequeue();
+                if (ContainsExternalCompilerLayout(currentPath))
+                {
+                    return currentPath;
+                }
+
+                if (depth >= 4)
+                {
+                    continue;
+                }
+
+                foreach (string childDirectoryPath in Directory.GetDirectories(currentPath).OrderBy(path => path, StringComparer.Ordinal))
+                {
+                    pendingDirectories.Enqueue((childDirectoryPath, depth + 1));
+                }
+            }
+
+            return null;
+        }
+
+        private static string ResolveEditorContentsPath(string editorPath)
+        {
+            if (editorPath.EndsWith(".app", StringComparison.OrdinalIgnoreCase))
+            {
+                return Path.Combine(editorPath, "Contents");
+            }
+
+            string editorDirectoryPath = Path.GetDirectoryName(editorPath);
+            if (string.IsNullOrEmpty(editorDirectoryPath))
+            {
+                return null;
+            }
+
+            string dataDirectoryPath = Path.Combine(editorDirectoryPath, "Data");
+            if (Directory.Exists(dataDirectoryPath))
+            {
+                return dataDirectoryPath;
+            }
+
+            string installRootPath = Path.GetDirectoryName(editorDirectoryPath);
+            return string.IsNullOrEmpty(installRootPath)
+                ? null
+                : installRootPath;
+        }
+
+        private static int? ReadRequiredRuntimeMajor(string compilerDirectoryPath)
+        {
+            if (string.IsNullOrEmpty(compilerDirectoryPath))
+            {
+                return null;
+            }
+
+            string runtimeConfigPath = Path.Combine(compilerDirectoryPath, CompilerRuntimeConfigFileName);
+            if (!File.Exists(runtimeConfigPath))
+            {
+                return null;
+            }
+
+            string text = File.ReadAllText(runtimeConfigPath);
+            CscRuntimeConfigDto config = JsonConvert.DeserializeObject<CscRuntimeConfigDto>(text);
+            string versionText = config?.RuntimeOptions?.Framework?.Version;
+            if (string.IsNullOrEmpty(versionText) || !Version.TryParse(versionText, out Version version))
+            {
+                return null;
+            }
+
+            return version.Major;
+        }
+
+        private static bool SharedRootSatisfiesRequiredMajor(string sharedRootPath, int requiredMajor)
+        {
+            if (!Directory.Exists(sharedRootPath))
+            {
+                return false;
+            }
+
+            string[] runtimeDirectories = Directory.GetDirectories(sharedRootPath);
+            foreach (string runtimeDirectoryPath in runtimeDirectories)
+            {
+                string versionText = Path.GetFileName(runtimeDirectoryPath);
+                if (Version.TryParse(versionText, out Version version) && version.Major >= requiredMajor)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static ExternalCompilerRuntimePairing TryResolveDotNetSdkRuntimePairing(
+            string compilerDirectoryPath,
+            string dotnetHostFileName,
+            int requiredMajor)
+        {
+            string dotNetSdkRootPath = FindDirectoryContainingSdk(compilerDirectoryPath);
+            if (string.IsNullOrEmpty(dotNetSdkRootPath))
+            {
+                return null;
+            }
+
+            string hostPath = Path.Combine(dotNetSdkRootPath, dotnetHostFileName);
+            if (!File.Exists(hostPath))
+            {
+                return null;
+            }
+
+            string sharedRootPath = Path.Combine(
+                dotNetSdkRootPath,
+                NetCoreRuntimeSharedDirectoryName,
+                NetCoreRuntimeSharedFrameworkName);
+            if (!SharedRootSatisfiesRequiredMajor(sharedRootPath, requiredMajor))
+            {
+                return null;
+            }
+
+            string sharedDirectoryPath = ResolveNetCoreRuntimeSharedDirectoryPath(sharedRootPath);
+            if (string.IsNullOrEmpty(sharedDirectoryPath))
+            {
+                return null;
+            }
+
+            return new ExternalCompilerRuntimePairing(hostPath, sharedDirectoryPath);
+        }
+
+        private static string FindDirectoryContainingSdk(string startDirectoryPath)
+        {
+            if (string.IsNullOrEmpty(startDirectoryPath))
+            {
+                return null;
+            }
+
+            string currentPath = Path.GetFullPath(startDirectoryPath);
+            while (!string.IsNullOrEmpty(currentPath))
+            {
+                if (Directory.Exists(Path.Combine(currentPath, DotNetSdkSdkDirectoryName)))
+                {
+                    return currentPath;
+                }
+
+                string parentPath = Path.GetDirectoryName(currentPath);
+                if (string.IsNullOrEmpty(parentPath) || parentPath == currentPath)
+                {
+                    return null;
+                }
+
+                currentPath = parentPath;
+            }
+
+            return null;
+        }
+
+        private sealed class CscRuntimeConfigDto
+        {
+            [JsonProperty(CscRuntimeConfigRuntimeOptionsPropertyName)]
+            public CscRuntimeConfigRuntimeOptionsDto RuntimeOptions { get; set; }
+        }
+
+        private sealed class CscRuntimeConfigRuntimeOptionsDto
+        {
+            [JsonProperty(CscRuntimeConfigFrameworkPropertyName)]
+            public CscRuntimeConfigFrameworkDto Framework { get; set; }
+        }
+
+        private sealed class CscRuntimeConfigFrameworkDto
+        {
+            [JsonProperty(CscRuntimeConfigVersionPropertyName)]
+            public string Version { get; set; }
+        }
+    }
+}

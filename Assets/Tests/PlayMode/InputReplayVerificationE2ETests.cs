@@ -1,15 +1,20 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 using System.Collections;
 using System.IO;
-using io.github.hatayama.uLoopMCP;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.Tests.Demo;
 using NUnit.Framework;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 
-namespace Tests.PlayMode
+namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 {
+    /// <summary>
+    /// Test fixture that verifies Input Replay Verification 2 E behavior.
+    /// </summary>
     public class InputReplayVerificationE2ETests
     {
         private const string SCENE_PATH = "Assets/Scenes/InputReplayVerificationScene.unity";
@@ -22,7 +27,8 @@ namespace Tests.PlayMode
         public IEnumerator SetUp()
         {
             _replayCompleted = false;
-            InputReplayer.ReplayCompleted += OnReplayCompleted;
+            CleanupOverlayCanvases();
+            InputReplayer.AddReplayCompletedHandler(OnReplayCompleted);
 
             AsyncOperation loadOp = EditorSceneManager.LoadSceneAsyncInPlayMode(
                 SCENE_PATH,
@@ -42,7 +48,7 @@ namespace Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            InputReplayer.ReplayCompleted -= OnReplayCompleted;
+            InputReplayer.RemoveReplayCompletedHandler(OnReplayCompleted);
 
             if (InputReplayer.IsReplaying)
             {
@@ -55,8 +61,38 @@ namespace Tests.PlayMode
             CleanupLogFile(Path.Combine(
                 ReplayVerificationControllerBase.LOG_OUTPUT_DIR,
                 ReplayVerificationControllerBase.REPLAY_LOG_FILE));
+            CleanupOverlayCanvases();
 
             yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator StartReplay_WithShowOverlay_Should_CreateOverlayCanvas()
+        {
+            // Verifies direct input replay creates the shared overlay prefab when overlays are enabled.
+            string fixtureRecordingJson = Path.Combine(FIXTURE_DIR, "recording.json");
+
+            Assert.IsTrue(File.Exists(fixtureRecordingJson),
+                $"Fixture recording JSON not found: {fixtureRecordingJson}");
+
+            InputRecordingData recordingData = InputRecordingFileHelper.Load(fixtureRecordingJson);
+            Debug.Assert(recordingData != null, $"Failed to load fixture: {fixtureRecordingJson}");
+
+            InputReplayer.StartReplay(recordingData, loop: false, showOverlay: true);
+
+            yield return null;
+            yield return null;
+
+            InputVisualizationCanvas canvas =
+                Object.FindAnyObjectByType<InputVisualizationCanvas>();
+            Assert.IsNotNull(canvas, "InputVisualizationCanvas must exist when replay overlay is enabled.");
+
+            ReplayInputOverlay replayOverlay = canvas.ReplayInputOverlay;
+            Assert.IsNotNull(replayOverlay, "ReplayInputOverlay must exist on the visualization canvas.");
+
+            CanvasGroup replayCanvasGroup = replayOverlay.GetComponent<CanvasGroup>();
+            Assert.IsNotNull(replayCanvasGroup, "ReplayInputOverlay must include a CanvasGroup.");
+            Assert.Greater(replayCanvasGroup.alpha, 0f, "ReplayInputOverlay should be visible while replay is active.");
         }
 
         [UnityTest]
@@ -110,6 +146,16 @@ namespace Tests.PlayMode
             if (File.Exists(path))
             {
                 File.Delete(path);
+            }
+        }
+
+        private static void CleanupOverlayCanvases()
+        {
+            InputVisualizationCanvas[] canvases =
+                Object.FindObjectsByType<InputVisualizationCanvas>(FindObjectsSortMode.None);
+            for (int i = 0; i < canvases.Length; i++)
+            {
+                Object.DestroyImmediate(canvases[i].gameObject);
             }
         }
     }

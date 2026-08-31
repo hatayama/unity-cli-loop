@@ -1,0 +1,191 @@
+package dispatcher
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/hatayama/unity-cli-loop/common/skillscan"
+)
+
+// Suffixes appended (before the random digits os.CreateTemp and os.MkdirTemp
+// add) to temp and backup copies created during a sync. The uloop marker
+// claims a namespace no user file lands in by accident, so dir-mode
+// stale-artifact cleanup can identify uloop's own debris by name alone without
+// risking human-named backups such as references.backup-2024; the cleanup
+// matches these same constants, so the producers and the matcher cannot drift.
+const (
+	skillSyncTempSuffix   = ".uloop-tmp-"
+	skillSyncBackupSuffix = ".uloop-backup-"
+)
+
+func syncSkillDirectory(sourceDir string, destinationDir string) error {
+	parentDir := filepath.Dir(destinationDir)
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		return err
+	}
+	tempDir, err := os.MkdirTemp(parentDir, filepath.Base(destinationDir)+skillSyncTempSuffix)
+	if err != nil {
+		return err
+	}
+
+	replaced := false
+	defer func() {
+		if !replaced {
+			_ = os.RemoveAll(tempDir)
+		}
+	}()
+	if err := copySkillDirectory(sourceDir, tempDir); err != nil {
+		return err
+	}
+	if err := replaceSkillDirectory(tempDir, destinationDir); err != nil {
+		return err
+	}
+	replaced = true
+	return nil
+}
+
+func replaceSkillDirectory(sourceDir string, destinationDir string) error {
+	if _, err := os.Stat(destinationDir); err != nil {
+		if os.IsNotExist(err) {
+			return os.Rename(sourceDir, destinationDir)
+		}
+		return err
+	}
+
+	parentDir := filepath.Dir(destinationDir)
+	backupDir, err := os.MkdirTemp(parentDir, filepath.Base(destinationDir)+skillSyncBackupSuffix)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(backupDir); err != nil {
+		return err
+	}
+	if err := os.Rename(destinationDir, backupDir); err != nil {
+		return err
+	}
+	if err := os.Rename(sourceDir, destinationDir); err != nil {
+		if restoreErr := os.Rename(backupDir, destinationDir); restoreErr != nil {
+			return fmt.Errorf("replace skill directory failed: %w; restore failed: %v", err, restoreErr)
+		}
+		return err
+	}
+	return os.RemoveAll(backupDir)
+}
+
+func copySkillDirectory(sourceDir string, destinationDir string) error {
+	return filepath.WalkDir(sourceDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relativePath, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+		if relativePath == "." {
+			return os.MkdirAll(destinationDir, 0o755)
+		}
+		if shouldSkipSkillFile(entry.Name()) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		destinationPath := filepath.Join(destinationDir, relativePath)
+		if entry.IsDir() {
+			return os.MkdirAll(destinationPath, 0o755)
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		content = normalizeSkillFileContent(relativePath, content)
+		return os.WriteFile(destinationPath, content, 0o644)
+	})
+}
+
+func getSkillStatus(baseDir string, skill skillDefinition, grouped bool) (string, error) {
+	return getSkillStatusWithStat(baseDir, skill, grouped, os.Stat)
+}
+
+func getSkillStatusWithStat(
+	baseDir string,
+	skill skillDefinition,
+	grouped bool,
+	stat func(string) (os.FileInfo, error),
+) (string, error) {
+	skillDir := getPreferredSkillDir(baseDir, skill.name, grouped)
+	if _, err := stat(filepath.Join(skillDir, skillscan.SkillFileName)); err != nil {
+		if os.IsNotExist(err) {
+			return "not_installed", nil
+		}
+		return "", err
+	}
+	if isInstalledSkillOutdated(skillDir, skill) {
+		return "outdated", nil
+	}
+	return "installed", nil
+}
+
+func isInstalledSkillOutdated(installedDir string, skill skillDefinition) bool {
+	matches, err := installedSkillFileMatches(installedDir, skill)
+	if err != nil || !matches {
+		return true
+	}
+
+	expectedFiles := collectComparableSkillFiles(skill.sourceDirectory)
+	installedFiles := collectComparableSkillFiles(installedDir)
+	if len(expectedFiles) != len(installedFiles) {
+		return true
+	}
+	return !comparableFilesMatch(expectedFiles, installedFiles)
+}
+
+// comparableFilesMatch reports whether every expected file exists in installed
+// with equal normalized content. Target-mode and dir-mode staleness checks both
+// go through here so the comparison rule cannot drift between them.
+func comparableFilesMatch(expectedFiles map[string][]byte, installedFiles map[string][]byte) bool {
+	for relativePath, expectedContent := range expectedFiles {
+		installedContent, ok := installedFiles[relativePath]
+		if !ok || !bytes.Equal(expectedContent, installedContent) {
+			return false
+		}
+	}
+	return true
+}
+
+// installedSkillFileMatches reports whether the installed SKILL.md equals the
+// source content after normalization. Target-mode and dir-mode status checks
+// both go through here so the comparison rule cannot drift between them.
+func installedSkillFileMatches(installedDir string, skill skillDefinition) (bool, error) {
+	installedContent, err := os.ReadFile(filepath.Join(installedDir, skillscan.SkillFileName))
+	if err != nil {
+		return false, err
+	}
+	installedContent = normalizeSkillFileContent(skillscan.SkillFileName, installedContent)
+	expectedContent := normalizeSkillFileContent(skillscan.SkillFileName, skill.content)
+	return bytes.Equal(installedContent, expectedContent), nil
+}
+
+func collectComparableSkillFiles(root string) map[string][]byte {
+	files := map[string][]byte{}
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.IsDir() || shouldSkipSkillFile(entry.Name()) {
+			return nil
+		}
+		relativePath, err := filepath.Rel(root, path)
+		if err != nil || relativePath == skillscan.SkillFileName {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		files[relativePath] = normalizeSkillFileContent(relativePath, content)
+		return nil
+	})
+	return files
+}

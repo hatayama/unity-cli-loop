@@ -1,7 +1,13 @@
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Test Execution State Validation Service behavior.
+    /// </summary>
     public class TestExecutionStateValidationServiceTests
     {
         [Test]
@@ -9,10 +15,10 @@ namespace io.github.hatayama.uLoopMCP
         {
             TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(true);
 
-            ValidationResult result = service.Validate(RunTestMode.EditMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.EditMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.False);
-            Assert.That(result.ErrorMessage, Is.EqualTo("EditMode tests cannot run during play mode"));
+            Assert.That(result.ErrorMessage, Is.EqualTo("EditMode tests cannot run during play mode. Use control-play-mode --action Stop to exit play mode, then rerun the tests."));
         }
 
         [Test]
@@ -20,7 +26,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(false);
 
-            ValidationResult result = service.Validate(RunTestMode.EditMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.EditMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.True);
             Assert.That(result.ErrorMessage, Is.Null);
@@ -31,7 +37,7 @@ namespace io.github.hatayama.uLoopMCP
         {
             TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(true);
 
-            ValidationResult result = service.Validate(RunTestMode.PlayMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.PlayMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.True);
             Assert.That(result.ErrorMessage, Is.Null);
@@ -44,23 +50,10 @@ namespace io.github.hatayama.uLoopMCP
                 isPlaying: false,
                 isCompiling: true);
 
-            ValidationResult result = service.Validate(RunTestMode.EditMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.EditMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("Tests cannot run while compilation is in progress"));
-        }
-
-        [Test]
-        public void Validate_WhenDomainReloadIsInProgress_ShouldReturnFailure()
-        {
-            TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(
-                isPlaying: false,
-                isDomainReloadInProgress: true);
-
-            ValidationResult result = service.Validate(RunTestMode.EditMode, saveBeforeRun: false);
-
-            Assert.That(result.IsValid, Is.False);
-            Assert.That(result.ErrorMessage, Is.EqualTo("Tests cannot run while domain reload is in progress"));
         }
 
         [Test]
@@ -70,10 +63,53 @@ namespace io.github.hatayama.uLoopMCP
                 isPlaying: false,
                 isUpdating: true);
 
-            ValidationResult result = service.Validate(RunTestMode.EditMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.EditMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("Tests cannot run while the editor is updating"));
+        }
+
+        [Test]
+        public void Validate_WithPlayModeWhilePaused_ShouldReturnFailure()
+        {
+            // Verifies that PlayMode tests are rejected when Play Mode is paused.
+            TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(
+                isPlaying: true,
+                isPaused: true);
+
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.PlayMode, saveBeforeRun: false);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("paused"));
+            Assert.That(result.ErrorMessage, Does.Contain("control-play-mode"));
+            Assert.That(result.ErrorMessage, Does.Contain("clear-pause-point"));
+        }
+
+        [Test]
+        public void Validate_WithEditModeWhilePaused_ShouldReturnPlayModeFailureNotPausedFailure()
+        {
+            // Verifies that the existing "cannot run during play mode" check takes precedence over the paused check for EditMode.
+            TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(
+                isPlaying: true,
+                isPaused: true);
+
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.EditMode, saveBeforeRun: false);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.ErrorMessage, Is.EqualTo("EditMode tests cannot run during play mode. Use control-play-mode --action Stop to exit play mode, then rerun the tests."));
+        }
+
+        [Test]
+        public void Validate_WithPlayModeWhilePlayingNotPaused_ShouldReturnSuccess()
+        {
+            // Verifies that PlayMode tests pass validation when playing but not paused.
+            TestExecutionStateValidationService service = new StubTestExecutionStateValidationService(
+                isPlaying: true,
+                isPaused: false);
+
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.PlayMode, saveBeforeRun: false);
+
+            Assert.That(result.IsValid, Is.True);
         }
 
         [Test]
@@ -88,7 +124,7 @@ namespace io.github.hatayama.uLoopMCP
                 isPlaying: false,
                 unsavedEditorChanges: unsavedEditorChanges);
 
-            ValidationResult result = service.Validate(RunTestMode.PlayMode, saveBeforeRun: false);
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.PlayMode, saveBeforeRun: false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Tests cannot run while the editor has unsaved scene or prefab changes"));
@@ -103,13 +139,13 @@ namespace io.github.hatayama.uLoopMCP
             {
                 "Scene: Assets/Scenes/Minecraft.unity"
             };
-            StubTestExecutionStateValidationService service = new StubTestExecutionStateValidationService(
+            StubTestExecutionStateValidationService service = new(
                 isPlaying: false,
                 unsavedEditorChanges: unsavedEditorChanges,
                 saveResult: ValidationResult.Success(),
                 clearUnsavedChangesAfterSave: true);
 
-            ValidationResult result = service.Validate(RunTestMode.PlayMode, saveBeforeRun: true);
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.PlayMode, saveBeforeRun: true);
 
             Assert.That(result.IsValid, Is.True);
             Assert.That(result.ErrorMessage, Is.Null);
@@ -128,18 +164,21 @@ namespace io.github.hatayama.uLoopMCP
                 unsavedEditorChanges: unsavedEditorChanges,
                 saveResult: ValidationResult.Failure("Tests cannot save unsaved scene or prefab changes before running tests. Unsaved changes that failed to save: Prefab Stage: Assets/Scenes/Crosshair.prefab"));
 
-            ValidationResult result = service.Validate(RunTestMode.PlayMode, saveBeforeRun: true);
+            ValidationResult result = service.Validate(UnityCliLoopTestMode.PlayMode, saveBeforeRun: true);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("Tests cannot save unsaved scene or prefab changes before running tests"));
             Assert.That(result.ErrorMessage, Does.Contain("Prefab Stage: Assets/Scenes/Crosshair.prefab"));
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class StubTestExecutionStateValidationService : TestExecutionStateValidationService
         {
             private readonly bool _isPlaying;
+            private readonly bool _isPaused;
             private readonly bool _isCompiling;
-            private readonly bool _isDomainReloadInProgress;
             private readonly bool _isUpdating;
             private readonly ValidationResult _saveResult;
             private readonly bool _clearUnsavedChangesAfterSave;
@@ -149,16 +188,16 @@ namespace io.github.hatayama.uLoopMCP
 
             public StubTestExecutionStateValidationService(
                 bool isPlaying,
+                bool isPaused = false,
                 bool isCompiling = false,
-                bool isDomainReloadInProgress = false,
                 bool isUpdating = false,
                 string[] unsavedEditorChanges = null,
                 ValidationResult saveResult = null,
                 bool clearUnsavedChangesAfterSave = false)
             {
                 _isPlaying = isPlaying;
+                _isPaused = isPaused;
                 _isCompiling = isCompiling;
-                _isDomainReloadInProgress = isDomainReloadInProgress;
                 _isUpdating = isUpdating;
                 _unsavedEditorChanges = unsavedEditorChanges ?? new string[0];
                 _saveResult = saveResult ?? ValidationResult.Success();
@@ -166,8 +205,8 @@ namespace io.github.hatayama.uLoopMCP
             }
 
             protected override bool IsPlaying => _isPlaying;
+            protected override bool IsPaused => _isPaused;
             protected override bool IsCompiling => _isCompiling;
-            protected override bool IsDomainReloadInProgress => _isDomainReloadInProgress;
             protected override bool IsUpdating => _isUpdating;
             protected override string[] DetectUnsavedEditorChanges()
             {

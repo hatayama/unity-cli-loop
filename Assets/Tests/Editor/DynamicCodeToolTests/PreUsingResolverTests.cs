@@ -1,17 +1,20 @@
 using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Pre Using Resolver Extract Type Identifiers behavior.
+    /// </summary>
     [TestFixture]
     public class PreUsingResolverExtractTypeIdentifiersTests
     {
         [Test]
         public void ExtractTypeIdentifiers_WhenUppercaseTypeName_ShouldReturnIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "StringBuilder builder = new StringBuilder();");
 
             Assert.That(result, Does.Contain("StringBuilder"));
@@ -21,7 +24,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenExcludedBuiltInTypes_ShouldSkipThem()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "String x = null; Int32 y = 0; Boolean flag = true;");
 
             Assert.That(result, Does.Not.Contain("String"));
@@ -32,7 +35,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenIdentifierFollowsDot_ShouldSkipIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "System.Text.StringBuilder builder = null;");
 
             Assert.That(result, Does.Contain("System"));
@@ -43,7 +46,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenStringLiteral_ShouldNotExtractFromIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "string s = \"StringBuilder is great\";");
 
             Assert.That(result, Does.Not.Contain("StringBuilder"));
@@ -52,7 +55,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenLineComment_ShouldNotExtractFromIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "int x = 1; // StringBuilder comment");
 
             Assert.That(result, Does.Not.Contain("StringBuilder"));
@@ -61,7 +64,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenBlockComment_ShouldNotExtractFromIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "int x = 1; /* StringBuilder */ int y = 2;");
 
             Assert.That(result, Does.Not.Contain("StringBuilder"));
@@ -70,7 +73,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenEmpty_ShouldReturnEmptySet()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers("");
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers("");
 
             Assert.That(result, Is.Empty);
         }
@@ -80,7 +83,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         {
             // AdvanceOneTokenPublic skips the entire $"..." including interpolation holes;
             // types inside holes are handled by AutoUsingResolver fallback if needed
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "string s = $\"value is {MyVar} and {\"nested\"}\";");
 
             Assert.That(result, Does.Not.Contain("MyVar"));
@@ -91,7 +94,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenGenericTypes_ShouldExtractBothNames()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "HashSet<Regex> set = new HashSet<Regex>();");
 
             Assert.That(result, Does.Contain("HashSet"));
@@ -101,7 +104,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenMemberInitializer_ShouldSkipIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "new Foo { Name = \"bar\", Count = 1 };");
 
             Assert.That(result, Does.Contain("Foo"));
@@ -112,7 +115,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenNamedArgument_ShouldSkipIt()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "DoSomething(Name: \"bar\");");
 
             Assert.That(result, Does.Contain("DoSomething"));
@@ -122,10 +125,22 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void ExtractTypeIdentifiers_WhenEqualityComparison_ShouldNotSkip()
         {
-            HashSet<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
                 "if (MyEnum == null) {}");
 
             Assert.That(result, Does.Contain("MyEnum"));
+        }
+
+        /// <summary>
+        /// What: identifiers are recorded in source appearance order, first occurrence only.
+        /// </summary>
+        [Test]
+        public void ExtractTypeIdentifiers_WhenMultipleTypes_PreservesSourceAppearanceOrder()
+        {
+            IReadOnlyList<string> result = PreUsingResolver.ExtractTypeIdentifiers(
+                "Encoding e = null; StringBuilder b = null; Encoding again = null;");
+
+            Assert.That(result, Is.EqualTo(new[] { "Encoding", "StringBuilder" }));
         }
 
         [Test]
@@ -157,6 +172,9 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
     }
 
+    /// <summary>
+    /// Test fixture that verifies Pre Using Resolver Resolve behavior.
+    /// </summary>
     [TestFixture]
     public class PreUsingResolverResolveTests
     {
@@ -188,13 +206,13 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void Resolve_WhenAlreadyHasUsing_ShouldNotAddDuplicate()
         {
-            List<string> usings = new List<string> { "using System.Text;" };
+            List<string> usings = new() { "using System.Text;" };
             string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
             string wrappedSource = WrapperTemplate.Build(usings, System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
-            int occurrences = DynamicCodeTestStringUtility.CountSubstring(result.UpdatedSource, "using System.Text;");
+            int occurrences = CountSubstring(result.UpdatedSource, "using System.Text;");
             Assert.AreEqual(1, occurrences, "Should not add duplicate using System.Text");
         }
 
@@ -208,6 +226,18 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
 
             Assert.That(result.UpdatedSource, Does.Not.Contain("using System.Text;"));
+        }
+
+        private static int CountSubstring(string source, string target)
+        {
+            int count = 0;
+            int index = 0;
+            while ((index = source.IndexOf(target, index, System.StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += target.Length;
+            }
+            return count;
         }
 
         [Test]
@@ -234,188 +264,33 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
 
             Assert.That(result.AddedAssemblyReferences, Has.Count.GreaterThan(0));
         }
-    }
 
-    [TestFixture]
-    public class PreUsingResolverIntegrationTests
-    {
-        private IPreloadAssemblySecurityValidator _previousValidator;
-
-        [SetUp]
-        public void SetUp()
-        {
-            _previousValidator = PreloadAssemblySecurityValidatorRegistry.SwapValidatorForTests(
-                new SystemReflectionMetadataPreloadValidator());
-        }
-
-        [TearDown]
-        public void TearDown()
-        {
-            PreloadAssemblySecurityValidatorRegistry.SwapValidatorForTests(_previousValidator);
-        }
-
+        /// <summary>
+        /// What: when several identifiers resolve to the same namespace, the first
+        /// identifier in source order is recorded as the trigger.
+        /// </summary>
         [Test]
-        public async Task CompileAsync_ScriptMode_MissingUsing_ShouldSucceedWithSingleBuild()
+        public void Resolve_WhenMultipleIdentifiersShareNamespace_RecordsFirstSourceIdentifier()
         {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
+            string body = "Encoding e = null; StringBuilder b = null;\nreturn e.WebName;";
+            string wrappedSource = WrapperTemplate.Build(
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
+
+            PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
+
+            AutoInjectedNamespace attribution = null;
+            foreach (AutoInjectedNamespace item in result.AddedNamespaceAttributions)
             {
-                Code = @"
-                    StringBuilder builder = new StringBuilder();
-                    builder.Append(""hello"");
-                    return builder.ToString();
-                ",
-                ClassName = "PreUsingMissingCommand",
-                Namespace = "TestNamespace"
-            };
+                if (item.Namespace == "System.Text")
+                {
+                    attribution = item;
+                    break;
+                }
+            }
 
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Should compile");
-            StringAssert.Contains("using System.Text;", result.UpdatedCode);
-            // PreUsingResolver pre-injects the using, so AutoUsingResolver needs no retry
-            Assert.AreEqual(1, compiler.LastBuildCount, "Should compile in a single build (no retry)");
-        }
-
-        [Test]
-        public async Task CompileAsync_RawMode_FullClass_ShouldSucceedWithoutPreUsingIntervention()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = @"
-                    using System.Text;
-
-                    public class RawModeTestClass
-                    {
-                        public async System.Threading.Tasks.Task<object> ExecuteAsync(
-                            System.Collections.Generic.Dictionary<string, object> parameters = null,
-                            System.Threading.CancellationToken ct = default)
-                        {
-                            StringBuilder sb = new StringBuilder();
-                            sb.Append(""raw"");
-                            return sb.ToString();
-                        }
-                    }
-                ",
-                ClassName = "RawModeCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Raw mode should compile");
-            Assert.IsNotNull(result.CompiledAssembly);
-        }
-
-        [Test]
-        public async Task CompileAsync_ScriptMode_AllUsingsPresent_ShouldCompileNormally()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = @"
-                    using System.Text;
-                    StringBuilder builder = new StringBuilder();
-                    builder.Append(""already imported"");
-                    return builder.ToString();
-                ",
-                ClassName = "AlreadyImportedCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Should compile");
-            Assert.AreEqual(1, compiler.LastBuildCount, "No retry needed when using is already present");
-        }
-
-        [Test]
-        public async Task CompileAsync_ScriptMode_MultipleMissingUsings_ShouldPreInjectAllAndSucceed()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = @"
-                    StringBuilder sb = new StringBuilder();
-                    Regex regex = new Regex(@""\d+"");
-                    return sb.ToString() + regex.ToString();
-                ",
-                ClassName = "MultiplePreUsingCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Should compile");
-            StringAssert.Contains("using System.Text;", result.UpdatedCode);
-            StringAssert.Contains("using System.Text.RegularExpressions;", result.UpdatedCode);
-            Assert.AreEqual(1, compiler.LastBuildCount, "Both usings pre-injected, no retry needed");
-        }
-
-        [Test]
-        public async Task CompileAsync_ScriptMode_SimpleArithmetic_ShouldSucceedWithSingleBuild()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = "return 1 + 2;",
-                ClassName = "SimpleArithmeticPreUsingCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Should compile");
-            Assert.IsNotNull(result.CompiledAssembly);
-            Assert.AreEqual(1, compiler.LastBuildCount, "Simple code needs no retry");
-        }
-
-        [Test]
-        public async Task CompileAsync_ScriptMode_CustomAsmdefType_ShouldResolveAssemblyReference()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = @"
-                    DynamicAssemblyTest test = new DynamicAssemblyTest();
-                    return test.HelloWorld();
-                ",
-                ClassName = "CustomAsmdefReferenceCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Custom asmdef type should compile");
-            Assert.AreEqual(1, compiler.LastBuildCount, "Unique type resolution should avoid extra retries");
-        }
-
-        [Test]
-        public async Task CompileAsync_ScriptMode_FullyQualifiedCustomAsmdefType_ShouldResolveWithoutRetry()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = @"
-                    io.github.hatayama.uLoopMCP.DynamicAssemblyTest test = new io.github.hatayama.uLoopMCP.DynamicAssemblyTest();
-                    return test.HelloWorld();
-                ",
-                ClassName = "FullyQualifiedCustomAsmdefPreUsingCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Fully-qualified custom asmdef type should compile");
-            Assert.AreEqual(1, compiler.LastBuildCount, "Qualified assembly resolution should avoid extra retries");
+            Assert.That(attribution, Is.Not.Null);
+            Assert.That(attribution.TriggerIdentifier, Is.EqualTo("Encoding"));
+            Assert.That(attribution.IsSpeculative, Is.True);
         }
     }
 }

@@ -1,0 +1,400 @@
+using System;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor;
+
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Runs the prepared wrapper entry point while keeping Undo and cancellation handling consistent.
+    /// </summary>
+    public class CommandRunner : ICompiledCommandInvoker
+    {
+        private readonly CompiledCommandEntryPointResolver _entryPointResolver;
+        private readonly CommandRunnerUndoHooks _undoHooks;
+        private readonly CommandRunnerExecutionSlot _executionSlot = new();
+
+        public bool IsRunning => _executionSlot.IsRunning;
+
+        public CommandRunner()
+            : this(DynamicCodeServices.CommandEntryPointResolver, null)
+        {
+        }
+
+        internal CommandRunner(
+            CompiledCommandEntryPointResolver entryPointResolver,
+            CommandRunnerUndoHooks undoHooks = null)
+        {
+            _entryPointResolver = entryPointResolver;
+            _undoHooks = undoHooks;
+        }
+
+        private static void LogExecutionError(Exception ex, string correlationId)
+        {
+            VibeLogger.LogError(
+                "command_execution_error",
+                "Command execution failed with exception",
+                new { 
+                    error = ex.Message,
+                    stackTrace = ex.StackTrace
+                },
+                correlationId,
+                "Unexpected execution error occurred",
+                "Investigate execution failures and improve error handling"
+            );
+        }
+
+        private CancellationTokenSource CreateCombinedCancellationTokenSource(
+            ExecutionContext context,
+            CancellationTokenSource executionCancellationTokenSource)
+        {
+            return CancellationTokenSource.CreateLinkedTokenSource(
+                executionCancellationTokenSource.Token,
+                context.CancellationToken
+            );
+        }
+
+        public async Task<ExecutionResult> ExecuteAsync(ExecutionContext context)
+        {
+            string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
+            // Why switch first: callers often resume off-thread via ConfigureAwait(false), but
+            // BeginUndoGroup / EndExecution use Unity Undo APIs that require the main thread.
+            try
+            {
+                await MainThreadSwitcher.SwitchToMainThread(context.CancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Why catch here: a pre-cancelled token throws before TryBeginExecution,
+                // and callers expect a cancelled ExecutionResult rather than a leaked OCE.
+                return CreateCancelledResult();
+            }
+
+            if (!TryBeginExecution(out int undoGroup, out CancellationTokenSource executionCancellationTokenSource))
+            {
+                return CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_IN_PROGRESS);
+            }
+
+            try
+            {
+                using CancellationTokenSource combinedCts = CreateCombinedCancellationTokenSource(
+                    context,
+                    executionCancellationTokenSource);
+                ExecutionResult result = await ExecuteInternalAsync(context, combinedCts.Token).ConfigureAwait(false);
+                await MainThreadSwitcher.SwitchToMainThread();
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                await MainThreadSwitcher.SwitchToMainThread();
+                return CapturePartialResults(CreateCancelledResult());
+            }
+            catch (Exception ex)
+            {
+                LogExecutionError(ex, correlationId);
+                await MainThreadSwitcher.SwitchToMainThread();
+
+                return CapturePartialResults(
+                    CreateErrorResult(
+                        ex.Message,
+                        new List<string> { $"Exception: {ex.Message}" }));
+            }
+            finally
+            {
+                EndExecution(undoGroup);
+            }
+        }
+
+        private bool TryBeginExecution(
+            out int undoGroup,
+            out CancellationTokenSource executionCancellationTokenSource)
+        {
+            return _executionSlot.TryBegin(BeginUndoGroup, out undoGroup, out executionCancellationTokenSource);
+        }
+
+        private void EndExecution(int undoGroup)
+        {
+            _executionSlot.End(undoGroup, CollapseUndoGroup);
+        }
+
+        private int BeginUndoGroup()
+        {
+            if (_undoHooks != null)
+            {
+                System.Diagnostics.Debug.Assert(_undoHooks.GetCurrentGroup != null, "GetCurrentGroup must be set");
+                System.Diagnostics.Debug.Assert(
+                    _undoHooks.SetCurrentGroupName != null,
+                    "SetCurrentGroupName must be set");
+                int hookedGroup = _undoHooks.GetCurrentGroup();
+                _undoHooks.SetCurrentGroupName("ExecuteDynamicCode");
+                return hookedGroup;
+            }
+
+            int undoGroup = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("ExecuteDynamicCode");
+            return undoGroup;
+        }
+
+        private void CollapseUndoGroup(int undoGroup)
+        {
+            if (_undoHooks != null)
+            {
+                System.Diagnostics.Debug.Assert(
+                    _undoHooks.CollapseUndoOperations != null,
+                    "CollapseUndoOperations must be set");
+                _undoHooks.CollapseUndoOperations(undoGroup);
+                return;
+            }
+
+            Undo.CollapseUndoOperations(undoGroup);
+        }
+
+        private static ExecutionResult CreateErrorResult(string errorMessage, List<string> logs = null)
+        {
+            return new ExecutionResult
+            {
+                Success = false,
+                ErrorMessage = errorMessage,
+                ExecutionTime = TimeSpan.Zero,
+                Logs = logs ?? new List<string>()
+            };
+        }
+
+        private static ExecutionResult CreateCancelledResult()
+        {
+            return CreateErrorResult(
+                UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_CANCELLED,
+                new List<string> { "Execution cancelled" });
+        }
+
+        private static ExecutionResult CreateSuccessResult(string result, List<string> logs = null)
+        {
+            return new ExecutionResult
+            {
+                Success = true,
+                Result = result,
+                ExecutionTime = TimeSpan.Zero, // Will be set by the caller
+                Logs = logs ?? new List<string> { "Execution completed successfully" }
+            };
+        }
+
+        private static ExecutionResult CapturePartialResults(ExecutionResult result)
+        {
+            System.Diagnostics.Debug.Assert(result != null, "result must not be null");
+            result.PartialResults = UloopDynamicCodePartialResults.Snapshot();
+            return result;
+        }
+
+        private static object CreateInstance(Type targetType)
+        {
+            return Activator.CreateInstance(targetType);
+        }
+
+        private static object InvokeExecuteMethod(
+            MethodInfo executeMethod,
+            object instance,
+            Dictionary<string, object> parameters,
+            CancellationToken cancellationToken)
+        {
+            object[] callArgs = BuildSupportedArguments(executeMethod, parameters, cancellationToken);
+            return executeMethod.Invoke(instance, callArgs);
+        }
+
+        private ExecutionResult ExecuteInternal(ExecutionContext context, CancellationToken cancellationToken)
+        {
+            UloopDynamicCodePartialResults.OpenExecutionScope();
+            if (context.CompiledAssembly == null)
+            {
+                return CapturePartialResults(
+                    CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_NO_COMPILED_ASSEMBLY));
+            }
+
+            try
+            {
+                // Find executable type from assembly (sync only)
+                (Type targetType, MethodInfo executeMethod) = _entryPointResolver.TryFindExecuteMethod(
+                    context.CompiledAssembly);
+                
+                if (targetType == null || executeMethod == null)
+                {
+                    return CapturePartialResults(
+                        CreateErrorResult(
+                            UnityCliLoopConstants.ERROR_MESSAGE_NO_EXECUTE_METHOD,
+                            new List<string> { "Assembly types checked but no Execute method found" }));
+                }
+
+                // Create instance
+                object instance = CreateInstance(targetType);
+                if (instance == null)
+                {
+                    return CapturePartialResults(
+                        CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_FAILED_TO_CREATE_INSTANCE));
+                }
+
+                // Check cancellation
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                try
+                {
+                    // Execute method
+                    object executionResult = InvokeExecuteMethod(
+                        executeMethod,
+                        instance,
+                        context.Parameters,
+                        cancellationToken);
+                    
+                    // Convert result to string
+                    string resultString = executionResult?.ToString() ?? "";
+                    
+                    return CapturePartialResults(CreateSuccessResult(resultString));
+                }
+                catch (NotSupportedException ex)
+                {
+                    return CapturePartialResults(
+                        CreateErrorResult(
+                            UnityCliLoopConstants.ERROR_MESSAGE_UNSUPPORTED_SIGNATURE,
+                            new List<string> { ex.Message }));
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (TargetInvocationException ex)
+            {
+                // Retrieve actual exception
+                Exception innerException = ex.InnerException ?? ex;
+                if (innerException is OperationCanceledException)
+                {
+                    throw innerException;
+                }
+                
+                return CapturePartialResults(
+                    CreateErrorResult(
+                        innerException.Message,
+                        new List<string>
+                        {
+                            $"Target invocation exception: {innerException.Message}",
+                            $"Stack trace: {innerException.StackTrace}"
+                        }));
+            }
+            catch (Exception ex)
+            {
+                return CapturePartialResults(
+                    CreateErrorResult(
+                        ex.Message,
+                        new List<string>
+                        {
+                            $"Execution exception: {ex.Message}",
+                            $"Stack trace: {ex.StackTrace}"
+                        }));
+            }
+        }
+
+        private async Task<ExecutionResult> ExecuteInternalAsync(ExecutionContext context, CancellationToken cancellationToken)
+        {
+            UloopDynamicCodePartialResults.OpenExecutionScope();
+            if (context.CompiledAssembly == null)
+            {
+                return CapturePartialResults(
+                    CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_NO_COMPILED_ASSEMBLY));
+            }
+
+            try
+            {
+                // Prefer async ExecuteAsync; fallback to sync Execute
+                (Type asyncType, MethodInfo executeAsyncMethod) = _entryPointResolver.TryFindExecuteAsyncMethod(
+                    context.CompiledAssembly);
+                if (asyncType != null && executeAsyncMethod != null)
+                {
+                    object instance = CreateInstance(asyncType);
+                    if (instance == null)
+                    {
+                        return CapturePartialResults(
+                            CreateErrorResult(UnityCliLoopConstants.ERROR_MESSAGE_FAILED_TO_CREATE_INSTANCE));
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    object[] callArgs = BuildSupportedArguments(
+                        executeAsyncMethod,
+                        context.Parameters,
+                        cancellationToken);
+                    object invoked = executeAsyncMethod.Invoke(instance, callArgs);
+
+                    object awaitedResult = await AwaitableHelper.AwaitIfNeeded(invoked, cancellationToken).ConfigureAwait(false);
+                    string resultString = awaitedResult?.ToString() ?? "";
+
+                    return CapturePartialResults(CreateSuccessResult(resultString));
+                }
+
+                // Fallback to sync path if no async method found
+                ExecutionResult syncResult = ExecuteInternal(context, cancellationToken);
+                return syncResult;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (TargetInvocationException ex)
+            {
+                Exception innerException = ex.InnerException ?? ex;
+                if (innerException is OperationCanceledException)
+                {
+                    throw innerException;
+                }
+
+                return CapturePartialResults(
+                    CreateErrorResult(
+                        innerException.Message,
+                        new List<string>
+                        {
+                            $"Target invocation exception: {innerException.Message}",
+                            $"Stack trace: {innerException.StackTrace}"
+                        }));
+            }
+            catch (Exception ex)
+            {
+                return CapturePartialResults(
+                    CreateErrorResult(
+                        ex.Message,
+                        new List<string>
+                        {
+                            $"Execution exception: {ex.Message}",
+                            $"Stack trace: {ex.StackTrace}"
+                        }));
+            }
+        }
+
+        private static object[] BuildSupportedArguments(
+            MethodInfo method,
+            Dictionary<string, object> parameters,
+            CancellationToken cancellationToken)
+        {
+            System.Reflection.ParameterInfo[] methodParameters = method.GetParameters();
+            if (methodParameters.Length == 0)
+            {
+                return null;
+            }
+            if (methodParameters.Length == 2 && methodParameters[0].ParameterType == typeof(Dictionary<string, object>) && methodParameters[1].ParameterType == typeof(CancellationToken))
+            {
+                return new object[] { parameters, cancellationToken };
+            }
+            if (methodParameters.Length == 1 && methodParameters[0].ParameterType == typeof(Dictionary<string, object>))
+            {
+                return new object[] { parameters };
+            }
+            if (methodParameters.Length == 1 && methodParameters[0].ParameterType == typeof(CancellationToken))
+            {
+                return new object[] { cancellationToken };
+            }
+
+            throw new NotSupportedException(
+                "Expected Execute/ExecuteAsync overloads with Dictionary<string,object> and/or CancellationToken");
+        }
+    }
+}

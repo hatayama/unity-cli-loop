@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement name="window-root" class="unity-cli-loop-window-root">
+        <ui:ScrollView name="main-scroll-view" class="unity-cli-loop-main-container">
+            <!-- Configuration Section -->
+            <ui:VisualElement name="configuration-section" class="unity-cli-loop-section unity-cli-loop-section--box">
+                <ui:Foldout name="configuration-foldout" text="Configuration" class="unity-cli-loop-foldout">
+                    <ui:VisualElement name="cli-content">
+                        <ui:VisualElement class="unity-cli-loop-cli-status-row">
+                            <ui:VisualElement name="cli-status-icon" class="unity-cli-loop-cli-status-icon unity-cli-loop-cli-status-icon--not-installed" />
+                            <ui:Label name="cli-status-label" text="CLI: Checking..." />
+                            <ui:Button name="refresh-cli-version-button" text="↻" class="unity-cli-loop-button--refresh" />
+                        </ui:VisualElement>
+                        <ui:Label name="cli-homebrew-upgrade-message" text="" class="unity-cli-loop-warning-message" />
+                        <ui:Button name="install-cli-button" text="Install CLI" class="unity-cli-loop-button unity-cli-loop-button--configure" />
+                        <ui:VisualElement name="cli-install-progress" class="unity-cli-loop-install-progress" style="display: none;">
+                            <ui:Label name="cli-install-progress-label" text="" class="unity-cli-loop-install-progress__detail" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="unity-cli-loop-cli-separator" />
+
+                        <ui:VisualElement name="skills-subsection">
+                            <ui:VisualElement class="unity-cli-loop-cli-subsection-header-row">
+                                <ui:Label text="Skills" class="unity-cli-loop-cli-subsection-header" />
+                                <ui:Button name="refresh-skills-state-button" text="↻" class="skills-setup-panel__refresh-button" />
+                            </ui:VisualElement>
+                            <ui:VisualElement name="skills-setup-panel-placeholder" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+                </ui:Foldout>
+            </ui:VisualElement>
+
+            <!-- Tool Settings Section -->
+            <ui:VisualElement name="tool-settings-section" class="unity-cli-loop-section unity-cli-loop-section--box">
+                <ui:Foldout name="tool-settings-foldout" text="Tool Settings" class="unity-cli-loop-foldout">
+                        <ui:VisualElement name="tool-settings-content" class="unity-cli-loop-tool-settings-content">
+                        <ui:VisualElement name="tool-settings-info-container" />
+                        <ui:VisualElement name="tool-list-container" class="unity-cli-loop-tool-list-container" />
+                    </ui:VisualElement>
+                </ui:Foldout>
+            </ui:VisualElement>
+        </ui:ScrollView>
+
+        <ui:VisualElement name="github-link-row" class="unity-cli-loop-github-link">
+            <ui:Label name="github-link-label" text="Star on GitHub" class="unity-cli-loop-github-link__label" />
+            <ui:Image name="github-link-icon" class="unity-cli-loop-github-link__icon" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

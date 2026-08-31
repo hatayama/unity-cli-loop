@@ -1,19 +1,19 @@
 name: release-please
 
 on:
-  # No push trigger on purpose. The v2 series is no longer released, so an automatic
-  # release PR is pure noise: closing it does not stick, because release-please
-  # recreates it on the next push to main (#2095 was closed and came back as #2099).
-  # Removing only the branch entry would leave an empty `branches:`, which matches
-  # every branch, so the whole push trigger goes.
-  # Run this workflow manually (branch=main) if a v2 release becomes necessary again.
+  push:
+    branches:
+      - main
+  # Enable manual execution via "Run workflow" button in browser
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Target branch name (uses current ref if not specified)'
+        description: "Target branch name (uses current ref if not specified)"
         required: false
 
 permissions:
+  actions: write
+  checks: read
   contents: write
   pull-requests: write
   issues: write
@@ -21,13 +21,42 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    outputs:
-      releases_created: ${{ steps.release.outputs.releases_created }}
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          fetch-depth: 0      # Required for tag fetching
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
+          fetch-depth: 0 # Required for tag fetching
+
+      - name: 🎯 Resolve target branch
+        id: target
+        env:
+          INPUT_BRANCH: ${{ github.event.inputs.branch }}
+        run: |
+          TARGET_BRANCH="${INPUT_BRANCH:-${GITHUB_REF_NAME}}"
+          case "${TARGET_BRANCH}" in
+            main|v3-beta)
+              ;;
+            *)
+              echo "This release workflow only supports main and v3-beta." >&2
+              exit 1
+              ;;
+          esac
+
+          TARGET_SHA="$(git rev-parse HEAD)"
+          echo "branch=${TARGET_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "sha=${TARGET_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: 🧭 Detect release commit
+        id: release_commit
+        run: |
+          COMMIT_SUBJECT="$(git log -1 --format=%s)"
+          if scripts/is-release-please-release-commit.sh "${COMMIT_SUBJECT}"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Release commit detected; release-please will wait for the next non-release commit."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # ── Debug: Show repository structure ─────────────────────────
       - name: 🕵️ Show file tree
@@ -40,105 +69,52 @@ jobs:
       - name: 🧪 Sanity check
         run: |
           test -f Packages/src/package.json && echo "✅ Unity package.json OK"
-          test -f Packages/src/TypeScriptServer~/package.json && echo "✅ TypeScript Server package.json OK"
-          test -f Packages/src/Cli~/package.json && echo "✅ CLI package.json OK"
+
+      - name: Setup Go for package release sync
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
+
+      - name: 🏷️ Sync release-please package releases
+        id: package_release_sync
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: scripts/sync-release-please-package-releases.sh
+
+      - name: 🏷️ Sync published release PR labels
+        if: steps.release_commit.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ steps.target.outputs.branch }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: scripts/sync-published-release-pr-labels.sh
 
       # ── Execute release-please ───────────────────────────
       - name: 🚀 Run release‑please
+        if: steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false'
         id: release
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          target-branch: ${{ steps.target.outputs.branch }}
+          skip-github-release: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Rebuild bundles when Release PR is created/updated ──
-      # GITHUB_TOKEN-created PRs do not trigger pull_request events,
-      # so build-and-test.yml cannot handle this — must rebuild here.
-      - name: 🔧 Setup Node.js for bundle rebuild
-        if: ${{ steps.release.outputs.pr != '' }}
-        uses: actions/setup-node@v7
+      - name: Setup Go for release PR automation
+        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          node-version: '24'
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
 
-      - name: 📦 Rebuild server bundle for Release PR
-        if: ${{ steps.release.outputs.pr != '' }}
+      - name: Dispatch release PR checks
+        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'
+        working-directory: cli/release-automation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_JSON: ${{ steps.release.outputs.pr }}
-        run: |
-          PR_NUMBER=$(echo "${PR_JSON}" | jq -r '.number')
-          echo "🔄 Release PR #${PR_NUMBER} detected, rebuilding server bundle..."
-
-          gh pr checkout "${PR_NUMBER}"
-
-          cd Packages/src/TypeScriptServer~
-          npm ci --ignore-scripts=false
-          ULOOPMCP_PRODUCTION=true NODE_ENV=production npm run build:production
-          cd "$GITHUB_WORKSPACE"
-
-          git add Packages/src/TypeScriptServer~/dist/server.bundle.js Packages/src/TypeScriptServer~/dist/server.bundle.js.map
-          if git diff --cached --quiet; then
-            echo "✅ No changes to bundle, skipping commit"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "chore: rebuild server bundle for release"
-            git push
-            echo "✅ Server bundle rebuilt and pushed to PR"
-          fi
-
-  # ── Dispatch npm-publish when release is created ────────────
-  # Keep npm-publish.yml as the single trusted publisher entrypoint.
-  # GITHUB_TOKEN-created releases do not trigger publish-on-release.yml,
-  # so release-please must explicitly dispatch npm-publish.yml here.
-  dispatch-publish:
-    needs: release
-    if: needs.release.outputs.releases_created == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - name: 🚀 Dispatch npm-publish workflow
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          STARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-          gh workflow run npm-publish.yml \
-            --ref main \
-            -f ref="${GITHUB_SHA}" \
-            -f dry-run=false \
-            --repo "${GITHUB_REPOSITORY}"
-
-          RUN_ID=""
-          for _ in 1 2 3 4 5; do
-            sleep 3
-            RUN_ID=$(
-              gh run list \
-                --workflow npm-publish.yml \
-                --event workflow_dispatch \
-                --commit "${GITHUB_SHA}" \
-                --repo "${GITHUB_REPOSITORY}" \
-                --limit 10 \
-                --json databaseId,createdAt \
-              | jq -r --arg started_at "${STARTED_AT}" '
-                  map(select(.createdAt >= $started_at))
-                  | sort_by(.createdAt)
-                  | last
-                  | .databaseId // empty
-                '
-            )
-
-            if [ -n "${RUN_ID}" ]; then
-              break
-            fi
-          done
-
-          if [ -z "${RUN_ID}" ]; then
-            echo "Failed to find the dispatched npm-publish workflow run." >&2
-            exit 1
-          fi
-
-          gh run watch "${RUN_ID}" --exit-status --repo "${GITHUB_REPOSITORY}"
+          TARGET_BRANCH: ${{ steps.target.outputs.branch }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: go run ./cmd/dispatch-release-please-pr-checks

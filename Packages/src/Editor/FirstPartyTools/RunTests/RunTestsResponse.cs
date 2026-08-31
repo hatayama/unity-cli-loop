@@ -1,0 +1,203 @@
+using System;
+using System.Collections.Generic;
+using Newtonsoft.Json;
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Response schema for RunTests command
+    /// Provides type-safe response structure
+    /// </summary>
+    public class RunTestsResponse : UnityCliLoopToolResponse
+    {
+        internal const string NoTestsFoundMessage = "No tests found matching the specified filter criteria";
+        internal const string NoTestsFoundExplanationText =
+            "No tests were discovered for this run. This is not a test failure; check TestMode, FilterType, and FilterValue. If newly added test scripts are never discovered, the most common cause is a missing test assembly: add an .asmdef with Test Assemblies enabled to the test folder (EditMode test assemblies target the Editor platform only), reference the assemblies under test, then run 'uloop compile' and rerun the tests. An .asmdef cannot reference the predefined Assembly-CSharp: if the code under test lives there, move it into its own .asmdef and add any package assemblies it uses to that .asmdef's references.";
+
+        public static readonly string TestFrameworkUnavailableMessage =
+            $"run-tests requires the Unity Test Framework package ({UnityCliLoopConstants.PACKAGE_NAME_TEST_FRAMEWORK}). Install it via Package Manager to use test execution.";
+
+        /// <summary>
+        /// Machine-readable execution status
+        /// </summary>
+        public string Status { get; set; }
+
+        /// <summary>
+        /// Whether any discovered test failed
+        /// </summary>
+        public bool HasFailures { get; set; }
+
+        /// <summary>
+        /// Whether Unity Test Runner discovered zero tests
+        /// </summary>
+        public bool NoTestsFound { get; set; }
+
+        /// <summary>
+        /// Explanation for agents when zero tests are discovered
+        /// </summary>
+        public string NoTestsFoundExplanation { get; set; }
+
+        /// <summary>
+        /// Test execution message
+        /// </summary>
+        public string Message { get; set; }
+
+        /// <summary>
+        /// Test execution completion timestamp
+        /// </summary>
+        public string CompletedAt { get; set; }
+
+        /// <summary>
+        /// Total number of tests executed
+        /// </summary>
+        public int TestCount { get; set; }
+
+        /// <summary>
+        /// Number of passed tests
+        /// </summary>
+        public int PassedCount { get; set; }
+
+        /// <summary>
+        /// Number of failed tests
+        /// </summary>
+        public int FailedCount { get; set; }
+
+        /// <summary>
+        /// Number of skipped tests
+        /// </summary>
+        public int SkippedCount { get; set; }
+
+        /// <summary>
+        /// Path to XML result file (if saved)
+        /// </summary>
+        public string XmlPath { get; set; }
+
+        /// <summary>
+        /// IDs of pause points that were cleared before test execution, or null when none were active
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string[] ClearedPausePointIds { get; set; }
+
+        /// <summary>
+        /// Failed leaf tests, omitted from JSON when none failed.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public SerializableTestResult.FailedTestDetail[] FailedTests { get; set; }
+
+        /// <summary>
+        /// Skipped leaf test full names, omitted from JSON when none were skipped.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string[] SkippedTests { get; set; }
+
+        /// <summary>
+        /// Policy warning when hot-reload changes were live at test-run start. Empty when none
+        /// were active; omitted from JSON via ShouldSerializeWarning.
+        /// </summary>
+        public string Warning { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Effective filter type echoed when NoTestsFound ran with a non-all filter.
+        /// </summary>
+        public string FilterType { get; set; }
+
+        /// <summary>
+        /// Effective filter value echoed when NoTestsFound ran with a non-all filter.
+        /// </summary>
+        public string FilterValue { get; set; }
+
+        /// <summary>
+        /// Leaf test full names discovered in the same TestMode with no filter, capped at
+        /// UnfilteredTestNamesLimit. Null when the unfiltered list was not retrieved.
+        /// </summary>
+        public List<string> UnfilteredTestNames { get; set; }
+
+        /// <summary>
+        /// Total leaf tests discovered without the filter, before the UnfilteredTestNames cap.
+        /// </summary>
+        public int UnfilteredTestCount { get; set; }
+
+        // Why omit empty: a clean run with no live patches must not grow a Warning field.
+        public bool ShouldSerializeWarning()
+        {
+            return !string.IsNullOrEmpty(Warning);
+        }
+
+        // Why UnfilteredTestNames != null: UnfilteredTestCount can be 0 after a successful
+        // retrieve, and that zero still needs to appear on the wire.
+        public bool ShouldSerializeFilterType()
+        {
+            return UnfilteredTestNames != null;
+        }
+
+        public bool ShouldSerializeFilterValue()
+        {
+            return UnfilteredTestNames != null;
+        }
+
+        public bool ShouldSerializeUnfilteredTestNames()
+        {
+            return UnfilteredTestNames != null;
+        }
+
+        public bool ShouldSerializeUnfilteredTestCount()
+        {
+            return UnfilteredTestNames != null;
+        }
+
+        /// <summary>
+        /// Create a new RunTestsResponse. Every field is required so classification decisions
+        /// stay at the call site (the Unity Test Runner adapter and use-case), not in this DTO.
+        /// </summary>
+        public RunTestsResponse(
+            bool success,
+            string message,
+            string completedAt,
+            int testCount,
+            int passedCount,
+            int failedCount,
+            int skippedCount,
+            string xmlPath,
+            string status,
+            bool hasFailures,
+            bool noTestsFound,
+            string noTestsFoundExplanation)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(status), "status must be a RunTestsExecutionStatus value");
+            Debug.Assert(noTestsFoundExplanation != null, "noTestsFoundExplanation must not be null; pass string.Empty when not applicable");
+
+            Success = success;
+            Message = message;
+            CompletedAt = completedAt;
+            TestCount = testCount;
+            PassedCount = passedCount;
+            FailedCount = failedCount;
+            SkippedCount = skippedCount;
+            XmlPath = xmlPath;
+            Status = status;
+            HasFailures = hasFailures;
+            NoTestsFound = noTestsFound;
+            NoTestsFoundExplanation = noTestsFoundExplanation;
+        }
+
+        public static RunTestsResponse CreateTestFrameworkUnavailable()
+        {
+            return new RunTestsResponse(
+                success: false,
+                message: TestFrameworkUnavailableMessage,
+                completedAt: DateTime.UtcNow.ToString("o"),
+                testCount: 0,
+                passedCount: 0,
+                failedCount: 0,
+                skippedCount: 0,
+                xmlPath: null,
+                status: RunTestsExecutionStatus.ExecutionFailed,
+                hasFailures: false,
+                noTestsFound: false,
+                noTestsFoundExplanation: string.Empty);
+        }
+    }
+}

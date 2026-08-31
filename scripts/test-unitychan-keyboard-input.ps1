@@ -1,4 +1,4 @@
-# Keyboard input test script for UnityChan locomotion and action playback
+# Keyboard input test script for cube movement and action playback
 
 $ErrorActionPreference = "Stop"
 
@@ -39,7 +39,7 @@ function Release {
 }
 
 try {
-    Write-Host "=== UnityChan Keyboard Input Test ==="
+    Write-Host "=== Keyboard Cube Input Test ==="
 
     uloop control-play-mode --action Play
     Start-Sleep -Seconds 2

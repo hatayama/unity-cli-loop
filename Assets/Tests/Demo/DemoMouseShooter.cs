@@ -1,10 +1,13 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class DemoMouseShooter : MonoBehaviour
     {
         [SerializeField] private float bulletSpeed = 20f;

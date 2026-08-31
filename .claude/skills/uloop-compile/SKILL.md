@@ -1,6 +1,7 @@
 ---
 name: uloop-compile
-description: "Compile the Unity project and report errors/warnings. Use after C# edits or when a full Domain Reload compile is needed."
+toolName: compile
+description: "Compile the Unity project and report errors/warnings. Use after C# edits."
 ---
 
 # uloop compile
@@ -10,70 +11,47 @@ Execute Unity project compilation.
 ## Usage
 
 ```bash
-uloop compile [--force-recompile <true|false>] [--wait-for-domain-reload <true|false>]
+uloop compile [--force-recompile] [--no-wait-for-domain-reload] [--stop-on-external-scene-changes] [--timeout-seconds <seconds>]
 ```
 
 ## Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--force-recompile` | boolean value | `false` | Force full recompilation (triggers Domain Reload). Rarely needed — see "When to use --force-recompile" below. Pass `true` or `false`; bare flags are not accepted. |
-| `--wait-for-domain-reload` | boolean value | `false` | Wait until Domain Reload completes before returning. Pass `true` or `false`; bare flags are not accepted. |
+| `--force-recompile` | flag | - | Full recompile plus domain reload. Almost never needed: a plain compile already detects externally edited files, and the forced reload can freeze large projects and come back as `COMPILE_RESULT_UNKNOWN`. |
+| `--no-wait-for-domain-reload` | flag | - | Return before Domain Reload completion |
+| `--stop-on-external-scene-changes` | flag | - | Stop before compilation if open Scene files changed externally instead of auto-reloading them |
+| `--timeout-seconds` | integer | 600 | Maximum seconds the CLI waits for the compile to finish before returning COMPILE_WAIT_TIMEOUT (default 600). Values above 1200 exceed the Unity-side result retention window (20 minutes) and weaken post-timeout recovery. |
 
 ## When to use --force-recompile
 
-Almost never. Unity itself detects changed files — even when they were edited outside the
-Editor, a plain `uloop compile` runs every recompilation the changes require. A forced full
-recompile can freeze the Editor for a long time on large projects, and with
-`--wait-for-domain-reload true` the response crosses a Domain Reload so `Success` comes back
-as `null`, making it useless as a verification step. The only legitimate use: surfacing
-warnings hidden by other asmdefs with a full build.
+`--force-recompile` is almost never needed. Detecting changed files is Unity's job: even when
+files were edited outside the Editor, a plain `uloop compile` refreshes assets and runs every
+recompilation the changes require. "The files were changed externally, so recompile everything
+just in case" is not a valid reason.
 
-## Global Options
+Why to avoid it:
 
-| Option | Description |
-|--------|-------------|
-| `--project-path <path>` | Optional. Use only when the target Unity project is not the current directory. |
+- On large projects a full recompile plus domain reload can freeze Unity for a long time.
+- The result crosses a domain reload, so it often comes back as `COMPILE_RESULT_UNKNOWN` and
+  does not work as a verification step.
+- It puts the Editor into the unstable just-after-reload state for no benefit.
 
-## Examples
-
-```bash
-# Check compilation
-uloop compile
-
-# Force full recompilation
-uloop compile --force-recompile true
-
-# Force recompilation and wait for Domain Reload completion
-uloop compile --force-recompile true --wait-for-domain-reload true
-
-# Wait for Domain Reload completion even without force recompilation
-uloop compile --force-recompile false --wait-for-domain-reload true
-```
+The one legitimate use case: you need warnings hidden by other asmdefs surfaced by a full
+build. Otherwise always run plain `uloop compile`.
 
 ## Output
 
 Returns JSON:
-- `Success`: boolean
-- `ErrorCount`: number
-- `WarningCount`: number
+
+- `Success`: boolean or null
+- `ErrorCount`: number or null
+- `WarningCount`: number or null
+- `Message`: string
+- `ErrorCode`: string or null. `COMPILE_ALREADY_IN_PROGRESS` when Unity is already compiling, `COMPILE_EDITOR_UPDATING` when the editor is updating, `COMPILE_RESULT_UNKNOWN` after a forced recompile that did not return a definitive result.
 
 ## Troubleshooting
 
-Diagnose the failure mode before retrying.
+When Unity's API Updater asks for consent to rewrite source files during a CLI compile (the 'Script Updating Consent' dialog), uloop declines automatically — source files are never rewritten without explicit user consent — and the response's Warning discloses the decline. The obsolete-API errors the updater would have fixed appear in Errors; fix them in code, or have the user accept the dialog in an interactive Unity session. Outside CLI compiles, and for the separate 'API Update Required' dialog, the modal can still appear and uloop cannot click it: if compile times out while the Editor looks idle, ask the user to answer the dialog — never auto-dismiss it.
 
-**Stale lock files** (CLI hangs or shows "Unity is busy" while Unity Editor *is* running):
-
-```bash
-uloop fix
-```
-
-This removes any leftover lock files (`compiling.lock`, `domainreload.lock`, `serverstarting.lock`) from the Unity project's Temp directory. Then retry `uloop compile`.
-
-**Unity Editor not running** (CLI returns a connection failure and no Unity process is alive):
-
-```bash
-uloop launch
-```
-
-`uloop launch` auto-detects the project at the current working directory and opens it in the matching Unity Editor version. After Unity finishes launching, retry `uloop compile`.
+A compile that outlives your shell's output window keeps running inside Unity: the call may return with empty or truncated output while the compile is still in progress, and the next uloop command is rejected with "Unity is busy running 'compile'" until it finishes. That rejection is normal single-flight behavior, not a failure — wait and rerun the command; do not restart Unity or rerun compile to recover.

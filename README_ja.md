@@ -1,6 +1,6 @@
 # Unity CLI Loop
 
-[English](README.md)
+[English](README.md) | 日本語
 
 [![Unity](https://img.shields.io/badge/Unity-2022.3+-red.svg)](https://unity3d.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE.md)<br>
@@ -11,8 +11,8 @@
 ![GitHubCopilot](https://img.shields.io/badge/GitHub_Copilot-111?logo=githubcopilot)
 
 <p align="center">
-    <img height="450" alt="logo-black-bg" src="https://github.com/user-attachments/assets/fca3047f-9042-4bf9-83bd-58b03f061082" /><br>
-    <sub>(Logo inspired by Daft Punk's <i>Discovery</i> album art)</sub>  
+    <img height="450" alt="logo-black-bg" src="Packages/src/Documentation~/images/logo.png" /><br>
+    <sub>(Logo inspired by Daft Punk's <i>Human After All</i> album art)</sub>  
 </p>
   
 
@@ -20,29 +20,26 @@ CLIを通じて、AIエージェントがUnityプロジェクトのコンパイ�
 
 AI駆動の開発ループを既存のUnityプロジェクト内で自律的に回し続けるために設計されています。
 
-> **Note**: このプロジェクトの旧名称は **uLoopMCP** です。
+> [!IMPORTANT]
+> - **[V3の新機能](Packages/src/Documentation~/whats-new-v3_ja.md)** — ネイティブGo CLIへの移行、ポート管理の廃止、`hot-reload` / `pause-point` の追加、CLIの自動アップデートとプロジェクトごとの自動バージョン使い分け、Unityがバックグラウンドにあっても複数のUnityを並列で動かしても接続が安定し続ける信頼性の向上
+> - **[カスタムツール／スキルのV3移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md)** — C#カスタムツールや、`uloop` を呼び出す自作スキル／スクリプトを持っている人向け。それ以外の人は、パッケージとCLIを更新するだけで移行できます
 
 # コンセプト
 Unity CLI Loopは、「AIがUnityプロジェクトの実装をできるだけ人手を介さずに進められる」ことを目指して作られた Unity連携ツールです。
-人間が手で行っていたコンパイル、Test Runner の実行、ログ確認、シーン編集、画面キャプチャによるUIレイアウト確認などの作業を、LLM ツールからまとめて操作できるようにします。
+人間が手で行っていたコンパイル、Test Runner の実行、ログ確認、シーン編集、画面キャプチャによるUIレイアウト確認、さらには実装した機能が本当に動くかどうかを実際に操作して確かめる動作確認までを、LLM ツールからまとめて行えるようにします。
 
 Unity CLI Loopのコアとなるコンセプトは次の4つです。
 
-1. **AIが自律的にビルド・テスト・ログ解析・修正を回し続ける「自律開発ループ」** — `compile`, `run-tests`, `get-logs`, `clear-console`
+1. **AIが自律的にビルド・テスト・ログ解析・修正を回し続ける「自律開発ループ」** — コードを書き換えずに任意の行で実行を止め、その瞬間の変数を読み取って原因を特定することもできます。メソッド本体の修正は再コンパイルを待たずに実行中のゲームへ即時反映できます。`compile`, `run-tests`, `get-logs`, `clear-console`, `pause-point`, `hot-reload`
 2. **シーン構築、オブジェクト操作、メニュー実行、スクリーンショットからのUI改善など、Unity Editorの操作をAIに委任** — `execute-dynamic-code`, `screenshot`
-3. **PlayMode中の自動テスト — ボタンクリック、ドラッグ、キーボード入力、入力の記録・再生、ゲーム動作の検証をAIが実行** — `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `record-input`, `replay-input`, `execute-dynamic-code`, `screenshot`
+3. **PlayMode中の自動テスト — ボタンクリック、ドラッグ、キーボード入力、記録済み入力の再生、ゲーム動作の検証をAIが実行** — `simulate-mouse-ui`, `simulate-mouse-input`, `simulate-keyboard`, `replay-input`, `execute-dynamic-code`, `screenshot`
 4. **上記を最小限のツール数で実現する** → [設計思想](#設計思想)
 
 https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
 # インストール
 
-> [!WARNING]
-> 以下のソフトウェアが必須です
->
-> - **Unity 2022.3以上**
-> - **Node.js 22.0以上** - CLIの実行に必要
-> - [公式サイト](https://nodejs.org/en/download)やお好みのバージョンマネージャー等でインストールしてください
+ここでインストールするのはUnityパッケージです。CLI本体（ネイティブバイナリ）は、パッケージ導入後に[クイックスタートのステップ1](#ステップ1-cliのインストール)でインストールします。Unityを経由せずterminalだけでCLIを入れる方法も、同じステップに畳んで記載しています。
 
 ## Unity Package Manager経由
 
@@ -55,16 +52,19 @@ https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
 ```
 
-> **v1.0.0以前にgit URL でインストールされていた方へ**: v1.0.0でリポジトリ名が `uLoopMCP` から `unity-cli-loop` に変更されました。`manifest.json` の URL を更新してください：
-> ```text
-> 旧: https://github.com/hatayama/uLoopMCP.git?path=/Packages/src
-> 新: https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
-> ```
-> 旧URLはGitHubのリダイレクトにより引き続き動作しますが、更新を推奨します。OpenUPMユーザーは影響ありません。
-
 ## OpenUPM経由（推奨）
 
-## Unity Package ManagerでScoped registryを使用
+グローバルな `uloop` CLI が PATH に入った状態で、プロジェクトルートのターミナルから（または `--project-path` を指定して）Unity パッケージを導入できます。
+
+```bash
+uloop package install
+uloop package status
+```
+
+`uloop package install` は OpenUPM の scoped registry と `io.github.hatayama.uloopmcp` 依存を `Packages/manifest.json` に書き込みます。OpenUPM の `dist-tags.latest` ではなく特定バージョンを入れたいときは `--version <x.y.z>` を付けます。導入状態の確認には `uloop package status` を使います。
+
+### 手動で設定する場合（Unity Package Manager）
+
 1. Project Settingsウィンドウを開き、Package Managerページに移動
 2. Scoped Registriesリストに以下のエントリを追加：
 ```text
@@ -75,40 +75,157 @@ Scope(s): io.github.hatayama.uloopmcp
 
 3. Package Managerウィンドウを開き、My RegistriesセクションのOpenUPMを選択。Unity CLI Loopが表示されます。
 
-> [!NOTE]
-> `com.unity.inputsystem` は optional dependency になりました。`simulate-keyboard`、`simulate-mouse-input`、`record-input`、`replay-input`、Recordings ウィンドウを使いたい場合だけ追加してください。
-> `com.unity.test-framework` も optional dependency です。`run-tests` で Unity Test Runner を実行したい場合だけ追加してください。
-
 # クイックスタート
 
 ## ステップ1: CLIのインストール
 
-Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが開くので **CLI** ボタンが青くなっている事を確認します。
+Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが開くので、**CLI** ボタンが青くなっていなければ **Install CLI** を押してください。
 
-**Install CLI** ボタンを押します。  
-<img width="277" height="306" alt="1" src="https://github.com/user-attachments/assets/0e25c327-73bf-4af6-997b-eebb3c26b372" />
-
-
-
-下記の表示になれば成功です。  
-<img width="272" height="309" alt="2" src="https://github.com/user-attachments/assets/ec14f73b-53be-4435-af95-84bb9125e3e4" />
-
-
+installerはグローバルな`uloop`コマンドをPATH上に配置します。プロジェクト固有の`uloop-project-runner` binaryは、各プロジェクトの`.uloop/project-runner-pin.json`に従ってuser cacheへ自動的にdownloadされます。
 
 <details>
-<summary>terminalからinstallする場合はこちら</summary>
+<summary>V2プロジェクトと併用する場合</summary>
+
+v2とv3のプロジェクトを併用するときも、v3 dispatcherをインストールしたままにしてください。Unityがプロジェクトをv2系の`io.github.hatayama.uloopmcp` packageへ解決している場合、dispatcherは同じバージョンのv2 `uloop-cli` releaseをバージョン別user cacheへ自動的にインストールし、コマンドを委譲します。解決済みpackageのバージョンは、downgrade後に残った古いv3 project-runner pinより優先されます。初回のnpmインストールとv2モードの注記はstderrへ出力されるため、stdoutには委譲先コマンドの出力だけが残ります。v3プロジェクトはpinで選ばれたproject runnerを引き続き使用します。
+
+グローバルな`install`、`update`、`uninstall`、`launch`コマンドは、どのプロジェクトでもv3 dispatcherが処理します。検出されたv2プロジェクトでは、それ以外のプロジェクトコマンド、help、プロジェクトスコープのversion表示が委譲されます。
+
+v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode.js 22以降が必要です。v2プロジェクトのSettingsウィンドウでは、**Update CLI**または**Downgrade CLI**を押さないでください。委譲先CLIが同じv2バージョンを返すため通常はボタン自体が表示されませんが、使用するとグローバルnpm版CLIが復活し、PATHの順序によってv3 dispatcherが隠れる可能性があります。
+
+</details>
+
+<details>
+<summary>CLIだけをterminalからinstallする場合はこちら</summary>
+
+Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
+
+### Homebrew（macOS）
 
 ```bash
-npm install -g uloop-cli
+brew install hatayama/tap/uloop
 ```
 
-詳細は [npm の uloop-cli パッケージ](https://www.npmjs.com/package/uloop-cli) を参照してください。
+更新は `brew upgrade uloop` で行います。formula は dispatcher の release ごとに自動で更新されます。
+
+### Shell installer（curl / PowerShell）
+
+インストーラは `Packages/src/project-runner-pin.json` の digest 一覧でアーカイブを検証します（Unity の **Install CLI** ボタンと同じ pin）。
+任意の環境変数: `ULOOP_REF`（pin を取る git ref。既定は `main`）、`ULOOP_INSTALL_DIR`。
+`ULOOP_VERSION` は pin の `dispatcherReleaseTag` と一致する場合のみ有効です。
+
+> [!NOTE]
+> terminal install も Unity GUI と同じ repository pin を信頼源にします。明示的に
+> `ULOOP_ARCHIVE_MANIFEST`（Sigstore 検証由来）を渡す手動フローは、任意の release tag を選ぶ hardened option として残っています。
+
+macOS、Windows Git Bash の場合:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
+```
+
+Windows Git Bash では、インストーラは dispatcher の zip を `unzip`、`tar`（bsdtar / Windows の tar.exe）、PowerShell の `Expand-Archive` の順に試して展開します。フォールバックが使える環境では `unzip` は必須ではありません。
+
+Windows PowerShell の場合:
+
+```powershell
+irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+```
+
+### 手動の attestation 検証付き install（release tag を自分で選ぶ）
+
+最初にOSまたはパッケージ管理経由で`gh`（ログイン済み）と`jq`を導入してください。以下のコマンドはこの2つを自動では導入せず、代替手段にもフォールバックしません。最新のdispatcher Release tagは自動で解決されます。特定のバージョンを入れたい場合は、`RELEASE_TAG`にimmutableなタグ（例: `dispatcher-v3.0.0`）を直接指定してください。
+
+コマンドがやっていることは順に次の5つです。
+
+1. 最新のdispatcher Release tagを解決する（`RELEASE_TAG`）
+2. Releaseからインストーラと、その署名情報（sigstore attestation bundle）を取得する（`gh release download`）
+3. インストーラが「このリポジトリのCIが、このタグのコミットからビルドしたもの」であることを検証する（`gh attestation verify`）
+4. 検証済みの署名情報から、CLI本体アーカイブの正しいハッシュ一覧を取り出す（`jq`）
+5. ハッシュ一覧を渡してインストーラを実行する。アーカイブが一覧と一致しなければ、実行前に中断されます
+
+macOS、Windows Git Bash の場合:
+
+<!-- このブロックに # コメントを入れないこと。素のzsh（interactivecomments無効）にコピペするとコメント行がエラーになり、検証失敗時に実行を止める && の連結も壊れる。説明は上のリストに書く。 -->
+```bash
+REPOSITORY=hatayama/unity-cli-loop
+RELEASE_TAG=$(gh api "repos/$REPOSITORY/releases?per_page=100" --jq '[.[] | select(.tag_name | startswith("dispatcher-v"))][0].tag_name')
+SOURCE_REF=refs/heads/main
+tmp_dir=$(mktemp -d)
+gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sigstore.json' --dir "$tmp_dir" && \
+tag_sha=$(gh api "repos/$REPOSITORY/commits/$RELEASE_TAG" --jq .sha) && \
+gh attestation verify "$tmp_dir/install.sh" --bundle "$tmp_dir/install.sh.sigstore.json" --repo "$REPOSITORY" --signer-workflow "$REPOSITORY/.github/workflows/dispatcher-publish.yml" --source-ref "$SOURCE_REF" --source-digest "$tag_sha" && \
+manifest=$(jq -r '.dsseEnvelope.payload | @base64d | fromjson | .subject[] | "\(.digest.sha256)  \(.name)"' "$tmp_dir/install.sh.sigstore.json" | LC_ALL=C sort) && \
+ULOOP_VERSION="$RELEASE_TAG" ULOOP_ARCHIVE_MANIFEST="$manifest" sh "$tmp_dir/install.sh"
+```
+
+Windows PowerShell の場合:
+
+```powershell
+$repository = 'hatayama/unity-cli-loop'
+# 最新のdispatcher Release tagを解決する（固定したい場合はタグ文字列を直接代入）
+$releaseTag = (gh api "repos/$repository/releases?per_page=100" | ConvertFrom-Json | Where-Object { $_.tag_name -like 'dispatcher-v*' } | Select-Object -First 1).tag_name
+if (-not $releaseTag) { throw 'No dispatcher release found.' }
+$sourceRef = 'refs/heads/main'
+$temporaryDirectory = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
+# Releaseからインストーラと、その署名情報（sigstore attestation bundle）を取得する
+gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --dir $temporaryDirectory.FullName
+if ($LASTEXITCODE -ne 0) { throw 'Installer download failed.' }
+$tagSha = gh api "repos/$repository/commits/$releaseTag" --jq .sha
+if ($LASTEXITCODE -ne 0) { throw 'Release tag resolution failed.' }
+# インストーラが「このリポジトリのCIが、このタグのコミットからビルドしたもの」であることを検証する
+gh attestation verify (Join-Path $temporaryDirectory.FullName 'install.ps1') --bundle (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') --repo $repository --signer-workflow "$repository/.github/workflows/dispatcher-publish.yml" --source-ref $sourceRef --source-digest $tagSha
+if ($LASTEXITCODE -ne 0) { throw 'Installer attestation verification failed.' }
+# 検証済みの署名情報から、CLI本体アーカイブの正しいハッシュ一覧を取り出す
+$bundle = Get-Content -Raw -Encoding UTF8 (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') | ConvertFrom-Json
+$statement = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($bundle.dsseEnvelope.payload)) | ConvertFrom-Json
+$manifest = [string]::Join("`n", @($statement.subject | ForEach-Object { "$($_.digest.sha256)  $($_.name)" } | Sort-Object))
+# ハッシュ一覧を渡してインストーラを実行する（アーカイブが一覧と一致しなければ実行前に中断される）
+$env:ULOOP_VERSION = $releaseTag
+$env:ULOOP_ARCHIVE_MANIFEST = $manifest
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $temporaryDirectory.FullName 'install.ps1')
+```
+
+native CLI のインストール後、installer は古い npm package を `npm uninstall -g uloop-cli` で自動削除しようとします。
+npm が見つからない場合や、古い command が別の Node prefix に属している場合は、手動で実行する command を表示します。
+
+```bash
+npm uninstall -g uloop-cli
+```
+
+プロジェクトを切り替えるためにv2 CLIをグローバルインストールしないでください。ターミナルの`uloop`がnative dispatcherではなく古いnpm版を指している場合は、npm版を削除してnative dispatcherを再インストールしてください。
+
+```bash
+npm uninstall -g uloop-cli
+# 上記の検証済みnative installerをもう一度実行します。
+which uloop
+uloop --version
+```
+
+Windows PowerShell の場合:
+
+```powershell
+npm uninstall -g uloop-cli
+# 上記の検証済みnative installerをもう一度実行します。
+Get-Command uloop
+uloop --version
+```
+
 </details>
+
+
+<img width="350" alt="CLI未インストール状態のSettingsウィンドウ。Install CLIボタンが表示されている" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
+
+Settings ウィンドウでは、グローバルな `uloop` コマンドが検出されているかを確認できます。
+
+下記の表示になれば成功です。
+
+<img width="350" alt="CLI検出に成功したSettingsウィンドウ。緑のインジケータとCLIバージョンが表示されている" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
 
 ## ステップ2: Skillsのインストール
 
-Claude CodeやCodexなど、対象を選択して **Install Skills** ボタンを押します。  
-<img width="272" height="306" alt="3" src="https://github.com/user-attachments/assets/492e9680-726a-425b-8bf1-e5983f4f15a5" />
+Claude CodeやCodexなど、対象を選択して **Install Skills** ボタンを押します。
+
+<img width="350" alt="SettingsウィンドウのSkillsセクション。対象を選択してInstall Skillsボタンが押せる状態" src="Packages/src/Documentation~/images/settings-skills-install.png" />
 
 
 <details> 
@@ -123,6 +240,11 @@ uloop skills install --codex
 
 # または、グローバルにインストール
 uloop skills install --claude --global
+
+# または、任意のディレクトリ（外部のスキルパッケージストアなど）へ
+# <path>/<skill-name> のフラット構成で同期。uloopが管理しないトップレベルの
+# ファイルはそのまま残る（references/ などスキル所有のディレクトリは丸ごと置換）
+uloop skills install --output-dir path/to/skills
 ```
 </details>
 
@@ -132,32 +254,35 @@ uloop skills install --claude --global
 |---|---|
 | 「このプロジェクトのUnityを起動して」 | `/uloop-launch` |
 | 「コンパイルエラーを直して」 | `/uloop-compile` |
+| 「この修正をコンパイルせずに今すぐ反映して」 | `/uloop-hot-reload` |
 | 「テストを実行して失敗原因を教えて」 | `/uloop-run-tests` + `/uloop-get-logs` |
 | 「シーンの階層構造を確認して」 | `/uloop-get-hierarchy` |
 | 「Unityを再生させて、Unityを前面に出して」 | `/uloop-control-play-mode` + `/uloop-focus-window` |
 | 「Prefabのパラメータを一括修正して」 | `/uloop-execute-dynamic-code` |
 | 「Game Viewのスクショを撮って、UIレイアウトを調整して」 | `/uloop-screenshot` + `/uloop-execute-dynamic-code` |
-| 「ゲームプレイの入力を記録して」 | `/uloop-record-input` |
 | 「記録した入力を再生して」 | `/uloop-replay-input` |
+| 「バグの原因をこの行で止めて調べて」 | `/uloop-pause-point` |
 
 
 <details>
-<summary>バンドルされている全16個のSkills一覧</summary>
+<summary>バンドルされている全18個のSkills一覧</summary>
 
 - `/uloop-launch` - 正しいバージョンでUnityを起動
 - `/uloop-compile` - コンパイルの実行
 - `/uloop-get-logs` - Consoleログの取得
 - `/uloop-run-tests` - テストの実行
+- `/uloop-hot-reload` - メソッド本体の変更を再コンパイルなしで実行中のコードへ即時適用
 - `/uloop-clear-console` - Consoleのクリア
 - `/uloop-focus-window` - Unity Editorを前面に表示
 - `/uloop-get-hierarchy` - シーン階層の取得
 - `/uloop-find-game-objects` - GameObject検索
 - `/uloop-screenshot` - EditorWindowのキャプチャ
+- `/uloop-pause-point` - 任意の行で実行を止めて変数をキャプチャ
+- `/uloop-set-game-view-size` - Game Viewのカスタム解像度の取得・設定
 - `/uloop-simulate-mouse-ui` - PlayMode UI要素のクリック・長押し・ドラッグシミュレーション
 - `/uloop-simulate-mouse-input` - Input System経由のPlayModeマウス入力シミュレーション
 - `/uloop-simulate-keyboard` - Input System経由のPlayModeキーボード入力シミュレーション
-- `/uloop-record-input` - PlayMode中のキーボード・マウス入力の記録
-- `/uloop-replay-input` - 記録された入力のPlayMode再生
+- `/uloop-replay-input` - Recordingsウィンドウで記録した入力のPlayMode再生
 - `/uloop-control-play-mode` - Play Modeの制御
 - `/uloop-execute-dynamic-code` - 動的C#コード実行
 
@@ -184,8 +309,11 @@ uloop launch -r
 # コンパイルを実行
 uloop compile
 
-# コンパイルしてDomain Reload完了まで待つ
-uloop compile --wait-for-domain-reload true
+# Domain Reloadを待たずにコンパイルを開始
+uloop compile --no-wait-for-domain-reload
+
+# 変更した.csのメソッド本体を再コンパイルなしで実行中のコードへ適用
+uloop hot-reload
 
 # ログを取得
 uloop get-logs --max-count 10
@@ -199,96 +327,31 @@ uloop execute-dynamic-code --code 'using UnityEngine; Debug.Log("Hello from CLI!
 
 </details>
 
-<details>
-<summary>シェル補完（オプション）</summary>
+## Claude Codeを使う場合の設定
 
-Bash/Zsh/PowerShell の補完機能をインストールできます：
+Claude Codeはシェルコマンドをサンドボックス内で実行し、サンドボックスは通信をデフォルトで遮断します。UnityとのIPC接続も対象になるため、`uloop` はUnityが正常に動いていても、接続しようとした時点で `UNITY_NOT_REACHABLE`（`connect: operation not permitted`）で失敗します。
 
-```bash
-# 補完スクリプトをシェル設定に追加（シェル自動検出）
-uloop completion --install
-
-# シェルを明示的に指定（Windows環境で自動検出が失敗する場合）
-uloop completion --shell bash --install        # Git Bash / MINGW64
-uloop completion --shell powershell --install  # PowerShell
-
-# 補完スクリプトを確認
-uloop completion
-```
-
-</details>
-
-## プロジェクトパス指定
-
-`--project-path` を省略した場合は、カレントディレクトリの Unity プロジェクトで設定されたポートが自動選択されます。
-
-一つのLLMツールから複数のUnityインスタンスを操作したい場合、プロジェクトパスを明示的に指定します：
-
-```bash
-# プロジェクトパスで指定（絶対パス・相対パスどちらも可）
-uloop compile --project-path /Users/foo/my-unity-project
-uloop compile --project-path ../other-project
-```
-
-<details>
-<summary>CLIの代わりにMCPを使う場合</summary>
-
-> [!WARNING]
-> MCP接続は将来のリリースでメンテナンスが終了、または廃止される可能性があります。CLIの利用を推奨します。
-
-MCP（Model Context Protocol）経由でも接続できます。MCPの場合、CLIやSkillsのインストールは不要です。
-
-### MCP接続の手順
-
-1. Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが開くので **MCP** ボタンを押してください。
-<img width="274" height="289" alt="CleanShot 2026-02-26 at 20 37 16" src="https://github.com/user-attachments/assets/5f2fc5db-fd33-4b5d-9f0e-3e2e0d134cf6" />
-
-2. 次に、LLM Tool SettingsセクションでターゲットIDEを選択します。黄色い「Configure {LLM Tool名}」ボタンを押してIDEに自動接続してください。
-<img width="335" alt="image" src="https://github.com/user-attachments/assets/25f1f4f9-e3c8-40a5-a2f3-903f9ed5f45b" />
-
-3. IDE接続確認
-  - 例えばCursorの場合、設定ページのTools & MCPを確認し、uLoopMCPを見つけてください。トグルをクリックしてMCPを有効にします。
-
-<img width="657" height="399" alt="image" src="https://github.com/user-attachments/assets/5137491d-0396-482f-b695-6700043b3f69" />
-
-> [!WARNING]
-> **Windsurfについて**
-> プロジェクト単位の設定ができず、global設定のみとなります。
-
-<details>
-<summary>手動設定（通常は不要）</summary>
-
-> [!NOTE]
-> 通常は自動設定で十分ですが、必要に応じて、設定ファイル（`mcp.jsonなど`）を手動で編集できます：
+`~/.claude/settings.json` の `sandbox.excludedCommands` に `uloop *` を追加して、`uloop` コマンドをサンドボックスの対象外にしてください。
 
 ```json
 {
-  "mcpServers": {
-    "uLoopMCP": {
-      "command": "node",
-      "args": [
-        "[Unity Package Path]/TypeScriptServer~/dist/server.bundle.js"
-      ],
-      "env": {
-        "UNITY_TCP_PORT": "{port}"
-      }
-    }
+  "sandbox": {
+    "excludedCommands": ["uloop *"]
   }
 }
 ```
 
-**パス例**:
-- **Package Manager経由**: `"/Users/username/UnityProject/Library/PackageCache/io.github.hatayama.uloopmcp@[hash]/TypeScriptServer~/dist/server.bundle.js"`
-> [!NOTE]
-> Package Manager経由でインストールした場合、パッケージはハッシュ化されたディレクトリ名で`Library/PackageCache`に配置されます。「Auto Configure Cursor」ボタンを使用すると、正しいパスが自動的に設定されます。
+このパターンは**入力されたコマンド文字列**に対して照合されるため、`uloop` で始まる呼び出しが対象外になります。詳細と検証結果は [docs/claude-code-sandbox.md](docs/claude-code-sandbox.md) を参照してください。
 
-</details>
+# 仕組み
 
-### 複数のUnityインスタンスのサポート
-> [!NOTE]
-> ポート番号を変更することで複数のUnityインスタンスをサポートできます。Unity CLI Loop起動時に自動的に使われていないportが割り当てられます。
+`uloop` コマンドがUnity Editorに届くまでの流れは次のとおりです。
 
-</details>
+- **グローバル `uloop` dispatcher** — PATH上に1つだけ置かれる入口。コマンドを解釈し、対象プロジェクト用のrunnerへ委譲します
+- **`uloop-project-runner`** — プロジェクトごとのrunner。使用するバージョンは各プロジェクトの `.uloop/project-runner-pin.json`（pin）で決まり、バージョン別のユーザーキャッシュへ自動的にダウンロードされます。そのため、異なるバージョンの複数プロジェクトを1台のマシンで共存させられます → [project runner pinの詳細](docs/project-runner-pin.md)
+- **Unity Editor内のIPCサーバー** — runnerからの接続を受け取り、Unity APIを実行して結果を返します
+
+接続には**TCPポートを使いません**。macOS/LinuxではUnixドメインソケット、Windowsでは名前付きパイプで接続するため、ポートの設定も、他のEditorインスタンスとのポート衝突もありません。
 
 # 設計思想
 
@@ -298,388 +361,54 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 
 専用ツールを設けているのは、フレームをまたぐ入力シミュレーションやスクリーンショット取得のように動的コード実行では原理的に対応できない操作と、compile・get-logsのように開発ループの中で繰り返し呼ばれる操作です。後者を専用ツール化することで、毎回C#コードを生成するトークンコストを削減しています。
 
+新しい専用ツールが欲しくなったときも、その多くはSkill化で足ります。定型の操作をSKILL.mdの手順、シェルスクリプト、`execute-dynamic-code` に渡すC#スニペットとして書いておけば、AIはそれを呼び出すだけで済みます。Skillの本体は起動時にしか読み込まれず、実行のたびにコードを生成し直す必要もないため、追加のトークン消費はほぼゼロです。作り方は[カスタムツール開発ガイド](Packages/src/Documentation~/custom-tools_ja.md#カスタムツール用-skills)を参照してください。
+
 # 主要機能
+
+各ツールの詳しい説明と使用例は **[ツールリファレンス](Packages/src/Documentation~/tools_ja.md)** を参照してください。
+
 ## 自律開発ループ系ツール
-### 1. compile - コンパイルの実行
-AssetDatabase.Refresh()をした後、コンパイルして結果を返却します。内蔵のLinterでは発見できないエラー・警告を見つける事ができます。
-差分コンパイルと強制全体コンパイルを選択できます。
-`WaitForDomainReload=true` を指定すると、`ForceRecompile` の値に関係なく Domain Reload完了後に結果を返せます。
-```text
-→ compile実行、エラー・警告内容を解析
-→ 該当ファイルを自動修正
-→ 再度compileで確認
-```
-
-### 2. get-logs - UnityのConsoleと同じ内容のLogを取得します
-LogTypeや検索対象の文字列で絞り込む事ができます。また、stacktraceの有無も選択できます。
-これにより、コンテキストを小さく保ちながらlogを取得できます。
-**MaxCountの動作**: 最新のログから指定数を取得します（tail的な動作）。MaxCount=10なら最新の10件のログを返します。
-**高度な検索機能**:
-- **正規表現サポート**: `UseRegex: true`で強力なパターンマッチングが可能
-- **スタックトレース検索**: `SearchInStackTrace: true`でスタックトレース内も検索対象
-```
-→ get-logs (LogType: Error, SearchText: "NullReference", MaxCount: 10)
-→ get-logs (LogType: All, SearchText: "(?i).*error.*", UseRegex: true, MaxCount: 20)
-→ get-logs (LogType: All, SearchText: "MyClass", SearchInStackTrace: true, MaxCount: 50)
-→ スタックトレースから原因箇所を特定、該当コードを修正
-```
-
-### 3. run-tests - TestRunnerの実行 (PlayMode, EditMode対応)
-Unity Test Runnerを実行し、テスト結果を取得します。このツールは Unity Test Framework パッケージが必要です。未導入の場合、`run-tests` は unsupported メッセージを返し、それ以外の Unity CLI Loop 機能は動作し続けます。FilterTypeとFilterValueで条件を設定できます。
-- FilterType: all（全テスト）、exact（個別テストメソッド名）、regex（クラス名や名前空間）、assembly（アセンブリ名）
-- FilterValue: フィルタータイプに応じた値（クラス名、名前空間など）
-- SaveBeforeRun: 明示的に有効化した場合、未保存のロード済みScene変更と現在のPrefab Stage変更を保存してからテストを実行
-テスト結果をxmlで出力する事が可能です。出力pathを返すので、それをAIに読み取ってもらう事ができます。
-これもコンテキストを圧迫しないための工夫です。
-```text
-→ run-tests (FilterType: exact, FilterValue: "PlayerControllerTests.TestJump")
-→ run-tests (SaveBeforeRun: true)
-→ 失敗したテストを確認、実装を修正してテストをパス
-```
-> [!WARNING]
-> PlayModeテスト実行の際、Domain Reloadは強制的にOFFにされます。(テスト終了後に元の設定に戻ります)
-> この際、Static変数がリセットされない事に注意して下さい。
+- `compile` - コンパイルを実行し、エラー・警告を返す
+- `get-logs` - Consoleと同じ内容のログを、種類や検索文字列で絞り込んで取得
+- `run-tests` - Unity Test Runnerを実行（PlayMode / EditMode対応）
+- `hot-reload` - メソッド本体の変更を再コンパイルなしで実行中のコードへ即時適用
+- `pause-point` - コードを書き換えずに任意の行でPlayModeを止め、その瞬間の変数を読む
 
 ## Unity Editor 自動化・探索ツール
-### 4. clear-console - ログのクリーンアップ
-log検索時、ノイズのとなるlogをクリアする事ができます。
-```text
-→ clear-console
-→ 新しいデバッグセッションを開始
-```
+- `clear-console` - Consoleのログをクリア
+- `find-game-objects` - シーン内のオブジェクトを検索し、コンポーネントを調査
+- `get-hierarchy` - シーン構造をJSONで取得
+- `focus-window` - Unity Editorウィンドウを前面化
+- `screenshot` - EditorWindowやGame Viewのスクリーンショットを保存
+- `set-game-view-size` - Game Viewのカスタム解像度を取得・設定
+- `control-play-mode` - Play Modeの再生・停止・一時停止
+- `execute-dynamic-code` - 動的C#コード実行
 
-### 5. find-game-objects - シーン内オブジェクト検索
-オブジェクトを取得し、コンポーネントのパラメータを調べます。また、Unity Editorで選択中のGameObject（複数可）の情報も取得できます。
-```text
-→ find-game-objects (RequiredComponents: ["Camera"])
-→ Cameraコンポーネントのパラメータを調査
-
-→ find-game-objects (SearchMode: "Selected")
-→ Unity Editorで選択中のGameObjectの詳細情報を取得（複数選択対応）
-```
-
-### 6. get-hierarchy - シーン構造の解析
-現在アクティブなHierarchyの情報をネストされたJSON形式で取得します。ランタイムでも動作します。
-**自動ファイル出力**: 取得したHierarchyは常に`{project_root}/.uloop/outputs/HierarchyResults/`ディレクトリにJSONとして保存されます。レスポンスにはファイルパスのみが返るため、大量データでもトークン消費を最小限に抑えられます。
-**選択モード**: `UseSelection: true` を指定すると、Unity Editorで選択中のGameObjectから階層を取得できます。複数選択にも対応 - 親子両方が選択されている場合、重複を避けるため親のみがルートとして使用されます。
-```text
-→ GameObject間の親子関係を理解。構造的な問題を発見・修正
-→ シーンの規模にかかわらず、Hierarchyデータはファイルに保存され、生のJSONの代わりにパスが返されます
-→ get-hierarchy (UseSelection: true)
-→ パスを手動で指定せずに、選択中のGameObjectの階層を取得
-```
-
-### 7. focus-window - Unity Editorウィンドウを前面化（macOS / Windows対応）
-macOS / Windows Editor上で、Unity Editor ウィンドウを最前面に表示させます。
-他アプリにフォーカスが奪われた後でも、視覚的なフィードバックをすぐ確認できます。（Linuxは未対応）
-
-### 8. screenshot - EditorWindowのスクリーンショット
-任意のEditorWindowのスクリーンショットをPNGとして保存します。ウィンドウ名（タイトルバーに表示されている文字列）を指定してキャプチャできます。
-同じ種類のウィンドウが複数開いている場合（例：Inspectorを3つ開いている場合）、すべてのウィンドウを連番で保存します。
-3つのマッチングモードをサポート: `exact`（デフォルト）、`prefix`、`contains` - すべて大文字小文字を区別しません。
-```text
-→ screenshot (WindowName: "Console")
-→ Console画面の状態をPNGで保存
-→ AIに視覚的なフィードバックを提供
-```
-
-### 9. control-play-mode - Play Modeの制御
-Unity EditorのPlay Modeを制御します。Play（再生開始/一時停止解除）、Stop（停止）、Pause（一時停止）の3つのアクションを実行できます。
-```
-→ control-play-mode (Action: Play)
-→ Play Modeを開始してゲームの動作を確認
-→ control-play-mode (Action: Pause)
-→ 一時停止して状態を確認
-```
-
-### 10. execute-dynamic-code - 動的C#コード実行
-Unity Editor内で動的にC#コードを実行します。
-
-**Async対応**:
-- スニペット内で await が利用可能です（Task / ValueTask / UniTask など awaitable 全般）
-- CancellationToken をツールに渡すと、キャンセルが末端まで伝播します
-
-**セキュリティレベル対応**: 2段階のセキュリティ制御を実装し、実行可能なコードを制限。ツール自体を無効化するには、MCPツール設定UIのツールon/offトグルを使用してください。
-
-  - **Level 1 - Restricted（制限付き）**【推奨設定】
-    - 基本的に全てのUnity APIと.NET標準ライブラリが利用可能
-    - ユーザー定義アセンブリ（Assembly-CSharp等）も利用可能
-    - セキュリティ上危険な操作のみをピンポイントでブロック：
-      - **ファイル削除系**: `File.Delete`, `Directory.Delete`, `FileUtil.DeleteFileOrDirectory`
-      - **ファイル書き込み系**: `File.WriteAllText`, `File.WriteAllBytes`, `File.Replace`
-      - **ネットワーク通信**: `HttpClient`, `WebClient`, `WebRequest`, `Socket`, `TcpClient`全般
-      - **プロセス実行**: `Process.Start`, `Process.Kill`
-      - **動的コード実行**: `Assembly.Load*`, `Type.InvokeMember`, `Activator.CreateComInstanceFrom`
-      - **スレッド操作**: `Thread`, `Task`の直接操作
-      - **レジストリ操作**: `Microsoft.Win32`名前空間全般
-    - 安全な操作は許可：
-      - ファイル読み取り（`File.ReadAllText`, `File.Exists`等）
-      - パス操作（`Path.*`全般）
-      - 情報取得（`Assembly.GetExecutingAssembly`, `Type.GetType`等）
-    - 用途：通常のUnity開発、安全性を確保した自動化
-
-  - **Level 2 - FullAccess（フルアクセス）**
-    - **全てのアセンブリが利用可能（制限なし）**
-    - ⚠️ **警告**: セキュリティリスクがあるため、信頼できるコードのみで使用
-```
-→ execute-dynamic-code (Code: "GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube); return \"Cube created\";")
-→ プロトタイプの迅速な検証、バッチ処理の自動化
-→ セキュリティレベルに応じてUnity APIの利用を制限
-```
-
-
-> [!IMPORTANT]
-> **セキュリティ設定について**
->
-> 一部のツールはセキュリティ上の理由でデフォルトで無効化されています。
-> これらのツールを使用するには、uLoopMCPウィンドウの「Security Settings」で該当する項目を有効化してください：
->
-> **基本セキュリティ設定**:
-> - **Allow Tests Execution**: `run-tests`ツールを有効化
-> - **Allow Third Party Tools**: ユーザーが独自に拡張したtoolを有効化
->
-> **Dynamic Code Security Level** (`execute-dynamic-code`ツール):
-> - **Level 1 (Restricted)**: Unity APIのみ、危険な操作はブロック（推奨）
-> - **Level 2 (FullAccess)**: 全APIが利用可能（注意して使用）
->
-> `execute-dynamic-code`を完全に無効化するには、ツールon/offトグルでオフにしてください。
->
-> 設定変更は即座に反映され、サーバー再起動は不要です。
->
-
-### PlayMode 自動テスト系ツール
-### 11. simulate-mouse-ui - PlayMode UI要素のマウス操作シミュレーション
-PlayMode中のUI要素に対してマウスクリック・長押し・ドラッグをシミュレーションします。EventSystemとExecuteEventsを使ってポインタイベントを直接ディスパッチするため、旧Input System・新Input Systemの両方に依存せず動作します。ゲームロジックがInput Systemを直接読み取る場合（例：`Mouse.current.leftButton.wasPressedThisFrame`）は、`simulate-mouse-input` を使用してください。
-
-6つのアクションに対応: Click、LongPress、Drag（ワンショット）、DragStart/DragMove/DragEnd（分割ドラッグ）
-
-```text
-→ screenshot (CaptureMode: rendering, AnnotateElements: true)
-→ AnnotatedElementsから要素の座標（SimX/SimY）を取得
-→ simulate-mouse-ui (Action: Click, X: 400, Y: 300)
-→ simulate-mouse-ui (Action: LongPress, X: 400, Y: 300, Duration: 5.0)
-→ simulate-mouse-ui (Action: Drag, FromX: 100, FromY: 500, X: 400, Y: 300)
-→ simulate-mouse-ui (Action: DragStart, X: 100, Y: 500)
-→ simulate-mouse-ui (Action: DragMove, X: 200, Y: 400, DragSpeed: 300)
-→ simulate-mouse-ui (Action: DragEnd, X: 400, Y: 300)
-```
-https://github.com/user-attachments/assets/c7ee9103-c282-4f90-8b01-64bb17400f3e
-
-### 12. simulate-mouse-input - Input System経由のPlayModeマウス入力シミュレーション
-Input System経由でPlayMode中のマウス入力をシミュレーションします。ボタンクリック、マウスデルタ、スクロールホイールを`Mouse.current`に直接注入します。EventSystemのポインタイベントを発火する`simulate-mouse-ui`と異なり、`Mouse.current`を直接読み取るゲームロジック向けのツールです。このツールは Input System パッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを`Input System Package (New)`または`Both`に設定する必要があります。
-
-5つのアクションに対応: Click、LongPress、MoveDelta、SmoothDelta、Scroll
-
-```text
-→ simulate-mouse-input (Action: Click, X: 400, Y: 300)
-→ simulate-mouse-input (Action: Click, X: 400, Y: 300, Button: Right)
-→ simulate-mouse-input (Action: LongPress, X: 400, Y: 300, Duration: 2.0)
-→ simulate-mouse-input (Action: MoveDelta, DeltaX: 100, DeltaY: 0)
-→ simulate-mouse-input (Action: Scroll, ScrollY: 120)
-→ simulate-mouse-input (Action: SmoothDelta, DeltaX: 300, DeltaY: 0, Duration: 0.5)
-```
-
-### 13. simulate-keyboard - PlayModeでのキーボード入力シミュレーション
-Input System経由でPlayMode中のキーボード入力をシミュレーションします。単発のキータップ、長押し、複数キーの同時押し（例：Shift+Wでスプリント）に対応しています。このツールは Input System パッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要があります。ゲームコードがInput System API（例: `Keyboard.current[Key.W].isPressed`）で入力を読み取っている必要があり、レガシーの `Input.GetKey()` には対応していません。
-
-3つのアクションに対応: Press（ワンショットタップまたは時間指定ホールド）、KeyDown（キーを押し続ける）、KeyUp（押下中のキーを解放）
-
-```text
-→ simulate-keyboard (Action: Press, Key: Space)
-→ simulate-keyboard (Action: Press, Key: W, Duration: 2.0)
-→ simulate-keyboard (Action: KeyDown, Key: LeftShift)
-→ simulate-keyboard (Action: KeyDown, Key: W)
-→ screenshot (CaptureMode: rendering)
-→ simulate-keyboard (Action: KeyUp, Key: W)
-→ simulate-keyboard (Action: KeyUp, Key: LeftShift)
-```
-
-### 14. record-input - PlayMode中の入力記録
-PlayMode中のキーボード・マウス入力をフレーム単位でJSONファイルに記録します。Input Systemのデバイス状態差分によりキー押下、マウス移動、クリック、スクロールイベントをキャプチャします。このツールは Input System パッケージ導入時のみ利用可能です。
-
-```text
-→ record-input (Action: Start)
-→ record-input (Action: Start, Keys: "W,A,S,D,Space")
-→ record-input (Action: Stop)
-→ JSONファイルが .uloop/outputs/InputRecordings/ に保存される
-```
-
-### 15. replay-input - 記録された入力のPlayMode再生
-記録されたキーボード・マウス入力をPlayMode中に再生します。JSON記録を読み込み、Input System経由でフレーム単位で入力を注入します。ループ再生と進捗モニタリングに対応しています。このツールは Input System パッケージ導入時のみ利用可能です。
-
-```text
-→ replay-input (Action: Start)
-→ replay-input (Action: Start, InputPath: "scripts/my-play.json", Loop: true)
-→ replay-input (Action: Status)
-→ replay-input (Action: Stop)
-```
-
-## ツールリファレンス
-
-全ツールの詳細仕様（パラメータ、レスポンス、使用例）については **[TOOL_REFERENCE_ja.md](/Packages/src/TOOL_REFERENCE_ja.md)** を参照してください。
+## PlayMode 自動テスト系ツール
+- `simulate-mouse-ui` - UI要素へのマウス操作シミュレーション（EventSystem経由）
+- `simulate-mouse-input` - Input System経由のマウス入力シミュレーション
+- `simulate-keyboard` - Input System経由のキーボード入力シミュレーション
+- `replay-input` - Recordingsウィンドウで記録した入力のPlayMode再生
 
 ## Unity CLI Loop 拡張ツールの開発
-Unity CLI Loopはコアパッケージへの変更を必要とせず、プロジェクト固有のツールを効率的に開発できます。
-型安全な設計により、信頼性の高いカスタムツールを短時間で実装可能です。
-(AIに依頼すればすぐに作ってくれるはずです✨)
 
-開発した拡張ツールはGitHubで公開し、他のプロジェクトでも再利用できます。公開例は [uLoopMCP-extensions-sample](https://github.com/hatayama/uLoopMCP-extensions-sample) を参照してください。
+コアパッケージに手を入れることなく、プロジェクト固有のカスタムツールを型安全に追加できます。`Skill/SKILL.md` を添えれば、AIエージェントがカスタムツールを自動認識します。
 
-> [!TIP]
-> **AI支援開発向け**: 詳細な実装ガイドが [.claude/rules/mcp-tools.md](/.claude/rules/mcp-tools.md)（ツール開発用）と [.claude/rules/cli.md](/.claude/rules/cli.md)（CLI/Skills開発用）に用意されています。これらのガイドは、Claude Codeが該当ディレクトリで作業する際に自動的に読み込まれます。
-
-> [!IMPORTANT]
-> **セキュリティ設定について**
->
-> プロジェクト固有に開発したツールは、uLoopMCPウィンドウの「Security Settings」で **Allow Third Party Tools** を有効化する必要があります。
-> また、動的コード実行を含むカスタムツールを開発する場合は、**Dynamic Code Security Level**の設定も考慮してください。
-
-<details>
-<summary>実装ガイドを見る</summary>
-
-**ステップ1: スキーマクラスの作成**（パラメータを定義）：
-```csharp
-using System.ComponentModel;
-
-public class MyCustomSchema : BaseToolSchema
-{
-    [Description("パラメータの説明")]
-    public string MyParameter { get; set; } = "default_value";
-
-    [Description("Enumパラメータの例")]
-    public MyEnum EnumParameter { get; set; } = MyEnum.Option1;
-}
-
-public enum MyEnum
-{
-    Option1 = 0,
-    Option2 = 1,
-    Option3 = 2
-}
-```
-
-**ステップ2: レスポンスクラスの作成**（返却データを定義）：
-```csharp
-public class MyCustomResponse : BaseToolResponse
-{
-    public string Result { get; set; }
-    public bool Success { get; set; }
-
-    public MyCustomResponse(string result, bool success)
-    {
-        Result = result;
-        Success = success;
-    }
-
-    // 必須のパラメータなしコンストラクタ
-    public MyCustomResponse() { }
-}
-```
-
-**ステップ3: ツールクラスの作成**：
-```csharp
-using System.Threading;
-using System.Threading.Tasks;
-
-[McpTool(Description = "私のカスタムツールの説明")]  // ← この属性により自動登録されます
-public class MyCustomTool : AbstractUnityTool<MyCustomSchema, MyCustomResponse>
-{
-    public override string ToolName => "my-custom-tool";
-
-    // メインスレッドで実行されます
-    protected override Task<MyCustomResponse> ExecuteAsync(MyCustomSchema parameters, CancellationToken cancellationToken)
-    {
-        // 型安全なパラメータアクセス
-        string param = parameters.MyParameter;
-        MyEnum enumValue = parameters.EnumParameter;
-
-        // 長時間実行される処理の前にキャンセレーションをチェック
-        cancellationToken.ThrowIfCancellationRequested();
-
-        // カスタムロジックをここに実装
-        string result = ProcessCustomLogic(param, enumValue);
-        bool success = !string.IsNullOrEmpty(result);
-
-        // 長時間実行される処理では定期的にキャンセレーションをチェック
-        // cancellationToken.ThrowIfCancellationRequested();
-
-        return Task.FromResult(new MyCustomResponse(result, success));
-    }
-
-    private string ProcessCustomLogic(string input, MyEnum enumValue)
-    {
-        // カスタムロジックを実装
-        return $"Processed '{input}' with enum '{enumValue}'";
-    }
-}
-```
-
-> [!IMPORTANT]
-> **重要事項**：
-> - **スレッドセーフティ**: ツールはUnityのメインスレッドで実行されるため、追加の同期なしにUnity APIを安全に呼び出せます。
-
-[カスタムツールのサンプル](/Assets/Editor/CustomToolSamples)も参考にして下さい。
-
-</details>
-
-### カスタムツール用 Skills
-
-カスタムツールを作成した際、ツールフォルダ内に `Skill/` サブフォルダを作成し、`SKILL.md` ファイルを配置することで、LLMツールがSkillsシステムを通じて自動的にカスタムツールを認識・使用できるようになります。
-
-**仕組み:**
-1. カスタムツールのフォルダ内に `Skill/` サブフォルダを作成
-2. `Skill/` フォルダ内に `SKILL.md` ファイルを配置
-3. `uloop skills install --claude` を実行（バンドル + プロジェクトのSkillsをまとめてインストール）
-4. LLMツールがカスタムSkillを自動認識
-
-**ディレクトリ構造:**
-```
-Assets/Editor/CustomTools/MyTool/
-├── MyTool.cs           # ツール実装
-└── Skill/
-    ├── SKILL.md        # スキル定義（必須）
-    └── references/     # 追加ファイル（オプション）
-        └── usage.md
-```
-
-**SKILL.md のフォーマット:**
-```markdown
----
-name: uloop-my-custom-tool
-description: "ツールの説明と使用タイミング"
----
-
-# uloop my-custom-tool
-
-ツールの詳細ドキュメント...
-```
-
-**スキャン対象**（`Skill/SKILL.md` ファイルを検索）:
-- `Assets/**/Editor/<ToolFolder>/Skill/SKILL.md`
-- `Packages/*/Editor/<ToolFolder>/Skill/SKILL.md`
-- `Library/PackageCache/*/Editor/<ToolFolder>/Skill/SKILL.md`
-
-> [!TIP]
-> - フロントマターに `internal: true` を追加すると、インストール対象から除外されます（内部ツールやデバッグ用ツールに便利）
-> - `Skill/` フォルダ内の追加ファイル（`references/`、`scripts/`、`assets/` など）もインストール時に一緒にコピーされます
-
-完全な例は [HelloWorld サンプル](/Assets/Editor/CustomCommandSamples/HelloWorld/Skill/SKILL.md) を参照してください。
-
-より実践的なサンプルプロジェクトは [uLoopMCP-extensions-sample](https://github.com/hatayama/uLoopMCP-extensions-sample) を参照してください。
+実装手順とSkillsの書き方は **[カスタムツール開発ガイド](Packages/src/Documentation~/custom-tools_ja.md)** を参照してください。
 
 ## その他
 
 ### Unity CLI Loop 関連ファイル
 
-`UserSettings/UnityMcpSettings.json` はユーザー個別のエディタセッション状態を保持するため、常にローカル専用です。
+`UserSettings/UnityCliLoopSettings.json` はユーザー個別のエディタ設定を保持するため、常にローカル専用です。
 
 プロジェクトルートの `.uloop/` ディレクトリには、CLIキャッシュ、ツールレジストリ、ランタイム出力が格納されます。大半はローカル専用ですが、一部のファイルはチーム共有のためにオプションでgit管理できます。
 
 | ファイル | 用途 | git管理 |
 |---------|------|---------|
-| `settings.permissions.json` | チーム共有のセキュリティポリシー（サードパーティツール許可、動的コード実行レベル） | 任意 |
+| `project-runner-pin.json` | グローバルdispatcherが使うproject runnerのバージョン契約 | Yes |
 | `settings.tools.json` | ツールごとの有効・無効設定 | 任意 |
-| `tools.json` | 自動生成されるMCPツールレジストリ | No |
+| `tools.json` | 自動生成されるCLIツールレジストリ | No |
 | `outputs/` | ランタイム出力（テスト結果、スクリーンショット、ヒエラルキーダンプ） | No |
 
 > [!TIP]
@@ -687,12 +416,12 @@ description: "ツールの説明と使用タイミング"
 >
 > ```gitignore
 > **/.uloop/*
-> !**/.uloop/settings.permissions.json
+> !**/.uloop/project-runner-pin.json
 > !**/.uloop/settings.tools.json
 > ```
 >
-> 自動生成ファイルやランタイム出力を無視しつつ、チーム共有の設定ファイルをgit管理できます。
-> `!` の行はチームの方針に合わせて調整してください — 共有不要なファイルの行は削除できます。
+> 自動生成ファイルやランタイム出力を無視しつつ、dispatcherのpinとチーム共有の設定ファイルをgit管理できます。
+> ツールの有効・無効設定を共有しない場合は、`!` の行を削除してください。
 
 ## ライセンス
 MIT License

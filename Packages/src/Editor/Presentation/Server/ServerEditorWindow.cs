@@ -1,0 +1,162 @@
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.UIElements;
+
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Presentation
+{
+    /// <summary>
+    /// Standalone window for server status monitoring and lifecycle control.
+    /// Accessible from Window > Unity CLI Loop > Server.
+    /// </summary>
+    public class ServerEditorWindow : EditorWindow
+    {
+        private const string UXML_RELATIVE_PATH = "Editor/Presentation/Server/ServerEditorWindow.uxml";
+        private const string USS_RELATIVE_PATH = "Editor/Presentation/Server/ServerEditorWindow.uss";
+
+        private ServerStatusSection _serverStatusSection;
+        private ServerControlsSection _serverControlsSection;
+        private volatile bool _needsRepaint;
+        private static UnityCliLoopServerApplicationService RegisteredServerApplicationService;
+
+        [MenuItem("Window/Unity CLI Loop/Server", priority = 2)]
+        public static void ShowWindow()
+        {
+            ServerEditorWindow window = GetWindow<ServerEditorWindow>("Server");
+            window.Show();
+        }
+
+        internal static void InitializeEditorServices(UnityCliLoopServerApplicationService serverApplicationService)
+        {
+            System.Diagnostics.Debug.Assert(
+                serverApplicationService != null,
+                "serverApplicationService must not be null");
+
+            RegisteredServerApplicationService = serverApplicationService
+                ?? throw new System.ArgumentNullException(nameof(serverApplicationService));
+        }
+
+        private static UnityCliLoopServerApplicationService GetServerApplicationService()
+        {
+            if (RegisteredServerApplicationService == null)
+            {
+                throw new System.InvalidOperationException(
+                    "Unity CLI Loop server application service is not registered.");
+            }
+
+            return RegisteredServerApplicationService;
+        }
+
+        private void OnEnable()
+        {
+            EditorApplication.update += OnEditorUpdate;
+            GetServerApplicationService().AddServerStateChangedHandler(OnServerStateChanged);
+        }
+
+        private void OnDisable()
+        {
+            EditorApplication.update -= OnEditorUpdate;
+            GetServerApplicationService().RemoveServerStateChangedHandler(OnServerStateChanged);
+        }
+
+        private void CreateGUI()
+        {
+            LoadLayout();
+            InitializeSections();
+            RefreshUI();
+        }
+
+        private void OnFocus()
+        {
+            RefreshUI();
+        }
+
+        private void LoadLayout()
+        {
+            string uxmlPath = $"{UnityCliLoopConstants.PackageAssetPath}/{UXML_RELATIVE_PATH}";
+            VisualTreeAsset visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(uxmlPath);
+            Debug.Assert(visualTree != null, $"UXML not found at {uxmlPath}");
+            visualTree.CloneTree(rootVisualElement);
+
+            string ussPath = $"{UnityCliLoopConstants.PackageAssetPath}/{USS_RELATIVE_PATH}";
+            StyleSheet styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(ussPath);
+            Debug.Assert(styleSheet != null, $"USS not found at {ussPath}");
+            rootVisualElement.styleSheets.Add(styleSheet);
+        }
+
+        private void InitializeSections()
+        {
+            _serverStatusSection = new ServerStatusSection(rootVisualElement);
+
+            _serverControlsSection = new ServerControlsSection(rootVisualElement);
+            _serverControlsSection.OnToggleServer += ToggleServer;
+        }
+
+        private void RefreshUI()
+        {
+            if (_serverStatusSection == null)
+            {
+                return;
+            }
+
+            ServerStatusData statusData = CreateServerStatusData();
+            _serverStatusSection.Update(statusData);
+
+            ServerControlsData controlsData = CreateServerControlsData();
+            _serverControlsSection.Update(controlsData);
+        }
+
+        private ServerStatusData CreateServerStatusData()
+        {
+            bool isRunning = GetServerApplicationService().IsServerRunning;
+            string status = isRunning ? "Running" : "Stopped";
+            Color statusColor = isRunning ? Color.green : Color.red;
+
+            return new ServerStatusData(isRunning, status, statusColor);
+        }
+
+        private ServerControlsData CreateServerControlsData()
+        {
+            bool isRunning = GetServerApplicationService().IsServerRunning;
+            return new ServerControlsData(isRunning);
+        }
+
+        private void ToggleServer()
+        {
+            UnityCliLoopServerApplicationService serverApplicationService = GetServerApplicationService();
+            if (serverApplicationService.IsServerRunning)
+            {
+                serverApplicationService.StopServer();
+            }
+            else
+            {
+                StartServer();
+            }
+
+            RefreshUI();
+        }
+
+        private void StartServer()
+        {
+            GetServerApplicationService().StartServer();
+        }
+
+        private void OnServerStateChanged()
+        {
+            _needsRepaint = true;
+        }
+
+        private void OnEditorUpdate()
+        {
+            if (!_needsRepaint)
+            {
+                return;
+            }
+
+            _needsRepaint = false;
+            RefreshUI();
+        }
+    }
+}

@@ -2,18 +2,38 @@ using System.Collections;
 using NUnit.Framework;
 using UnityEngine.UIElements;
 
-namespace io.github.hatayama.uLoopMCP
+using io.github.hatayama.UnityCliLoop.Presentation;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Tool Settings Section behavior.
+    /// </summary>
     [TestFixture]
     public class ToolSettingsSectionTests
     {
         private const int ToolListRowHeight = 24;
+        private const int ToolDetailsRowHeight = 132;
+
+        [Test]
+        public void Constructor_CreatesSelectableToolSettingsInfoText()
+        {
+            // Tests that the tool settings info text can be selected without being edited.
+            VisualElement root = CreateRootElement();
+            _ = new ToolSettingsSection(root);
+
+            TextField infoText = root.Q<TextField>("tool-settings-info-text");
+            Assert.IsNotNull(infoText);
+            Assert.AreEqual("Enable or disable tools. Disabled tools are hidden from AI agents.", infoText.value);
+            Assert.IsTrue(infoText.isReadOnly);
+            Assert.IsTrue(infoText.multiline);
+        }
 
         [Test]
         public void Update_ClosedWithoutToolListData_DoesNotCreateToolRows()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
                 compileEnabled: true,
                 includeGetLogs: true,
@@ -32,7 +52,7 @@ namespace io.github.hatayama.uLoopMCP
         public void Update_OpenWithoutToolListData_ShowsLoadingWithoutToolRows()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
                 compileEnabled: true,
                 includeGetLogs: true,
@@ -54,7 +74,7 @@ namespace io.github.hatayama.uLoopMCP
         public void Update_LoadedData_PopulatesVirtualizedRows()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData data = CreateData(
                 compileEnabled: true,
                 includeGetLogs: true,
@@ -72,10 +92,138 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         [Test]
+        public void Update_LoadedData_ShowsDetailsButtonWhenDescriptionExists()
+        {
+            // Tests that rows with skill descriptions expose the details button.
+            VisualElement root = CreateRootElement();
+            ToolSettingsSection section = new(root);
+            ToolSettingsSectionData data = CreateData(
+                compileEnabled: true,
+                includeGetLogs: false,
+                compileDescription: "Compile description");
+
+            section.Update(data);
+
+            VisualElement row = BindToolListRow(root, 1);
+            Button detailsButton = row.Q<Button>("tool-list-row-details-button");
+            Assert.IsNotNull(detailsButton);
+            Assert.AreEqual(DisplayStyle.Flex, detailsButton.style.display.value);
+            Assert.AreEqual("Show Details", detailsButton.text);
+        }
+
+        [Test]
+        public void Update_LoadedData_HidesDetailsButtonWhenDescriptionMissing()
+        {
+            // Tests that rows without skill descriptions do not show an inert details button.
+            VisualElement root = CreateRootElement();
+            ToolSettingsSection section = new(root);
+            ToolSettingsSectionData data = CreateData(
+                compileEnabled: true,
+                includeGetLogs: false);
+
+            section.Update(data);
+
+            VisualElement row = BindToolListRow(root, 1);
+            Button detailsButton = row.Q<Button>("tool-list-row-details-button");
+            Assert.IsNotNull(detailsButton);
+            Assert.AreEqual(DisplayStyle.None, detailsButton.style.display.value);
+        }
+
+        [Test]
+        public void ToggleDetails_WhenSameToolSelectedTwice_ShowsThenHidesDetailsRow()
+        {
+            // Tests that the details button opens and closes a details row below the tool.
+            VisualElement root = CreateRootElement();
+            ToolSettingsSection section = new(root);
+            ToolSettingsSectionData data = CreateData(
+                compileEnabled: true,
+                includeGetLogs: false,
+                compileDescription: "Compile description");
+
+            section.Update(data);
+            IList items = GetToolListItems(root);
+            ListView listView = GetToolListView(root);
+
+            section.ToggleToolDetailsForTool("compile");
+
+            VisualElement toolRow = BindToolListRow(root, 1);
+            VisualElement detailsRow = BindToolListRow(root, 2);
+            Button detailsButton = toolRow.Q<Button>("tool-list-row-details-button");
+            Assert.AreEqual(3, items.Count);
+            Assert.AreEqual("Hide Details", detailsButton.text);
+            Assert.IsTrue(detailsButton.ClassListContains("unity-cli-loop-tool-toggle-row__details-button--selected"));
+            TextField detailsBody = detailsRow.Q<TextField>("tool-list-row-details-body");
+            Assert.AreEqual("Compile description", detailsBody.value);
+            Assert.IsTrue(detailsBody.isReadOnly);
+            Assert.AreEqual((2 * ToolListRowHeight) + ToolDetailsRowHeight + 2, listView.style.height.value.value);
+
+            section.ToggleToolDetailsForTool("compile");
+            listView.bindItem(toolRow, 1);
+
+            Assert.AreEqual(2, items.Count);
+            Assert.AreEqual("Show Details", toolRow.Q<Button>("tool-list-row-details-button").text);
+        }
+
+        [Test]
+        public void ToggleDetails_WhenShown_AddsDetailsRowBelowTool()
+        {
+            // Tests that details appear as an expanded row immediately below the selected tool.
+            VisualElement root = CreateRootElement();
+            ToolSettingsSection section = new(root);
+            ToolSettingsSectionData data = CreateData(
+                compileEnabled: true,
+                includeGetLogs: true,
+                compileDescription: "Compile description");
+
+            section.Update(data);
+            section.ToggleToolDetailsForTool("compile");
+
+            VisualElement detailsRow = BindToolListRow(root, 2);
+            VisualElement followingToolRow = BindToolListRow(root, 3);
+
+            TextField detailsBody = detailsRow.Q<TextField>("tool-list-row-details-body");
+            Assert.AreEqual("Compile description", detailsBody.value);
+            Assert.IsTrue(detailsBody.isReadOnly);
+            Assert.AreEqual("get-logs", followingToolRow.Q<Label>("tool-list-row-label").text);
+        }
+
+        [Test]
+        public void ToggleDetails_WhenAnotherToolIsSelected_SwitchesDetailsRow()
+        {
+            // Tests that selecting another details button moves the expanded details row.
+            VisualElement root = CreateRootElement();
+            ToolSettingsSection section = new(root);
+            ToolSettingsSectionData data = CreateData(
+                compileEnabled: true,
+                includeGetLogs: true,
+                compileDescription: "Compile description",
+                getLogsDescription: "Logs description");
+
+            section.Update(data);
+            ListView listView = GetToolListView(root);
+
+            section.ToggleToolDetailsForTool("compile");
+            section.ToggleToolDetailsForTool("get-logs");
+            VisualElement compileRow = BindToolListRow(root, 1);
+            VisualElement getLogsRow = BindToolListRow(root, 2);
+            VisualElement detailsRow = BindToolListRow(root, 3);
+            listView.bindItem(compileRow, 1);
+            listView.bindItem(getLogsRow, 2);
+
+            TextField detailsBody = detailsRow.Q<TextField>("tool-list-row-details-body");
+            Assert.AreEqual("Logs description", detailsBody.value);
+            Assert.IsTrue(detailsBody.isReadOnly);
+            Assert.AreEqual("Show Details", compileRow.Q<Button>("tool-list-row-details-button").text);
+            Assert.AreEqual("Hide Details", getLogsRow.Q<Button>("tool-list-row-details-button").text);
+            Assert.IsFalse(compileRow.Q<Button>("tool-list-row-details-button").ClassListContains("unity-cli-loop-tool-toggle-row__details-button--selected"));
+            Assert.IsTrue(getLogsRow.Q<Button>("tool-list-row-details-button").ClassListContains("unity-cli-loop-tool-toggle-row__details-button--selected"));
+        }
+
+        [Test]
         public void Update_HeaderOnlyRefreshAfterLoad_PreservesLoadedRows()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData loadedData = CreateData(
                 compileEnabled: true,
                 includeGetLogs: false,
@@ -83,7 +231,6 @@ namespace io.github.hatayama.uLoopMCP
             ToolSettingsSectionData headerOnlyData = CreateData(
                 compileEnabled: false,
                 includeGetLogs: false,
-                allowThirdPartyTools: false,
                 includeThirdPartyTool: true,
                 hasToolListData: false);
 
@@ -100,7 +247,7 @@ namespace io.github.hatayama.uLoopMCP
         public void Update_ClosedAfterLoad_ReleasesLoadedRows()
         {
             VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
+            ToolSettingsSection section = new(root);
             ToolSettingsSectionData loadedData = CreateData(
                 compileEnabled: true,
                 includeGetLogs: false,
@@ -120,97 +267,31 @@ namespace io.github.hatayama.uLoopMCP
             Assert.AreEqual(DisplayStyle.None, listView.style.display.value);
         }
 
-        [Test]
-        public void Update_RestrictedLevel_MarksRestrictedButtonAsActive()
-        {
-            VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
-            ToolSettingsSectionData data = CreateData(
-                compileEnabled: true,
-                includeGetLogs: false,
-                dynamicCodeSecurityLevel: DynamicCodeSecurityLevel.Restricted);
-
-            section.Update(data);
-
-            Button restrictedButton = root.Q<Button>("security-level-restricted-button");
-            Button fullAccessButton = root.Q<Button>("security-level-full-access-button");
-
-            Assert.IsTrue(restrictedButton.ClassListContains("mcp-segmented-control__button--active"));
-            Assert.IsFalse(fullAccessButton.ClassListContains("mcp-segmented-control__button--active"));
-        }
-
-        [Test]
-        public void Update_FullAccessLevel_MarksFullAccessButtonAsWarningActive()
-        {
-            VisualElement root = CreateRootElement();
-            ToolSettingsSection section = new ToolSettingsSection(root);
-            ToolSettingsSectionData data = CreateData(
-                compileEnabled: true,
-                includeGetLogs: false,
-                dynamicCodeSecurityLevel: DynamicCodeSecurityLevel.FullAccess);
-
-            section.Update(data);
-
-            Button restrictedButton = root.Q<Button>("security-level-restricted-button");
-            Button fullAccessButton = root.Q<Button>("security-level-full-access-button");
-            Label description = root.Q<Label>("security-level-description");
-
-            Assert.IsFalse(restrictedButton.ClassListContains("mcp-segmented-control__button--active"));
-            Assert.IsTrue(fullAccessButton.ClassListContains("mcp-segmented-control__button--active"));
-            Assert.IsTrue(fullAccessButton.ClassListContains("mcp-segmented-control__button--warning-active"));
-            Assert.IsTrue(description.ClassListContains("mcp-security-level-description--warning"));
-        }
-
         private static VisualElement CreateRootElement()
         {
-            VisualElement root = new VisualElement();
-            Foldout foldout = new Foldout
+            VisualElement root = new();
+            VisualElement windowRoot = new()
+            {
+                name = "window-root"
+            };
+            Foldout foldout = new()
             {
                 name = "tool-settings-foldout"
             };
-            VisualElement container = new VisualElement
+            VisualElement container = new()
             {
                 name = "tool-list-container"
             };
 
-            Label cliReferenceLink = new Label
-            {
-                name = "cli-reference-link"
-            };
-            Toggle allowThirdPartyToggle = new Toggle
-            {
-                name = "allow-third-party-toggle"
-            };
-            Label allowThirdPartyLabel = new Label
-            {
-                name = "allow-third-party-label"
-            };
-            Button securityLevelRestrictedButton = new Button
-            {
-                name = "security-level-restricted-button"
-            };
-            Button securityLevelFullAccessButton = new Button
-            {
-                name = "security-level-full-access-button"
-            };
-            Label securityLevelDescription = new Label
-            {
-                name = "security-level-description"
-            };
-            VisualElement toolSettingsInfoContainer = new VisualElement
+            VisualElement toolSettingsInfoContainer = new()
             {
                 name = "tool-settings-info-container"
             };
 
-            foldout.Add(allowThirdPartyToggle);
-            foldout.Add(allowThirdPartyLabel);
-            foldout.Add(securityLevelRestrictedButton);
-            foldout.Add(securityLevelFullAccessButton);
-            foldout.Add(securityLevelDescription);
             foldout.Add(toolSettingsInfoContainer);
             foldout.Add(container);
-            root.Add(foldout);
-            root.Add(cliReferenceLink);
+            windowRoot.Add(foldout);
+            root.Add(windowRoot);
             return root;
         }
 
@@ -218,35 +299,36 @@ namespace io.github.hatayama.uLoopMCP
             bool compileEnabled,
             bool includeGetLogs,
             bool showToolSettings = true,
-            bool allowThirdPartyTools = true,
             bool includeThirdPartyTool = false,
             bool hasToolListData = true,
-            DynamicCodeSecurityLevel dynamicCodeSecurityLevel = DynamicCodeSecurityLevel.Restricted)
+            string compileDescription = "",
+            string getLogsDescription = "",
+            string thirdPartyDescription = "")
         {
-            ToolToggleItem compile = new ToolToggleItem(
+            ToolToggleItem compile = new(
                 toolName: "compile",
-                description: "Compile project",
                 isEnabled: compileEnabled,
-                isThirdParty: false);
+                isThirdParty: false,
+                skillDescription: compileDescription);
             ToolToggleItem[] thirdPartyTools = includeThirdPartyTool
                 ? new[]
                 {
                     new ToolToggleItem(
                         toolName: "sample-third-party",
-                        description: "Third-party sample",
                         isEnabled: true,
-                        isThirdParty: true)
+                        isThirdParty: true,
+                        skillDescription: thirdPartyDescription)
                 }
                 : System.Array.Empty<ToolToggleItem>();
 
             ToolToggleItem[] builtInTools;
             if (includeGetLogs)
             {
-                ToolToggleItem getLogs = new ToolToggleItem(
+                ToolToggleItem getLogs = new(
                     toolName: "get-logs",
-                    description: "Read Unity logs",
                     isEnabled: true,
-                    isThirdParty: false);
+                    isThirdParty: false,
+                    skillDescription: getLogsDescription);
                 builtInTools = new[] { compile, getLogs };
             }
             else
@@ -256,8 +338,6 @@ namespace io.github.hatayama.uLoopMCP
 
             return new ToolSettingsSectionData(
                 showToolSettings: showToolSettings,
-                allowThirdPartyTools: allowThirdPartyTools,
-                dynamicCodeSecurityLevel: dynamicCodeSecurityLevel,
                 builtInTools: builtInTools,
                 thirdPartyTools: thirdPartyTools,
                 isRegistryAvailable: true,
@@ -269,6 +349,14 @@ namespace io.github.hatayama.uLoopMCP
             ListView listView = GetToolListView(root);
             Assert.IsNotNull(listView.itemsSource);
             return listView.itemsSource;
+        }
+
+        private static VisualElement BindToolListRow(VisualElement root, int index)
+        {
+            ListView listView = GetToolListView(root);
+            VisualElement row = listView.makeItem();
+            listView.bindItem(row, index);
+            return row;
         }
 
         private static ListView GetToolListView(VisualElement root)

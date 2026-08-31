@@ -1,0 +1,14 @@
+{
+    "name": "UnityCLILoop.PausePoints.Runtime",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Runtime",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

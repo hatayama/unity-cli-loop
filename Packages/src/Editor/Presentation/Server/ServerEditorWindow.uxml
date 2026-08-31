@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement name="server-section" class="unity-cli-loop-section unity-cli-loop-section--box">
+        <ui:VisualElement class="unity-cli-loop-server-status">
+            <ui:VisualElement name="server-status-indicator" class="unity-cli-loop-server-status__indicator" />
+            <ui:Label name="status-value" text="Stopped" class="unity-cli-loop-server-status__text unity-cli-loop-server-status__text--stopped" />
+            <ui:VisualElement class="unity-cli-loop-server-status__spacer" />
+        </ui:VisualElement>
+
+        <ui:VisualElement class="unity-cli-loop-server-controls">
+            <ui:Button name="toggle-server-button" text="Start Server" class="unity-cli-loop-button unity-cli-loop-button--compact unity-cli-loop-button--start" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

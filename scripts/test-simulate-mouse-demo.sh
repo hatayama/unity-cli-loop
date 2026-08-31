@@ -1,76 +1,472 @@
 #!/bin/sh
-# SimulateMouse demo scenario: clicks buttons, long-presses, drags boxes,
-# split-drags through waypoints, and operates the virtual pad.
-# Requires: Unity running with SimulateMouseDemoScene in PlayMode.
+# E2E verification for SimulateMouseDemoScene using the uloop CLI.
 
-set -e
+set -eu
+
+SCENE_PATH="Assets/Scenes/SimulateMouseDemoScene.unity"
+TMP_DIR="${TMPDIR:-/tmp}/unity-cli-loop-simulate-mouse"
+ELEMENTS_JSON="$TMP_DIR/simulate-mouse-elements.json"
+ORIGINAL_GAME_VIEW_WIDTH=""
+ORIGINAL_GAME_VIEW_HEIGHT=""
+PROJECT_PATH=""
+ULOOP_PATH="${ULOOP_BIN:-uloop}"
+
+fail() {
+    printf 'ERROR: %s\n' "$1" >&2
+    exit 1
+}
 
 cleanup() {
-    uloop control-play-mode --action Stop 2>/dev/null
+    run_uloop control-play-mode --action Stop >/dev/null 2>&1 || true
+    if [ -n "${ORIGINAL_GAME_VIEW_WIDTH:-}" ] && [ -n "${ORIGINAL_GAME_VIEW_HEIGHT:-}" ]; then
+        restore_game_view_size "$ORIGINAL_GAME_VIEW_WIDTH" "$ORIGINAL_GAME_VIEW_HEIGHT" >/dev/null 2>&1 || true
+    fi
 }
 trap cleanup EXIT INT TERM
 
-# --- Coordinates (SimulateMouseDemoScene at 16:9 / 1584x891) ---
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --project-path)
+            [ "$#" -ge 2 ] || fail "--project-path requires a value"
+            PROJECT_PATH=$2
+            shift 2
+            ;;
+        --uloop-path)
+            [ "$#" -ge 2 ] || fail "--uloop-path requires a value"
+            ULOOP_PATH=$2
+            shift 2
+            ;;
+        -h|--help)
+            printf 'Usage: sh scripts/test-simulate-mouse-demo.sh [--project-path <path>] [--uloop-path <path>]\n'
+            exit 0
+            ;;
+        *)
+            fail "unknown option: $1"
+            ;;
+    esac
+done
 
-CB1_X=274  CB1_Y=210
-CB2_X=538  CB2_Y=210
-LP_X=861   LP_Y=210
-DZ_X=564   DZ_Y=446
-RED_X=399  RED_Y=770
-GREEN_X=564 GREEN_Y=770
-BLUE_X=729  BLUE_Y=770
-PAD_X=1259  PAD_Y=554
+require_jq() {
+    command -v jq >/dev/null 2>&1 || fail "jq is required to parse uloop JSON responses"
+}
 
-# --- Start PlayMode ---
+run_uloop() {
+    if [ -n "$PROJECT_PATH" ]; then
+        "$ULOOP_PATH" --project-path "$PROJECT_PATH" "$@"
+        return
+    fi
 
-echo "=== SimulateMouse Demo ==="
-uloop control-play-mode --action Play
-sleep 2
+    "$ULOOP_PATH" "$@"
+}
 
-# --- Phase 1: Button clicks (4x alternating) ---
+run_uloop_json() {
+    if ! output=$(run_uloop "$@" 2>&1); then
+        printf '%s\n' "$output" >&2
+        fail "uloop $* failed"
+    fi
 
-echo "[1/5] Button clicks"
-uloop simulate-mouse-ui --action Click --x $CB1_X --y $CB1_Y && sleep 0.3
-uloop simulate-mouse-ui --action Click --x $CB2_X --y $CB2_Y && sleep 0.3
-uloop simulate-mouse-ui --action Click --x $CB1_X --y $CB1_Y && sleep 0.3
-uloop simulate-mouse-ui --action Click --x $CB2_X --y $CB2_Y && sleep 0.3
+    printf '%s\n' "$output"
+}
 
-# --- Phase 1.5: LongPress (3 seconds) ---
+assert_json_success() {
+    json=$1
+    context=$2
 
-echo "[2/5] LongPress"
-uloop simulate-mouse-ui --action LongPress --x $LP_X --y $LP_Y --duration 3.0 && sleep 0.3
+    printf '%s\n' "$json" | jq -e '.Success == true' >/dev/null \
+        || fail "$context failed: $(printf '%s\n' "$json" | jq -r '.ErrorMessage // .Message // .Error // "unknown error"')"
+}
 
-# --- Phase 2: One-shot drag RedBox to DropZone top ---
+assert_text_equals() {
+    actual=$1
+    expected=$2
+    context=$3
 
-echo "[3/5] Drag RedBox"
-uloop simulate-mouse-ui --action Drag --from-x $RED_X --from-y $RED_Y --x $RED_X --y $((DZ_Y - 80)) --drag-speed 700 && sleep 0.3
+    [ "$actual" = "$expected" ] || fail "$context: expected '$expected', got '$actual'"
+}
 
-# --- Phase 3: Split drag GreenBox through waypoints ---
+wait_unity_ready() {
+    attempt=0
+    while [ "$attempt" -lt 15 ]; do
+        if run_uloop get-logs --max-count 1 >/dev/null 2>&1; then
+            return
+        fi
 
-echo "[4/5] Split drag GreenBox"
-uloop simulate-mouse-ui --action DragStart --x $GREEN_X --y $GREEN_Y && sleep 0.3
-uloop simulate-mouse-ui --action DragMove --x $((DZ_X + 150)) --y $((GREEN_Y - 50)) --drag-speed 400 && sleep 0.3
-uloop simulate-mouse-ui --action DragMove --x $((DZ_X - 150)) --y $((DZ_Y + 50)) --drag-speed 400 && sleep 0.3
-uloop simulate-mouse-ui --action DragMove --x $DZ_X --y $((DZ_Y - 80)) --drag-speed 400 && sleep 0.3
-uloop simulate-mouse-ui --action DragEnd --x $DZ_X --y $DZ_Y --drag-speed 400 && sleep 0.3
+        attempt=$((attempt + 1))
+        sleep 2
+    done
 
-# --- Phase 4: One-shot drag BlueBox to DropZone bottom ---
+    fail "Unity did not respond to uloop"
+}
 
-echo "[4.5/5] Drag BlueBox"
-uloop simulate-mouse-ui --action Drag --from-x $BLUE_X --from-y $BLUE_Y --x $BLUE_X --y $((DZ_Y + 80)) --drag-speed 700 && sleep 0.3
+wait_play_mode() {
+    attempt=0
+    while [ "$attempt" -lt 20 ]; do
+        json=$(run_uloop_json execute-dynamic-code --code 'using UnityEngine; return Application.isPlaying;')
+        if printf '%s\n' "$json" | jq -e '.Success == true and .Result == "True"' >/dev/null; then
+            return
+        fi
 
-# --- Phase 5: Virtual Pad (8 directions) ---
+        attempt=$((attempt + 1))
+        sleep 1
+    done
 
-echo "[5/5] Virtual Pad"
-uloop simulate-mouse-ui --action DragStart --x $PAD_X --y $PAD_Y && sleep 0.3
-uloop simulate-mouse-ui --action DragMove --x $((PAD_X + 60)) --y $((PAD_Y - 60)) --drag-speed 300 && sleep 0.4
-uloop simulate-mouse-ui --action DragMove --x $((PAD_X - 70)) --y $((PAD_Y + 50)) --drag-speed 300 && sleep 0.4
-uloop simulate-mouse-ui --action DragMove --x $PAD_X --y $((PAD_Y - 75)) --drag-speed 300 && sleep 0.4
-uloop simulate-mouse-ui --action DragMove --x $((PAD_X + 80)) --y $PAD_Y --drag-speed 300 && sleep 0.4
-uloop simulate-mouse-ui --action DragMove --x $((PAD_X + 50)) --y $((PAD_Y + 60)) --drag-speed 300 && sleep 0.4
-uloop simulate-mouse-ui --action DragMove --x $((PAD_X - 80)) --y $PAD_Y --drag-speed 300 && sleep 0.4
-uloop simulate-mouse-ui --action DragMove --x $((PAD_X - 55)) --y $((PAD_Y - 65)) --drag-speed 300 && sleep 0.4
-uloop simulate-mouse-ui --action DragMove --x $PAD_X --y $((PAD_Y + 75)) --drag-speed 300 && sleep 0.4
-uloop simulate-mouse-ui --action DragEnd --x $PAD_X --y $PAD_Y --drag-speed 300
+    fail "Unity did not enter PlayMode"
+}
 
-echo "=== SimulateMouse Demo Complete! ==="
+initialize_demo_scene() {
+    run_uloop control-play-mode --action Stop >/dev/null 2>&1 || true
+
+    code="
+using UnityEditor.SceneManagement;
+using UnityEngine.SceneManagement;
+string scenePath = \"$SCENE_PATH\";
+if (SceneManager.GetActiveScene().path != scenePath)
+{
+    EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+}
+return SceneManager.GetActiveScene().path;
+"
+
+    json=$(run_uloop_json execute-dynamic-code --code "$code")
+    assert_json_success "$json" "Load demo scene"
+    scene=$(printf '%s\n' "$json" | jq -r '.Result')
+    assert_text_equals "$scene" "$SCENE_PATH" "Active scene"
+}
+
+select_full_hd_game_view() {
+    json=$(run_uloop_json set-game-view-size --width 1920 --height 1080)
+    assert_json_success "$json" "Set Full HD Game View"
+    ORIGINAL_GAME_VIEW_WIDTH=$(printf '%s\n' "$json" | jq -r '.PreviousWidth')
+    ORIGINAL_GAME_VIEW_HEIGHT=$(printf '%s\n' "$json" | jq -r '.PreviousHeight')
+    current_width=$(printf '%s\n' "$json" | jq -r '.CurrentWidth')
+    current_height=$(printf '%s\n' "$json" | jq -r '.CurrentHeight')
+    assert_text_equals "$current_width" "1920" "Game View width"
+    assert_text_equals "$current_height" "1080" "Game View height"
+    printf '    %sx%s (previous: %sx%s)\n' \
+        "$current_width" "$current_height" \
+        "$ORIGINAL_GAME_VIEW_WIDTH" "$ORIGINAL_GAME_VIEW_HEIGHT"
+    sleep 1
+}
+
+restore_game_view_size() {
+    original_width=$1
+    original_height=$2
+    json=$(run_uloop_json set-game-view-size --width "$original_width" --height "$original_height")
+    assert_json_success "$json" "Restore Game View resolution"
+}
+
+capture_annotated_elements() {
+    run_uloop_json screenshot \
+        --capture-mode rendering \
+        --annotate-elements \
+        --elements-only >"$ELEMENTS_JSON"
+
+    jq -e '.ScreenshotCount == 1 and (.Screenshots[0].AnnotatedElements | length > 0)' "$ELEMENTS_JSON" >/dev/null \
+        || fail "No annotated UI elements were returned"
+}
+
+get_element_json() {
+    name=$1
+    count=$(jq --arg name "$name" '[.Screenshots[0].AnnotatedElements[] | select(.Name == $name)] | length' "$ELEMENTS_JSON")
+    [ "$count" = "1" ] || fail "Expected exactly one annotated element named '$name', found $count"
+
+    jq -c --arg name "$name" '.Screenshots[0].AnnotatedElements[] | select(.Name == $name)' "$ELEMENTS_JSON"
+}
+
+element_field() {
+    element_json=$1
+    field=$2
+    printf '%s\n' "$element_json" | jq -r ".$field"
+}
+
+assert_mouse_response() {
+    json=$1
+    expected_action=$2
+    expected_hit=$3
+
+    printf '%s\n' "$json" | jq -e --arg action "$expected_action" \
+        '.Success == true and .Action == $action' >/dev/null \
+        || fail "$expected_action failed: $(printf '%s\n' "$json" | jq -r '.Message // "unknown error"')"
+
+    if [ -n "$expected_hit" ]; then
+        actual_hit=$(printf '%s\n' "$json" | jq -r '.HitGameObjectName // ""')
+        assert_text_equals "$actual_hit" "$expected_hit" "hitGameObjectName"
+    fi
+}
+
+invoke_click() {
+    name=$1
+    element=$(get_element_json "$name")
+    x=$(element_field "$element" "SimX")
+    y=$(element_field "$element" "SimY")
+    path=$(element_field "$element" "Path")
+
+    json=$(run_uloop_json simulate-mouse-ui \
+        --action Click \
+        --x "$x" \
+        --y "$y" \
+        --bypass-raycast \
+        --target-path "$path")
+    assert_mouse_response "$json" "Click" "$name"
+}
+
+invoke_long_press() {
+    name=$1
+    duration=$2
+    element=$(get_element_json "$name")
+    x=$(element_field "$element" "SimX")
+    y=$(element_field "$element" "SimY")
+    path=$(element_field "$element" "Path")
+
+    json=$(run_uloop_json simulate-mouse-ui \
+        --action LongPress \
+        --x "$x" \
+        --y "$y" \
+        --duration "$duration" \
+        --bypass-raycast \
+        --target-path "$path")
+    assert_mouse_response "$json" "LongPress" "$name"
+}
+
+invoke_drag_to_drop_zone() {
+    name=$1
+    speed=$2
+    element=$(get_element_json "$name")
+    drop_zone=$(get_element_json "DropZone")
+    from_x=$(element_field "$element" "SimX")
+    from_y=$(element_field "$element" "SimY")
+    to_x=$(element_field "$drop_zone" "SimX")
+    to_y=$(element_field "$drop_zone" "SimY")
+    target_path=$(element_field "$element" "Path")
+    drop_path=$(element_field "$drop_zone" "Path")
+
+    json=$(run_uloop_json simulate-mouse-ui \
+        --action Drag \
+        --from-x "$from_x" \
+        --from-y "$from_y" \
+        --x "$to_x" \
+        --y "$to_y" \
+        --drag-speed "$speed" \
+        --bypass-raycast \
+        --target-path "$target_path" \
+        --drop-target-path "$drop_path")
+    assert_mouse_response "$json" "Drag" "$name"
+}
+
+invoke_drag_start() {
+    name=$1
+    element=$(get_element_json "$name")
+    x=$(element_field "$element" "SimX")
+    y=$(element_field "$element" "SimY")
+    path=$(element_field "$element" "Path")
+
+    json=$(run_uloop_json simulate-mouse-ui \
+        --action DragStart \
+        --x "$x" \
+        --y "$y" \
+        --drag-speed 700 \
+        --bypass-raycast \
+        --target-path "$path")
+    assert_mouse_response "$json" "DragStart" "$name"
+}
+
+invoke_drag_move() {
+    x=$1
+    y=$2
+    speed=$3
+    expected_hit=$4
+
+    json=$(run_uloop_json simulate-mouse-ui \
+        --action DragMove \
+        --x "$x" \
+        --y "$y" \
+        --drag-speed "$speed")
+    assert_mouse_response "$json" "DragMove" "$expected_hit"
+}
+
+invoke_drag_end() {
+    x=$1
+    y=$2
+    speed=$3
+    drop_path=$4
+    expected_hit=$5
+
+    json=$(run_uloop_json simulate-mouse-ui \
+        --action DragEnd \
+        --x "$x" \
+        --y "$y" \
+        --drag-speed "$speed" \
+        --drop-target-path "$drop_path")
+    assert_mouse_response "$json" "DragEnd" "$expected_hit"
+}
+
+get_text_from_scene() {
+    object_name=$1
+    code="
+using UnityEngine;
+using UnityEngine.UI;
+GameObject target = GameObject.Find(\"$object_name\");
+if (target == null) { return \"ERROR: $object_name not found\"; }
+Text text = target.GetComponent<Text>();
+if (text == null) { return \"ERROR: $object_name has no Text component\"; }
+return text.text;
+"
+
+    json=$(run_uloop_json execute-dynamic-code --code "$code")
+    assert_json_success "$json" "Read text from $object_name"
+    printf '%s\n' "$json" | jq -r '.Result'
+}
+
+get_long_press_button_text() {
+    code='
+using UnityEngine;
+using UnityEngine.UI;
+GameObject target = GameObject.Find("LongPressButton");
+if (target == null) { return "ERROR: LongPressButton not found"; }
+Text text = target.GetComponentInChildren<Text>();
+if (text == null) { return "ERROR: LongPressButton label not found"; }
+return text.text;
+'
+
+    json=$(run_uloop_json execute-dynamic-code --code "$code")
+    assert_json_success "$json" "Read LongPressButton text"
+    printf '%s\n' "$json" | jq -r '.Result'
+}
+
+get_drop_zone_status() {
+    code='
+using UnityEngine;
+GameObject target = GameObject.Find("DropZone");
+if (target == null) { return "ERROR: DropZone not found"; }
+DropZone dropZone = target.GetComponent<DropZone>();
+if (dropZone == null) { return "ERROR: DropZone component not found"; }
+return dropZone.StatusMessage;
+'
+
+    json=$(run_uloop_json execute-dynamic-code --code "$code")
+    assert_json_success "$json" "Read DropZone status"
+    printf '%s\n' "$json" | jq -r '.Result'
+}
+
+get_virtual_pad_state() {
+    code='
+using UnityEngine;
+GameObject target = GameObject.Find("VirtualPadBackground");
+if (target == null) { return "ERROR: VirtualPadBackground not found"; }
+DemoVirtualPad pad = target.GetComponent<DemoVirtualPad>();
+if (pad == null) { return "ERROR: DemoVirtualPad component not found"; }
+if (Mathf.Abs(pad.Direction.x) < 0.001f && Mathf.Abs(pad.Direction.y) < 0.001f) { return "Zero"; }
+return pad.Direction.ToString("F3");
+'
+
+    json=$(run_uloop_json execute-dynamic-code --code "$code")
+    assert_json_success "$json" "Read VirtualPad state"
+    printf '%s\n' "$json" | jq -r '.Result'
+}
+
+exercise_virtual_pad() {
+    virtual_pad=$(get_element_json "VirtualPadBackground")
+    pad_x=$(element_field "$virtual_pad" "SimX")
+    pad_y=$(element_field "$virtual_pad" "SimY")
+    pad_width=$(printf '%s\n' "$virtual_pad" | jq -r '.BoundsMaxX - .BoundsMinX')
+    pad_height=$(printf '%s\n' "$virtual_pad" | jq -r '.BoundsMaxY - .BoundsMinY')
+    pad_offset=$(jq -nr --argjson width "$pad_width" --argjson height "$pad_height" '([$width, $height] | min) * 0.28')
+    target_path=$(element_field "$virtual_pad" "Path")
+
+    json=$(run_uloop_json simulate-mouse-ui \
+        --action DragStart \
+        --x "$pad_x" \
+        --y "$pad_y" \
+        --bypass-raycast \
+        --target-path "$target_path")
+    assert_mouse_response "$json" "DragStart" "VirtualPadBackground"
+
+    move_x=$(jq -nr --argjson center "$pad_x" --argjson offset "$pad_offset" '$center + $offset')
+    move_y=$(jq -nr --argjson center "$pad_y" --argjson offset "$pad_offset" '$center - $offset')
+    invoke_drag_move "$move_x" "$move_y" 400 "VirtualPadBackground"
+
+    move_x=$(jq -nr --argjson center "$pad_x" --argjson offset "$pad_offset" '$center - $offset')
+    move_y=$(jq -nr --argjson center "$pad_y" --argjson offset "$pad_offset" '$center + $offset')
+    invoke_drag_move "$move_x" "$move_y" 400 "VirtualPadBackground"
+
+    move_x="$pad_x"
+    move_y=$(jq -nr --argjson center "$pad_y" --argjson offset "$pad_offset" '$center - $offset')
+    invoke_drag_move "$move_x" "$move_y" 400 "VirtualPadBackground"
+
+    move_x=$(jq -nr --argjson center "$pad_x" --argjson offset "$pad_offset" '$center + $offset')
+    move_y="$pad_y"
+    invoke_drag_move "$move_x" "$move_y" 400 "VirtualPadBackground"
+
+    invoke_drag_end "$pad_x" "$pad_y" 400 "" "VirtualPadBackground"
+}
+
+mkdir -p "$TMP_DIR"
+require_jq
+
+printf '\n'
+printf '=========================================\n'
+printf '  SimulateMouse UI E2E Verification\n'
+printf '=========================================\n'
+
+wait_unity_ready
+
+printf '[1/8] Loading SimulateMouse demo scene...\n'
+initialize_demo_scene
+
+printf '[2/8] Starting PlayMode...\n'
+run_uloop_json control-play-mode --action Play >/dev/null
+wait_play_mode
+sleep 1
+
+printf '[3/8] Selecting Full HD Game View resolution...\n'
+select_full_hd_game_view
+
+printf '[4/8] Reading annotated UI coordinates...\n'
+capture_annotated_elements
+
+printf '[5/8] Clicking counter buttons...\n'
+invoke_click "ClickButton1"
+invoke_click "ClickButton2"
+invoke_click "ClickButton1"
+invoke_click "ClickButton2"
+counter_text=$(get_text_from_scene "CounterText")
+assert_text_equals "$counter_text" "Total Clicks: 4" "CounterText"
+
+printf '[6/8] Long-pressing the hold button...\n'
+invoke_long_press "LongPressButton" 3.2
+long_press_text=$(get_long_press_button_text)
+assert_text_equals "$long_press_text" "Activated!" "LongPressButton label"
+
+printf '[7/8] Dragging boxes into the DropZone...\n'
+invoke_drag_to_drop_zone "RedBox" 900
+assert_text_equals "$(get_drop_zone_status)" "Dropped: RedBox" "DropZone after RedBox"
+
+green_box=$(get_element_json "GreenBox")
+drop_zone=$(get_element_json "DropZone")
+green_x=$(element_field "$green_box" "SimX")
+green_y=$(element_field "$green_box" "SimY")
+drop_x=$(element_field "$drop_zone" "SimX")
+drop_y=$(element_field "$drop_zone" "SimY")
+drop_path=$(element_field "$drop_zone" "Path")
+
+invoke_drag_start "GreenBox"
+move_x=$(jq -nr --argjson center "$drop_x" '$center + 150')
+move_y=$(jq -nr --argjson center "$green_y" '$center - 50')
+invoke_drag_move "$move_x" "$move_y" 500 "GreenBox"
+move_x=$(jq -nr --argjson center "$drop_x" '$center - 150')
+move_y=$(jq -nr --argjson center "$drop_y" '$center + 50')
+invoke_drag_move "$move_x" "$move_y" 500 "GreenBox"
+invoke_drag_end "$drop_x" "$drop_y" 500 "$drop_path" "GreenBox"
+assert_text_equals "$(get_drop_zone_status)" "Dropped: GreenBox" "DropZone after GreenBox"
+
+invoke_drag_to_drop_zone "BlueBox" 900
+assert_text_equals "$(get_drop_zone_status)" "Dropped: BlueBox" "DropZone after BlueBox"
+
+printf '[8/8] Exercising the virtual pad...\n'
+exercise_virtual_pad
+assert_text_equals "$(get_virtual_pad_state)" "Zero" "VirtualPad state"
+
+printf '\n'
+printf '=========================================\n'
+printf '  RESULT: PASS\n'
+printf '=========================================\n'

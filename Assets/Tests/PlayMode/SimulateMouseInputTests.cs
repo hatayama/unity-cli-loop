@@ -1,32 +1,47 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
+using System;
 using System.Collections;
 using System.Threading.Tasks;
-using io.github.hatayama.uLoopMCP;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.TestTools;
+using Object = UnityEngine.Object;
 
-namespace Tests.PlayMode
+namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 {
+    /// <summary>
+    /// Test fixture that verifies Simulate Mouse Input behavior.
+    /// </summary>
     public class SimulateMouseInputTests : InputTestFixture
     {
         private SimulateMouseInputTool tool = null!;
         private SimulateMouseInputResponse lastResponse = null!;
         private Mouse mouse = null!;
+        private GameObject mouseObserverGo = null!;
+        private MouseUpdateFramePressObserver mouseUpdateFramePressObserver = null!;
 
         public override void Setup()
         {
             base.Setup();
             tool = new SimulateMouseInputTool();
             mouse = InputSystem.AddDevice<Mouse>();
+            mouseObserverGo = new GameObject("MouseUpdateFramePressObserver");
+            mouseUpdateFramePressObserver = mouseObserverGo.AddComponent<MouseUpdateFramePressObserver>();
         }
 
         public override void TearDown()
         {
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+            InputSystemUpdateHelper.ResetTimeoutsForTests();
+            UloopPausePointRegistry.ResetForTests();
             MouseInputState.ReleaseAllButtons();
+            Object.DestroyImmediate(mouseObserverGo);
             base.TearDown();
         }
 
@@ -35,7 +50,10 @@ namespace Tests.PlayMode
         [UnityTest]
         public IEnumerator Click_Should_SetWasPressedThisFrame()
         {
+            // Verifies that Click is visible to gameplay Update polling through wasPressedThisFrame.
             yield return null;
+
+            mouseUpdateFramePressObserver.ResetCount();
 
             yield return RunTool(new JObject
             {
@@ -47,9 +65,10 @@ namespace Tests.PlayMode
             Assert.IsTrue(lastResponse.Success);
             Assert.AreEqual("Click", lastResponse.Action);
             Assert.AreEqual("Left", lastResponse.Button);
-            AssertCoordinateMetadata(400f, 300f);
+            Assert.Greater(mouseUpdateFramePressObserver.LeftButtonPressedUpdateCount, 0, "Click should be visible to MonoBehaviour.Update via wasPressedThisFrame");
             // After click completes, button should be released
             Assert.IsFalse(mouse.leftButton.isPressed, "Left button should be released after click");
+            AssertCoordinateMetadata(400f, 300f);
         }
 
         [UnityTest]
@@ -88,6 +107,72 @@ namespace Tests.PlayMode
             Assert.IsFalse(mouse.middleButton.isPressed, "Middle button should be released after click");
         }
 
+        [UnityTest]
+        public IEnumerator Click_WhenUnityPausesDuringObservation_Should_CompleteAsPausePointInterruption()
+        {
+            // Verifies that a pause-point pause releases the tool slot instead of leaving the click command busy.
+            yield return null;
+
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+            {
+                ["action"] = MouseInputAction.Click.ToString(),
+                ["x"] = 400,
+                ["y"] = 300,
+                ["duration"] = 1f
+            }, System.Threading.CancellationToken.None);
+
+            yield return new WaitUntil(() => mouse.leftButton.isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the click observation window.");
+
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.AreEqual("Click", lastResponse.Action);
+            Assert.AreEqual("Left", lastResponse.Button);
+            Assert.IsNull(lastResponse.PausePointId);
+            Assert.IsNull(lastResponse.PausePointHitCount);
+            Assert.IsFalse(mouse.leftButton.isPressed, "Pause-point interruption should release the injected mouse button state.");
+            Assert.IsFalse(SimulateMouseInputOverlayState.HasAnyActivity, "Pause-point interruption should clear mouse overlay state.");
+        }
+
+        [UnityTest]
+        public IEnumerator Click_WhenPausePointMarkerHits_Should_ReturnMarkerDetails()
+        {
+            // Verifies marker-caused interruption reports the marker id and hit count.
+            yield return null;
+
+            UloopPausePointRegistry.ConfigureForTests(
+                new FakePausePointPauseController(),
+                () => new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc));
+            UloopPausePointRegistry.Enable("left-click", 30);
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+            {
+                ["action"] = MouseInputAction.Click.ToString(),
+                ["x"] = 400,
+                ["y"] = 300,
+                ["duration"] = 1f
+            }, System.Threading.CancellationToken.None);
+
+            yield return new WaitUntil(() => mouse.leftButton.isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the click observation window.");
+
+            UloopPausePoint.Pause("left-click");
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.AreEqual("left-click", lastResponse.PausePointId);
+            Assert.AreEqual(1, lastResponse.PausePointHitCount);
+            Assert.IsFalse(mouse.leftButton.isPressed, "Marker interruption should release the injected mouse button state.");
+        }
+
         #endregion
 
         #region LongPress Tests
@@ -107,9 +192,9 @@ namespace Tests.PlayMode
 
             Assert.IsTrue(lastResponse.Success);
             Assert.AreEqual("LongPress", lastResponse.Action);
-            AssertCoordinateMetadata(400f, 300f);
             // After long press completes, button should be released
             Assert.IsFalse(mouse.leftButton.isPressed, "Button should be released after long press");
+            AssertCoordinateMetadata(400f, 300f);
         }
 
         [UnityTest]
@@ -126,6 +211,97 @@ namespace Tests.PlayMode
             });
 
             Assert.IsFalse(lastResponse.Success, "LongPress with zero duration should fail");
+        }
+
+        [UnityTest]
+        public IEnumerator LongPress_Should_RestoreRunInBackground_WhenOriginallyDisabled()
+        {
+            // Verifies that mouse input simulation keeps PlayMode running in the background only during execution.
+            yield return null;
+
+            bool originalRunInBackground = UnityEngine.Application.runInBackground;
+
+            try
+            {
+                UnityEngine.Application.runInBackground = false;
+                Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+                {
+                    ["action"] = MouseInputAction.LongPress.ToString(),
+                    ["x"] = 400,
+                    ["y"] = 300,
+                    ["duration"] = 0.2f
+                }, System.Threading.CancellationToken.None);
+
+                float toggleTimeoutAt = Time.realtimeSinceStartup + 2f;
+                yield return new WaitUntil(() =>
+                    UnityEngine.Application.runInBackground
+                    || task.IsCompleted
+                    || Time.realtimeSinceStartup >= toggleTimeoutAt);
+                Assert.IsTrue(
+                    UnityEngine.Application.runInBackground,
+                    "Mouse input simulation should enable Run In Background while executing.");
+
+                float completionTimeoutAt = Time.realtimeSinceStartup + 5f;
+                yield return new WaitUntil(() =>
+                    task.IsCompleted || Time.realtimeSinceStartup >= completionTimeoutAt);
+                Assert.IsTrue(task.IsCompleted, "Tool execution timed out.");
+                Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
+
+                lastResponse = (SimulateMouseInputResponse)task.Result;
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsFalse(
+                    UnityEngine.Application.runInBackground,
+                    "Mouse input simulation should restore the original Run In Background value.");
+            }
+            finally
+            {
+                UnityEngine.Application.runInBackground = originalRunInBackground;
+            }
+        }
+
+        #endregion
+
+        #region SmoothDelta Tests
+
+        [UnityTest]
+        public IEnumerator SmoothDelta_WhenPausePointMarkerHitsDuringGameplayUpdate_Should_ReturnMarkerDetails()
+        {
+            // Verifies SmoothDelta observes gameplay-frame pause points before scheduling the next delta.
+            yield return null;
+
+            MouseDeltaPausePointObserver observer = mouseObserverGo.AddComponent<MouseDeltaPausePointObserver>();
+            observer.MarkerId = "smooth-delta";
+            UloopPausePointRegistry.ConfigureForTests(
+                new FakePausePointPauseController(),
+                () => new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc));
+            UloopPausePointRegistry.Enable(observer.MarkerId, 30);
+
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+            {
+                ["action"] = MouseInputAction.SmoothDelta.ToString(),
+                ["deltaX"] = 120f,
+                ["deltaY"] = 0f,
+                ["duration"] = 1f
+            }, System.Threading.CancellationToken.None);
+
+            yield return new WaitUntil(() => task.IsCompleted || observer.HasTriggered);
+            Assert.IsTrue(observer.HasTriggered, "The test must hit the marker from gameplay Update.");
+
+            try
+            {
+                yield return WaitForTask(task);
+            }
+            finally
+            {
+                InputSystemUpdateHelper.ResetPauseProviderForTests();
+            }
+
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.AreEqual("SmoothDelta", lastResponse.Action);
+            Assert.AreEqual("smooth-delta", lastResponse.PausePointId);
+            Assert.AreEqual(1, lastResponse.PausePointHitCount);
         }
 
         #endregion
@@ -187,25 +363,29 @@ namespace Tests.PlayMode
 
         private IEnumerator RunTool(JObject parameters)
         {
-            Task<BaseToolResponse> task = tool.ExecuteAsync(parameters);
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
+            yield return WaitForTask(task);
+            lastResponse = (SimulateMouseInputResponse)task.Result;
+        }
+
+        private static IEnumerator WaitForTask(Task<UnityCliLoopToolResponse> task)
+        {
             float timeoutAt = Time.realtimeSinceStartup + 5f;
             yield return new WaitUntil(() =>
                 task.IsCompleted || Time.realtimeSinceStartup >= timeoutAt);
             Assert.IsTrue(task.IsCompleted, "Tool execution timed out.");
             Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
-            lastResponse = (SimulateMouseInputResponse)task.Result;
         }
 
         private void AssertCoordinateMetadata(float inputX, float inputY)
         {
-            Vector2 inputPosition = new Vector2(inputX, inputY);
+            Vector2 inputPosition = new(inputX, inputY);
             Vector2 gameViewSize = GameViewCoordinateUtility.GetMainGameViewSize();
-            GameViewCoordinateConversion expected =
-                GameViewCoordinateUtility.ConvertInputToUnity(inputPosition, gameViewSize);
+            GameViewCoordinateConversion expected = GameViewCoordinateUtility.ConvertInputToUnity(inputPosition, gameViewSize);
 
-            Assert.AreEqual("top-left-game-view", lastResponse.InputCoordinateSystem);
-            Assert.AreEqual("bottom-left-game-view", lastResponse.UnityCoordinateSystem);
-            Assert.AreEqual("unity_x = input_x; unity_y = gameViewHeight - input_y", lastResponse.CoordinateConversionFormula);
+            Assert.AreEqual(UnityCliLoopConstants.COORDINATE_SYSTEM_TOP_LEFT_GAME_VIEW, lastResponse.InputCoordinateSystem);
+            Assert.AreEqual(UnityCliLoopConstants.COORDINATE_SYSTEM_BOTTOM_LEFT_GAME_VIEW, lastResponse.UnityCoordinateSystem);
+            Assert.AreEqual(UnityCliLoopConstants.COORDINATE_CONVERSION_FORMULA_GAME_VIEW_INPUT_TO_UNITY, lastResponse.CoordinateConversionFormula);
             Assert.IsTrue(lastResponse.GameViewWidth.HasValue);
             Assert.IsTrue(lastResponse.GameViewHeight.HasValue);
             Assert.IsTrue(lastResponse.InputPositionX.HasValue);
@@ -220,7 +400,86 @@ namespace Tests.PlayMode
             Assert.AreEqual(expected.InjectedUnityPosition.y, lastResponse.InjectedUnityPositionY!.Value);
         }
 
+        /// <summary>
+        /// Records pause requests without pausing the real Unity Editor.
+        /// </summary>
+        private sealed class FakePausePointPauseController : IUloopPausePointPauseController
+        {
+            public bool IsPlaying => true;
+            public bool IsPaused { get; private set; }
+
+            public void Pause()
+            {
+                IsPaused = true;
+            }
+
+            public void Resume()
+            {
+                IsPaused = false;
+            }
+        }
+
         #endregion
+    }
+
+    /// <summary>
+    /// Test support type used by play mode mouse input fixtures.
+    /// </summary>
+    public class MouseUpdateFramePressObserver : MonoBehaviour
+    {
+        public int LeftButtonPressedUpdateCount { get; private set; }
+
+        private void Update()
+        {
+            Mouse mouse = Mouse.current;
+            if (mouse == null)
+            {
+                return;
+            }
+
+            if (mouse.leftButton.wasPressedThisFrame)
+            {
+                LeftButtonPressedUpdateCount++;
+            }
+        }
+
+        public void ResetCount()
+        {
+            LeftButtonPressedUpdateCount = 0;
+        }
+    }
+
+    /// <summary>
+    /// Test support type that hits a pause-point marker when gameplay observes mouse delta.
+    /// </summary>
+    public class MouseDeltaPausePointObserver : MonoBehaviour
+    {
+        public string MarkerId { get; set; } = "";
+        public bool HasTriggered { get; private set; }
+
+        private void Update()
+        {
+            if (HasTriggered)
+            {
+                return;
+            }
+
+            Mouse mouse = Mouse.current;
+            if (mouse == null)
+            {
+                return;
+            }
+
+            Vector2 delta = mouse.delta.ReadValue();
+            if (delta.sqrMagnitude <= 0f)
+            {
+                return;
+            }
+
+            HasTriggered = true;
+            UloopPausePoint.Pause(MarkerId);
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+        }
     }
 }
 #endif

@@ -2,21 +2,37 @@ name: Security Code Scan
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, v3-beta ]
     paths:
       - 'Packages/src/**/*.cs'
       - 'Assets/**/*.cs'
-      - 'Packages/src/TypeScriptServer~/**/*.ts'
-      - 'Packages/src/TypeScriptServer~/package.json'
-      - 'Packages/src/TypeScriptServer~/package-lock.json'
+      - 'cli/**/*.go'
+      - 'cli/.golangci.yml'
+      - 'cli/.go-version'
+      - '**/go.mod'
+      - '**/go.sum'
+      - 'cli/release-automation/**'
+      - '.github/workflows/**'
+      - 'scripts/**'
+      - 'cli/dispatcher/attestation/trusted_root.json'
+      - 'Packages/src/project-runner-pin.json'
+      - '.uloop/project-runner-pin.json'
   pull_request:
-    branches: [ main ]
+    branches: [ main, v3-beta ]
     paths:
       - 'Packages/src/**/*.cs'
       - 'Assets/**/*.cs'
-      - 'Packages/src/TypeScriptServer~/**/*.ts'
-      - 'Packages/src/TypeScriptServer~/package.json'
-      - 'Packages/src/TypeScriptServer~/package-lock.json'
+      - 'cli/**/*.go'
+      - 'cli/.golangci.yml'
+      - 'cli/.go-version'
+      - '**/go.mod'
+      - '**/go.sum'
+      - 'cli/release-automation/**'
+      - '.github/workflows/**'
+      - 'scripts/**'
+      - 'cli/dispatcher/attestation/trusted_root.json'
+      - 'Packages/src/project-runner-pin.json'
+      - '.uloop/project-runner-pin.json'
   workflow_dispatch:
 
 jobs:
@@ -25,134 +41,89 @@ jobs:
     runs-on: ubuntu-latest
     
     permissions:
-      actions: read
       contents: read
       security-events: write
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v7.0.1
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       with:
-        dotnet-version: '6.0.x'
+        persist-credentials: false
 
-    - name: Run SecurityCodeScan on uLoopMCP Package
-      run: |
-        # Create a temporary project file for scanning
-        cat > temp-uloopmcp.csproj << 'EOF'
-        <Project Sdk="Microsoft.NET.Sdk">
-          <PropertyGroup>
-            <TargetFramework>net6.0</TargetFramework>
-            <Nullable>enable</Nullable>
-            <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-          </PropertyGroup>
-          <ItemGroup>
-            <Compile Include="Packages/src/**/*.cs" />
-          </ItemGroup>
-          <ItemGroup>
-            <PackageReference Include="SecurityCodeScan.VS2019" Version="5.6.7" PrivateAssets="all" />
-          </ItemGroup>
-        </Project>
-        EOF
-        
-        # Run dotnet build to trigger SecurityCodeScan analysis
-        dotnet restore temp-uloopmcp.csproj
-        
-        # Build with continue on error and create a basic SARIF file if scanning fails
-        if ! dotnet build temp-uloopmcp.csproj --configuration Release --verbosity normal --no-restore; then
-          echo "SecurityCodeScan completed with warnings/errors - creating placeholder SARIF"
-          cat > security-results.sarif << 'SARIF_EOF'
-        {
-          "version": "2.1.0",
-          "$schema": "http://json.schemastore.org/sarif-2.1.0-rtm.5",
-          "runs": [
-            {
-              "tool": {
-                "driver": {
-                  "name": "SecurityCodeScan",
-                  "informationUri": "https://security-code-scan.github.io/",
-                  "version": "5.6.7"
-                }
-              },
-              "results": []
-            }
-          ]
-        }
-        SARIF_EOF
-        else
-          echo "SecurityCodeScan completed successfully"
-        fi
-
-    - name: Upload SARIF results to GitHub
-      uses: github/codeql-action/upload-sarif@v4.37.6
-      if: always() && hashFiles('security-results.sarif') != ''
+    - name: Setup Go
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
       with:
-        sarif_file: security-results.sarif
-        category: "SecurityCodeScan"
+        go-version-file: cli/.go-version
+        cache: false
 
-    - name: Upload security scan results as artifact
-      uses: actions/upload-artifact@v7
-      if: always()
+    - name: Initialize CodeQL C# analysis
+      uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
       with:
-        name: security-scan-results
-        path: security-results.sarif
+        languages: csharp
+        build-mode: none
+        tools: linked
+        queries: +security-extended
+        config: |
+          paths:
+            - Packages/src
+            - Assets/Tests
 
-  typescript-security:
-    name: TypeScript Security Analysis
+    - name: Analyze C# security code with CodeQL
+      uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+      with:
+        category: codeql-csharp-security
+        output: ${{ runner.temp }}/codeql-results
+        upload: never
+
+    - name: Validate CodeQL SARIF
+      working-directory: cli/release-automation
+      run: go run ./cmd/check-codeql-sarif --sarif "${{ runner.temp }}/codeql-results/csharp.sarif"
+
+    - name: Upload verified CodeQL SARIF
+      if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+      uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+      with:
+        sarif_file: ${{ runner.temp }}/codeql-results/csharp.sarif
+        category: codeql-csharp-security
+
+    - name: Explain fork pull request SARIF upload policy
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork
+      run: echo "CodeQL SARIF upload is skipped for fork pull requests because their token has no security-events write permission."
+
+  go-security:
+    name: Go CLI Security Analysis
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v7.0.1
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v7
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       with:
-        node-version: '22'
-        cache: 'npm'
-        cache-dependency-path: 'Packages/src/TypeScriptServer~/package-lock.json'
+        persist-credentials: false
 
-    - name: Install dependencies
-      working-directory: Packages/src/TypeScriptServer~
-      run: npm ci --ignore-scripts=false
-
-    - name: Run TypeScript security check
-      working-directory: Packages/src/TypeScriptServer~
-      run: npm run security:check
-
-  npm-supply-chain-security:
-    name: NPM Supply Chain Security
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v7.0.1
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v7
+    - name: Setup Go
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
       with:
-        node-version: '22'
+        go-version-file: cli/.go-version
+        cache: false
 
-    - name: Run npm audit
-      working-directory: Packages/src/TypeScriptServer~
+    - name: Install golangci-lint
       run: |
-        echo "Running npm audit for security vulnerabilities..."
-        npm audit --audit-level=moderate || {
-          echo "::warning::npm audit found vulnerabilities. Review and update dependencies."
-          exit 1
-        }
+        go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-    - name: Install lockfile-lint
-      run: npm install -g lockfile-lint
+    - name: Check Go CLI
+      run: scripts/check-go-cli.sh
 
-    - name: Run lockfile-lint
-      working-directory: Packages/src/TypeScriptServer~
+    - name: Install govulncheck
       run: |
-        echo "Validating package-lock.json integrity..."
-        lockfile-lint \
-          --path package-lock.json \
-          --type npm \
-          --allowed-hosts npm \
-          --allowed-schemes "https:" "git+https:"
+        go install golang.org/x/vuln/cmd/govulncheck@latest
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+    - name: Run govulncheck
+      run: |
+        for module_dir in cli/common cli/dispatcher cli/project-runner cli/release-automation; do
+          (cd "$module_dir" && govulncheck ./...)
+        done

@@ -1,0 +1,87 @@
+{
+  "Success": true,
+  "Id": "Assets/Scripts/Enemy.cs:42",
+  "Status": "Hit",
+  "IsEnabled": true,
+  "IsHit": true,
+  "HitCount": 1,
+  "MethodEntryCount": 1,
+  "HitWhen": "speed > 5",
+  "HitWhenSkippedCount": 2,
+  "HitWhenErrorNote": "--hit-when expected variable 'speed' to be a numeric primitive.",
+  "TimeoutSeconds": 30,
+  "Mode": "continuous",
+  "MaxHistory": 20,
+  "MaxPreviewElements": 15,
+  "MaxCallerFrames": 4,
+  "CapturedVariableHistory": [
+    {
+      "HitSequence": 1,
+      "FrameCount": 42,
+      "HitAtUtc": "2026-06-03T00:00:01.0000000Z",
+      "CapturedVariables": [],
+      "Truncated": false,
+      "CallerFrames": [
+        {
+          "Method": "Game.AI.Tick",
+          "File": "Assets/Scripts/AI.cs",
+          "Line": 44
+        }
+      ]
+    },
+    {
+      "HitSequence": 2,
+      "FrameCount": 43,
+      "HitAtUtc": "2026-06-03T00:00:02.0000000Z",
+      "CapturedVariables": [],
+      "Truncated": false,
+      "CallerFrames": []
+    }
+  ],
+  "HistoryDroppedCount": 0,
+  "Expired": false,
+  "EnabledAtUtc": "2026-06-03T00:00:00.0000000Z",
+  "ElapsedSinceEnabledMilliseconds": 1200,
+  "RemainingMilliseconds": 28800,
+  "Generation": 3,
+  "EditorState": {
+    "IsPlaying": true,
+    "IsPaused": true,
+    "CapturedAt": "PausePointHit"
+  },
+  "FirstHitAtUtc": "2026-06-03T00:00:01.0000000Z",
+  "LastHitAtUtc": "2026-06-03T00:00:01.0000000Z",
+  "FirstHitSequence": 1,
+  "LastHitSequence": 1,
+  "Message": "Pause point hit.",
+  "RecommendedNextAction": "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.",
+  "CapturedVariables": [
+    {
+      "Name": "target",
+      "Scope": "InstanceField",
+      "TypeName": "UnityEngine.GameObject",
+      "Value": "Enemy",
+      "UnityObjectKind": "SceneObject",
+      "UnityObjectPath": "MainScene:/Root/Enemy",
+      "UnityObjectInstanceId": -1234,
+      "Truncated": false
+    }
+  ],
+  "CallerFrames": [
+    {
+      "Method": "Game.AI.Tick",
+      "File": "Assets/Scripts/AI.cs",
+      "Line": 44
+    }
+  ],
+  "CapturedVariablesTruncated": true,
+  "TruncatedVariableNames": [
+    "extraField"
+  ],
+  "TruncatedVariableCount": 1,
+  "ClearedReason": "",
+  "StatusBeforeClear": "",
+  "LateHitDiscardedAfterClear": false,
+  "SuppressedByHotReload": false,
+  "RetargetedToHotReloadPatch": false
+}

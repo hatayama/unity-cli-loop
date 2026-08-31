@@ -1,9 +1,12 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
+using System;
 using System.Collections;
 using System.Threading;
 using System.Threading.Tasks;
-using io.github.hatayama.uLoopMCP;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -12,18 +15,25 @@ using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.UI;
 using UnityEngine.TestTools;
+using Object = UnityEngine.Object;
 
-namespace Tests.PlayMode
+namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 {
+    /// <summary>
+    /// Test fixture that verifies Simulate Keyboard behavior.
+    /// </summary>
     public class SimulateKeyboardTests : InputTestFixture
     {
         private GameObject eventSystemGo = null!;
         private GameObject framePressObserverGo = null!;
+        private ExistingEventSystemDisableScope eventSystemDisableScope = null!;
         private TestableSimulateKeyboardTool tool = null!;
         private SimulateKeyboardResponse lastResponse = null!;
         private Keyboard keyboard = null!;
         private FramePressObserver framePressObserver = null!;
+        private UpdateFramePressObserver updateFramePressObserver = null!;
         private FrameStateObserver frameStateObserver = null!;
+        private WasPressedGameplayJumpController gameplayJumpController = null!;
         private ManualModeFramePressObserver manualModeFramePressObserver = null!;
         private InputSettings.UpdateMode originalUpdateMode;
         private float originalTimeScale;
@@ -35,11 +45,14 @@ namespace Tests.PlayMode
             originalUpdateMode = settings.updateMode;
             originalTimeScale = Time.timeScale;
 
+            eventSystemDisableScope = new ExistingEventSystemDisableScope();
             eventSystemGo = new GameObject("TestEventSystem");
             eventSystemGo.AddComponent<EventSystem>();
             framePressObserverGo = new GameObject("FramePressObserver");
             framePressObserver = framePressObserverGo.AddComponent<FramePressObserver>();
+            updateFramePressObserver = framePressObserverGo.AddComponent<UpdateFramePressObserver>();
             frameStateObserver = framePressObserverGo.AddComponent<FrameStateObserver>();
+            gameplayJumpController = framePressObserverGo.AddComponent<WasPressedGameplayJumpController>();
             manualModeFramePressObserver = framePressObserverGo.AddComponent<ManualModeFramePressObserver>();
 
             tool = new TestableSimulateKeyboardTool();
@@ -48,9 +61,13 @@ namespace Tests.PlayMode
 
         public override void TearDown()
         {
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+            InputSystemUpdateHelper.ResetTimeoutsForTests();
+            UloopPausePointRegistry.ResetForTests();
             InputSettings settings = RequireInputSettings();
             settings.updateMode = originalUpdateMode;
             Time.timeScale = originalTimeScale;
+            DeferredPlayerLatchSynchronizer.ResetForTests();
             KeyboardKeyState.ReleaseAllKeys();
             SimulateKeyboardOverlayState.Clear();
             InputVisualizationCanvas[] canvases =
@@ -61,6 +78,7 @@ namespace Tests.PlayMode
             }
             Object.DestroyImmediate(framePressObserverGo);
             Object.DestroyImmediate(eventSystemGo);
+            eventSystemDisableScope.Restore();
             base.TearDown();
         }
 
@@ -85,6 +103,53 @@ namespace Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator Press_Should_ReportObservedPressEdge()
+        {
+            // Verifies the response tells callers whether wasPressedThisFrame was actually
+            // observable, so agents can distinguish a delivered edge from a missed one.
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue,
+                "Press must report press-edge observability");
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved!.Value,
+                "A successful Press in PlayMode should observe the press edge");
+        }
+
+        [UnityTest]
+        public IEnumerator KeyDown_Should_ReportObservedPressEdge()
+        {
+            // Verifies KeyDown also reports edge observability, because agents fall back to it
+            // when Press appears to be missed by gameplay polling.
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue && lastResponse.PressEdgeObserved.Value,
+                "A successful KeyDown in PlayMode should observe the press edge");
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyUp.ToString(),
+                ["key"] = "Space"
+            });
+        }
+
+        [UnityTest]
         public IEnumerator Press_WithDuration_Should_HoldKey()
         {
             yield return null;
@@ -98,6 +163,149 @@ namespace Tests.PlayMode
 
             Assert.IsTrue(lastResponse.Success);
             Assert.AreEqual("Space", lastResponse.KeyName);
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WhenUnityPausesDuringObservation_Should_CompleteAsPausePointInterruption()
+        {
+            // Verifies that a pause-point pause releases the tool slot instead of leaving the press command busy.
+            yield return null;
+
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.Press,
+                Key = "Space",
+                Duration = 1f
+            };
+            Task<SimulateKeyboardResponse> task =
+                tool.ExecuteWithCancellationAsync(parameters, CancellationToken.None);
+
+            yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the press observation window.");
+
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.AreEqual("Press", lastResponse.Action);
+            Assert.AreEqual("Space", lastResponse.KeyName);
+            Assert.IsNull(lastResponse.PausePointId);
+            Assert.IsNull(lastResponse.PausePointHitCount);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue,
+                "Interrupted presses must still report whether the press edge was observed.");
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved!.Value,
+                "The press reached isPressed through gameplay updates, so the edge must have been observed.");
+            Assert.IsFalse(keyboard[Key.Space].isPressed, "Pause-point interruption should release the injected key state.");
+            Assert.IsFalse(SimulateKeyboardOverlayState.IsActive, "Pause-point interruption should clear keyboard overlay state.");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WhenPausePointMarkerHits_Should_ReturnMarkerDetails()
+        {
+            // Verifies marker-caused interruption reports the marker id and hit count.
+            yield return null;
+
+            UloopPausePointRegistry.ConfigureForTests(
+                new FakePausePointPauseController(),
+                () => new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc));
+            UloopPausePointRegistry.Enable("space-press", 30);
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.Press,
+                Key = "Space",
+                Duration = 1f
+            };
+            Task<SimulateKeyboardResponse> task =
+                tool.ExecuteWithCancellationAsync(parameters, CancellationToken.None);
+
+            yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the press observation window.");
+
+            UloopPausePoint.Pause("space-press");
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.AreEqual("space-press", lastResponse.PausePointId);
+            Assert.AreEqual(1, lastResponse.PausePointHitCount);
+            Assert.IsTrue(
+                lastResponse.PressEdgeObserved.HasValue,
+                "Marker-interrupted presses must still report whether the press edge was observed.");
+            Assert.IsFalse(keyboard[Key.Space].isPressed, "Marker interruption should release the injected key state.");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WhenMultiplePausePointMarkersHit_Should_ListAllHits()
+        {
+            // Verifies the response lists every marker hit during the press, not just the latest.
+            yield return null;
+
+            UloopPausePointRegistry.ConfigureForTests(
+                new FakePausePointPauseController(),
+                () => new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc));
+            UloopPausePointRegistry.Enable("space-press", 30);
+            UloopPausePointRegistry.Enable("space-press-followup", 30);
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.Press,
+                Key = "Space",
+                Duration = 1f
+            };
+            Task<SimulateKeyboardResponse> task =
+                tool.ExecuteWithCancellationAsync(parameters, CancellationToken.None);
+
+            yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
+            Assert.IsFalse(task.IsCompleted, "The test must pause during the press observation window.");
+
+            UloopPausePoint.Pause("space-press");
+            UloopPausePoint.Pause("space-press-followup");
+            InputSystemUpdateHelper.ConfigurePauseProviderForTests(() => true);
+            yield return WaitForTask(task);
+            InputSystemUpdateHelper.ResetPauseProviderForTests();
+
+            lastResponse = task.Result;
+            Assert.IsTrue(lastResponse.Success);
+            Assert.IsTrue(lastResponse.InterruptedByPausePoint);
+            Assert.IsNotNull(lastResponse.PausePointHits, "All hit markers must be listed.");
+            Assert.AreEqual(2, lastResponse.PausePointHits!.Count);
+            Assert.AreEqual("space-press", lastResponse.PausePointHits[0].Id);
+            Assert.AreEqual("space-press-followup", lastResponse.PausePointHits[1].Id);
+        }
+
+        [UnityTest]
+        public IEnumerator Press_Cancellation_Should_ClearPressOverlay()
+        {
+            // Verifies that canceling an applied press releases input and clears transient overlay state.
+            yield return null;
+
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.Press,
+                Key = "Space",
+                Duration = 2f
+            };
+            CancellationTokenSource cts = new();
+            Task<SimulateKeyboardResponse> task = tool.ExecuteWithCancellationAsync(parameters, cts.Token);
+
+            yield return new WaitUntil(() => keyboard[Key.Space].isPressed || task.IsCompleted);
+
+            Assert.IsFalse(task.IsCompleted, "Cancellation test must interrupt the applied press.");
+            Assert.AreEqual("Space", SimulateKeyboardOverlayState.PressKey, "Applied press should show transient overlay state before cancellation.");
+
+            cts.Cancel();
+            yield return WaitForTask(task, allowCanceled: true);
+
+            Assert.IsTrue(task.IsCanceled, "Press cancellation should remain visible to the caller.");
+            Assert.IsFalse(keyboard[Key.Space].isPressed, "Canceled Press should release the injected key state.");
+            Assert.IsNull(SimulateKeyboardOverlayState.PressKey, "Canceled Press should clear transient overlay state.");
         }
 
         [UnityTest]
@@ -132,6 +340,79 @@ namespace Tests.PlayMode
 
             Assert.Greater(framePressObserver.SpacePressedFrameCount, 0, "Zero-duration press should still be visible as a tap");
             Assert.IsFalse(keyboard[Key.Space].isPressed, "Zero-duration press should release the key after the tap");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WithoutDuration_Should_BeVisibleToGameplayUpdate()
+        {
+            // Verifies that default Press stays alive long enough for Update polling to observe wasPressedThisFrame.
+            yield return null;
+
+            updateFramePressObserver.ResetCount();
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.Greater(updateFramePressObserver.SpacePressedUpdateCount, 0, "Default Press should be visible to MonoBehaviour.Update via wasPressedThisFrame");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WithoutDuration_Should_StayHeldForGameplayObservationFrames()
+        {
+            // Verifies that default Press is not released before gameplay Update can observe the held state.
+            yield return null;
+
+            updateFramePressObserver.ResetCount();
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.GreaterOrEqual(updateFramePressObserver.SpaceHeldUpdateCount, 2, "Default Press should stay held across gameplay observation frames");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_WithoutDuration_Should_TriggerGameplayJumpFromWasPressedThisFrame()
+        {
+            // Verifies that default Press drives gameplay state transitions that poll wasPressedThisFrame in Update.
+            yield return null;
+
+            gameplayJumpController.ResetState();
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.AreEqual(1, gameplayJumpController.JumpCount, "Default Press should trigger a single gameplay jump.");
+            Assert.IsFalse(gameplayJumpController.Grounded, "Gameplay state should become airborne after the jump.");
+            Assert.Greater(gameplayJumpController.VerticalPosition, 0f, "Gameplay jump should move the controller upward.");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_InFixedMode_Should_BeVisibleToGameplayUpdate()
+        {
+            // Verifies that Press still reaches Update polling when the project processes input in FixedUpdate.
+            yield return null;
+
+            InputSettings settings = RequireInputSettings();
+            settings.updateMode = InputSettings.UpdateMode.ProcessEventsInFixedUpdate;
+            updateFramePressObserver.ResetCount();
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space",
+                ["duration"] = 0.2f
+            });
+
+            Assert.Greater(updateFramePressObserver.SpacePressedUpdateCount, 0, "Fixed-update input processing should still be visible to MonoBehaviour.Update via wasPressedThisFrame");
         }
 
         [UnityTest]
@@ -191,6 +472,51 @@ namespace Tests.PlayMode
             InputVisualizationCanvas canvas = Object.FindAnyObjectByType<InputVisualizationCanvas>();
             Assert.IsNotNull(canvas, "InputVisualizationCanvas must exist after keyboard simulation.");
             Assert.AreEqual(Vector3.one, canvas.transform.localScale, "Overlay canvas should use unit scale so GameView resolution changes do not collapse the UI.");
+        }
+
+        [UnityTest]
+        public IEnumerator Press_Should_RestoreRunInBackground_WhenOriginallyDisabled()
+        {
+            // Verifies that keyboard simulation keeps PlayMode running in the background only during execution.
+            yield return null;
+
+            bool originalRunInBackground = UnityEngine.Application.runInBackground;
+
+            try
+            {
+                UnityEngine.Application.runInBackground = false;
+                Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(new JObject
+                {
+                    ["action"] = KeyboardAction.Press.ToString(),
+                    ["key"] = "Space",
+                    ["duration"] = 0.2f
+                }, CancellationToken.None);
+
+                float toggleTimeoutAt = Time.realtimeSinceStartup + 2f;
+                yield return new WaitUntil(() =>
+                    UnityEngine.Application.runInBackground
+                    || task.IsCompleted
+                    || Time.realtimeSinceStartup >= toggleTimeoutAt);
+                Assert.IsTrue(
+                    UnityEngine.Application.runInBackground,
+                    "Keyboard simulation should enable Run In Background while executing.");
+
+                float completionTimeoutAt = Time.realtimeSinceStartup + 5f;
+                yield return new WaitUntil(() =>
+                    task.IsCompleted || Time.realtimeSinceStartup >= completionTimeoutAt);
+                Assert.IsTrue(task.IsCompleted, "Tool execution timed out.");
+                Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
+
+                lastResponse = (SimulateKeyboardResponse)task.Result;
+                Assert.IsTrue(lastResponse.Success);
+                Assert.IsFalse(
+                    UnityEngine.Application.runInBackground,
+                    "Keyboard simulation should restore the original Run In Background value.");
+            }
+            finally
+            {
+                UnityEngine.Application.runInBackground = originalRunInBackground;
+            }
         }
 
         [UnityTest]
@@ -309,6 +635,194 @@ namespace Tests.PlayMode
             StringAssert.Contains("Invalid key name", lastResponse.Message);
         }
 
+        /// <summary>
+        /// Verifies that a bare digit key is rejected instead of being parsed as an enum ordinal,
+        /// and that the failure message offers both the Digit and Numpad candidates.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithBareDigitKey_Should_ReturnFailureSuggestingDigitAndNumpad()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "3"
+            });
+
+            Assert.IsFalse(lastResponse.Success, "A bare digit must not be accepted as a Key enum ordinal");
+            StringAssert.Contains("Digit3", lastResponse.Message);
+            StringAssert.Contains("Numpad3", lastResponse.Message);
+            StringAssert.Contains("Digits are not key names", lastResponse.Message);
+            StringAssert.Contains("re-check any earlier results", lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that a signed numeric key is rejected, closing the Enum.TryParse signed-ordinal path.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithSignedNumericKey_Should_ReturnFailure()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "+3"
+            });
+
+            Assert.IsFalse(lastResponse.Success, "A signed numeric key must not be accepted as a Key enum ordinal");
+            StringAssert.Contains("Digits are not key names", lastResponse.Message);
+            StringAssert.Contains("re-check any earlier results", lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that a comma-separated key list is rejected, closing the Enum.TryParse flag-OR path.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithCommaSeparatedKeyNames_Should_ReturnFailure()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Space,Enter"
+            });
+
+            Assert.IsFalse(lastResponse.Success, "A comma-separated key list must not be OR-ed into a single key");
+            StringAssert.Contains("Invalid key name", lastResponse.Message);
+            // The digit guidance is scoped to numeric input, so it must not appear here.
+            StringAssert.DoesNotContain("Digits are not key names", lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that a whitespace-padded digit is rejected, closing the Enum.TryParse path that
+        /// trimmed the input before reading it as an enum ordinal.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithPaddedDigitKey_Should_ReturnFailure()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = " 3 "
+            });
+
+            Assert.IsFalse(lastResponse.Success, "A whitespace-padded digit must not be accepted as a Key enum ordinal");
+            StringAssert.Contains("Digits are not key names", lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that an out-of-range numeric key fails as a validation error instead of throwing
+        /// ArgumentOutOfRangeException from the keyboard indexer.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithUndefinedNumericKey_Should_ReturnFailure()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "300"
+            });
+
+            Assert.IsFalse(lastResponse.Success, "An undefined numeric key must fail validation rather than throw");
+            StringAssert.Contains("Digits are not key names", lastResponse.Message);
+            StringAssert.Contains("re-check any earlier results", lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that the existing Return-to-Enter alias still resolves after key names are whitelisted.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithReturnAlias_Should_Succeed()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Return"
+            });
+
+            Assert.IsTrue(lastResponse.Success, lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that key names resolve case-insensitively, which the whitelist must preserve
+        /// because Enum.TryParse was previously called with ignoreCase.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithLowercaseKeyName_Should_Succeed()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "space"
+            });
+
+            Assert.IsTrue(lastResponse.Success, lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that Digit3, the name the rejection message advertises for bare digits, is
+        /// actually accepted.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithDigitKeyName_Should_Succeed()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = "Digit3"
+            });
+
+            Assert.IsTrue(lastResponse.Success, lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that a whitespace-padded valid key name keeps resolving, since padded correct
+        /// input was already accepted before key names were whitelisted.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithPaddedKeyName_Should_Succeed()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = " Space "
+            });
+
+            Assert.IsTrue(lastResponse.Success, lastResponse.Message);
+        }
+
+        /// <summary>
+        /// Verifies that the Return-to-Enter alias still applies when the name is whitespace-padded.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Press_WithPaddedReturnAlias_Should_Succeed()
+        {
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.Press.ToString(),
+                ["key"] = " Return "
+            });
+
+            Assert.IsTrue(lastResponse.Success, lastResponse.Message);
+        }
+
         [UnityTest]
         public IEnumerator Press_WithEmptyKey_Should_ReturnFailure()
         {
@@ -358,6 +872,32 @@ namespace Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator KeyDown_Should_TriggerGameplayJumpFromWasPressedThisFrame()
+        {
+            // Verifies that KeyDown exposes its initial edge to gameplay before returning as a held key.
+            yield return null;
+
+            gameplayJumpController.ResetState();
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "Space"
+            });
+
+            Assert.AreEqual(1, gameplayJumpController.JumpCount, "KeyDown should trigger a single gameplay jump on the initial edge.");
+            Assert.IsFalse(gameplayJumpController.Grounded, "Gameplay state should become airborne after KeyDown.");
+            Assert.IsTrue(keyboard[Key.Space].isPressed, "KeyDown should remain held after gameplay observes the edge.");
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyUp.ToString(),
+                ["key"] = "Space"
+            });
+            Assert.IsTrue(lastResponse.Success);
+        }
+
+        [UnityTest]
         public IEnumerator KeyDown_WhenAlreadyHeld_Should_ReturnFailure()
         {
             yield return null;
@@ -376,6 +916,8 @@ namespace Tests.PlayMode
             });
             Assert.IsFalse(lastResponse.Success);
             StringAssert.Contains("already held", lastResponse.Message);
+            Assert.That(lastResponse.KeyStateTrackedHeld, Is.True);
+            Assert.That(lastResponse.KeyStateDeviceIsPressed, Is.Not.Null);
         }
 
         [UnityTest]
@@ -391,6 +933,8 @@ namespace Tests.PlayMode
 
             Assert.IsFalse(lastResponse.Success);
             StringAssert.Contains("not currently held", lastResponse.Message);
+            Assert.That(lastResponse.KeyStateTrackedHeld, Is.False);
+            Assert.That(lastResponse.KeyStateDeviceIsPressed, Is.Not.Null);
         }
 
         [UnityTest]
@@ -496,12 +1040,12 @@ namespace Tests.PlayMode
         {
             yield return null;
 
-            SimulateKeyboardSchema parameters = new SimulateKeyboardSchema
+            SimulateKeyboardSchema parameters = new()
             {
-                Action = KeyboardAction.KeyDown,
+                Action = UnityCliLoopKeyboardAction.KeyDown,
                 Key = "W"
             };
-            CancellationTokenSource cts = new CancellationTokenSource();
+            CancellationTokenSource cts = new();
             Task<SimulateKeyboardResponse> task = tool.ExecuteWithCancellationAsync(parameters, cts.Token);
 
             yield return new WaitUntil(() => KeyboardKeyState.IsKeyHeld(Key.W) || task.IsCompleted);
@@ -525,18 +1069,121 @@ namespace Tests.PlayMode
             Assert.IsTrue(lastResponse.Success, "Canceled KeyDown cleanup should leave later key-down requests usable.");
         }
 
+        [UnityTest]
+        public IEnumerator KeyUp_CancellationAfterRelease_Should_ClearHeldState()
+        {
+            // Verifies that canceling KeyUp after release does not leave held-key bookkeeping behind.
+            yield return null;
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "W"
+            });
+            Assert.IsTrue(lastResponse.Success, "KeyUp cancellation test requires an initially held key.");
+            Assert.IsTrue(KeyboardKeyState.IsKeyHeld(Key.W), "KeyUp cancellation test requires held-key bookkeeping.");
+
+            SimulateKeyboardSchema parameters = new()
+            {
+                Action = UnityCliLoopKeyboardAction.KeyUp,
+                Key = "W"
+            };
+            CancellationTokenSource cts = new();
+            Task<SimulateKeyboardResponse> task = tool.ExecuteWithCancellationAsync(parameters, cts.Token);
+            cts.Cancel();
+
+            yield return WaitForTask(task, allowCanceled: true);
+
+            Assert.IsTrue(task.IsCanceled, "KeyUp cancellation should remain visible to the caller.");
+            Assert.IsFalse(keyboard[Key.W].isPressed, "Canceled KeyUp should release the physical key state.");
+            Assert.IsFalse(KeyboardKeyState.IsKeyHeld(Key.W), "Canceled KeyUp should clear held-key bookkeeping.");
+            CollectionAssert.DoesNotContain(SimulateKeyboardOverlayState.HeldKeys, "W", "Canceled KeyUp should clear the overlay badge.");
+
+            yield return RunTool(new JObject
+            {
+                ["action"] = KeyboardAction.KeyDown.ToString(),
+                ["key"] = "W"
+            });
+
+            Assert.IsTrue(lastResponse.Success, "Canceled KeyUp cleanup should leave later key-down requests usable.");
+        }
+
+        [UnityTest]
+        public IEnumerator ApplyOnNextConfiguredUpdate_CancellationBeforeInputUpdate_ShouldRemoveCallback()
+        {
+            // Verifies that cancellation removes the pending Input System callback before the next update.
+            yield return null;
+
+            InputSettings settings = RequireInputSettings();
+            settings.updateMode = InputSettings.UpdateMode.ProcessEventsInDynamicUpdate;
+            Time.timeScale = 1f;
+            int applyCount = 0;
+            CancellationTokenSource cts = new();
+
+            Task<InputSimulationWaitOutcome> task = InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => applyCount++,
+                cts.Token);
+
+            Assert.AreEqual(1, InputSystemUpdateHelper.PendingConfiguredUpdateCallbackCount);
+
+            cts.Cancel();
+            yield return WaitForTask(task, allowCanceled: true);
+
+            Assert.IsTrue(task.IsCanceled, "Apply cancellation should remain visible to the caller.");
+            Assert.AreEqual(0, applyCount, "Canceled apply should not run after callback cleanup.");
+            Assert.AreEqual(0, InputSystemUpdateHelper.PendingConfiguredUpdateCallbackCount, "Canceled apply should remove the pending Input System callback.");
+        }
+
+        [UnityTest]
+        public IEnumerator ApplyOnNextConfiguredUpdate_WhenApplyThrows_ShouldFaultAndRemoveCallback()
+        {
+            // Verifies that apply failures complete the wait as faulted instead of leaving the callback pending.
+            yield return null;
+
+            InputSettings settings = RequireInputSettings();
+            settings.updateMode = InputSettings.UpdateMode.ProcessEventsInDynamicUpdate;
+            InvalidOperationException expectedException = new("Apply failed.");
+            Task<InputSimulationWaitOutcome> task = InputSystemUpdateHelper.ApplyOnNextConfiguredUpdate(
+                () => throw expectedException,
+                CancellationToken.None);
+
+            Assert.AreEqual(1, InputSystemUpdateHelper.PendingConfiguredUpdateCallbackCount);
+
+            yield return WaitForTask(task, allowFaulted: true);
+
+            Assert.IsTrue(task.IsFaulted, "Apply failures should fault the returned task.");
+            Assert.AreSame(expectedException, task.Exception?.GetBaseException());
+            Assert.AreEqual(0, InputSystemUpdateHelper.PendingConfiguredUpdateCallbackCount, "Faulted apply should remove the pending Input System callback.");
+        }
+
+        [UnityTest]
+        public IEnumerator WaitForRuntimeFrames_WhenFrameGoalCannotComplete_ShouldReturnTimedOut()
+        {
+            // Verifies that frame observation has a wall-clock guard and does not wait forever.
+            yield return null;
+
+            InputSystemUpdateHelper.ConfigureTimeoutsForTests(50, 50);
+            Task<InputSimulationWaitOutcome> task =
+                InputSystemUpdateHelper.WaitForRuntimeFrames(int.MaxValue, CancellationToken.None);
+
+            yield return WaitForTask(task);
+
+            Assert.AreEqual(InputSimulationWaitOutcome.TimedOut, task.Result);
+            Assert.AreEqual(0, EditorFrameWaiter.PendingWaitCount, "Timed-out frame observation should cancel its pending frame wait.");
+        }
+
         #endregion
 
         #region Helpers
 
         private IEnumerator RunTool(JObject parameters)
         {
-            Task<BaseToolResponse> task = tool.ExecuteAsync(parameters);
+            Task<UnityCliLoopToolResponse> task = tool.ExecuteAsync(parameters, System.Threading.CancellationToken.None);
             yield return WaitForTask(task);
             lastResponse = (SimulateKeyboardResponse)task.Result;
         }
 
-        private static IEnumerator WaitForTask(Task task, bool allowCanceled = false)
+        private static IEnumerator WaitForTask(Task task, bool allowCanceled = false, bool allowFaulted = false)
         {
             float timeoutAt = Time.realtimeSinceStartup + 5f;
             yield return new WaitUntil(() =>
@@ -546,7 +1193,10 @@ namespace Tests.PlayMode
             {
                 Assert.IsFalse(task.IsCanceled, "Tool execution should not be canceled.");
             }
-            Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
+            if (!allowFaulted)
+            {
+                Assert.IsFalse(task.IsFaulted, $"Tool execution should not fault: {task.Exception}");
+            }
         }
 
         private static InputSettings RequireInputSettings()
@@ -554,6 +1204,25 @@ namespace Tests.PlayMode
             InputSettings? settings = InputSystem.settings;
             Debug.Assert(settings != null, "InputSystem.settings must be available in SimulateKeyboardTests");
             return settings!;
+        }
+
+        /// <summary>
+        /// Records pause requests without pausing the real Unity Editor.
+        /// </summary>
+        private sealed class FakePausePointPauseController : IUloopPausePointPauseController
+        {
+            public bool IsPlaying => true;
+            public bool IsPaused { get; private set; }
+
+            public void Pause()
+            {
+                IsPaused = true;
+            }
+
+            public void Resume()
+            {
+                IsPaused = false;
+            }
         }
 
         private static BadgeVisual RequireBadgeVisual(string keyName)
@@ -599,6 +1268,9 @@ namespace Tests.PlayMode
         }
     }
 
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class FramePressObserver : MonoBehaviour
     {
         public int SpacePressedFrameCount { get; private set; }
@@ -649,6 +1321,43 @@ namespace Tests.PlayMode
         }
     }
 
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
+    public class UpdateFramePressObserver : MonoBehaviour
+    {
+        public int SpacePressedUpdateCount { get; private set; }
+        public int SpaceHeldUpdateCount { get; private set; }
+
+        private void Update()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard == null)
+            {
+                return;
+            }
+
+            if (keyboard.spaceKey.wasPressedThisFrame)
+            {
+                SpacePressedUpdateCount++;
+            }
+
+            if (keyboard.spaceKey.isPressed)
+            {
+                SpaceHeldUpdateCount++;
+            }
+        }
+
+        public void ResetCount()
+        {
+            SpacePressedUpdateCount = 0;
+            SpaceHeldUpdateCount = 0;
+        }
+    }
+
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class FrameStateObserver : MonoBehaviour
     {
         public int WPressedUpdateCount { get; private set; }
@@ -678,6 +1387,52 @@ namespace Tests.PlayMode
         }
     }
 
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
+    public class WasPressedGameplayJumpController : MonoBehaviour
+    {
+        private const float JumpVelocity = 8f;
+        private const float SimulatedFrameSeconds = 0.016f;
+
+        public bool Grounded { get; private set; } = true;
+        public int JumpCount { get; private set; }
+        public float VerticalPosition { get; private set; }
+        public float VerticalVelocity { get; private set; }
+
+        private void Update()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard == null)
+            {
+                return;
+            }
+
+            if (Grounded && keyboard.spaceKey.wasPressedThisFrame)
+            {
+                Grounded = false;
+                JumpCount++;
+                VerticalVelocity = JumpVelocity;
+            }
+
+            if (!Grounded)
+            {
+                VerticalPosition += VerticalVelocity * SimulatedFrameSeconds;
+            }
+        }
+
+        public void ResetState()
+        {
+            Grounded = true;
+            JumpCount = 0;
+            VerticalPosition = 0f;
+            VerticalVelocity = 0f;
+        }
+    }
+
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class ManualModeFramePressObserver : MonoBehaviour
     {
         public int EnterPressedStateCount { get; private set; }
@@ -710,6 +1465,9 @@ namespace Tests.PlayMode
         }
     }
 
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class TestableSimulateKeyboardTool : SimulateKeyboardTool
     {
         public Task<SimulateKeyboardResponse> ExecuteWithCancellationAsync(

@@ -714,7 +714,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 801584489}
         m_TargetAssemblyTypeName: io.github.hatayama.uLoopMCP.ReplayVerificationControllerBase,
-          uLoopMCP.Tests.Demo
+          UnityCLILoop.Tests.Demo
         m_MethodName: OnCompareLogs
         m_Mode: 0
         m_Arguments:
@@ -1019,7 +1019,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 801584489}
         m_TargetAssemblyTypeName: io.github.hatayama.uLoopMCP.ReplayVerificationControllerBase,
-          uLoopMCP.Tests.Demo
+          UnityCLILoop.Tests.Demo
         m_MethodName: OnSaveRecordingLog
         m_Mode: 0
         m_Arguments:
@@ -1861,7 +1861,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 801584489}
         m_TargetAssemblyTypeName: io.github.hatayama.uLoopMCP.ReplayVerificationControllerBase,
-          uLoopMCP.Tests.Demo
+          UnityCLILoop.Tests.Demo
         m_MethodName: OnSaveReplayLog
         m_Mode: 0
         m_Arguments:

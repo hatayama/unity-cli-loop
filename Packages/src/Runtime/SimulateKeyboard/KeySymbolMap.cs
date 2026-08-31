@@ -1,9 +1,13 @@
+#if UNITY_EDITOR
 #nullable enable
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
+    /// <summary>
+    /// Provides Key Symbol Map behavior for Unity CLI Loop.
+    /// </summary>
     public static class KeySymbolMap
     {
         private static readonly Dictionary<string, string> Symbols = new()
@@ -21,43 +25,32 @@ namespace io.github.hatayama.uLoopMCP
             { "ScrollLock", "ScrLk" },
         };
 
+        private static readonly Dictionary<string, (string macSymbol, string otherSymbol)> PlatformSymbols = new()
+        {
+            { "LeftMeta", ("\u2318", "\u229E") },     // ⌘ or ⊞
+            { "RightMeta", ("\u2318", "\u229E") },
+            { "LeftWindows", ("\u2318", "\u229E") },
+            { "RightWindows", ("\u2318", "\u229E") },
+            { "LeftCtrl", ("\u2303", "Ctrl") },      // ⌃ or Ctrl
+            { "RightCtrl", ("\u2303", "Ctrl") },
+            { "LeftAlt", ("\u2325", "Alt") },        // ⌥ or Alt
+            { "RightAlt", ("\u2325", "Alt") },
+            { "LeftShift", ("\u21E7", "Shift") },    // ⇧ or Shift
+            { "RightShift", ("\u21E7", "Shift") },
+            { "Backspace", ("\u232B", "BS") },       // ⌫ or BS
+            { "Delete", ("\u2326", "Del") }          // ⌦ or Del
+        };
+
         // Meta key maps to ⌘ on macOS, ⊞ on Windows/Linux
         private static bool IsMac =>
-            Application.platform == RuntimePlatform.OSXEditor ||
-            Application.platform == RuntimePlatform.OSXPlayer;
+            UnityEngine.Application.platform == RuntimePlatform.OSXEditor ||
+            UnityEngine.Application.platform == RuntimePlatform.OSXPlayer;
 
         public static string GetSymbol(string keyName)
         {
-            // Key.LeftMeta.ToString() returns "LeftWindows" in Input System
-            if (keyName == "LeftMeta" || keyName == "RightMeta" ||
-                keyName == "LeftWindows" || keyName == "RightWindows")
+            if (PlatformSymbols.TryGetValue(keyName, out (string macSymbol, string otherSymbol) platformSymbol))
             {
-                return IsMac ? "\u2318" : "\u229E"; // ⌘ or ⊞
-            }
-
-            if (keyName == "LeftCtrl" || keyName == "RightCtrl")
-            {
-                return IsMac ? "\u2303" : "Ctrl"; // ⌃ or Ctrl
-            }
-
-            if (keyName == "LeftAlt" || keyName == "RightAlt")
-            {
-                return IsMac ? "\u2325" : "Alt"; // ⌥ or Alt
-            }
-
-            if (keyName == "LeftShift" || keyName == "RightShift")
-            {
-                return IsMac ? "\u21E7" : "Shift"; // ⇧ or Shift
-            }
-
-            if (keyName == "Backspace")
-            {
-                return IsMac ? "\u232B" : "BS"; // ⌫ or BS
-            }
-
-            if (keyName == "Delete")
-            {
-                return IsMac ? "\u2326" : "Del"; // ⌦ or Del
+                return IsMac ? platformSymbol.macSymbol : platformSymbol.otherSymbol;
             }
 
             if (Symbols.TryGetValue(keyName, out string symbol))
@@ -75,3 +68,4 @@ namespace io.github.hatayama.uLoopMCP
         }
     }
 }
+#endif

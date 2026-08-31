@@ -1,0 +1,205 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Builds compiled-vs-edited line-drift and requested-line snap warnings for pause-point enable.
+    /// </summary>
+    internal static class PausePointCompiledLineComparisonWarnings
+    {
+        // Why success-only: resolve failure leaves ResolvedMethod and ResolvedLineText empty,
+        // so this wording would point at fields that are not on the response.
+        // Why same resolvedLine on both sides: the resolver rounds empty/comment lines forward,
+        // so comparing the requested line to the resolved line is a false drift.
+        // Why readOk is distinct from empty text: a blank edited line is a real mismatch;
+        // a failed read is not evidence of drift.
+        internal static (string warning, bool comparedAndMatched) BuildCompiledLineDriftWarningOrEmpty(
+            string compiledLineText,
+            string editedLineText,
+            string file,
+            int resolvedLine,
+            bool editedLineReadOk)
+        {
+            if (string.IsNullOrEmpty(compiledLineText) || !editedLineReadOk)
+            {
+                return (string.Empty, false);
+            }
+
+            string compiledTrimmed = compiledLineText.Trim();
+            string editedTrimmed = editedLineText == null ? string.Empty : editedLineText.Trim();
+            if (editedTrimmed.Length == 0)
+            {
+                return (string.Format(
+                    SourcePausePointConstants.HotReloadCompiledLineMapBlankEditedLineDriftWarningFormat,
+                    SourcePausePointPathNormalizer.ToForwardSlashes(file),
+                    resolvedLine,
+                    compiledTrimmed), false);
+            }
+
+            if (string.Equals(compiledTrimmed, editedTrimmed, StringComparison.Ordinal))
+            {
+                return (string.Empty, true);
+            }
+
+            return (string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineMapLineDriftWarningFormat,
+                SourcePausePointPathNormalizer.ToForwardSlashes(file),
+                resolvedLine,
+                compiledTrimmed,
+                editedTrimmed), false);
+        }
+
+        // Why resolvedLine != requestedLine only: the compiled resolver rounds empty and comment
+        // lines forward, so this inequality is the snap and has no false positive on this path.
+        internal static string BuildLineSnapDisclosureWarningOrEmpty(
+            string file,
+            int requestedLine,
+            int resolvedLine,
+            string resolvedMethod,
+            bool requestedLineReadOk,
+            string requestedLineEditedText)
+        {
+            if (requestedLine <= 0 || resolvedLine <= 0 || resolvedLine == requestedLine)
+            {
+                return string.Empty;
+            }
+
+            string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(file);
+            string methodDisplay = resolvedMethod ?? string.Empty;
+            if (!requestedLineReadOk)
+            {
+                return string.Format(
+                    SourcePausePointConstants.HotReloadCompiledLineSnapDisclosureWithoutEditedTextFormat,
+                    normalizedFile,
+                    requestedLine,
+                    resolvedLine,
+                    methodDisplay);
+            }
+
+            string requestedTrimmed = requestedLineEditedText == null
+                ? string.Empty
+                : requestedLineEditedText.Trim();
+            if (requestedTrimmed.Length == 0)
+            {
+                return string.Format(
+                    SourcePausePointConstants.HotReloadCompiledLineSnapDisclosureBlankRequestedLineFormat,
+                    normalizedFile,
+                    requestedLine,
+                    resolvedLine,
+                    methodDisplay);
+            }
+
+            return string.Format(
+                SourcePausePointConstants.HotReloadCompiledLineSnapDisclosureFormat,
+                normalizedFile,
+                requestedLine,
+                requestedTrimmed,
+                resolvedLine,
+                methodDisplay);
+        }
+
+        // Why snap before resolved-line drift: the requested line is what the agent passed;
+        // the armed line is what actually paused.
+        // Why resolved-text candidates only with a drift sentence: a snap-only warning already
+        // named the armed line, so searching that same text finds the armed line itself.
+        // Why still search requested-line text on a snap-only warning: the intended statement is
+        // on --line, including when braces at the armed line happen to match.
+        // Why skip the requested-line search when texts match: the suffix would duplicate.
+        internal static (string warning, bool comparedAndMatched) ComposeCompiledLineDriftAndSnapWarningOrEmpty(
+            string file,
+            int requestedLine,
+            int resolvedLine,
+            string resolvedMethod,
+            string compiledResolvedLineText,
+            bool resolvedEditedLineReadOk,
+            string resolvedEditedLineText,
+            bool requestedEditedLineReadOk,
+            string requestedEditedLineText,
+            int compiledMethodStartLine,
+            int compiledMethodEndLine,
+            IReadOnlyList<string> compiledSourceLines)
+        {
+            string snapWarning = BuildLineSnapDisclosureWarningOrEmpty(
+                file,
+                requestedLine,
+                resolvedLine,
+                resolvedMethod,
+                requestedEditedLineReadOk,
+                requestedEditedLineText);
+            (string driftWarning, bool comparedAndMatched) = BuildCompiledLineDriftWarningOrEmpty(
+                compiledResolvedLineText,
+                resolvedEditedLineText,
+                file,
+                resolvedLine,
+                resolvedEditedLineReadOk);
+            string combined = PausePointEnableWarnings.MergeWarnings(snapWarning, driftWarning);
+            string resolvedTrimmed = resolvedEditedLineText == null
+                ? string.Empty
+                : resolvedEditedLineText.Trim();
+            string requestedTrimmed = requestedEditedLineText == null
+                ? string.Empty
+                : requestedEditedLineText.Trim();
+            IReadOnlyList<SourcePausePointNearbyCompiledMethod> namedCompiledMethodSpans =
+                Array.Empty<SourcePausePointNearbyCompiledMethod>();
+            if (driftWarning.Length > 0
+                || !string.Equals(resolvedTrimmed, requestedTrimmed, StringComparison.Ordinal))
+            {
+                namedCompiledMethodSpans = SourcePausePointResolver.FindNamedCompiledMethodSpansInFile(file);
+            }
+            combined = PausePointEnableWarnings.AppendCompiledMethodSpanToDriftWarningOrUnchanged(
+                combined,
+                resolvedMethod,
+                compiledMethodStartLine,
+                compiledMethodEndLine);
+            if (driftWarning.Length > 0)
+            {
+                combined = PausePointEnableWarnings.AppendCandidateCompiledLinesToDriftWarningOrUnchanged(
+                    combined,
+                    resolvedEditedLineText,
+                    compiledSourceLines,
+                    namedCompiledMethodSpans);
+            }
+
+            if (!string.Equals(resolvedTrimmed, requestedTrimmed, StringComparison.Ordinal))
+            {
+                combined = PausePointEnableWarnings.AppendRequestedLineCandidateCompiledLinesToDriftWarningOrUnchanged(
+                    combined,
+                    requestedLine,
+                    requestedEditedLineText,
+                    compiledSourceLines,
+                    namedCompiledMethodSpans);
+            }
+
+            return (combined, comparedAndMatched);
+        }
+
+        // Why not ReadLineTextFromSource: that helper returns empty for both a missing line
+        // and a blank line, which used to suppress a real blank-vs-compiled mismatch.
+        internal static (bool readOk, string text) ReadEditedLineText(string requestedFile, int lineNumber)
+        {
+            if (string.IsNullOrEmpty(requestedFile) || lineNumber <= 0)
+            {
+                return (false, string.Empty);
+            }
+
+            string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(requestedFile);
+            string absoluteFilePath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), normalizedFile);
+            if (!File.Exists(absoluteFilePath))
+            {
+                return (false, string.Empty);
+            }
+
+            string[] lines = SourcePausePointSourceLineReader.SplitSourceLines(File.ReadAllText(absoluteFilePath));
+            if (lineNumber > lines.Length)
+            {
+                return (false, string.Empty);
+            }
+
+            return (true, lines[lineNumber - 1].Trim());
+        }
+    }
+}

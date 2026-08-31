@@ -1,15 +1,22 @@
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.Tests.Editor
+using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies dependency-aware tool availability behavior.
+    /// </summary>
     public class ToolExecutionAvailabilityTests
     {
         [Test]
         public void ShouldReportDependencyUnavailableBeforeDisabled_WhenRunTestsDependencyIsMissing_ReturnsTrue()
         {
+            // Verifies that run-tests can explain its missing dependency before disabled settings hide it.
             bool shouldReportDependency = ToolExecutionAvailability
                 .ShouldReportDependencyUnavailableBeforeDisabled(
-                    McpConstants.TOOL_NAME_RUN_TESTS,
+                    UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
                     isTestFrameworkAvailable: false);
 
             Assert.That(shouldReportDependency, Is.True);
@@ -18,9 +25,10 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void ShouldReportDependencyUnavailableBeforeDisabled_WhenRunTestsDependencyExists_ReturnsFalse()
         {
+            // Verifies that normal disabled-tool behavior applies when Unity Test Framework is installed.
             bool shouldReportDependency = ToolExecutionAvailability
                 .ShouldReportDependencyUnavailableBeforeDisabled(
-                    McpConstants.TOOL_NAME_RUN_TESTS,
+                    UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
                     isTestFrameworkAvailable: true);
 
             Assert.That(shouldReportDependency, Is.False);
@@ -29,6 +37,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void ShouldReportDependencyUnavailableBeforeDisabled_WhenOtherToolIsDisabled_ReturnsFalse()
         {
+            // Verifies that dependency bypass behavior stays scoped to run-tests.
             bool shouldReportDependency = ToolExecutionAvailability
                 .ShouldReportDependencyUnavailableBeforeDisabled(
                     "compile",
@@ -40,9 +49,10 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void ShouldExposeInRegisteredTools_WhenRunTestsDisabledAndDependencyIsMissing_ReturnsTrue()
         {
+            // Verifies that run-tests stays discoverable when it needs to return the dependency error.
             bool shouldExpose = ToolExecutionAvailability
                 .ShouldExposeInRegisteredTools(
-                    McpConstants.TOOL_NAME_RUN_TESTS,
+                    UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
                     isToolEnabled: false,
                     isTestFrameworkAvailable: false);
 
@@ -52,9 +62,10 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void ShouldExposeInRegisteredTools_WhenRunTestsDisabledAndDependencyExists_ReturnsFalse()
         {
+            // Verifies that disabled run-tests is hidden after its dependency is available.
             bool shouldExpose = ToolExecutionAvailability
                 .ShouldExposeInRegisteredTools(
-                    McpConstants.TOOL_NAME_RUN_TESTS,
+                    UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
                     isToolEnabled: false,
                     isTestFrameworkAvailable: true);
 
@@ -64,6 +75,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void ShouldExposeInRegisteredTools_WhenOtherToolIsEnabled_ReturnsTrue()
         {
+            // Verifies that regular enabled tools remain visible.
             bool shouldExpose = ToolExecutionAvailability
                 .ShouldExposeInRegisteredTools(
                     "compile",
@@ -76,6 +88,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void ShouldExposeInRegisteredTools_WhenOtherToolIsDisabled_ReturnsFalse()
         {
+            // Verifies that dependency bypass behavior does not make unrelated disabled tools visible.
             bool shouldExpose = ToolExecutionAvailability
                 .ShouldExposeInRegisteredTools(
                     "compile",

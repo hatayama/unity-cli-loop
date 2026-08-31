@@ -1,20 +1,24 @@
+#if UNITY_EDITOR
 #nullable enable
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
-    public static class ReplayInputOverlayState
+    /// <summary>
+    /// Provides Replay Input Overlay State operations for its owning module.
+    /// </summary>
+    public sealed class ReplayInputOverlayStateService
     {
-        private static bool _isActive;
-        private static int _currentFrame;
-        private static int _totalFrames;
-        private static bool _isLooping;
+        private bool _isActive;
+        private int _currentFrame;
+        private int _totalFrames;
+        private bool _isLooping;
 
-        public static bool IsActive => _isActive;
-        public static int CurrentFrame => _currentFrame;
-        public static int TotalFrames => _totalFrames;
-        public static bool IsLooping => _isLooping;
+        public bool IsActive => _isActive;
+        public int CurrentFrame => _currentFrame;
+        public int TotalFrames => _totalFrames;
+        public bool IsLooping => _isLooping;
 
-        public static float Progress
+        public float Progress
         {
             get
             {
@@ -22,7 +26,7 @@ namespace io.github.hatayama.uLoopMCP
             }
         }
 
-        public static void Update(int currentFrame, int totalFrames, bool isLooping)
+        public void Update(int currentFrame, int totalFrames, bool isLooping)
         {
             _isActive = true;
             _currentFrame = currentFrame;
@@ -30,7 +34,7 @@ namespace io.github.hatayama.uLoopMCP
             _isLooping = isLooping;
         }
 
-        public static void Clear()
+        public void Clear()
         {
             _isActive = false;
             _currentFrame = 0;
@@ -38,4 +42,29 @@ namespace io.github.hatayama.uLoopMCP
             _isLooping = false;
         }
     }
+
+    /// <summary>
+    /// Stores Replay Input Overlay state shared by the owning workflow.
+    /// </summary>
+    public static class ReplayInputOverlayState
+    {
+        private static readonly ReplayInputOverlayStateService ServiceValue = new ReplayInputOverlayStateService();
+
+        public static bool IsActive => ServiceValue.IsActive;
+        public static int CurrentFrame => ServiceValue.CurrentFrame;
+        public static int TotalFrames => ServiceValue.TotalFrames;
+        public static bool IsLooping => ServiceValue.IsLooping;
+        public static float Progress => ServiceValue.Progress;
+
+        public static void Update(int currentFrame, int totalFrames, bool isLooping)
+        {
+            ServiceValue.Update(currentFrame, totalFrames, isLooping);
+        }
+
+        public static void Clear()
+        {
+            ServiceValue.Clear();
+        }
+    }
 }
+#endif

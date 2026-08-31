@@ -1,0 +1,205 @@
+using NUnit.Framework;
+using System.Threading.Tasks;
+
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
+{
+    /// <summary>
+    /// Test fixture that verifies Unity CLI Loop Server Startup Protection behavior.
+    /// </summary>
+    public class UnityCliLoopServerStartupProtectionTests
+    {
+        private UnityCliLoopSessionFlagsRepository _sessionFlagsRepository;
+        private UnityCliLoopCompileSessionLifecycleService _sessionStateService;
+        private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _sessionFlagsRepository = UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository();
+            _sessionStateService = UnityCliLoopEditorSessionStateTestFactory.CreateCompileSessionLifecycleService();
+            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _originalSessionState.Restore();
+        }
+
+        [Test]
+        public void ClearStartupProtection_ResetsProtectionWindow()
+        {
+            // Tests that the startup protection window can be cleared by recovery code.
+            UnityCliLoopServerStartupProtectionService service = new();
+
+            service.ActivateStartupProtection(60000);
+
+            Assert.IsTrue(service.IsStartupProtectionActive(), "Startup protection should be active after activation");
+
+            service.ClearStartupProtection();
+
+            Assert.IsFalse(service.IsStartupProtectionActive(), "Startup protection should be cleared by recovery path");
+        }
+
+        [Test]
+        public void OnBeforeAssemblyReload_ShouldClearStartupProtectionBeforeRecovery()
+        {
+            // Tests that assembly-reload recovery clears the startup protection window before shutdown.
+            UnityCliLoopServerStartupProtectionService startupProtectionService = new();
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                startupProtectionService: startupProtectionService);
+            service.RegisterRecoveredServer(new TestServerInstance());
+            startupProtectionService.ActivateStartupProtection(60000);
+
+            Assert.IsTrue(startupProtectionService.IsStartupProtectionActive(), "Startup protection should be active before reload");
+
+            service.OnBeforeAssemblyReload();
+
+            Assert.IsFalse(
+                startupProtectionService.IsStartupProtectionActive(),
+                "Assembly reload recovery should clear startup protection so the server can restart"
+            );
+        }
+
+        [Test]
+        public void OnBeforeAssemblyReload_ShouldPrepareDomainReloadLifecycle()
+        {
+            // Tests that bundled server-scoped services are reset through the domain-reload lifecycle hook.
+            TestDomainReloadLifecycle domainReloadLifecycle = new();
+            UnityCliLoopServerControllerService service = CreateControllerService(domainReloadLifecycle);
+
+            service.OnBeforeAssemblyReload();
+
+            Assert.That(domainReloadLifecycle.PrepareCallCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task StopServerWithUseCaseAsync_ShouldClearStartupProtectionBeforeShutdown()
+        {
+            // Tests that explicit shutdown clears the startup protection window before stopping.
+            UnityCliLoopServerStartupProtectionService startupProtectionService = new();
+            UnityCliLoopServerControllerService service = CreateControllerService(
+                startupProtectionService: startupProtectionService);
+
+            startupProtectionService.ActivateStartupProtection(60000);
+
+            Assert.IsTrue(startupProtectionService.IsStartupProtectionActive(), "Startup protection should be active before shutdown");
+
+            await service.StopServerWithUseCaseAsync();
+
+            Assert.IsFalse(
+                startupProtectionService.IsStartupProtectionActive(),
+                "Shutdown path should clear startup protection so recovery can restart the server"
+            );
+        }
+
+        private UnityCliLoopServerControllerService CreateControllerService(
+            TestDomainReloadLifecycle domainReloadLifecycle = null,
+            UnityCliLoopServerStartupProtectionService startupProtectionService = null)
+        {
+            TestServerInstanceFactory serverInstanceFactory = new();
+            UnityCliLoopServerLifecycleRegistryService lifecycleRegistry =
+                new UnityCliLoopServerLifecycleRegistryService();
+            DomainReloadDetectionFileService domainReloadDetectionService =
+                new DomainReloadDetectionFileService(
+                    _sessionFlagsRepository,
+                    new UnityCliLoopPendingCompileSessionRepository(),
+                    _sessionStateService);
+            UnityCliLoopServerStartupService startupService = new(
+                serverInstanceFactory,
+                _sessionFlagsRepository);
+            UnityCliLoopServerInitializationUseCase initializationUseCase = new(
+                new EditorSecurityValidationService(),
+                startupService);
+            UnityCliLoopServerShutdownUseCase shutdownUseCase = new(startupService);
+            SessionRecoveryService sessionRecoveryService = new(
+                domainReloadDetectionService,
+                _sessionFlagsRepository);
+            DomainReloadRecoveryUseCase domainReloadRecoveryUseCase = new(
+                sessionRecoveryService,
+                domainReloadDetectionService,
+                _sessionFlagsRepository);
+            UnityCliLoopServerReadinessService readinessService = new(
+                lifecycleRegistry,
+                new TestReadinessProbe());
+            UnityCliLoopServerRecoveryTrackingService recoveryTrackingService = new(_sessionFlagsRepository);
+            return new UnityCliLoopServerControllerService(
+                serverInstanceFactory,
+                lifecycleRegistry,
+                domainReloadDetectionService,
+                _sessionFlagsRepository,
+                initializationUseCase,
+                shutdownUseCase,
+                sessionRecoveryService,
+                domainReloadRecoveryUseCase,
+                UnityCliLoopToolRegistrarTestFactory.Create(() => System.Array.Empty<IUnityCliLoopTool>()),
+                readinessService,
+                startupProtectionService ?? new UnityCliLoopServerStartupProtectionService(),
+                recoveryTrackingService,
+                domainReloadLifecycle ?? new TestDomainReloadLifecycle());
+        }
+
+        /// <summary>
+        /// Test support type that makes readiness probing deterministic and side-effect free.
+        /// </summary>
+        private sealed class TestReadinessProbe : IUnityCliLoopServerReadinessProbe
+        {
+            public System.Threading.Tasks.Task ProbeAsync(System.Threading.CancellationToken ct)
+            {
+                return System.Threading.Tasks.Task.CompletedTask;
+            }
+        }
+
+        /// <summary>
+        /// Test support type that records domain reload lifecycle calls.
+        /// </summary>
+        private sealed class TestDomainReloadLifecycle : IUnityCliLoopServerDomainReloadLifecycle
+        {
+            public int PrepareCallCount { get; private set; }
+
+            public void PrepareForDomainReload()
+            {
+                PrepareCallCount++;
+            }
+        }
+
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
+        private sealed class TestServerInstanceFactory : IUnityCliLoopServerInstanceFactory
+        {
+            public IUnityCliLoopServerInstance Create()
+            {
+                return new TestServerInstance();
+            }
+        }
+
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
+        private sealed class TestServerInstance : IUnityCliLoopServerInstance
+        {
+            public bool IsRunning => false;
+
+            public string Endpoint => "test";
+
+            public void StartServer()
+            {
+            }
+
+            public void StopServer()
+            {
+            }
+
+            public void Dispose()
+            {
+            }
+        }
+    }
+}

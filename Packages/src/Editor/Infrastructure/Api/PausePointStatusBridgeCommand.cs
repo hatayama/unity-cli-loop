@@ -1,0 +1,473 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Infrastructure
+{
+    /// <summary>
+    /// Serves CLI-only pause point status and cleanup requests outside the normal tool slot.
+    /// </summary>
+    internal static class PausePointStatusBridgeCommand
+    {
+        private const string IdParamName = "Id";
+        private const string ReasonParamName = "Reason";
+        private const string MinimumRemainingSecondsParamName = "MinimumRemainingSeconds";
+        private const string EmptyListMessage = "No pause points are registered.";
+        private const string EmptyListNextAction =
+            "Enable one with 'uloop enable-pause-point --id <marker-id>' or '--file <project-relative path> --line <line>'.";
+        private const string NonEmptyListNextAction =
+            "Pass --id <marker-id> to inspect one pause point in detail.";
+
+        public static PausePointStatusResponse Execute(JToken paramsToken)
+        {
+            string id = ReadId(paramsToken);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(id);
+            return PausePointStatusResponse.FromSnapshot(snapshot);
+        }
+
+        public static bool IsListRequest(JToken paramsToken)
+        {
+            return string.IsNullOrEmpty(ReadId(paramsToken));
+        }
+
+        public static PausePointStatusListResponse ExecuteList()
+        {
+            IReadOnlyList<UloopPausePointSnapshot> snapshots = UloopPausePointRegistry.GetAllStatuses();
+            List<PausePointStatusListItemResponse> pausePoints = snapshots
+                .Select(PausePointStatusListItemResponse.FromSnapshot)
+                .ToList();
+            int count = pausePoints.Count;
+            return new PausePointStatusListResponse
+            {
+                Message = count == 0 ? EmptyListMessage : $"{count} pause point(s) registered.",
+                Count = count,
+                PausePoints = pausePoints,
+                NextActions = count == 0
+                    ? new string[] { EmptyListNextAction }
+                    : new string[] { NonEmptyListNextAction }
+            };
+        }
+
+        // Called once when await-pause-point starts waiting, so a marker enabled well before a
+        // slow multi-step CLI round trip does not expire before the await itself observes a hit.
+        public static PausePointStatusResponse Extend(JToken paramsToken)
+        {
+            string id = ReadId(paramsToken);
+            int minimumRemainingSeconds = ReadMinimumRemainingSeconds(paramsToken);
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.ExtendExpiryForAwait(id, minimumRemainingSeconds);
+            return PausePointStatusResponse.FromSnapshot(snapshot);
+        }
+
+        public static PausePointStatusResponse Clear(JToken paramsToken)
+        {
+            string id = ReadId(paramsToken);
+            string reason = ReadReason(paramsToken);
+            if (string.IsNullOrEmpty(reason))
+            {
+                reason = UloopPausePointClearedReason.ExplicitClear;
+            }
+
+            // Registry.Clear unpatches any source pause point via the hook
+            // SourcePausePointPatcher wires into it, so this bridge - which must not reference
+            // that Editor-only tool assembly directly - never leaves a Harmony injection attached
+            // after the marker itself reports Cleared.
+            // The CLI polling bridge only reports marker status; the resumed-from-pause side
+            // effect is surfaced through the clear-pause-point tool response, not this path.
+            (UloopPausePointSnapshot snapshot, bool _, int _) = UloopPausePointRegistry.Clear(id, reason);
+            LogCleared(id, snapshot.StatusBeforeClear);
+            if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
+            {
+                LogExpired(id, snapshot.ElapsedSinceEnabledMilliseconds);
+            }
+
+            return PausePointStatusResponse.FromSnapshot(snapshot);
+        }
+
+        // Why: PausePointUseCase.LogCleared duplicates this instead of sharing it, since this
+        // bridge must not reference that Editor-only tool assembly. Keep both in sync if the
+        // log shape or wording changes.
+        private static void LogCleared(string target, string statusBeforeClear)
+        {
+            VibeLogger.LogInfo(
+                "pause_point_cleared",
+                $"Pause point cleared: {target}",
+                new { Target = target, StatusBeforeClear = statusBeforeClear });
+        }
+
+        // Why: PausePointUseCase.LogExpired duplicates this instead of sharing it, since this
+        // bridge must not reference that Editor-only tool assembly. Keep both in sync if the
+        // log shape or wording changes. The physics-callback dispatch diagnostics
+        // (pause_point_physics_dispatch_diagnostics / pause_point_cleared_without_hit_physics)
+        // are NOT duplicated here -- they are tool-side only, since this bridge has no access to
+        // the declaring-type/patch state PausePointUseCase tracks for that purpose.
+        private static void LogExpired(string id, long elapsedSinceEnabledMilliseconds)
+        {
+            VibeLogger.LogInfo(
+                "pause_point_expired",
+                $"Pause point expired before being cleared: {id}",
+                new { Id = id, ElapsedSinceEnabledMilliseconds = elapsedSinceEnabledMilliseconds });
+        }
+
+        private static string ReadId(JToken paramsToken)
+        {
+            if (paramsToken is not JObject paramsObject)
+            {
+                return string.Empty;
+            }
+
+            JToken idToken = paramsObject.GetValue(IdParamName, StringComparison.OrdinalIgnoreCase);
+            return idToken?.ToString() ?? string.Empty;
+        }
+
+        private static string ReadReason(JToken paramsToken)
+        {
+            if (paramsToken is not JObject paramsObject)
+            {
+                return string.Empty;
+            }
+
+            JToken reasonToken = paramsObject.GetValue(ReasonParamName, StringComparison.OrdinalIgnoreCase);
+            return reasonToken?.ToString() ?? string.Empty;
+        }
+
+        private static int ReadMinimumRemainingSeconds(JToken paramsToken)
+        {
+            if (paramsToken is not JObject paramsObject)
+            {
+                return 0;
+            }
+
+            JToken valueToken = paramsObject.GetValue(MinimumRemainingSecondsParamName, StringComparison.OrdinalIgnoreCase);
+            return valueToken?.ToObject<int>() ?? 0;
+        }
+    }
+
+    /// <summary>
+    /// Pause point status payload returned by the internal CLI polling bridge command.
+    /// </summary>
+    public class PausePointStatusResponse : UnityCliLoopToolResponse
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public bool IsEnabled { get; set; }
+        public bool IsHit { get; set; }
+        public int HitCount { get; set; }
+        public int MethodEntryCount { get; set; }
+        public string HitWhen { get; set; } = string.Empty;
+        public int HitWhenSkippedCount { get; set; }
+        public string HitWhenErrorNote { get; set; } = string.Empty;
+        public int TimeoutSeconds { get; set; }
+        public string Mode { get; set; } = string.Empty;
+        public int MaxHistory { get; set; }
+        public int MaxPreviewElements { get; set; }
+        public int MaxCallerFrames { get; set; }
+        public IReadOnlyList<PausePointStatusCapturedHistoryFrame> CapturedVariableHistory { get; set; } =
+            Array.Empty<PausePointStatusCapturedHistoryFrame>();
+        public int HistoryDroppedCount { get; set; }
+        public bool Expired { get; set; }
+        public string EnabledAtUtc { get; set; } = string.Empty;
+        public long ElapsedSinceEnabledMilliseconds { get; set; }
+        public long RemainingMilliseconds { get; set; }
+        public int Generation { get; set; }
+        public PausePointStatusEditorState EditorState { get; set; } = new();
+        public string FirstHitAtUtc { get; set; } = string.Empty;
+        public string LastHitAtUtc { get; set; } = string.Empty;
+        public int FirstHitSequence { get; set; }
+        public int LastHitSequence { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string RecommendedNextAction { get; set; } = string.Empty;
+        public IReadOnlyList<PausePointStatusCapturedVariable> CapturedVariables { get; set; } =
+            Array.Empty<PausePointStatusCapturedVariable>();
+        public IReadOnlyList<PausePointStatusCallerFrame> CallerFrames { get; set; } =
+            Array.Empty<PausePointStatusCallerFrame>();
+        public bool CapturedVariablesTruncated { get; set; }
+        public IReadOnlyList<string> TruncatedVariableNames { get; set; } = Array.Empty<string>();
+        public int TruncatedVariableCount { get; set; }
+        public string ClearedReason { get; set; } = string.Empty;
+        public string StatusBeforeClear { get; set; } = string.Empty;
+        public bool LateHitDiscardedAfterClear { get; set; }
+        public bool SuppressedByHotReload { get; set; }
+        public bool RetargetedToHotReloadPatch { get; set; }
+        // Null when unset so the status contract omits the field (matches Go omitempty).
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string SuppressedByHotReloadReason { get; set; }
+        // Null when unset so the status contract omits Warning (matches Go omitempty).
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string Warning { get; set; }
+        // Why DefaultValue/Null ignore: match Go omitempty so unresolved markers omit the fields
+        // from the status contract shape (0 / empty must not appear in the shared JSON fixture).
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public int ResolvedLine { get; set; }
+
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string ResolvedLineText { get; set; }
+
+        internal static PausePointStatusResponse FromSnapshot(UloopPausePointSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return new PausePointStatusResponse
+            {
+                Id = snapshot.Id,
+                Status = snapshot.Status,
+                IsEnabled = snapshot.IsEnabled,
+                IsHit = snapshot.IsHit,
+                HitCount = snapshot.HitCount,
+                MethodEntryCount = snapshot.MethodEntryCount,
+                HitWhen = snapshot.HitWhen,
+                HitWhenSkippedCount = snapshot.HitWhenSkippedCount,
+                HitWhenErrorNote = snapshot.HitWhenErrorNote,
+                TimeoutSeconds = snapshot.TimeoutSeconds,
+                Mode = snapshot.Mode,
+                MaxHistory = snapshot.MaxHistory,
+                MaxPreviewElements = snapshot.MaxPreviewElements,
+                MaxCallerFrames = snapshot.MaxCallerFrames,
+                CapturedVariableHistory = snapshot.CapturedVariableHistory
+                    .Select(PausePointStatusCapturedHistoryFrame.FromSnapshot)
+                    .ToList(),
+                HistoryDroppedCount = snapshot.HistoryDroppedCount,
+                Expired = snapshot.Expired,
+                EnabledAtUtc = snapshot.EnabledAtUtc,
+                ElapsedSinceEnabledMilliseconds = snapshot.ElapsedSinceEnabledMilliseconds,
+                RemainingMilliseconds = snapshot.RemainingMilliseconds,
+                Generation = snapshot.Generation,
+                EditorState = PausePointStatusEditorState.FromSnapshot(snapshot.EditorState),
+                FirstHitAtUtc = snapshot.FirstHitAtUtc,
+                LastHitAtUtc = snapshot.LastHitAtUtc,
+                FirstHitSequence = snapshot.FirstHitSequence,
+                LastHitSequence = snapshot.LastHitSequence,
+                Message = snapshot.Message,
+                RecommendedNextAction = ResolveExpiredRecommendedNextAction(
+                    snapshot.Status,
+                    snapshot.RecommendedNextAction),
+                CapturedVariables = snapshot.CapturedVariables
+                    .Select(PausePointStatusCapturedVariable.FromCapturedVariable)
+                    .ToList(),
+                CallerFrames = snapshot.CallerFrames
+                    .Select(PausePointStatusCallerFrame.FromCallerFrame)
+                    .ToList(),
+                CapturedVariablesTruncated = snapshot.CapturedVariablesTruncated,
+                TruncatedVariableNames = snapshot.TruncatedVariableNames,
+                TruncatedVariableCount = snapshot.TruncatedVariableCount,
+                ClearedReason = snapshot.ClearedReason,
+                StatusBeforeClear = snapshot.StatusBeforeClear,
+                LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear,
+                SuppressedByHotReload = snapshot.SuppressedByHotReload,
+                RetargetedToHotReloadPatch = snapshot.RetargetedToHotReloadPatch,
+                SuppressedByHotReloadReason = snapshot.SuppressedByHotReloadReason,
+                // Why reason as Warning: agents already read Warning; suppressed=false clears both.
+                Warning = snapshot.SuppressedByHotReload ? snapshot.SuppressedByHotReloadReason : null,
+                ResolvedLine = snapshot.ResolvedLine,
+                ResolvedLineText = string.IsNullOrEmpty(snapshot.ResolvedLineText)
+                    ? null
+                    : snapshot.ResolvedLineText
+            };
+        }
+
+        // Why duplicate: this bridge must not reference the Editor-only PausePoint assembly.
+        // Keep in sync with SourcePausePointConstants.ExpiredRecommendedNextAction.
+        private const string ExpiredRecommendedNextAction =
+            "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
+
+        private static string ResolveExpiredRecommendedNextAction(string status, string recommendedNextAction)
+        {
+            if (status == UloopPausePointStatus.Expired
+                && string.IsNullOrEmpty(recommendedNextAction))
+            {
+                return ExpiredRecommendedNextAction;
+            }
+
+            return recommendedNextAction ?? string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Summary response returned when pause-point-status does not identify one marker.
+    /// </summary>
+    public class PausePointStatusListResponse : UnityCliLoopToolResponse
+    {
+        [JsonProperty(Order = 1)]
+        public string Message { get; set; } = string.Empty;
+
+        [JsonProperty(Order = 2)]
+        public int Count { get; set; }
+
+        [JsonProperty(Order = 3)]
+        public IReadOnlyList<PausePointStatusListItemResponse> PausePoints { get; set; } =
+            Array.Empty<PausePointStatusListItemResponse>();
+
+        [JsonProperty(Order = 4)]
+        public IReadOnlyList<string> NextActions { get; set; } = Array.Empty<string>();
+    }
+
+    /// <summary>
+    /// Compact pause point data used by the id-less status list.
+    /// </summary>
+    public class PausePointStatusListItemResponse
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string Mode { get; set; } = string.Empty;
+        public int HitCount { get; set; }
+        public long RemainingMilliseconds { get; set; }
+
+        internal static PausePointStatusListItemResponse FromSnapshot(UloopPausePointSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return new PausePointStatusListItemResponse
+            {
+                Id = snapshot.Id,
+                Status = snapshot.Status,
+                Mode = snapshot.Mode,
+                HitCount = snapshot.HitCount,
+                RemainingMilliseconds = snapshot.RemainingMilliseconds
+            };
+        }
+    }
+
+    /// <summary>
+    /// One formatted capture frame included in the CLI-only pause point status response history.
+    /// </summary>
+    public class PausePointStatusCapturedHistoryFrame
+    {
+        public int HitSequence { get; set; }
+        public int FrameCount { get; set; }
+        public string HitAtUtc { get; set; } = string.Empty;
+        public IReadOnlyList<PausePointStatusCapturedVariable> CapturedVariables { get; set; } =
+            Array.Empty<PausePointStatusCapturedVariable>();
+        public bool Truncated { get; set; }
+        public IReadOnlyList<PausePointStatusCallerFrame> CallerFrames { get; set; } =
+            Array.Empty<PausePointStatusCallerFrame>();
+
+        internal static PausePointStatusCapturedHistoryFrame FromSnapshot(
+            UloopPausePointCapturedHistoryFrame snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return new PausePointStatusCapturedHistoryFrame
+            {
+                HitSequence = snapshot.HitSequence,
+                FrameCount = snapshot.FrameCount,
+                HitAtUtc = snapshot.HitAtUtc,
+                CapturedVariables = snapshot.CapturedVariables
+                    .Select(PausePointStatusCapturedVariable.FromCapturedVariable)
+                    .ToList(),
+                Truncated = snapshot.Truncated,
+                CallerFrames = snapshot.CallerFrames
+                    .Select(PausePointStatusCallerFrame.FromCallerFrame)
+                    .ToList()
+            };
+        }
+    }
+
+    /// <summary>
+    /// Unity Editor play state attached to pause point status evidence.
+    /// </summary>
+    public class PausePointStatusEditorState
+    {
+        public bool IsPlaying { get; set; }
+        public bool IsPaused { get; set; }
+        public string CapturedAt { get; set; } = string.Empty;
+
+        internal static PausePointStatusEditorState FromSnapshot(UloopPausePointEditorStateSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            return new PausePointStatusEditorState
+            {
+                IsPlaying = snapshot.IsPlaying,
+                IsPaused = snapshot.IsPaused,
+                CapturedAt = snapshot.CapturedAt
+            };
+        }
+    }
+
+    /// <summary>
+    /// One variable captured at a source pause point, mirroring Runtime.UloopCapturedVariable's
+    /// fields for the CLI polling bridge response.
+    /// </summary>
+    public class PausePointStatusCapturedVariable
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Scope { get; set; } = string.Empty;
+        public string TypeName { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+        public string UnityObjectKind { get; set; } = string.Empty;
+        public string UnityObjectPath { get; set; } = string.Empty;
+        public int UnityObjectInstanceId { get; set; }
+        public bool Truncated { get; set; }
+
+        internal static PausePointStatusCapturedVariable FromCapturedVariable(UloopCapturedVariable capturedVariable)
+        {
+            if (capturedVariable == null)
+            {
+                throw new ArgumentNullException(nameof(capturedVariable));
+            }
+
+            return new PausePointStatusCapturedVariable
+            {
+                Name = capturedVariable.Name,
+                Scope = capturedVariable.Scope,
+                TypeName = capturedVariable.TypeName,
+                Value = capturedVariable.Value,
+                UnityObjectKind = capturedVariable.UnityObjectKind,
+                UnityObjectPath = capturedVariable.UnityObjectPath,
+                UnityObjectInstanceId = capturedVariable.UnityObjectInstanceId,
+                Truncated = capturedVariable.Truncated
+            };
+        }
+    }
+
+    /// <summary>
+    /// One managed caller stack frame included in the CLI-only pause point status response.
+    /// </summary>
+    public class PausePointStatusCallerFrame
+    {
+        public string Method { get; set; } = string.Empty;
+
+        // Null when debug symbols are unavailable; omit to match Go omitempty.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string File { get; set; }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public int Line { get; set; }
+
+        // Null when File is present. Distinguishes why File/Line were omitted.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string Note { get; set; }
+
+        internal static PausePointStatusCallerFrame FromCallerFrame(UloopPausePointCallerFrame callerFrame)
+        {
+            if (callerFrame == null)
+            {
+                throw new ArgumentNullException(nameof(callerFrame));
+            }
+
+            return new PausePointStatusCallerFrame
+            {
+                Method = callerFrame.Method,
+                File = callerFrame.File,
+                Line = callerFrame.Line,
+                Note = callerFrame.Note
+            };
+        }
+    }
+}

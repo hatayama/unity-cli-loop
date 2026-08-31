@@ -1,93 +1,487 @@
 name: native-cli-publish
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
-      ref:
-        description: "Git ref to build from (tag, branch, or SHA). Defaults to default branch."
-        required: false
-        default: ""
-      release-tag:
-        description: "Release tag to upload assets to. Defaults to the checked-out ref name."
-        required: false
-        default: ""
       dry-run:
         description: "Dry run (skip release upload)"
         type: boolean
         default: false
 
-permissions:
-  contents: write
-
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v3-beta'
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      actions: write
+    outputs:
+      should_publish: ${{ steps.release.outputs.publish }}
+      should_release: ${{ steps.release.outputs.release }}
+      dry_run: ${{ steps.release.outputs.dry_run }}
+      release_tag: ${{ steps.release.outputs.tag }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7.0.1
+      - name: Checkout approved event commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          ref: ${{ inputs.ref || github.ref }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve release target
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF_NAME: ${{ github.ref_name }}
+          INPUT_DRY_RUN: ${{ inputs.dry-run }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/resolve-native-cli-release-target.sh >> "$GITHUB_OUTPUT"
+
+      - name: Verify release target matches build commit
+        if: steps.release.outputs.publish == 'true' || steps.release.outputs.release == 'true'
+        env:
+          TARGET_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          set -eu
+          build_sha=$(git rev-parse HEAD)
+          if [ "${TARGET_SHA}" != "${build_sha}" ]; then
+            echo "Release target ${TARGET_SHA} does not match build source commit ${build_sha}." >&2
+            exit 1
+          fi
 
       - name: Setup Go
-        uses: actions/setup-go@v7
+        if: steps.release.outputs.publish == 'true' || steps.release.outputs.release == 'true'
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
         with:
-          go-version: '1.26.1'
-          cache-dependency-path: Packages/src/GoCli~/go.sum
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
 
       - name: Install golangci-lint
+        if: steps.release.outputs.publish == 'true'
         run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.0
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Check native CLI
+        if: steps.release.outputs.publish == 'true'
         run: scripts/check-go-cli.sh
 
       - name: Package native CLI release assets
+        if: steps.release.outputs.publish == 'true'
         run: scripts/package-go-cli.sh
 
-      - name: Resolve release tag
-        id: release
+      - name: Verify packaged release assets
+        if: steps.release.outputs.publish == 'true'
+        run: scripts/verify-native-cli-release-assets.sh
+
+      - name: Write release notes
+        if: steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true'
         env:
-          INPUT_RELEASE_TAG: ${{ inputs.release-tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
-          if [ -n "${INPUT_RELEASE_TAG}" ]; then
-            RELEASE_TAG="${INPUT_RELEASE_TAG}"
-          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            RELEASE_TAG="${GITHUB_REF_NAME}"
+          set -eu
+          mkdir -p release-input
+          awk -v version="${RELEASE_VERSION}" '
+            $0 ~ "^## \\[" version "\\]" { found = 1; printing = 1; print; next }
+            printing && /^## \[/ { exit }
+            printing { print }
+            END { if (!found) exit 1 }
+          ' cli/project-runner/CHANGELOG.md > release-input/release-notes.md
+
+      - name: Write release metadata
+        if: steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true'
+        env:
+          TARGET_SHA: ${{ steps.release.outputs.sha }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          SHOULD_PUBLISH: ${{ steps.release.outputs.publish }}
+          SHOULD_RELEASE: ${{ steps.release.outputs.release }}
+          DRY_RUN: ${{ steps.release.outputs.dry_run }}
+        run: |
+          set -eu
+          mkdir -p release-input
+          {
+            printf 'build_sha=%s\n' "$(git rev-parse HEAD)"
+            printf 'target_sha=%s\n' "${TARGET_SHA}"
+            printf 'release_tag=%s\n' "${RELEASE_TAG}"
+            printf 'version=%s\n' "${RELEASE_VERSION}"
+            printf 'publish=%s\n' "${SHOULD_PUBLISH}"
+            printf 'release=%s\n' "${SHOULD_RELEASE}"
+            printf 'dry_run=%s\n' "${DRY_RUN}"
+            printf 'event_ref=%s\n' "${GITHUB_REF}"
+          } > release-input/release-metadata.env
+          if [ "${SHOULD_PUBLISH}" = "true" ]; then
+            shasum -a 256 dist/release/* > release-input/release-assets.manifest
           else
-            RELEASE_TAG=$(jq -r '.["Packages/src"]' .release-please-manifest.json)
-            RELEASE_TAG="v${RELEASE_TAG}"
+            : > release-input/release-assets.manifest
           fi
 
-          case "${RELEASE_TAG}" in
-            v[0-9]*)
-              ;;
-            *)
-              echo "Invalid release tag: ${RELEASE_TAG}" >&2
-              exit 1
-              ;;
-          esac
-
-          case "${RELEASE_TAG}" in
-            *[!A-Za-z0-9._-]*)
-              echo "Invalid release tag: ${RELEASE_TAG}" >&2
-              exit 1
-              ;;
-          esac
-
-          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "Release tag: ${RELEASE_TAG}"
-
-      - name: Upload native CLI assets
-        if: inputs.dry-run != true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          gh release upload "${RELEASE_TAG}" Packages/src/GoCli~/release/* --clobber
+      - name: Upload packaged release assets
+        if: steps.release.outputs.release == 'true' || steps.release.outputs.publish == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-cli-release-input
+          path: |
+            dist/release
+            release-input
+          if-no-files-found: error
 
       - name: Dry run summary
-        if: inputs.dry-run == true
+        if: steps.release.outputs.publish == 'true' && steps.release.outputs.dry_run == 'true'
+        run: ls -lh dist/release
+
+      - name: Cancel superseded approval-waiting runs
+        if: (steps.release.outputs.publish == 'true' || steps.release.outputs.release == 'true') && steps.release.outputs.dry_run != 'true'
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          go run ./cmd/cancel-superseded-waiting-runs
+          --repo "${{ github.repository }}"
+          --workflow native-cli-publish.yml
+          --branch "${{ github.ref_name }}"
+          --current-run-id "${{ github.run_id }}"
+
+  publish:
+    needs: build
+    if: (needs.build.outputs.should_publish == 'true' || needs.build.outputs.should_release == 'true') && needs.build.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    environment: cli-release
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    env:
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download packaged release assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: native-cli-release-input
+          path: .
+
+      - name: Verify release metadata
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ls -lh Packages/src/GoCli~/release
+          set -eu
+          metadata_value() {
+            key=$1
+            value=$(grep "^${key}=" release-input/release-metadata.env | cut -d= -f2-)
+            if [ -z "${value}" ]; then
+              echo "Missing release metadata: ${key}." >&2
+              exit 1
+            fi
+            printf '%s\n' "${value}"
+          }
+
+          build_sha=$(metadata_value build_sha)
+          target_sha=$(metadata_value target_sha)
+          release_tag=$(metadata_value release_tag)
+          version=$(metadata_value version)
+          should_publish=$(metadata_value publish)
+          should_release=$(metadata_value release)
+          dry_run=$(metadata_value dry_run)
+          event_ref=$(metadata_value event_ref)
+          BUILD_SHA="${build_sha}"
+          TARGET_SHA="${target_sha}"
+          if [ "${BUILD_SHA}" != "${GITHUB_SHA}" ] || [ "${TARGET_SHA}" != "${GITHUB_SHA}" ]; then
+            echo "Build SHA and release target must match the approved event commit." >&2
+            exit 1
+          fi
+          release_sha="${GITHUB_SHA}"
+          if [ "${event_ref}" != "refs/heads/main" ]; then
+            echo "Unsupported release ref ${event_ref}." >&2
+            exit 1
+          fi
+          if [ "${release_tag}" != "uloop-project-runner-v${version}" ]; then
+            echo "Release tag does not match the resolved version." >&2
+            exit 1
+          fi
+          validate_boolean() {
+            field_name=$1
+            field_value=$2
+            if [ "${field_value}" != "true" ] && [ "${field_value}" != "false" ]; then
+              echo "Invalid boolean metadata value for ${field_name}: ${field_value}." >&2
+              exit 1
+            fi
+          }
+          validate_boolean publish "${should_publish}"
+          validate_boolean release "${should_release}"
+          validate_boolean dry_run "${dry_run}"
+          printf 'RELEASE_SHA=%s\n' "${release_sha}" >> "$GITHUB_ENV"
+          printf 'RELEASE_TAG=%s\n' "${release_tag}" >> "$GITHUB_ENV"
+          printf 'SHOULD_PUBLISH=%s\n' "${should_publish}" >> "$GITHUB_ENV"
+          printf 'SHOULD_RELEASE=%s\n' "${should_release}" >> "$GITHUB_ENV"
+          printf 'DRY_RUN=%s\n' "${dry_run}" >> "$GITHUB_ENV"
+
+      - name: Verify release asset manifest
+        if: env.SHOULD_PUBLISH == 'true'
+        run: |
+          set -eu
+          manifest_paths="${RUNNER_TEMP}/native-cli-manifest-paths"
+          actual_paths="${RUNNER_TEMP}/native-cli-actual-paths"
+          awk '{ print $2 }' release-input/release-assets.manifest | sed 's#^dist/release/##' | sort > "${manifest_paths}"
+          find dist/release -maxdepth 1 -type f -printf '%f\n' | sort > "${actual_paths}"
+          manifest_count=$(wc -l < "${manifest_paths}" | tr -d ' ')
+          unique_manifest_count=$(uniq "${manifest_paths}" | wc -l | tr -d ' ')
+          if [ "${manifest_count}" -ne "${unique_manifest_count}" ]; then
+            echo "Release manifest is missing files or has duplicate entries." >&2
+            exit 1
+          fi
+          if ! cmp -s "${manifest_paths}" "${actual_paths}"; then
+            echo "Unexpected release files are not listed in the manifest." >&2
+            echo "Release manifest is missing files or has duplicate entries." >&2
+            exit 1
+          fi
+          asset_count=0
+          while IFS=' ' read -r checksum asset_path; do
+            case "${checksum}" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]* ) ;; *) exit 1 ;; esac
+            case "${asset_path}" in dist/release/[A-Za-z0-9._+-]* ) ;; *) exit 1 ;; esac
+            full_path="${asset_path}"
+            [ -s "${full_path}" ]
+            actual_checksum=$(shasum -a 256 "${full_path}" | awk '{print $1}')
+            [ "${actual_checksum}" = "${checksum}" ]
+            asset_count=$((asset_count + 1))
+          done < release-input/release-assets.manifest
+          [ "${asset_count}" -gt 0 ]
+
+      - name: Create or reuse draft release
+        id: draft
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          report_release_creation_failure() {
+            error_path=$1
+            cat "${error_path}" >&2
+            if grep -qE 'HTTP 403|Resource not accessible by integration' "${error_path}"; then
+              echo "See docs/release-recovery-runbook.md for the roll-forward recovery procedure." >&2
+            fi
+          }
+          tag_error_path="${RUNNER_TEMP}/native-cli-release-tag-error"
+          set +e
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha' 2> "${tag_error_path}")
+          tag_status=$?
+          set -e
+          if [ "${tag_status}" -ne 0 ]; then
+            tag_error=$(cat "${tag_error_path}")
+            case "${tag_error}" in
+              *"HTTP 404"*) tag_sha="" ;;
+              *"HTTP 422"*"No commit found for SHA"*|*"No commit found for SHA"*"HTTP 422"*) tag_sha="" ;;
+              *) printf '%s\n' "${tag_error}" >&2; exit "${tag_status}" ;;
+            esac
+          fi
+          if [ -n "${tag_sha}" ] && [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
+            exit 1
+          fi
+          if [ -z "${tag_sha}" ]; then
+            # Why the tag is created before the release: with an active tag ruleset the
+            # workflow token cannot create a release for a not-yet-existing tag, while
+            # explicit ref creation is permitted and pins the tag to the verified commit.
+            tag_create_error_path="${RUNNER_TEMP}/native-cli-release-tag-create-error"
+            set +e
+            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${RELEASE_TAG}" \
+              -f sha="${RELEASE_SHA}" > "${tag_create_error_path}" 2>&1
+            tag_create_status=$?
+            set -e
+            if [ "${tag_create_status}" -ne 0 ]; then
+              report_release_creation_failure "${tag_create_error_path}"
+              exit "${tag_create_status}"
+            fi
+          fi
+          if gh release view "${RELEASE_TAG}" --json isDraft,targetCommitish > release-input/release-state.json 2>/dev/null; then
+            is_draft=$(jq -r '.isDraft' release-input/release-state.json)
+            if [ "${is_draft}" = "false" ]; then
+              echo "release_published=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "release_published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          prerelease_flag=""
+          case "${RELEASE_TAG}" in *-beta.*) prerelease_flag="--prerelease" ;; esac
+          release_create_error_path="${RUNNER_TEMP}/native-cli-release-create-error"
+          set +e
+          gh release create "${RELEASE_TAG}" --draft --title "${RELEASE_TAG}" --notes-file release-input/release-notes.md --target "${RELEASE_SHA}" ${prerelease_flag} > "${release_create_error_path}" 2>&1
+          release_create_status=$?
+          set -e
+          if [ "${release_create_status}" -ne 0 ]; then
+            report_release_creation_failure "${release_create_error_path}"
+            exit "${release_create_status}"
+          fi
+          echo "release_published=false" >> "$GITHUB_OUTPUT"
+
+      - name: Attest native CLI release assets
+        id: attest
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
+        with:
+          subject-path: dist/release/*
+
+      - name: Verify native CLI asset attestations
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/native-cli-publish.yml
+        run: |
+          set -eu
+          while IFS=' ' read -r checksum asset_path; do
+            gh attestation verify "${asset_path}" --repo "${GITHUB_REPOSITORY}" --signer-workflow "${SIGNER_WORKFLOW}"
+          done < release-input/release-assets.manifest
+
+      - name: Attach attestation bundles to release assets
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          set -eu
+          [ -s "${BUNDLE_PATH}" ]
+          while IFS=' ' read -r checksum asset_path; do
+            cp "${BUNDLE_PATH}" "${asset_path}.sigstore.json"
+          done < release-input/release-assets.manifest
+
+      - name: Upload native CLI assets
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')
+          if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
+            exit 1
+          fi
+          while IFS=' ' read -r checksum asset_path; do
+            gh release upload "${RELEASE_TAG}" "${asset_path}" "${asset_path}.sigstore.json" --clobber
+          done < release-input/release-assets.manifest
+
+      - name: Verify remote release assets
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          release_assets=$(gh release view "${RELEASE_TAG}" --json assets)
+          while IFS=' ' read -r checksum asset_path; do
+            asset_name=$(basename "${asset_path}")
+            bundle_name="${asset_name}.sigstore.json"
+            asset_count=$(printf '%s' "${release_assets}" | jq --arg name "${asset_name}" '[.assets[] | select(.name == $name)] | length')
+            bundle_count=$(printf '%s' "${release_assets}" | jq --arg name "${bundle_name}" '[.assets[] | select(.name == $name)] | length')
+            asset_size=$(printf '%s' "${release_assets}" | jq -r --arg name "${asset_name}" '[.assets[] | select(.name == $name) | .size] | .[0]')
+            bundle_size=$(printf '%s' "${release_assets}" | jq -r --arg name "${bundle_name}" '[.assets[] | select(.name == $name) | .size] | .[0]')
+            if [ "${asset_count}" -ne 1 ] || [ "${bundle_count}" -ne 1 ] || [ "${asset_size}" -le 0 ] || [ "${bundle_size}" -le 0 ]; then
+              echo "Release asset or attestation bundle is missing or empty: ${asset_name}." >&2
+              exit 1
+            fi
+          done < release-input/release-assets.manifest
+
+      - name: Verify remote attestation digest matches release tag
+        if: env.SHOULD_PUBLISH == 'true' && env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SIGNER_WORKFLOW: ${{ github.repository }}/.github/workflows/native-cli-publish.yml
+        run: |
+          set -eu
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')
+          if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
+            exit 1
+          fi
+          verification_directory=$(mktemp -d "${RUNNER_TEMP}/native-cli-attestation-verify.XXXXXX")
+          while IFS=' ' read -r checksum asset_path; do
+            asset_name=$(basename "${asset_path}")
+            bundle_name="${asset_name}.sigstore.json"
+            asset_directory="${verification_directory}/${asset_name}"
+            mkdir "${asset_directory}"
+            gh release download "${RELEASE_TAG}" --pattern "${asset_name}" --pattern "${bundle_name}" --dir "${asset_directory}"
+            downloaded_asset_path="${asset_directory}/${asset_name}"
+            downloaded_bundle_path="${asset_directory}/${bundle_name}"
+            verification_output_path="${asset_directory}/verification.json"
+            digest_output_path="${asset_directory}/digests.txt"
+            gh attestation verify "${downloaded_asset_path}" --repo "${GITHUB_REPOSITORY}" --bundle "${downloaded_bundle_path}" --signer-workflow "${SIGNER_WORKFLOW}" --format json > "${verification_output_path}"
+            verification_count=$(jq 'length' "${verification_output_path}")
+            digest_count=$(jq '[.[].verificationResult.signature.certificate.sourceRepositoryDigest | select(type == "string" and length > 0)] | length' "${verification_output_path}")
+            if [ "${verification_count}" -eq 0 ] || [ "${verification_count}" -ne "${digest_count}" ]; then
+              echo "Attestation verification did not return a source repository digest for ${asset_name}." >&2
+              exit 1
+            fi
+            jq -r '.[].verificationResult.signature.certificate.sourceRepositoryDigest' "${verification_output_path}" > "${digest_output_path}"
+            while IFS= read -r digest; do
+              if [ "${digest}" != "${tag_sha}" ]; then
+                echo "Attestation digest for ${asset_name} does not match release tag ${RELEASE_TAG}." >&2
+                exit 1
+              fi
+            done < "${digest_output_path}"
+          done < release-input/release-assets.manifest
+
+      - name: Publish draft release
+        if: env.DRY_RUN != 'true' && steps.draft.outputs.release_published != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')
+          if [ "${tag_sha}" != "${RELEASE_SHA}" ]; then
+            echo "Release tag ${RELEASE_TAG} does not match approved release commit ${RELEASE_SHA}." >&2
+            exit 1
+          fi
+          case "${RELEASE_TAG}" in *-beta.*) gh release edit "${RELEASE_TAG}" --draft=false --prerelease ;; *) gh release edit "${RELEASE_TAG}" --draft=false ;; esac
+
+  post-publish:
+    needs: [build, publish]
+    if: needs.build.outputs.dry_run != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout approved event commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache-dependency-path: '**/go.sum'
+
+      - name: Dispatch release-please after native CLI publish
+        if: needs.build.outputs.should_publish == 'true' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: gh workflow run release-please.yml --ref "${TARGET_BRANCH}" -f branch="${TARGET_BRANCH}"
+
+      - name: Sync release-please package releases
+        id: package_release_sync
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: scripts/sync-release-please-package-releases.sh
+
+      - name: Mark release PR as tagged
+        if: github.event_name == 'push' && steps.package_release_sync.outputs.ready != 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+          TARGET_SHA: ${{ github.sha }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: scripts/mark-release-pr-tagged.sh

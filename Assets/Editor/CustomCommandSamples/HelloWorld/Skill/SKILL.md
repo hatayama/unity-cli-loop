@@ -1,6 +1,6 @@
 ---
 name: uloop-hello-world
-description: "Sample hello world tool via uloop CLI. Use when you need to test the MCP tool system or see an example of custom tool implementation."
+description: "Sample uloop hello-world tool. Use to verify custom tool wiring or inspect a minimal tool implementation example."
 ---
 
 # uloop hello-world
@@ -19,7 +19,7 @@ uloop hello-world [options]
 |-----------|------|---------|-------------|
 | `--name` | string | `World` | Name to greet |
 | `--language` | string | `english` | Language for greeting: `english`, `japanese`, `spanish`, `french` |
-| `--include-timestamp` | boolean | `true` | Whether to include timestamp in response |
+| `--no-include-timestamp` | flag | - | Exclude timestamp from response |
 
 ## Examples
 
@@ -34,12 +34,13 @@ uloop hello-world --name "Alice"
 uloop hello-world --name "太郎" --language japanese
 
 # Spanish greeting without timestamp
-uloop hello-world --name "Carlos" --language spanish --include-timestamp false
+uloop hello-world --name "Carlos" --language spanish --no-include-timestamp
 ```
 
 ## Output
 
 Returns JSON with:
+
 - `Message`: The greeting message
 - `Language`: Language used for greeting
 - `Timestamp`: Current timestamp (if enabled)
@@ -47,7 +48,8 @@ Returns JSON with:
 ## Notes
 
 This is a sample custom tool demonstrating:
+
 - Type-safe parameter handling with Schema
 - Enum parameters for language selection
-- Boolean flag parameters
+- Value-less flag parameters
 - Multi-language support

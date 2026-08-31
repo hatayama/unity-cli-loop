@@ -6,15 +6,27 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
-namespace io.github.hatayama.uLoopMCP.Tests.Editor
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Infrastructure;
+using io.github.hatayama.UnityCliLoop.Presentation;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Setup Wizard Window behavior.
+    /// </summary>
     public class SetupWizardWindowTests
     {
         private static readonly string SettingsFilePath =
-            Path.Combine(McpConstants.USER_SETTINGS_FOLDER, McpConstants.SETTINGS_FILE_NAME);
+            Path.Combine(UnityCliLoopConstants.USER_SETTINGS_FOLDER, UnityCliLoopConstants.SETTINGS_FILE_NAME);
 
         private bool _settingsFileExisted;
         private string _settingsFileContent;
+        private IUnityCliLoopEditorSettingsPort _editorSettingsPort;
+        private UnityCliLoopEditorSettingsRepository _editorSettingsRepository;
+        private UnityCliLoopEditorSessionStateSnapshot _originalSessionState;
 
         [SetUp]
         public void SetUp()
@@ -22,150 +34,356 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             _settingsFileExisted = File.Exists(SettingsFilePath);
             _settingsFileContent = _settingsFileExisted ? File.ReadAllText(SettingsFilePath) : null;
 
-            if (!Directory.Exists(McpConstants.USER_SETTINGS_FOLDER))
+            if (!Directory.Exists(UnityCliLoopConstants.USER_SETTINGS_FOLDER))
             {
-                Directory.CreateDirectory(McpConstants.USER_SETTINGS_FOLDER);
+                Directory.CreateDirectory(UnityCliLoopConstants.USER_SETTINGS_FOLDER);
             }
 
             DeleteIfExists(SettingsFilePath);
-            McpEditorSettings.InvalidateCache();
+            _editorSettingsPort =
+                UnityCliLoopEditorSettingsTestFactory.CreatePortWithRepository(out _editorSettingsRepository);
+            _originalSessionState = UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+            SetupWizardWindow.InitializeEditorServices(
+                _editorSettingsPort,
+                CreateCliSetupApplicationService(),
+                CreateSkillSetupUseCase());
+            _editorSettingsRepository.InvalidateCache();
         }
 
         [TearDown]
         public void TearDown()
         {
             RestoreFile(SettingsFilePath, _settingsFileExisted, _settingsFileContent);
-            McpEditorSettings.InvalidateCache();
+            _editorSettingsRepository.InvalidateCache();
+            _originalSessionState.Restore();
         }
 
-        [TestCase("", "1.7.3", false, true)]
-        [TestCase("1.7.2", "1.7.3", false, true)]
-        [TestCase("1.7.4", "1.7.3", false, true)]
-        [TestCase("1.7.3", "1.7.3", false, false)]
-        [TestCase("", "1.7.3", true, false)]
-        [TestCase("1.7.2", "1.7.3", true, false)]
+        [TestCase("", "1.7.3", "", "3.0.1", false, false, false, true)]
+        [TestCase("1.7.2", "1.7.3", "3.0.1", "3.0.1", false, false, false, false)]
+        [TestCase("1.7.2", "1.7.3", "3.0.1", "3.0.1", false, true, false, true)]
+        [TestCase("1.7.2", "1.7.3", "3.0.1", "3.0.1", false, false, true, true)]
+        [TestCase("1.7.4", "1.7.3", "3.0.1", "3.0.1", false, false, true, true)]
+        [TestCase("1.7.3", "1.7.3", "3.0.1", "3.0.1", false, true, true, false)]
+        [TestCase("1.7.3", "1.7.3", "3.0.1", "3.0.2", false, true, false, true)]
+        [TestCase("1.7.3", "1.7.3", "3.0.1", "3.0.2", false, false, false, false)]
+        [TestCase("", "1.7.3", "", "3.0.1", true, true, true, false)]
+        [TestCase("1.7.2", "1.7.3", "3.0.1", "3.0.1", true, true, true, false)]
+        [TestCase("1.7.3", "1.7.3", "3.0.1", "3.0.2", true, true, true, false)]
         public void ShouldAutoShowForVersion_ReturnsExpectedValue(
             string lastSeenVersion,
             string currentVersion,
+            string lastSeenMinimumDispatcherVersion,
+            string currentMinimumDispatcherVersion,
             bool suppressAutoShow,
+            bool needsCliUpdate,
+            bool hasSkillUpdate,
             bool expected)
         {
+            // Verifies that package and dispatcher requirement changes auto-show only for actionable updates.
             bool shouldAutoShow =
-                SetupWizardWindow.ShouldAutoShowForVersion(currentVersion, lastSeenVersion, suppressAutoShow);
+                SetupWizardStartupFlow.ShouldAutoShowForVersion(
+                    currentVersion,
+                    lastSeenVersion,
+                    currentMinimumDispatcherVersion,
+                    lastSeenMinimumDispatcherVersion,
+                    suppressAutoShow,
+                    needsCliUpdate,
+                    hasSkillUpdate);
 
             Assert.That(shouldAutoShow, Is.EqualTo(expected));
         }
 
-        [Test]
-        public void MaybeRecordLastSeenVersion_WhenAutoShow_UpdatesStoredVersion()
+        [TestCase(false, false, false)]
+        [TestCase(true, false, true)]
+        [TestCase(false, true, true)]
+        [TestCase(true, true, true)]
+        public void ShouldSuppressAutoShow_ReturnsExpectedValue(
+            bool personalSuppress,
+            bool projectSuppress,
+            bool expected)
         {
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
-            {
-                lastSeenSetupWizardVersion = "1.7.2"
-            });
+            // Verifies that the personal and the project-scoped suppression flags are OR-combined,
+            // so the project-scoped flag alone suppresses the wizard for everyone on the project.
+            bool shouldSuppress =
+                SetupWizardStartupFlow.ShouldSuppressAutoShow(personalSuppress, projectSuppress);
 
-            SetupWizardWindow.MaybeRecordLastSeenVersion(true, "1.7.3");
-
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(shouldSuppress, Is.EqualTo(expected));
         }
 
         [Test]
-        public void MaybeRecordLastSeenVersion_WhenManualShow_KeepsStoredVersion()
+        public void HasSkillUpdateForSetupWizard_WhenOutdatedTargetHasSkillsDirectory_ReturnsTrue()
         {
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            // Verifies that outdated installed skills request the upgrade-time wizard.
+            List<SkillSetupTargetInfo> targets = new()
             {
-                lastSeenSetupWizardVersion = "1.7.2"
-            });
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    installState: SkillInstallState.Outdated)
+            };
 
-            SetupWizardWindow.MaybeRecordLastSeenVersion(false, "1.7.3");
+            bool hasSkillUpdate = SetupWizardStartupFlow.HasSkillUpdateForSetupWizard(targets);
 
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(hasSkillUpdate, Is.True);
+        }
+
+        [TestCase(SkillInstallState.Installed)]
+        [TestCase(SkillInstallState.Missing)]
+        [TestCase(SkillInstallState.Checking)]
+        public void HasSkillUpdateForSetupWizard_WhenTargetIsNotOutdated_ReturnsFalse(
+            SkillInstallState installState)
+        {
+            // Verifies that non-outdated skill states do not request the upgrade-time wizard.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    installState)
+            };
+
+            bool hasSkillUpdate = SetupWizardStartupFlow.HasSkillUpdateForSetupWizard(targets);
+
+            Assert.That(hasSkillUpdate, Is.False);
         }
 
         [Test]
-        public void MaybeRecordSuppressedVersion_WhenAutoShowSuppressed_UpdatesStoredVersion()
+        public void HasSkillUpdateForSetupWizard_WhenOutdatedTargetHasNoSkillsDirectory_ReturnsFalse()
         {
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            // Verifies that missing opt-in skills directories are not treated as skill updates.
+            List<SkillSetupTargetInfo> targets = new()
             {
-                lastSeenSetupWizardVersion = "1.7.2"
-            });
+                CreateSkillTarget(
+                    hasSkillsDirectory: false,
+                    installState: SkillInstallState.Outdated)
+            };
 
-            SetupWizardWindow.MaybeRecordSuppressedVersion(true, "1.7.3");
+            bool hasSkillUpdate = SetupWizardStartupFlow.HasSkillUpdateForSetupWizard(targets);
 
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(hasSkillUpdate, Is.False);
         }
 
         [Test]
-        public void MaybeRecordSuppressedVersion_WhenAutoShowAllowed_KeepsStoredVersion()
+        public void HasSkillUpdateForSetupWizard_WhenTargetHasDifferentLayoutSkills_ReturnsTrue()
         {
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            // Verifies that existing skills in the old layout request the upgrade-time wizard.
+            List<SkillSetupTargetInfo> targets = new()
             {
-                lastSeenSetupWizardVersion = "1.7.2"
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    installState: SkillInstallState.Missing,
+                    hasDifferentLayoutSkills: true)
+            };
+
+            bool hasSkillUpdate = SetupWizardStartupFlow.HasSkillUpdateForSetupWizard(targets);
+
+            Assert.That(hasSkillUpdate, Is.True);
+        }
+
+        [TestCase("2.1.1", "3.0.0-beta.7", true)]
+        [TestCase("1.9.0", "3.0.0", true)]
+        [TestCase("", "3.0.0-beta.7", true)]
+        [TestCase("", "4.0.0", false)]
+        [TestCase("3.0.0-beta.6", "3.0.0-beta.7", false)]
+        [TestCase("3.0.0-beta.7", "4.0.0", false)]
+        [TestCase("not-a-version", "3.0.0-beta.7", false)]
+        public void ShouldAutoScanThirdPartyToolMigration_ReturnsExpectedValue(
+            string lastSeenVersion,
+            string currentVersion,
+            bool expected)
+        {
+            // Verifies that V3 startup scans run for V2 upgrades or missing prior setup state.
+            bool shouldAutoScan =
+                SetupWizardStartupFlow.ShouldAutoScanThirdPartyToolMigration(currentVersion, lastSeenVersion);
+
+            Assert.That(shouldAutoScan, Is.EqualTo(expected));
+        }
+
+        [TestCase(true, false, 0d, 10d, MigrationAutoScanPollAction.ContinueWaiting)]
+        [TestCase(true, true, 0d, 10d, MigrationAutoScanPollAction.ContinueWaiting)]
+        [TestCase(false, false, 0d, 10d, MigrationAutoScanPollAction.Terminate)]
+        [TestCase(false, true, 0d, 10d, MigrationAutoScanPollAction.RunDetection)]
+        [TestCase(false, true, 5d, 10d, MigrationAutoScanPollAction.RunDetection)]
+        [TestCase(false, true, 10d, 10d, MigrationAutoScanPollAction.FallBackToFullScan)]
+        [TestCase(false, true, 15d, 10d, MigrationAutoScanPollAction.FallBackToFullScan)]
+        public void DecideMigrationAutoScanPollAction_ReturnsExpectedAction(
+            bool isCompiling,
+            bool scriptCompilationFailed,
+            double elapsedSeconds,
+            double timeoutSeconds,
+            MigrationAutoScanPollAction expected)
+        {
+            // Verifies the pure poll decision function used to replace the unreliable
+            // delayCall-based migration auto-scan trigger with an EditorApplication.update poll.
+            MigrationAutoScanPollAction action = SetupWizardStartupFlow.DecideMigrationAutoScanPollAction(
+                isCompiling,
+                scriptCompilationFailed,
+                elapsedSeconds,
+                timeoutSeconds);
+
+            Assert.That(action, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void MaybeRecordLastSeenSetupWizardState_WhenAutoShow_UpdatesStoredState()
+        {
+            // Verifies that auto-show records the setup wizard version state.
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "1.7.2",
+                lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
             });
 
-            SetupWizardWindow.MaybeRecordSuppressedVersion(false, "1.7.3");
+            SetupWizardStartupFlow.MaybeRecordLastSeenSetupWizardState(
+                _editorSettingsPort,
+                true,
+                "1.7.3",
+                "3.0.2");
 
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                Is.EqualTo("3.0.2"));
+        }
+
+        [Test]
+        public void MaybeRecordLastSeenSetupWizardState_WhenManualShow_KeepsStoredState()
+        {
+            // Verifies that manual opens do not update the setup wizard version state.
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "1.7.2",
+                lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
+            });
+
+            SetupWizardStartupFlow.MaybeRecordLastSeenSetupWizardState(
+                _editorSettingsPort,
+                false,
+                "1.7.3",
+                "3.0.2");
+
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                Is.EqualTo("3.0.1"));
+        }
+
+        [Test]
+        public void MaybeRecordSuppressedSetupWizardState_WhenAutoShowSuppressed_UpdatesStoredState()
+        {
+            // Verifies that suppressing auto-show records the current setup wizard state.
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "1.7.2",
+                lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
+            });
+
+            SetupWizardStartupFlow.MaybeRecordSuppressedSetupWizardState(
+                _editorSettingsPort,
+                true,
+                "1.7.3",
+                "3.0.2");
+
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                Is.EqualTo("3.0.2"));
+        }
+
+        [Test]
+        public void MaybeRecordSuppressedSetupWizardState_WhenAutoShowAllowed_KeepsStoredState()
+        {
+            // Verifies that allowing auto-show leaves the stored setup wizard state unchanged.
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
+            {
+                lastSeenSetupWizardVersion = "1.7.2",
+                lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
+            });
+
+            SetupWizardStartupFlow.MaybeRecordSuppressedSetupWizardState(
+                _editorSettingsPort,
+                false,
+                "1.7.3",
+                "3.0.2");
+
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                Is.EqualTo("3.0.1"));
         }
 
         [Test]
         public void TryReuseOpenWindow_WhenExistingWindowAndAutoShow_FocusesWindowAndRecordsVersion()
         {
             bool focusedExistingWindow = false;
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
-                lastSeenSetupWizardVersion = "1.7.2"
+                lastSeenSetupWizardVersion = "1.7.2",
+                lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
             });
 
             bool reused = SetupWizardWindow.TryReuseOpenWindow(
                 hasOpenWindow: true,
                 shouldRecordVersion: true,
                 currentVersion: "1.7.3",
+                currentMinimumDispatcherVersion: "3.0.2",
                 focusExistingWindow: () => focusedExistingWindow = true);
 
             Assert.That(reused, Is.True);
             Assert.That(focusedExistingWindow, Is.True);
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.3"));
+            Assert.That(
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                Is.EqualTo("3.0.2"));
         }
 
         [Test]
         public void TryReuseOpenWindow_WhenExistingWindowAndManualShow_FocusesWindowWithoutRecordingVersion()
         {
             bool focusedExistingWindow = false;
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
-                lastSeenSetupWizardVersion = "1.7.2"
+                lastSeenSetupWizardVersion = "1.7.2",
+                lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
             });
 
             bool reused = SetupWizardWindow.TryReuseOpenWindow(
                 hasOpenWindow: true,
                 shouldRecordVersion: false,
                 currentVersion: "1.7.3",
+                currentMinimumDispatcherVersion: "3.0.2",
                 focusExistingWindow: () => focusedExistingWindow = true);
 
             Assert.That(reused, Is.True);
             Assert.That(focusedExistingWindow, Is.True);
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                Is.EqualTo("3.0.1"));
         }
 
         [Test]
         public void TryReuseOpenWindow_WhenNoExistingWindow_DoesNotFocusOrRecordVersion()
         {
             bool focusedExistingWindow = false;
-            McpEditorSettings.SaveSettings(new McpEditorSettingsData
+            _editorSettingsPort.SaveSettings(new UnityCliLoopEditorSettingsData
             {
-                lastSeenSetupWizardVersion = "1.7.2"
+                lastSeenSetupWizardVersion = "1.7.2",
+                lastSeenSetupWizardMinimumDispatcherVersion = "3.0.1"
             });
 
             bool reused = SetupWizardWindow.TryReuseOpenWindow(
                 hasOpenWindow: false,
                 shouldRecordVersion: true,
                 currentVersion: "1.7.3",
+                currentMinimumDispatcherVersion: "3.0.2",
                 focusExistingWindow: () => focusedExistingWindow = true);
 
             Assert.That(reused, Is.False);
             Assert.That(focusedExistingWindow, Is.False);
-            Assert.That(McpEditorSettings.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(_editorSettingsPort.GetLastSeenSetupWizardVersion(), Is.EqualTo("1.7.2"));
+            Assert.That(
+                _editorSettingsPort.GetSettings().lastSeenSetupWizardMinimumDispatcherVersion,
+                Is.EqualTo("3.0.1"));
         }
 
         [Test]
@@ -175,7 +393,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Vector2 contentSize = new(350f, 280f);
             Vector2 frameSize = new(18f, 28f);
 
-            Rect resizedRect = SetupWizardWindow.WithContentSize(initialRect, contentSize, frameSize);
+            Rect resizedRect = SetupWizardWindowResizer.WithContentSize(initialRect, contentSize, frameSize);
 
             Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
             Assert.That(resizedRect.size, Is.EqualTo(new Vector2(368f, 380f)));
@@ -188,7 +406,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Vector2 contentSize = new(120f, 140f);
             Vector2 frameSize = new(18f, 28f);
 
-            Rect resizedRect = SetupWizardWindow.WithContentSize(initialRect, contentSize, frameSize);
+            Rect resizedRect = SetupWizardWindowResizer.WithContentSize(initialRect, contentSize, frameSize);
 
             Assert.That(resizedRect.center, Is.EqualTo(initialRect.center));
             Assert.That(resizedRect.size, Is.EqualTo(new Vector2(360f, 380f)));
@@ -200,7 +418,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             Rect bounds = new(100f, 200f, 900f, 700f);
             Vector2 size = new(300f, 250f);
 
-            Rect centeredRect = SetupWizardWindow.CreateCenteredRect(bounds, size);
+            Rect centeredRect = SetupWizardWindowResizer.CreateCenteredRect(bounds, size);
 
             Assert.That(centeredRect.center, Is.EqualTo(bounds.center));
             Assert.That(centeredRect.size, Is.EqualTo(size));
@@ -217,21 +435,26 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void PrepareForOpen_PopulatesWindowStateBeforeShowing()
         {
+            // Verifies PrepareForOpen writes title, position, and record-version flag before Show.
             SetupWizardWindow window = ScriptableObject.CreateInstance<SetupWizardWindow>();
             try
             {
                 Rect position = new(12f, 34f, 360f, 380f);
 
-                SetupWizardWindow.PrepareForOpen(window, "Unity CLI Loop Setup", position, "1.9.0");
+                SetupWizardWindow.PrepareForOpen(
+                    window,
+                    "Unity CLI Loop Setup",
+                    position,
+                    true);
 
                 SerializedObject serializedWindow = new(window);
-                SerializedProperty lastSeenVersionProperty =
-                    serializedWindow.FindProperty("_lastSeenSetupWizardVersionBeforeOpen");
+                SerializedProperty recordVersionProperty =
+                    serializedWindow.FindProperty("_shouldRecordLastSeenVersionAfterCreateGui");
 
                 Assert.That(window.titleContent.text, Is.EqualTo("Unity CLI Loop Setup"));
                 Assert.That(window.position, Is.EqualTo(position));
-                Assert.That(lastSeenVersionProperty, Is.Not.Null);
-                Assert.That(lastSeenVersionProperty.stringValue, Is.EqualTo("1.9.0"));
+                Assert.That(recordVersionProperty, Is.Not.Null);
+                Assert.That(recordVersionProperty.boolValue, Is.True);
             }
             finally
             {
@@ -240,75 +463,9 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         }
 
         [Test]
-        public void FilterInstallableSkillTargets_ExcludesTargetsWithoutSkillsDirectory()
-        {
-            List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
-            {
-                new("Claude Code", ".claude", "--claude", true, true),
-                new("Cursor", ".cursor", "--cursor", false, false),
-                new("Codex CLI", ".codex", "--codex", true, false, hasDifferentLayoutSkills: true)
-            };
-
-            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
-                SetupWizardWindow.FilterInstallableSkillTargets(targets);
-
-            Assert.That(installableTargets.Count, Is.EqualTo(2));
-            Assert.That(installableTargets[0].DirName, Is.EqualTo(".claude"));
-            Assert.That(installableTargets[1].DirName, Is.EqualTo(".codex"));
-        }
-
-        [Test]
-        public void ShouldUseFirstInstallSkillsUi_WhenVersionWasNeverSeen_ReturnsTrue()
-        {
-            bool shouldUseFirstInstallUi = SetupWizardWindow.ShouldUseFirstInstallSkillsUi("");
-
-            Assert.That(shouldUseFirstInstallUi, Is.True);
-        }
-
-        [Test]
-        public void ShouldUseFirstInstallSkillsUi_WhenVersionWasSeen_ReturnsFalse()
-        {
-            bool shouldUseFirstInstallUi = SetupWizardWindow.ShouldUseFirstInstallSkillsUi("1.9.0");
-
-            Assert.That(shouldUseFirstInstallUi, Is.False);
-        }
-
-        [Test]
-        public void ShouldUseTargetSelectionSkillsUi_WhenFirstInstall_ReturnsTrue()
-        {
-            bool shouldUseTargetSelectionUi = SetupWizardWindow.ShouldUseTargetSelectionSkillsUi(
-                shouldUseFirstInstallSkillsUi: true,
-                installableTargetCount: 1);
-
-            Assert.That(shouldUseTargetSelectionUi, Is.True);
-        }
-
-        [Test]
-        public void ShouldUseTargetSelectionSkillsUi_WhenNoInstallableTargets_ReturnsTrue()
-        {
-            bool shouldUseTargetSelectionUi = SetupWizardWindow.ShouldUseTargetSelectionSkillsUi(
-                shouldUseFirstInstallSkillsUi: false,
-                installableTargetCount: 0);
-
-            Assert.That(shouldUseTargetSelectionUi, Is.True);
-        }
-
-        [Test]
-        public void ShouldUseTargetSelectionSkillsUi_WhenInstallableTargetsExistAfterFirstInstall_ReturnsFalse()
-        {
-            bool shouldUseTargetSelectionUi = SetupWizardWindow.ShouldUseTargetSelectionSkillsUi(
-                shouldUseFirstInstallSkillsUi: false,
-                installableTargetCount: 1);
-
-            Assert.That(shouldUseTargetSelectionUi, Is.False);
-        }
-
-        [Test]
         public void CanManageSkills_WhenCliIsMissing_ReturnsFalse()
         {
-            bool canManageSkills = SetupWizardWindow.CanManageSkills(
-                cliInstalled: false,
-                useProjectCliVersion: false);
+            bool canManageSkills = SetupWizardWindow.CanManageSkills(cliInstalled: false);
 
             Assert.That(canManageSkills, Is.False);
         }
@@ -316,249 +473,247 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void CanManageSkills_WhenCliIsInstalled_ReturnsTrue()
         {
-            bool canManageSkills = SetupWizardWindow.CanManageSkills(
-                cliInstalled: true,
-                useProjectCliVersion: false);
+            bool canManageSkills = SetupWizardWindow.CanManageSkills(cliInstalled: true);
 
             Assert.That(canManageSkills, Is.True);
         }
 
-        [Test]
-        public void CanManageSkills_WhenProjectCliVersionIsEnabled_ReturnsTrue()
-        {
-            bool canManageSkills = SetupWizardWindow.CanManageSkills(
-                cliInstalled: false,
-                useProjectCliVersion: true);
-
-            Assert.That(canManageSkills, Is.True);
-        }
-
-        [Test]
-        public void CreateFirstInstallSkillTarget_WhenClaudeSelected_ReturnsClaudeProjectTarget()
-        {
-            ToolSkillSynchronizer.SkillTargetInfo target =
-                SetupWizardWindow.CreateFirstInstallSkillTarget(SkillsTarget.Claude, true);
-
-            Assert.That(target.DisplayName, Is.EqualTo("Claude Code"));
-            Assert.That(target.DirName, Is.EqualTo(".claude"));
-            Assert.That(target.InstallFlag, Is.EqualTo("--claude"));
-            Assert.That(target.HasSkillsDirectory, Is.False);
-            Assert.That(target.HasExistingSkills, Is.False);
-        }
-
-        [TestCase(SkillsTarget.Cursor, "Cursor", ".cursor", "--cursor")]
-        [TestCase(SkillsTarget.Gemini, "Gemini CLI", ".gemini", "--gemini")]
-        [TestCase(SkillsTarget.Codex, "Codex CLI", ".codex", "--codex")]
-        [TestCase(SkillsTarget.Agents, "Other (.agents)", ".agents", "--agents")]
-        public void CreateFirstInstallSkillTarget_ReturnsMappedTarget(
-            SkillsTarget targetType,
-            string expectedDisplayName,
-            string expectedDirName,
-            string expectedInstallFlag)
-        {
-            ToolSkillSynchronizer.SkillTargetInfo target =
-                SetupWizardWindow.CreateFirstInstallSkillTarget(targetType, true);
-
-            Assert.That(target.DisplayName, Is.EqualTo(expectedDisplayName));
-            Assert.That(target.DirName, Is.EqualTo(expectedDirName));
-            Assert.That(target.InstallFlag, Is.EqualTo(expectedInstallFlag));
-            Assert.That(target.HasSkillsDirectory, Is.False);
-            Assert.That(target.HasExistingSkills, Is.False);
-        }
-
-        [Test]
-        public void CreateFirstInstallSkillTarget_WhenGroupingDisabled_KeepsTargetMetadata()
-        {
-            ToolSkillSynchronizer.SkillTargetInfo target =
-                SetupWizardWindow.CreateFirstInstallSkillTarget(SkillsTarget.Claude, false);
-
-            Assert.That(target.DisplayName, Is.EqualTo("Claude Code"));
-            Assert.That(target.DirName, Is.EqualTo(".claude"));
-            Assert.That(target.InstallFlag, Is.EqualTo("--claude"));
-        }
-
-        [Test]
-        public void GetSelectedSkillTargetInfo_WhenDetectedTargetExists_ReturnsDetectedState()
-        {
-            List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
-            {
-                new(
-                    "Claude Code",
-                    ".claude",
-                    "--claude",
-                    hasSkillsDirectory: true,
-                    hasExistingSkills: true,
-                    installState: SkillInstallState.Installed)
-            };
-
-            ToolSkillSynchronizer.SkillTargetInfo target = SetupWizardWindow.GetSelectedSkillTargetInfo(
-                targets,
-                SkillsTarget.Claude,
-                groupSkillsUnderUnityCliLoop: true);
-
-            Assert.That(target.DirName, Is.EqualTo(".claude"));
-            Assert.That(target.InstallState, Is.EqualTo(SkillInstallState.Installed));
-        }
-
-        [Test]
-        public void GetFirstInstallableSkillTargets_WhenSelectedTargetIsInstalled_ReturnsEmpty()
-        {
-            List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
-            {
-                new(
-                    "Claude Code",
-                    ".claude",
-                    "--claude",
-                    hasSkillsDirectory: true,
-                    hasExistingSkills: true,
-                    installState: SkillInstallState.Installed)
-            };
-
-            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
-                SetupWizardWindow.GetFirstInstallableSkillTargets(
-                    targets,
-                    SkillsTarget.Claude,
-                    groupSkillsUnderUnityCliLoop: true);
-
-            Assert.That(installableTargets, Is.Empty);
-        }
-
-        [Test]
-        public void GetFirstInstallableSkillTargets_WhenSelectedTargetIsMissing_ReturnsMappedTarget()
-        {
-            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
-                SetupWizardWindow.GetFirstInstallableSkillTargets(
-                    new List<ToolSkillSynchronizer.SkillTargetInfo>(),
-                    SkillsTarget.Claude,
-                    groupSkillsUnderUnityCliLoop: true);
-
-            Assert.That(installableTargets.Count, Is.EqualTo(1));
-            Assert.That(installableTargets[0].DirName, Is.EqualTo(".claude"));
-            Assert.That(installableTargets[0].InstallState, Is.EqualTo(SkillInstallState.Missing));
-        }
-
-        [Test]
-        public void GetSetupWizardInstallableSkillTargets_WhenNoInstallableTargetsAfterFirstInstall_ReturnsSelectedTarget()
-        {
-            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
-                SetupWizardWindow.GetSetupWizardInstallableSkillTargets(
-                    new List<ToolSkillSynchronizer.SkillTargetInfo>(),
-                    SkillsTarget.Codex,
-                    groupSkillsUnderUnityCliLoop: false,
-                    shouldUseFirstInstallSkillsUi: false);
-
-            Assert.That(installableTargets.Count, Is.EqualTo(1));
-            Assert.That(installableTargets[0].DirName, Is.EqualTo(".codex"));
-            Assert.That(installableTargets[0].HasSkillsDirectory, Is.False);
-            Assert.That(installableTargets[0].InstallState, Is.EqualTo(SkillInstallState.Missing));
-        }
-
-        [Test]
-        public void GetSetupWizardInstallableSkillTargets_WhenInstallableTargetsExistAfterFirstInstall_ReturnsExistingTargets()
-        {
-            List<ToolSkillSynchronizer.SkillTargetInfo> targets = new()
-            {
-                new(
-                    "Claude Code",
-                    ".claude",
-                    "--claude",
-                    hasSkillsDirectory: true,
-                    hasExistingSkills: false),
-                new(
-                    "Codex CLI",
-                    ".codex",
-                    "--codex",
-                    hasSkillsDirectory: false,
-                    hasExistingSkills: false)
-            };
-
-            List<ToolSkillSynchronizer.SkillTargetInfo> installableTargets =
-                SetupWizardWindow.GetSetupWizardInstallableSkillTargets(
-                    targets,
-                    SkillsTarget.Codex,
-                    groupSkillsUnderUnityCliLoop: false,
-                    shouldUseFirstInstallSkillsUi: false);
-
-            Assert.That(installableTargets.Count, Is.EqualTo(1));
-            Assert.That(installableTargets[0].DirName, Is.EqualTo(".claude"));
-        }
-
-        [TestCase(SkillInstallState.Installed, false, true, "Installed")]
-        [TestCase(SkillInstallState.Checking, false, true, "Checking...")]
-        [TestCase(SkillInstallState.Outdated, false, true, "Outdated")]
-        [TestCase(SkillInstallState.Missing, false, true, "Missing")]
-        [TestCase(SkillInstallState.Missing, true, true, "Not grouped")]
-        [TestCase(SkillInstallState.Missing, true, false, "Grouped")]
-        public void GetSkillInstallStatusText_ReturnsExpectedLabel(
-            SkillInstallState installState,
-            bool hasDifferentLayoutSkills,
-            bool groupSkillsUnderUnityCliLoop,
-            string expectedLabel)
-        {
-            string label = SetupWizardWindow.GetSkillInstallStatusText(
-                installState,
-                hasDifferentLayoutSkills,
-                groupSkillsUnderUnityCliLoop);
-
-            Assert.That(label, Is.EqualTo(expectedLabel));
-        }
-
-        [TestCase(true, false, "Installing...")]
-        [TestCase(false, true, "Update Skills")]
-        [TestCase(false, false, "Install Skills")]
-        public void GetInstallSkillsButtonText_ReturnsExpectedLabel(
-            bool isInstallingSkills,
-            bool hasOutdatedSkills,
-            string expectedLabel)
-        {
-            string label = SetupWizardWindow.GetInstallSkillsButtonText(
-                isInstallingSkills,
-                hasOutdatedSkills);
-
-            Assert.That(label, Is.EqualTo(expectedLabel));
-        }
-
-        [TestCase(false, false, false, "Install Skills")]
-        [TestCase(true, true, false, "Installing...")]
-        [TestCase(true, false, true, "Update Skills")]
-        [TestCase(true, false, false, "Install Skills")]
-        public void GetSkillsButtonTextForSetupWizard_ReturnsExpectedLabel(
+        [TestCase(false, false, false, false, false, false, null, "3.0.0", "Install CLI")]
+        [TestCase(false, false, false, false, true, false, null, "3.0.0", "Fix PATH")]
+        [TestCase(true, false, false, false, false, false, "3.0.0", "3.0.0", "Installed")]
+        [TestCase(true, false, false, false, true, false, "3.0.0", "3.0.0", "Fix PATH")]
+        [TestCase(true, false, false, true, false, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
+        [TestCase(true, false, false, true, true, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
+        [TestCase(true, false, false, true, false, false, "3.0.0", "3.0.0", "Update CLI (v3.0.0 required)")]
+        [TestCase(true, true, false, false, false, false, "3.0.0", "3.0.0", "Installing...")]
+        [TestCase(true, true, false, false, true, false, "3.0.0", "3.0.0", "Fixing PATH...")]
+        [TestCase(false, false, true, false, false, false, null, "3.0.0", "Checking...")]
+        [TestCase(true, false, false, false, false, true, "3.0.0", "3.0.0", "Managed by Homebrew")]
+        [TestCase(true, false, false, true, false, true, "2.9.0", "3.0.0", "Managed by Homebrew")]
+        [TestCase(false, false, false, false, false, true, null, "3.0.0", "Managed by Homebrew")]
+        [TestCase(true, false, false, false, true, true, "3.0.0", "3.0.0", "Fix PATH")]
+        [TestCase(true, true, false, false, true, true, "3.0.0", "3.0.0", "Fixing PATH...")]
+        public void GetCliButtonTextForSetupWizard_ReturnsExpectedLabel(
             bool cliInstalled,
-            bool isInstallingSkills,
-            bool hasOutdatedSkills,
+            bool isInstallingCli,
+            bool isChecking,
+            bool needsUpdate,
+            bool needsCliPathSetup,
+            bool isHomebrewManagedCli,
+            string cliVersion,
+            string requiredCliVersion,
             string expectedLabel)
         {
-            string label = SetupWizardWindow.GetSkillsButtonTextForSetupWizard(
+            string label = SetupWizardCliStepPresenter.GetCliButtonTextForSetupWizard(
                 cliInstalled,
-                isInstallingSkills,
-                hasOutdatedSkills);
+                isInstallingCli,
+                isChecking,
+                needsUpdate,
+                needsCliPathSetup,
+                isHomebrewManagedCli,
+                cliVersion,
+                requiredCliVersion);
 
             Assert.That(label, Is.EqualTo(expectedLabel));
         }
 
-        [TestCase(SkillInstallState.Installed, false, true, "setup-target-item__status--installed")]
-        [TestCase(SkillInstallState.Checking, false, true, "setup-target-item__status--checking")]
-        [TestCase(SkillInstallState.Outdated, false, true, "setup-target-item__status--outdated")]
-        [TestCase(SkillInstallState.Missing, false, true, "setup-target-item__status--missing")]
-        [TestCase(SkillInstallState.Missing, true, true, "setup-target-item__status--different-layout")]
-        public void GetSkillInstallStatusClass_ReturnsExpectedClass(
-            SkillInstallState installState,
-            bool hasDifferentLayoutSkills,
-            bool groupSkillsUnderUnityCliLoop,
-            string expectedClass)
+        [TestCase(false, false, null, "3.0.0", "Not installed")]
+        [TestCase(true, true, "3.0.0", "3.0.0", "v3.0.0")]
+        [TestCase(true, false, "2.9.0", "3.0.0", "v2.9.0 (requires v3.0.0)")]
+        [TestCase(true, false, "3.0.0", "3.0.0", "v3.0.0 (update required)")]
+        public void GetCliStatusTextForSetupWizard_ReturnsExpectedLabel(
+            bool cliInstalled,
+            bool cliCompatible,
+            string cliVersion,
+            string requiredCliVersion,
+            string expectedLabel)
         {
-            string className = SetupWizardWindow.GetSkillInstallStatusClass(
-                installState,
-                hasDifferentLayoutSkills,
-                groupSkillsUnderUnityCliLoop);
+            // Verifies that same-version replacement prompts do not expose dispatcher internals.
+            string label = SetupWizardCliStepPresenter.GetCliStatusTextForSetupWizard(
+                cliInstalled,
+                cliCompatible,
+                cliVersion,
+                requiredCliVersion);
 
-            Assert.That(className, Is.EqualTo(expectedClass));
+            Assert.That(label, Is.EqualTo(expectedLabel));
+        }
+
+        [TestCase(
+            true,
+            "2.9.0",
+            true,
+            true,
+            "Homebrew-managed CLI v2.9.0 does not meet the required v3.0.0.\n"
+            + "Run this command in your terminal:\nbrew upgrade uloop")]
+        [TestCase(
+            true,
+            null,
+            true,
+            true,
+            "Homebrew-managed CLI did not report a version.\n"
+            + "Run this command in your terminal:\nbrew reinstall uloop")]
+        [TestCase(
+            true,
+            "3.0.0",
+            false,
+            true,
+            "Homebrew-managed CLI v3.0.0 did not answer as the required uloop CLI.\n"
+            + "Run this command in your terminal:\nbrew reinstall uloop")]
+        [TestCase(true, "3.0.0", true, false, "")]
+        [TestCase(false, "2.9.0", true, false, "")]
+        [TestCase(false, null, true, false, "")]
+        public void Update_TogglesHomebrewUpgradeWarning(
+            bool isHomebrewManagedCli,
+            string cliVersion,
+            bool cliIsDispatcher,
+            bool expectedVisible,
+            string expectedText)
+        {
+            // Verifies the wizard explains every unusable Homebrew CLI, and stays silent otherwise.
+            VisualElement statusIcon = new();
+            Label statusLabel = new();
+            Label homebrewUpgradeMessage = new() { name = "cli-homebrew-upgrade-message" };
+            Button installButton = new();
+            SetupWizardCliStepPresenter presenter = new(
+                statusIcon,
+                statusLabel,
+                homebrewUpgradeMessage,
+                installButton,
+                () => { });
+
+            presenter.Update(
+                cliInstalled: !string.IsNullOrEmpty(cliVersion),
+                cliVersion,
+                cliIsDispatcher,
+                requiredCliVersion: "3.0.0",
+                isInstallingCli: false,
+                needsCliPathSetup: false,
+                isHomebrewManagedCli);
+
+            Assert.That(
+                homebrewUpgradeMessage.ClassListContains("setup-warning-message--visible"),
+                Is.EqualTo(expectedVisible));
+            Assert.That(homebrewUpgradeMessage.text, Is.EqualTo(expectedText));
+        }
+
+        [TestCase(false, false, false, false, false, false, true)]
+        [TestCase(true, false, true, false, false, false, true)]
+        [TestCase(true, false, false, false, false, false, true)]
+        [TestCase(true, true, false, false, false, false, false)]
+        [TestCase(false, false, false, true, false, false, false)]
+        [TestCase(false, false, false, false, true, false, false)]
+        [TestCase(true, false, false, false, false, true, false)]
+        [TestCase(false, false, false, false, false, true, false)]
+        [TestCase(true, false, true, false, false, true, true)]
+        public void IsCliButtonEnabledForSetupWizard_ReturnsExpectedValue(
+            bool cliInstalled,
+            bool cliVersionMatched,
+            bool needsCliPathSetup,
+            bool isInstallingCli,
+            bool isChecking,
+            bool isHomebrewManagedCli,
+            bool expectedEnabled)
+        {
+            // Verifies a Homebrew-managed CLI leaves only PATH repair, which writes no binary, enabled.
+            bool enabled = SetupWizardCliStepPresenter.IsCliButtonEnabledForSetupWizard(
+                cliInstalled,
+                cliVersionMatched,
+                needsCliPathSetup,
+                isInstallingCli,
+                isChecking,
+                isHomebrewManagedCli);
+
+            Assert.That(enabled, Is.EqualTo(expectedEnabled));
+        }
+
+        [TestCase(false, false, false)]
+        [TestCase(true, false, true)]
+        [TestCase(true, true, false)]
+        public void ShouldRepairCliPathFromPrimaryButton_ReturnsExpectedAction(
+            bool needsCliPathSetup,
+            bool needsUpdate,
+            bool expected)
+        {
+            // Verifies that setup wizard chooses PATH repair only after the CLI version is already usable.
+            bool result = SetupWizardWindow.ShouldRepairCliPathFromPrimaryButton(
+                needsCliPathSetup,
+                needsUpdate);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
+
+        [TestCase(RuntimePlatform.OSXEditor, true, true)]
+        [TestCase(RuntimePlatform.OSXEditor, false, false)]
+        [TestCase(RuntimePlatform.WindowsEditor, true, false)]
+        public void ShouldCheckCliPathSetupForSetupWizard_RequiresPackageOwnedCli(
+            RuntimePlatform platform,
+            bool hasPackageOwnedCurrentUserInstall,
+            bool expected)
+        {
+            // Verifies that setup wizard only repairs PATH for package-owned POSIX CLIs.
+            bool result = SetupWizardWindow.ShouldCheckCliPathSetupForSetupWizard(
+                platform,
+                hasPackageOwnedCurrentUserInstall);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void ShouldShowSkillsInstalledDialog_WhenTargetsAreMissing_ReturnsTrue()
+        {
+            // Verifies that Setup Wizard keeps the success dialog for first install.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    SkillInstallState.Missing)
+            };
+
+            bool shouldShowDialog = SetupWizardWindow.ShouldShowSkillsInstalledDialog(targets);
+
+            Assert.That(shouldShowDialog, Is.True);
+        }
+
+        [Test]
+        public void ShouldShowSkillsInstalledDialog_WhenAnyTargetIsOutdated_ReturnsFalse()
+        {
+            // Verifies that Setup Wizard suppresses the success dialog for skill updates.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    SkillInstallState.Missing),
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    SkillInstallState.Outdated)
+            };
+
+            bool shouldShowDialog = SetupWizardWindow.ShouldShowSkillsInstalledDialog(targets);
+
+            Assert.That(shouldShowDialog, Is.False);
+        }
+
+        [Test]
+        public void ShouldShowSkillsInstalledDialog_WhenAnyTargetUsesDifferentLayout_ReturnsFalse()
+        {
+            // Verifies that Setup Wizard suppresses the success dialog for skill layout updates.
+            List<SkillSetupTargetInfo> targets = new()
+            {
+                CreateSkillTarget(
+                    hasSkillsDirectory: true,
+                    SkillInstallState.Missing,
+                    hasDifferentLayoutSkills: true)
+            };
+
+            bool shouldShowDialog = SetupWizardWindow.ShouldShowSkillsInstalledDialog(targets);
+
+            Assert.That(shouldShowDialog, Is.False);
         }
 
         [Test]
         public void EstimateWrappedLineCount_WithPositiveHeight_ReturnsRoundedLineCount()
         {
-            int lineCount = SetupWizardWindow.EstimateWrappedLineCount(35f, 12f);
+            int lineCount = SetupWizardWindowResizer.EstimateWrappedLineCount(35f, 12f);
 
             Assert.That(lineCount, Is.EqualTo(3));
         }
@@ -566,7 +721,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void SelectPreferredTextWidth_WhenWrappedAcrossManyLines_UsesTwoLineTarget()
         {
-            float preferredWidth = SetupWizardWindow.SelectPreferredTextWidth(120f, 320f, 4, WhiteSpace.Normal);
+            float preferredWidth = SetupWizardWindowResizer.SelectPreferredTextWidth(120f, 320f, 4, WhiteSpace.Normal);
 
             Assert.That(preferredWidth, Is.EqualTo(160f));
         }
@@ -574,7 +729,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void SelectPreferredTextWidth_WhenWrappedAcrossTwoLines_KeepsLaidOutWidth()
         {
-            float preferredWidth = SetupWizardWindow.SelectPreferredTextWidth(180f, 320f, 2, WhiteSpace.Normal);
+            float preferredWidth = SetupWizardWindowResizer.SelectPreferredTextWidth(180f, 320f, 2, WhiteSpace.Normal);
 
             Assert.That(preferredWidth, Is.EqualTo(180f));
         }
@@ -582,7 +737,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void SelectPreferredTextWidth_WhenShorterTextFitsWithinCurrentWidth_ShrinksToMeasuredWidth()
         {
-            float preferredWidth = SetupWizardWindow.SelectPreferredTextWidth(420f, 180f, 1, WhiteSpace.Normal);
+            float preferredWidth = SetupWizardWindowResizer.SelectPreferredTextWidth(420f, 180f, 1, WhiteSpace.Normal);
 
             Assert.That(preferredWidth, Is.EqualTo(180f));
         }
@@ -590,7 +745,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void SelectPreferredTextWidth_WhenTextDoesNotWrap_UsesMeasuredWidth()
         {
-            float preferredWidth = SetupWizardWindow.SelectPreferredTextWidth(180f, 320f, 1, WhiteSpace.NoWrap);
+            float preferredWidth = SetupWizardWindowResizer.SelectPreferredTextWidth(180f, 320f, 1, WhiteSpace.NoWrap);
 
             Assert.That(preferredWidth, Is.EqualTo(320f));
         }
@@ -598,7 +753,7 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void HasFiniteSize_WhenVectorContainsNaN_ReturnsFalse()
         {
-            bool hasFiniteSize = SetupWizardWindow.HasFiniteSize(new Vector2(float.NaN, 120f));
+            bool hasFiniteSize = SetupWizardWindowResizer.HasFiniteSize(new Vector2(float.NaN, 120f));
 
             Assert.That(hasFiniteSize, Is.False);
         }
@@ -606,9 +761,24 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
         [Test]
         public void HasFiniteSize_WhenVectorContainsFiniteValues_ReturnsTrue()
         {
-            bool hasFiniteSize = SetupWizardWindow.HasFiniteSize(new Vector2(240f, 120f));
+            bool hasFiniteSize = SetupWizardWindowResizer.HasFiniteSize(new Vector2(240f, 120f));
 
             Assert.That(hasFiniteSize, Is.True);
+        }
+
+        private static SkillSetupTargetInfo CreateSkillTarget(
+            bool hasSkillsDirectory,
+            SkillInstallState installState,
+            bool hasDifferentLayoutSkills = false)
+        {
+            return new SkillSetupTargetInfo(
+                "Claude Code",
+                ".claude",
+                "--claude",
+                hasSkillsDirectory,
+                hasExistingSkills: hasSkillsDirectory,
+                hasDifferentLayoutSkills,
+                installState);
         }
 
         private static void RestoreFile(string path, bool existed, string content)
@@ -628,6 +798,20 @@ namespace io.github.hatayama.uLoopMCP.Tests.Editor
             {
                 File.Delete(path);
             }
+        }
+
+        private static CliSetupApplicationService CreateCliSetupApplicationService()
+        {
+            CliPinReaderService cliPinReaderService = new();
+            return new CliSetupApplicationService(
+                new CliInstallationDetector(cliPinReaderService),
+                new NativeCliInstallerService(),
+                cliPinReaderService);
+        }
+
+        private static SkillSetupUseCase CreateSkillSetupUseCase()
+        {
+            return new SkillSetupUseCase(new ToolSkillSetupService(new ToolSettingsRepository()));
         }
     }
 }

@@ -14,7 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="../../Packages/src/Editor/Execution/DynamicCodeExecutionScheduler.cs" Link="Production/DynamicCodeExecutionScheduler.cs" />
-    <Compile Include="../../Packages/src/Editor/Execution/DynamicCodeExecutionSchedulerHooks.cs" Link="Production/DynamicCodeExecutionSchedulerHooks.cs" />
+    <Compile Include="../../Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/Execution/DynamicCodeExecutionScheduler.cs" Link="Production/DynamicCodeExecutionScheduler.cs" />
+    <Compile Include="../../Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/Execution/DynamicCodeExecutionSchedulerHooks.cs" Link="Production/DynamicCodeExecutionSchedulerHooks.cs" />
+    <Compile Include="../../Packages/src/Editor/FirstPartyTools/ExecuteDynamicCode/Execution/CommandRunnerExecutionSlot.cs" Link="Production/CommandRunnerExecutionSlot.cs" />
   </ItemGroup>
 </Project>

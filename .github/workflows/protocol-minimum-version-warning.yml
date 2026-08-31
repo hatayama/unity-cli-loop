@@ -1,0 +1,40 @@
+name: Protocol Minimum Version Warning
+
+on:
+  pull_request_target:
+    branches: [main, v3-beta]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout base repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache: false
+
+      - name: Fetch pull request merge
+        run: git fetch --no-tags origin "pull/${{ github.event.pull_request.number }}/merge:protocol-minimum-version-pr-merge"
+
+      - name: Comment on protocol minimum version guard
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PROTOCOL_MINIMUM_VERSION_BASE_REF: origin/${{ github.base_ref }}
+          PROTOCOL_MINIMUM_VERSION_HEAD_REF: protocol-minimum-version-pr-merge
+        run: go run ./cmd/comment-protocol-minimum-version

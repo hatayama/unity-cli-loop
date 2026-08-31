@@ -1,1 +1,13 @@
+# Repository text files use LF by default. Add explicit exceptions only when
+# a specific tool or file format requires CRLF.
 * text=auto eol=lf
+
+*.sh text eol=lf
+*.ps1 text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Binary assets must never be run through end-of-line conversion.
+*.png -text

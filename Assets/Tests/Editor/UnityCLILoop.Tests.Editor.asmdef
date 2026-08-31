@@ -1,0 +1,63 @@
+{
+    "name": "UnityCLILoop.Tests.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Editor",
+    "references": [
+        "GUID:214998e563c124e8a88199b2dd1f522d",
+        "GUID:5079a8d3a72924a81aa1cbc25f65ed1b",
+        "GUID:5c4588558a3624eacbce0f50007cf1eb",
+        "GUID:18e6dd30a99d14f32a045f79a2956f46",
+        "GUID:2fca906c8834d45aea12a5cc143c032d",
+        "GUID:ccdfaeee6b50d49bf8443d779c6b6878",
+        "GUID:01082d2dd8b5b41d487dcc154c017098",
+        "GUID:aa8dd8c09aac9487db2e0b50381920dc",
+        "GUID:e5952ef560e1641f68b2687e6045bf5b",
+        "GUID:d427b32aad9cb44fc8e962437c9dbcd8",
+        "GUID:b21158f16291043699bc11600a45a9ee",
+        "GUID:f1a38fcd7e85047c5a86331a3e37ddfc",
+        "GUID:45d3617c96fa64d3e95383450e67f25a",
+        "GUID:a2d87883023de4cf59b7d1962d5dd8aa",
+        "GUID:527f26a36b5043c2bd4d4036d04cd76d",
+        "GUID:94d8abc693f543a691a4645a5ff42e5c",
+        "GUID:aa7cf56cc5f074e57ba35272b877e116",
+        "GUID:a39242918a7ab45519b2c80f798dce33",
+        "GUID:0cf5a90ce140e4729abd701bea48b00e",
+        "GUID:afe86dd49995e46baa33e099a4d2ee1d",
+        "GUID:ee36dcf19655f43c08e0a7009ca7a624",
+        "GUID:1b127da462d854085a0384d517187480",
+        "GUID:54dfc5fd447794df2aa683025462d668",
+        "GUID:dc412b2cd951d452b8dcec99c3adeb19",
+        "GUID:3b7aa330d87dc452293296dd5830859b",
+        "GUID:9ed21973545c44e28af522b049dec47d",
+        "GUID:a338f3f8ae84147109d351d16d557552",
+        "GUID:a0bdbd2c5705643fbb9aef9fac8fd46a",
+        "GUID:679888bc3e9c44c19ab0d62ff8701dcf",
+        "GUID:9c34b9a25e1464dec91601291eade23f",
+        "GUID:32708dd5a1f18474e8a4deddc56e8806",
+        "GUID:c956a21f824994ef087b6de566690b3d",
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:0acc523941302664db1f4e527237feb3",
+        "GUID:27619889b8ba8c24980f49ee34dbb44a",
+        "GUID:332048ead1ebf4658b9961338e5d68c3",
+        "GUID:33fef506e6744f2982e8c13b1196f696",
+        "GUID:96b8d4624fb74ea2849fed17e7ad69d3",
+        "GUID:e3fd8b49afd6f4e3cae09011028922b4",
+        "GUID:75469ad4d38634e559750d17036d5f7c"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "",
+            "define": "ULOOP_HAS_INPUT_SYSTEM"
+        }
+    ],
+    "noEngineReferences": false
+}

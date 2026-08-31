@@ -1,0 +1,637 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Parameters for applying hot reload to edited source files, or reverting every active patch.
+    /// </summary>
+    public class HotReloadSchema : UnityCliLoopToolSchema
+    {
+        /// <summary>
+        /// Project-relative source file paths to hot-reload. Omitted or empty apply values select sources changed since the last compile snapshot; --status rejects a nonempty value and --revert-all ignores it.
+        /// </summary>
+        public string[] Files { get; set; } = Array.Empty<string>();
+
+        /// <summary>
+        /// When true, removes every active hot-reload transplant and ignores Files.
+        /// </summary>
+        public bool RevertAll { get; set; }
+
+        /// <summary>
+        /// When true, lists the currently patched methods without applying or reverting anything.
+        /// </summary>
+        public bool Status { get; set; }
+    }
+
+    /// <summary>
+    /// One per-method outcome from a hot-reload apply run.
+    /// </summary>
+    public class HotReloadMethodResult
+    {
+        public string Kind { get; set; } = string.Empty;
+        public string Method { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public string FilePath { get; set; } = string.Empty;
+
+        /// <summary>
+        /// How many times this patched method body has run since the current patch was applied.
+        /// Populated on --status Active rows and AlreadyActive apply rows; 0 for other
+        /// apply/revert outcomes. Added-member AlreadyActive rows are always 0 because
+        /// added-member calls are not instrumented.
+        /// </summary>
+        public long InvocationCount { get; set; }
+
+        /// <summary>
+        /// Optional note when the patched method is (or is only reached from) a one-shot lifecycle
+        /// method. Empty when not applicable; does not change Kind.
+        /// </summary>
+        public string LifecycleNote { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Response for the hot-reload tool: aggregated apply outcomes or revert-all status.
+    /// </summary>
+    public class HotReloadResponse : UnityCliLoopToolResponse
+    {
+        public IReadOnlyList<HotReloadMethodResult> Methods { get; set; } =
+            Array.Empty<HotReloadMethodResult>();
+
+        public IReadOnlyList<string> Warnings { get; set; } = Array.Empty<string>();
+
+        public int PatchedTotal { get; set; }
+
+        public int ActivePatchTotal { get; set; }
+
+        public int UnchangedTotal { get; set; }
+
+        public int ClearedCount { get; set; }
+
+        public string[] AddedFields { get; set; } = Array.Empty<string>();
+
+        public string Message { get; set; } = string.Empty;
+
+        public string ErrorCode { get; set; } = string.Empty;
+
+        public string[] NextActions { get; set; } = Array.Empty<string>();
+
+        public string RecommendedNextAction { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Remaining method identities discarded by the last Play-entry domain reload
+        /// that have not been recovered by apply, revert-all, or a successful compile.
+        /// </summary>
+        public int DroppedByPlayModeEntryCount { get; set; }
+
+        // Why omit empty: success and validation-only payloads must not grow a next-action
+        // field that PausePoint-style responses leave blank on the wire.
+        public bool ShouldSerializeRecommendedNextAction()
+        {
+            return !string.IsNullOrEmpty(RecommendedNextAction);
+        }
+
+        public bool ShouldSerializeErrorCode()
+        {
+            return !string.IsNullOrEmpty(ErrorCode);
+        }
+
+        public bool ShouldSerializeNextActions()
+        {
+            return NextActions != null && NextActions.Length > 0;
+        }
+
+        public bool ShouldSerializeDroppedByPlayModeEntryCount()
+        {
+            return DroppedByPlayModeEntryCount > 0;
+        }
+    }
+
+    /// <summary>
+    /// Exposes attribute-free hot reload as a Unity CLI Loop first-party tool.
+    /// </summary>
+    [UnityCliLoopTool]
+    public class HotReloadTool : UnityCliLoopTool<HotReloadSchema, HotReloadResponse>
+    {
+        // Why internal seams: compile-pipeline enumeration and apply execution cannot use planted
+        // fixtures, so tests substitute them while production keeps these default implementations.
+        internal static Func<HotReloadChangedFileAggregationResult> DetectChangedFilesForTesting =
+            HotReloadChangedFileAggregator.Detect;
+
+        internal static Func<IReadOnlyList<string>, CancellationToken, Task<HotReloadOrchestratorResult>>
+            RunApplyAsyncForTesting = RunApplyAsync;
+
+        public override string ToolName => UnityCliLoopConstants.TOOL_NAME_HOT_RELOAD;
+
+        protected override async Task<HotReloadResponse> ExecuteAsync(
+            HotReloadSchema parameters,
+            CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            Debug.Assert(parameters != null, "parameters must not be null.");
+
+            if (parameters.Status)
+            {
+                if (parameters.RevertAll
+                    || (parameters.Files != null && parameters.Files.Length > 0))
+                {
+                    return CreateValidationFailure(
+                        new HotReloadValidationFailure(
+                            "--status cannot be combined with --files or --revert-all.",
+                            HotReloadValidationErrorCodes.StatusConflict,
+                            new[]
+                            {
+                                "Run 'uloop hot-reload --status' with no other flags to inspect active patches.",
+                                "To apply or revert patches, drop --status and pass --files or --revert-all."
+                            }));
+                }
+
+                return ExecuteStatus();
+            }
+
+            if (parameters.RevertAll)
+            {
+                return ExecuteRevertAll();
+            }
+
+            HotReloadValidationFailure validationFailure = ValidateApplyParameters(parameters);
+            if (validationFailure != null)
+            {
+                return CreateValidationFailure(validationFailure);
+            }
+
+            HotReloadDefaultFileSelection selection = HotReloadDefaultFileSelector.Resolve(
+                parameters.Files,
+                DetectChangedFilesForTesting);
+            if (selection.ValidationFailure != null)
+            {
+                return CreateValidationFailure(selection.ValidationFailure);
+            }
+
+            HotReloadOrchestratorResult result = await RunApplyAsyncForTesting(selection.Files, ct)
+                .ConfigureAwait(false);
+            // Why switch back: SessionState for Play-entry drop recovery is a Unity Editor API.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(result.Methods);
+
+            HotReloadResponse response = BuildApplyResponse(result, selection.ScanLimitWarnings);
+            if (!string.IsNullOrEmpty(selection.SelectionMessage))
+            {
+                response.Message = selection.SelectionMessage + " " + response.Message;
+            }
+
+            return response;
+        }
+
+        private static HotReloadResponse ExecuteRevertAll()
+        {
+            int clearedCount = HotReloadPatcher.ActiveChangeCount;
+            HotReloadPatcher.RevertAll();
+            HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
+            return new HotReloadResponse
+            {
+                Success = true,
+                ClearedCount = clearedCount,
+                ActivePatchTotal = HotReloadPatcher.ActiveChangeCount,
+                Message = clearedCount == 0
+                    ? "No active hot-reload changes to revert."
+                    : "Reverted all active hot-reload changes."
+            };
+        }
+
+        private static HotReloadResponse ExecuteStatus()
+        {
+            IReadOnlyList<HotReloadActivePatchInfo> active = HotReloadPatcher.DescribeActivePatches();
+            IReadOnlyList<HotReloadAddedMemberInfo> addedMembers = HotReloadAddedMemberRegistry.Describe();
+            List<HotReloadMethodResult> methods =
+                new List<HotReloadMethodResult>(active.Count + addedMembers.Count);
+            int neverInvokedCount = 0;
+            for (int index = 0; index < active.Count; index++)
+            {
+                HotReloadActivePatchInfo patch = active[index];
+                long invocationCount = HotReloadInvocationRegistry.GetCount(patch.MethodKey);
+                HotReloadMethodResult row = new HotReloadMethodResult
+                {
+                    Kind = "Active",
+                    Method = patch.MethodKey,
+                    FilePath = patch.FilePath,
+                    InvocationCount = invocationCount
+                };
+                if (invocationCount == 0L)
+                {
+                    row.Reason = HotReloadConstants.ActivePatchNeverInvokedReason;
+                    neverInvokedCount++;
+                }
+
+                methods.Add(row);
+            }
+
+            for (int index = 0; index < addedMembers.Count; index++)
+            {
+                HotReloadAddedMemberInfo added = addedMembers[index];
+                methods.Add(
+                    new HotReloadMethodResult
+                    {
+                        Kind = HotReloadConstants.AddedMemberStatusKind,
+                        Method = added.MethodKey,
+                        FilePath = added.FilePath,
+                        // Why: --status does not compare source, so the AlreadyActive first
+                        // sentence would be a lie after a post-reload edit; only the
+                        // not-instrumented fact is always true.
+                        Reason = HotReloadConstants.AddedMemberNotInstrumentedReason
+                    });
+            }
+
+            int count = methods.Count;
+            string message = $"{count} change(s) currently active.";
+            if (neverInvokedCount > 0)
+            {
+                message += " " + string.Format(
+                    HotReloadConstants.NeverInvokedActiveAggregatedMessageFormat,
+                    neverInvokedCount);
+            }
+
+            int droppedCount = HotReloadPlayModeEntryDropLedger.Count;
+            string dropMessage = HotReloadPlayModeEntryDropStatusMessageBuilder.Build(
+                count,
+                droppedCount);
+            if (dropMessage != null)
+            {
+                message = dropMessage;
+            }
+
+            return new HotReloadResponse
+            {
+                Success = true,
+                Methods = methods,
+                ActivePatchTotal = count,
+                Message = message,
+                DroppedByPlayModeEntryCount = droppedCount
+            };
+        }
+
+        // Validates supplied files so omitted files can use the compile-snapshot default path.
+        internal static HotReloadValidationFailure ValidateApplyParameters(HotReloadSchema parameters)
+        {
+            if (parameters.Files == null)
+            {
+                return null;
+            }
+
+            for (int index = 0; index < parameters.Files.Length; index++)
+            {
+                if (string.IsNullOrWhiteSpace(parameters.Files[index]))
+                {
+                    return new HotReloadValidationFailure(
+                        "Files must not contain null or empty paths.",
+                        HotReloadValidationErrorCodes.InvalidFiles,
+                        new[]
+                        {
+                            "Remove null or empty entries from --files.",
+                            "Pass project-relative .cs paths with --files."
+                        });
+                }
+            }
+
+            return null;
+        }
+
+        internal static HotReloadResponse BuildApplyResponse(
+            HotReloadOrchestratorResult result,
+            IReadOnlyList<string> additionalWarnings = null)
+        {
+            Debug.Assert(result != null, "result must not be null.");
+
+            List<HotReloadMethodResult> methods = new List<HotReloadMethodResult>(result.Methods.Count);
+            bool hasFailure = false;
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                HotReloadMethodOutcome outcome = result.Methods[index];
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
+                {
+                    hasFailure = true;
+                }
+
+                methods.Add(
+                    new HotReloadMethodResult
+                    {
+                        Kind = outcome.Kind.ToString(),
+                        Method = outcome.Method,
+                        Reason = outcome.Reason ?? string.Empty,
+                        FilePath = outcome.FilePath ?? string.Empty,
+                        InvocationCount = outcome.Kind == HotReloadMethodOutcomeKind.AlreadyActive
+                            ? HotReloadInvocationRegistry.GetCount(outcome.Method)
+                            : 0L,
+                        LifecycleNote = outcome.LifecycleNote ?? string.Empty
+                    });
+            }
+
+            List<string> warnings = new List<string>(result.Warnings);
+            if (additionalWarnings != null)
+            {
+                warnings.AddRange(additionalWarnings);
+            }
+
+            // Why before the pause-point extras: this warning is cleared by compile, so it must
+            // count toward the single-compile resolution suffix instead of suppressing it.
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                result.Methods,
+                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadEditedSourceFromDisk,
+                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadCompiledSnapshot);
+            int orchestratorWarningCount = warnings.Count;
+            AppendRetargetLineDriftWarnings(warnings);
+            AppendExpiredNotRetargetedWarnings(warnings);
+
+            if (result.RetargetedPausePointIds != null && result.RetargetedPausePointIds.Count > 0)
+            {
+                List<string> details = new List<string>(result.RetargetedPausePointIds.Count);
+                for (int index = 0; index < result.RetargetedPausePointIds.Count; index++)
+                {
+                    details.Add(FormatRetargetedPausePointIdDetail(result.RetargetedPausePointIds[index]));
+                }
+
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.RetargetedPausePointsMessageFormat,
+                        string.Join(", ", details)));
+            }
+
+            if (result.SuppressedPausePointIds != null && result.SuppressedPausePointIds.Count > 0)
+            {
+                string ids = string.Join(", ", result.SuppressedPausePointIds);
+                warnings.Add(
+                    "Armed pause points could not be re-targeted and will not fire until the patch "
+                    + $"is reverted or compiled for real: {ids}");
+            }
+
+            return new HotReloadResponse
+            {
+                Success = !hasFailure,
+                Methods = methods,
+                Warnings = warnings,
+                PatchedTotal = result.PatchedTotal,
+                ActivePatchTotal = result.ActivePatchTotal,
+                UnchangedTotal = result.UnchangedTotal,
+                AddedFields = result.AddedFields ?? Array.Empty<string>(),
+                Message = BuildApplyMessage(
+                    result,
+                    hasFailure,
+                    warnings.Count,
+                    appendCompileResolution: orchestratorWarningCount >= 2
+                        && orchestratorWarningCount == warnings.Count),
+                RecommendedNextAction = HotReloadRecommendedNextAction.Resolve(
+                    hasFailure,
+                    result.PatchedTotal,
+                    CountAddedOutcomes(result))
+            };
+        }
+
+        // What: drains retarget line-drift triples recorded by SourcePausePointPatcher into Warnings.
+        private static void AppendRetargetLineDriftWarnings(List<string> warnings)
+        {
+            IReadOnlyList<(string Id, string OldText, string NewText)> driftWarnings =
+                HotReloadPausePointCoordination.ConsumeRetargetLineDriftWarnings?.Invoke();
+            if (driftWarnings == null || driftWarnings.Count == 0)
+            {
+                return;
+            }
+
+            for (int index = 0; index < driftWarnings.Count; index++)
+            {
+                (string id, string oldText, string newText) = driftWarnings[index];
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.RetargetLineDriftWarningFormat,
+                        id,
+                        oldText,
+                        newText));
+            }
+        }
+
+        // What: drains expired-not-retargeted ids recorded during the latest patch transition.
+        private static void AppendExpiredNotRetargetedWarnings(List<string> warnings)
+        {
+            IReadOnlyList<string> expiredIds =
+                HotReloadPausePointCoordination.ConsumeExpiredNotRetargetedMarkerIds?.Invoke();
+            if (expiredIds == null || expiredIds.Count == 0)
+            {
+                return;
+            }
+
+            warnings.Add(
+                string.Format(
+                    HotReloadConstants.ExpiredPausePointsNotRetargetedMessageFormat,
+                    string.Join(", ", expiredIds)));
+        }
+
+        // What: "{id} (now line {N}: {text})" from the registry values written on retarget/enable.
+        private static string FormatRetargetedPausePointIdDetail(string id)
+        {
+            UloopPausePointSnapshot status = UloopPausePointRegistry.GetStatus(id);
+            string lineText = status.ResolvedLineText ?? string.Empty;
+            return string.Format(
+                HotReloadConstants.RetargetedPausePointIdDetailFormat,
+                id,
+                status.ResolvedLine,
+                lineText);
+        }
+
+        private static string BuildApplyMessage(
+            HotReloadOrchestratorResult result,
+            bool hasFailure,
+            int warningCount,
+            bool appendCompileResolution)
+        {
+            // Why: when every method was left untouched, the empty Methods list is intentional —
+            // report the unchanged count instead of the generic "no patchable bodies" message.
+            if (!hasFailure && result.Methods.Count == 0 && result.UnchangedTotal > 0)
+            {
+                return AppendWarningCount(
+                    "All " + result.UnchangedTotal
+                    + " methods are unchanged since the last compile; nothing to patch.",
+                    warningCount,
+                    appendCompileResolution);
+            }
+
+            string message;
+            bool isAppliedBranch;
+            (message, isAppliedBranch) = BuildApplyOutcomeMessage(result, hasFailure);
+            message = AppendUnchangedAndLifecycleNotes(message, result);
+
+            if (isAppliedBranch && HasSkippedOutcome(result))
+            {
+                message += " See Methods for Skipped reasons.";
+            }
+
+            return AppendWarningCount(message, warningCount, appendCompileResolution);
+        }
+
+        private static (string Message, bool IsAppliedBranch) BuildApplyOutcomeMessage(
+            HotReloadOrchestratorResult result,
+            bool hasFailure)
+        {
+            int addedCount = CountAddedOutcomes(result);
+            if (hasFailure)
+            {
+                return ("Hot reload finished with one or more Failed method outcomes. See Methods.", false);
+            }
+
+            if (result.Methods.Count == 0)
+            {
+                return (
+                    "Hot reload found no patchable method bodies in the given files; nothing was changed. "
+                    + "Hot reload only replaces existing ordinary method bodies; use uloop compile for other edits.",
+                    false);
+            }
+
+            if (AreAllOutcomesAlreadyActive(result))
+            {
+                return (
+                    string.Format(
+                        HotReloadConstants.AlreadyActiveApplyMessageFormat,
+                        result.Methods.Count),
+                    false);
+            }
+
+            if (result.PatchedTotal == 0 && addedCount == 0)
+            {
+                return (HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage, false);
+            }
+
+            string message = "Hot reload applied. PatchedTotal=" + result.PatchedTotal
+                + ", ActivePatchTotal=" + result.ActivePatchTotal + ".";
+            if (addedCount > 0)
+            {
+                message += " Added: " + addedCount + ".";
+            }
+
+            return (message, true);
+        }
+
+        private static string AppendUnchangedAndLifecycleNotes(
+            string message,
+            HotReloadOrchestratorResult result)
+        {
+            if (result.UnchangedTotal > 0)
+            {
+                message += " " + result.UnchangedTotal + " unchanged methods were left untouched.";
+            }
+
+            int lifecycleNoteCount = CountLifecycleNotes(result);
+            if (lifecycleNoteCount > 0)
+            {
+                // Why aggregate: per-method text already lives on Methods[].LifecycleNote;
+                // dumping every note into Message repeats nearly identical paragraphs.
+                message += " " + string.Format(
+                    HotReloadConstants.LifecycleNotesAggregatedMessageFormat,
+                    lifecycleNoteCount);
+            }
+
+            return message;
+        }
+
+        private static int CountLifecycleNotes(HotReloadOrchestratorResult result)
+        {
+            int lifecycleNoteCount = 0;
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                if (!string.IsNullOrEmpty(result.Methods[index].LifecycleNote))
+                {
+                    lifecycleNoteCount++;
+                }
+            }
+
+            return lifecycleNoteCount;
+        }
+
+        private static bool AreAllOutcomesAlreadyActive(HotReloadOrchestratorResult result)
+        {
+            if (result.Methods.Count == 0)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                if (result.Methods[index].Kind != HotReloadMethodOutcomeKind.AlreadyActive)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool HasSkippedOutcome(HotReloadOrchestratorResult result)
+        {
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                if (result.Methods[index].Kind == HotReloadMethodOutcomeKind.Skipped)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string AppendWarningCount(
+            string message,
+            int warningCount,
+            bool appendCompileResolution)
+        {
+            if (warningCount <= 0)
+            {
+                return message;
+            }
+
+            string withCount = message + " " + warningCount + " warning(s). See Warnings.";
+            if (!appendCompileResolution)
+            {
+                return withCount;
+            }
+
+            return withCount + " " + HotReloadConstants.MultiWarningSingleCompileResolutionMessage;
+        }
+
+        private static int CountAddedOutcomes(HotReloadOrchestratorResult result)
+        {
+            int addedCount = 0;
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                if (result.Methods[index].Kind == HotReloadMethodOutcomeKind.Added)
+                {
+                    addedCount++;
+                }
+            }
+
+            return addedCount;
+        }
+
+        private static Task<HotReloadOrchestratorResult> RunApplyAsync(
+            IReadOnlyList<string> files,
+            CancellationToken ct)
+        {
+            return HotReloadOrchestrator.RunAsync(files, contentPathOverride: null, ct);
+        }
+
+        private static HotReloadResponse CreateValidationFailure(HotReloadValidationFailure failure)
+        {
+            Debug.Assert(failure != null, "failure must not be null.");
+            return new HotReloadResponse
+            {
+                Success = false,
+                Message = failure.Message,
+                ErrorCode = failure.ErrorCode,
+                NextActions = failure.NextActions
+            };
+        }
+    }
+}

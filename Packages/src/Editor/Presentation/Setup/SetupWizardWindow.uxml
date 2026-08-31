@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:ScrollView class="setup-main-container">
+        <!-- Legacy prerequisite row kept hidden so older USS/layout bindings remain stable. -->
+        <ui:VisualElement name="nodejs-warning" class="setup-prerequisite setup-prerequisite--warning setup-hidden">
+            <ui:Label text="CLI installer unavailable" class="setup-prerequisite__title" />
+            <ui:Label text="Use the direct installer from the README." class="setup-prerequisite__message" />
+            <ui:Button name="refresh-button" text="Refresh" class="setup-button setup-button--small" />
+        </ui:VisualElement>
+        <ui:VisualElement name="nodejs-ok" class="setup-prerequisite setup-prerequisite--ok setup-prerequisite--compact setup-hidden">
+            <ui:Label text="CLI installer ready" class="setup-prerequisite__title" />
+        </ui:VisualElement>
+
+        <!-- Step 1: Install CLI -->
+        <ui:VisualElement name="step-1" class="setup-step">
+            <ui:Label text="Step 1: Install CLI" class="setup-step__title" />
+            <ui:VisualElement class="setup-step__content">
+                <ui:VisualElement class="setup-step__status-row">
+                    <ui:VisualElement name="cli-status-icon" class="setup-status-icon" />
+                    <ui:Label name="cli-status-label" text="Checking..." class="setup-step__status-label" />
+                </ui:VisualElement>
+                <ui:Label name="cli-homebrew-upgrade-message" text="" class="setup-warning-message" />
+                <ui:Button name="install-cli-button" text="Install CLI" class="setup-button" />
+                <ui:VisualElement name="cli-install-progress" class="setup-install-progress" style="display: none;">
+                    <ui:Label name="cli-install-progress-label" text="" class="setup-install-progress__detail" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Step 2: Install Skills -->
+        <ui:VisualElement name="step-2" class="setup-step">
+            <ui:VisualElement class="setup-step__title-row">
+                <ui:Label text="Step 2: Install Skills (Optional)" class="setup-step__title" />
+                <ui:Button name="refresh-skills-state-button" text="↻" class="skills-setup-panel__refresh-button" />
+            </ui:VisualElement>
+            <ui:VisualElement class="setup-step__content">
+                <ui:VisualElement name="skills-setup-panel-placeholder" />
+                <ui:Label name="skills-hint-label" text="Install skills later from&#10;Window &gt; Unity CLI Loop &gt; Settings." class="setup-step__hint-label" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Footer -->
+        <ui:VisualElement class="setup-footer">
+            <ui:VisualElement class="setup-footer__button-row">
+                <ui:Button name="open-settings-button" text="Open Settings" class="setup-button setup-button--primary" />
+                <ui:Button name="close-button" text="Close" class="setup-button" />
+            </ui:VisualElement>
+            <ui:Toggle
+                name="suppress-auto-show-toggle"
+                text="Don't show this after updates"
+                class="setup-footer__toggle" />
+            <ui:Label
+                text="Reopen this from&#10;Window &gt; Unity CLI Loop &gt; Setup Wizard."
+                class="setup-footer__hint-label" />
+            <ui:VisualElement name="github-link-row" class="setup-footer__github-link">
+                <ui:Label name="github-link-label" text="Star on GitHub" class="setup-footer__github-link-label" />
+                <ui:Image name="github-link-icon" class="setup-footer__github-link-icon" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:ScrollView>
+</ui:UXML>

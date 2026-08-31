@@ -1,9 +1,13 @@
-#if ULOOPMCP_HAS_ROSLYN
 using NUnit.Framework;
-using System.Threading.Tasks;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.Application;
+using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.Tests.Editor;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
     /// <summary>
     /// Parameter validation tests for ExecuteDynamicCodeTool
@@ -12,21 +16,27 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
     public class ExecuteDynamicCodeParameterValidationTests
     {
         [Test]
-        public void ExecuteAsync_WithStringParameters_ShouldThrowParameterValidationException()
+        public void ExecuteAsync_WithStringParameters_ShouldThrowUnityCliLoopToolParameterValidationException()
         {
+            // Verifies that a string Parameters value is rejected with a clear validation error before any compilation starts.
             // Arrange
-            ExecuteDynamicCodeTool tool = new ExecuteDynamicCodeTool();
-            JObject paramsToken = new JObject
-            {
+            UnityCliLoopToolRegistry registry = ToolRegistryTestFactory.Create();
+            UnityCliLoopToolExecutionService executionService = new(new NoOpEditorRuntimeStatePort());
+            JObject paramsToken = new()            {
                 ["Code"] = "return \"ok\";",
                 ["Parameters"] = "{}", // invalid: string instead of object
                 ["CompileOnly"] = true
             };
 
             // Act & Assert
-            var ex = Assert.ThrowsAsync<ParameterValidationException>(async () =>
+            UnityCliLoopToolParameterValidationException ex =
+                Assert.ThrowsAsync<UnityCliLoopToolParameterValidationException>(async () =>
             {
-                await tool.ExecuteAsync(paramsToken);
+                await executionService.ExecuteToolAsync(
+                    registry,
+                    "execute-dynamic-code",
+                    paramsToken,
+                    CancellationToken.None);
             });
 
             Assert.IsNotNull(ex);
@@ -34,70 +44,5 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             StringAssert.Contains("{}", ex.Message);
         }
 
-        [Test]
-        public async Task ExecuteAsync_WithObjectParameters_ShouldSucceedInCompileOnly()
-        {
-            // Arrange
-            DynamicCodeSecurityLevel prev = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-            ExecuteDynamicCodeTool tool = new ExecuteDynamicCodeTool();
-            JObject paramsToken = new JObject
-            {
-                ["Code"] = "return \"ok\";",
-                ["Parameters"] = new JObject(), // valid: object
-                ["CompileOnly"] = true
-            };
-
-            // Act
-            BaseToolResponse baseResponse = null;
-            try
-            {
-                baseResponse = await tool.ExecuteAsync(paramsToken);
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(prev);
-            }
-            ExecuteDynamicCodeResponse response = baseResponse as ExecuteDynamicCodeResponse;
-
-            // Assert
-            Assert.IsNotNull(response, "Response should be ExecuteDynamicCodeResponse");
-            Assert.IsTrue(response.Success, $"Expected success but got error: {response.ErrorMessage}");
-            Assert.IsTrue(string.IsNullOrEmpty(response.ErrorMessage), "ErrorMessage should be empty on success");
-        }
-
-        [Test]
-        public async Task ExecuteAsync_CodeWithoutReturn_ShouldAutoReturnAndSucceed()
-        {
-            // Arrange
-            DynamicCodeSecurityLevel prev = ULoopSettings.GetDynamicCodeSecurityLevel();
-            ULoopSettings.SetDynamicCodeSecurityLevel(DynamicCodeSecurityLevel.Restricted);
-            ExecuteDynamicCodeTool tool = new ExecuteDynamicCodeTool();
-            JObject paramsToken = new JObject
-            {
-                ["Code"] = "int x = 1; // no explicit return",
-                ["CompileOnly"] = false
-            };
-
-            // Act
-            BaseToolResponse baseResponse = null;
-            try
-            {
-                baseResponse = await tool.ExecuteAsync(paramsToken);
-            }
-            finally
-            {
-                ULoopSettings.SetDynamicCodeSecurityLevel(prev);
-            }
-            ExecuteDynamicCodeResponse response = baseResponse as ExecuteDynamicCodeResponse;
-
-            // Assert
-            Assert.IsNotNull(response, "Response should be ExecuteDynamicCodeResponse");
-            Assert.IsTrue(response.Success, $"Expected success but got error: {response.ErrorMessage}");
-            Assert.IsTrue(string.IsNullOrEmpty(response.ErrorMessage), "ErrorMessage should be empty on success");
-        }
     }
 }
-#endif
-
-

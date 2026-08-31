@@ -1,20 +1,31 @@
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.Compilation;
+using System;
+using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
-namespace io.github.hatayama.uLoopMCP
+using io.github.hatayama.UnityCliLoop.Domain;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Dev
 {
+    /// <summary>
+    /// Defines the Unity Editor window for Compile Editor workflows.
+    /// </summary>
     public class CompileEditorWindow : EditorWindow
     {
         private CompileController _compileController;
         private CompileLogDisplay _logDisplay;
         private Vector2 _scrollPosition;
         private bool _forceRecompile = false;
+        private bool _isPostCompileReadinessRunning = false;
 
         // Note: Compile window data is now managed via McpSessionManager
 
-        [MenuItem("uLoopMCP/Windows/Compile Tool")]
+        [MenuItem("UnityCliLoop/Windows/Compile Tool")]
         public static void ShowWindow()
         {
             CompileEditorWindow window = GetWindow<CompileEditorWindow>();
@@ -27,7 +38,9 @@ namespace io.github.hatayama.uLoopMCP
             // Create instances only if they don't exist yet
             if (_compileController == null || _logDisplay == null)
             {
-                _compileController = new CompileController();
+                _compileController = new CompileController(
+                    UnityCliLoopCompileResultSessionRepositoryFacade.Repository,
+                    UnityCliLoopPendingCompileSessionRepositoryFacade.Repository);
                 _logDisplay = new CompileLogDisplay();
 
                 // Subscribe to events
@@ -87,9 +100,8 @@ namespace io.github.hatayama.uLoopMCP
             _forceRecompile = EditorGUILayout.Toggle("Force Recompile", _forceRecompile);
             GUILayout.Space(5);
 
-            EditorGUI.BeginDisabledGroup(_compileController.IsCompiling);
-            string buttonText = _compileController.IsCompiling ? "Compiling..." :
-                               (_forceRecompile ? "Run Force Compile" : "Run Compile");
+            EditorGUI.BeginDisabledGroup(IsCompileActionBusy());
+            string buttonText = CreateCompileButtonText();
             if (GUILayout.Button(buttonText, GUILayout.Height(30)))
             {
                 // Execute compilation using async/await
@@ -118,14 +130,33 @@ namespace io.github.hatayama.uLoopMCP
 
         private async Task ExecuteCompileAsync()
         {
-            CompileResult result = await _compileController.TryCompileAsync(_forceRecompile);
+            if (!ValidateCompilationStateBeforeControllerExecution())
+            {
+                return;
+            }
+
+            CompileResult result = await _compileController.TryCompileAsync(_forceRecompile, playModeStopWarning: null, CancellationToken.None);
+            if (ShouldRunExecuteDynamicCodeReadinessAfterCompile(result))
+            {
+                _isPostCompileReadinessRunning = true;
+                Repaint();
+                try
+                {
+                    await RunExecuteDynamicCodeReadinessProbesAfterCompileAsync(CancellationToken.None);
+                }
+                finally
+                {
+                    _isPostCompileReadinessRunning = false;
+                    Repaint();
+                }
+            }
             
             // Output result to log (for debugging)
             string message = string.IsNullOrEmpty(result.Message) ? "(none)" : result.Message;
             bool displaySuccess = result.Success ?? false;
             bool shouldWarn = result.Success == false;
             string logMessage =
-                $"Compilation finished: Success={displaySuccess}, Indeterminate={result.IsIndeterminate}, Errors={result.error.Length}, Warnings={result.warning.Length}, Message={message}";
+                $"Compilation finished: Success={displaySuccess}, Indeterminate={result.IsIndeterminate}, Errors={result.Errors.Length}, Warnings={result.Warnings.Length}, Message={message}";
 
             if (shouldWarn)
             {
@@ -136,10 +167,79 @@ namespace io.github.hatayama.uLoopMCP
             UnityEngine.Debug.Log(logMessage);
         }
 
+        private bool ValidateCompilationStateBeforeControllerExecution()
+        {
+            CompilationStateValidationService validationService = new();
+            ValidationResult validation = validationService.ValidateCompilationState();
+            if (validation.IsValid)
+            {
+                return true;
+            }
+
+            CompileResult result = new CompileResult(
+                success: false,
+                errorCount: 0,
+                warningCount: 0,
+                completedAt: DateTime.Now,
+                messages: new CompilerMessage[0],
+                errors: new CompilerMessage[0],
+                warnings: new CompilerMessage[0],
+                isIndeterminate: true,
+                message: validation.ErrorMessage);
+            _logDisplay.AppendCompletionMessage(result);
+            Repaint();
+            UnityEngine.Debug.LogWarning(validation.ErrorMessage);
+            return false;
+        }
+
+        private static bool ShouldRunExecuteDynamicCodeReadinessAfterCompile(CompileResult result)
+        {
+            return result.Success == true;
+        }
+
+        private static async Task RunExecuteDynamicCodeReadinessProbesAfterCompileAsync(CancellationToken ct)
+        {
+            // Why: the editor Compile Tool bypasses the native CLI's post-compile readiness wait,
+            // so it must run the same hidden probe path before handing control back to the user.
+            foreach (string code in ExecuteDynamicCodeReadinessProbe.CreateReturnStringProbeCodes())
+            {
+                ct.ThrowIfCancellationRequested();
+                JObject parameters = new()
+                {
+                    ["Code"] = code,
+                    ["CompileOnly"] = false,
+                    ["YieldToForegroundRequests"] = false
+                };
+                await UnityCliLoopToolRegistrar.ExecuteToolAsync(
+                    "execute-dynamic-code",
+                    parameters,
+                    ct);
+            }
+        }
+
+        private bool IsCompileActionBusy()
+        {
+            return _compileController.IsCompiling || _isPostCompileReadinessRunning;
+        }
+
+        private string CreateCompileButtonText()
+        {
+            if (_compileController.IsCompiling)
+            {
+                return "Compiling...";
+            }
+
+            if (_isPostCompileReadinessRunning)
+            {
+                return "Preparing...";
+            }
+
+            return _forceRecompile ? "Run Force Compile" : "Run Compile";
+        }
+
         private void OnCompileCompleted(CompileResult result)
         {
             _logDisplay.AppendCompletionMessage(result);
-            McpEditorSettings.SetCompileWindowHasData(true);
             Repaint();
         }
 
@@ -166,9 +266,6 @@ namespace io.github.hatayama.uLoopMCP
         {
             _logDisplay.Clear();
             _compileController.ClearMessages();
-
-            // Also clear McpSessionManager data
-            McpEditorSettings.ClearCompileWindowData();
 
             Repaint();
         }

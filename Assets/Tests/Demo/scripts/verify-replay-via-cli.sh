@@ -1,29 +1,83 @@
 #!/bin/sh
-# E2E verification: human plays freely, then CLI replays and verifies.
+# E2E verification: record input through the Recordings window, replay it through the CLI, and compare behavior.
 #
 # Usage: sh verify-replay-via-cli.sh [--project-path <path>]
 #
 # Prerequisites:
-#   - Unity Editor running with InputReplayVerificationScene loaded
-#   - PlayMode is NOT running (script starts it)
+#   - Unity Editor running for the target project
+#   - PlayMode is not running because this script starts it
+#   - Record input with Window > Unity CLI Loop > Recordings when prompted
 
 set -e
 
 PROJECT_PATH=""
-if [ "$1" = "--project-path" ] && [ -n "$2" ]; then
-    PROJECT_PATH="$2"
-fi
+ULOOP_PATH="${ULOOP_BIN:-uloop}"
+SCENE_PATH="Assets/Scenes/InputReplayVerificationScene.unity"
+
+fail() {
+    echo "ERROR: $1" >&2
+    exit 1
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --project-path)
+            [ "$#" -ge 2 ] || fail "--project-path requires a value"
+            PROJECT_PATH=$2
+            shift 2
+            ;;
+        --uloop-path)
+            [ "$#" -ge 2 ] || fail "--uloop-path requires a value"
+            ULOOP_PATH=$2
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: sh verify-replay-via-cli.sh [--project-path <path>] [--uloop-path <path>]"
+            exit 0
+            ;;
+        *)
+            fail "unknown option: $1"
+            ;;
+    esac
+done
 
 run_uloop() {
     if [ -n "$PROJECT_PATH" ]; then
-        uloop "$@" --project-path "$PROJECT_PATH"
+        "$ULOOP_PATH" --project-path "$PROJECT_PATH" "$@"
     else
-        uloop "$@"
+        "$ULOOP_PATH" "$@"
     fi
 }
 
 RECORDING_LOG=".uloop/outputs/InputRecordings/recording-event-log.txt"
 REPLAY_LOG=".uloop/outputs/InputRecordings/replay-event-log.txt"
+
+if [ -n "$PROJECT_PATH" ]; then
+    RECORDING_LOG="$PROJECT_PATH/$RECORDING_LOG"
+    REPLAY_LOG="$PROJECT_PATH/$REPLAY_LOG"
+fi
+
+run_uloop_json() {
+    output=$(run_uloop "$@" 2>&1) || {
+        printf '%s\n' "$output" >&2
+        fail "uloop $* failed"
+    }
+    if printf '%s\n' "$output" | grep -Eq '"Success"[[:space:]]*:[[:space:]]*false'; then
+        printf '%s\n' "$output" >&2
+        fail "uloop $* returned success=false"
+    fi
+
+    printf '%s\n' "$output"
+}
+
+assert_json_result() {
+    json=$1
+    expected=$2
+    context=$3
+
+    actual=$(printf '%s\n' "$json" | sed -n 's/.*"Result"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    [ "$actual" = "$expected" ] || fail "$context: expected '$expected', got '$actual'"
+}
 
 wait_for_unity() {
     i=0
@@ -39,91 +93,110 @@ wait_for_unity() {
 }
 
 activate_for_record() {
-    run_uloop execute-dynamic-code --code '
+    json=$(run_uloop_json execute-dynamic-code --code '
 var cube = GameObject.Find("VerificationCube");
 if (cube == null) return "ERROR: VerificationCube not found";
 cube.SendMessage("ActivateForExternalControl");
 return "OK: activated for recording";
-'
+')
+    assert_json_result "$json" "OK: activated for recording" "Activate recording controller"
 }
 
 activate_for_replay() {
-    run_uloop execute-dynamic-code --code '
+    json=$(run_uloop_json execute-dynamic-code --code '
 var cube = GameObject.Find("VerificationCube");
 if (cube == null) return "ERROR: VerificationCube not found";
 cube.SendMessage("ActivateForExternalReplay");
 return "OK: activated for replay";
-'
+')
+    assert_json_result "$json" "OK: activated for replay" "Activate replay controller"
 }
 
 save_log() {
-    run_uloop execute-dynamic-code --code "
+    unity_path=$1
+    if command -v cygpath >/dev/null 2>&1; then
+        unity_path=$(cygpath -w "$1")
+    fi
+    escaped_path=$(printf '%s\n' "$unity_path" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    rm -f "$1"
+    json=$(run_uloop_json execute-dynamic-code --code "
 var cube = GameObject.Find(\"VerificationCube\");
 if (cube == null) return \"ERROR: VerificationCube not found\";
-cube.SendMessage(\"SaveLog\", \"$1\");
+cube.SendMessage(\"SaveLog\", \"$escaped_path\");
 return \"OK: log saved\";
-"
+")
+    assert_json_result "$json" "OK: log saved" "Save event log"
+    [ -f "$1" ] || fail "Save event log did not create $1"
+}
+
+initialize_replay_scene() {
+    run_uloop control-play-mode --action Stop >/dev/null 2>&1 || true
+
+    json=$(run_uloop_json execute-dynamic-code --code "
+using UnityEditor.SceneManagement;
+using UnityEngine.SceneManagement;
+string scenePath = \"$SCENE_PATH\";
+if (SceneManager.GetActiveScene().path != scenePath)
+{
+    EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+}
+return SceneManager.GetActiveScene().path;
+")
+    assert_json_result "$json" "$SCENE_PATH" "Load replay verification scene"
 }
 
 echo ""
 echo "========================================="
-echo "  Input Record/Replay E2E Verification"
+echo "  Input Replay E2E Verification"
 echo "========================================="
 
-# ---- Phase 1: Record human input ----
+# ---- Phase 1: Record human input through the Recordings window ----
 
 echo ""
-echo "[1/8] Starting PlayMode..."
-run_uloop control-play-mode --action Play
+echo "[1/8] Loading replay verification scene..."
+initialize_replay_scene
+
+echo "[2/8] Starting PlayMode..."
+run_uloop_json control-play-mode --action Play >/dev/null
 echo "  Waiting for Unity..."
 sleep 6
 wait_for_unity
 
-echo "[2/8] Activating controller..."
+echo "[3/8] Activating controller..."
 activate_for_record
 
-echo "[3/8] Starting recording via CLI..."
-run_uloop record-input --action Start
-
+echo "[4/8] Recording input with the Recordings window..."
 echo ""
 echo "========================================="
-echo "  Recording is active!"
-echo "  Go to the Unity Game View and play."
+echo "  Open Window > Unity CLI Loop > Recordings."
+echo "  Click Start Recording, play in the Game View, then click Stop Recording."
 echo ""
 echo "  WASD: move | Mouse: rotate"
 echo "  Left click: red | Right click: blue"
 echo "  Scroll: scale"
 echo ""
-echo "  Press ENTER here when done."
+echo "  Press ENTER here after the recording has stopped."
 echo "========================================="
 echo ""
-read dummy
+read -r _
 
-echo "[4/8] Saving event log + deactivating controller..."
-run_uloop execute-dynamic-code --code '
-var cube = GameObject.Find("VerificationCube");
-if (cube == null) return "ERROR: VerificationCube not found";
-cube.SendMessage("SaveLog", ".uloop/outputs/InputRecordings/recording-event-log.txt");
-cube.SendMessage("ClearLog");
-return "OK: log saved, controller deactivated";
-'
-
-echo "  Stopping recording via CLI..."
-run_uloop record-input --action Stop
+echo "[5/8] Saving recording event log..."
+save_log "$RECORDING_LOG"
+[ -s "$RECORDING_LOG" ] || fail "Recording event log is empty"
 
 # ---- Phase 2: Replay via CLI ----
 
-echo "[5/8] Restarting PlayMode..."
-run_uloop control-play-mode --action Stop
+echo "[6/8] Restarting PlayMode..."
+run_uloop_json control-play-mode --action Stop >/dev/null
 sleep 3
-run_uloop control-play-mode --action Play
+run_uloop_json control-play-mode --action Play >/dev/null
 echo "  Waiting for Unity..."
 sleep 6
 wait_for_unity
 
-echo "[6/8] Activating controller + starting replay via CLI..."
+echo "[7/8] Activating controller + starting replay via CLI..."
 activate_for_replay
-echo "  Starting replay..."
+echo "  Starting replay of the latest Recordings window file..."
 REPLAY_RESULT=$(run_uloop replay-input --action Start 2>&1) || true
 echo "  $REPLAY_RESULT"
 
@@ -138,7 +211,7 @@ while [ $waited -lt 60 ]; do
         break
     fi
     if [ $((waited % 5)) -eq 0 ]; then
-        progress=$(echo "$STATUS_RESULT" | grep -o '"progress": *[0-9.]*' | sed 's/.*: *//')
+        progress=$(echo "$STATUS_RESULT" | grep -o '"Progress": *[0-9.]*' | sed 's/.*: *//')
         echo "  Progress: ${progress:-...}"
     fi
     sleep 1
@@ -153,13 +226,14 @@ if [ $waited -ge 60 ]; then
 fi
 sleep 1
 
-echo "[7/8] Saving replay event log..."
-save_log ".uloop/outputs/InputRecordings/replay-event-log.txt"
+echo "[8/8] Saving replay event log..."
+save_log "$REPLAY_LOG"
+[ -s "$REPLAY_LOG" ] || fail "Replay event log is empty"
 
 # ---- Phase 3: Compare ----
 
 echo ""
-echo "[8/8] Comparing logs..."
+echo "[Final] Comparing logs..."
 echo ""
 
 # Normalize frame numbers to relative (first event = frame 0).

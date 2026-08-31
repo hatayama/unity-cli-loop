@@ -1,39 +1,58 @@
 {
+  "pull-request-header": "Release components:\n\n- `unity-package`: Unity Package Manager/OpenUPM package (`v<version>` tags).\n- `uloop-project-runner`: native project runner binaries (`uloop-project-runner-v<version>` tags).\n- `dispatcher`: native dispatcher binaries (`dispatcher-v<version>` tags).",
   "packages": {
     "Packages/src": {
-      "release-type": "node",
+      "component": "unity-package",
+      "release-type": "go",
+      "release-as": "3.0.0",
       "include-v-in-tag": true,
       "include-component-in-tag": false,
+      "changelog-path": "CHANGELOG.md",
       "extra-files": [
         {
           "type": "json",
-          "path": "TypeScriptServer~/package.json",
+          "path": "package.json",
           "jsonpath": "$.version"
+        }
+      ]
+    },
+    "cli/dispatcher": {
+      "component": "dispatcher",
+      "release-type": "go",
+      "release-as": "3.0.0",
+      "include-v-in-tag": true,
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "dispatchercontract/dispatcher-contract.json",
+          "jsonpath": "$.dispatcherVersion"
+        }
+      ]
+    },
+    "cli/project-runner": {
+      "component": "uloop-project-runner",
+      "release-type": "go",
+      "release-as": "3.0.0",
+      "include-v-in-tag": true,
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "/cli/common/clicontract/contract.json",
+          "jsonpath": "$.projectRunnerVersion"
         },
         {
           "type": "json",
-          "path": "Cli~/package.json",
-          "jsonpath": "$.version"
+          "path": "/Packages/src/project-runner-pin.json",
+          "jsonpath": "$.projectRunnerVersion"
         },
         {
           "type": "json",
-          "path": "Cli~/src/default-tools.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "generic",
-          "path": "Packages/src/TypeScriptServer~/src/version.ts",
-          "glob": "Packages/src/TypeScriptServer~/src/version.ts"
-        },
-        {
-          "type": "generic",
-          "path": "Packages/src/Cli~/src/version.ts",
-          "glob": "Packages/src/Cli~/src/version.ts"
-        },
-        {
-          "type": "generic",
-          "path": "Packages/src/Editor/Config/McpVersion.cs",
-          "glob": "Packages/src/Editor/Config/McpVersion.cs"
+          "path": "/.uloop/project-runner-pin.json",
+          "jsonpath": "$.projectRunnerVersion"
         }
       ]
     }

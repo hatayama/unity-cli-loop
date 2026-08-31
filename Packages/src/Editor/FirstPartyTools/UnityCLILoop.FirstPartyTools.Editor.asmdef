@@ -1,0 +1,47 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "GUID:aa8dd8c09aac9487db2e0b50381920dc",
+        "GUID:a39242918a7ab45519b2c80f798dce33",
+        "GUID:0cf5a90ce140e4729abd701bea48b00e",
+        "GUID:afe86dd49995e46baa33e099a4d2ee1d",
+        "GUID:ee36dcf19655f43c08e0a7009ca7a624",
+        "GUID:1b127da462d854085a0384d517187480",
+        "GUID:54dfc5fd447794df2aa683025462d668",
+        "GUID:94d8abc693f543a691a4645a5ff42e5c",
+        "GUID:dc412b2cd951d452b8dcec99c3adeb19",
+        "GUID:3b7aa330d87dc452293296dd5830859b",
+        "GUID:9ed21973545c44e28af522b049dec47d",
+        "GUID:a338f3f8ae84147109d351d16d557552",
+        "GUID:a0bdbd2c5705643fbb9aef9fac8fd46a",
+        "GUID:d427b32aad9cb44fc8e962437c9dbcd8",
+        "GUID:679888bc3e9c44c19ab0d62ff8701dcf",
+        "GUID:9c34b9a25e1464dec91601291eade23f",
+        "GUID:32708dd5a1f18474e8a4deddc56e8806",
+        "GUID:e3fd8b49afd6f4e3cae09011028922b4",
+        "GUID:774ab7841db34070bf18932c90cf9ea6"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "",
+            "define": "ULOOP_HAS_INPUT_SYSTEM"
+        },
+        {
+            "name": "com.unity.test-framework",
+            "expression": "",
+            "define": "ULOOP_HAS_TEST_FRAMEWORK"
+        }
+    ],
+    "noEngineReferences": false
+}

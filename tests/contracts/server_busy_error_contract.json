@@ -1,0 +1,15 @@
+{
+  "comment": "Representative server_busy error.data payload with every ServerBusyErrorData field present. Go and C# contract tests decode this same frame.",
+  "errorData": {
+    "type": "server_busy",
+    "message": "Unity is busy running 'compile'. Retry 'get-logs' after the running tool completes.",
+    "runningToolName": "compile",
+    "requestedToolName": "get-logs",
+    "isPlaying": true,
+    "isPaused": false,
+    "isCompiling": true,
+    "isUpdating": false,
+    "secondsSinceLastMainThreadTick": 1.5,
+    "runningToolElapsedSeconds": 12
+  }
+}

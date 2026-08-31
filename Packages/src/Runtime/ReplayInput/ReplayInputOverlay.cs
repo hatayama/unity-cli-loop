@@ -3,14 +3,19 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
     // Overlay that displays replay progress (frame counter and progress bar)
     // during input replay. Keyboard/mouse visualization is handled by existing
     // SimulateKeyboardOverlay and SimulateMouseInputOverlay.
+    /// <summary>
+    /// Drives the runtime overlay used by Replay Input behavior.
+    /// </summary>
     public class ReplayInputOverlay : MonoBehaviour
     {
         private const float FADE_OUT_DURATION = 0.5f;
+        private const string ProgressBarFillName = "ProgressBarFill";
+        private const string StatusTextName = "StatusText";
 
         [SerializeField] private Text? _statusText;
         [SerializeField] private Image? _progressBarFill;
@@ -22,6 +27,8 @@ namespace io.github.hatayama.uLoopMCP
 
         private void Awake()
         {
+            RestoreMissingReferences();
+
             _canvasGroup = GetComponent<CanvasGroup>();
             if (_canvasGroup == null)
             {
@@ -32,6 +39,33 @@ namespace io.github.hatayama.uLoopMCP
             _canvasGroup.blocksRaycasts = false;
 
             SetVisible(false);
+        }
+
+        private void RestoreMissingReferences()
+        {
+            if (_statusText == null)
+            {
+                _statusText = FindChildComponent<Text>(StatusTextName);
+            }
+
+            if (_progressBarFill == null)
+            {
+                _progressBarFill = FindChildComponent<Image>(ProgressBarFillName);
+            }
+        }
+
+        private T FindChildComponent<T>(string childName) where T : Component
+        {
+            T[] children = GetComponentsInChildren<T>(true);
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == childName)
+                {
+                    return children[i];
+                }
+            }
+
+            return null!;
         }
 
         private void LateUpdate()

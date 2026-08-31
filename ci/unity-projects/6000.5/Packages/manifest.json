@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "io.github.hatayama.uloopmcp": "file:../../../../Packages/src"
+  }
+}

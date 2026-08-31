@@ -1,10 +1,13 @@
 using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Pre Using Resolver Added Namespaces behavior.
+    /// </summary>
     [TestFixture]
     public class PreUsingResolverAddedNamespacesTests
     {
@@ -60,7 +63,7 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         [Test]
         public void Resolve_WhenAlreadyHasUsing_ShouldNotReportIt()
         {
-            List<string> usings = new List<string> { "using System.Text;" };
+            List<string> usings = new() { "using System.Text;" };
             string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
             string wrappedSource = WrapperTemplate.Build(usings, System.Array.Empty<string>(), "TestNs", "TestClass", body);
 
@@ -68,193 +71,102 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
 
             Assert.That(result.AddedNamespaces, Does.Not.Contain("System.Text"));
         }
+
+        /// <summary>
+        /// What: the first unique type identifier that resolved a namespace is recorded as
+        /// the speculative trigger.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenUnresolvedType_RecordsTriggerIdentifierForAddedNamespace()
+        {
+            string body = "StringBuilder builder = new StringBuilder();\nreturn builder.ToString();";
+            string wrappedSource = WrapperTemplate.Build(
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
+
+            PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
+
+            AutoInjectedNamespace attribution = FindAttribution(result.AddedNamespaceAttributions, "System.Text");
+            Assert.That(attribution, Is.Not.Null);
+            Assert.That(attribution.TriggerIdentifier, Is.EqualTo("StringBuilder"));
+            Assert.That(attribution.IsSpeculative, Is.True);
+        }
+
+        /// <summary>
+        /// What: identifier System is a known namespace prefix and must not inject
+        /// UnityEngine.Rendering.VirtualTexturing.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenIdentifierIsKnownNamespace_DoesNotInjectVirtualTexturing()
+        {
+            string body = "System.DateTime now = System.DateTime.UtcNow;\nreturn now.Year;";
+            string wrappedSource = WrapperTemplate.Build(
+                new List<string>(), System.Array.Empty<string>(), "TestNs", "TestClass", body);
+
+            PreUsingResult result = PreUsingResolver.Resolve(wrappedSource, AssemblyTypeIndex.Instance);
+
+            Assert.That(
+                result.AddedNamespaces,
+                Does.Not.Contain("UnityEngine.Rendering.VirtualTexturing"));
+            Assert.That(
+                FindAttribution(result.AddedNamespaceAttributions, "UnityEngine.Rendering.VirtualTexturing"),
+                Is.Null);
+        }
+
+        /// <summary>
+        /// What: a full known namespace is classified as a known namespace, not only
+        /// as a leading segment.
+        /// </summary>
+        [Test]
+        public void IsKnownNamespace_WhenIdentifierIsSystemText_ReturnsTrue()
+        {
+            AssemblyTypeIndex index = AssemblyTypeIndex.Instance;
+
+            Assert.That(index.IsKnownNamespace("System.Text"), Is.True);
+            Assert.That(index.IsNamespaceLeadingSegment("System.Text"), Is.False);
+            Assert.That(index.IsKnownNamespaceOrLeadingSegment("System.Text"), Is.True);
+        }
+
+        /// <summary>
+        /// What: a namespace root that does not itself contain public types is still
+        /// classified as a leading segment.
+        /// </summary>
+        [Test]
+        public void IsNamespaceLeadingSegment_WhenIdentifierIsIo_ReturnsTrue()
+        {
+            AssemblyTypeIndex index = AssemblyTypeIndex.Instance;
+
+            Assert.That(index.IsKnownNamespace("io"), Is.False);
+            Assert.That(index.IsNamespaceLeadingSegment("io"), Is.True);
+            Assert.That(index.IsKnownNamespaceOrLeadingSegment("io"), Is.True);
+        }
+
+        /// <summary>
+        /// What: a type simple name is neither a known namespace nor a leading segment.
+        /// </summary>
+        [Test]
+        public void IsKnownNamespaceOrLeadingSegment_WhenIdentifierIsStringBuilder_ReturnsFalse()
+        {
+            AssemblyTypeIndex index = AssemblyTypeIndex.Instance;
+
+            Assert.That(index.IsKnownNamespace("StringBuilder"), Is.False);
+            Assert.That(index.IsNamespaceLeadingSegment("StringBuilder"), Is.False);
+            Assert.That(index.IsKnownNamespaceOrLeadingSegment("StringBuilder"), Is.False);
+        }
+
+        private static AutoInjectedNamespace FindAttribution(
+            IReadOnlyList<AutoInjectedNamespace> attributions,
+            string namespaceName)
+        {
+            foreach (AutoInjectedNamespace attribution in attributions)
+            {
+                if (attribution.Namespace == namespaceName)
+                {
+                    return attribution;
+                }
+            }
+
+            return null;
+        }
     }
 
-    [TestFixture]
-    public class AutoInjectedNamespacesIntegrationTests
-    {
-        private IPreloadAssemblySecurityValidator _previousValidator;
-
-        [SetUp]
-        public void SetUp()
-        {
-            _previousValidator = PreloadAssemblySecurityValidatorRegistry.SwapValidatorForTests(
-                new SystemReflectionMetadataPreloadValidator());
-        }
-
-        [TearDown]
-        public void TearDown()
-        {
-            PreloadAssemblySecurityValidatorRegistry.SwapValidatorForTests(_previousValidator);
-        }
-
-        [Test]
-        public async Task CompileAsync_ScriptMode_MissingUsing_ShouldReportAutoInjectedNamespaces()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = @"
-                    StringBuilder builder = new StringBuilder();
-                    builder.Append(""hello"");
-                    return builder.ToString();
-                ",
-                ClassName = "AutoInjectedNsTestCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Should compile");
-            Assert.That(result.AutoInjectedNamespaces, Does.Contain("System.Text"));
-        }
-
-        [Test]
-        public async Task CompileAsync_ScriptMode_NoMissingUsing_ShouldReportEmptyAutoInjectedNamespaces()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = "return 1 + 2;",
-                ClassName = "NoAutoInjectionCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Should compile");
-            Assert.That(result.AutoInjectedNamespaces, Is.Empty);
-        }
-
-        [Test]
-        public async Task CompileAsync_ScriptMode_WithExistingUsing_ShouldNotReportIt()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = @"
-                    using System.Text;
-                    StringBuilder builder = new StringBuilder();
-                    builder.Append(""already imported"");
-                    return builder.ToString();
-                ",
-                ClassName = "ExistingUsingCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Should compile");
-            Assert.That(result.AutoInjectedNamespaces, Is.Empty);
-        }
-
-        [Test]
-        public async Task CompileAsync_ScriptMode_MultipleMissing_ShouldReportAll()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = @"
-                    StringBuilder sb = new StringBuilder();
-                    Regex regex = new Regex(@""\d+"");
-                    return sb.ToString() + regex.ToString();
-                ",
-                ClassName = "MultipleAutoInjectedCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Should compile");
-            Assert.That(result.AutoInjectedNamespaces, Does.Contain("System.Text"));
-            Assert.That(result.AutoInjectedNamespaces, Does.Contain("System.Text.RegularExpressions"));
-        }
-
-        [Test]
-        public async Task CompileAsync_RawMode_MissingUsing_ShouldReportAutoInjectedNamespaces()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = @"
-                    public class RawModeMissingUsingTest
-                    {
-                        public async System.Threading.Tasks.Task<object> ExecuteAsync(
-                            System.Collections.Generic.Dictionary<string, object> parameters = null,
-                            System.Threading.CancellationToken ct = default)
-                        {
-                            StringBuilder sb = new StringBuilder();
-                            sb.Append(""raw"");
-                            return sb.ToString();
-                        }
-                    }
-                ",
-                ClassName = "RawModeMissingUsingCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Raw mode should compile with auto-using");
-            Assert.That(result.AutoInjectedNamespaces, Does.Contain("System.Text"));
-        }
-
-        [Test]
-        public async Task CompileAsync_RawMode_FullyQualifiedNames_ShouldReportEmptyAutoInjectedNamespaces()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = @"
-                    public class RawModeAutoInjectedTest
-                    {
-                        public async System.Threading.Tasks.Task<object> ExecuteAsync(
-                            System.Collections.Generic.Dictionary<string, object> parameters = null,
-                            System.Threading.CancellationToken ct = default)
-                        {
-                            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-                            sb.Append(""raw"");
-                            return sb.ToString();
-                        }
-                    }
-                ",
-                ClassName = "RawModeAutoInjectedCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success,
-                result.Errors != null && result.Errors.Count > 0 ? result.Errors[0].Message : "Raw mode should compile");
-            // Raw mode uses fully-qualified names, so no auto-injection needed
-            Assert.That(result.AutoInjectedNamespaces, Is.Empty);
-        }
-
-        [Test]
-        public async Task CompileAsync_ScriptMode_ShouldPopulateCoreTimings()
-        {
-            DynamicCodeCompiler compiler = new DynamicCodeCompiler(DynamicCodeSecurityLevel.Restricted);
-            CompilationRequest request = new CompilationRequest
-            {
-                Code = "return 1 + 2;",
-                ClassName = "TimingVisibilityCommand",
-                Namespace = "TestNamespace"
-            };
-
-            CompilationResult result = await compiler.CompileAsync(request, CancellationToken.None);
-
-            Assert.IsTrue(result.Success, "Timing test should compile");
-            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] ReferenceResolution:"));
-            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] Build:"));
-            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] AssemblyLoad:"));
-            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] CompilePlan:"));
-            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] CompileCacheCheck:"));
-            Assert.That(result.Timings, Has.Some.StartsWith("[Perf] CompilerTotal:"));
-        }
-    }
 }

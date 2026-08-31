@@ -1,0 +1,392 @@
+package automation
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+)
+
+const (
+	protocolMinimumVersionFile    = "Packages/src/Editor/Domain/CliConstants.cs"
+	protocolMinimumVersionMarker  = "<!-- uloop-protocol-minimum-version-warning -->"
+	projectRunnerReleaseTagPrefix = "uloop-project-runner-v"
+)
+
+var requiredMinimumProjectRunnerAssets = []string{
+	"uloop-project-runner-darwin-amd64.tar.gz",
+	"uloop-project-runner-darwin-amd64.tar.gz.sha256",
+	"uloop-project-runner-darwin-arm64.tar.gz",
+	"uloop-project-runner-darwin-arm64.tar.gz.sha256",
+	"uloop-project-runner-windows-amd64.zip",
+	"uloop-project-runner-windows-amd64.zip.sha256",
+}
+
+type minimumProjectRunnerRelease struct {
+	Tag            string
+	RequiredAssets []string
+}
+
+type ProtocolMinimumVersionGuardConfig struct {
+	BaseRef string
+	HeadRef string
+}
+
+type ProtocolMinimumVersionValues struct {
+	RequiredProtocolVersion     int
+	HasRequiredProtocol         bool
+	MinimumProjectRunnerVersion string
+}
+
+type ProtocolMinimumVersionGuardResult struct {
+	Base                               ProtocolMinimumVersionValues
+	Head                               ProtocolMinimumVersionValues
+	RequiredProtocolChanged            bool
+	MinimumProjectRunnerVersionChanged bool
+	NeedsMinimumVersionUpdate          bool
+	MinimumCliReleaseProtocolError     string
+}
+
+type minimumCliReleaseContract struct {
+	ProtocolVersion      *json.RawMessage `json:"protocolVersion"`
+	ProjectRunnerVersion string           `json:"projectRunnerVersion"`
+}
+
+type minimumCliReleaseView struct {
+	IsDraft bool                     `json:"isDraft"`
+	Assets  []minimumCliReleaseAsset `json:"assets"`
+}
+
+type minimumCliReleaseAsset struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
+func RunProtocolMinimumVersionGuard(
+	ctx context.Context,
+	stdout io.Writer,
+	stderr io.Writer,
+	config ProtocolMinimumVersionGuardConfig,
+) int {
+	result, err := AnalyzeProtocolMinimumVersionGuardForRefs(ctx, config)
+	if err != nil {
+		writeProtocolMinimumVersionLine(stderr, err)
+		return 1
+	}
+	if protocolMinimumVersionGuardNeedsAction(result) {
+		writeProtocolMinimumVersionLine(stderr, FormatProtocolMinimumVersionWarning(result))
+		return 1
+	}
+
+	writeProtocolMinimumVersionLine(stdout, "Protocol minimum version guard passed.")
+	return 0
+}
+
+func RunMinimumCliReleaseProtocolCheck(ctx context.Context, stdout io.Writer, stderr io.Writer, ref string) int {
+	repoRoot, err := gitRepoRoot(ctx)
+	if err != nil {
+		writeProtocolMinimumVersionLine(stderr, fmt.Sprintf("failed to resolve git repository root: %v", err))
+		return 1
+	}
+
+	constantsContent, err := minimumCliReleaseFile(ctx, repoRoot, ref, protocolMinimumVersionFile)
+	if err != nil {
+		writeProtocolMinimumVersionLine(stderr, fmt.Sprintf("failed to read %s: %v", protocolMinimumVersionFile, err))
+		return 1
+	}
+	pinContent, err := minimumCliReleaseFile(ctx, repoRoot, ref, unityPackageCliPinFile)
+	if err != nil {
+		writeProtocolMinimumVersionLine(stderr, fmt.Sprintf("failed to read %s: %v", unityPackageCliPinFile, err))
+		return 1
+	}
+	values, err := ParseProtocolMinimumVersionValues(constantsContent, pinContent)
+	if err != nil {
+		writeProtocolMinimumVersionLine(stderr, err)
+		return 1
+	}
+	if !values.HasRequiredProtocol {
+		writeProtocolMinimumVersionLine(stderr, protocolMinimumVersionFile+" does not define REQUIRED_CLI_PROTOCOL_VERSION")
+		return 1
+	}
+
+	releaseTag, err := verifyMinimumCliReleaseProtocolAtRef(ctx, repoRoot, values)
+	if err != nil {
+		writeProtocolMinimumVersionLine(stderr, err)
+		return 1
+	}
+
+	writeProtocolMinimumVersionLine(
+		stdout,
+		fmt.Sprintf(
+			"Minimum project runner release %s advertises protocol %d.",
+			releaseTag,
+			values.RequiredProtocolVersion))
+	return 0
+}
+
+func AnalyzeProtocolMinimumVersionGuardForRefs(
+	ctx context.Context,
+	config ProtocolMinimumVersionGuardConfig,
+) (ProtocolMinimumVersionGuardResult, error) {
+	if config.BaseRef == "" {
+		return ProtocolMinimumVersionGuardResult{}, fmt.Errorf("--base is required")
+	}
+	if config.HeadRef == "" {
+		config.HeadRef = "HEAD"
+	}
+
+	repoRoot, err := gitRepoRoot(ctx)
+	if err != nil {
+		return ProtocolMinimumVersionGuardResult{}, fmt.Errorf("failed to resolve git repository root: %w", err)
+	}
+
+	baseValues, err := protocolMinimumVersionValuesAtRef(ctx, repoRoot, config.BaseRef)
+	if err != nil {
+		return ProtocolMinimumVersionGuardResult{}, err
+	}
+	headValues, err := protocolMinimumVersionValuesAtRef(ctx, repoRoot, config.HeadRef)
+	if err != nil {
+		return ProtocolMinimumVersionGuardResult{}, err
+	}
+
+	result := AnalyzeProtocolMinimumVersionGuard(baseValues, headValues)
+	if protocolMinimumVersionGuardNeedsReleaseCheck(result) {
+		_, err = verifyMinimumCliReleaseProtocolAtRef(ctx, repoRoot, result.Head)
+		if err != nil {
+			result.MinimumCliReleaseProtocolError = err.Error()
+		}
+	}
+	return result, nil
+}
+
+func AnalyzeProtocolMinimumVersionGuard(
+	base ProtocolMinimumVersionValues,
+	head ProtocolMinimumVersionValues,
+) ProtocolMinimumVersionGuardResult {
+	requiredProtocolChanged := base.HasRequiredProtocol != head.HasRequiredProtocol ||
+		base.RequiredProtocolVersion != head.RequiredProtocolVersion
+	minimumProjectRunnerVersionChanged := base.MinimumProjectRunnerVersion != head.MinimumProjectRunnerVersion
+
+	return ProtocolMinimumVersionGuardResult{
+		Base:                               base,
+		Head:                               head,
+		RequiredProtocolChanged:            requiredProtocolChanged,
+		MinimumProjectRunnerVersionChanged: minimumProjectRunnerVersionChanged,
+		NeedsMinimumVersionUpdate:          requiredProtocolChanged && !minimumProjectRunnerVersionChanged,
+	}
+}
+
+func VerifyMinimumCliReleaseProtocol(values ProtocolMinimumVersionValues, contractContent []byte) error {
+	return verifyMinimumProjectRunnerReleaseProtocol(
+		minimumProjectRunnerReleaseTag(values.MinimumProjectRunnerVersion),
+		values,
+		contractContent)
+}
+
+func minimumProjectRunnerReleaseTag(version string) string {
+	return projectRunnerReleaseTagPrefix + normalizeProjectRunnerVersion(version)
+}
+
+func normalizeProjectRunnerVersion(version string) string {
+	trimmedVersion := strings.TrimSpace(version)
+	if strings.HasPrefix(trimmedVersion, "v") || strings.HasPrefix(trimmedVersion, "V") {
+		return trimmedVersion[1:]
+	}
+	return trimmedVersion
+}
+
+func verifyMinimumProjectRunnerReleaseProtocol(
+	releaseTag string,
+	values ProtocolMinimumVersionValues,
+	contractContent []byte,
+) error {
+	if !values.HasRequiredProtocol {
+		return fmt.Errorf("%s does not define REQUIRED_CLI_PROTOCOL_VERSION", protocolMinimumVersionFile)
+	}
+
+	contract := minimumCliReleaseContract{}
+	err := json.Unmarshal(contractContent, &contract)
+	if err != nil {
+		return fmt.Errorf("project runner release contract is invalid JSON: %w", err)
+	}
+	protocolVersion, hasProtocolVersion := minimumCliReleaseProtocolVersion(contract.ProtocolVersion)
+	if !hasProtocolVersion {
+		return fmt.Errorf(
+			"project runner release %s does not define protocolVersion",
+			releaseTag)
+	}
+	if protocolVersion != values.RequiredProtocolVersion {
+		return fmt.Errorf(
+			"unity package requires protocol %d, but project runner release %s advertises protocol %d",
+			values.RequiredProtocolVersion,
+			releaseTag,
+			protocolVersion)
+	}
+	return nil
+}
+
+func minimumCliReleaseProtocolVersion(value *json.RawMessage) (int, bool) {
+	if value == nil {
+		return 0, false
+	}
+
+	protocolVersion, err := strconv.Atoi(strings.TrimSpace(string(*value)))
+	if err != nil {
+		return 0, false
+	}
+	return protocolVersion, true
+}
+
+func verifyMinimumCliReleaseProtocolAtRef(
+	ctx context.Context,
+	repoRoot string,
+	values ProtocolMinimumVersionValues,
+) (string, error) {
+	release := minimumProjectRunnerRelease{
+		Tag:            minimumProjectRunnerReleaseTag(values.MinimumProjectRunnerVersion),
+		RequiredAssets: requiredMinimumProjectRunnerAssets,
+	}
+	contractContent, err := runnerContractFileAtRef(ctx, repoRoot, release.Tag)
+	if err != nil {
+		return "", errors.New(runnerContractMissingAtReleaseMessage(release.Tag))
+	}
+	if err := verifyMinimumProjectRunnerReleaseProtocol(release.Tag, values, []byte(contractContent)); err != nil {
+		return "", err
+	}
+	return verifyMinimumCliReleaseIsPublished(ctx, repoRoot, release)
+}
+
+func minimumCliReleaseFile(ctx context.Context, repoRoot string, ref string, file string) ([]byte, error) {
+	if ref == "" {
+		return os.ReadFile(filepath.Join(repoRoot, file))
+	}
+
+	content, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, file)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(content), nil
+}
+
+func verifyMinimumCliReleaseIsPublished(ctx context.Context, repoRoot string, release minimumProjectRunnerRelease) (string, error) {
+	output, err := runProtocolMinimumVersionOutput(
+		ctx,
+		repoRoot,
+		"gh",
+		"release",
+		"view",
+		release.Tag,
+		"--json",
+		"isDraft,assets")
+	if err != nil {
+		return "", fmt.Errorf("project runner release %s is not published with complete native assets: %w", release.Tag, err)
+	}
+
+	releaseView := minimumCliReleaseView{}
+	if err := json.Unmarshal([]byte(output), &releaseView); err != nil {
+		return "", fmt.Errorf("project runner release %s metadata is invalid JSON: %w", release.Tag, err)
+	}
+	if releaseView.IsDraft {
+		return "", fmt.Errorf("project runner release %s is still draft", release.Tag)
+	}
+	if missingAsset := missingMinimumCliReleaseAsset(releaseView.Assets, release.RequiredAssets); missingAsset != "" {
+		return "", fmt.Errorf("project runner release %s is missing release asset %s", release.Tag, missingAsset)
+	}
+	return release.Tag, nil
+}
+
+func missingMinimumCliReleaseAsset(assets []minimumCliReleaseAsset, requiredAssetNames []string) string {
+	availableAssets := map[string]bool{}
+	for _, asset := range assets {
+		if asset.Size > 0 {
+			availableAssets[asset.Name] = true
+		}
+	}
+
+	for _, assetName := range requiredAssetNames {
+		if !availableAssets[assetName] {
+			return assetName
+		}
+	}
+	return ""
+}
+
+func FormatProtocolMinimumVersionWarning(result ProtocolMinimumVersionGuardResult) string {
+	builder := strings.Builder{}
+	builder.WriteString(protocolMinimumVersionMarker)
+	builder.WriteString("\n")
+	if result.NeedsMinimumVersionUpdate {
+		builder.WriteString("Protocol version changed, but `" + unityPackageCliPinFile + "` `projectRunnerVersion` did not.\n\n")
+	} else if result.RequiredProtocolChanged {
+		builder.WriteString("Protocol version changed, but `" + unityPackageCliPinFile + "` `projectRunnerVersion` does not point to a published project runner release that advertises the required protocol.\n\n")
+	} else {
+		builder.WriteString("`" + unityPackageCliPinFile + "` `projectRunnerVersion` changed, but it does not point to a published project runner release that advertises the required protocol.\n\n")
+	}
+	builder.WriteString("- Base required protocol: ")
+	builder.WriteString(protocolMinimumVersionValueLabel(result.Base))
+	builder.WriteString("\n")
+	builder.WriteString("- Head required protocol: ")
+	builder.WriteString(protocolMinimumVersionValueLabel(result.Head))
+	builder.WriteString("\n")
+	builder.WriteString("- Current minimum project runner: `")
+	builder.WriteString(result.Head.MinimumProjectRunnerVersion)
+	builder.WriteString("`\n")
+	if result.MinimumCliReleaseProtocolError != "" {
+		builder.WriteString("- Release check: ")
+		builder.WriteString(protocolMinimumVersionErrorLabel(result.MinimumCliReleaseProtocolError))
+		builder.WriteString("\n")
+	}
+	builder.WriteString("\n")
+	builder.WriteString("Update `" + unityPackageCliPinFile + "` `projectRunnerVersion` to a published project runner release that advertises the new protocol before releasing the Unity package.")
+	return builder.String()
+}
+
+func protocolMinimumVersionGuardNeedsAction(result ProtocolMinimumVersionGuardResult) bool {
+	return result.NeedsMinimumVersionUpdate || result.MinimumCliReleaseProtocolError != ""
+}
+
+func protocolMinimumVersionGuardNeedsReleaseCheck(result ProtocolMinimumVersionGuardResult) bool {
+	if result.NeedsMinimumVersionUpdate {
+		return false
+	}
+	return result.RequiredProtocolChanged || result.MinimumProjectRunnerVersionChanged
+}
+
+func protocolMinimumVersionValueLabel(values ProtocolMinimumVersionValues) string {
+	if !values.HasRequiredProtocol {
+		return "`<missing>`"
+	}
+	return "`" + strconv.Itoa(values.RequiredProtocolVersion) + "`"
+}
+
+func protocolMinimumVersionErrorLabel(value string) string {
+	trimmedValue := strings.TrimSpace(value)
+	singleLineValue := strings.ReplaceAll(trimmedValue, "\n", " ")
+	return "`" + singleLineValue + "`"
+}
+
+func protocolMinimumVersionValuesAtRef(
+	ctx context.Context,
+	repoRoot string,
+	ref string,
+) (ProtocolMinimumVersionValues, error) {
+	constantsContent, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, protocolMinimumVersionFile)
+	if err != nil {
+		return ProtocolMinimumVersionValues{}, err
+	}
+	pinContent, err := protocolMinimumVersionFileAtRef(ctx, repoRoot, ref, unityPackageCliPinFile)
+	if err != nil {
+		return ProtocolMinimumVersionValues{}, err
+	}
+	return ParseProtocolMinimumVersionValues([]byte(constantsContent), []byte(pinContent))
+}
+
+func writeProtocolMinimumVersionLine(writer io.Writer, values ...any) {
+	// CI status output failures cannot be recovered after the command outcome is known.
+	_, _ = fmt.Fprintln(writer, values...)
+}

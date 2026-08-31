@@ -1,5 +1,9 @@
-namespace io.github.hatayama.uLoopMCP
+#if UNITY_EDITOR
+namespace io.github.hatayama.UnityCliLoop.Runtime
 {
+    /// <summary>
+    /// Centralizes constants used by Simulate Mouse UI Animation behavior.
+    /// </summary>
     public static class SimulateMouseUiAnimationConstants
     {
         public const float EXPAND_DURATION = 0.1f;
@@ -7,3 +11,4 @@ namespace io.github.hatayama.uLoopMCP
         public const float DISSIPATE_DURATION = 0.1f;
     }
 }
+#endif

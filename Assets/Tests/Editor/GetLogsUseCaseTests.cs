@@ -7,7 +7,9 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace io.github.hatayama.uLoopMCP
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
     /// <summary>
     /// Unit tests for GetLogsUseCase
@@ -48,7 +50,7 @@ namespace io.github.hatayama.uLoopMCP
             // Arrange
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.All,
+                LogType = UnityCliLoopLogType.All,
                 MaxCount = 100,
             };
 
@@ -61,7 +63,7 @@ namespace io.github.hatayama.uLoopMCP
             Assert.GreaterOrEqual(result.TotalCount, 0, "TotalCount should be non-negative");
             Assert.GreaterOrEqual(result.DisplayedCount, 0, "DisplayedCount should be non-negative");
             Assert.LessOrEqual(result.DisplayedCount, result.TotalCount, "DisplayedCount should not exceed TotalCount");
-            Assert.AreEqual(McpLogType.All, result.LogType, "LogType should match request");
+            Assert.AreEqual(UnityCliLoopLogType.All, result.LogType, "LogType should match request");
             Assert.AreEqual(100, result.MaxCount, "MaxCount should match request");
         }
 
@@ -84,7 +86,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.Log,
+                LogType = UnityCliLoopLogType.Log,
                 MaxCount = 100,
             };
 
@@ -98,7 +100,7 @@ namespace io.github.hatayama.uLoopMCP
             // All returned logs should be Log type
             foreach (LogEntry log in result.Logs)
             {
-                Assert.AreEqual(McpLogType.Log, log.Type,
+                Assert.AreEqual(UnityCliLoopLogType.Log, log.Type,
                     $"Expected all logs to be Log type, but found {log.Type}: {log.Message}");
             }
             
@@ -140,7 +142,7 @@ namespace io.github.hatayama.uLoopMCP
             Assert.IsNotNull(result);
             Assert.IsNotNull(result.Logs);
             Assert.Greater(result.Logs.Length, 0, "Expected at least one log for lowercase error filter");
-            Assert.IsTrue(result.Logs.All(log => log.Type == McpLogType.Error),
+            Assert.IsTrue(result.Logs.All(log => log.Type == UnityCliLoopLogType.Error),
                 "All returned logs should be Error type when logType is 'error'");
             Assert.IsTrue(result.Logs.Any(log => log.Message.Contains(errorMessage)),
                 "Expected the generated error log to be returned");
@@ -168,7 +170,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.Error,
+                LogType = UnityCliLoopLogType.Error,
                 MaxCount = 100,
             };
 
@@ -179,7 +181,7 @@ namespace io.github.hatayama.uLoopMCP
             Assert.IsNotNull(result);
             Assert.IsNotNull(result.Logs);
             Assert.Greater(result.Logs.Length, 0, "Expected at least one log for Error filter");
-            Assert.IsTrue(result.Logs.All(log => log.Type == McpLogType.Error),
+            Assert.IsTrue(result.Logs.All(log => log.Type == UnityCliLoopLogType.Error),
                 "All returned logs should be normalized to Error type");
             Assert.IsTrue(result.Logs.Any(log => log.Message.Contains(errorMessage)),
                 "Expected Error log to be included");
@@ -211,7 +213,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.Error,
+                LogType = UnityCliLoopLogType.Error,
                 MaxCount = 100,
             };
 
@@ -221,7 +223,7 @@ namespace io.github.hatayama.uLoopMCP
             // Assert
             Assert.IsNotNull(result);
             Assert.IsNotNull(result.Logs);
-            Assert.IsTrue(result.Logs.All(log => log.Type == McpLogType.Error),
+            Assert.IsTrue(result.Logs.All(log => log.Type == UnityCliLoopLogType.Error),
                 "All returned logs should be normalized to Error type");
             Assert.IsTrue(result.Logs.Any(log => log.Message.Contains(errorMessage)),
                 "Expected Error log to be included");
@@ -252,7 +254,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.Error,
+                LogType = UnityCliLoopLogType.Error,
                 MaxCount = 100,
             };
 
@@ -264,7 +266,7 @@ namespace io.github.hatayama.uLoopMCP
             Assert.IsNotNull(result.Logs);
             Assert.IsTrue(result.Logs.Any(log => log.Message.Contains(uniqueTestId) && log.Message.Contains("error CS8618")),
                 "Compiler error message should be included in Error filter");
-            Assert.IsTrue(result.Logs.Where(log => log.Message.Contains(uniqueTestId)).All(log => log.Type == McpLogType.Error),
+            Assert.IsTrue(result.Logs.Where(log => log.Message.Contains(uniqueTestId)).All(log => log.Type == UnityCliLoopLogType.Error),
                 "Compiler error messages should be normalized to Error type");
             Assert.IsFalse(result.Logs.Any(log => log.Message.Contains(normalLogMessage)),
                 "Normal Log entries should not be included in Error filter");
@@ -291,7 +293,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.Warning,
+                LogType = UnityCliLoopLogType.Warning,
                 MaxCount = 100,
             };
 
@@ -303,7 +305,7 @@ namespace io.github.hatayama.uLoopMCP
             Assert.IsNotNull(result.Logs);
             Assert.IsTrue(result.Logs.Any(log => log.Message.Contains(uniqueTestId) && log.Message.Contains("warning CS8618")),
                 "Compiler warning message should be included in Warning filter");
-            Assert.IsTrue(result.Logs.Where(log => log.Message.Contains(uniqueTestId)).All(log => log.Type == McpLogType.Warning),
+            Assert.IsTrue(result.Logs.Where(log => log.Message.Contains(uniqueTestId)).All(log => log.Type == UnityCliLoopLogType.Warning),
                 "Compiler warning messages should be normalized to Warning type");
             Assert.IsFalse(result.Logs.Any(log => log.Message.Contains(normalLogMessage)),
                 "Normal Log entries should not be included in Warning filter");
@@ -322,7 +324,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.All,
+                LogType = UnityCliLoopLogType.All,
                 SearchText = "XYZ123",
                 UseRegex = false,
                 MaxCount = 100,
@@ -360,7 +362,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.All,
+                LogType = UnityCliLoopLogType.All,
                 SearchText = @"Test\d+",
                 UseRegex = true,
                 MaxCount = 100,
@@ -399,7 +401,7 @@ namespace io.github.hatayama.uLoopMCP
             // Test with StackTrace included
             GetLogsSchema schemaWithStack = new()
             {
-                LogType = McpLogType.Error,
+                LogType = UnityCliLoopLogType.Error,
                 IncludeStackTrace = true,
                 MaxCount = 10,
             };
@@ -422,7 +424,7 @@ namespace io.github.hatayama.uLoopMCP
             // Test without StackTrace
             GetLogsSchema schemaWithoutStack = new()
             {
-                LogType = McpLogType.Error,
+                LogType = UnityCliLoopLogType.Error,
                 IncludeStackTrace = false,
                 MaxCount = 10,
             };
@@ -459,7 +461,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.All,
+                LogType = UnityCliLoopLogType.All,
                 MaxCount = 0,
             };
 
@@ -488,7 +490,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.All,
+                LogType = UnityCliLoopLogType.All,
                 MaxCount = 1,
             };
 
@@ -517,7 +519,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.All,
+                LogType = UnityCliLoopLogType.All,
                 MaxCount = int.MaxValue,
             };
 
@@ -534,26 +536,23 @@ namespace io.github.hatayama.uLoopMCP
         }
 
         /// <summary>
-        /// Verifies behavior with negative MaxCount (error handling check)
+        /// Verifies fail-fast behavior with negative MaxCount
         /// </summary>
         [Test]
-        public async Task ExecuteAsync_WithNegativeMaxCount_HandlesGracefully()
+        public void ExecuteAsync_WithNegativeMaxCount_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.All,
+                LogType = UnityCliLoopLogType.All,
                 MaxCount = -1,
             };
 
-            // Act
-            GetLogsResponse result = await _useCase.ExecuteAsync(schema, _cancellationTokenSource.Token);
-
-            // Assert
-            Assert.IsNotNull(result);
-            Assert.IsNotNull(result.Logs);
-            // Negative MaxCount should be handled gracefully (likely treated as 0 or ignored)
-            Assert.GreaterOrEqual(result.DisplayedCount, 0, "DisplayedCount should be non-negative");
+            // Act & Assert
+            Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () =>
+            {
+                await _useCase.ExecuteAsync(schema, _cancellationTokenSource.Token);
+            });
         }
 
         #endregion
@@ -567,9 +566,7 @@ namespace io.github.hatayama.uLoopMCP
         public void ExecuteAsync_WithNullParameters_ThrowsException()
         {
             // Act & Assert
-            // Currently throws InvalidOperationException wrapping NullReferenceException
-            // This is acceptable behavior as it indicates the parameter was null
-            Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            Assert.ThrowsAsync<ArgumentNullException>(async () =>
             {
 #pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type
                 await _useCase.ExecuteAsync(null, _cancellationTokenSource.Token);
@@ -609,7 +606,7 @@ namespace io.github.hatayama.uLoopMCP
             // Arrange
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.All,
+                LogType = UnityCliLoopLogType.All,
                 MaxCount = 100,
             };
             
@@ -628,48 +625,24 @@ namespace io.github.hatayama.uLoopMCP
         /// Verifies behavior with invalid regex pattern
         /// </summary>
         [Test]
-        public async Task ExecuteAsync_WithInvalidRegexPattern_HandlesGracefully()
+        public void ExecuteAsync_WithInvalidRegexPattern_ThrowsArgumentException()
         {
             // Arrange
             Debug.Log("Test Log");
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.All,
+                LogType = UnityCliLoopLogType.All,
                 SearchText = "[invalid(regex",  // Invalid regex pattern
                 UseRegex = true,
                 MaxCount = 10,
             };
 
-            // Act
-            // Should handle invalid regex gracefully
-            Exception thrownException = null;
-            GetLogsResponse result = null;
-            
-            try
+            // Act & Assert
+            Assert.ThrowsAsync<ArgumentException>(async () =>
             {
-                result = await _useCase.ExecuteAsync(schema, _cancellationTokenSource.Token);
-            }
-            catch (Exception ex)
-            {
-                thrownException = ex;
-            }
-
-            // Assert
-            // Either returns empty result or throws a meaningful exception
-            if (thrownException != null)
-            {
-                Assert.IsTrue(
-                    thrownException is InvalidOperationException || 
-                    thrownException.InnerException is RegexMatchTimeoutException ||
-                    thrownException.InnerException is ArgumentException,
-                    "Should throw appropriate exception for invalid regex");
-            }
-            else
-            {
-                Assert.IsNotNull(result, "Should return a result even with invalid regex");
-                Assert.IsNotNull(result.Logs, "Logs array should not be null");
-            }
+                await _useCase.ExecuteAsync(schema, _cancellationTokenSource.Token);
+            });
         }
 
         #endregion
@@ -695,7 +668,7 @@ namespace io.github.hatayama.uLoopMCP
 
             GetLogsSchema schema = new()
             {
-                LogType = McpLogType.Error,
+                LogType = UnityCliLoopLogType.Error,
                 SearchText = "failed",
                 UseRegex = false,
                 SearchInStackTrace = false,
@@ -713,7 +686,7 @@ namespace io.github.hatayama.uLoopMCP
             // Should only find Error logs containing "failed"
             foreach (LogEntry log in result.Logs)
             {
-                Assert.AreEqual(McpLogType.Error, log.Type, "Should only return Error type");
+                Assert.AreEqual(UnityCliLoopLogType.Error, log.Type, "Should only return Error type");
                 Assert.IsTrue(log.Message.Contains("failed"), "Should contain search text 'failed'");
                 Assert.IsTrue(string.IsNullOrEmpty(log.StackTrace), "Stack trace should be empty");
             }

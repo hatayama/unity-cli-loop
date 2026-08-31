@@ -6,8 +6,14 @@ using UnityEditor;
 using UnityEngine;
 using Newtonsoft.Json.Linq;
 
-namespace io.github.hatayama.uLoopMCP
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
+    /// <summary>
+    /// Test fixture that verifies Find Game Objects Tool behavior.
+    /// </summary>
     public class FindGameObjectsToolTests
     {
         private FindGameObjectsTool tool;
@@ -45,24 +51,23 @@ namespace io.github.hatayama.uLoopMCP
         public async Task ExecuteAsync_WithNamePattern_FindsMatchingObjects()
         {
             // Arrange
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject",
                 ["SearchMode"] = "Contains"
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.results, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(2));
-            Assert.That(response.results.Length, Is.EqualTo(2));
+            Assert.That(response.Results, Is.Not.Null);
+            Assert.That(response.TotalFound, Is.EqualTo(2));
+            Assert.That(response.Results.Length, Is.EqualTo(2));
             
             // Check that both TestObject1 and TestObject2 are found
-            string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+            string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
             Assert.That(foundNames, Does.Contain("TestObject1"));
             Assert.That(foundNames, Does.Contain("TestObject2"));
             Assert.That(foundNames, Does.Not.Contain("AnotherObject"));
@@ -72,19 +77,74 @@ namespace io.github.hatayama.uLoopMCP
         public async Task ExecuteAsync_WithEmptyParameters_ReturnsError()
         {
             // Arrange
-            JObject paramsJson = new JObject();
+            JObject paramsJson = new();
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(0));
-            Assert.That(response.errorMessage, Is.Not.Null);
-            Assert.That(response.errorMessage, Does.Contain("At least one search criterion"));
+            Assert.That(response.TotalFound, Is.EqualTo(0));
+            Assert.That(response.ErrorMessage, Is.Not.Null);
+            Assert.That(response.ErrorMessage, Does.Contain("At least one search criterion"));
         }
-        
+
+        [Test]
+        public async Task ExecuteAsync_WithExactModeZeroHits_ReturnsPartialMatchModeHint()
+        {
+            // Verifies a zero-hit Exact-mode name search returns a hint pointing at
+            // Contains/Regex, since Exact is the default and silently misses partial matches.
+            JObject paramsJson = new()            {
+                ["NamePattern"] = "Camera",
+                ["SearchMode"] = "Exact"
+            };
+
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
+            FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
+
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response.TotalFound, Is.EqualTo(0));
+            Assert.That(response.Message, Is.Not.Null);
+            Assert.That(response.Message, Does.Contain("Exact match found nothing"));
+            Assert.That(response.Message, Does.Contain("--search-mode Contains"));
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WithContainsModeZeroHits_DoesNotReturnExactModeHint()
+        {
+            // Verifies the Exact-mode hint is scoped to Exact mode only, since Contains/Regex
+            // already support partial matching and have no equivalent trap to warn about.
+            JObject paramsJson = new()            {
+                ["NamePattern"] = "NoSuchObjectNameAtAll",
+                ["SearchMode"] = "Contains"
+            };
+
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
+            FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
+
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response.TotalFound, Is.EqualTo(0));
+            Assert.That(response.Message, Is.Null);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_WithExactModeNonZeroHits_DoesNotReturnHint()
+        {
+            // Verifies the hint only appears on a zero-hit result, not alongside real matches.
+            JObject paramsJson = new()            {
+                ["NamePattern"] = "TestObject1",
+                ["SearchMode"] = "Exact"
+            };
+
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
+            FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
+
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response.TotalFound, Is.EqualTo(1));
+            Assert.That(response.Message, Is.Null);
+        }
+
         [Test]
         public async Task ExecuteAsync_WithComponentSearch_FindsObjectsWithSpecificComponent()
         {
@@ -93,20 +153,19 @@ namespace io.github.hatayama.uLoopMCP
             testObject2.AddComponent<Rigidbody>();
             testObject3.AddComponent<BoxCollider>();
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["RequiredComponents"] = new JArray { "BoxCollider" }
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.GreaterThanOrEqualTo(2)); // Scene might have other objects with BoxCollider
+            Assert.That(response.TotalFound, Is.GreaterThanOrEqualTo(2)); // Scene might have other objects with BoxCollider
             
-            string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+            string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
             Assert.That(foundNames, Does.Contain("TestObject1"));
             Assert.That(foundNames, Does.Contain("AnotherObject"));
             Assert.That(foundNames, Does.Not.Contain("TestObject2"));
@@ -121,23 +180,22 @@ namespace io.github.hatayama.uLoopMCP
             testObject2.AddComponent<BoxCollider>();
             testObject3.AddComponent<Rigidbody>();
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["RequiredComponents"] = new JArray { "BoxCollider", "Rigidbody" }
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(1));
-            Assert.That(response.results[0].name, Is.EqualTo("TestObject1"));
+            Assert.That(response.TotalFound, Is.EqualTo(1));
+            Assert.That(response.Results[0].Name, Is.EqualTo("TestObject1"));
             
             // Verify components are returned
-            ComponentInfo boxCollider = System.Array.Find(response.results[0].components, c => c.type == "BoxCollider");
-            ComponentInfo rigidbody = System.Array.Find(response.results[0].components, c => c.type == "Rigidbody");
+            ComponentInfo boxCollider = System.Array.Find(response.Results[0].Components, c => c.Type == "BoxCollider");
+            ComponentInfo rigidbody = System.Array.Find(response.Results[0].Components, c => c.Type == "Rigidbody");
             Assert.That(boxCollider, Is.Not.Null);
             Assert.That(rigidbody, Is.Not.Null);
         }
@@ -152,32 +210,31 @@ namespace io.github.hatayama.uLoopMCP
             testObject2.tag = "Untagged";
             testObject3.tag = "Untagged";
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject|AnotherObject",
                 ["SearchMode"] = "Regex",
                 ["Tag"] = "Untagged"
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.GreaterThanOrEqualTo(3)); // At least our 3 test objects
+            Assert.That(response.TotalFound, Is.GreaterThanOrEqualTo(3)); // At least our 3 test objects
             
-            string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+            string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
             Assert.That(foundNames, Does.Contain("TestObject1"));
             Assert.That(foundNames, Does.Contain("TestObject2"));
             Assert.That(foundNames, Does.Contain("AnotherObject"));
             
             // Verify tag is returned in results
-            foreach (var result in response.results)
+            foreach (var result in response.Results)
             {
-                if (result.name == "TestObject1" || result.name == "TestObject2" || result.name == "AnotherObject")
+                if (result.Name == "TestObject1" || result.Name == "TestObject2" || result.Name == "AnotherObject")
                 {
-                    Assert.That(result.tag, Is.EqualTo("Untagged"));
+                    Assert.That(result.Tag, Is.EqualTo("Untagged"));
                 }
             }
         }
@@ -191,38 +248,36 @@ namespace io.github.hatayama.uLoopMCP
             testObject2.layer = enemyLayer;
             testObject3.layer = enemyLayer;
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["Layer"] = enemyLayer
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(2));
+            Assert.That(response.TotalFound, Is.EqualTo(2));
             
-            string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+            string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
             Assert.That(foundNames, Does.Contain("TestObject2"));
             Assert.That(foundNames, Does.Contain("AnotherObject"));
             Assert.That(foundNames, Does.Not.Contain("TestObject1"));
             
             // Verify layer is returned in results
-            Assert.That(response.results[0].layer, Is.EqualTo(enemyLayer));
+            Assert.That(response.Results[0].Layer, Is.EqualTo(enemyLayer));
         }
         
         [Test]
         public async Task ExecuteAsync_WithRegexSearch_FindsObjectsMatchingPattern()
         {
             // Arrange
-            GameObject enemy1 = new GameObject("Enemy1");
-            GameObject enemy2 = new GameObject("Enemy2");
-            GameObject player = new GameObject("Player1");
+            GameObject enemy1 = new("Enemy1");
+            GameObject enemy2 = new("Enemy2");
+            GameObject player = new("Player1");
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "Enemy\\d+",
                 ["SearchMode"] = "Regex"
             };
@@ -230,14 +285,14 @@ namespace io.github.hatayama.uLoopMCP
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
                 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.GreaterThanOrEqualTo(2));
+                Assert.That(response.TotalFound, Is.GreaterThanOrEqualTo(2));
                 
-                string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+                string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
                 Assert.That(foundNames, Does.Contain("Enemy1"));
                 Assert.That(foundNames, Does.Contain("Enemy2"));
                 Assert.That(foundNames, Does.Not.Contain("Player1"));
@@ -259,22 +314,21 @@ namespace io.github.hatayama.uLoopMCP
             testObject2.SetActive(false);
             testObject3.SetActive(false);
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "Object",
                 ["SearchMode"] = "Contains",
                 ["IncludeInactive"] = true
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(3)); // Should find all 3 objects including inactive
+            Assert.That(response.TotalFound, Is.EqualTo(3)); // Should find all 3 objects including inactive
             
-            string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+            string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
             Assert.That(foundNames, Does.Contain("TestObject1"));
             Assert.That(foundNames, Does.Contain("TestObject2"));
             Assert.That(foundNames, Does.Contain("AnotherObject"));
@@ -288,22 +342,21 @@ namespace io.github.hatayama.uLoopMCP
             testObject2.SetActive(false);
             testObject3.SetActive(false);
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "Object",
                 ["SearchMode"] = "Contains",
                 ["IncludeInactive"] = false
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(1)); // Should only find active object
-            Assert.That(response.results[0].name, Is.EqualTo("TestObject1"));
-            Assert.That(response.results[0].isActive, Is.True);
+            Assert.That(response.TotalFound, Is.EqualTo(1)); // Should only find active object
+            Assert.That(response.Results[0].Name, Is.EqualTo("TestObject1"));
+            Assert.That(response.Results[0].IsActive, Is.True);
         }
         
         [Test]
@@ -316,8 +369,7 @@ namespace io.github.hatayama.uLoopMCP
             testObject2.layer = 8;
             testObject3.layer = 8;
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "Object",
                 ["SearchMode"] = "Contains",
                 ["RequiredComponents"] = new JArray { "BoxCollider" },
@@ -325,24 +377,24 @@ namespace io.github.hatayama.uLoopMCP
             };
             
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
             
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(1)); // Only TestObject2 matches all criteria
-            Assert.That(response.results[0].name, Is.EqualTo("TestObject2"));
+            Assert.That(response.TotalFound, Is.EqualTo(1)); // Only TestObject2 matches all criteria
+            Assert.That(response.Results[0].Name, Is.EqualTo("TestObject2"));
             
             // Verify all criteria are met
-            ComponentInfo boxCollider = System.Array.Find(response.results[0].components, c => c.type == "BoxCollider");
+            ComponentInfo boxCollider = System.Array.Find(response.Results[0].Components, c => c.Type == "BoxCollider");
             Assert.That(boxCollider, Is.Not.Null);
-            Assert.That(response.results[0].layer, Is.EqualTo(8));
+            Assert.That(response.Results[0].Layer, Is.EqualTo(8));
         }
         
         [Test]
-        public async Task ExecuteAsync_WithMaxResults_LimitsReturnedObjects()
+        public async Task ExecuteAsync_WithMaxCount_LimitsReturnedObjects()
         {
-            // Arrange
+            // Verifies the MaxCount wire parameter limits the returned GameObjects.
             // Create many GameObjects
             GameObject[] manyObjects = new GameObject[20];
             for (int i = 0; i < 20; i++)
@@ -350,28 +402,27 @@ namespace io.github.hatayama.uLoopMCP
                 manyObjects[i] = new GameObject($"ManyObject{i}");
             }
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "ManyObject",
                 ["SearchMode"] = "Contains",
-                ["MaxResults"] = 5
+                ["MaxCount"] = 5
             };
             
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
                 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.results.Length, Is.EqualTo(5)); // Should be limited to 5
-                Assert.That(response.totalFound, Is.EqualTo(5)); // Total found should also be 5
+                Assert.That(response.Results.Length, Is.EqualTo(5)); // Should be limited to 5
+                Assert.That(response.TotalFound, Is.EqualTo(5)); // Total found should also be 5
                 
                 // Verify all results match the pattern
-                foreach (var result in response.results)
+                foreach (var result in response.Results)
                 {
-                    Assert.That(result.name, Does.StartWith("ManyObject"));
+                    Assert.That(result.Name, Does.StartWith("ManyObject"));
                 }
             }
             finally
@@ -388,14 +439,13 @@ namespace io.github.hatayama.uLoopMCP
         public async Task ExecuteAsync_WithPathSearchMode_FindsObjectByHierarchyPath()
         {
             // Arrange
-            GameObject parent = new GameObject("Parent");
-            GameObject child = new GameObject("Child");
-            GameObject grandchild = new GameObject("Grandchild");
+            GameObject parent = new("Parent");
+            GameObject child = new("Child");
+            GameObject grandchild = new("Grandchild");
             child.transform.SetParent(parent.transform);
             grandchild.transform.SetParent(child.transform);
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "Parent/Child/Grandchild",
                 ["SearchMode"] = "Path"
             };
@@ -403,14 +453,14 @@ namespace io.github.hatayama.uLoopMCP
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
                 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(1));
-                Assert.That(response.results[0].name, Is.EqualTo("Grandchild"));
-                Assert.That(response.results[0].path, Is.EqualTo("Parent/Child/Grandchild"));
+                Assert.That(response.TotalFound, Is.EqualTo(1));
+                Assert.That(response.Results[0].Name, Is.EqualTo("Grandchild"));
+                Assert.That(response.Results[0].Path, Is.EqualTo("Parent/Child/Grandchild"));
             }
             finally
             {
@@ -423,12 +473,11 @@ namespace io.github.hatayama.uLoopMCP
         public async Task ExecuteAsync_WithExactSearchMode_FindsExactNameMatch()
         {
             // Arrange
-            GameObject exact = new GameObject("ExactName");
-            GameObject partial = new GameObject("ExactNamePart");
-            GameObject different = new GameObject("DifferentName");
+            GameObject exact = new("ExactName");
+            GameObject partial = new("ExactNamePart");
+            GameObject different = new("DifferentName");
             
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "ExactName",
                 ["SearchMode"] = "Exact"
             };
@@ -436,13 +485,13 @@ namespace io.github.hatayama.uLoopMCP
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
                 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(1));
-                Assert.That(response.results[0].name, Is.EqualTo("ExactName"));
+                Assert.That(response.TotalFound, Is.EqualTo(1));
+                Assert.That(response.Results[0].Name, Is.EqualTo("ExactName"));
             }
             finally
             {
@@ -457,12 +506,11 @@ namespace io.github.hatayama.uLoopMCP
         public async Task ExecuteAsync_WithContainsSearchMode_FindsPartialMatch()
         {
             // Arrange
-            GameObject obj1 = new GameObject("TestObjectOne");
-            GameObject obj2 = new GameObject("AnotherTestObjectTwo");
-            GameObject obj3 = new GameObject("DifferentName");
+            GameObject obj1 = new("TestObjectOne");
+            GameObject obj2 = new("AnotherTestObjectTwo");
+            GameObject obj3 = new("DifferentName");
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject",
                 ["SearchMode"] = "Contains"
             };
@@ -470,14 +518,14 @@ namespace io.github.hatayama.uLoopMCP
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(4)); // Includes SetUp objects (TestObject1, TestObject2)
+                Assert.That(response.TotalFound, Is.EqualTo(4)); // Includes SetUp objects (TestObject1, TestObject2)
 
-                string[] foundNames = System.Array.ConvertAll(response.results, r => r.name);
+                string[] foundNames = System.Array.ConvertAll(response.Results, r => r.Name);
                 Assert.That(foundNames, Does.Contain("TestObjectOne"));
                 Assert.That(foundNames, Does.Contain("AnotherTestObjectTwo"));
                 Assert.That(foundNames, Does.Not.Contain("DifferentName"));
@@ -497,20 +545,19 @@ namespace io.github.hatayama.uLoopMCP
             // Arrange
             Selection.objects = new Object[0];
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["SearchMode"] = "Selected"
             };
 
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(0));
-            Assert.That(response.results, Is.Empty);
-            Assert.That(response.message, Does.Contain("No GameObjects"));
+            Assert.That(response.TotalFound, Is.EqualTo(0));
+            Assert.That(response.Results, Is.Empty);
+            Assert.That(response.Message, Does.Contain("No GameObjects"));
         }
 
         [Test]
@@ -520,24 +567,23 @@ namespace io.github.hatayama.uLoopMCP
             Object[] previousSelection = Selection.objects;
             Selection.objects = new Object[] { testObject1 };
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["SearchMode"] = "Selected"
             };
 
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(1));
-                Assert.That(response.results, Is.Not.Null);
-                Assert.That(response.results.Length, Is.EqualTo(1));
-                Assert.That(response.results[0].name, Is.EqualTo("TestObject1"));
-                Assert.That(response.resultsFilePath, Is.Null);
+                Assert.That(response.TotalFound, Is.EqualTo(1));
+                Assert.That(response.Results, Is.Not.Null);
+                Assert.That(response.Results.Length, Is.EqualTo(1));
+                Assert.That(response.Results[0].Name, Is.EqualTo("TestObject1"));
+                Assert.That(response.ResultsFilePath, Is.Null);
             }
             finally
             {
@@ -551,26 +597,25 @@ namespace io.github.hatayama.uLoopMCP
             // Arrange
             Selection.objects = new Object[] { testObject1, testObject2 };
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["SearchMode"] = "Selected"
             };
 
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(2));
-                Assert.That(response.resultsFilePath, Is.Not.Null);
-                Assert.That(response.resultsFilePath, Does.Contain("FindGameObjectsResults"));
-                Assert.That(response.message, Does.Contain("Multiple objects selected"));
+                Assert.That(response.TotalFound, Is.EqualTo(2));
+                Assert.That(response.ResultsFilePath, Is.Not.Null);
+                Assert.That(response.ResultsFilePath, Does.Contain("FindGameObjectsResults"));
+                Assert.That(response.Message, Does.Contain("Multiple objects selected"));
 
                 // Verify file exists
-                string fullPath = Path.Combine(Application.dataPath, "..", response.resultsFilePath);
+                string fullPath = Path.Combine(UnityEngine.Application.dataPath, "..", response.ResultsFilePath);
                 Assert.That(File.Exists(fullPath), Is.True, $"Export file should exist at {fullPath}");
 
                 // Cleanup exported file
@@ -593,8 +638,7 @@ namespace io.github.hatayama.uLoopMCP
             testObject2.SetActive(false);
             Selection.objects = new Object[] { testObject1, testObject2 };
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["SearchMode"] = "Selected",
                 ["IncludeInactive"] = false
             };
@@ -602,15 +646,15 @@ namespace io.github.hatayama.uLoopMCP
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(1));
-                Assert.That(response.results, Is.Not.Null);
-                Assert.That(response.results.Length, Is.EqualTo(1));
-                Assert.That(response.results[0].name, Is.EqualTo("TestObject1"));
+                Assert.That(response.TotalFound, Is.EqualTo(1));
+                Assert.That(response.Results, Is.Not.Null);
+                Assert.That(response.Results.Length, Is.EqualTo(1));
+                Assert.That(response.Results[0].Name, Is.EqualTo("TestObject1"));
             }
             finally
             {
@@ -624,12 +668,11 @@ namespace io.github.hatayama.uLoopMCP
         public async Task ExecuteAsync_ReturnsObjectReferenceProperties()
         {
             // Arrange
-            GameObject anchorTarget = new GameObject("AnchorTarget");
+            GameObject anchorTarget = new("AnchorTarget");
             MeshRenderer renderer = testObject1.AddComponent<MeshRenderer>();
             renderer.probeAnchor = anchorTarget.transform;
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject1",
                 ["SearchMode"] = "Exact"
             };
@@ -637,26 +680,26 @@ namespace io.github.hatayama.uLoopMCP
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(1));
+                Assert.That(response.TotalFound, Is.EqualTo(1));
 
                 ComponentInfo meshRenderer = System.Array.Find(
-                    response.results[0].components, c => c.type == "MeshRenderer");
+                    response.Results[0].Components, c => c.Type == "MeshRenderer");
                 Assert.That(meshRenderer, Is.Not.Null);
 
                 ComponentPropertyInfo probeAnchor = System.Array.Find(
-                    meshRenderer.properties, p => p.name == "Probe Anchor");
+                    meshRenderer.Properties, p => p.Name == "Probe Anchor");
                 Assert.That(probeAnchor, Is.Not.Null, "MeshRenderer should have Probe Anchor property");
-                Assert.That(probeAnchor.type, Is.EqualTo("ObjectReference"));
+                Assert.That(probeAnchor.Type, Is.EqualTo("ObjectReference"));
 
                 string expectedEntityId = GetExpectedObjectId(anchorTarget.transform);
 
                 // Value should be a structured object with name, type, entityId
-                JObject valueObj = JObject.FromObject(probeAnchor.value);
+                JObject valueObj = JObject.FromObject(probeAnchor.Value);
                 Assert.That(valueObj["name"].ToString(), Is.EqualTo("AnchorTarget"));
                 Assert.That(valueObj["type"].ToString(), Is.EqualTo("Transform"));
                 Assert.That(valueObj["entityId"].ToString(), Is.EqualTo(expectedEntityId));
@@ -673,29 +716,28 @@ namespace io.github.hatayama.uLoopMCP
             // Arrange
             testObject1.AddComponent<MeshRenderer>();
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject1",
                 ["SearchMode"] = "Exact"
             };
 
             // Act
-            BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+            UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
             FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
             // Assert
             Assert.That(response, Is.Not.Null);
-            Assert.That(response.totalFound, Is.EqualTo(1));
+            Assert.That(response.TotalFound, Is.EqualTo(1));
 
             ComponentInfo meshRenderer = System.Array.Find(
-                response.results[0].components, c => c.type == "MeshRenderer");
+                response.Results[0].Components, c => c.Type == "MeshRenderer");
             Assert.That(meshRenderer, Is.Not.Null);
 
             ComponentPropertyInfo probeAnchor = System.Array.Find(
-                meshRenderer.properties, p => p.name == "Probe Anchor");
+                meshRenderer.Properties, p => p.Name == "Probe Anchor");
             Assert.That(probeAnchor, Is.Not.Null, "MeshRenderer should have Probe Anchor property");
 
-            JObject valueObj = JObject.FromObject(probeAnchor.value);
+            JObject valueObj = JObject.FromObject(probeAnchor.Value);
             Assert.That(valueObj["name"].ToString(), Is.EqualTo("None"));
             Assert.That(valueObj["type"].ToString(), Is.EqualTo("None"));
             Assert.That(valueObj["entityId"].ToString(), Is.EqualTo("0"));
@@ -706,8 +748,7 @@ namespace io.github.hatayama.uLoopMCP
             UnityEngine.Debug.Assert(obj != null, "Unity Object must exist before reading its identifier.");
 
 #if UNITY_6000_4_OR_NEWER
-            ulong entityId = UnityEngine.EntityId.ToULong(obj.GetEntityId());
-            return entityId.ToString(CultureInfo.InvariantCulture);
+            return obj.GetEntityId().ToString();
 #else
             int instanceId = obj.GetInstanceID();
             return instanceId.ToString(CultureInfo.InvariantCulture);
@@ -722,8 +763,7 @@ namespace io.github.hatayama.uLoopMCP
             testObject2.SetActive(false);
             Selection.objects = new Object[] { testObject1, testObject2 };
 
-            JObject paramsJson = new JObject
-            {
+            JObject paramsJson = new()            {
                 ["SearchMode"] = "Selected",
                 ["IncludeInactive"] = true
             };
@@ -731,16 +771,16 @@ namespace io.github.hatayama.uLoopMCP
             try
             {
                 // Act
-                BaseToolResponse baseResponse = await tool.ExecuteAsync(paramsJson);
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
                 FindGameObjectsResponse response = baseResponse as FindGameObjectsResponse;
 
                 // Assert
                 Assert.That(response, Is.Not.Null);
-                Assert.That(response.totalFound, Is.EqualTo(2));
-                Assert.That(response.resultsFilePath, Is.Not.Null); // Multiple selection exports to file
+                Assert.That(response.TotalFound, Is.EqualTo(2));
+                Assert.That(response.ResultsFilePath, Is.Not.Null); // Multiple selection exports to file
 
                 // Cleanup exported file
-                string fullPath = Path.Combine(Application.dataPath, "..", response.resultsFilePath);
+                string fullPath = Path.Combine(UnityEngine.Application.dataPath, "..", response.ResultsFilePath);
                 if (File.Exists(fullPath))
                 {
                     File.Delete(fullPath);

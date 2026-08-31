@@ -1,0 +1,21 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.RunTests.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "GUID:d427b32aad9cb44fc8e962437c9dbcd8",
+        "GUID:fc3fd32eddbee40e39c2d76dc184957b",
+        "GUID:527f26a36b5043c2bd4d4036d04cd76d"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "optionalUnityReferences": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

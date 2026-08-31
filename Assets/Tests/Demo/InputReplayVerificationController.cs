@@ -1,4 +1,4 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 using System.Collections.Generic;
 using System.Globalization;
@@ -6,11 +6,14 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
     // Deterministic controller for verifying record/replay accuracy.
     // Uses fixed per-frame movement (no deltaTime) to ensure identical
     // results between recording and replay at the same frame rate.
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public class InputReplayVerificationController : ReplayVerificationControllerBase
     {
         private const float MOVE_SPEED = 0.1f;
@@ -185,7 +188,7 @@ namespace io.github.hatayama.uLoopMCP
 
         private static string BuildInputStateText(Keyboard keyboard, Mouse mouse)
         {
-            List<string> held = new List<string>();
+            List<string> held = new();
             if (keyboard[Key.W].isPressed) held.Add("W");
             if (keyboard[Key.A].isPressed) held.Add("A");
             if (keyboard[Key.S].isPressed) held.Add("S");

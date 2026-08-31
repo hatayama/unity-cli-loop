@@ -1,0 +1,31 @@
+{
+    "name": "UnityCLILoop.Tests.Demo",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.Tests.Demo",
+    "references": [
+        "GUID:75469ad4d38634e559750d17036d5f7c",
+        "GUID:c956a21f824994ef087b6de566690b3d",
+        "GUID:4307f53044263cf4b835bd812fc161a4"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "",
+            "define": "ULOOP_HAS_INPUT_SYSTEM"
+        },
+        {
+            "name": "com.unity.cinemachine",
+            "expression": "3.0.0",
+            "define": "CINEMACHINE_3_OR_NEWER"
+        }
+    ],
+    "noEngineReferences": false
+}

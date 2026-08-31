@@ -1,0 +1,382 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Coordinates the execute-dynamic-code workflow while keeping the tool itself thin.
+    /// Processing sequence: 1. Resolve parameters, 2. Execute via runtime, 3. Retry missing-return cases, 4. Shape response
+    /// </summary>
+    internal sealed class ExecuteDynamicCodeUseCase : IExecuteDynamicCodeUseCase
+    {
+        private readonly IDynamicCodeExecutionRuntime _runtime;
+        private readonly DynamicCodeExecutionResponseFactory _responseFactory;
+        private readonly IDynamicCodeEditorStateReader _editorStateReader;
+        private readonly IEditorFocusStateProvider _editorFocusStateProvider;
+
+        public ExecuteDynamicCodeUseCase(
+            IDynamicCodeExecutionRuntime runtime,
+            IDynamicCodeEditorStateReader editorStateReader = null,
+            IEditorFocusStateProvider editorFocusStateProvider = null)
+        {
+            _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+            _responseFactory = new DynamicCodeExecutionResponseFactory();
+            _editorStateReader = editorStateReader ?? new DynamicCodeEditorStateReader();
+            _editorFocusStateProvider = editorFocusStateProvider ?? new EditorFocusStateProvider();
+        }
+
+        public async Task<ExecuteDynamicCodeResponse> ExecuteAsync(
+            ExecuteDynamicCodeSchema parameters,
+            CancellationToken cancellationToken)
+        {
+            using DynamicCodeDomainReloadWaitSignal domainReloadWaitSignal =
+                DynamicCodeDomainReloadWaitSignal.Start(parameters);
+            // Declared outside the try so the catch below can still correlate a cancellation
+            // against this same execute_dynamic_code_start entry, and so it can tell whether the
+            // finalResult path below already logged completion before a later await in that same
+            // path (e.g. ApplyPauseStateAsync) throws OperationCanceledException.
+            string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
+            bool completionLogged = false;
+
+            try
+            {
+                object[] parametersArray = ConvertParameters(parameters.Parameters);
+                string originalCode = parameters.Code ?? string.Empty;
+
+                LogExecutionStart(parameters, correlationId);
+
+                DynamicCodeExecutionRequest request = CreateExecutionRequest(
+                    originalCode,
+                    parametersArray,
+                    parameters.CompileOnly,
+                    parameters.YieldToForegroundRequests);
+                await WarmForegroundExecutionPathIfNeededAsync(parameters, cancellationToken)
+                    .ConfigureAwait(false);
+                ExecutionResult executionResult = await ExecuteRequestAsync(request, cancellationToken).ConfigureAwait(false);
+
+                ExecutionResult finalResult = await DynamicCodeMissingReturnRetryPolicy.RetryMissingReturnIfNeeded(
+                    executionResult,
+                    originalCode,
+                    (string retryCode, CancellationToken ct) => ExecuteRequestAsync(
+                        CreateExecutionRequest(
+                            retryCode,
+                            parametersArray,
+                            parameters.CompileOnly,
+                            parameters.YieldToForegroundRequests),
+                        ct),
+                    cancellationToken).ConfigureAwait(false);
+
+                if (ShouldMarkExecutionPathWarm(parameters, finalResult))
+                {
+                    DynamicCodeForegroundWarmupState.MarkCompletedBySuccessfulExecution();
+                }
+
+                LogExecutionComplete(finalResult, correlationId);
+                completionLogged = true;
+
+                if (DynamicCodeExecutionResponseFactory.IsCancelledResult(finalResult))
+                {
+                    ExecuteDynamicCodeResponse cancelledResponse =
+                        DynamicCodeExecutionResponseFactory.CreateCancelledResponse(finalResult);
+                    cancelledResponse.Logs = finalResult.Logs ?? cancelledResponse.Logs;
+                    cancelledResponse.Timings = finalResult.Timings != null
+                        ? new List<string>(finalResult.Timings)
+                        : cancelledResponse.Timings;
+                    cancelledResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
+                    // Why CancellationToken.None: finalResult can be cancelled by the internal
+                    // executionCancellationTokenSource (e.g. a domain reload) even when
+                    // cancellationToken itself is already cancelled; reusing it here would throw
+                    // again and lose the preserved Logs/Timings on the fallback path below.
+                    await ApplyPauseStateAsync(cancelledResponse, CancellationToken.None).ConfigureAwait(false);
+                    return cancelledResponse;
+                }
+
+                if (DynamicCodeExecutionResponseFactory.IsRuntimeRestartingResult(finalResult))
+                {
+                    ExecuteDynamicCodeResponse restartingResponse =
+                        DynamicCodeExecutionResponseFactory.CreateRuntimeRestartingResponse();
+                    restartingResponse.EmitTimingsInJsonResponse = parameters.IncludeTimings;
+                    // Why CancellationToken.None: same reasoning as the cancelled-response branch
+                    // above, but reusing a cancelled token here would swap this RuntimeRestarting
+                    // response for a plain Cancelled one via the outer catch, which is worse than
+                    // losing Logs/Timings since the response kind itself changes.
+                    await ApplyPauseStateAsync(restartingResponse, CancellationToken.None).ConfigureAwait(false);
+                    return restartingResponse;
+                }
+
+                ExecuteDynamicCodeResponse response =
+                    _responseFactory.ConvertExecutionResultToResponse(finalResult, originalCode);
+                response.EmitTimingsInJsonResponse = parameters.IncludeTimings;
+                // Why: domain-reload timeouts can complete while Unity's synchronization context is stalled.
+                bool domainReloadWaitRequired =
+                    await domainReloadWaitSignal.ShouldWaitAsync(cancellationToken).ConfigureAwait(false);
+                response.DomainReloadWaitRequired = domainReloadWaitRequired;
+                await ApplyPauseStateAsync(response, cancellationToken).ConfigureAwait(false);
+                return response;
+            }
+            catch (OperationCanceledException)
+            {
+                if (!completionLogged)
+                {
+                    LogExecutionCancelledBeforeResult(correlationId);
+                }
+                ExecuteDynamicCodeResponse response = DynamicCodeExecutionResponseFactory.CreateCancelledResponse();
+                response.EmitTimingsInJsonResponse = parameters?.IncludeTimings ?? false;
+                // Why CancellationToken.None: cancellationToken is already cancelled on this path,
+                // and passing it to SwitchToMainThread would throw again instead of switching.
+                await ApplyPauseStateAsync(response, CancellationToken.None).ConfigureAwait(false);
+                return response;
+            }
+        }
+
+        // Lets an agent recognize a post-interrupt state (e.g. a pause point hit mid-execution)
+        // instead of mistaking a stale-looking result for a bug. ActivePausePointId stays empty
+        // when the Editor is paused for a reason unrelated to a pause point. EditorPlaying is
+        // always written so a stopped versus playing Editor is visible after ShouldSerialize
+        // omits EditorPaused=false.
+        // Why async: the preceding ConfigureAwait(false) continuations may resume this method on a
+        // thread-pool thread, and the default reader reads EditorApplication off the main thread.
+        private async Task ApplyPauseStateAsync(
+            ExecuteDynamicCodeResponse response,
+            CancellationToken cancellationToken)
+        {
+            // No ConfigureAwait(false) here: SwitchToMainThreadAwaitable is not a Task and does not
+            // expose that method. Its continuation is scheduled onto the main thread by
+            // MainThreadSwitcher itself, so the code below always runs there regardless.
+            await MainThreadSwitcher.SwitchToMainThread(cancellationToken);
+
+            response.EditorPlaying = _editorStateReader.IsPlaying;
+            (bool editorPaused, string activePausePointId) = ExecuteDynamicCodePauseStateResolver.Resolve(
+                _editorStateReader.IsPaused, UloopPausePointRegistry.GetActivePausePointId());
+            response.EditorPaused = editorPaused;
+            response.ActivePausePointId = activePausePointId;
+            response.Warning = EditorUnfocusedWarningBuilder.BuildPlayModeProgressHint(
+                response.EditorPlaying,
+                _editorFocusStateProvider.IsFocused);
+        }
+
+        private static void LogExecutionStart(
+            ExecuteDynamicCodeSchema parameters,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                "execute_dynamic_code_start",
+                "Dynamic code execution started (return optional)",
+                new
+                {
+                    correlationId,
+                    codeLength = parameters.Code?.Length ?? 0,
+                    compileOnly = parameters.CompileOnly,
+                    parametersCount = parameters.Parameters?.Count ?? 0
+                },
+                correlationId,
+                "Dynamic code execution request received (return is optional)",
+                "Monitor execution flow and performance");
+        }
+
+        // Why this exists: execute_dynamic_code_start had no matching completion log, so a
+        // client-side stall diagnosis (e.g. EditorUnresponsiveError) could not be correlated
+        // against whether Unity had actually finished the snippet by the time the CLI gave up.
+        private static void LogExecutionComplete(ExecutionResult finalResult, string correlationId)
+        {
+            LogExecutionCompleteEntry(
+                finalResult.Success,
+                DynamicCodeExecutionResponseFactory.IsCancelledResult(finalResult),
+                DynamicCodeExecutionResponseFactory.IsRuntimeRestartingResult(finalResult),
+                finalResult.ExecutionTime.TotalMilliseconds,
+                correlationId);
+        }
+
+        // Covers cancellation paths that throw before a final ExecutionResult exists (e.g. during
+        // foreground warmup), which LogExecutionComplete above cannot reach.
+        private static void LogExecutionCancelledBeforeResult(string correlationId)
+        {
+            LogExecutionCompleteEntry(success: false, cancelled: true, runtimeRestarting: false, executionTimeMs: 0, correlationId);
+        }
+
+        private static void LogExecutionCompleteEntry(
+            bool success,
+            bool cancelled,
+            bool runtimeRestarting,
+            double executionTimeMs,
+            string correlationId)
+        {
+            VibeLogger.LogInfo(
+                "execute_dynamic_code_complete",
+                "Dynamic code execution completed",
+                new
+                {
+                    correlationId,
+                    success,
+                    cancelled,
+                    runtimeRestarting,
+                    executionTimeMs
+                },
+                correlationId,
+                "Dynamic code execution finished; correlate against execute_dynamic_code_start by correlationId",
+                "Monitor execution flow and performance");
+        }
+
+        private static object[] ConvertParameters(Dictionary<string, object> parameters)
+        {
+            if (parameters == null || parameters.Count == 0)
+            {
+                return null;
+            }
+
+            return parameters.Values.ToArray();
+        }
+
+        private static DynamicCodeExecutionRequest CreateExecutionRequest(
+            string code,
+            object[] parameters,
+            bool compileOnly,
+            bool yieldToForegroundRequests = false)
+        {
+            return new DynamicCodeExecutionRequest
+            {
+                Code = code,
+                ClassName = "DynamicCommand",
+                Parameters = parameters,
+                CompileOnly = compileOnly,
+                YieldToForegroundRequests = yieldToForegroundRequests
+            };
+        }
+
+        private async Task<ExecutionResult> ExecuteRequestAsync(
+            DynamicCodeExecutionRequest request,
+            CancellationToken cancellationToken)
+        {
+            if (!request.YieldToForegroundRequests)
+            {
+                // Why catch here: reset/reload disposes the scheduler mid-flight; map to an explicit
+                // retryable response instead of leaking ObjectDisposedException across the tool boundary.
+                // Why not retry inside UseCase: re-fetching a facade races domain reload.
+                try
+                {
+                    return await _runtime.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);
+                }
+                catch (ObjectDisposedException)
+                {
+                    LogDynamicCodeRuntimeRestarting("execute");
+                    return DynamicCodeExecutionResponseFactory.CreateRuntimeRestartingExecutionResult();
+                }
+            }
+
+            try
+            {
+                (bool entered, ExecutionResult result) = await _runtime.TryExecuteIfIdleAsync(
+                    request,
+                    cancellationToken).ConfigureAwait(false);
+                if (entered)
+                {
+                    return result;
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                LogDynamicCodeRuntimeRestarting("try_execute_if_idle");
+                return DynamicCodeExecutionResponseFactory.CreateRuntimeRestartingExecutionResult();
+            }
+
+            return new ExecutionResult
+            {
+                Success = false,
+                ErrorMessage = UnityCliLoopConstants.ERROR_MESSAGE_EXECUTION_IN_PROGRESS
+            };
+        }
+
+        private async Task WarmForegroundExecutionPathIfNeededAsync(
+            ExecuteDynamicCodeSchema parameters,
+            CancellationToken cancellationToken)
+        {
+            if (!ShouldWarmForegroundExecutionPath(parameters))
+            {
+                return;
+            }
+
+            if (!DynamicCodeForegroundWarmupState.TryBegin())
+            {
+                return;
+            }
+
+            bool completed = false;
+            try
+            {
+                // Why catch here: warmup is best-effort; a disposed runtime during reset must not
+                // surface as a CLI error — treat as incomplete warm (same as entered=false).
+                try
+                {
+                    completed = await ExecuteForegroundWarmupSequenceAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (ObjectDisposedException)
+                {
+                    LogDynamicCodeRuntimeRestarting("warm");
+                    completed = false;
+                }
+
+                if (completed)
+                {
+                    DynamicCodeForegroundWarmupState.MarkCompleted();
+                }
+            }
+            finally
+            {
+                if (!completed)
+                {
+                    DynamicCodeForegroundWarmupState.ResetAfterIncompleteAttempt();
+                }
+            }
+        }
+
+        private static void LogDynamicCodeRuntimeRestarting(string path)
+        {
+            VibeLogger.LogWarning(
+                "dynamic_code_runtime_restarting",
+                "Dynamic-code runtime was disposed during reset or domain reload",
+                new { path },
+                humanNote: "ObjectDisposedException from the execution runtime was mapped at the UseCase boundary",
+                aiTodo: "Retry the same execute-dynamic-code shortly; do not treat this as a permanent failure");
+        }
+
+        private async Task<bool> ExecuteForegroundWarmupSequenceAsync(CancellationToken ct)
+        {
+            return await DynamicCodeForegroundWarmupRunner.RunForegroundSequenceAsync(
+                _runtime,
+                yieldToForegroundRequests: false,
+                ct).ConfigureAwait(false);
+        }
+
+        private static bool ShouldWarmForegroundExecutionPath(ExecuteDynamicCodeSchema parameters)
+        {
+            if (parameters == null)
+            {
+                return false;
+            }
+
+            // Why: this fallback only exists to protect the first real foreground execution that
+            // users see after startup or reload.
+            // Why not run it for compile-only or yield-to-foreground requests: compile validation
+            // does not need the runtime hot path, and yield-based requests are background work
+            // that must stay cancellable.
+            return !parameters.CompileOnly && !parameters.YieldToForegroundRequests;
+        }
+
+        private static bool ShouldMarkExecutionPathWarm(
+            ExecuteDynamicCodeSchema parameters,
+            ExecutionResult executionResult)
+        {
+            return parameters != null
+                && !parameters.CompileOnly
+                && executionResult != null
+                && executionResult.Success;
+        }
+
+    }
+}

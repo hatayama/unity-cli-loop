@@ -1,85 +1,920 @@
 # Changelog
 
-## [2.2.0](https://github.com/hatayama/unity-cli-loop/compare/v2.1.10...v2.2.0) (2026-06-25)
+## [3.0.0-beta.81](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.80...v3.0.0-beta.81) (2026-08-28)
+
+
+### Bug Fixes
+
+* hot reload no longer fails when an inactive #if region precedes the edited method ([#2450](https://github.com/hatayama/unity-cli-loop/issues/2450)) ([dd78fa3](https://github.com/hatayama/unity-cli-loop/commit/dd78fa3b97424b80ea06955a15a8ab203f380855))
+
+## [3.0.0-beta.80](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.79...v3.0.0-beta.80) (2026-08-28)
 
 
 ### Features
 
-* Skills use the project-matched CLI by default ([#1404](https://github.com/hatayama/unity-cli-loop/issues/1404)) ([5bb9d49](https://github.com/hatayama/unity-cli-loop/commit/5bb9d49c59e4b6166a5bb926a7c6e7be690e230f))
+* add set-code-optimization command and recommend permanent Debug for pause-point ([#2442](https://github.com/hatayama/unity-cli-loop/issues/2442)) ([3c54031](https://github.com/hatayama/unity-cli-loop/commit/3c540310a4e5a6a51ecccc5e04a47c6951a3352a))
 
-## [2.1.10](https://github.com/hatayama/unity-cli-loop/compare/v2.1.9...v2.1.10) (2026-06-20)
-
-
-### Bug Fixes
-
-* get-logs works with active Console search filters ([#1379](https://github.com/hatayama/unity-cli-loop/issues/1379)) ([941cb2f](https://github.com/hatayama/unity-cli-loop/commit/941cb2fb1888a943f4218d51325f33aecaf6e57f))
-* Unity 6.5 projects compile without metadata type conflicts ([#1377](https://github.com/hatayama/unity-cli-loop/issues/1377)) ([4a33119](https://github.com/hatayama/unity-cli-loop/commit/4a3311984c0c3ea11b27dff24b1987cb1a3de383))
-
-## [2.1.9](https://github.com/hatayama/unity-cli-loop/compare/v2.1.8...v2.1.9) (2026-06-14)
+## [3.0.0-beta.79](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.78...v3.0.0-beta.79) (2026-08-27)
 
 
 ### Bug Fixes
 
-* Respect UI raycast priority in simulate-mouse-ui ([#1318](https://github.com/hatayama/unity-cli-loop/issues/1318)) ([acb40a6](https://github.com/hatayama/unity-cli-loop/commit/acb40a68a0e4723148892e961c3aeb95ddd32f90))
+* complete stub .cs.meta files shipped in the package ([#2441](https://github.com/hatayama/unity-cli-loop/issues/2441)) ([14dba70](https://github.com/hatayama/unity-cli-loop/commit/14dba709e5a646779b31ef533f3a8f2e0399fa04))
 
-## [2.1.8](https://github.com/hatayama/unity-cli-loop/compare/v2.1.7...v2.1.8) (2026-06-12)
-
-
-### Bug Fixes
-
-* Avoid dependency conflicts from bundled metadata DLLs ([#1288](https://github.com/hatayama/unity-cli-loop/issues/1288)) ([636439d](https://github.com/hatayama/unity-cli-loop/commit/636439d4ca5170623e5ceeb017fe8ba12d9c4c60))
-
-## [2.1.7](https://github.com/hatayama/unity-cli-loop/compare/v2.1.6...v2.1.7) (2026-06-12)
+## [3.0.0-beta.78](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.77...v3.0.0-beta.78) (2026-08-27)
 
 
-### Bug Fixes
+### Features
 
-* Multiline dynamic code snippets work reliably on Windows ([#1319](https://github.com/hatayama/unity-cli-loop/issues/1319)) ([aff5ddd](https://github.com/hatayama/unity-cli-loop/commit/aff5dddf53f586c2da19a571784549eb4f4079d8))
-
-## [2.1.6](https://github.com/hatayama/unity-cli-loop/compare/v2.1.5...v2.1.6) (2026-06-04)
+* retire the record-input CLI tool in favor of the Recordings window ([#2430](https://github.com/hatayama/unity-cli-loop/issues/2430)) ([54afc07](https://github.com/hatayama/unity-cli-loop/commit/54afc07bff66933dfcd23607e60317ce4c1419a5))
+* Suppress the Setup Wizard popup for the whole team from Project Settings ([#2433](https://github.com/hatayama/unity-cli-loop/issues/2433)) ([4bed9ce](https://github.com/hatayama/unity-cli-loop/commit/4bed9ce8423671931c8af190ac2cc18d69f961af))
 
 
 ### Bug Fixes
 
-* Input simulation overlays stay usable without shipping runtime DLLs ([#1285](https://github.com/hatayama/unity-cli-loop/issues/1285)) ([e271514](https://github.com/hatayama/unity-cli-loop/commit/e2715140af298ab3698a8d02efd1cd319d448670))
+* discover tools via TypeCache instead of scanning every loaded assembly ([#2435](https://github.com/hatayama/unity-cli-loop/issues/2435)) ([9dcb570](https://github.com/hatayama/unity-cli-loop/commit/9dcb570e45736f08ee1051cc1785c899c29a7744))
+* support long Windows paths in hot-reload snapshots ([#2437](https://github.com/hatayama/unity-cli-loop/issues/2437)) ([f2c690b](https://github.com/hatayama/unity-cli-loop/commit/f2c690b05861678c3ad1cf7069d4369db27963d4))
 
-## [2.1.5](https://github.com/hatayama/unity-cli-loop/compare/v2.1.4...v2.1.5) (2026-06-01)
-
-
-### Bug Fixes
-
-* Interrupted PlayMode tests no longer leave domain reload disabled ([#1255](https://github.com/hatayama/unity-cli-loop/issues/1255)) ([551bb38](https://github.com/hatayama/unity-cli-loop/commit/551bb382c21abc4785b1b23fbb52e0e48e134906))
-
-## [2.1.4](https://github.com/hatayama/unity-cli-loop/compare/v2.1.3...v2.1.4) (2026-05-21)
+## [3.0.0-beta.77](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.76...v3.0.0-beta.77) (2026-08-26)
 
 
 ### Bug Fixes
 
-* Make bundled skill guidance more concise ([#1178](https://github.com/hatayama/unity-cli-loop/issues/1178)) ([dbcc38e](https://github.com/hatayama/unity-cli-loop/commit/dbcc38e7d239ba3203685b0fc606d661e5d454b0))
+* normalize cross-platform behavior found by pre-release Windows verification ([#2428](https://github.com/hatayama/unity-cli-loop/issues/2428)) ([c15576c](https://github.com/hatayama/unity-cli-loop/commit/c15576c7cfed90ac3acfc15dd76775e6d6f60d58))
 
-## [2.1.3](https://github.com/hatayama/unity-cli-loop/compare/v2.1.2...v2.1.3) (2026-05-14)
-
-
-### Bug Fixes
-
-* **build:** exclude Editor-only assemblies from player builds ([#1120](https://github.com/hatayama/unity-cli-loop/issues/1120)) ([768b49d](https://github.com/hatayama/unity-cli-loop/commit/768b49d447126cb04f98d1fe493c162fdcec6c28))
-* Unity 6.5 projects compile and keep fast code execution available ([#1119](https://github.com/hatayama/unity-cli-loop/issues/1119)) ([1a27478](https://github.com/hatayama/unity-cli-loop/commit/1a274786e8f53afe1a74bf7b66b894842310944f))
-* Unity no longer imports stale empty folders ([#1124](https://github.com/hatayama/unity-cli-loop/issues/1124)) ([45a57c3](https://github.com/hatayama/unity-cli-loop/commit/45a57c30c1803d93d4ef823e4937d1ed7c39d53d))
-* Unity stays responsive during domain reload recovery ([#1121](https://github.com/hatayama/unity-cli-loop/issues/1121)) ([5f5ab9d](https://github.com/hatayama/unity-cli-loop/commit/5f5ab9de8bf26972aaa9ef6a971324c907d01375))
-
-## [2.1.2](https://github.com/hatayama/unity-cli-loop/compare/v2.1.1...v2.1.2) (2026-05-13)
+## [3.0.0-beta.76](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.75...v3.0.0-beta.76) (2026-08-26)
 
 
 ### Bug Fixes
 
-* Global skill installs work without manual folder moves ([#1112](https://github.com/hatayama/unity-cli-loop/issues/1112)) ([498e428](https://github.com/hatayama/unity-cli-loop/commit/498e428958dd4d38ee83e5ca6d027eed9be9901d))
+* keep every SKILL.md under the Codex 8KB prompt cap and enforce it in CI ([#2424](https://github.com/hatayama/unity-cli-loop/issues/2424)) ([2679d03](https://github.com/hatayama/unity-cli-loop/commit/2679d03e6340122eb0ffffc15ab06fa2e95829f7))
 
-## [2.1.1](https://github.com/hatayama/unity-cli-loop/compare/v2.1.0...v2.1.1) (2026-05-07)
+## [3.0.0-beta.75](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.74...v3.0.0-beta.75) (2026-08-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* align CLI option names across first-party tools ([#2422](https://github.com/hatayama/unity-cli-loop/issues/2422))
+
+### Features
+
+* accept --file and --line on pause-point-status and await-pause-point ([#2411](https://github.com/hatayama/unity-cli-loop/issues/2411)) ([f650e36](https://github.com/hatayama/unity-cli-loop/commit/f650e36a6bcbd2880dba6ee385c59181895e756f))
+* add a max-caller-frames option to enable-pause-point ([779c32b](https://github.com/hatayama/unity-cli-loop/commit/779c32b5af581bdca603be069f245711e4d4760d))
+* add arming guidance, re-arm discard warning, and closing-brace warning to enable-pause-point ([#2342](https://github.com/hatayama/unity-cli-loop/issues/2342)) ([a79d386](https://github.com/hatayama/unity-cli-loop/commit/a79d3863f96d6b61ff033d55b53b87607b54cd16))
+* add hit-when condition parser and evaluator for pause points ([#2404](https://github.com/hatayama/unity-cli-loop/issues/2404)) ([1075c8f](https://github.com/hatayama/unity-cli-loop/commit/1075c8ff60e15d8c4f1494f9a530134027db0a16))
+* add RecommendedNextAction to hot-reload responses with failed outcomes ([#2294](https://github.com/hatayama/unity-cli-loop/issues/2294)) ([90994b3](https://github.com/hatayama/unity-cli-loop/commit/90994b3802184bae3a022bd709214e8e1aa4a4a4))
+* add recovery hint to never-invoked patch reason in hot-reload status ([#2360](https://github.com/hatayama/unity-cli-loop/issues/2360)) ([1235c4e](https://github.com/hatayama/unity-cli-loop/commit/1235c4e959eaebdeccefbf68c5de46457370c9ee))
+* add structured error fields to hot-reload validation failures ([4473114](https://github.com/hatayama/unity-cli-loop/commit/44731140afa4ca128193ab531cadab1f56e176a8))
+* add uloop hot-reload for live C# patching without domain reload ([#2254](https://github.com/hatayama/unity-cli-loop/issues/2254)) ([20e97f6](https://github.com/hatayama/unity-cli-loop/commit/20e97f69c6fd6f64095934a4eebdc18115329e6a))
+* align CLI option names across first-party tools ([#2422](https://github.com/hatayama/unity-cli-loop/issues/2422)) ([2e4daff](https://github.com/hatayama/unity-cli-loop/commit/2e4daff6536a7febe88841d9c6104b2fbf8923ff))
+* annotate never-invoked active patches in hot-reload status ([#2359](https://github.com/hatayama/unity-cli-loop/issues/2359)) ([5243439](https://github.com/hatayama/unity-cli-loop/commit/5243439e1296c91ca044acc19770e1efd72d47b8))
+* annotate pause-point collection previews with order and truncation ([#2293](https://github.com/hatayama/unity-cli-loop/issues/2293)) ([4b9b156](https://github.com/hatayama/unity-cli-loop/commit/4b9b156a74302006372eb0de720e95c4e3094f27))
+* compile pending script changes before running tests ([5ab6770](https://github.com/hatayama/unity-cli-loop/commit/5ab6770185af6444b9074424fd88bb667cf8f67b))
+* correct the dead-end language-version suggestion in compile NextActions ([#2363](https://github.com/hatayama/unity-cli-loop/issues/2363)) ([c4fa63b](https://github.com/hatayama/unity-cli-loop/commit/c4fa63bdd45cfddcadfec159340facb895a96318))
+* decline the Script Updating Consent dialog during CLI compiles ([#2327](https://github.com/hatayama/unity-cli-loop/issues/2327)) ([dc86a7b](https://github.com/hatayama/unity-cli-loop/commit/dc86a7b8ddb1cba4fcf445e3f0fe5692b03bb991))
+* default hot-reload --files to sources changed since the last compile ([1c75e85](https://github.com/hatayama/unity-cli-loop/commit/1c75e85ade883553f691c91d116ed9501bb91835))
+* default screenshot capture mode to rendering during Play Mode ([#2379](https://github.com/hatayama/unity-cli-loop/issues/2379)) ([393c11f](https://github.com/hatayama/unity-cli-loop/commit/393c11fa00e8cce3bb6e8058b0a06da56ec34233))
+* disclose hot-reload patches discarded by a test run's deferred domain reload ([#2343](https://github.com/hatayama/unity-cli-loop/issues/2343)) ([ec94f51](https://github.com/hatayama/unity-cli-loop/commit/ec94f51b4f656e4c3e0b9e15fc318795e0b477b9))
+* enable-pause-point switches Release editors to Debug automatically ([b2ba35e](https://github.com/hatayama/unity-cli-loop/commit/b2ba35ee7018ca55e1d36d9bd00d77c768639f60))
+* explain frame-boundary pausing on hit responses and surface the expired next action ([#2285](https://github.com/hatayama/unity-cli-loop/issues/2285)) ([812d4fe](https://github.com/hatayama/unity-cli-loop/commit/812d4fed5daaf84c67ea892eddb34f38fa887121))
+* explain unreported trigger results on pause-point wait settlement ([#2334](https://github.com/hatayama/unity-cli-loop/issues/2334)) ([ba9590f](https://github.com/hatayama/unity-cli-loop/commit/ba9590fce0e2fe6c571ddab56ef2ef3fd2f27763))
+* gate pause-point hits with the hit-when condition ([#2405](https://github.com/hatayama/unity-cli-loop/issues/2405)) ([f5f4e33](https://github.com/hatayama/unity-cli-loop/commit/f5f4e3391e3a131b92d12288fbfe633b4a3c4914))
+* include caller stack frames in pause-point hit captures ([6c31a83](https://github.com/hatayama/unity-cli-loop/commit/6c31a8300ca7845e7d5a90bde42cc675df3154a5))
+* include editor play/pause state in execute-dynamic-code error responses ([#2377](https://github.com/hatayama/unity-cli-loop/issues/2377)) ([5b029e1](https://github.com/hatayama/unity-cli-loop/commit/5b029e158685d8c57f0b17568713066c8bef50ff))
+* include failed test details in run-tests failure responses ([#2302](https://github.com/hatayama/unity-cli-loop/issues/2302)) ([e1909f4](https://github.com/hatayama/unity-cli-loop/commit/e1909f48ecb29132053b3b9d954db37333eb887f))
+* include the running tool's elapsed time in single-flight busy rejections ([c5709bd](https://github.com/hatayama/unity-cli-loop/commit/c5709bd769e384249e2d0d4ea1235ad110e30b22))
+* label drift candidates with their compiled methods and rebalance the expired hint ([#2415](https://github.com/hatayama/unity-cli-loop/issues/2415)) ([d17ed2d](https://github.com/hatayama/unity-cli-loop/commit/d17ed2d16d673ce187985ce9c976adad36bcf9ab))
+* lead line-resolution warnings with a one-line conclusion ([#2361](https://github.com/hatayama/unity-cli-loop/issues/2361)) ([af69ffd](https://github.com/hatayama/unity-cli-loop/commit/af69ffdb84ffa85ac15cadc6dbb27c44095ab20e))
+* list all markers when pause-point-status omits --id ([#2413](https://github.com/hatayama/unity-cli-loop/issues/2413)) ([aee4288](https://github.com/hatayama/unity-cli-loop/commit/aee4288a2415efa148e335572442307402cb19e6))
+* log assembly-progress stalls while Unity keeps reporting compiling ([de73029](https://github.com/hatayama/unity-cli-loop/commit/de730298fe56b613a12e6899a85b9254477c2203))
+* name changed declarations in the outside-body drift warning ([#2284](https://github.com/hatayama/unity-cli-loop/issues/2284)) ([5c28d73](https://github.com/hatayama/unity-cli-loop/commit/5c28d7397fad1acdf48a2f2915eedae2fac6f00c))
+* name filtered-out candidate tests when run-tests finds nothing with a filter ([127e2cf](https://github.com/hatayama/unity-cli-loop/commit/127e2cf620d07706e0fb24e4c15f68b24069bd5d))
+* name predefined-assembly test methods when run-tests discovers zero tests ([81492ec](https://github.com/hatayama/unity-cli-loop/commit/81492ec04522e94b8a6d826c6f0aa0ed3d340216))
+* name the assembly that declares an unresolved namespace in compile NextActions ([#2364](https://github.com/hatayama/unity-cli-loop/issues/2364)) ([30dfe02](https://github.com/hatayama/unity-cli-loop/commit/30dfe02a0d07c8162469b12bdfb5689c98a22fc0))
+* note symbol-less caller frames in pause-point responses ([#2298](https://github.com/hatayama/unity-cli-loop/issues/2298)) ([e5b4b8e](https://github.com/hatayama/unity-cli-loop/commit/e5b4b8e4719798fec9f3b057173d3dc733028f17))
+* note when a patched method is reachable only from one-shot lifecycle callers ([#2403](https://github.com/hatayama/unity-cli-loop/issues/2403)) ([d5e0069](https://github.com/hatayama/unity-cli-loop/commit/d5e0069d97996421290757d28fff6be5030651cd))
+* remap --line into the named method's compiled span when resolution fails ([#2378](https://github.com/hatayama/unity-cli-loop/issues/2378)) ([e3b0a8b](https://github.com/hatayama/unity-cli-loop/commit/e3b0a8bcef581d9c9978051f4815e9441014136a))
+* report method entry counts for expired pause points ([#2402](https://github.com/hatayama/unity-cli-loop/issues/2402)) ([d1e3c21](https://github.com/hatayama/unity-cli-loop/commit/d1e3c21fce43d989fdb99f7fd58c5e713abeefcd))
+* report patches discarded by the Play-entry domain reload in hot-reload status ([#2374](https://github.com/hatayama/unity-cli-loop/issues/2374)) ([8e51087](https://github.com/hatayama/unity-cli-loop/commit/8e51087005167cf883b389c12f67f1c55df5aa8a))
+* report the line resolution basis in enable-pause-point responses ([#2409](https://github.com/hatayama/unity-cli-loop/issues/2409)) ([ea30b1e](https://github.com/hatayama/unity-cli-loop/commit/ea30b1e2bbfcaf03163e6f5a83716c9786d7429a))
+* report why play mode stopped in control-play-mode responses ([#2303](https://github.com/hatayama/unity-cli-loop/issues/2303)) ([2beb725](https://github.com/hatayama/unity-cli-loop/commit/2beb72591d35a9c0c7ae9ca7b628acaa02f56aa5))
+* return opted-in partial results when dynamic code throws ([#2408](https://github.com/hatayama/unity-cli-loop/issues/2408)) ([24a0e9a](https://github.com/hatayama/unity-cli-loop/commit/24a0e9a737382188971596cd1c9e2054255d76ba))
+* state when the resolved line text matches the edited file in hot-reload pause-point warnings ([#2335](https://github.com/hatayama/unity-cli-loop/issues/2335)) ([aa00fe6](https://github.com/hatayama/unity-cli-loop/commit/aa00fe680ca14db1148b9bcfb0a7ecc945533af4))
+* suggest candidate compiled lines when an enable line drifts from the edited file ([0542971](https://github.com/hatayama/unity-cli-loop/commit/0542971c90c0ca583e3e3c976ddfa9d5f5689e4c))
+* warn about const drift in sibling files of hot-reloaded assemblies ([#2297](https://github.com/hatayama/unity-cli-loop/issues/2297)) ([51d2cdf](https://github.com/hatayama/unity-cli-loop/commit/51d2cdf4e48bb2eca55c115258cc2f349769385b))
+* warn at enable time when a pause point resolves into a per-frame Unity message ([b25e0f2](https://github.com/hatayama/unity-cli-loop/commit/b25e0f2f1faf51ff85ce3ee302155c6595b08a50))
+* warn at enable time when a trace marker sits in a per-frame Unity message ([a9c6679](https://github.com/hatayama/unity-cli-loop/commit/a9c667908208b1ecae0f99581121cc3be7c17739))
+* warn in the compile response when the compile stops an active Play session ([#2372](https://github.com/hatayama/unity-cli-loop/issues/2372)) ([5b8d65e](https://github.com/hatayama/unity-cli-loop/commit/5b8d65eb4852b7368678f616ce2c3276c0eef66b))
+* warn when a window screenshot is captured during Play Mode ([#2312](https://github.com/hatayama/unity-cli-loop/issues/2312)) ([cd5dbb9](https://github.com/hatayama/unity-cli-loop/commit/cd5dbb944b0b14b20c1c41fe455afe89b1b7450a))
+* warn when hot-reload leaves unpatched-method line numbers shifted from compiled source ([#2313](https://github.com/hatayama/unity-cli-loop/issues/2313)) ([b7267be](https://github.com/hatayama/unity-cli-loop/commit/b7267be9e3bcec09fa9399cb1835e0686101bed9))
+* warn when the Unity Editor is unfocused in simulate-keyboard, execute-dynamic-code, and control-play-mode responses ([542c20a](https://github.com/hatayama/unity-cli-loop/commit/542c20add69808063b1e2918011550f822295fd1))
 
 
 ### Bug Fixes
 
-* allow installation without Unity Test Framework ([#1062](https://github.com/hatayama/unity-cli-loop/issues/1062)) ([45d58b9](https://github.com/hatayama/unity-cli-loop/commit/45d58b944da687f8505457d1a32361c188f119a5))
+* align clear-pause-point messages with ClearedCount for auto-disarmed and expired markers ([319159b](https://github.com/hatayama/unity-cli-loop/commit/319159bb6cffef137eef8c91eb97435a84b1fff2))
+* align pause-point truncation aggregates with per-variable clipping ([#2376](https://github.com/hatayama/unity-cli-loop/issues/2376)) ([ea066fb](https://github.com/hatayama/unity-cli-loop/commit/ea066fb71e6a88fef1b50c81f71bae12d4d0461d))
+* Annotated screenshots keep visible clickable UI and matching click coordinates ([#2225](https://github.com/hatayama/unity-cli-loop/issues/2225)) ([3568105](https://github.com/hatayama/unity-cli-loop/commit/3568105cd7a83e7f3ce55eec7e1d533e5bd82dd4))
+* append edited-line candidates to pause-point resolve failures under hot reload ([#2289](https://github.com/hatayama/unity-cli-loop/issues/2289)) ([4df267f](https://github.com/hatayama/unity-cli-loop/commit/4df267f6bd48cdee01b7f2d29843bdbf4b05d196))
+* apply hot-reload files all-or-nothing when shim compilation fails ([#2386](https://github.com/hatayama/unity-cli-loop/issues/2386)) ([ad7f116](https://github.com/hatayama/unity-cli-loop/commit/ad7f1169025c7f2ac3898264275b60b2b41b411a))
+* attribute auto-injected using directives to their triggering identifiers ([#2326](https://github.com/hatayama/unity-cli-loop/issues/2326)) ([3b6d904](https://github.com/hatayama/unity-cli-loop/commit/3b6d90483adee440585f2ec02e8bc1736e0778cc))
+* capture pause-point variables at the resolved line on hot-reload patched methods ([#2393](https://github.com/hatayama/unity-cli-loop/issues/2393)) ([1bded94](https://github.com/hatayama/unity-cli-loop/commit/1bded94a7a29acc732b687f6925924ee9366a564))
+* disclose line snapping and blank edited lines in pause-point drift warnings ([#2283](https://github.com/hatayama/unity-cli-loop/issues/2283)) ([57dbebc](https://github.com/hatayama/unity-cli-loop/commit/57dbebc68bf7e149bc5cf00b09e25d9d45037677))
+* explain pause-point truncation flags filtered by captured-variable names ([#2290](https://github.com/hatayama/unity-cli-loop/issues/2290)) ([f15ac70](https://github.com/hatayama/unity-cli-loop/commit/f15ac70251f9337973be5c2d25991e400e0865e7))
+* guide hot-reload failures on uncompiled or unimported assemblies to compile ([#2291](https://github.com/hatayama/unity-cli-loop/issues/2291)) ([7cf203d](https://github.com/hatayama/unity-cli-loop/commit/7cf203d87c3dfc89d36ce703cdb7e92223feb620))
+* harden pause-point caller-frame path and array normalization ([3e86a46](https://github.com/hatayama/unity-cli-loop/commit/3e86a46437353a66c0324d966f2e5140fed1f36f))
+* keep hot-reload-patched callers visible in pause-point caller frames ([#2277](https://github.com/hatayama/unity-cli-loop/issues/2277)) ([a9dd11b](https://github.com/hatayama/unity-cli-loop/commit/a9dd11b5a257f8c55774c5eb819f80b2d487a665))
+* make control-play-mode report an already-running Play session as a no-op ([#2375](https://github.com/hatayama/unity-cli-loop/issues/2375)) ([5040e1f](https://github.com/hatayama/unity-cli-loop/commit/5040e1f2148d9f7862cc86db153c2863bab27693))
+* map this-qualified added-field reads to the instance parameter in hot reload shims ([5730ccd](https://github.com/hatayama/unity-cli-loop/commit/5730ccd885a94c98c7cfc22211538c4d7b531449))
+* name the --files option in the hot-reload missing-files validation message ([d21e473](https://github.com/hatayama/unity-cli-loop/commit/d21e473b062765d9896d3ad13a9a62ca67cd3d5a))
+* name the exit command in the EditMode-during-play test failure message ([#2317](https://github.com/hatayama/unity-cli-loop/issues/2317)) ([df42b1a](https://github.com/hatayama/unity-cli-loop/commit/df42b1a413e3e9a8cd0300cbbdd35c1ca0708d13))
+* name the missing test-assembly cause in the no-tests-found explanation ([#2318](https://github.com/hatayama/unity-cli-loop/issues/2318)) ([263fbb9](https://github.com/hatayama/unity-cli-loop/commit/263fbb9a3f5c5158aeed14e29d1e74c4cb5ff40a))
+* name the unpatched resolved method in the pause-point compiled-line-map warning ([#2325](https://github.com/hatayama/unity-cli-loop/issues/2325)) ([9210075](https://github.com/hatayama/unity-cli-loop/commit/92100759907ff0e32974bbd0da2036af6b128c69))
+* omit null simulate-keyboard fields and surface pause-point reading notes before captured variables ([#2347](https://github.com/hatayama/unity-cli-loop/issues/2347)) ([d3cfee4](https://github.com/hatayama/unity-cli-loop/commit/d3cfee45961b8128cf3ac2281f66f3005a7b7aba))
+* Pause points on multi-line statements now return the full source text ([39ed6ee](https://github.com/hatayama/unity-cli-loop/commit/39ed6ee73d872bf417de1e4e755a559894667153))
+* pause-point timeout now explains a rejected trigger instead of blaming a missed line ([#2395](https://github.com/hatayama/unity-cli-loop/issues/2395)) ([8a5f1c9](https://github.com/hatayama/unity-cli-loop/commit/8a5f1c91be6b2b7f3acd43bbfbb2009d9370078e))
+* Rendering screenshots keep correct brightness in Linear color space ([#2210](https://github.com/hatayama/unity-cli-loop/issues/2210)) ([89eddd7](https://github.com/hatayama/unity-cli-loop/commit/89eddd7a40be8766ad640931a0e17d98ce56c9e8))
+* report a fully passing test suite with skipped tests as passed ([#2420](https://github.com/hatayama/unity-cli-loop/issues/2420)) ([faf00ee](https://github.com/hatayama/unity-cli-loop/commit/faf00eeaaf985869a6144ea00675f95e8ac35709))
+* report actual device key state in simulate-keyboard release responses ([#2292](https://github.com/hatayama/unity-cli-loop/issues/2292)) ([9bdde06](https://github.com/hatayama/unity-cli-loop/commit/9bdde06d692ed850a8ead4466eb6cd9e3dd05b92))
+* set the not-instrumented Reason on hot-reload status Added rows ([#2286](https://github.com/hatayama/unity-cli-loop/issues/2286)) ([27eea1c](https://github.com/hatayama/unity-cli-loop/commit/27eea1c53ddf6bf24d2dc0b591904a3814d747eb))
+* sync stale player-view key latches after simulate-keyboard releases ([#2296](https://github.com/hatayama/unity-cli-loop/issues/2296)) ([eb502af](https://github.com/hatayama/unity-cli-loop/commit/eb502afbe0a1b3e410290a60d5a2936c336b7f0f))
+* validate hot-reload entries before mutating patch state ([#2387](https://github.com/hatayama/unity-cli-loop/issues/2387)) ([fdfc42b](https://github.com/hatayama/unity-cli-loop/commit/fdfc42bbb6dea5bc4de95f369087ce89ba8ae2de))
+* warn on hot-reloaded new consts and disclose that patched bodies keep compiled const values ([#2345](https://github.com/hatayama/unity-cli-loop/issues/2345)) ([c7bb69f](https://github.com/hatayama/unity-cli-loop/commit/c7bb69f886ff1721c299e7aa88f61f33470aba10))
+* warn that an asmdef cannot reference Assembly-CSharp in the no-tests-found explanation ([#2319](https://github.com/hatayama/unity-cli-loop/issues/2319)) ([ef737ee](https://github.com/hatayama/unity-cli-loop/commit/ef737ee782ae1e4a716284a18d26dc9011e61396))
+
+## [3.0.0-beta.74](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.73...v3.0.0-beta.74) (2026-08-16)
+
+
+### Bug Fixes
+
+* Unity no longer installs a duplicate CLI over a Homebrew-managed uloop ([#2196](https://github.com/hatayama/unity-cli-loop/issues/2196)) ([0a2b5fc](https://github.com/hatayama/unity-cli-loop/commit/0a2b5fc33a02da5042d816472316376b800c8f02))
+
+## [3.0.0-beta.73](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.71...v3.0.0-beta.73) (2026-08-11)
+
+
+### Bug Fixes
+
+* report the full error count in diagnostics summaries ([#2134](https://github.com/hatayama/unity-cli-loop/issues/2134)) ([12694df](https://github.com/hatayama/unity-cli-loop/commit/12694dff3c63de6e483c276d34900987b63a36bc))
+* Stop screenshot rendering mode from returning all-black PNGs ([#2107](https://github.com/hatayama/unity-cli-loop/issues/2107)) ([ac4cf0a](https://github.com/hatayama/unity-cli-loop/commit/ac4cf0a103f346ccf047c40228aefaec36882184))
+
+## [3.0.0-beta.71](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.70...v3.0.0-beta.71) (2026-07-29)
+
+
+### Features
+
+* check 3D physics hits with simulate-mouse-input --dry-run ([#2072](https://github.com/hatayama/unity-cli-loop/issues/2072)) ([24225f6](https://github.com/hatayama/unity-cli-loop/commit/24225f65af305fdb486ac80b36d3c0d01bb30d01))
+
+## [3.0.0-beta.70](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.69...v3.0.0-beta.70) (2026-07-29)
+
+
+### Bug Fixes
+
+* reference System.Security.Cryptography.Primitives when building the Roslyn worker ([8bb1f28](https://github.com/hatayama/unity-cli-loop/commit/8bb1f287346569b05b43a27952c09d17679c1de7))
+
+## [3.0.0-beta.69](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.68...v3.0.0-beta.69) (2026-07-29)
+
+
+### Features
+
+* address pause point round 13-14 leftover improvements ([#2065](https://github.com/hatayama/unity-cli-loop/issues/2065)) ([ce21b4f](https://github.com/hatayama/unity-cli-loop/commit/ce21b4f5d1d3693cb9837288da15f4b43102fabe))
+
+## [3.0.0-beta.68](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.67...v3.0.0-beta.68) (2026-07-29)
+
+
+### Features
+
+* add ErrorCode and RecommendedNextAction to pause point failure responses ([#2048](https://github.com/hatayama/unity-cli-loop/issues/2048)) ([5ab8f71](https://github.com/hatayama/unity-cli-loop/commit/5ab8f712fa6cfcd5489fee8f3afd75b2e930d159))
+* address pause point round 13-14 verification feedback ([#2059](https://github.com/hatayama/unity-cli-loop/issues/2059)) ([62db173](https://github.com/hatayama/unity-cli-loop/commit/62db17327b467ab44250d1ca59f8b136129251ae))
+
+## [3.0.0-beta.67](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.66...v3.0.0-beta.67) (2026-07-28)
+
+
+### Features
+
+* configurable compile wait timeout and working timeout recovery ([#2036](https://github.com/hatayama/unity-cli-loop/issues/2036)) ([fc867c3](https://github.com/hatayama/unity-cli-loop/commit/fc867c3914f979dbc8f31f26be4c5753f66e1c36))
+
+## [3.0.0-beta.66](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.65...v3.0.0-beta.66) (2026-07-27)
+
+
+### Bug Fixes
+
+* Background Unity editors no longer pop over other windows and keep serving commands ([#2029](https://github.com/hatayama/unity-cli-loop/issues/2029)) ([55d7c37](https://github.com/hatayama/unity-cli-loop/commit/55d7c3732b66f6d55a15163cea1916719a1a1459))
+
+## [3.0.0-beta.65](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.64...v3.0.0-beta.65) (2026-07-27)
+
+
+### Features
+
+* Improve uloop CLI discoverability after E2E verification rounds ([#2023](https://github.com/hatayama/unity-cli-loop/issues/2023)) ([fcad6e7](https://github.com/hatayama/unity-cli-loop/commit/fcad6e7e7ff279ea160828caa938f9105d4a6c30))
+
+
+### Bug Fixes
+
+* Apply pause-point round 11 verification feedback ([#1985](https://github.com/hatayama/unity-cli-loop/issues/1985)) ([43c4c67](https://github.com/hatayama/unity-cli-loop/commit/43c4c67e06bc3da93726ed728c9d3a0c4d21e167))
+
+## [3.0.0-beta.64](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.63...v3.0.0-beta.64) (2026-07-24)
+
+
+### Features
+
+* Unify skills setup UI into a shared panel for settings and setup wizard ([#1982](https://github.com/hatayama/unity-cli-loop/issues/1982)) ([eeb7aaa](https://github.com/hatayama/unity-cli-loop/commit/eeb7aaac66d881fc8573ff83a1f784926bb20711))
+
+
+### Bug Fixes
+
+* Compress redundant prose in distributed skills ([#1978](https://github.com/hatayama/unity-cli-loop/issues/1978)) ([3b242a3](https://github.com/hatayama/unity-cli-loop/commit/3b242a33f6a3fc929f4a3ec62b1061115e1860f7))
+* Improve skills setup panel empty state and refresh scoping ([#1983](https://github.com/hatayama/unity-cli-loop/issues/1983)) ([caeb079](https://github.com/hatayama/unity-cli-loop/commit/caeb0799d78331162e1cae5c0572c8fc2ed6aa81))
+* Tighten v3 migration skill guidance and align wizard prompt ([#1981](https://github.com/hatayama/unity-cli-loop/issues/1981)) ([7c8a4a2](https://github.com/hatayama/unity-cli-loop/commit/7c8a4a20a7cda853a9ddfdf966fa24c4ccfc5609))
+
+## [3.0.0-beta.63](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.62...v3.0.0-beta.63) (2026-07-24)
+
+
+### Features
+
+* pause-point round 10 feedback improvements ([8b66c6a](https://github.com/hatayama/unity-cli-loop/commit/8b66c6a7e7066e82820b144b85a9b2d89ff071ed))
+* pause-point round 9 feedback improvements ([#1967](https://github.com/hatayama/unity-cli-loop/issues/1967)) ([1ea3696](https://github.com/hatayama/unity-cli-loop/commit/1ea369605c05836485ba95c690029af74914dec7))
+
+
+### Bug Fixes
+
+* Windows CLI install robustness and uninstall message wording ([#1970](https://github.com/hatayama/unity-cli-loop/issues/1970)) ([40a12ad](https://github.com/hatayama/unity-cli-loop/commit/40a12add4b445293ee7a4820ae26c860068a2dac))
+
+## [3.0.0-beta.62](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.61...v3.0.0-beta.62) (2026-07-23)
+
+
+### Features
+
+* keep editor ticking while unfocused via scoped SignalTick pump ([#1963](https://github.com/hatayama/unity-cli-loop/issues/1963)) ([64bef8a](https://github.com/hatayama/unity-cli-loop/commit/64bef8a13aad5a1b23c652df556cf799239d24ef))
+* Show live progress feedback while installing the CLI ([#1959](https://github.com/hatayama/unity-cli-loop/issues/1959)) ([06ae9f3](https://github.com/hatayama/unity-cli-loop/commit/06ae9f3ec8c4a7428c1681cfd8585a34ff4d08d8))
+
+
+### Bug Fixes
+
+* Restore green EditMode suite for schema and startup-hook guards ([#1962](https://github.com/hatayama/unity-cli-loop/issues/1962)) ([3a8817e](https://github.com/hatayama/unity-cli-loop/commit/3a8817ede32b2725b32595e8a88971fbdbf8da07))
+
+## [3.0.0-beta.61](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.60...v3.0.0-beta.61) (2026-07-23)
+
+
+### Bug Fixes
+
+* Migration wizard now opens reliably right after a compile-error restart ([#1955](https://github.com/hatayama/unity-cli-loop/issues/1955)) ([f3feb18](https://github.com/hatayama/unity-cli-loop/commit/f3feb188e908616afffcb6f2385e49a5cfb3f5af))
+
+## [3.0.0-beta.60](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.59...v3.0.0-beta.60) (2026-07-22)
+
+
+### Features
+
+* Round-8 pause-point usability improvements ([#1944](https://github.com/hatayama/unity-cli-loop/issues/1944)) ([1940cca](https://github.com/hatayama/unity-cli-loop/commit/1940cca1dea33377300cb06a13cb65ba9be85db9))
+
+
+### Bug Fixes
+
+* Custom-tool migration removes a Success property that hides the base response's Success ([#1932](https://github.com/hatayama/unity-cli-loop/issues/1932)) ([25bf0a8](https://github.com/hatayama/unity-cli-loop/commit/25bf0a8616110b99db6a3cbe46fb48e89649bb72))
+* Show the migration wizard window immediately during auto-scan ([#1931](https://github.com/hatayama/unity-cli-loop/issues/1931)) ([e403509](https://github.com/hatayama/unity-cli-loop/commit/e4035090a43cf8cd79449bc372ae5a4453458112))
+
+## [3.0.0-beta.59](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.58...v3.0.0-beta.59) (2026-07-21)
+
+
+### Features
+
+* Round-7 pause-point usability improvements ([#1926](https://github.com/hatayama/unity-cli-loop/issues/1926)) ([178f0b5](https://github.com/hatayama/unity-cli-loop/commit/178f0b5e7129ef9f7a7155752c97f564b74b9b6a))
+
+
+### Bug Fixes
+
+* Make the migration wizard window resizable, scrollable, and its scan result concise ([#1929](https://github.com/hatayama/unity-cli-loop/issues/1929)) ([718c989](https://github.com/hatayama/unity-cli-loop/commit/718c9897e759fcb4203dbb76633996e85ad89401))
+* Speed up V3 custom tool migration auto-scan and show progress feedback ([#1923](https://github.com/hatayama/unity-cli-loop/issues/1923)) ([1852c43](https://github.com/hatayama/unity-cli-loop/commit/1852c436db5f0122bb508afa9970414d5f91f08d))
+
+## [3.0.0-beta.58](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.57...v3.0.0-beta.58) (2026-07-21)
+
+
+### Features
+
+* Round-4 pause-point usability and diagnostics improvements ([#1897](https://github.com/hatayama/unity-cli-loop/issues/1897)) ([9b02fb5](https://github.com/hatayama/unity-cli-loop/commit/9b02fb564cbec25d339cc7d968cf94f6f7cb25d4))
+* Round-5 pause-point diagnostics and observability improvements ([#1908](https://github.com/hatayama/unity-cli-loop/issues/1908)) ([958d85d](https://github.com/hatayama/unity-cli-loop/commit/958d85d9af0aba3ddbb57cf191574eeffe07449c))
+* Round-6 pause-point usability improvements ([#1914](https://github.com/hatayama/unity-cli-loop/issues/1914)) ([f8f5018](https://github.com/hatayama/unity-cli-loop/commit/f8f501872a1b47699717eb150168c254cae6fec4))
+
+## [3.0.0-beta.57](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.56...v3.0.0-beta.57) (2026-07-20)
+
+
+### Bug Fixes
+
+* Correct dispatcher version series back to the 3.0.0-beta line ([#1888](https://github.com/hatayama/unity-cli-loop/issues/1888)) ([ddaa473](https://github.com/hatayama/unity-cli-loop/commit/ddaa4731d90f61f4f277b0928c3afeaa85aad482))
+* Round-3 pause-point/dynamic-code usability and reliability fixes ([#1884](https://github.com/hatayama/unity-cli-loop/issues/1884)) ([f1de07e](https://github.com/hatayama/unity-cli-loop/commit/f1de07e8030eca5e70de418cf22e4a597d5a0e06))
+
+## [3.0.0-beta.56](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.55...v3.0.0-beta.56) (2026-07-20)
+
+
+### Features
+
+* Custom-type pause-point variables now preview as JSON instead of just a type name ([#1866](https://github.com/hatayama/unity-cli-loop/issues/1866)) ([357f879](https://github.com/hatayama/unity-cli-loop/commit/357f879b930dcee399e65e979b2ac9009b7854ed))
+* find-game-objects now hints at Contains/Regex when Exact matching finds nothing ([#1868](https://github.com/hatayama/unity-cli-loop/issues/1868)) ([a6ae04d](https://github.com/hatayama/unity-cli-loop/commit/a6ae04d37a6df4ed6fdb9bbd5b18d58e43282daa))
+
+
+### Bug Fixes
+
+* Document reflection-based state recovery and pause-point capture edge cases ([#1874](https://github.com/hatayama/unity-cli-loop/issues/1874)) ([af50cf4](https://github.com/hatayama/unity-cli-loop/commit/af50cf4b45e85e7a7f4baa0f14814d80df5a0a5a))
+* Dynamic code execution no longer reports a false failure right after a pause point ([#1864](https://github.com/hatayama/unity-cli-loop/issues/1864)) ([9610135](https://github.com/hatayama/unity-cli-loop/commit/9610135222b92d0bca34a4c4611832e3d0c97ac5))
+* Pause points no longer expire before await-pause-point can observe them ([#1873](https://github.com/hatayama/unity-cli-loop/issues/1873)) ([00a166b](https://github.com/hatayama/unity-cli-loop/commit/00a166b2f267317813875b710dd1d75f2e6d5602))
+* Simulate tools now say which pause point is blocking them instead of a generic paused error ([#1865](https://github.com/hatayama/unity-cli-loop/issues/1865)) ([fad146a](https://github.com/hatayama/unity-cli-loop/commit/fad146ae64a02c0a125db7881a6aa67ec671155a))
+* Slim down and deduplicate agent skill files, add repository map ([#1876](https://github.com/hatayama/unity-cli-loop/issues/1876)) ([6bf4f76](https://github.com/hatayama/unity-cli-loop/commit/6bf4f769ac1fe6de186bcbdd50cbe6c93d35b45a))
+
+## [3.0.0-beta.55](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.54...v3.0.0-beta.55) (2026-07-20)
+
+
+### Bug Fixes
+
+* Installed CLI now self-updates to a dispatcher release with V2 project support ([#1859](https://github.com/hatayama/unity-cli-loop/issues/1859)) ([985d3fe](https://github.com/hatayama/unity-cli-loop/commit/985d3fe03f1e57a5f2d74ef08336f11417a181bf))
+
+## [3.0.0-beta.54](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.53...v3.0.0-beta.54) (2026-07-19)
+
+
+### Bug Fixes
+
+* Pause points and watch expressions no longer leave silent gaps in debugging feedback ([#1854](https://github.com/hatayama/unity-cli-loop/issues/1854)) ([77658f8](https://github.com/hatayama/unity-cli-loop/commit/77658f89efb4a302058d4f546f39839a092e223e))
+* pause-pointの応答から重複情報を削減し、変数値だけを後から選んで取得できるように改善 ([#1857](https://github.com/hatayama/unity-cli-loop/issues/1857)) ([d507274](https://github.com/hatayama/unity-cli-loop/commit/d507274f14f61236aee30c3886139aa48c1a46d1))
+
+## [3.0.0-beta.53](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.52...v3.0.0-beta.53) (2026-07-19)
+
+
+### Bug Fixes
+
+* Improve compile and pause-point skill guidance for AI agents ([#1836](https://github.com/hatayama/unity-cli-loop/issues/1836)) ([c7c650e](https://github.com/hatayama/unity-cli-loop/commit/c7c650eceaacb0d0e32d6c1208224c205d1e1210))
+* Keep the Setup Wizard skill target dropdown available ([#1842](https://github.com/hatayama/unity-cli-loop/issues/1842)) ([2d73535](https://github.com/hatayama/unity-cli-loop/commit/2d735357b3e378947b98aa3d4eea02f2e3b0f60a))
+* resolve macOS E2E failures ([#1834](https://github.com/hatayama/unity-cli-loop/issues/1834)) ([6d498b4](https://github.com/hatayama/unity-cli-loop/commit/6d498b490265f986c7250e96ef0a19bc50a16f78))
+* Setup falls back to skill target selection when folders are missing ([#1839](https://github.com/hatayama/unity-cli-loop/issues/1839)) ([7deb9d2](https://github.com/hatayama/unity-cli-loop/commit/7deb9d2412b982e02fe0fc8ea57f8f261e4ef1dd))
+* suppress expected launch-time worker errors ([#1837](https://github.com/hatayama/unity-cli-loop/issues/1837)) ([0be8528](https://github.com/hatayama/unity-cli-loop/commit/0be8528a6c786f699b1fed073437f880bda53c75))
+
+## [3.0.0-beta.52](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.51...v3.0.0-beta.52) (2026-07-18)
+
+
+### Bug Fixes
+
+* align tool exit codes with response success ([#1824](https://github.com/hatayama/unity-cli-loop/issues/1824)) ([1cc123b](https://github.com/hatayama/unity-cli-loop/commit/1cc123b8d450b137ef489d55af0d13f9f587c16f))
+
+## [3.0.0-beta.51](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.50...v3.0.0-beta.51) (2026-07-17)
+
+
+### Bug Fixes
+
+* make Windows v3 workflows reliable ([#1818](https://github.com/hatayama/unity-cli-loop/issues/1818)) ([21eae0a](https://github.com/hatayama/unity-cli-loop/commit/21eae0a96af05355cbf57eb3ab98dd7388fc7b2a))
+
+## [3.0.0-beta.50](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.49...v3.0.0-beta.50) (2026-07-15)
+
+
+### Features
+
+* add pause point capture modes and history ([#1729](https://github.com/hatayama/unity-cli-loop/issues/1729)) ([0b5e72e](https://github.com/hatayama/unity-cli-loop/commit/0b5e72e788a6f032001ee3670c117d8034089234))
+* add pause-point watch expressions ([#1733](https://github.com/hatayama/unity-cli-loop/issues/1733)) ([875835f](https://github.com/hatayama/unity-cli-loop/commit/875835fc71deb70ccdc0bea0d67582a0d42a2f80))
+* Cap .uloop/outputs folders at 20 files automatically ([#1772](https://github.com/hatayama/unity-cli-loop/issues/1772)) ([8d67dae](https://github.com/hatayama/unity-cli-loop/commit/8d67daec5b8ec48ef43ff31bf40e094226ffe438))
+* Improve CLI guidance for tool enums, busy errors, and dynamic-code diagnostics ([7318b9d](https://github.com/hatayama/unity-cli-loop/commit/7318b9d1dcead7b52241e88adab7538b47a5f95a))
+* Improve pause point observability with cleared reasons, collection previews, and raw capture ([03c656b](https://github.com/hatayama/unity-cli-loop/commit/03c656b8734de3d87a32dc7e7f90fea61031eeaf))
+* Pause point wait command is now await-pause-point ([#1698](https://github.com/hatayama/unity-cli-loop/issues/1698)) ([f1d0a9d](https://github.com/hatayama/unity-cli-loop/commit/f1d0a9d1c6c72a8699a2468e68a05262a50642dc))
+* Pause-point snapshots now identify which instance was hit ([#1737](https://github.com/hatayama/unity-cli-loop/issues/1737)) ([a086ac9](https://github.com/hatayama/unity-cli-loop/commit/a086ac9f192dcc2e7c087c6f475f42b0962052e5))
+* Prompt to remove the temporary V3 migration skill after docs are migrated ([#1711](https://github.com/hatayama/unity-cli-loop/issues/1711)) ([a6eff6e](https://github.com/hatayama/unity-cli-loop/commit/a6eff6e889a9d980040a1a1901b5e2390bfe0214))
+
+
+### Bug Fixes
+
+* captured variables stay readable after re-enabling a pause point while paused ([#1734](https://github.com/hatayama/unity-cli-loop/issues/1734)) ([4e63cc5](https://github.com/hatayama/unity-cli-loop/commit/4e63cc5c56ba2b9257ac334ef2fa0a41c0384205))
+* compile-consistency — external scene hold, compile wait/TTL align, API Update guidance ([#1760](https://github.com/hatayama/unity-cli-loop/issues/1760)) ([247cb0c](https://github.com/hatayama/unity-cli-loop/commit/247cb0c62a6a87fd56dba0126334fb5061d4d081))
+* Device Simulator support for screenshot and mouse flow ([#1769](https://github.com/hatayama/unity-cli-loop/issues/1769)) ([0af2840](https://github.com/hatayama/unity-cli-loop/commit/0af28403ad56394779d4719c7b1b241d328cd00c))
+* dynamic-code cancel and Editor shutdown no longer hang on stuck work ([#1753](https://github.com/hatayama/unity-cli-loop/issues/1753)) ([bc1233a](https://github.com/hatayama/unity-cli-loop/commit/bc1233acd79449a1020821b021f85b5cb68b0763))
+* Harden CLI distribution and Unity IPC security ([#1794](https://github.com/hatayama/unity-cli-loop/issues/1794)) ([b5ca16b](https://github.com/hatayama/unity-cli-loop/commit/b5ca16b34fc8359466183c0cac30f2d77e862212))
+* harden execute-dynamic-code against reload busy sticks and worker lifecycle races ([#1765](https://github.com/hatayama/unity-cli-loop/issues/1765)) ([625282d](https://github.com/hatayama/unity-cli-loop/commit/625282d8bc7dc31aef2751dc7a7fb1e651cfada3))
+* Harden IPC contracts, empty RPC errors, and Settings async UI ([#1778](https://github.com/hatayama/unity-cli-loop/issues/1778)) ([0dffc75](https://github.com/hatayama/unity-cli-loop/commit/0dffc753bec575a29252430a59540ad3e0812848))
+* Harden V2-to-V3 third-party migration for safe apply and reliable scans ([#1710](https://github.com/hatayama/unity-cli-loop/issues/1710)) ([b4fbb0d](https://github.com/hatayama/unity-cli-loop/commit/b4fbb0db6b8837e4036637e11684bc08da427935))
+* Improve CLI PlayMode reliability for background input simulation ([#1714](https://github.com/hatayama/unity-cli-loop/issues/1714)) ([8845709](https://github.com/hatayama/unity-cli-loop/commit/8845709d3f70af6fc50ae98501b184f659ef5a33))
+* pause-point disconnect no longer leaves Play Mode stuck; quiet-save before CLI Play ([#1756](https://github.com/hatayama/unity-cli-loop/issues/1756)) ([3b17b68](https://github.com/hatayama/unity-cli-loop/commit/3b17b68ebc485d7b700ef7e10837fc5a258021cc))
+* run-tests hangs no longer hold the tool slot for up to 30 minutes ([#1742](https://github.com/hatayama/unity-cli-loop/issues/1742)) ([efa4898](https://github.com/hatayama/unity-cli-loop/commit/efa48982e37e39dd4d6b6459d2616cefb04eb81a))
+* run-tests timeout can cancel in-flight Test Runner jobs ([#1743](https://github.com/hatayama/unity-cli-loop/issues/1743)) ([b348ad5](https://github.com/hatayama/unity-cli-loop/commit/b348ad562dc1d9be0cdd44cd5c18773e5ccee2ab))
+* Settings no longer shows watch tools as separate toggles ([#1789](https://github.com/hatayama/unity-cli-loop/issues/1789)) ([dad66b7](https://github.com/hatayama/unity-cli-loop/commit/dad66b7c08c3f0b1e9eaa87e78e2d32eca7f2072))
+* Tool Settings pause-point toggle now gates every pause point command ([#1700](https://github.com/hatayama/unity-cli-loop/issues/1700)) ([8785326](https://github.com/hatayama/unity-cli-loop/commit/8785326661d899751b8ba4ba4d20aebac2b78cc8))
+
+## [3.0.0-beta.49](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.48...v3.0.0-beta.49) (2026-07-11)
+
+
+### Features
+
+* Add a raycast tool for checking what a Game View coordinate hits in 3D physics ([#1659](https://github.com/hatayama/unity-cli-loop/issues/1659)) ([5352e00](https://github.com/hatayama/unity-cli-loop/commit/5352e005c0dcfec0081a4610f481d41c668b5057))
+* Capture and format pause-point variables (locals, parameters, instance fields, UnityEngine.Object) ([#1682](https://github.com/hatayama/unity-cli-loop/issues/1682)) ([3818f79](https://github.com/hatayama/unity-cli-loop/commit/3818f799b8b59b20f02aae064639cb424c2a3dbd))
+* Enable pause points by source file and line ([#1684](https://github.com/hatayama/unity-cli-loop/issues/1684)) ([272edb3](https://github.com/hatayama/unity-cli-loop/commit/272edb3d665bc54bfe15e84a1d71b36d9cd20c7c))
+* **package:** Inject capture calls at source lines with Harmony ([#1683](https://github.com/hatayama/unity-cli-loop/issues/1683)) ([0159711](https://github.com/hatayama/unity-cli-loop/commit/01597115e943ad019a46702c83f0e0c34fd99874))
+* **package:** Resolve source file and line to patch locations via portable PDBs ([#1681](https://github.com/hatayama/unity-cli-loop/issues/1681)) ([2cf5fe2](https://github.com/hatayama/unity-cli-loop/commit/2cf5fe285006a336dc0aeb7977ae3ce7d668553a))
+* Raycast annotation now labels every UI-split closed region separately ([#1667](https://github.com/hatayama/unity-cli-loop/issues/1667)) ([1444de6](https://github.com/hatayama/unity-cli-loop/commit/1444de61018b361454b43f39445e75caf232a617))
+* Screenshot tool can now annotate 3D physics raycast candidates ([#1661](https://github.com/hatayama/unity-cli-loop/issues/1661)) ([c5d2fd0](https://github.com/hatayama/unity-cli-loop/commit/c5d2fd0dd1d30988299730f9074d3a797660717c))
+
+
+### Bug Fixes
+
+* Async setup and input cleanup carry cancellation tokens ([1a0ebe6](https://github.com/hatayama/unity-cli-loop/commit/1a0ebe63d484b04a483afb33dfc2317c9e899f01))
+* CLI-only skills remain discoverable when project path casing differs ([#1616](https://github.com/hatayama/unity-cli-loop/issues/1616)) ([fcd6a20](https://github.com/hatayama/unity-cli-loop/commit/fcd6a20d3dcfcd614113f0f7060655c88fca686c))
+* Dispatcher requires the project runner pin instead of parsing CliConstants ([#1501](https://github.com/hatayama/unity-cli-loop/issues/1501)) ([2012eb8](https://github.com/hatayama/unity-cli-loop/commit/2012eb882cf5bef0de72a49d2cda08f12586daf3))
+* Domain reload waits complete during recovery ([e80b630](https://github.com/hatayama/unity-cli-loop/commit/e80b630d592279f3e2837ef1edeaf1065efe54f4))
+* Duplicate skills now follow stable source priority ([#1614](https://github.com/hatayama/unity-cli-loop/issues/1614)) ([95270bb](https://github.com/hatayama/unity-cli-loop/commit/95270bb51990a6ad10e84e2b9941b884514b009c))
+* Dynamic code snippets now recognize bare Object and Random calls consistently ([#1657](https://github.com/hatayama/unity-cli-loop/issues/1657)) ([ce5c364](https://github.com/hatayama/unity-cli-loop/commit/ce5c364996b19f02f393e110cb8e429247b3cd86))
+* execute-dynamic-code no longer hides internal errors behind a generic failure message ([#1521](https://github.com/hatayama/unity-cli-loop/issues/1521)) ([138ad9e](https://github.com/hatayama/unity-cli-loop/commit/138ad9e55ad662d47e28fd291c9ac656299e1fac))
+* Ignore malformed RPC capability metadata ([386f906](https://github.com/hatayama/unity-cli-loop/commit/386f906036bd17b9f2e3c324fc0ee2f75b4f86d0))
+* Invalid tool parameters now return a readable error result instead of an RPC failure ([#1522](https://github.com/hatayama/unity-cli-loop/issues/1522)) ([2aff8bd](https://github.com/hatayama/unity-cli-loop/commit/2aff8bdac893bc234d812cfdc05cb40f7b99045d))
+* Local skill packages no longer include stale cached skills ([#1615](https://github.com/hatayama/unity-cli-loop/issues/1615)) ([9388b91](https://github.com/hatayama/unity-cli-loop/commit/9388b91801ea4ed76aa5c1251861a0efb9210d6c))
+* Mouse click and long-press coordinates now match the Game View's actual resolution ([#1662](https://github.com/hatayama/unity-cli-loop/issues/1662)) ([f6574dd](https://github.com/hatayama/unity-cli-loop/commit/f6574dddc3095acd588b4180956ea42de604a934))
+* Native CLI setup avoids duplicate PATH entries ([#1621](https://github.com/hatayama/unity-cli-loop/issues/1621)) ([345c027](https://github.com/hatayama/unity-cli-loop/commit/345c027b4e1d851adb98f181a450fe9b2fc0b16d))
+* **package:** Clear active pause points before running tests ([#1690](https://github.com/hatayama/unity-cli-loop/issues/1690)) ([018872f](https://github.com/hatayama/unity-cli-loop/commit/018872f690244df9cfcdf3e48c5c5d39a9ab9ae9))
+* **package:** Reject PlayMode test runs while the Editor is paused ([#1687](https://github.com/hatayama/unity-cli-loop/issues/1687)) ([998ce19](https://github.com/hatayama/unity-cli-loop/commit/998ce198bb104b2ee3644b0ba61757677f26a07b))
+* **package:** Stop tools from hanging when a pause point fires mid-command ([#1685](https://github.com/hatayama/unity-cli-loop/issues/1685)) ([442f9bf](https://github.com/hatayama/unity-cli-loop/commit/442f9bfddd9ae5a435baf57ab7d23d4e8cdd9963))
+* **package:** Trim redundant generic content from tool skills ([#1691](https://github.com/hatayama/unity-cli-loop/issues/1691)) ([d2a178b](https://github.com/hatayama/unity-cli-loop/commit/d2a178b9e3681480c5ede81bb4e51c0a318aa1d4))
+* **package:** Update stale pause point guidance in tool skills ([#1688](https://github.com/hatayama/unity-cli-loop/issues/1688)) ([ec3f545](https://github.com/hatayama/unity-cli-loop/commit/ec3f545314057455260773adb5ac9272db4895fc))
+* Quoted skill metadata is recognized consistently ([#1613](https://github.com/hatayama/unity-cli-loop/issues/1613)) ([49f0302](https://github.com/hatayama/unity-cli-loop/commit/49f0302a0582587a791edaf075cd70487bcfa33d))
+* Raycast grid annotation no longer misses rotated or split colliders ([#1666](https://github.com/hatayama/unity-cli-loop/issues/1666)) ([a92a8fa](https://github.com/hatayama/unity-cli-loop/commit/a92a8fae760cc70e42891d23df4567f96a2cbf5e))
+* Read minimum version requirements from the project runner pin ([#1506](https://github.com/hatayama/unity-cli-loop/issues/1506)) ([18bf780](https://github.com/hatayama/unity-cli-loop/commit/18bf780dc31f6105902c383186e97c4aec7c8772))
+* Recovery completion no longer surfaces as UI errors ([b095e5f](https://github.com/hatayama/unity-cli-loop/commit/b095e5f998579b4ea05161a5c918fe2ec1b4355d))
+* Reject malformed dispatcher versions consistently ([0d0b3dc](https://github.com/hatayama/unity-cli-loop/commit/0d0b3dca7d69a99159c75d454e8994f04d063466))
+* Remove the dispatcher contract integer generation ([#1504](https://github.com/hatayama/unity-cli-loop/issues/1504)) ([d2ddbce](https://github.com/hatayama/unity-cli-loop/commit/d2ddbce87d9bd68b53a1e202e9ce43996b61acf6))
+* run-tests errors now show the original failure instead of a generic message ([#1520](https://github.com/hatayama/unity-cli-loop/issues/1520)) ([1257fcd](https://github.com/hatayama/unity-cli-loop/commit/1257fcd6ed0e075a13032c1c4328dd41cb0f2574))
+* Server recovery now surfaces cleanup failures ([c41526c](https://github.com/hatayama/unity-cli-loop/commit/c41526c44b01d1e0b3f2bf4e10b50f83a0afd329))
+* Shared compiler restarts no longer leak process handles ([#1630](https://github.com/hatayama/unity-cli-loop/issues/1630)) ([8f11be5](https://github.com/hatayama/unity-cli-loop/commit/8f11be5bf9ed1e792536293fc1b15b73024aff4d))
+* Shared compiler shutdown no longer leaves worker processes running ([#1631](https://github.com/hatayama/unity-cli-loop/issues/1631)) ([9b2bf86](https://github.com/hatayama/unity-cli-loop/commit/9b2bf86a80a5aaa6da8269805075d37d035ac696))
+* Shrink the project runner pin schema to two fields ([#1503](https://github.com/hatayama/unity-cli-loop/issues/1503)) ([adceaed](https://github.com/hatayama/unity-cli-loop/commit/adceaedd78a8b7f608f5c2179e1ee799fdecb136))
+* Simulating UI input now fails clearly when PlayMode is paused ([#1519](https://github.com/hatayama/unity-cli-loop/issues/1519)) ([5b903ed](https://github.com/hatayama/unity-cli-loop/commit/5b903ed2560af9e12159c0ded1245b68e2978c95))
+* Surface startup recovery failures when no server is restored ([d5e5d55](https://github.com/hatayama/unity-cli-loop/commit/d5e5d550595f2403ea830eded2cc4533abaadc84))
+* UI drag simulation now keeps mouse position in sync during drags ([#1658](https://github.com/hatayama/unity-cli-loop/issues/1658)) ([effbd78](https://github.com/hatayama/unity-cli-loop/commit/effbd787c7114e784ceed3c27b0e0afb25728d5e))
+* UTF-16BE skill files keep their byte order during setup ([#1618](https://github.com/hatayama/unity-cli-loop/issues/1618)) ([7b09e42](https://github.com/hatayama/unity-cli-loop/commit/7b09e42460e1b982aef489b8c0aa941fc51c044d))
+* Verify installer script checksums before Unity Editor installs it ([#1668](https://github.com/hatayama/unity-cli-loop/issues/1668)) ([bf33af3](https://github.com/hatayama/unity-cli-loop/commit/bf33af3e6c533f20f2ecdc94fcaa95d6b056ff99))
+* Worker compiler timeouts no longer block indefinitely ([#1628](https://github.com/hatayama/unity-cli-loop/issues/1628)) ([e1eb989](https://github.com/hatayama/unity-cli-loop/commit/e1eb9894a53edb5c3f47601f7bcf4ceadeb1a3b6))
+
+## [3.0.0-beta.48](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.47...v3.0.0-beta.48) (2026-07-01)
+
+
+### Features
+
+* Unity launch now opens projects with compiler errors by default ([#1449](https://github.com/hatayama/unity-cli-loop/issues/1449)) ([990b046](https://github.com/hatayama/unity-cli-loop/commit/990b04636b3e836a9ed73b8c4746c2e395cb5f47))
+
+## [3.0.0-beta.47](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.46...v3.0.0-beta.47) (2026-07-01)
+
+
+### Bug Fixes
+
+* Unity no longer pauses on external change dialogs after focus return ([#1447](https://github.com/hatayama/unity-cli-loop/issues/1447)) ([5972b81](https://github.com/hatayama/unity-cli-loop/commit/5972b81ac8437a3cb867202177598371df854c4d))
+
+## [3.0.0-beta.46](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.45...v3.0.0-beta.46) (2026-06-30)
+
+
+### Bug Fixes
+
+* Release PRs explain release component roles ([#1437](https://github.com/hatayama/unity-cli-loop/issues/1437)) ([a2824fa](https://github.com/hatayama/unity-cli-loop/commit/a2824fafd88dc5b2e263f6cded15856fe61a31bd))
+* Skill updates no longer show a completion dialog ([#1432](https://github.com/hatayama/unity-cli-loop/issues/1432)) ([b99fb41](https://github.com/hatayama/unity-cli-loop/commit/b99fb41c1d78512804a4b71fe98b6eedef8575a1))
+* Windows update checks no longer interrupt routine commands ([#1434](https://github.com/hatayama/unity-cli-loop/issues/1434)) ([02ce6cc](https://github.com/hatayama/unity-cli-loop/commit/02ce6cc3dbeb92360ebcd5c5318eae6b9ca87c7c))
+
+## [3.0.0-beta.45](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.44...v3.0.0-beta.45) (2026-06-29)
+
+
+### Features
+
+* Launch Unity with compiler errors or a chosen Editor version ([#1423](https://github.com/hatayama/unity-cli-loop/issues/1423)) ([5ce43fa](https://github.com/hatayama/unity-cli-loop/commit/5ce43fa5e5ad5d02a338fb315ecd575cefa77f3c))
+* Project runner releases now use clearer names ([#1427](https://github.com/hatayama/unity-cli-loop/issues/1427)) ([c3e41ce](https://github.com/hatayama/unity-cli-loop/commit/c3e41ce55896ae63358c2cbbabff9e1a25921e44))
+
+## [3.0.0-beta.44](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.43...v3.0.0-beta.44) (2026-06-28)
+
+
+### Bug Fixes
+
+* Setup now prompts when dispatcher requirements change ([#1420](https://github.com/hatayama/unity-cli-loop/issues/1420)) ([1870ac4](https://github.com/hatayama/unity-cli-loop/commit/1870ac445db47a431966d4fcdeb017629af0662b))
+
+## [3.0.0-beta.43](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.42...v3.0.0-beta.43) (2026-06-27)
+
+
+### Bug Fixes
+
+* Dispatcher releases no longer look stable during v3 beta ([#1418](https://github.com/hatayama/unity-cli-loop/issues/1418)) ([bebb5cd](https://github.com/hatayama/unity-cli-loop/commit/bebb5cda7583a66969dcf4183316ec1d658014bd))
+* First dispatcher commands now show CLI download status ([#1419](https://github.com/hatayama/unity-cli-loop/issues/1419)) ([722d799](https://github.com/hatayama/unity-cli-loop/commit/722d799ff12db5cdffea370939328c00a34aa461))
+* Keep beta dispatcher releases out of Latest ([#1415](https://github.com/hatayama/unity-cli-loop/issues/1415)) ([a2df843](https://github.com/hatayama/unity-cli-loop/commit/a2df843f0106d14cc68b64419cf84861adca8f8c))
+* Setup now shows CLI update prompts for outdated CLI installs ([#1417](https://github.com/hatayama/unity-cli-loop/issues/1417)) ([24a170f](https://github.com/hatayama/unity-cli-loop/commit/24a170f92f4228d9b41b53116d7ee251fec851ad))
+
+## [3.0.0-beta.42](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.41...v3.0.0-beta.42) (2026-06-27)
+
+
+### Features
+
+* Let uloop launchers use project-pinned CLI versions ([#1413](https://github.com/hatayama/unity-cli-loop/issues/1413)) ([3e39bed](https://github.com/hatayama/unity-cli-loop/commit/3e39bed15f6b65ea54e68ca36ea2c4be898f4c7a))
+
+## [3.0.0-beta.41](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.40...v3.0.0-beta.41) (2026-06-26)
+
+
+### Features
+
+* Projects can run pinned CLI versions ([#1411](https://github.com/hatayama/unity-cli-loop/issues/1411)) ([1637a34](https://github.com/hatayama/unity-cli-loop/commit/1637a34ac47a31025d37db511ef5736baa745f57))
+* Settings now shows selectable tool details ([#1408](https://github.com/hatayama/unity-cli-loop/issues/1408)) ([07b8401](https://github.com/hatayama/unity-cli-loop/commit/07b84013a87d4ef5ca9a6c14af95339e22248699))
+
+
+### Bug Fixes
+
+* Keep release PRs compatible with the CLI launcher ([cce7e15](https://github.com/hatayama/unity-cli-loop/commit/cce7e15e0c3d35b320bd81df366247102d8f8b91))
+* Tool Settings now hides pause point helper tools ([#1410](https://github.com/hatayama/unity-cli-loop/issues/1410)) ([7a7057d](https://github.com/hatayama/unity-cli-loop/commit/7a7057d3f3861accc20f31b1b31f00606f07feb7))
+
+## [3.0.0-beta.40](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.39...v3.0.0-beta.40) (2026-06-25)
+
+
+### Bug Fixes
+
+* Keep Go and C# complexity checks under fifteen ([#1403](https://github.com/hatayama/unity-cli-loop/issues/1403)) ([e77d893](https://github.com/hatayama/unity-cli-loop/commit/e77d8938a1ebea3439236c91753677cb0074aa27))
+* Migration handles deeply nested Windows project files ([#1396](https://github.com/hatayama/unity-cli-loop/issues/1396)) ([bd3d7ed](https://github.com/hatayama/unity-cli-loop/commit/bd3d7ed7f55e81664ab911523acd32bc2da5a75c))
+
+## [3.0.0-beta.39](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.38...v3.0.0-beta.39) (2026-06-22)
+
+
+### Bug Fixes
+
+* Keep V3 CLI JSON output compatible with V2 ([#1391](https://github.com/hatayama/unity-cli-loop/issues/1391)) ([d07ffa2](https://github.com/hatayama/unity-cli-loop/commit/d07ffa204fbc864eb5b0c0db891baf8e277889ae))
+* Make V3 migration safer and easier to run ([#1386](https://github.com/hatayama/unity-cli-loop/issues/1386)) ([03087ce](https://github.com/hatayama/unity-cli-loop/commit/03087ce3b9df4255e5a867195a939ac490d687ae))
+
+## [3.0.0-beta.38](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.37...v3.0.0-beta.38) (2026-06-21)
+
+
+### Features
+
+* V3 CLI invocation migration skills are available from the wizard ([#1382](https://github.com/hatayama/unity-cli-loop/issues/1382)) ([a327f4a](https://github.com/hatayama/unity-cli-loop/commit/a327f4ad2179b5cd44b1aa5d2747494712edf657))
+
+
+### Bug Fixes
+
+* get-logs works with active Console filters ([#1381](https://github.com/hatayama/unity-cli-loop/issues/1381)) ([ffd3c91](https://github.com/hatayama/unity-cli-loop/commit/ffd3c9138484cb95c275fa9720bc8e24cfafd500))
+* Migration checks are faster and more reliable ([#1376](https://github.com/hatayama/unity-cli-loop/issues/1376)) ([07f3020](https://github.com/hatayama/unity-cli-loop/commit/07f302047b62c3b3ebb1d9e498c3961aa0a1e8ca))
+* Migration now upgrades v3 editor tools without leaving compile errors ([#1374](https://github.com/hatayama/unity-cli-loop/issues/1374)) ([7dec89f](https://github.com/hatayama/unity-cli-loop/commit/7dec89f032e0b572b423227fc69dbb3190a65c52))
+
+## [3.0.0-beta.37](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.36...v3.0.0-beta.37) (2026-06-18)
+
+
+### Bug Fixes
+
+* Dynamic code cancellation no longer leaves Unity busy ([#1369](https://github.com/hatayama/unity-cli-loop/issues/1369)) ([e7e58e9](https://github.com/hatayama/unity-cli-loop/commit/e7e58e9b0fda20d9cd77962acc3cbd05e4b278a9))
+* Prevent bundled dependency conflicts in consuming Unity projects ([#1364](https://github.com/hatayama/unity-cli-loop/issues/1364)) ([f195892](https://github.com/hatayama/unity-cli-loop/commit/f195892356db23dc9ffca9d5b59064c1130e3c78))
+* Simplify and deduplicate agent skill definitions and code references ([#1367](https://github.com/hatayama/unity-cli-loop/issues/1367)) ([83cfc25](https://github.com/hatayama/unity-cli-loop/commit/83cfc2525930e13f70828bc890cf750569e6b5ad))
+* Simulated UI clicks now reach clipped overlay controls ([#1366](https://github.com/hatayama/unity-cli-loop/issues/1366)) ([925543d](https://github.com/hatayama/unity-cli-loop/commit/925543d423970804d506c63f26ed7146af33ceaa))
+
+## [3.0.0-beta.36](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.35...v3.0.0-beta.36) (2026-06-17)
+
+
+### Features
+
+* Dynamic code execution uses full Unity access by default ([#1362](https://github.com/hatayama/unity-cli-loop/issues/1362)) ([5b64443](https://github.com/hatayama/unity-cli-loop/commit/5b64443b2593a44caba2f8d67127cb89b92997f4))
+
+
+### Bug Fixes
+
+* Clarify skill guidance for pause points and Windows code execution ([#1363](https://github.com/hatayama/unity-cli-loop/issues/1363)) ([7250f9d](https://github.com/hatayama/unity-cli-loop/commit/7250f9dd5b3d919da10525271573934fcd4e9e0a))
+* CLI JSON output now uses consistent field names ([#1360](https://github.com/hatayama/unity-cli-loop/issues/1360)) ([e20c8b3](https://github.com/hatayama/unity-cli-loop/commit/e20c8b330e9f3651554ed2a0184f7d1a49d585eb))
+* Make PowerShell multiline code guidance clearer ([#1355](https://github.com/hatayama/unity-cli-loop/issues/1355)) ([3571823](https://github.com/hatayama/unity-cli-loop/commit/3571823293db8d13f02d75c1acf2125405ebdece))
+* PlayMode start reports compiler errors instead of timing out ([#1354](https://github.com/hatayama/unity-cli-loop/issues/1354)) ([69804cd](https://github.com/hatayama/unity-cli-loop/commit/69804cdb5f4b811c0c3afafd2b0317bf4f725070))
+* Update pause point skill description ([#1351](https://github.com/hatayama/unity-cli-loop/issues/1351)) ([2ee34eb](https://github.com/hatayama/unity-cli-loop/commit/2ee34eb277ecd94fd06d1ee9096a98bbfd3bf3db))
+
+## [3.0.0-beta.35](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.34...v3.0.0-beta.35) (2026-06-15)
+
+
+### Bug Fixes
+
+* Test runs no longer race Play Mode cleanup ([#1347](https://github.com/hatayama/unity-cli-loop/issues/1347)) ([6b53da5](https://github.com/hatayama/unity-cli-loop/commit/6b53da5ee581cd8b8045fa65eddbc213c6968af2))
+* Windows dynamic code snippets are easier to pass safely ([#1346](https://github.com/hatayama/unity-cli-loop/issues/1346)) ([eb91151](https://github.com/hatayama/unity-cli-loop/commit/eb9115183f184bff5ea2fed0471882a42b709c31))
+
+## [3.0.0-beta.34](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.33...v3.0.0-beta.34) (2026-06-15)
+
+
+### Bug Fixes
+
+* Clarify pause point skill guidance ([#1345](https://github.com/hatayama/unity-cli-loop/issues/1345)) ([d93c28e](https://github.com/hatayama/unity-cli-loop/commit/d93c28e68596b5743586bf87841c9084f48c8d92))
+* Forced compilation now explains unknown result fields ([#1342](https://github.com/hatayama/unity-cli-loop/issues/1342)) ([7dd609d](https://github.com/hatayama/unity-cli-loop/commit/7dd609d49ff2f5911766c0cf9901120719ce6f24))
+* Setup now installs CLI releases that match the required protocol ([#1340](https://github.com/hatayama/unity-cli-loop/issues/1340)) ([91cca52](https://github.com/hatayama/unity-cli-loop/commit/91cca52cf51c0675da413294be7d39ab4ec143fe))
+
+## [3.0.0-beta.33](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.32...v3.0.0-beta.33) (2026-06-14)
+
+
+### Features
+
+* Gate CLI/Unity compatibility on an IPC protocol version instead of release numbers ([#1329](https://github.com/hatayama/unity-cli-loop/issues/1329)) ([85c21d3](https://github.com/hatayama/unity-cli-loop/commit/85c21d328b8aa412c7e5b60b93e7a89720ee6680))
+* Pause point waits now explain their evidence ([#1338](https://github.com/hatayama/unity-cli-loop/issues/1338)) ([0b5b468](https://github.com/hatayama/unity-cli-loop/commit/0b5b468ca1681b8ca750dbbf97267d7bbb6f7cb6))
+
+
+### Bug Fixes
+
+* Expired pause points now explain how to recover ([#1335](https://github.com/hatayama/unity-cli-loop/issues/1335)) ([2b7ae47](https://github.com/hatayama/unity-cli-loop/commit/2b7ae47e884cd7231a37c83314251d268ad9058b))
+* Keep dynamic code execution responsive by default ([#1331](https://github.com/hatayama/unity-cli-loop/issues/1331)) ([148c109](https://github.com/hatayama/unity-cli-loop/commit/148c1098bb052b8d638cd7345d86a7843d78118c))
+* run-tests now identifies zero-test runs ([#1336](https://github.com/hatayama/unity-cli-loop/issues/1336)) ([1ff3b6b](https://github.com/hatayama/unity-cli-loop/commit/1ff3b6bf64adf0161fcfaed3ea454205ce752d5f))
+* Unity tools no longer hang while waiting for editor frames ([#1333](https://github.com/hatayama/unity-cli-loop/issues/1333)) ([9b415a2](https://github.com/hatayama/unity-cli-loop/commit/9b415a2b54bce8fcfef2cb7d4a24b1ceb24db2fc))
+
+## [3.0.0-beta.32](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.31...v3.0.0-beta.32) (2026-06-12)
+
+
+### Features
+
+* Pause points are easier to drive: unified naming, embedded logs, diagnosis hints, and frame stepping ([#1309](https://github.com/hatayama/unity-cli-loop/issues/1309)) ([875fd91](https://github.com/hatayama/unity-cli-loop/commit/875fd915a0a977cad11bf021fcfe9c0f4e93212d))
+* Pause Unity at named debug breaks for inspection ([#1283](https://github.com/hatayama/unity-cli-loop/issues/1283)) ([5628335](https://github.com/hatayama/unity-cli-loop/commit/5628335100e6a6e6abe1a3baa3c2134e4a16b127))
+
+
+### Bug Fixes
+
+* Cancelled test runs no longer hang, and log retrieval responds faster ([#1321](https://github.com/hatayama/unity-cli-loop/issues/1321)) ([ee81068](https://github.com/hatayama/unity-cli-loop/commit/ee81068727ac31261658c34fe8d8048e6f3d7f4e))
+* Clarify transient debug-break guidance ([#1289](https://github.com/hatayama/unity-cli-loop/issues/1289)) ([476b2da](https://github.com/hatayama/unity-cli-loop/commit/476b2dae0edaf43c5069140473403bc64ddde841))
+* Input simulation no longer hangs when Editor updates stall ([#1306](https://github.com/hatayama/unity-cli-loop/issues/1306)) ([7498397](https://github.com/hatayama/unity-cli-loop/commit/7498397c455123b7e4f8d5765f54357e816324b9))
+* Launch now confirms when Unity is ready or restarted ([#1301](https://github.com/hatayama/unity-cli-loop/issues/1301)) ([3b72fff](https://github.com/hatayama/unity-cli-loop/commit/3b72fffa4de96d0daae266f925b5de5d2ffdc392))
+* Make Unity readiness and PlayMode stop results clearer ([#1300](https://github.com/hatayama/unity-cli-loop/issues/1300)) ([a36e661](https://github.com/hatayama/unity-cli-loop/commit/a36e66185e717ebf03a819a6c6d0906b1797ae98))
+* Other local users can no longer connect to the Unity Editor's uloop channel on Windows ([#1322](https://github.com/hatayama/unity-cli-loop/issues/1322)) ([8362dd7](https://github.com/hatayama/unity-cli-loop/commit/8362dd7127c024916133ed587b9f4372ed259356))
+* Preserve compile diagnostics across Unity reloads ([#1282](https://github.com/hatayama/unity-cli-loop/issues/1282)) ([447a697](https://github.com/hatayama/unity-cli-loop/commit/447a697883e8f886df9d198d643c8b4751416abd))
+* Setup no longer opens after upgrades with no CLI or skill updates ([#1277](https://github.com/hatayama/unity-cli-loop/issues/1277)) ([b0608f3](https://github.com/hatayama/unity-cli-loop/commit/b0608f3901e2b67c5df8d387dd13f143e8336424))
+* Unity connection stays alive: the server restarts itself after failures and the CLI detects frozen Editors instead of hanging ([#1312](https://github.com/hatayama/unity-cli-loop/issues/1312)) ([0392ca9](https://github.com/hatayama/unity-cli-loop/commit/0392ca93572147022ef8ee8f66ba463319132857))
+* Unity startup recovery avoids premature readiness timeouts ([#1296](https://github.com/hatayama/unity-cli-loop/issues/1296)) ([1d3d2b6](https://github.com/hatayama/unity-cli-loop/commit/1d3d2b6780f239acdede657e0dd153911ffaf669))
+
+## [3.0.0-beta.31](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.30...v3.0.0-beta.31) (2026-06-02)
+
+
+### Bug Fixes
+
+* Compile waits longer before reporting indeterminate results ([#1276](https://github.com/hatayama/unity-cli-loop/issues/1276)) ([100e9aa](https://github.com/hatayama/unity-cli-loop/commit/100e9aa5aa06b049536545bcd5dd0a6839b27d95))
+* No-test runs now explain likely test assembly setup issues ([#1274](https://github.com/hatayama/unity-cli-loop/issues/1274)) ([d64d9bb](https://github.com/hatayama/unity-cli-loop/commit/d64d9bb3aa135be5f6785099d4cefb46bc1f4a44))
+
+## [3.0.0-beta.30](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.29...v3.0.0-beta.30) (2026-06-02)
+
+
+### Bug Fixes
+
+* Compile handles externally changed open Scenes without blocking ([#1261](https://github.com/hatayama/unity-cli-loop/issues/1261)) ([8d6ed1b](https://github.com/hatayama/unity-cli-loop/commit/8d6ed1b7107d9cada658e2f7bb7bbd71122840b7))
+
+## [3.0.0-beta.29](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.28...v3.0.0-beta.29) (2026-06-01)
+
+
+### Bug Fixes
+
+* Compile reports assembly definition errors instead of unknown status ([#1260](https://github.com/hatayama/unity-cli-loop/issues/1260)) ([e093b0b](https://github.com/hatayama/unity-cli-loop/commit/e093b0bb070fe66c413e880b278ba9b00c31daa2))
+* Setup updates outdated CLI before offering PATH repair ([#1258](https://github.com/hatayama/unity-cli-loop/issues/1258)) ([2254286](https://github.com/hatayama/unity-cli-loop/commit/2254286ead5bb90a77893ff1b071d9b536534dac))
+
+## [3.0.0-beta.28](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.27...v3.0.0-beta.28) (2026-06-01)
+
+
+### Bug Fixes
+
+* Interrupted PlayMode tests no longer leave domain reload disabled ([#1254](https://github.com/hatayama/unity-cli-loop/issues/1254)) ([600f96d](https://github.com/hatayama/unity-cli-loop/commit/600f96d709998be4c8124502a23b04d23e921e01))
+
+## [3.0.0-beta.27](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.26...v3.0.0-beta.27) (2026-05-31)
+
+
+### Bug Fixes
+
+* Unity package no longer includes development CLI binaries ([#1250](https://github.com/hatayama/unity-cli-loop/issues/1250)) ([93b0176](https://github.com/hatayama/unity-cli-loop/commit/93b0176ac2dfd16d697ca426a9f56f7e97031e6d))
+
+## [3.0.0-beta.26](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.25...v3.0.0-beta.26) (2026-05-31)
+
+
+### Bug Fixes
+
+* Compile commands now finish reliably after Unity reloads scripts ([#1248](https://github.com/hatayama/unity-cli-loop/issues/1248)) ([f593f46](https://github.com/hatayama/unity-cli-loop/commit/f593f463a7519eba992e525290ec3de5cc4fd276))
+
+## [3.0.0-beta.25](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.24...v3.0.0-beta.25) (2026-05-30)
+
+
+### Bug Fixes
+
+* Setup now requires the CLI needed for reliable compile waits ([#1246](https://github.com/hatayama/unity-cli-loop/issues/1246)) ([07c8247](https://github.com/hatayama/unity-cli-loop/commit/07c8247b0801e453eac23c8611d3f572bd675f80))
+
+## [3.0.0-beta.24](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.23...v3.0.0-beta.24) (2026-05-30)
+
+
+### Bug Fixes
+
+* Compile commands no longer hang across Unity reloads ([#1240](https://github.com/hatayama/unity-cli-loop/issues/1240)) ([12238ce](https://github.com/hatayama/unity-cli-loop/commit/12238ce492e364e3a1999364027cded03ab96262))
+
+## [3.0.0-beta.23](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.22...v3.0.0-beta.23) (2026-05-28)
+
+
+### Bug Fixes
+
+* Compile no longer leaves Unity busy after finishing ([#1237](https://github.com/hatayama/unity-cli-loop/issues/1237)) ([f705b4b](https://github.com/hatayama/unity-cli-loop/commit/f705b4b7a9cc48ded3625bae91da6a39d9095462))
+* Dynamic code snippets can use Unity Object without ambiguity ([#1234](https://github.com/hatayama/unity-cli-loop/issues/1234)) ([0428197](https://github.com/hatayama/unity-cli-loop/commit/0428197e7c957ab4915646471b3142b1394e2373))
+* Simulated key presses now reach gameplay polling ([#1236](https://github.com/hatayama/unity-cli-loop/issues/1236)) ([ba735f1](https://github.com/hatayama/unity-cli-loop/commit/ba735f158a2be60829ad9e349a536a954637439a))
+
+## [3.0.0-beta.22](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.21...v3.0.0-beta.22) (2026-05-28)
+
+
+### Bug Fixes
+
+* Compile fails fast on asmdef and asmref import errors ([#1225](https://github.com/hatayama/unity-cli-loop/issues/1225)) ([a90ca87](https://github.com/hatayama/unity-cli-loop/commit/a90ca875382228914468919d717454eeea25b9e7))
+* Player builds stay free of editor-only uLoop tooling ([#1229](https://github.com/hatayama/unity-cli-loop/issues/1229)) ([ff6fb8d](https://github.com/hatayama/unity-cli-loop/commit/ff6fb8ddc979a77f5a9afbd759dbe13203a42ccd))
+* Settings makes installed CLI uninstall action appear inactive ([#1228](https://github.com/hatayama/unity-cli-loop/issues/1228)) ([99af542](https://github.com/hatayama/unity-cli-loop/commit/99af5428048e83d7722e28acd7c226352742be1c))
+* Unity CLI Loop assemblies no longer expose legacy uLoopMCP names ([#1230](https://github.com/hatayama/unity-cli-loop/issues/1230)) ([cb75c0c](https://github.com/hatayama/unity-cli-loop/commit/cb75c0c48c71adfe8372ad064486bd2d5a2ea7a0))
+
+## [3.0.0-beta.21](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.20...v3.0.0-beta.21) (2026-05-27)
+
+
+### Bug Fixes
+
+* Play mode control waits reliably and input overlays avoid missing script warnings ([#1219](https://github.com/hatayama/unity-cli-loop/issues/1219)) ([2ad9f59](https://github.com/hatayama/unity-cli-loop/commit/2ad9f596f7d18b19c0dd012a9442e1d88c100a56))
+* Setup now requires the Play Mode wait CLI release ([#1220](https://github.com/hatayama/unity-cli-loop/issues/1220)) ([73db4b4](https://github.com/hatayama/unity-cli-loop/commit/73db4b444f4df8f39757fa0532d303afb7d60da6))
+* Unity busy states are easier to diagnose ([#1215](https://github.com/hatayama/unity-cli-loop/issues/1215)) ([fb4713d](https://github.com/hatayama/unity-cli-loop/commit/fb4713d5567110536bb37b157b4abfb25a95994c))
+
+## [3.0.0-beta.20](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.19...v3.0.0-beta.20) (2026-05-26)
+
+
+### Features
+
+* Tests now save editor changes before running ([#1212](https://github.com/hatayama/unity-cli-loop/issues/1212)) ([ded7d74](https://github.com/hatayama/unity-cli-loop/commit/ded7d7411905f3edeb0c286567c8d7d03ae57aa5))
+
+
+### Bug Fixes
+
+* Input simulation no longer stalls when Run In Background is disabled ([#1214](https://github.com/hatayama/unity-cli-loop/issues/1214)) ([7023ac4](https://github.com/hatayama/unity-cli-loop/commit/7023ac4aa9309ac342d50c84e449b24e6e59b0d1))
+
+## [3.0.0-beta.19](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.18...v3.0.0-beta.19) (2026-05-25)
+
+
+### Bug Fixes
+
+* Input simulation commands no longer hang while showing overlays ([#1208](https://github.com/hatayama/unity-cli-loop/issues/1208)) ([b21a47c](https://github.com/hatayama/unity-cli-loop/commit/b21a47c021074e63f7db472e5666c23bc743ffe1))
+* Make skill instructions use CLI flag syntax ([#1210](https://github.com/hatayama/unity-cli-loop/issues/1210)) ([a11923d](https://github.com/hatayama/unity-cli-loop/commit/a11923dc61cdced2bbe57656058084c726920d8a))
+
+## [3.0.0-beta.18](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.17...v3.0.0-beta.18) (2026-05-25)
+
+
+### Bug Fixes
+
+* Simplify compile skill guidance ([#1206](https://github.com/hatayama/unity-cli-loop/issues/1206)) ([71b080e](https://github.com/hatayama/unity-cli-loop/commit/71b080ef58558ba190fd0ac249529f3f7e0f6dc1))
+
+## [3.0.0-beta.17](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.16...v3.0.0-beta.17) (2026-05-25)
+
+
+### Bug Fixes
+
+* Input overlays load without auto-referencing runtime assemblies ([#1195](https://github.com/hatayama/unity-cli-loop/issues/1195)) ([45e5daf](https://github.com/hatayama/unity-cli-loop/commit/45e5daf547719ccec322b4b0efeb3f692b78602f))
+* Internal assemblies no longer leak into project scripts ([#1197](https://github.com/hatayama/unity-cli-loop/issues/1197)) ([546bf6d](https://github.com/hatayama/unity-cli-loop/commit/546bf6d54dd32ac513d4857a163971b8adc1ac39))
+* Keep Run Tests available without extra Editor startup hooks ([#1201](https://github.com/hatayama/unity-cli-loop/issues/1201)) ([b8d89c3](https://github.com/hatayama/unity-cli-loop/commit/b8d89c32605e9f125bc92d598eac9315707bd95e))
+* run-tests is available in package consumer projects ([#1192](https://github.com/hatayama/unity-cli-loop/issues/1192)) ([311e453](https://github.com/hatayama/unity-cli-loop/commit/311e4531cdd45babf7b374497717a54f30176f75))
+* Unity commands recover without stale readiness cleanup ([#1199](https://github.com/hatayama/unity-cli-loop/issues/1199)) ([a4b3f06](https://github.com/hatayama/unity-cli-loop/commit/a4b3f06ad14dd88d465f5ab2fe3b2705a0b4ac4e))
+
+## [3.0.0-beta.16](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.15...v3.0.0-beta.16) (2026-05-23)
+
+
+### Bug Fixes
+
+* CLI updates use installer scripts from the selected release ([#1190](https://github.com/hatayama/unity-cli-loop/issues/1190)) ([761a8c6](https://github.com/hatayama/unity-cli-loop/commit/761a8c6354f8c8fa497ac046a02a76b2b5b0cb47))
+* Windows CLI updates no longer fail when upgrading from older versions ([#1189](https://github.com/hatayama/unity-cli-loop/issues/1189)) ([79f60fd](https://github.com/hatayama/unity-cli-loop/commit/79f60fdf4d4a163bb26fb3d7647de15b9fa13fed))
+
+## [3.0.0-beta.15](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.14...v3.0.0-beta.15) (2026-05-23)
+
+
+### Features
+
+* Improve Windows CLI installs and release provenance ([#1186](https://github.com/hatayama/unity-cli-loop/issues/1186)) ([3dead33](https://github.com/hatayama/unity-cli-loop/commit/3dead3341dc2286031e3287d1ef47da7bfd6ce9c))
+* Install uloop natively on macOS ([#1187](https://github.com/hatayama/unity-cli-loop/issues/1187)) ([1c12b49](https://github.com/hatayama/unity-cli-loop/commit/1c12b4991d1da53701ae97f1c1ed6a2fcb032c96))
+
+
+### Bug Fixes
+
+* Startup no longer freezes during migration checks ([#1181](https://github.com/hatayama/unity-cli-loop/issues/1181)) ([78b5b22](https://github.com/hatayama/unity-cli-loop/commit/78b5b22a2fe7ee00944e2d3b37a0bcd9e31284ae))
+* Unity CLI install repairs missing terminal command setup ([#1176](https://github.com/hatayama/unity-cli-loop/issues/1176)) ([c633a8e](https://github.com/hatayama/unity-cli-loop/commit/c633a8e5934bc68aa31f3989aacd9edd735b5c16))
+* Unity commands recover reliably after editor reloads ([#1182](https://github.com/hatayama/unity-cli-loop/issues/1182)) ([7c035ec](https://github.com/hatayama/unity-cli-loop/commit/7c035eccb7beb4a173dc75378c588c3a4e5dcb02))
+
+## [3.0.0-beta.14](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.13...v3.0.0-beta.14) (2026-05-19)
+
+
+### Bug Fixes
+
+* Busy responses no longer create Unity Console errors ([#1168](https://github.com/hatayama/unity-cli-loop/issues/1168)) ([be7aa80](https://github.com/hatayama/unity-cli-loop/commit/be7aa80d0048374b53170c5df34c54600425cb12))
+* Prevent stale server recovery after Editor restarts ([#1166](https://github.com/hatayama/unity-cli-loop/issues/1166)) ([5b7835d](https://github.com/hatayama/unity-cli-loop/commit/5b7835d43e72d53cfd7997c97a4f9cf15be3f2e4))
+* Unity tool requests no longer overlap during long-running work ([#1164](https://github.com/hatayama/unity-cli-loop/issues/1164)) ([c5a583b](https://github.com/hatayama/unity-cli-loop/commit/c5a583ba457e2c330b8c5150cc101e81b790fb45))
+* Windows CLI uninstall no longer leaves stale commands behind ([#1169](https://github.com/hatayama/unity-cli-loop/issues/1169)) ([62a7c88](https://github.com/hatayama/unity-cli-loop/commit/62a7c887af62e31c02d7d0fefdd204f37f8f070b))
+
+## [3.0.0-beta.13](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.12...v3.0.0-beta.13) (2026-05-17)
+
+
+### Bug Fixes
+
+* Settings no longer shows the CLI as installed after uninstall ([#1154](https://github.com/hatayama/unity-cli-loop/issues/1154)) ([090f0a3](https://github.com/hatayama/unity-cli-loop/commit/090f0a3a180a5d3e7c74dd7b6dbc1b7aab884835))
+
+## [3.0.0-beta.12](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.11...v3.0.0-beta.12) (2026-05-17)
+
+
+### Bug Fixes
+
+* Windows CLI install no longer fails during binary verification ([#1152](https://github.com/hatayama/unity-cli-loop/issues/1152)) ([04abc42](https://github.com/hatayama/unity-cli-loop/commit/04abc42b69360111907454ac43d38f1836c8bc3d))
+
+## [3.0.0-beta.11](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.10...v3.0.0-beta.11) (2026-05-17)
+
+
+### Bug Fixes
+
+* Improve Unity reload recovery and skill setup reliability ([#1150](https://github.com/hatayama/unity-cli-loop/issues/1150)) ([4556535](https://github.com/hatayama/unity-cli-loop/commit/4556535e69a15a0e8dc117131d860e5a597a84bd))
+* Make Unity tool skill descriptions more concise ([#1148](https://github.com/hatayama/unity-cli-loop/issues/1148)) ([c09a5af](https://github.com/hatayama/unity-cli-loop/commit/c09a5afa01deccea694413bd640787c42f40e54d))
+
+## [3.0.0-beta.10](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.9...v3.0.0-beta.10) (2026-05-17)
+
+
+### Features
+
+* Code execution waits for reload recovery by default ([#1142](https://github.com/hatayama/unity-cli-loop/issues/1142)) ([15d3ad0](https://github.com/hatayama/unity-cli-loop/commit/15d3ad0b2048e95d2fee876a21ba4fac54444d4e))
+
+
+### Bug Fixes
+
+* CLI commands recover reliably after Unity reloads ([#1136](https://github.com/hatayama/unity-cli-loop/issues/1136)) ([7e45f1e](https://github.com/hatayama/unity-cli-loop/commit/7e45f1e7ba7f9c96d6503faaf3153ddbfd33b9fd))
+* CLI recovery stays reliable during Unity readiness updates ([#1139](https://github.com/hatayama/unity-cli-loop/issues/1139)) ([6dbe57b](https://github.com/hatayama/unity-cli-loop/commit/6dbe57ba3397c5e63f7aab90520ebcac8210b74a))
+* Make CLI help consistent for native and Unity commands ([#1146](https://github.com/hatayama/unity-cli-loop/issues/1146)) ([802afa3](https://github.com/hatayama/unity-cli-loop/commit/802afa3e23ea405c3cf4ff944e14afaae82bb55e))
+* Unity busy detection no longer relies on obsolete lock files ([#1144](https://github.com/hatayama/unity-cli-loop/issues/1144)) ([ba5746f](https://github.com/hatayama/unity-cli-loop/commit/ba5746f1fbfb602ed10dc99f108e4bc761491ceb))
+
+## [3.0.0-beta.9](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.8...v3.0.0-beta.9) (2026-05-16)
+
+
+### Features
+
+* uloop can uninstall its global command from terminal and Settings ([#1135](https://github.com/hatayama/unity-cli-loop/issues/1135)) ([4122d57](https://github.com/hatayama/unity-cli-loop/commit/4122d57eb79cbe491c633063b99e22484816d355))
+
+
+### Bug Fixes
+
+* Setup can update the CLI on older Windows PowerShell ([#1133](https://github.com/hatayama/unity-cli-loop/issues/1133)) ([6601ed3](https://github.com/hatayama/unity-cli-loop/commit/6601ed3af6cb89d18ff7dfee25148b4ad351ea21))
+
+## [3.0.0-beta.8](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.7...v3.0.0-beta.8) (2026-05-15)
+
+
+### Features
+
+* Help older custom tools migrate to V3 automatically ([#1125](https://github.com/hatayama/unity-cli-loop/issues/1125)) ([8412aa4](https://github.com/hatayama/unity-cli-loop/commit/8412aa449040d0ee8d05fb50b55b944e0cf31570))
+
+
+### Bug Fixes
+
+* Release PRs resume after branch-scoped releases are published ([#1127](https://github.com/hatayama/unity-cli-loop/issues/1127)) ([141e888](https://github.com/hatayama/unity-cli-loop/commit/141e888c9f89dc6cbb22cab48274527bf1f53897))
+* Setup recognizes existing npm CLI installs ([#1131](https://github.com/hatayama/unity-cli-loop/issues/1131)) ([7fbb0d8](https://github.com/hatayama/unity-cli-loop/commit/7fbb0d8ea34b7fe1c85de73240cbc0ca1129fe18))
+* Uninstall CLI no longer reinstalls the global command ([#1126](https://github.com/hatayama/unity-cli-loop/issues/1126)) ([2adffbc](https://github.com/hatayama/unity-cli-loop/commit/2adffbc1f97d62b02323b7926e1e1f3e82cd3ec0))
+
+## [3.0.0-beta.7](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.6...v3.0.0-beta.7) (2026-05-12)
+
+
+### Bug Fixes
+
+* Release PRs keep changelog baselines in sync ([#1104](https://github.com/hatayama/unity-cli-loop/issues/1104)) ([3d0426e](https://github.com/hatayama/unity-cli-loop/commit/3d0426eb560087a702ed756f092897587976e5f1))
+* Setup now requires the single-binary CLI before running tools ([#1101](https://github.com/hatayama/unity-cli-loop/issues/1101)) ([98c3cda](https://github.com/hatayama/unity-cli-loop/commit/98c3cda7caeb76635bb14dfd11cf177aa41fbd06))
+
+## [3.0.0-beta.6](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.5...v3.0.0-beta.6) (2026-05-11)
+
+
+### Features
+
+* Native CLI is distributed as a single uloop binary ([#1100](https://github.com/hatayama/unity-cli-loop/issues/1100)) ([1180fae](https://github.com/hatayama/unity-cli-loop/commit/1180fae9be33c3f1cc6e35044b2ee42130052e93))
+* Simplify native CLI packaging and updates ([#1099](https://github.com/hatayama/unity-cli-loop/issues/1099)) ([35ef3c0](https://github.com/hatayama/unity-cli-loop/commit/35ef3c0c61b4bb8d00d2dab8ab8468fa3b5bdab6))
+
+
+### Bug Fixes
+
+* CLI and Skills reload buttons refresh independently ([#1091](https://github.com/hatayama/unity-cli-loop/issues/1091)) ([95f7c2d](https://github.com/hatayama/unity-cli-loop/commit/95f7c2d941a044f2177f2bde057d650da45547cb))
+
+## [3.0.0-beta.5](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.4...v3.0.0-beta.5) (2026-05-10)
+
+
+### Bug Fixes
+
+* Release PRs no longer include old changelog entries after publishing ([#1088](https://github.com/hatayama/unity-cli-loop/issues/1088)) ([1a0922b](https://github.com/hatayama/unity-cli-loop/commit/1a0922bea7b28a35833f2e3330a9522a2c4fc50d))
+* Repository-level fixes now create beta release PRs ([#1089](https://github.com/hatayama/unity-cli-loop/issues/1089)) ([ca4888a](https://github.com/hatayama/unity-cli-loop/commit/ca4888ae8409fbea4aee22c00d91e05166fb5d26))
+
+## [3.0.0-beta.4](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.3...v3.0.0-beta.4) (2026-05-10)
+
+
+### Bug Fixes
+
+* Setup now upgrades to the native CLI cleanly ([#1084](https://github.com/hatayama/unity-cli-loop/issues/1084)) ([5d43688](https://github.com/hatayama/unity-cli-loop/commit/5d43688fd3272bd1bfad109dd217762b1077b67a))
+
+## [3.0.0-beta.3](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.2...v3.0.0-beta.3) (2026-05-09)
+
+
+### Features
+
+* Setup keeps packages smaller while installing Dispatcher on demand ([#1081](https://github.com/hatayama/unity-cli-loop/issues/1081)) ([2896147](https://github.com/hatayama/unity-cli-loop/commit/289614797c011f0c545bfbaf3eeab5dbb51c1e13))
+
+## [3.0.0-beta.2](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.1...v3.0.0-beta.2) (2026-05-08)
+
+
+### Features
+
+* Git Bash can install and complete uloop on Windows ([#1055](https://github.com/hatayama/unity-cli-loop/issues/1055)) ([7f7c78d](https://github.com/hatayama/unity-cli-loop/commit/7f7c78dddc67a4fbc092aed47fb88864b2df1d3a))
+* Improve native CLI maintainability and local validation ([#1042](https://github.com/hatayama/unity-cli-loop/issues/1042)) ([9ab932b](https://github.com/hatayama/unity-cli-loop/commit/9ab932b9c1e104c69682b298c687ec4c2c83efc0))
+* Make Unity tools easier to extend and maintain ([#1063](https://github.com/hatayama/unity-cli-loop/issues/1063)) ([c50f54c](https://github.com/hatayama/unity-cli-loop/commit/c50f54c3afe7cb94985c26eb6eaec910f1ae2cce))
+* Setup updates the dispatcher only when projects require it ([#1053](https://github.com/hatayama/unity-cli-loop/issues/1053)) ([20aab00](https://github.com/hatayama/unity-cli-loop/commit/20aab004b6a360573416ddf4648cd0728010aa8d))
+* Windows users can run terminal-driven E2E checks ([#1054](https://github.com/hatayama/unity-cli-loop/issues/1054)) ([8648984](https://github.com/hatayama/unity-cli-loop/commit/864898472e25bdd485b5f91c481485848ffac441))
+
+
+### Bug Fixes
+
+* Improve code execution responsiveness after Unity recompiles ([#1070](https://github.com/hatayama/unity-cli-loop/issues/1070)) ([7b972b4](https://github.com/hatayama/unity-cli-loop/commit/7b972b4cc9c40ea10e31f7d808d761fe6a9f6b3f))
+* Settings no longer shows obsolete connected client details ([#1060](https://github.com/hatayama/unity-cli-loop/issues/1060)) ([b66790f](https://github.com/hatayama/unity-cli-loop/commit/b66790fb3b2bc89512c8cb595a2698f5bfc7d68b))
+
+## [3.0.0-beta.1](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0-beta.0...v3.0.0-beta.1) (2026-05-03)
+
+
+### Features
+
+* Setup can install the bundled CLI without downloading it ([#1034](https://github.com/hatayama/unity-cli-loop/issues/1034)) ([11f5882](https://github.com/hatayama/unity-cli-loop/commit/11f5882d604f86e76d58b3455efb7d101c08e689))
+
+
+### Bug Fixes
+
+* CLI options and skill sync work reliably across platforms ([#1039](https://github.com/hatayama/unity-cli-loop/issues/1039)) ([f080a87](https://github.com/hatayama/unity-cli-loop/commit/f080a87253db8384cbc5e5865eda414ceb0b1acf))
+* CLI setup avoids legacy npm checks and shared-install uninstalls ([#1040](https://github.com/hatayama/unity-cli-loop/issues/1040)) ([ec3d91f](https://github.com/hatayama/unity-cli-loop/commit/ec3d91f616b1351c2a886051918f809d985e89a1))
+* stabilize Windows native CLI install flow ([#1038](https://github.com/hatayama/unity-cli-loop/issues/1038)) ([d829c16](https://github.com/hatayama/unity-cli-loop/commit/d829c16f14b6841b8d9b4761b08b1f2a6a330ef7))
 
 ## [2.1.0](https://github.com/hatayama/unity-cli-loop/compare/v2.0.4...v2.1.0) (2026-04-29)
 

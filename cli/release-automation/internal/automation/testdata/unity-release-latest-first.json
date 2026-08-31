@@ -1,0 +1,37 @@
+{
+  "offset": 0,
+  "limit": 25,
+  "total": 2,
+  "results": [
+    {
+      "version": "6000.7.0a5",
+      "shortRevision": "bbbbbbbbbbbb",
+      "downloads": [
+        {
+          "platform": "WINDOWS",
+          "architecture": "X86_64",
+          "type": "EXE",
+          "url": "https://example.invalid/UnitySetup64-6000.7.0a5.exe"
+        },
+        {
+          "platform": "LINUX",
+          "architecture": "X86_64",
+          "type": "TAR_XZ",
+          "url": "https://example.invalid/Unity-6000.7.0a5.tar.xz"
+        }
+      ]
+    },
+    {
+      "version": "6000.7.0a4",
+      "shortRevision": "7305b6f6fd4f",
+      "downloads": [
+        {
+          "platform": "LINUX",
+          "architecture": "X86_64",
+          "type": "TAR_XZ",
+          "url": "https://example.invalid/Unity-6000.7.0a4.tar.xz"
+        }
+      ]
+    }
+  ]
+}

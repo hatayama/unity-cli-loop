@@ -1,66 +1,51 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using io.github.hatayama.uLoopMCP.Factory;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools.Factory;
 using NUnit.Framework;
 
-namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 {
+    /// <summary>
+    /// Test fixture that verifies Dynamic Code Execution Facade behavior.
+    /// </summary>
     [TestFixture]
     public class DynamicCodeExecutionFacadeTests
     {
-        [Test]
-        public async Task ExecuteAsync_WhenSameSecurityLevelUsedTwice_ShouldReuseExecutor()
-        {
-            FakeDynamicCodeExecutorProvider provider = new FakeDynamicCodeExecutorProvider();
-            using DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
-            using DynamicCodeExecutionFacade facade = new DynamicCodeExecutionFacade(
-                new FakeCompiledAssemblyBuilder(true),
-                pool);
-
-            await facade.ExecuteAsync(
-                CreateRequest(DynamicCodeSecurityLevel.Restricted, "return 1;"),
-                CancellationToken.None);
-            await facade.ExecuteAsync(
-                CreateRequest(DynamicCodeSecurityLevel.Restricted, "return 2;"),
-                CancellationToken.None);
-
-            Assert.That(provider.CreateCallsBySecurityLevel[DynamicCodeSecurityLevel.Restricted], Is.EqualTo(1));
-        }
+        private static readonly TimeSpan CancellationPropagationTimeout = TimeSpan.FromSeconds(1);
 
         [Test]
-        public async Task ExecuteAsync_WhenSecurityLevelChanges_ShouldCreateSeparateExecutors()
+        public async Task ExecuteAsync_WhenCalledTwice_ShouldReuseExecutor()
         {
-            FakeDynamicCodeExecutorProvider provider = new FakeDynamicCodeExecutorProvider();
+            // Verifies dynamic code execution reuses the same cached executor.
+            FakeDynamicCodeExecutorProvider provider = new();
             using DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
-            using DynamicCodeExecutionFacade facade = new DynamicCodeExecutionFacade(
-                new FakeCompiledAssemblyBuilder(true),
-                pool);
+            using DynamicCodeExecutionFacade facade = new DynamicCodeExecutionFacade(pool);
 
             await facade.ExecuteAsync(
-                CreateRequest(DynamicCodeSecurityLevel.Restricted, "return 1;"),
+                CreateRequest("return 1;"),
                 CancellationToken.None);
             await facade.ExecuteAsync(
-                CreateRequest(DynamicCodeSecurityLevel.FullAccess, "return 2;"),
+                CreateRequest("return 2;"),
                 CancellationToken.None);
 
-            Assert.That(provider.CreateCallsBySecurityLevel[DynamicCodeSecurityLevel.Restricted], Is.EqualTo(1));
-            Assert.That(provider.CreateCallsBySecurityLevel[DynamicCodeSecurityLevel.FullAccess], Is.EqualTo(1));
+            Assert.That(provider.CreateCallCount, Is.EqualTo(1));
         }
 
         [Test]
         public void Dispose_WhenExecutorsWereCreated_ShouldDisposeCachedExecutors()
         {
-            FakeDynamicCodeExecutorProvider provider = new FakeDynamicCodeExecutorProvider();
+            FakeDynamicCodeExecutorProvider provider = new();
             using DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
-            DynamicCodeExecutionFacade facade = new DynamicCodeExecutionFacade(
-                new FakeCompiledAssemblyBuilder(true),
-                pool);
+            DynamicCodeExecutionFacade facade = new(pool);
 
             Assert.DoesNotThrowAsync(async () =>
             {
                 await facade.ExecuteAsync(
-                    CreateRequest(DynamicCodeSecurityLevel.Restricted, "return 1;"),
+                    CreateRequest("return 1;"),
                     CancellationToken.None);
             });
 
@@ -70,75 +55,194 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
         }
 
         [Test]
-        public void SupportsAutoPrewarm_ShouldDelegateToAssemblyBuilderCapability()
+        public void ResetServerScopedServicesBeforeDomainReload_ShouldSignalShutdownWithoutWaitingForRuntimeDrain()
         {
-            FakeDynamicCodeExecutorProvider provider = new FakeDynamicCodeExecutorProvider();
-            using DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
-            using DynamicCodeExecutionFacade supported = new DynamicCodeExecutionFacade(
-                new FakeCompiledAssemblyBuilder(true),
-                pool);
-            using DynamicCodeExecutionFacade unsupported = new DynamicCodeExecutionFacade(
-                new FakeCompiledAssemblyBuilder(false),
-                new DynamicCodeExecutorPool(provider));
+            // Tests that domain reload reset does not leave a pending drain task that can block Unity teardown.
+            DynamicCodeServicesRegistry registry = new();
+            FakeShutdownAwareRuntime runtime = new();
+            registry.SetRuntimeFacadeForTests(runtime);
 
-            Assert.That(supported.SupportsAutoPrewarm(), Is.True);
-            Assert.That(unsupported.SupportsAutoPrewarm(), Is.False);
+            registry.ResetServerScopedServicesBeforeDomainReload();
+
+            Assert.That(runtime.ShutdownCallCount, Is.EqualTo(1));
+            Assert.That(runtime.DisposeCallCount, Is.EqualTo(0));
+            Assert.That(registry.GetServerScopedDrainTaskForTests().IsCompleted, Is.True);
+
+            runtime.CompleteShutdown();
         }
 
-        private static DynamicCodeExecutionRequest CreateRequest(
-            DynamicCodeSecurityLevel securityLevel,
-            string code)
+        [Test]
+        public async Task ExecuteAsync_WhenForegroundExecutionIsCancelled_ShouldAllowNextExecution()
+        {
+            // Verifies CLI disconnect cancellation releases the scheduler slot instead of leaving execute-dynamic-code busy.
+            FakeDynamicCodeExecutorProvider provider = new();
+            using DynamicCodeExecutorPool pool = new DynamicCodeExecutorPool(provider);
+            using DynamicCodeExecutionFacade facade = new DynamicCodeExecutionFacade(pool);
+            using CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+
+            Task<ExecutionResult> firstExecution = facade.ExecuteAsync(
+                CreateRequest(FakeDynamicCodeExecutor.BlockingCode),
+                cancellationTokenSource.Token);
+            FakeDynamicCodeExecutor executor = await provider.CreatedExecutorTask;
+            await executor.BlockingExecutionStartedTask;
+
+            cancellationTokenSource.Cancel();
+
+            await AssertCanceledWithinTimeoutAsync(firstExecution);
+
+            ExecutionResult secondExecution = await facade.ExecuteAsync(
+                CreateRequest("return 2;"),
+                CancellationToken.None);
+
+            Assert.That(secondExecution.Success, Is.True);
+            Assert.That(secondExecution.Result, Is.EqualTo("return 2;"));
+        }
+
+        private static async Task AssertCanceledWithinTimeoutAsync(Task task)
+        {
+            Task timeoutTask = Task.Delay(CancellationPropagationTimeout);
+            Task completedTask = await Task.WhenAny(task, timeoutTask);
+            if (completedTask == timeoutTask)
+            {
+                Assert.Fail("Foreground execution task did not complete before the timeout.");
+            }
+
+            if (task.IsFaulted)
+            {
+                Assert.Fail($"Expected cancellation, but the task faulted: {task.Exception}");
+            }
+
+            Assert.That(task.IsCanceled, Is.True);
+        }
+
+        private static DynamicCodeExecutionRequest CreateRequest(string code)
         {
             return new DynamicCodeExecutionRequest
             {
-                SecurityLevel = securityLevel,
                 Code = code,
                 ClassName = "FacadeTestCommand"
             };
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class FakeDynamicCodeExecutorProvider : IDynamicCodeExecutorProvider
         {
-            public Dictionary<DynamicCodeSecurityLevel, int> CreateCallsBySecurityLevel { get; } = new();
+            public int CreateCallCount { get; private set; }
 
             public List<FakeDynamicCodeExecutor> CreatedExecutors { get; } = new();
 
-            public IDynamicCodeExecutor Create(DynamicCodeSecurityLevel securityLevel)
+            private readonly TaskCompletionSource<FakeDynamicCodeExecutor> _createdExecutorCompletionSource =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public Task<FakeDynamicCodeExecutor> CreatedExecutorTask => _createdExecutorCompletionSource.Task;
+
+            public IDynamicCodeExecutor Create()
             {
-                if (!CreateCallsBySecurityLevel.ContainsKey(securityLevel))
-                {
-                    CreateCallsBySecurityLevel[securityLevel] = 0;
-                }
+                CreateCallCount++;
 
-                CreateCallsBySecurityLevel[securityLevel]++;
-
-                FakeDynamicCodeExecutor executor = new FakeDynamicCodeExecutor();
+                FakeDynamicCodeExecutor executor = new();
                 CreatedExecutors.Add(executor);
+                _createdExecutorCompletionSource.TrySetResult(executor);
                 return executor;
             }
         }
 
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
         private sealed class FakeDynamicCodeExecutor : IDynamicCodeExecutor
         {
+            public const string BlockingCode = "__block_until_cancel__";
+
+            private readonly TaskCompletionSource<bool> _blockingExecutionStartedCompletionSource =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+
             public int DisposeCallCount { get; private set; }
 
-            public Task<ExecutionResult> ExecuteCodeAsync(
+            public Task BlockingExecutionStartedTask => _blockingExecutionStartedCompletionSource.Task;
+
+            public async Task<ExecutionResult> ExecuteCodeAsync(
                 string code,
                 string className = DynamicCodeConstants.DEFAULT_CLASS_NAME,
                 object[] parameters = null,
                 CancellationToken cancellationToken = default,
                 bool compileOnly = false)
             {
-                return Task.FromResult(new ExecutionResult
+                if (code == BlockingCode)
+                {
+                    _blockingExecutionStartedCompletionSource.TrySetResult(true);
+                    await WaitForCancellationOrFailAsync(cancellationToken);
+                }
+
+                return new ExecutionResult
                 {
                     Success = true,
                     Result = code
-                });
+                };
             }
 
-            public ExecutionStatistics GetStatistics()
+            public void Dispose()
             {
-                return new ExecutionStatistics();
+                DisposeCallCount++;
+            }
+
+            /// <summary>
+            /// Waits for cancellation with a bounded timeout so regression failures do not freeze Unity.
+            /// </summary>
+            private static async Task WaitForCancellationOrFailAsync(CancellationToken cancellationToken)
+            {
+                TaskCompletionSource<bool> cancellationCompletionSource =
+                    new(TaskCreationOptions.RunContinuationsAsynchronously);
+                using CancellationTokenRegistration cancellationRegistration =
+                    cancellationToken.Register(() => cancellationCompletionSource.TrySetCanceled());
+                Task timeoutTask = Task.Delay(CancellationPropagationTimeout);
+                Task completedTask = await Task.WhenAny(cancellationCompletionSource.Task, timeoutTask);
+
+                if (completedTask == timeoutTask)
+                {
+                    Assert.Fail("Foreground execution cancellation was not observed before the timeout.");
+                }
+
+                await cancellationCompletionSource.Task;
+            }
+        }
+
+        /// <summary>
+        /// Test support type used by editor and play mode fixtures.
+        /// </summary>
+        private sealed class FakeShutdownAwareRuntime : IShutdownAwareDynamicCodeExecutionRuntime, System.IDisposable
+        {
+            private readonly TaskCompletionSource<bool> _shutdownCompletionSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public int ShutdownCallCount { get; private set; }
+
+            public int DisposeCallCount { get; private set; }
+
+            public Task<ExecutionResult> ExecuteAsync(
+                DynamicCodeExecutionRequest request,
+                CancellationToken cancellationToken = default)
+            {
+                throw new System.NotSupportedException();
+            }
+
+            public Task<(bool Entered, ExecutionResult Result)> TryExecuteIfIdleAsync(
+                DynamicCodeExecutionRequest request,
+                CancellationToken cancellationToken = default)
+            {
+                throw new System.NotSupportedException();
+            }
+
+            public Task ShutdownAsync()
+            {
+                ShutdownCallCount++;
+                return _shutdownCompletionSource.Task;
+            }
+
+            public void CompleteShutdown()
+            {
+                _shutdownCompletionSource.SetResult(true);
             }
 
             public void Dispose()
@@ -147,26 +251,5 @@ namespace io.github.hatayama.uLoopMCP.DynamicCodeToolTests
             }
         }
 
-        private sealed class FakeCompiledAssemblyBuilder : ICompiledAssemblyBuilder
-        {
-            private readonly bool _supportsAutoPrewarm;
-
-            public FakeCompiledAssemblyBuilder(bool supportsAutoPrewarm)
-            {
-                _supportsAutoPrewarm = supportsAutoPrewarm;
-            }
-
-            public bool SupportsAutoPrewarm()
-            {
-                return _supportsAutoPrewarm;
-            }
-
-            public Task<CompiledAssemblyBuildResult> BuildAsync(
-                DynamicCompilationPlan plan,
-                CancellationToken ct = default)
-            {
-                throw new System.NotSupportedException();
-            }
-        }
     }
 }

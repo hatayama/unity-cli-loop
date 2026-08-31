@@ -1,0 +1,241 @@
+#if ULOOP_HAS_TEST_FRAMEWORK
+using System;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
+using UnityEditor.TestTools.TestRunner.Api;
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+[assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Editor")]
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Registers and executes Unity Test Runner work when the Test Framework package is installed.
+    /// </summary>
+    internal static class RunTestsTestFrameworkStartup
+    {
+        internal static void Initialize()
+        {
+            UnityTestFrameworkExecutionServiceRegistry.Register(new UnityTestFrameworkExecutionService());
+        }
+    }
+
+    internal sealed class UnityTestFrameworkExecutionService : IUnityTestFrameworkExecutionService
+    {
+        public Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
+        {
+            return PlayModeTestExecuter.ExecutePlayModeTest(filter, ct);
+        }
+
+        public Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
+        {
+            return PlayModeTestExecuter.ExecuteEditModeTest(filter, ct);
+        }
+
+        public Task<RunTestsUnfilteredTestListResult> RetrieveUnfilteredTestNamesAsync(
+            UnityCliLoopTestMode testMode,
+            CancellationToken ct)
+        {
+            return RunTestsUnfilteredTestListRetriever.RetrieveAsync(testMode, ct);
+        }
+
+        public RunTestsPredefinedAssemblyTestFindings ScanPredefinedAssemblyTests()
+        {
+            return RunTestsPredefinedAssemblyTestScanner.Scan();
+        }
+    }
+
+    public static class PlayModeTestExecuter
+    {
+        public static async Task<SerializableTestResult> ExecutePlayModeTest(
+            TestExecutionFilter filter,
+            CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
+            // Why not `using`: Dispose must run only after cancel-time stop/restore finishes.
+            // Disposing earlier re-enables domain reload while Test Runner / Play Mode may still be active.
+            DomainReloadDisableScope scope = new DomainReloadDisableScope();
+            string runGuid = null;
+            try
+            {
+                return await ExecuteTestWithEventNotification(
+                    TestMode.PlayMode,
+                    filter,
+                    ct,
+                    startedRunGuid => runGuid = startedRunGuid).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException originalException)
+            {
+                // Why switch first: ExecuteTestWithEventNotification may resume off-thread via
+                // ConfigureAwait(false), but stop/restore hooks call Unity Play Mode APIs.
+                await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
+                RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
+                    isPlayMode: true,
+                    runGuid: runGuid,
+                    RunTestsCancelStopRestoreUnityHooks.Resolve()).ConfigureAwait(false);
+                throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
+            }
+            finally
+            {
+                await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
+                scope.Dispose();
+            }
+        }
+
+        public static async Task<SerializableTestResult> ExecuteEditModeTest(
+            TestExecutionFilter filter,
+            CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            string runGuid = null;
+            try
+            {
+                return await ExecuteTestWithEventNotification(
+                    TestMode.EditMode,
+                    filter,
+                    ct,
+                    startedRunGuid => runGuid = startedRunGuid).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException originalException)
+            {
+                await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
+                RunTestsCancelStopRestoreResult stopResult = await RunTestsCancelStopRestore.StopAndRestoreAsync(
+                    isPlayMode: false,
+                    runGuid: runGuid,
+                    RunTestsCancelStopRestoreUnityHooks.Resolve()).ConfigureAwait(false);
+                throw new RunTestsExecutionCanceledException(originalException.CancellationToken, stopResult);
+            }
+        }
+
+        private static async Task<SerializableTestResult> ExecuteTestWithEventNotification(
+            TestMode testMode,
+            TestExecutionFilter filter,
+            CancellationToken ct,
+            Action<string> onRunStarted)
+        {
+            ct.ThrowIfCancellationRequested();
+            TaskCompletionSource<SerializableTestResult> taskCompletionSource =
+                new TaskCompletionSource<SerializableTestResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            using UnifiedTestCallback callback = new UnifiedTestCallback();
+            callback.OnTestCompleted += (result, rawResult) =>
+            {
+                if (taskCompletionSource.Task.IsCompleted)
+                {
+                    return;
+                }
+
+                if (result.failedCount > 0 && rawResult != null)
+                {
+                    result.xmlPath = TrySaveFailureXml(rawResult);
+                }
+                taskCompletionSource.TrySetResult(result);
+            };
+
+            string runGuid = StartTestExecution(testMode, filter, callback);
+            onRunStarted?.Invoke(runGuid);
+            // Without this registration the await below never completes on cancellation,
+            // keeping the TestRunnerApi callback subscription alive forever.
+            using CancellationTokenRegistration cancellationRegistration =
+                ct.Register(() => taskCompletionSource.TrySetCanceled(ct));
+            SerializableTestResult result = await taskCompletionSource.Task.ConfigureAwait(false);
+            // Why switch back: UnifiedTestCallback.Dispose unregisters TestRunnerApi callbacks
+            // and must run on the Unity main thread.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            ct.ThrowIfCancellationRequested();
+            return result;
+        }
+
+        internal static string TrySaveFailureXml(ITestResultAdaptor rawResult)
+        {
+            try
+            {
+                return NUnitXmlResultExporter.SaveTestResultAsXml(rawResult);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"Failed to save failure XML result file: {exception}");
+                return null;
+            }
+        }
+
+        private static string StartTestExecution(TestMode testMode, TestExecutionFilter filter, UnifiedTestCallback callback)
+        {
+            TestRunnerApi testRunnerApi = ScriptableObject.CreateInstance<TestRunnerApi>();
+            callback.SetTestRunnerApi(testRunnerApi);
+            testRunnerApi.RegisterCallbacks(callback);
+
+            Filter unityFilter = CreateUnityFilter(testMode, filter);
+            return testRunnerApi.Execute(new ExecutionSettings(unityFilter));
+        }
+
+        private static Filter CreateUnityFilter(TestMode testMode, TestExecutionFilter filter)
+        {
+            Filter unityFilter = new Filter
+            {
+                testMode = testMode
+            };
+
+            if (filter == null || filter.FilterType == TestExecutionFilterType.All)
+            {
+                return unityFilter;
+            }
+
+            switch (filter.FilterType)
+            {
+                case TestExecutionFilterType.Exact:
+                    unityFilter.testNames = new[] { filter.FilterValue };
+                    break;
+                case TestExecutionFilterType.Regex:
+                    unityFilter.groupNames = new[] { filter.FilterValue };
+                    break;
+                case TestExecutionFilterType.AssemblyName:
+                    unityFilter.assemblyNames = new[] { filter.FilterValue };
+                    break;
+            }
+
+            return unityFilter;
+        }
+    }
+
+    internal sealed class UnifiedTestCallback : ICallbacks, IDisposable
+    {
+        public event Action<SerializableTestResult, ITestResultAdaptor> OnTestCompleted;
+
+        private TestRunnerApi _testRunnerApi;
+
+        public void SetTestRunnerApi(TestRunnerApi testRunnerApi)
+        {
+            _testRunnerApi = testRunnerApi;
+        }
+
+        public void RunStarted(ITestAdaptor tests)
+        {
+        }
+
+        public void RunFinished(ITestResultAdaptor result)
+        {
+            SerializableTestResult serializableResult = SerializableTestResultConverter.FromTestResult(result);
+            OnTestCompleted?.Invoke(serializableResult, result);
+        }
+
+        public void TestStarted(ITestAdaptor test)
+        {
+        }
+
+        public void TestFinished(ITestResultAdaptor result)
+        {
+        }
+
+        public void Dispose()
+        {
+            OnTestCompleted = null;
+            _testRunnerApi?.UnregisterCallbacks(this);
+        }
+    }
+}
+#endif

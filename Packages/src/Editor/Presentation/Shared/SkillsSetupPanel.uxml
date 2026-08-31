@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+    <ui:VisualElement name="skills-setup-panel" class="skills-setup-panel">
+        <ui:VisualElement name="skill-target-status-list" class="skill-target-status-list" />
+        <ui:VisualElement name="skill-target-status-divider" class="skill-target-status-divider" />
+        <ui:Label name="skill-target-status-summary" text="" class="skill-target-status-summary" />
+        <ui:Label name="skills-no-targets-message" text="No agent skill folders (.claude, .codex, ...) found in this project. Use &quot;Install to specific target&quot; below to install." class="skills-no-targets-message" />
+        <ui:Button name="install-all-skills-button" text="Install Skills" class="skills-setup-panel__install-button" />
+        <ui:Foldout name="install-specific-target-foldout" text="Install to specific target" class="skills-setup-panel__foldout">
+            <ui:VisualElement name="group-skills-row" class="skills-setup-panel__toggle-row">
+                <ui:Toggle name="group-skills-toggle" />
+                <ui:Label name="group-skills-label" text="Group in subfolder" />
+            </ui:VisualElement>
+            <ui:VisualElement name="skills-target-row" class="skills-setup-panel__target-row">
+                <ui:Label text="Target:" class="skills-setup-panel__target-label" />
+                <uie:EnumField name="skills-target-field" class="skills-setup-panel__target-field" />
+            </ui:VisualElement>
+            <ui:Button name="install-selected-skills-button" text="Install Skills" class="skills-setup-panel__install-button" />
+        </ui:Foldout>
+    </ui:VisualElement>
+</ui:UXML>

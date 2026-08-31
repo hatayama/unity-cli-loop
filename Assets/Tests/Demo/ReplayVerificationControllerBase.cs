@@ -1,15 +1,18 @@
-#if ULOOPMCP_HAS_INPUT_SYSTEM
+#if ULOOP_HAS_INPUT_SYSTEM
 #nullable enable
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace io.github.hatayama.uLoopMCP
+namespace io.github.hatayama.UnityCliLoop.Tests.Demo
 {
     // Base class for replay verification controllers.
     // Provides event logging, log persistence, and frame-normalized comparison.
     // Subclasses override RecordEvents() to capture scene-specific state each frame.
+    /// <summary>
+    /// Test support type used by editor and play mode fixtures.
+    /// </summary>
     public abstract class ReplayVerificationControllerBase : MonoBehaviour
     {
         private const int TARGET_FRAME_RATE = 60;
@@ -36,7 +39,7 @@ namespace io.github.hatayama.uLoopMCP
             Debug.Assert(_verifyPanel != null, "_verifyPanel must be assigned in scene");
             Debug.Assert(_verifyResultText != null, "_verifyResultText must be assigned in scene");
 
-            Application.targetFrameRate = TARGET_FRAME_RATE;
+            UnityEngine.Application.targetFrameRate = TARGET_FRAME_RATE;
             _startFrame = Time.frameCount;
             HidePanel(_verifyPanel);
         }
@@ -134,7 +137,7 @@ namespace io.github.hatayama.uLoopMCP
 
             int maxLines = Mathf.Max(normalizedRecording.Length, normalizedReplay.Length);
             int diffCount = 0;
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            System.Text.StringBuilder sb = new();
 
             for (int i = 0; i < maxLines; i++)
             {

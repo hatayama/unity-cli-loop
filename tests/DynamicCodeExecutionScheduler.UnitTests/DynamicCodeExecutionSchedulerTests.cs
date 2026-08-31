@@ -2,8 +2,9 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
-namespace io.github.hatayama.uLoopMCP.UnitTests
+namespace io.github.hatayama.UnityCliLoop.UnitTests
 {
     [TestFixture]
     public class DynamicCodeExecutionSchedulerTests
@@ -190,10 +191,15 @@ namespace io.github.hatayama.uLoopMCP.UnitTests
         public void RunForegroundAsync_WhenDisposedAfterSemaphoreAcquire_ShouldThrowObjectDisposedException()
         {
             int disposeCalls = 0;
+            int semaphoreEnteredCount = 0;
             DynamicCodeExecutionScheduler scheduler = null;
             DynamicCodeExecutionSchedulerHooks hooks = new()
             {
-                AfterSemaphoreEntered = () => scheduler.Dispose()
+                AfterSemaphoreEntered = () =>
+                {
+                    semaphoreEnteredCount++;
+                    scheduler.Dispose();
+                }
             };
             scheduler = CreateScheduler(hooks, () => disposeCalls++);
 
@@ -206,6 +212,7 @@ namespace io.github.hatayama.uLoopMCP.UnitTests
                         CancellationToken.None),
                     Throws.InstanceOf<ObjectDisposedException>());
                 Assert.That(disposeCalls, Is.EqualTo(1));
+                Assert.That(semaphoreEnteredCount, Is.EqualTo(1));
             }
             finally
             {
@@ -213,15 +220,189 @@ namespace io.github.hatayama.uLoopMCP.UnitTests
             }
         }
 
+        [Test]
+        public async Task TryRunIfIdleAsync_WhenSetupThrowsAfterYieldAcquire_ShouldReleaseSlotForLaterForegroundWork()
+        {
+            // Verifies yield-path failures after Wait do not leak the semaphore on a live scheduler.
+            int foregroundEnteredCount = 0;
+            DynamicCodeExecutionSchedulerHooks hooks = new()
+            {
+                AfterYieldSemaphoreAcquired = () => throw new InvalidOperationException("yield setup failed"),
+                AfterSemaphoreEntered = () => foregroundEnteredCount++
+            };
+            using DynamicCodeExecutionScheduler scheduler = CreateScheduler(hooks);
+
+            Assert.That(
+                async () => await scheduler.TryRunIfIdleAsync(
+                    true,
+                    _ => Task.FromResult("background"),
+                    CancellationToken.None),
+                Throws.TypeOf<InvalidOperationException>());
+
+            string foregroundResult = await scheduler.RunForegroundAsync(
+                _ => Task.FromResult("foreground"),
+                () => "busy",
+                CancellationToken.None);
+
+            Assert.That(foregroundResult, Is.EqualTo("foreground"));
+            Assert.That(foregroundEnteredCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task RunForegroundAsync_WhenDisposeResourcesThrows_ShouldStillAllowSemaphoreReentryHook()
+        {
+            // Verifies Release stays reachable when deferred resource dispose throws in finally.
+            // Why not assert CurrentCount via reflection: workspace rules forbid unapproved reflection.
+            // AfterSemaphoreEntered runs after Wait and before ThrowIfDisposed, so a second acquire
+            // on a live scheduler is observed by the hook counter; here dispose leaves the instance
+            // disposed, so we only prove dispose ran and ReleaseExecutionSlot surfaced its throw.
+            int disposeCalls = 0;
+            int semaphoreEnteredCount = 0;
+            DynamicCodeExecutionScheduler scheduler = null;
+            DynamicCodeExecutionSchedulerHooks hooks = new()
+            {
+                AfterSemaphoreEntered = () =>
+                {
+                    semaphoreEnteredCount++;
+                    scheduler.Dispose();
+                }
+            };
+            scheduler = CreateScheduler(
+                hooks,
+                () =>
+                {
+                    disposeCalls++;
+                    throw new InvalidOperationException("pool dispose failed");
+                });
+
+            try
+            {
+                Assert.That(
+                    async () => await scheduler.RunForegroundAsync(
+                        _ => Task.FromResult("foreground"),
+                        () => "busy",
+                        CancellationToken.None),
+                    Throws.TypeOf<InvalidOperationException>());
+
+                Assert.That(disposeCalls, Is.EqualTo(1));
+                Assert.That(semaphoreEnteredCount, Is.EqualTo(1));
+                Assert.That(
+                    async () => await scheduler.RunForegroundAsync(
+                        _ => Task.FromResult("again"),
+                        () => "busy",
+                        CancellationToken.None),
+                    Throws.InstanceOf<ObjectDisposedException>());
+            }
+            finally
+            {
+                scheduler.Dispose();
+            }
+        }
+
+        [Test]
+        public async Task ShutdownAsync_WhenIdle_ShouldDisposeResourcesAndComplete()
+        {
+            // Verifies idle shutdown completes immediately and disposes resources once.
+            int disposeCalls = 0;
+            DynamicCodeExecutionScheduler scheduler = CreateScheduler(
+                disposeResources: () => disposeCalls++);
+
+            await scheduler.ShutdownAsync();
+
+            Assert.That(disposeCalls, Is.EqualTo(1));
+            Assert.That(scheduler.ShutdownAsync().IsCompletedSuccessfully, Is.True);
+        }
+
+        [Test]
+        public async Task ShutdownAsync_WhenRunningActionObservesCancellation_ShouldDisposeBeforeTimeout()
+        {
+            // Verifies cooperative cancellation lets shutdown finish without hitting the timeout path.
+            int disposeCalls = 0;
+            System.Collections.Generic.List<string> warnings = new();
+            DynamicCodeExecutionSchedulerHooks hooks = new()
+            {
+                LogWarning = message => warnings.Add(message)
+            };
+            DynamicCodeExecutionScheduler scheduler = CreateScheduler(
+                hooks,
+                () => disposeCalls++,
+                shutdownTimeoutMilliseconds: 1000);
+
+            TaskCompletionSource<bool> executionStarted =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task<string> executionTask = scheduler.RunForegroundAsync(
+                async cancellationToken =>
+                {
+                    executionStarted.TrySetResult(true);
+                    await WaitForCancellationAsync(cancellationToken);
+                    return "canceled";
+                },
+                () => "busy",
+                CancellationToken.None);
+
+            await executionStarted.Task;
+            await scheduler.ShutdownAsync();
+
+            Assert.That(async () => await executionTask, Throws.InstanceOf<OperationCanceledException>());
+            Assert.That(disposeCalls, Is.EqualTo(1));
+            Assert.That(warnings, Is.Empty);
+        }
+
+        [Test]
+        public async Task ShutdownAsync_WhenRunningActionIgnoresCancellation_ShouldCompleteAfterTimeoutAndDeferDispose()
+        {
+            // Verifies timeout unblocks shutdown while pool dispose waits for the late finally.
+            int disposeCalls = 0;
+            System.Collections.Generic.List<string> warnings = new();
+            DynamicCodeExecutionSchedulerHooks hooks = new()
+            {
+                LogWarning = message => warnings.Add(message)
+            };
+            DynamicCodeExecutionScheduler scheduler = CreateScheduler(
+                hooks,
+                () => disposeCalls++,
+                shutdownTimeoutMilliseconds: 40);
+
+            TaskCompletionSource<bool> executionStarted =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<bool> allowExecutionToComplete =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task<string> executionTask = scheduler.RunForegroundAsync(
+                async _ =>
+                {
+                    executionStarted.TrySetResult(true);
+                    await allowExecutionToComplete.Task;
+                    return "late";
+                },
+                () => "busy",
+                CancellationToken.None);
+
+            await executionStarted.Task;
+            await scheduler.ShutdownAsync();
+
+            Assert.That(disposeCalls, Is.EqualTo(0));
+            Assert.That(warnings, Has.Count.EqualTo(1));
+            Assert.That(warnings[0], Does.Contain("timed out after 40ms"));
+            Assert.That(warnings[0], Does.Contain("deferred until the running action reaches its finally"));
+
+            allowExecutionToComplete.TrySetResult(true);
+            string result = await executionTask;
+
+            Assert.That(result, Is.EqualTo("late"));
+            Assert.That(disposeCalls, Is.EqualTo(1));
+        }
+
         private static DynamicCodeExecutionScheduler CreateScheduler(
             DynamicCodeExecutionSchedulerHooks hooks = null,
-            Action disposeResources = null)
+            Action disposeResources = null,
+            int shutdownTimeoutMilliseconds = 1000)
         {
             return new DynamicCodeExecutionScheduler(
                 disposeResources ?? (() => { }),
                 hooks,
                 busyHandoffWindowMilliseconds: 20,
-                cancelledPrewarmHandoffWindowMilliseconds: 40);
+                cancelledPrewarmHandoffWindowMilliseconds: 40,
+                shutdownTimeoutMilliseconds: shutdownTimeoutMilliseconds);
         }
 
         private static async Task WaitForCancellationAsync(CancellationToken cancellationToken)

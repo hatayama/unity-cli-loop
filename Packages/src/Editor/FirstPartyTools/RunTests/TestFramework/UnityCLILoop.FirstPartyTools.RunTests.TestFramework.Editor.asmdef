@@ -1,0 +1,33 @@
+{
+    "name": "UnityCLILoop.FirstPartyTools.RunTests.TestFramework.Editor",
+    "rootNamespace": "io.github.hatayama.UnityCliLoop.FirstPartyTools",
+    "references": [
+        "UnityCLILoop.FirstPartyTools.RunTests.Editor",
+        "UnityCLILoop.FirstPartyTools.ControlPlayMode.Editor",
+        "UnityCLILoop.FirstPartyTools.Common.EditorUtility.Editor",
+        "UnityCLILoop.FirstPartyTools.Common.OutputRetention.Editor",
+        "UnityCLILoop.ToolContracts",
+        "UnityEditor.TestRunner",
+        "UnityEngine.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "optionalUnityReferences": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "ULOOP_HAS_TEST_FRAMEWORK"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.test-framework",
+            "expression": "",
+            "define": "ULOOP_HAS_TEST_FRAMEWORK"
+        }
+    ],
+    "noEngineReferences": false
+}

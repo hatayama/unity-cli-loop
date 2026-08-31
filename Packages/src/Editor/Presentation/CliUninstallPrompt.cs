@@ -1,0 +1,35 @@
+using System;
+using UnityEditor;
+using UnityEngine;
+
+namespace io.github.hatayama.UnityCliLoop.Presentation
+{
+    /// <summary>
+    /// Provides CLI Uninstall Prompt behavior for Unity CLI Loop.
+    /// </summary>
+    internal static class CliUninstallPrompt
+    {
+        private const string DialogTitle = "Uninstall uloop CLI?";
+        private const string DialogMessage =
+            "This removes the native uloop CLI command from this user account and removes package-owned PATH entries when applicable.";
+        private const string ConfirmButtonText = "OK";
+        private const string CancelButtonText = "Cancel";
+
+        public static bool ConfirmUninstall()
+        {
+            return ConfirmUninstall(
+                (title, message, ok, cancel) => EditorUtility.DisplayDialog(title, message, ok, cancel));
+        }
+
+        internal static bool ConfirmUninstall(Func<string, string, string, string, bool> displayDialog)
+        {
+            Debug.Assert(displayDialog != null, "displayDialog must not be null");
+
+            return displayDialog(
+                DialogTitle,
+                DialogMessage,
+                ConfirmButtonText,
+                CancelButtonText);
+        }
+    }
+}

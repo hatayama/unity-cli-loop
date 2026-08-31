@@ -1,0 +1,395 @@
+/* ===========================================
+   SetupWizardWindow Stylesheet
+   =========================================== */
+
+:root {
+    --setup-color-success: #4caf50;
+    --setup-color-warning: #ffd200;
+    --setup-color-danger: #ef5350;
+    --setup-color-muted: #999999;
+}
+
+/* ===========================================
+   Block: Main Container
+   =========================================== */
+.setup-main-container {
+    flex-grow: 1;
+    padding: 12px;
+}
+
+/* ===========================================
+   Block: Prerequisite
+   =========================================== */
+.setup-prerequisite {
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+}
+
+.setup-prerequisite--warning {
+    background-color: #5c4a00;
+    border-color: #7a6400;
+}
+
+.setup-prerequisite--ok {
+    background-color: #1b3a1b;
+    border-color: #2e7d32;
+}
+
+.setup-prerequisite--compact {
+    justify-content: center;
+    min-height: 36px;
+}
+
+.setup-prerequisite__title {
+    -unity-font-style: bold;
+    margin-bottom: 4px;
+}
+
+.setup-prerequisite--compact .setup-prerequisite__title {
+    margin-bottom: 0;
+}
+
+.setup-prerequisite--warning .setup-prerequisite__title {
+    color: var(--setup-color-warning);
+}
+
+.setup-prerequisite--ok .setup-prerequisite__title {
+    color: var(--setup-color-success);
+}
+
+.setup-prerequisite__message {
+    white-space: normal;
+    margin-bottom: 6px;
+}
+
+/* ===========================================
+   Block: Step
+   =========================================== */
+.setup-step {
+    background-color: var(--unity-colors-helpbox-background);
+    border-color: var(--unity-colors-helpbox-border);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+}
+
+.setup-step__title {
+    -unity-font-style: bold;
+    font-size: 13px;
+    margin-bottom: 10px;
+}
+
+.setup-step__title-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.setup-step__title-row .skills-setup-panel__refresh-button {
+    /* why: optically center the refresh glyph on the heading text (wizard only) */
+    translate: 0 1px;
+}
+
+.setup-step__title-row .setup-step__title {
+    margin-bottom: 0;
+}
+
+.setup-step__content {
+    padding-left: 4px;
+}
+
+.setup-selectable-text {
+    background-color: rgba(0, 0, 0, 0);
+    border-top-width: 0;
+    border-right-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    padding-top: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+}
+
+.setup-selectable-text .unity-base-text-field__input,
+.setup-selectable-text .unity-text-field__input {
+    background-color: rgba(0, 0, 0, 0);
+    border-top-width: 0;
+    border-right-width: 0;
+    border-bottom-width: 0;
+    border-left-width: 0;
+    padding-top: 0;
+    padding-right: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+    white-space: normal;
+}
+
+.setup-step__status-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.setup-step__status-label {
+    margin-left: 6px;
+}
+
+.setup-step__status-label--standalone {
+    margin-left: 0;
+    white-space: normal;
+}
+
+.setup-step__description-label {
+    white-space: normal;
+    margin-bottom: 10px;
+}
+
+/* Why the explicit side margins: the warning must line up with the button below it,
+   so both declare the same horizontal margin instead of inheriting the Button default. */
+.setup-warning-message {
+    display: none;
+    background-color: #5c4a00;
+    border-color: #7a6400;
+    color: var(--setup-color-warning);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 8px;
+    margin-top: 6px;
+    margin-bottom: 8px;
+    margin-left: 3px;
+    margin-right: 3px;
+    white-space: normal;
+}
+
+#install-cli-button {
+    margin-left: 3px;
+    margin-right: 3px;
+}
+
+.setup-warning-message--visible {
+    display: flex;
+}
+
+.setup-progress-bar {
+    height: 14px;
+    margin-top: 6px;
+    margin-bottom: 2px;
+}
+
+/* ===========================================
+   Block: Status Icon
+   =========================================== */
+.setup-status-icon {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.setup-status-icon--pending {
+    background-color: var(--setup-color-muted);
+}
+
+.setup-status-icon--success {
+    background-color: var(--setup-color-success);
+}
+
+/* ===========================================
+   Block: Button
+   =========================================== */
+.setup-button {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.setup-install-progress {
+    margin-top: 4px;
+}
+
+.setup-install-progress__detail {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 11px;
+    margin-top: 2px;
+}
+
+.setup-button--small {
+    height: 22px;
+    padding-left: 12px;
+    padding-right: 12px;
+    font-size: 11px;
+    align-self: flex-start;
+}
+
+.setup-button--primary {
+    background-color: #2e7d32;
+    border-color: var(--setup-color-success);
+    color: #ffffff;
+}
+
+.setup-button--primary:hover {
+    background-color: #388e3c;
+}
+
+.setup-button--primary:disabled {
+    background-color: #4a4a4a;
+    border-width: 1px;
+    border-color: rgba(128, 128, 128, 0.5);
+    color: #999999;
+    opacity: 1;
+}
+
+.setup-button--migration-action {
+    height: 66px;
+}
+
+/* ===========================================
+   Element: Hint Label
+   =========================================== */
+.setup-step__hint-label {
+    font-size: 11px;
+    color: var(--setup-color-muted);
+    white-space: normal;
+    margin-top: 4px;
+}
+
+/* ===========================================
+   Block: Footer
+   =========================================== */
+.setup-footer__toggle {
+    margin-top: 6px;
+}
+
+/* Keep a readable gap between the checkbox and its label text. */
+.setup-footer__toggle .unity-toggle__text {
+    margin-left: 5px;
+}
+
+.setup-footer__hint-label {
+    font-size: 11px;
+    color: var(--setup-color-muted);
+    white-space: normal;
+    margin-top: 2px;
+    margin-left: 18px;
+}
+
+.setup-footer__button-row {
+    flex-direction: row;
+}
+
+.setup-footer__button-row .setup-button {
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+.setup-section-actions {
+    margin-top: -2px;
+    margin-bottom: 10px;
+}
+
+.setup-section-actions__button-row {
+    flex-direction: row;
+}
+
+.setup-section-actions__button-row .setup-button {
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+.setup-section-actions__field-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 2px;
+}
+
+.setup-section-actions__field-label {
+    width: 76px;
+    flex-shrink: 0;
+    margin-right: 6px;
+    color: var(--setup-color-muted);
+}
+
+.setup-section-actions__field {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.setup-section-divider {
+    border-top-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.18);
+    margin-top: 4px;
+    margin-bottom: 14px;
+}
+
+.setup-skill-usage-foldout {
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.setup-skill-usage-text {
+    margin-top: 6px;
+    margin-left: 14px;
+}
+
+.setup-skill-usage-copy-button {
+    margin-left: 14px;
+}
+
+.setup-footer__github-link {
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    border-top-width: 1px;
+    border-top-color: rgba(255, 255, 255, 0.12);
+    padding-top: 8px;
+    margin-top: 10px;
+    opacity: 0.78;
+}
+
+.setup-footer__github-link-label {
+    font-size: 11px;
+    color: #c3cad3;
+    margin-right: 5px;
+}
+
+.setup-footer__github-link-icon {
+    width: 16px;
+    height: 16px;
+    opacity: 0.78;
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+.setup-footer__github-link--hover {
+    opacity: 1;
+}
+
+.setup-footer__github-link-label--hover {
+    color: #ffffff;
+}
+
+.setup-footer__github-link-icon--hover {
+    opacity: 1;
+}
+
+.setup-step__button-row {
+    flex-direction: row;
+    margin-top: 4px;
+}
+
+.setup-step__button-row .setup-button {
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+/* ===========================================
+   Utility: Hidden
+   =========================================== */
+.setup-hidden {
+    display: none;
+}

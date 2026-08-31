@@ -1,35 +1,35 @@
 ---
 name: uloop-execute-dynamic-code
-description: "Execute C# with Unity APIs when existing uloop tools cannot inspect or edit enough. Use for scene, prefab, SerializedObject, AssetDatabase refresh/.meta generation, menu, or PlayMode automation."
-context: fork
+toolName: execute-dynamic-code
+description: "Execute C# with Unity APIs when existing uloop tools cannot inspect or edit enough. Use for reachable scene/component state, scene/prefab/menu automation, and PlayMode checks"
 ---
 
 # Task
 
-Execute the following request using `uloop execute-dynamic-code`: $ARGUMENTS
+Run focused C# snippets in the active Unity Editor with `uloop execute-dynamic-code`.
 
 For basic selected GameObject discovery or property inspection, use `find-game-objects --search-mode Selected` before this tool. Use this tool after the built-in inspection tools are not enough or when you need to modify Unity state.
 
-## Workflow
+This tool can inspect reachable Unity state — GameObjects, components, public properties, static values, method results — but it cannot read local variables or intermediate calculations inside an already-running method. When those values matter, follow the `uloop-pause-point` skill: a pause point's `CapturedVariables` carries the locals, parameters, and instance fields at that line with no code edit or recompile, and while Unity stays paused `UloopPausePoint.TryGetCapturedValue(name)` gives this tool live captured references. That skill also covers the reverse combination — registering an `EditorApplication.update` watcher from this tool that freezes Unity on the first frame a runtime condition holds. Never poll or sleep inside a snippet; the body runs synchronously on the main thread.
 
-1. Read the relevant reference file(s) from the Code Examples section below
-2. Construct C# code based on the reference examples
-3. For multiline snippets, write the C# statements to a temporary `.csx` file and execute `uloop execute-dynamic-code --code-file <path>`
-4. Use `uloop execute-dynamic-code --code '<code>'` only for short one-line snippets
-5. If execution fails, adjust code and retry
-6. Report the execution result
+Live state injection: when a running PlayMode session is merely in the wrong state — a stuck end-to-end scenario, a camera angle a raycast can never hit, a private flag blocking the path under test — fix the state instead of the code: write the field directly from this tool (reflection reaches private fields) and steer the session onward. Nothing recompiles and no domain reload happens, so the session's in-memory state survives intact. The snippet is a one-off diagnostic that never lands in source files, so project rules restricting reflection in production code are not violated.
 
 ## Parameters
 
-- `--code '<code>'`: Inline C# statements to execute. Use this for one-line snippets only.
-- `--code-file <path>`: Read C# statements from a UTF-8 file. Prefer this for multiline snippets, especially on PowerShell, because Windows `.cmd` shims can lose lines from multiline inline arguments before `uloop` receives them.
-- **Shell quoting**: bash/zsh uses single quotes, for example `uloop execute-dynamic-code --code 'using UnityEngine; return Mathf.PI;'`. PowerShell single-quoted strings can contain normal double quotes, for example `uloop execute-dynamic-code --code 'Debug.Log("Hello!");'`.
-- `--parameters {}` (advanced, optional): Pass an object when reusing a snippet with varying data or when keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit this flag for most snippets, and pass an object instead of a JSON string.
-- `--compile-only true` (optional): Compile the snippet without executing it. Use this when you want Roslyn diagnostics before running new code.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--code` | string | - | Inline C# statements to execute. Direct statements only; `return` is optional, and `using` directives may appear at the top of the snippet. |
+| `--parameters` | object | - | Shell-quoted JSON object literal for reusing a snippet with varying data or keeping values outside the code. Values are exposed as `parameters["param0"]`, `parameters["param1"]`, and so on. Omit for most snippets; never pass a JSON string value. |
+| `--wait-for-domain-reload` | flag | - | Wait for Domain Reload recovery after snippets that intentionally trigger Unity script reload or import work. Omit for normal inspection and editor-state workflows. |
+| `--yield-to-foreground-requests` | flag | - | Allow foreground requests to preempt this execution |
+
+CLI-only flag, accepted instead of a schema parameter:
+
+- `--code-file <path>`: Read the C# statements from a file instead of `--code`. Use this when the active shell or launcher cannot preserve inline code exactly. Exactly one of `--code` or `--code-file` is required; combining them is an error.
 
 ## Code Rules
 
-Write direct statements only — no class/namespace/method wrappers. Return is optional.
+Write direct statements from your own Unity API knowledge — no class/namespace/method wrappers. Return is optional.
 
 ```csharp
 using UnityEngine;
@@ -37,51 +37,52 @@ float x = Mathf.PI;
 return x;
 ```
 
-**Forbidden** — these will be rejected at compile time: `System.IO.*`, `AssetDatabase.CreateFolder`, creating/editing `.cs`/`.asmdef` files. Use terminal commands for file operations instead.
+Prefer terminal commands for file operations and keep snippets focused on Unity Editor state that existing uloop tools cannot inspect or change.
+
+This snippet runs in the Editor execution context: `Screen.width` and `Screen.height` are Editor pixels, not the Game View resolution. For a ray through the Game View center, use `cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f))`.
+
+## Known transpiler constraints
+
+On CS8421, CS8820, or a surprising type error around numeric literals (e.g. `Color32`
+needing `(byte)255`), read [references/transpiler-constraints.md](references/transpiler-constraints.md)
+— snippets hoist literals in ways that constrain `static` local functions and lambdas.
+
+## Shell Quoting
+
+In zsh/bash, single-quote the whole snippet so C# double quotes pass through unchanged: `--code 'return "hi";'`. If a snippet fails to parse, gets mangled by the shell, or you are on Windows/PowerShell, read [references/shell-quoting.md](references/shell-quoting.md) — or switch to `--code-file`.
+
+## When To Use Input Simulation Tools Instead
+
+Calling UI handlers or runtime methods directly from a snippet is the better choice for targeted automation, direct state control, or quick diagnostics. Switch to the dedicated input tools only when the input route itself is part of what you need to verify:
+
+| Scenario | Recommended tool | Why |
+|----------|------------------|-----|
+| Verify that a uGUI element responds through the real EventSystem pointer path | `simulate-mouse-ui` | Fires `PointerDown` / `PointerUp` / `PointerClick` / drag events through EventSystem raycasts instead of bypassing the UI input route. |
+| Test gameplay that reads `Mouse.current`, button state, delta, or scroll | `simulate-mouse-input` | Injects Input System mouse state into `Mouse.current` so game code observes it like player input. Requires the New Input System (`Input System Package (New)` or `Both`); when that is unavailable, prefer an execute-dynamic-code workaround instead of changing project settings just to use the tool. |
+| Jump straight to a known callback, invoke a method, inspect state, or set up a test precondition | `execute-dynamic-code` | Direct automation without reproducing the full input pipeline. |
+| Drive custom runtime behavior that does not map cleanly to the built-in input tools | `execute-dynamic-code` | Calls project-specific methods and prototypes one-off flows immediately. |
 
 ## Output
 
 Returns JSON:
+
 - `Success`: boolean — overall execution success
 - `Result`: string — value of the snippet's `return` statement (empty when omitted)
-- `Logs`: string[] — execution diagnostics from the dynamic-code runner, not Unity Console entries
+- `Logs`: string[] — execution messages from the dynamic-code tool; read Unity Console `Debug.Log` output with `get-logs`
+- `PartialResults` (object, optional): values that a snippet explicitly saves before it completes or fails
 - `CompilationErrors`: object[] — Roslyn diagnostics with `Message`, `Line`, `Column`, `ErrorCode`, optional `Hint` and `Suggestions`
-- `ErrorMessage`: string — top-level failure summary (empty on success)
-- `Error`: string — alias of `ErrorMessage`
-- `SecurityLevel`: string — dynamic-code security level active for the request
+- `Error` / `ErrorMessage`: string — top-level failure summary (empty on success)
 - `UpdatedCode`: string|null — the wrapped form actually compiled (handy when debugging using-statement reordering)
 - `DiagnosticsSummary`: string|null — compact summary when diagnostics are available
 - `Diagnostics`: object[] — structured diagnostics; same shape as `CompilationErrors`, usually populated together with it
+- `Warning` (string, optional): Set when Play Mode is running while the Unity Editor is unfocused. Progress may be throttled; run `uloop focus-window`, or use the `pause-point --await`/`--trigger` flow instead of polling for progress.
 
-Use `uloop get-logs` to retrieve `Debug.Log`, `Debug.LogWarning`, and `Debug.LogError` messages emitted by the snippet. On `Success: false`, inspect `CompilationErrors` first. If empty, read `ErrorMessage` (and `Logs` for extra context) — the failure may be a runtime exception, security violation, cancellation, or an "execution in progress" rejection, all of which return empty `CompilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
+To retain an intermediate value across a later exception, opt in before the risky code:
 
-## Code Examples by Category
+```csharp
+UloopDynamicCodePartialResults.Set("completedSteps", completedSteps);
+```
 
-For detailed code examples, refer to these files:
+`PartialResults` contains only values explicitly saved this way. Ordinary local variables cannot be recovered after an exception unwinds the snippet. A cancellation that occurs before the snippet produces an execution result also returns no `PartialResults`.
 
-- **Prefab operations**: See [references/prefab-operations.md](references/prefab-operations.md)
-  - Create prefabs, instantiate, add components, modify properties
-- **Material operations**: See [references/material-operations.md](references/material-operations.md)
-  - Create materials, set shaders/textures, modify properties
-- **Asset operations**: See [references/asset-operations.md](references/asset-operations.md)
-  - Find/search assets, duplicate, move, rename, load
-- **ScriptableObject**: See [references/scriptableobject.md](references/scriptableobject.md)
-  - Create ScriptableObjects, modify with SerializedObject
-- **Scene operations**: See [references/scene-operations.md](references/scene-operations.md)
-  - Create/modify GameObjects, set parents, wire references, load scenes
-- **Batch operations**: See [references/batch-operations.md](references/batch-operations.md)
-  - Bulk modify objects, batch add/remove components, rename, layer/tag/material replacement
-- **Cleanup operations**: See [references/cleanup-operations.md](references/cleanup-operations.md)
-  - Detect broken scripts, missing references, unused materials, empty GameObjects
-- **Undo operations**: See [references/undo-operations.md](references/undo-operations.md)
-  - Undo-aware operations: RecordObject, AddComponent, SetParent, grouping
-- **Selection operations**: See [references/selection-operations.md](references/selection-operations.md)
-  - Get/set selection, multi-select, filter by type/editability
-- **PlayMode automation (zsh)**: See [references/playmode-automation-zsh.md](references/playmode-automation-zsh.md)
-  - Click UI buttons, invoke methods, set fields, tool combination workflows for zsh users
-- **PlayMode automation (PowerShell)**: See [references/playmode-automation-powershell.md](references/playmode-automation-powershell.md)
-  - Click UI buttons, invoke methods, set fields, tool combination workflows for PowerShell users
-- **PlayMode UI controls**: See [references/playmode-ui-controls.md](references/playmode-ui-controls.md)
-  - InputField, Slider, Toggle, Dropdown, drag & drop simulation, list all UI controls
-- **PlayMode inspection**: See [references/playmode-inspection.md](references/playmode-inspection.md)
-  - Scene info, game state via reflection, physics state, raycast checks, GameObject search, position/rotation
+On `Success: false`, inspect `CompilationErrors` first. If empty, read `ErrorMessage` (and `Logs` for extra context) — the failure may be a runtime exception, cancellation, or an "execution in progress" rejection, all of which return empty `CompilationErrors`. Both EditMode and PlayMode are supported targets — the snippet runs in whichever mode the Editor is currently in.
