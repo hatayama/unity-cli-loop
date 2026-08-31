@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.70...uloop-project-runner-v3.0.0) (2026-08-31)
+
+
+### Miscellaneous Chores
+
+* force release 3.0.0 ([6233aa5](https://github.com/hatayama/unity-cli-loop/commit/6233aa514a2fb63103ae5780a42602de30becd28))
+
 ## [3.0.0-beta.70](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0-beta.69...uloop-project-runner-v3.0.0-beta.70) (2026-08-28)
 
 

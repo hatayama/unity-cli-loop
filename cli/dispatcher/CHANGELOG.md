@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.37...dispatcher-v3.0.0) (2026-08-31)
+
+
+### Miscellaneous Chores
+
+* force release 3.0.0 ([6233aa5](https://github.com/hatayama/unity-cli-loop/commit/6233aa514a2fb63103ae5780a42602de30becd28))
+
 ## [3.0.0-beta.37](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.36...dispatcher-v3.0.0-beta.37) (2026-08-28)
 
 
