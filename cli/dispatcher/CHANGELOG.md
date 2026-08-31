@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0...dispatcher-v3.0.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* show the dispatcher version for interactive uloop -v inside V2 and V3 projects ([#2467](https://github.com/hatayama/unity-cli-loop/issues/2467)) ([9c79487](https://github.com/hatayama/unity-cli-loop/commit/9c79487224624bf52011867c5f57fbb9130fb283))
+
 ## [3.0.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.0-beta.37...dispatcher-v3.0.0) (2026-08-31)
 
 
