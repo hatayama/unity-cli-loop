@@ -21,6 +21,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
+    /// How run-tests handles unsaved Scene and Prefab Stage changes before execution.
+    /// </summary>
+    public enum RunTestsUnsavedChangesMode
+    {
+        save = 0,
+        fail = 1,
+        discard = 2
+    }
+
+    /// <summary>
     /// Defines machine-readable run-tests result states returned to CLI callers.
     /// </summary>
     internal static class RunTestsExecutionStatus

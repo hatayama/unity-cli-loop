@@ -34,12 +34,12 @@ This allows you to retrieve logs while keeping the context small.
 Executes Unity Test Runner and retrieves test results. You can set conditions with FilterType and FilterValue.
 - FilterType: all (all tests), exact (individual test method name), regex (class name or namespace), assembly (assembly name)
 - FilterValue: Value according to filter type (class name, namespace, etc.)
-- SaveBeforeRun: Saves unsaved loaded Scene changes and current Prefab Stage changes before running tests by default. When disabled, unsaved editor changes stop test execution instead of being discarded.
+- UnsavedChanges: How to handle unsaved loaded Scene and Prefab Stage changes before tests. `save` (default) writes them, `fail` stops if any remain, `discard` reloads disk state (Untitled scenes fail).
 Test results can be output as xml. The output path is returned so AI can read it.
 This is also a strategy to avoid consuming context.
 ```text
 → run-tests (FilterType: exact, FilterValue: "PlayerControllerTests.TestJump")
-→ run-tests (SaveBeforeRun: false, fail if editor changes are unsaved)
+→ run-tests (--unsaved-changes fail, stop if editor changes are unsaved)
 → Check failed tests, fix implementation to pass tests
 ```
 > [!WARNING]

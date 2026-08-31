@@ -100,10 +100,15 @@
             "type": "string",
             "description": "Filter value (test name, pattern, or assembly)"
           },
-          "SaveBeforeRun": {
-            "type": "boolean",
-            "description": "Fail before test execution if unsaved editor changes remain instead of auto-saving them",
-            "default": true
+          "UnsavedChanges": {
+            "type": "string",
+            "description": "save writes unsaved Scene/Prefab Stage changes; fail stops if any remain; discard reloads disk state (Untitled scenes fail)",
+            "enum": [
+              "save",
+              "fail",
+              "discard"
+            ],
+            "default": "save"
           },
           "TimeoutSeconds": {
             "type": "integer",
