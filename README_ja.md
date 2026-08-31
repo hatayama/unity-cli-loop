@@ -101,11 +101,20 @@ uloop skills install --claude --global
 uloop skills install --output-dir path/to/skills
 ```
 
-### ステップ 4：接続を確認する
+### ステップ 4：動作を確認する
 
-`Window > Unity CLI Loop > Settings` を開きます。CLI が検出されていれば、次のように表示されます：
+Unity でプロジェクトを開いた状態で、プロジェクトのルートで実行します：
 
-<img width="350" alt="CLI検出に成功したSettingsウィンドウ。緑のインジケータとCLIバージョンが表示されている" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
+```bash
+uloop -v
+```
+
+CLI のバージョンに続いて、このプロジェクトが使う project runner のバージョンが表示されれば完了です：
+
+```text
+3.0.1
+This Unity project pins uloop project runner 3.0.0.
+```
 
 ## Unity の UI から入れる場合
 
@@ -136,7 +145,9 @@ Scope(s): io.github.hatayama.uloopmcp
 
 <img width="350" alt="CLI未インストール状態のSettingsウィンドウ。Install CLIボタンが表示されている" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
 
-ボタンが消えて CLI のバージョンが表示されれば完了です。
+ボタンが消えて CLI のバージョンが表示されれば完了です：
+
+<img width="350" alt="CLI検出に成功したSettingsウィンドウ。緑のインジケータとCLIバージョンが表示されている" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
 
 ### ステップ 3：スキルをインストールする
 
