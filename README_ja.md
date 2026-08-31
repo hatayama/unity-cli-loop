@@ -39,9 +39,66 @@ https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
 # インストール
 
-ここでインストールするのはUnityパッケージです。CLI本体（ネイティブバイナリ）は、パッケージ導入後に[クイックスタートのステップ1](#ステップ1-cliのインストール)でインストールします。Unityを経由せずterminalだけでCLIを入れる方法も、同じステップに畳んで記載しています。
+入れるものは **CLI（`uloop` コマンド）**、**Unityパッケージ**、**Skills** の3つです。terminal から入れる方法と Unity の UI から入れる方法があり、どちらか一方で完了します。
 
-## Unity Package Manager経由
+> [!NOTE]
+> **V2からアップグレードする場合**: V2 APIで作ったカスタムツールがあるプロジェクトでは、V3パッケージを入れた直後にコンパイルエラーが出ます。これは想定内の挙動です。手で直さず、Unity起動時のSafe Modeの問い合わせで `Ignore` を選び、自動で開く移行ウィンドウ（`Window > Unity CLI Loop > Custom Tool Migration`）で **Migrate** を押してください。手順は [カスタムツール／スキルのV3移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md) を参照してください。
+
+## terminal から入れる場合
+
+### 1. CLI
+
+terminal で次のコマンドを実行すると、`uloop` コマンドが使えるようになります。
+
+macOS、Windows Git Bash の場合:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
+```
+
+Windows PowerShell の場合:
+
+```powershell
+irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
+```
+
+macOS では Homebrew でも入れられます（更新は `brew upgrade uloop`）。
+
+```bash
+brew install hatayama/tap/uloop
+```
+
+### 2. Unityパッケージ
+
+Unity プロジェクトのルートの terminal から（または `--project-path` を指定して）実行します。
+
+```bash
+uloop package install
+```
+
+OpenUPM の scoped registry と `io.github.hatayama.uloopmcp` 依存を `Packages/manifest.json` に書き込みます。特定バージョンを入れたいときは `--version <x.y.z>` を付けます。
+
+### 3. Skills
+
+使っているLLMツールに合わせて、Unity プロジェクトのルートの terminal から実行します。
+
+```bash
+# Claude Code のプロジェクトにインストール
+uloop skills install --claude
+
+# Codex など .agents/skills を読むツール向けにプロジェクトにインストール
+uloop skills install --agents
+
+# または、グローバルにインストール
+uloop skills install --claude --global
+
+# または、任意のディレクトリ（外部のスキルパッケージストアなど）へ
+uloop skills install --output-dir path/to/skills
+```
+
+## Unity の UI から入れる場合
+
+### 1. Unityパッケージ
 
 1. Unity Editorを開く
 2. Window > Package Managerを開く
@@ -52,18 +109,8 @@ https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
 ```
 
-## OpenUPM経由（推奨）
-
-グローバルな `uloop` CLI が PATH に入った状態で、プロジェクトルートのターミナルから（または `--project-path` を指定して）Unity パッケージを導入できます。
-
-```bash
-uloop package install
-uloop package status
-```
-
-`uloop package install` は OpenUPM の scoped registry と `io.github.hatayama.uloopmcp` 依存を `Packages/manifest.json` に書き込みます。OpenUPM の `dist-tags.latest` ではなく特定バージョンを入れたいときは `--version <x.y.z>` を付けます。導入状態の確認には `uloop package status` を使います。
-
-### 手動で設定する場合（Unity Package Manager）
+<details>
+<summary>OpenUPM の scoped registry から入れる場合</summary>
 
 1. Project Settingsウィンドウを開き、Package Managerページに移動
 2. Scoped Registriesリストに以下のエントリを追加：
@@ -75,13 +122,23 @@ Scope(s): io.github.hatayama.uloopmcp
 
 3. Package Managerウィンドウを開き、My RegistriesセクションのOpenUPMを選択。Unity CLI Loopが表示されます。
 
-# クイックスタート
+</details>
 
-## ステップ1: CLIのインストール
+### 2. CLI
 
-Window > Unity CLI Loop > Settingsを選択します。専用ウィンドウが開くので、**CLI** ボタンが青くなっていなければ **Install CLI** を押してください。
+Window > Unity CLI Loop > Settings を開きます。**CLI** ボタンが青くなっていなければ **Install CLI** を押してください。
 
-installerはグローバルな`uloop`コマンドをPATH上に配置します。プロジェクト固有の`uloop-project-runner` binaryは、各プロジェクトの`.uloop/project-runner-pin.json`に従ってuser cacheへ自動的にdownloadされます。
+<img width="350" alt="CLI未インストール状態のSettingsウィンドウ。Install CLIボタンが表示されている" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
+
+下記の表示になれば成功です。terminal から入れた場合も、このウィンドウで `uloop` コマンドが検出されているかを確認できます。
+
+<img width="350" alt="CLI検出に成功したSettingsウィンドウ。緑のインジケータとCLIバージョンが表示されている" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
+
+### 3. Skills
+
+同じ Settings ウィンドウで、Claude CodeやCodexなど対象を選択して **Install Skills** ボタンを押します。
+
+<img width="350" alt="SettingsウィンドウのSkillsセクション。対象を選択してInstall Skillsボタンが押せる状態" src="Packages/src/Documentation~/images/settings-skills-install.png" />
 
 <details>
 <summary>V2プロジェクトと併用する場合</summary>
@@ -92,160 +149,8 @@ v2とv3のプロジェクトを併用するときも、v3 dispatcherをインス
 
 v2への委譲には、初回コマンドでcacheを作成するnpmを含むNode.js 22以降が必要です。v2プロジェクトのSettingsウィンドウでは、**Update CLI**または**Downgrade CLI**を押さないでください。委譲先CLIが同じv2バージョンを返すため通常はボタン自体が表示されませんが、使用するとグローバルnpm版CLIが復活し、PATHの順序によってv3 dispatcherが隠れる可能性があります。
 
-</details>
+同じ理由で、v2 CLIをグローバルにnpmインストールし直さないでください。インストーラは古いnpm版 `uloop-cli` を自動で削除しようとし、できない場合は手動で実行するコマンドを表示します。terminalの `uloop` が古いnpm版を指している場合は `npm uninstall -g uloop-cli` を実行してから、上記のインストーラをもう一度実行してください。
 
-<details>
-<summary>CLIだけをterminalからinstallする場合はこちら</summary>
-
-Unity Package の setup を開かず、standalone の global CLI だけを入れたい場合に使ってください。
-
-### Homebrew（macOS）
-
-```bash
-brew install hatayama/tap/uloop
-```
-
-更新は `brew upgrade uloop` で行います。formula は dispatcher の release ごとに自動で更新されます。
-
-### Shell installer（curl / PowerShell）
-
-インストーラは `Packages/src/project-runner-pin.json` の digest 一覧でアーカイブを検証します（Unity の **Install CLI** ボタンと同じ pin）。
-任意の環境変数: `ULOOP_REF`（pin を取る git ref。既定は `main`）、`ULOOP_INSTALL_DIR`。
-`ULOOP_VERSION` は pin の `dispatcherReleaseTag` と一致する場合のみ有効です。
-
-> [!NOTE]
-> terminal install も Unity GUI と同じ repository pin を信頼源にします。明示的に
-> `ULOOP_ARCHIVE_MANIFEST`（Sigstore 検証由来）を渡す手動フローは、任意の release tag を選ぶ hardened option として残っています。
-
-macOS、Windows Git Bash の場合:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
-```
-
-Windows Git Bash では、インストーラは dispatcher の zip を `unzip`、`tar`（bsdtar / Windows の tar.exe）、PowerShell の `Expand-Archive` の順に試して展開します。フォールバックが使える環境では `unzip` は必須ではありません。
-
-Windows PowerShell の場合:
-
-```powershell
-irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
-```
-
-### 手動の attestation 検証付き install（release tag を自分で選ぶ）
-
-最初にOSまたはパッケージ管理経由で`gh`（ログイン済み）と`jq`を導入してください。以下のコマンドはこの2つを自動では導入せず、代替手段にもフォールバックしません。最新のdispatcher Release tagは自動で解決されます。特定のバージョンを入れたい場合は、`RELEASE_TAG`にimmutableなタグ（例: `dispatcher-v3.0.0`）を直接指定してください。
-
-コマンドがやっていることは順に次の5つです。
-
-1. 最新のdispatcher Release tagを解決する（`RELEASE_TAG`）
-2. Releaseからインストーラと、その署名情報（sigstore attestation bundle）を取得する（`gh release download`）
-3. インストーラが「このリポジトリのCIが、このタグのコミットからビルドしたもの」であることを検証する（`gh attestation verify`）
-4. 検証済みの署名情報から、CLI本体アーカイブの正しいハッシュ一覧を取り出す（`jq`）
-5. ハッシュ一覧を渡してインストーラを実行する。アーカイブが一覧と一致しなければ、実行前に中断されます
-
-macOS、Windows Git Bash の場合:
-
-<!-- このブロックに # コメントを入れないこと。素のzsh（interactivecomments無効）にコピペするとコメント行がエラーになり、検証失敗時に実行を止める && の連結も壊れる。説明は上のリストに書く。 -->
-```bash
-REPOSITORY=hatayama/unity-cli-loop
-RELEASE_TAG=$(gh api "repos/$REPOSITORY/releases?per_page=100" --jq '[.[] | select(.tag_name | startswith("dispatcher-v"))][0].tag_name')
-SOURCE_REF=refs/heads/main
-tmp_dir=$(mktemp -d)
-gh release download "$RELEASE_TAG" --repo "$REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sigstore.json' --dir "$tmp_dir" && \
-tag_sha=$(gh api "repos/$REPOSITORY/commits/$RELEASE_TAG" --jq .sha) && \
-gh attestation verify "$tmp_dir/install.sh" --bundle "$tmp_dir/install.sh.sigstore.json" --repo "$REPOSITORY" --signer-workflow "$REPOSITORY/.github/workflows/dispatcher-publish.yml" --source-ref "$SOURCE_REF" --source-digest "$tag_sha" && \
-manifest=$(jq -r '.dsseEnvelope.payload | @base64d | fromjson | .subject[] | "\(.digest.sha256)  \(.name)"' "$tmp_dir/install.sh.sigstore.json" | LC_ALL=C sort) && \
-ULOOP_VERSION="$RELEASE_TAG" ULOOP_ARCHIVE_MANIFEST="$manifest" sh "$tmp_dir/install.sh"
-```
-
-Windows PowerShell の場合:
-
-```powershell
-$repository = 'hatayama/unity-cli-loop'
-# 最新のdispatcher Release tagを解決する（固定したい場合はタグ文字列を直接代入）
-$releaseTag = (gh api "repos/$repository/releases?per_page=100" | ConvertFrom-Json | Where-Object { $_.tag_name -like 'dispatcher-v*' } | Select-Object -First 1).tag_name
-if (-not $releaseTag) { throw 'No dispatcher release found.' }
-$sourceRef = 'refs/heads/main'
-$temporaryDirectory = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
-# Releaseからインストーラと、その署名情報（sigstore attestation bundle）を取得する
-gh release download $releaseTag --repo $repository --pattern 'install.ps1' --pattern 'install.ps1.sigstore.json' --dir $temporaryDirectory.FullName
-if ($LASTEXITCODE -ne 0) { throw 'Installer download failed.' }
-$tagSha = gh api "repos/$repository/commits/$releaseTag" --jq .sha
-if ($LASTEXITCODE -ne 0) { throw 'Release tag resolution failed.' }
-# インストーラが「このリポジトリのCIが、このタグのコミットからビルドしたもの」であることを検証する
-gh attestation verify (Join-Path $temporaryDirectory.FullName 'install.ps1') --bundle (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') --repo $repository --signer-workflow "$repository/.github/workflows/dispatcher-publish.yml" --source-ref $sourceRef --source-digest $tagSha
-if ($LASTEXITCODE -ne 0) { throw 'Installer attestation verification failed.' }
-# 検証済みの署名情報から、CLI本体アーカイブの正しいハッシュ一覧を取り出す
-$bundle = Get-Content -Raw -Encoding UTF8 (Join-Path $temporaryDirectory.FullName 'install.ps1.sigstore.json') | ConvertFrom-Json
-$statement = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($bundle.dsseEnvelope.payload)) | ConvertFrom-Json
-$manifest = [string]::Join("`n", @($statement.subject | ForEach-Object { "$($_.digest.sha256)  $($_.name)" } | Sort-Object))
-# ハッシュ一覧を渡してインストーラを実行する（アーカイブが一覧と一致しなければ実行前に中断される）
-$env:ULOOP_VERSION = $releaseTag
-$env:ULOOP_ARCHIVE_MANIFEST = $manifest
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $temporaryDirectory.FullName 'install.ps1')
-```
-
-native CLI のインストール後、installer は古い npm package を `npm uninstall -g uloop-cli` で自動削除しようとします。
-npm が見つからない場合や、古い command が別の Node prefix に属している場合は、手動で実行する command を表示します。
-
-```bash
-npm uninstall -g uloop-cli
-```
-
-プロジェクトを切り替えるためにv2 CLIをグローバルインストールしないでください。ターミナルの`uloop`がnative dispatcherではなく古いnpm版を指している場合は、npm版を削除してnative dispatcherを再インストールしてください。
-
-```bash
-npm uninstall -g uloop-cli
-# 上記の検証済みnative installerをもう一度実行します。
-which uloop
-uloop --version
-```
-
-Windows PowerShell の場合:
-
-```powershell
-npm uninstall -g uloop-cli
-# 上記の検証済みnative installerをもう一度実行します。
-Get-Command uloop
-uloop --version
-```
-
-</details>
-
-
-<img width="350" alt="CLI未インストール状態のSettingsウィンドウ。Install CLIボタンが表示されている" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
-
-Settings ウィンドウでは、グローバルな `uloop` コマンドが検出されているかを確認できます。
-
-下記の表示になれば成功です。
-
-<img width="350" alt="CLI検出に成功したSettingsウィンドウ。緑のインジケータとCLIバージョンが表示されている" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
-
-## ステップ2: Skillsのインストール
-
-Claude CodeやCodexなど、対象を選択して **Install Skills** ボタンを押します。
-
-<img width="350" alt="SettingsウィンドウのSkillsセクション。対象を選択してInstall Skillsボタンが押せる状態" src="Packages/src/Documentation~/images/settings-skills-install.png" />
-
-
-<details> 
-<summary>terminalからinstallする場合はこちら</summary>
-
-```bash
-# Claude Code のプロジェクトにインストール
-uloop skills install --claude
-
-# OpenAI Codex のプロジェクトにインストール
-uloop skills install --codex
-
-# または、グローバルにインストール
-uloop skills install --claude --global
-
-# または、任意のディレクトリ（外部のスキルパッケージストアなど）へ
-# <path>/<skill-name> のフラット構成で同期。uloopが管理しないトップレベルの
-# ファイルはそのまま残る（references/ などスキル所有のディレクトリは丸ごと置換）
-uloop skills install --output-dir path/to/skills
-```
 </details>
 
 これで完了です！Skillsをインストールすると、LLMツールが以下のような指示に自動で対応できるようになります：
