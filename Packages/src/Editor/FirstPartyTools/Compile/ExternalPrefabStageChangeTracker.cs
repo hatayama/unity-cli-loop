@@ -115,6 +115,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            // The save step has already reconciled dirty stages whose file changed; a stage that is
+            // still dirty here changed on disk after that check (or its save failed), and reloading
+            // would silently drop the unsaved edits. Keep them and report the conflict instead.
+            if (prefabStage.scene.isDirty)
+            {
+                Debug.LogWarning(
+                    "Unity CLI Loop skipped Prefab Stage external-change reload because the current Prefab Stage has unsaved changes.");
+                return;
+            }
+
             AssetDatabase.ImportAsset(assetPath);
             UnityEngine.Object prefabAsset = AssetDatabase.LoadMainAssetAtPath(assetPath);
             if (prefabAsset == null)

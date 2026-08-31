@@ -338,7 +338,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                              result.Message);
         }
 
-        private static string[] SaveDirtyOpenScenesChangedExternally()
+        internal static string[] SaveDirtyOpenScenesChangedExternally()
         {
             string[] scenePathsToSave = ExternalAssetFocusReturnSavePolicy.SelectDirtyAssetsToSave(
                 GetOpenSceneStates(), SceneSnapshots, ReadAssetFileFingerprint);
