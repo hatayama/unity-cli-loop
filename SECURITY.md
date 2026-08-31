@@ -29,9 +29,9 @@ and forbade a mutable-branch `curl | sh` / `irm | iex` path).
   protected branch (default `main`; override with `ULOOP_REF`) and enforces
   those digests by SHA-256 before extraction.
 - An explicit `ULOOP_ARCHIVE_MANIFEST` (typically from a Sigstore-verified
-  attestation) always takes precedence over the pin. The README's
-  `gh attestation verify` + `jq` flow remains available as a hardened option
-  when choosing a release tag other than the pin.
+  attestation, as produced by `gh attestation verify` on the installer's
+  `.sigstore.json` bundle) always takes precedence over the pin, so a
+  release tag other than the pin can be installed as a hardened option.
 - Unity installation uses the same pin fields from the already-installed
   package, so terminal and GUI share one trust root. Remaining gaps (Sigstore
   chains to the signing workflow; repository trust chains to branch
