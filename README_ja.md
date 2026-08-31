@@ -83,6 +83,8 @@ uloop package install
 
 OpenUPM の scoped registry と `io.github.hatayama.uloopmcp` の依存を `Packages/manifest.json` に追加します。バージョンを固定するには `--version <x.y.z>` を付けます。
 
+続けて Unity でプロジェクトを開き（開いている場合は Editor に戻り）、パッケージをインストールさせます。次のステップは、インストールされたパッケージからスキルを読み取ります。
+
 ### ステップ 3：スキルをインストールする
 
 使っている LLM ツールに合わせて、Unity プロジェクトのルートで実行します：
@@ -116,6 +118,8 @@ CLI のバージョンに続いて、このプロジェクトが使う project r
 This Unity project pins uloop project runner 3.0.0.
 ```
 
+ターミナルに表示せず出力を受け取る場合（AI エージェントがコマンドを実行する場合など）はバージョンの行だけが表示されます。これも成功です。
+
 ## Unity の UI から入れる場合
 
 ### ステップ 1：Unity パッケージをインストールする
@@ -145,13 +149,13 @@ Scope(s): io.github.hatayama.uloopmcp
 
 <img width="350" alt="CLI未インストール状態のSettingsウィンドウ。Install CLIボタンが表示されている" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
 
-ボタンが消えて CLI のバージョンが表示されれば完了です：
+CLI のバージョンが表示され、ボタンが **Uninstall CLI** に変われば完了です：
 
 <img width="350" alt="CLI検出に成功したSettingsウィンドウ。緑のインジケータとCLIバージョンが表示されている" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
 
 ### ステップ 3：スキルをインストールする
 
-同じ Settings ウィンドウで、Claude Code、Codex など対象を選び、**Install Skills** を押します：
+同じ Settings ウィンドウで対象を選び（**Claude Code**、または Codex など `.agents/skills` を読むツール向けの **Common (.agents)**）、**Install Skills** を押します：
 
 <img width="350" alt="SettingsウィンドウのSkillsセクション。対象を選択してInstall Skillsボタンが押せる状態" src="Packages/src/Documentation~/images/settings-skills-install.png" />
 

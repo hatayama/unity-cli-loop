@@ -83,6 +83,8 @@ uloop package install
 
 This adds the OpenUPM scoped registry and the `io.github.hatayama.uloopmcp` dependency to `Packages/manifest.json`. Add `--version <x.y.z>` to pin a specific version.
 
+Then open the project in Unity (or switch back to the Editor) so that it installs the package. The next step reads the skills from the installed package.
+
 ### Step 3: Install the skills
 
 Run the command for your LLM tool in the root of your Unity project:
@@ -116,6 +118,8 @@ You are done when the CLI version is followed by the project runner version this
 This Unity project pins uloop project runner 3.0.0.
 ```
 
+When the output is captured instead of shown in a terminal — for example when an AI agent runs the command — only the version line is printed. That is also success.
+
 ## Install from the Unity UI
 
 ### Step 1: Install the Unity package
@@ -145,13 +149,13 @@ Open `Window > Unity CLI Loop > Settings` and press **Install CLI**:
 
 <img width="350" alt="Settings window before the CLI is installed, showing the Install CLI button" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
 
-You are done when the button disappears and the CLI version is shown:
+You are done when the CLI version is shown and the button changes to **Uninstall CLI**:
 
 <img width="350" alt="Settings window after CLI detection succeeds, showing a green indicator and the CLI version" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
 
 ### Step 3: Install the skills
 
-In the same Settings window, select your target (Claude Code, Codex, etc.) and press **Install Skills**:
+In the same Settings window, select your target — for example **Claude Code**, or **Common (.agents)** for Codex and other tools that read `.agents/skills` — and press **Install Skills**:
 
 <img width="350" alt="The Skills section of the Settings window, with a target selected and the Install Skills button ready" src="Packages/src/Documentation~/images/settings-skills-install.png" />
 
