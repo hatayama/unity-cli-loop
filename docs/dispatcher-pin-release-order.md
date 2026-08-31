@@ -17,13 +17,15 @@ installation. Package release preparation must follow this order:
 3. Verify the resulting pin with `check-dispatcher-pin` and publish the Unity
    package.
 
-`build-and-test.yml` runs `check-dispatcher-pin-freshness` on everything except
-pull requests, so `main` fails while the pin still records an older release than
-the newest published stable `dispatcher-v*` one. The failure clears by merging
-the automated pin-stamp pull request, or by stamping by hand with
-`stamp-dispatcher-pin --tag <tag>`. The gate deliberately skips `pull_request`
-runs: until that pull request merges, every other branch carries the same lagging
-pin, and failing there would only hide the state that `main` alone can fix.
+`dispatcher-pin-freshness.yml` runs `check-dispatcher-pin-freshness` on every
+push to `main`, once a day on a schedule, and on manual dispatch, so `main` fails
+while the pin still records an older release than the newest published stable
+`dispatcher-v*` one. The failure clears by merging the automated pin-stamp pull
+request, or by stamping by hand with `stamp-dispatcher-pin --tag <tag>`. The
+gate deliberately does not run on `pull_request`: until that pull request
+merges, every other branch carries the same lagging pin, and failing there would
+only hide the state that `main` alone can fix. The schedule exists because a
+dispatcher release can be published without any later push to `main`.
 
 A pull request created with `GITHUB_TOKEN` does not trigger `pull_request`
 workflows, so `open-dispatcher-pin-pr` dispatches the required check workflows
