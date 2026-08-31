@@ -93,6 +93,16 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: go run ./cmd/check-dispatcher-pin --network
 
+      # Not on pull_request: while the automated pin-stamp pull request is open, the pin on every
+      # other branch legitimately lags the newest stable dispatcher release, and failing there would
+      # turn all open pull requests red for a state only main can fix. Failing on main is the point.
+      - name: Check dispatcher pin freshness
+        if: github.event_name != 'pull_request'
+        working-directory: cli/release-automation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: go run ./cmd/check-dispatcher-pin-freshness
+
       - name: Check release triggers
         if: github.event_name == 'pull_request'
         working-directory: cli/release-automation
