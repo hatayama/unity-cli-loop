@@ -131,20 +131,20 @@ func TestBuildToolParamsPreservesExecuteDynamicCodeMultilineCode(t *testing.T) {
 	}
 }
 
-// Tests that run-tests accepts --fail-on-unsaved-changes from embedded tools.
-func TestBuildToolParamsConvertsRunTestsFailOnUnsavedChangesFlag(t *testing.T) {
+// Tests that run-tests accepts --unsaved-changes from embedded tools.
+func TestBuildToolParamsConvertsRunTestsUnsavedChangesFlag(t *testing.T) {
 	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), clicore.RunTestsCommandName)
 	if !ok {
 		t.Fatal("run-tests was not found in default tools")
 	}
 
-	params, _, err := buildToolParams([]string{"--fail-on-unsaved-changes"}, tool)
+	params, _, err := buildToolParams([]string{"--unsaved-changes", "fail"}, tool)
 	if err != nil {
 		t.Fatalf("buildToolParams failed: %v", err)
 	}
 
-	if params["SaveBeforeRun"] != false {
-		t.Fatalf("SaveBeforeRun mismatch: %#v", params["SaveBeforeRun"])
+	if params["UnsavedChanges"] != "fail" {
+		t.Fatalf("UnsavedChanges mismatch: %#v", params["UnsavedChanges"])
 	}
 }
 
@@ -165,28 +165,28 @@ func TestBuildToolParamsConvertsCompileStopOnExternalSceneChangesFlag(t *testing
 	}
 }
 
-// Tests that run-tests-specific aliases do not leak into unrelated tool schemas.
-func TestBuildToolParamsKeepsGenericSaveBeforeRunFlagForOtherTools(t *testing.T) {
+// Tests that run-tests-specific options do not leak into unrelated tool schemas.
+func TestBuildToolParamsKeepsGenericNegatedBooleanFlagForOtherTools(t *testing.T) {
 	tool := clicore.ToolDefinition{
 		Name: "sample-tool",
 		InputSchema: clicore.InputSchema{
 			Properties: map[string]clicore.ToolProperty{
-				"SaveBeforeRun": {Type: "boolean", Default: true},
+				"AutoSaveDrafts": {Type: "boolean", Default: true},
 			},
 		},
 	}
 
-	params, _, err := buildToolParams([]string{"--no-save-before-run"}, tool)
+	params, _, err := buildToolParams([]string{"--no-auto-save-drafts"}, tool)
 	if err != nil {
 		t.Fatalf("buildToolParams failed: %v", err)
 	}
-	if params["SaveBeforeRun"] != false {
-		t.Fatalf("SaveBeforeRun mismatch: %#v", params["SaveBeforeRun"])
+	if params["AutoSaveDrafts"] != false {
+		t.Fatalf("AutoSaveDrafts mismatch: %#v", params["AutoSaveDrafts"])
 	}
 
-	_, _, err = buildToolParams([]string{"--fail-on-unsaved-changes"}, tool)
+	_, _, err = buildToolParams([]string{"--unsaved-changes", "fail"}, tool)
 	if err == nil {
-		t.Fatal("expected run-tests-specific flag to be rejected")
+		t.Fatal("expected run-tests option to be rejected")
 	}
 }
 

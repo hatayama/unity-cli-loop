@@ -38,7 +38,7 @@ Through package 3.0.0 the preflight saved every dirty Scene and the dirty Prefab
 return, regardless of whether anything changed on disk. Because an agent-driven workflow
 switches focus between the terminal and Unity constantly, that silently committed in-progress
 editor work to disk within seconds of making it — the user saw a Scene they had not saved
-become saved, and `run-tests --fail-on-unsaved-changes` had nothing left to detect. Saving is
+become saved, and `run-tests --unsaved-changes fail` had nothing left to detect. Saving is
 now gated on an actual external change, which is the only case the dialog-avoidance rationale
 covers.
 

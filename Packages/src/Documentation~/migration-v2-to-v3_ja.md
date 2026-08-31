@@ -125,7 +125,7 @@ V3のbooleanオプションは値を取りません。V2の呼び出しをどう
 | `uloop compile` | `--reload-external-scene-changes true` | 削除 |
 | `uloop compile` | `--reload-external-scene-changes false` | `--stop-on-external-scene-changes` |
 | `uloop run-tests` | `--save-before-run true` またはフラグのみ | 削除 |
-| `uloop run-tests` | `--save-before-run false` | `--fail-on-unsaved-changes` |
+| `uloop run-tests` | `--save-before-run false` | `--unsaved-changes fail` |
 | `uloop replay-input` | `--show-overlay true` | 削除 |
 | `uloop replay-input` | `--show-overlay false` | `--no-show-overlay` |
 | `uloop get-hierarchy` | `--include-components true` | 削除 |

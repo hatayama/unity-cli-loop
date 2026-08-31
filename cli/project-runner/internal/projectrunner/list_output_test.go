@@ -61,7 +61,11 @@ func TestNewListCatalogUsesSpecialOptionAliases(t *testing.T) {
 				Name: clicore.RunTestsCommandName,
 				InputSchema: clicore.InputSchema{
 					Properties: map[string]clicore.ToolProperty{
-						"SaveBeforeRun": {Type: "boolean", Default: true},
+						"UnsavedChanges": {
+							Type:    "string",
+							Default: "save",
+							Enum:    []string{"save", "fail", "discard"},
+						},
 					},
 				},
 			},
@@ -79,11 +83,16 @@ func TestNewListCatalogUsesSpecialOptionAliases(t *testing.T) {
 	catalog := newListCatalog(cache)
 
 	runTestsTool := findListTool(t, catalog, clicore.RunTestsCommandName)
-	failOnUnsavedChanges := findListOption(t, runTestsTool, "--fail-on-unsaved-changes")
-	if failOnUnsavedChanges.Default != false {
-		t.Fatalf("fail-on-unsaved-changes default mismatch: %#v", failOnUnsavedChanges)
+	unsavedChanges := findListOption(t, runTestsTool, "--unsaved-changes")
+	if unsavedChanges.Default != "save" {
+		t.Fatalf("unsaved-changes default mismatch: %#v", unsavedChanges)
 	}
-	assertListOptionMissing(t, runTestsTool, "--no-save-before-run")
+	if len(unsavedChanges.Values) != 3 ||
+		unsavedChanges.Values[0] != "save" ||
+		unsavedChanges.Values[1] != "fail" ||
+		unsavedChanges.Values[2] != "discard" {
+		t.Fatalf("unsaved-changes values mismatch: %#v", unsavedChanges)
+	}
 	skipCompile := findListOption(t, runTestsTool, tooldocs.RunTestsSkipCompileOptionName)
 	if skipCompile.Type != "boolean" {
 		t.Fatalf("skip-compile type mismatch: %#v", skipCompile)
