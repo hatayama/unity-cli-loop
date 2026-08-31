@@ -4,7 +4,6 @@
     "Packages/src": {
       "component": "unity-package",
       "release-type": "go",
-      "release-as": "3.0.0",
       "include-v-in-tag": true,
       "include-component-in-tag": false,
       "changelog-path": "CHANGELOG.md",
@@ -19,7 +18,6 @@
     "cli/dispatcher": {
       "component": "dispatcher",
       "release-type": "go",
-      "release-as": "3.0.0",
       "include-v-in-tag": true,
       "include-component-in-tag": true,
       "changelog-path": "CHANGELOG.md",
@@ -34,7 +32,6 @@
     "cli/project-runner": {
       "component": "uloop-project-runner",
       "release-type": "go",
-      "release-as": "3.0.0",
       "include-v-in-tag": true,
       "include-component-in-tag": true,
       "changelog-path": "CHANGELOG.md",
