@@ -37,111 +37,108 @@ Unity CLI Loopのコアとなるコンセプトは次の4つです。
 
 https://github.com/user-attachments/assets/569a2110-7351-4cf3-8281-3a83fe181817
 
-# インストール
+# クイックスタート
 
-入れるものは **CLI（`uloop` コマンド）**、**Unityパッケージ**、**Skills** の3つです。terminal から入れる方法と Unity の UI から入れる方法があり、どちらか一方で完了します。
+このガイドでは、CLI、Unity パッケージ、スキルの 3 つをインストールし、LLM ツールから Unity を操作できる状態にします。
+
+## 始める前に
+
+以下を確認してください：
+
+- Unity 2022.3 以降のプロジェクトがある
+- ターミナルまたは PowerShell が開いている
+- Claude Code、Codex など、スキルを読み込める LLM ツールを使っている
 
 > [!NOTE]
-> **V2からアップグレードする場合**: V2 APIで作ったカスタムツールがあるプロジェクトでは、V3パッケージを入れた直後にコンパイルエラーが出ます。これは想定内の挙動です。手で直さず、Unity起動時のSafe Modeの問い合わせで `Ignore` を選び、自動で開く移行ウィンドウ（`Window > Unity CLI Loop > Custom Tool Migration`）で **Migrate** を押してください。手順は [カスタムツール／スキルのV3移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md) を参照してください。
+> **V2 からアップグレードする場合**: V2 API で作ったカスタムツールがあるプロジェクトでは、V3 パッケージを入れた直後にコンパイルエラーが出ます。これは想定内の挙動です。手で直さず、Unity 起動時の Safe Mode の問い合わせで `Ignore` を選び、自動で開く移行ウィンドウ（`Window > Unity CLI Loop > Custom Tool Migration`）で **Migrate** を押してください。手順は [カスタムツール／スキルの V3 移行ガイド](Packages/src/Documentation~/migration-v2-to-v3_ja.md) を参照してください。
 
-## terminal から入れる場合
+## ステップ 1：CLI をインストールする
 
-### 1. CLI
-
-terminal で次のコマンドを実行すると、`uloop` コマンドが使えるようになります。
-
-macOS、Windows Git Bash の場合:
+**macOS、Windows Git Bash:**
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.sh | sh
 ```
 
-Windows PowerShell の場合:
+**Windows PowerShell:**
 
 ```powershell
 irm https://raw.githubusercontent.com/hatayama/unity-cli-loop/main/scripts/install.ps1 | iex
 ```
 
-macOS では Homebrew でも入れられます（更新は `brew upgrade uloop`）。
+**Homebrew（macOS）:**
 
 ```bash
 brew install hatayama/tap/uloop
 ```
 
-### 2. Unityパッケージ
+Unity の UI からインストールする場合は、ステップ 2 の後に `Window > Unity CLI Loop > Settings` を開き、**Install CLI** を押します。
 
-Unity プロジェクトのルートの terminal から（または `--project-path` を指定して）実行します。
+## ステップ 2：Unity パッケージをインストールする
+
+Unity プロジェクトのルートで実行します：
 
 ```bash
 uloop package install
 ```
 
-OpenUPM の scoped registry と `io.github.hatayama.uloopmcp` 依存を `Packages/manifest.json` に書き込みます。特定バージョンを入れたいときは `--version <x.y.z>` を付けます。
+OpenUPM の scoped registry と `io.github.hatayama.uloopmcp` の依存を `Packages/manifest.json` に追加します。バージョンを固定するには `--version <x.y.z>` を付けます。
 
-### 3. Skills
+**Package Manager から入れる場合:** `Window > Package Manager` の「+」から **Add package from git URL** を選び、次の URL を入力します。
 
-使っているLLMツールに合わせて、Unity プロジェクトのルートの terminal から実行します。
-
-```bash
-# Claude Code のプロジェクトにインストール
-uloop skills install --claude
-
-# Codex など .agents/skills を読むツール向けにプロジェクトにインストール
-uloop skills install --agents
-
-# または、グローバルにインストール
-uloop skills install --claude --global
-
-# または、任意のディレクトリ（外部のスキルパッケージストアなど）へ
-uloop skills install --output-dir path/to/skills
-```
-
-## Unity の UI から入れる場合
-
-### 1. Unityパッケージ
-
-1. Unity Editorを開く
-2. Window > Package Managerを開く
-3. 「+」ボタンをクリック
-4. 「Add package from git URL」を選択
-5. 以下のURLを入力：
 ```text
 https://github.com/hatayama/unity-cli-loop.git?path=/Packages/src
 ```
 
 <details>
-<summary>OpenUPM の scoped registry から入れる場合</summary>
+<summary>OpenUPM の scoped registry を手動で設定する場合</summary>
 
-1. Project Settingsウィンドウを開き、Package Managerページに移動
-2. Scoped Registriesリストに以下のエントリを追加：
+1. `Project Settings > Package Manager` の Scoped Registries に以下を追加します：
 ```text
 Name: OpenUPM
 URL: https://package.openupm.com
 Scope(s): io.github.hatayama.uloopmcp
 ```
-
-3. Package Managerウィンドウを開き、My RegistriesセクションのOpenUPMを選択。Unity CLI Loopが表示されます。
+2. `Window > Package Manager` で My Registries の OpenUPM を選び、Unity CLI Loop をインストールします。
 
 </details>
 
-### 2. CLI
+## ステップ 3：スキルをインストールする
 
-Window > Unity CLI Loop > Settings を開きます。**CLI** ボタンが青くなっていなければ **Install CLI** を押してください。
+使っている LLM ツールに合わせて、Unity プロジェクトのルートで実行します：
 
-<img width="350" alt="CLI未インストール状態のSettingsウィンドウ。Install CLIボタンが表示されている" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
+```bash
+# Claude Code
+uloop skills install --claude
 
-下記の表示になれば成功です。terminal から入れた場合も、このウィンドウで `uloop` コマンドが検出されているかを確認できます。
+# Codex など .agents/skills を読むツール
+uloop skills install --agents
+
+# プロジェクトではなくグローバルにインストール
+uloop skills install --claude --global
+
+# 任意のディレクトリ（外部のスキルパッケージストアなど）へ
+uloop skills install --output-dir path/to/skills
+```
+
+Unity の UI からインストールする場合は、Settings ウィンドウで対象を選び、**Install Skills** を押します。
+
+## ステップ 4：接続を確認する
+
+`Window > Unity CLI Loop > Settings` を開きます。CLI が検出されていれば、次のように表示されます：
 
 <img width="350" alt="CLI検出に成功したSettingsウィンドウ。緑のインジケータとCLIバージョンが表示されている" src="Packages/src/Documentation~/images/settings-cli-installed.png" />
 
-### 3. Skills
+**Install CLI** ボタンが表示されている場合は、CLI がまだ検出されていません。ボタンを押すか、ステップ 1 をやり直してください。
 
-同じ Settings ウィンドウで、Claude CodeやCodexなど対象を選択して **Install Skills** ボタンを押します。
+<img width="350" alt="CLI未インストール状態のSettingsウィンドウ。Install CLIボタンが表示されている" src="Packages/src/Documentation~/images/settings-cli-not-installed.png" />
+
+同じウィンドウの Skills セクションで、スキルの導入先も確認できます。
 
 <img width="350" alt="SettingsウィンドウのSkillsセクション。対象を選択してInstall Skillsボタンが押せる状態" src="Packages/src/Documentation~/images/settings-skills-install.png" />
 
 <details>
-<summary>V2プロジェクトと併用する場合</summary>
+<summary>V2 プロジェクトと併用する場合</summary>
 
 v2とv3のプロジェクトを併用するときも、v3 dispatcherをインストールしたままにしてください。Unityがプロジェクトをv2系の`io.github.hatayama.uloopmcp` packageへ解決している場合、dispatcherは同じバージョンのv2 `uloop-cli` releaseをバージョン別user cacheへ自動的にインストールし、コマンドを委譲します。解決済みpackageのバージョンは、downgrade後に残った古いv3 project-runner pinより優先されます。初回のnpmインストールとv2モードの注記はstderrへ出力されるため、stdoutには委譲先コマンドの出力だけが残ります。v3プロジェクトはpinで選ばれたproject runnerを引き続き使用します。
 
