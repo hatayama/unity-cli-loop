@@ -83,7 +83,13 @@ uloop package install
 
 This adds the OpenUPM scoped registry and the `io.github.hatayama.uloopmcp` dependency to `Packages/manifest.json`. Add `--version <x.y.z>` to pin a specific version.
 
-Then open the project in Unity (or switch back to the Editor) so that it installs the package. The next step reads the skills from the installed package.
+Then launch Unity so that it installs the package. The command waits until Unity is ready to accept commands before it exits:
+
+```bash
+uloop launch
+```
+
+If Unity is already open, switching back to the Editor is enough to load the package. The next step reads the skills from the installed package.
 
 ### Step 3: Install the skills
 

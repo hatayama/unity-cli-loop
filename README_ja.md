@@ -83,7 +83,13 @@ uloop package install
 
 OpenUPM の scoped registry と `io.github.hatayama.uloopmcp` の依存を `Packages/manifest.json` に追加します。バージョンを固定するには `--version <x.y.z>` を付けます。
 
-続けて Unity でプロジェクトを開き（開いている場合は Editor に戻り）、パッケージをインストールさせます。次のステップは、インストールされたパッケージからスキルを読み取ります。
+続けて Unity を起動し、パッケージをインストールさせます。コマンドは Unity がコマンドを受け付けられるようになるまで待ってから終了します：
+
+```bash
+uloop launch
+```
+
+Unity をすでに開いている場合は、Editor に戻るだけでパッケージが読み込まれます。次のステップは、インストールされたパッケージからスキルを読み取ります。
 
 ### ステップ 3：スキルをインストールする
 
