@@ -160,7 +160,7 @@ Scope(s): io.github.hatayama.uloopmcp
 
 V2 のパッケージを使っているプロジェクトと V3 のプロジェクトは、同じマシンで併用できます。V3 の CLI をインストールしたままにしておけば、V2 のプロジェクトでは `uloop` コマンドが自動的に V2 の CLI を使います（初回に自動でダウンロードされます。Node.js 22 以降が必要です）。
 
-V2 のプロジェクトの Settings ウィンドウで **Update CLI** や **Downgrade CLI** を押したり、V2 の CLI を `npm install -g uloop-cli` で入れ直したりしないでください。古い npm 版の `uloop` が V3 の CLI を隠してしまいます。すでにそうなっている場合は `npm uninstall -g uloop-cli` を実行してから、ステップ 1 のインストールをもう一度実行してください。
+V2 のプロジェクトの Settings ウィンドウで **Update CLI** や **Downgrade CLI** を押したり、V2 の CLI を `npm install -g uloop-cli` で入れ直したりしないでください。古い npm 版の `uloop` が V3 の CLI を隠してしまいます。すでにそうなっている場合は `npm uninstall -g uloop-cli` を実行してから、「ターミナルから入れる場合」のステップ 1 の CLI インストーラをもう一度実行するか、Settings ウィンドウで **Install CLI** を押してください。
 
 </details>
 

@@ -160,7 +160,7 @@ In the same Settings window, select your target (Claude Code, Codex, etc.) and p
 
 Projects on the V2 package and V3 projects can coexist on the same machine. Keep the V3 CLI installed: in a V2 project, the `uloop` command automatically uses the V2 CLI (downloaded on first use; Node.js 22 or later is required).
 
-Do not press **Update CLI** or **Downgrade CLI** in a V2 project's Settings window, and do not reinstall the V2 CLI with `npm install -g uloop-cli`. The old npm `uloop` would hide the V3 CLI. If that has already happened, run `npm uninstall -g uloop-cli` and then repeat the Step 1 install.
+Do not press **Update CLI** or **Downgrade CLI** in a V2 project's Settings window, and do not reinstall the V2 CLI with `npm install -g uloop-cli`. The old npm `uloop` would hide the V3 CLI. If that has already happened, run `npm uninstall -g uloop-cli`, then run the CLI installer from Step 1 of "Install from the terminal" again or press **Install CLI** in the Settings window.
 
 </details>
 
