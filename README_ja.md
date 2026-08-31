@@ -83,7 +83,7 @@ uloop package install
 
 OpenUPM の scoped registry と `io.github.hatayama.uloopmcp` の依存を `Packages/manifest.json` に追加します。バージョンを固定するには `--version <x.y.z>` を付けます。
 
-続けて Unity を起動します。`uloop launch` は Unity が起動するのを待って終了します。Unity がすでに起動している場合は、その Unity にフォーカスします：
+続けて Unity を起動します。Unity がすでに起動している場合は、その Unity にフォーカスします：
 
 ```bash
 uloop launch
