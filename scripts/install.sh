@@ -441,7 +441,7 @@ resolve_manifest_from_pin_if_needed() {
 
   pin_json=$(fetch_pin_json) || {
     echo "Could not fetch project-runner pin from https://raw.githubusercontent.com/$REPOSITORY/$PIN_REF/Packages/src/project-runner-pin.json" >&2
-    echo "Set ULOOP_ARCHIVE_MANIFEST from a verified attestation (see README), or fix ULOOP_REF." >&2
+    echo "Set ULOOP_ARCHIVE_MANIFEST from a verified attestation (see SECURITY.md), or fix ULOOP_REF." >&2
     exit 1
   }
 
@@ -470,7 +470,7 @@ resolve_manifest_from_pin_if_needed() {
     :
   else
     echo "ULOOP_VERSION ($VERSION) does not match the pin dispatcherReleaseTag ($pin_tag) at $PIN_REF." >&2
-    echo "Unset ULOOP_VERSION, or supply ULOOP_ARCHIVE_MANIFEST from a verified attestation (see README)." >&2
+    echo "Unset ULOOP_VERSION, or supply ULOOP_ARCHIVE_MANIFEST from a verified attestation (see SECURITY.md)." >&2
     exit 1
   fi
 

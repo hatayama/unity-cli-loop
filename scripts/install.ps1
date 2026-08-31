@@ -160,7 +160,7 @@ function Resolve-UloopManifestFromPin {
     try {
         $PinJsonText = Get-UloopPinJson
     } catch {
-        throw "Could not fetch project-runner pin from $PinUrl. Set ULOOP_ARCHIVE_MANIFEST from a verified attestation (see README), or fix ULOOP_REF."
+        throw "Could not fetch project-runner pin from $PinUrl. Set ULOOP_ARCHIVE_MANIFEST from a verified attestation (see SECURITY.md), or fix ULOOP_REF."
     }
 
     $PinDocument = ConvertFrom-UloopPinDocument -JsonText $PinJsonText
@@ -180,7 +180,7 @@ function Resolve-UloopManifestFromPin {
         $script:Version = $PinTag
         Write-Host "Using dispatcher release $($script:Version) pinned at $PinRef"
     } elseif ($Version -ne $PinTag) {
-        throw "ULOOP_VERSION ($Version) does not match the pin dispatcherReleaseTag ($PinTag) at $PinRef. Unset ULOOP_VERSION, or supply ULOOP_ARCHIVE_MANIFEST from a verified attestation (see README)."
+        throw "ULOOP_VERSION ($Version) does not match the pin dispatcherReleaseTag ($PinTag) at $PinRef. Unset ULOOP_VERSION, or supply ULOOP_ARCHIVE_MANIFEST from a verified attestation (see SECURITY.md)."
     }
 
     $script:ResolvedArchiveManifest = $PinManifest
