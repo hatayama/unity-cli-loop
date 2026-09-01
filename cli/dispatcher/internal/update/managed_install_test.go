@@ -18,6 +18,7 @@ func TestIsWingetManagedPath(t *testing.T) {
 		{name: "curl install", path: `C:\Users\<USER_NAME>\AppData\Local\Programs\uloop\bin\uloop.exe`, want: false},
 		{name: "homebrew install", path: `/opt/homebrew/Cellar/uloop/3.1.0/bin/uloop`, want: false},
 		{name: "winget without managed directory", path: `C:\Tools\WinGet\uloop.exe`, want: false},
+		{name: "managed directory is not adjacent", path: `C:\Tools\WinGet\Other\Packages\uloop.exe`, want: false},
 		{name: "reversed segments", path: `D:\Packages\WinGet\uloop.exe`, want: false},
 	}
 
@@ -42,6 +43,7 @@ func TestDetectManagedInstall(t *testing.T) {
 	}{
 		{name: "homebrew", path: "/opt/homebrew/Cellar/uloop/3.1.0/bin/uloop", expectedKind: ManagedInstallHomebrew, expectedName: "Homebrew", expectedUpgrade: "brew upgrade uloop"},
 		{name: "winget", path: `C:\Program Files\WinGet\Links\uloop.exe`, expectedKind: ManagedInstallWinget, expectedName: "winget", expectedUpgrade: "winget upgrade --id hatayama.uloop"},
+		{name: "homebrew precedence", path: "/opt/homebrew/Cellar/uloop/3.1.0/WinGet/Links/uloop", expectedKind: ManagedInstallHomebrew, expectedName: "Homebrew", expectedUpgrade: "brew upgrade uloop"},
 		{name: "unmanaged", path: "/home/<USER_NAME>/.local/bin/uloop", expectedKind: ManagedInstallNone},
 	}
 
