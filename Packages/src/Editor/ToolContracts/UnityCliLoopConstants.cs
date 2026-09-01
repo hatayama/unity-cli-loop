@@ -95,6 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string HIERARCHY_RESULTS_DIR = "HierarchyResults";
         public const string FIND_GAMEOBJECTS_RESULTS_DIR = "FindGameObjectsResults";
         public const string SCREENSHOTS_DIR = "Screenshots";
+        public const string VIDEOS_DIR = "Videos";
         public const string VIBE_LOGS_DIR = "VibeLogs";
 
         // Raycast tool constants
