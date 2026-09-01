@@ -252,63 +252,96 @@ func runWingetTestScenario(t *testing.T, scenario *wingetTestScenario) (string, 
 
 func (s *wingetTestScenario) runOutput(_ context.Context, extraEnv []string, name string, args ...string) (string, error) {
 	joined := strings.Join(args, " ")
+	handlers := []func([]string, string) (string, bool, error){
+		s.releaseOutput,
+		s.upstreamOutput,
+		s.branchOutput,
+		s.manifestFileOutput,
+		s.pullRequestOutput,
+	}
+	for _, handler := range handlers {
+		output, handled, err := handler(args, joined)
+		if handled {
+			return output, err
+		}
+	}
+	return "", errors.New("unexpected command: " + name + " " + joined + " env=" + strings.Join(extraEnv, ","))
+}
+
+func (s *wingetTestScenario) releaseOutput(_ []string, joined string) (string, bool, error) {
 	if strings.Contains(joined, "release download") {
-		return testWingetSHA256 + "  " + wingetWindowsAmd64AssetName + "\n", nil
+		return testWingetSHA256 + "  " + wingetWindowsAmd64AssetName + "\n", true, nil
 	}
 	if strings.Contains(joined, "release view") {
-		return "2026-08-31T12:34:56Z\n", nil
+		return "2026-08-31T12:34:56Z\n", true, nil
 	}
+	return "", false, nil
+}
+
+func (s *wingetTestScenario) upstreamOutput(_ []string, joined string) (string, bool, error) {
 	if strings.Contains(joined, "repos/microsoft/winget-pkgs/contents/manifests/h/hatayama/uloop/3.1.0?ref=master") {
 		if s.versionExists {
-			return `{}`, nil
+			return `{}`, true, nil
 		}
-		return "", errors.New("gh api failed: HTTP 404 Not Found")
+		return "", true, errors.New("gh api failed: HTTP 404 Not Found")
 	}
 	if strings.Contains(joined, "repos/microsoft/winget-pkgs/contents/manifests/h/hatayama/uloop?ref=master") {
 		if s.packageExists {
-			return `{}`, nil
+			return `{}`, true, nil
 		}
-		return "", errors.New("gh api failed: HTTP 404 Not Found")
+		return "", true, errors.New("gh api failed: HTTP 404 Not Found")
 	}
 	if strings.Contains(joined, "repos/hatayama/winget-pkgs/merge-upstream") {
-		return `{}`, nil
+		return `{}`, true, nil
 	}
 	if strings.Contains(joined, "repos/microsoft/winget-pkgs/git/ref/heads/master") {
-		return "upstream-master-sha\n", nil
+		return "upstream-master-sha\n", true, nil
 	}
+	return "", false, nil
+}
+
+func (s *wingetTestScenario) branchOutput(_ []string, joined string) (string, bool, error) {
 	if strings.Contains(joined, "repos/hatayama/winget-pkgs/git/refs") {
 		if s.branchExists {
-			return "", errors.New("gh api failed: HTTP 422 Reference already exists")
+			return "", true, errors.New("gh api failed: HTTP 422 Reference already exists")
 		}
-		return `{}`, nil
+		return `{}`, true, nil
 	}
+	return "", false, nil
+}
+
+func (s *wingetTestScenario) manifestFileOutput(args []string, joined string) (string, bool, error) {
 	if strings.Contains(joined, "repos/hatayama/winget-pkgs/contents/manifests/h/hatayama/uloop/3.1.0/") {
 		if strings.Contains(joined, "-X PUT") {
 			s.putCalls++
 			encodedContent := flagValue(args, "content")
 			decodedContent, err := base64.StdEncoding.DecodeString(encodedContent)
 			if err != nil {
-				return "", err
+				return "", true, err
 			}
 			if strings.Contains(string(decodedContent), "InstallerSha256:") && !strings.Contains(string(decodedContent), strings.ToUpper(testWingetSHA256)) {
-				return "", errors.New("installer sha256 was not uppercased")
+				return "", true, errors.New("installer sha256 was not uppercased")
 			}
-			return `{}`, nil
+			return `{}`, true, nil
 		}
-		return "", errors.New("gh api failed: HTTP 404 Not Found")
+		return "", true, errors.New("gh api failed: HTTP 404 Not Found")
 	}
+	return "", false, nil
+}
+
+func (s *wingetTestScenario) pullRequestOutput(args []string, joined string) (string, bool, error) {
 	if strings.Contains(joined, "repos/microsoft/winget-pkgs/pulls?head=hatayama:hatayama-uloop-3.1.0&state=open") {
 		if s.pullRequestOpen {
-			return `[{"html_url":"https://example.invalid/existing"}]`, nil
+			return `[{"html_url":"https://example.invalid/existing"}]`, true, nil
 		}
-		return `[]`, nil
+		return `[]`, true, nil
 	}
 	if strings.Contains(joined, "repos/microsoft/winget-pkgs/pulls") && strings.Contains(joined, "-X POST") {
 		s.pullRequestCreateCalls++
 		s.pullRequestTitle = flagValue(args, "title")
-		return `{"html_url":"https://example.invalid/new"}`, nil
+		return `{"html_url":"https://example.invalid/new"}`, true, nil
 	}
-	return "", errors.New("unexpected command: " + name + " " + joined + " env=" + strings.Join(extraEnv, ","))
+	return "", false, nil
 }
 
 func flagValue(args []string, name string) string {
