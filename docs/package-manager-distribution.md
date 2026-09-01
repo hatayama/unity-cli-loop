@@ -35,7 +35,7 @@ winget receives stable dispatcher releases only. Prereleases are not submitted.
 - `uloop update` refuses Homebrew-managed installs and directs users to
   `brew upgrade uloop`. The dispatcher freshness path does the same for required
   updates and skips optional auto-updates.
-- `uloop update` will also refuse winget-managed installs and direct users to
+- `uloop update` also refuses winget-managed installs and directs users to
   `winget upgrade --id hatayama.uloop`.
 - The Unity Settings window and the Setup Wizard offer no CLI action for a
   Homebrew-managed install: the primary button is disabled and reads
