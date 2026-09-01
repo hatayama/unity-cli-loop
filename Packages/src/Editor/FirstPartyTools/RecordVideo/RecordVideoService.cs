@@ -33,7 +33,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string outputPath,
             bool usedDefaultOutputPath,
             int width,
-            int height)
+            int height,
+            float resolutionScale,
+            RecordVideoQuality quality)
         {
             Debug.Assert(!IsRecording, "Start must not run while a recording is already active.");
             Debug.Assert(!string.IsNullOrEmpty(outputPath), "outputPath must not be empty.");
@@ -42,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert((width & 1) == 0, "encoder width must be even.");
             Debug.Assert((height & 1) == 0, "encoder height must be even.");
 
-            PlayModeViewFrameSource frameSource = new PlayModeViewFrameSource();
+            PlayModeViewFrameSource frameSource = new PlayModeViewFrameSource(resolutionScale);
 
             string directory = Path.GetDirectoryName(outputPath);
             Debug.Assert(!string.IsNullOrEmpty(directory), "outputPath must include a directory.");
@@ -57,7 +59,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 width,
                 height,
                 frameRate,
-                useVp8);
+                useVp8,
+                quality);
             try
             {
                 _session = new VideoRecordingSession(
@@ -66,7 +69,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     () => EditorApplication.timeSinceStartup,
                     frameRate,
                     maxDurationSeconds,
-                    outputPath);
+                    outputPath,
+                    quality);
                 _usedDefaultOutputPath = usedDefaultOutputPath;
                 LastCompletedRecordingStore.Clear();
                 EditorApplication.update -= OnEditorUpdate;

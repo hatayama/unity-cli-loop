@@ -14,7 +14,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int skippedFrameCount,
             double elapsedSeconds,
             string stoppedBy,
-            bool isRecording)
+            bool isRecording,
+            string quality)
         {
             OutputPath = outputPath;
             Width = width;
@@ -25,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ElapsedSeconds = elapsedSeconds;
             StoppedBy = stoppedBy;
             IsRecording = isRecording;
+            Quality = quality;
         }
 
         internal string OutputPath { get; }
@@ -44,5 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal string StoppedBy { get; }
 
         internal bool IsRecording { get; }
+
+        internal string Quality { get; }
     }
 }

@@ -14,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly int _frameRate;
         private readonly double _maxDurationSeconds;
         private readonly string _outputPath;
+        private readonly RecordVideoQuality _quality;
         private readonly double _startedAt;
         private Texture2D _frameTexture;
         private int _encodedFrameCount;
@@ -28,7 +29,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<double> clock,
             int frameRate,
             double maxDurationSeconds,
-            string outputPath)
+            string outputPath,
+            RecordVideoQuality quality)
         {
             Debug.Assert(encoder.Width > 0, "encoder width must be positive.");
             Debug.Assert(encoder.Height > 0, "encoder height must be positive.");
@@ -39,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _frameRate = frameRate;
             _maxDurationSeconds = maxDurationSeconds;
             _outputPath = outputPath;
+            _quality = quality;
             _startedAt = clock();
             _frameTexture = new Texture2D(encoder.Width, encoder.Height, TextureFormat.RGBA32, false);
         }
@@ -112,7 +115,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _skippedFrameCount,
                 elapsed,
                 _stoppedBy,
-                !_stopped);
+                !_stopped,
+                _quality.ToString());
         }
     }
 }

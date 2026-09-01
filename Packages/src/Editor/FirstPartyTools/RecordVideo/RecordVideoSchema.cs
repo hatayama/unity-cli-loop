@@ -14,5 +14,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int MaxDurationSeconds { get; set; } = 60;
 
         public string OutputPath { get; set; } = "";
+
+        public float ResolutionScale { get; set; } = 1.0f;
+
+        public RecordVideoQuality Quality { get; set; } = RecordVideoQuality.Medium;
     }
 }

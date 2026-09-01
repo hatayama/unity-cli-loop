@@ -23,7 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int frameRate,
             int maxDurationSeconds,
             string outputPath,
-            bool isLinux)
+            bool isLinux,
+            float resolutionScale)
         {
             if (frameRate < MinFrameRate || frameRate > MaxFrameRate)
             {
@@ -36,6 +37,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return ValidationResult.Failure(
                     $"MaxDurationSeconds must be between {MinMaxDurationSeconds} and {MaxMaxDurationSeconds}.");
+            }
+
+            if (resolutionScale < 0.1f || resolutionScale > 1.0f)
+            {
+                return ValidationResult.Failure(
+                    $"ResolutionScale must be between 0.1 and 1.0, got: {resolutionScale}");
             }
 
             if (string.IsNullOrEmpty(outputPath))

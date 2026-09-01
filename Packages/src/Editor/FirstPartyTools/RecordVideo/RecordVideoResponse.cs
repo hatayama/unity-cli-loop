@@ -32,5 +32,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string StoppedBy { get; set; }
+
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string Quality { get; set; }
     }
 }

@@ -36,7 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 0,
                 3.0,
                 RecordVideoConstants.StoppedByMaxDuration,
-                false);
+                false,
+                RecordVideoQuality.High.ToString());
 
             LastCompletedRecordingStore.Save(snapshot);
             LastCompletedRecording unread = LastCompletedRecordingStore.TryRead();
@@ -50,6 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(unread.Snapshot.SkippedFrameCount, Is.EqualTo(snapshot.SkippedFrameCount));
             Assert.That(unread.Snapshot.ElapsedSeconds, Is.EqualTo(snapshot.ElapsedSeconds).Within(0.001));
             Assert.That(unread.Snapshot.StoppedBy, Is.EqualTo(snapshot.StoppedBy));
+            Assert.That(unread.Snapshot.Quality, Is.EqualTo(snapshot.Quality));
 
             LastCompletedRecordingStore.MarkReported();
             LastCompletedRecording reported = LastCompletedRecordingStore.TryRead();

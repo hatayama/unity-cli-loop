@@ -19,7 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int width,
             int height,
             int frameRate,
-            bool useVp8)
+            bool useVp8,
+            RecordVideoQuality quality)
         {
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be empty.");
             Debug.Assert(width > 0, "width must be positive.");
@@ -28,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             _width = width;
             _height = height;
-            _encoder = new MediaEncoder(filePath, CreateAttributes(width, height, frameRate, useVp8));
+            _encoder = new MediaEncoder(filePath, CreateAttributes(width, height, frameRate, useVp8, quality));
         }
 
         public int Width => _width;
@@ -57,7 +58,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int width,
             int height,
             int frameRate,
-            bool useVp8)
+            bool useVp8,
+            RecordVideoQuality quality)
         {
             VideoTrackEncoderAttributes attributes = useVp8
                 ? new VideoTrackEncoderAttributes(new VP8EncoderAttributes
@@ -75,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             attributes.width = (uint)width;
             attributes.height = (uint)height;
             attributes.includeAlpha = false;
-            attributes.bitRateMode = VideoBitrateMode.Medium;
+            attributes.bitRateMode = VideoQualityPolicy.ToBitrateMode(quality);
             return attributes;
         }
     }

@@ -52,7 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.FrameRate,
                 parameters.MaxDurationSeconds,
                 parameters.OutputPath,
-                isLinux);
+                isLinux,
+                parameters.ResolutionScale);
             if (!validation.IsValid)
             {
                 return CreateFailure(RecordVideoAction.Start, validation.ErrorMessage);
@@ -66,8 +67,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     RecordVideoConstants.RenderTextureUnavailableMessage);
             }
 
-            int width = VideoFrameSizePolicy.RoundDownToEven(renderTexture.width);
-            int height = VideoFrameSizePolicy.RoundDownToEven(renderTexture.height);
+            (int width, int height) size = VideoFrameSizePolicy.Resolve(
+                renderTexture.width,
+                renderTexture.height,
+                parameters.ResolutionScale);
+            int width = size.width;
+            int height = size.height;
             if (width == 0 || height == 0)
             {
                 return CreateFailure(RecordVideoAction.Start, RecordVideoConstants.FrameSizeTooSmallMessage);
@@ -85,7 +90,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 outputPath,
                 usedDefaultOutputPath,
                 width,
-                height);
+                height,
+                parameters.ResolutionScale,
+                parameters.Quality);
             return CreateResponse(
                 true,
                 RecordVideoConstants.StartedMessage,
@@ -179,7 +186,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 EncodedFrameCount = snapshot.EncodedFrameCount,
                 SkippedFrameCount = snapshot.SkippedFrameCount,
                 ElapsedSeconds = snapshot.ElapsedSeconds,
-                StoppedBy = snapshot.StoppedBy
+                StoppedBy = snapshot.StoppedBy,
+                Quality = snapshot.Quality
             };
         }
     }

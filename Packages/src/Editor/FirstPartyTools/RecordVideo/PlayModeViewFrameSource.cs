@@ -9,6 +9,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class PlayModeViewFrameSource : IGameViewFrameSource
     {
+        private readonly float _resolutionScale;
+
+        internal PlayModeViewFrameSource(float resolutionScale)
+        {
+            _resolutionScale = resolutionScale;
+        }
+
         public bool TryReadFrame(Texture2D destination)
         {
             RenderTexture renderTexture = GameViewBridge.GetRenderTexture();
@@ -17,11 +24,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            // Odd Game View sizes are cropped by 1px; a larger resize is a skip, not a re-encode.
-            if (renderTexture.width < destination.width
-                || renderTexture.height < destination.height
-                || renderTexture.width > destination.width + 1
-                || renderTexture.height > destination.height + 1)
+            if (!VideoFrameSizePolicy.MatchesEncoderSize(
+                    renderTexture.width,
+                    renderTexture.height,
+                    _resolutionScale,
+                    destination.width,
+                    destination.height))
             {
                 return false;
             }
@@ -33,8 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void ReadPlayModeViewTexture(RenderTexture renderTexture, Texture2D destination)
         {
             RenderTextureDescriptor flipDescriptor = new RenderTextureDescriptor(
-                renderTexture.width,
-                renderTexture.height,
+                destination.width,
+                destination.height,
                 renderTexture.format,
                 0);
             // Why sRGB: Blit samples the source through sRGB decode in Linear color space, so the

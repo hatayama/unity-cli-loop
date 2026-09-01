@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string SkippedFrameCountKey = KeyPrefix + "skippedFrameCount";
         private const string ElapsedSecondsKey = KeyPrefix + "elapsedSeconds";
         private const string StoppedByKey = KeyPrefix + "stoppedBy";
+        private const string QualityKey = KeyPrefix + "quality";
         private const string ReportedKey = KeyPrefix + "reported";
 
         internal static void Save(VideoRecordingSnapshot snapshot)
@@ -32,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SessionState.SetInt(SkippedFrameCountKey, snapshot.SkippedFrameCount);
             SessionState.SetFloat(ElapsedSecondsKey, (float)snapshot.ElapsedSeconds);
             SessionState.SetString(StoppedByKey, snapshot.StoppedBy);
+            SessionState.SetString(QualityKey, snapshot.Quality);
             SessionState.SetInt(ReportedKey, 0);
         }
 
@@ -52,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SessionState.GetInt(SkippedFrameCountKey, 0),
                 SessionState.GetFloat(ElapsedSecondsKey, 0f),
                 SessionState.GetString(StoppedByKey, string.Empty),
-                false);
+                false,
+                SessionState.GetString(QualityKey, string.Empty));
             bool isReported = SessionState.GetInt(ReportedKey, 0) != 0;
             return new LastCompletedRecording(snapshot, isReported);
         }
@@ -72,6 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SessionState.SetInt(SkippedFrameCountKey, 0);
             SessionState.SetFloat(ElapsedSecondsKey, 0f);
             SessionState.SetString(StoppedByKey, string.Empty);
+            SessionState.SetString(QualityKey, string.Empty);
             SessionState.SetInt(ReportedKey, 0);
         }
     }

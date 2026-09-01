@@ -749,7 +749,7 @@
     },
     {
       "name": "record-video",
-      "description": "Record the Unity Game View to an MP4 (WebM on Linux) while Play Mode runs. Use to capture gameplay for later review; other uloop commands can run while recording.",
+      "description": "Record the Unity Game View to a video file (H.264 .mp4, or VP8 .webm) while Play Mode runs. Use when a still screenshot is not enough: motion, animation, transitions, physics, or a gameplay sequence to review later. Start returns at once and other uloop commands keep working while it records.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -765,7 +765,7 @@
           },
           "FrameRate": {
             "type": "integer",
-            "description": "Output video fps. Valid range 1–60. Used by Start only.",
+            "description": "Output video fps. Valid range 1–60. Frames are paced by wall-clock time; when the Editor renders slower than this, the previous frame is repeated. Used by Start only.",
             "default": 30
           },
           "MaxDurationSeconds": {
@@ -775,7 +775,22 @@
           },
           "OutputPath": {
             "type": "string",
-            "description": "Output file path. Empty uses .uloop/outputs/Videos/gameview_<yyyyMMdd_HHmmss>.mp4 (.webm on Linux). Extension must be .mp4 or .webm. Linux rejects .mp4. Used by Start only."
+            "description": "Output file path. Empty uses .uloop/outputs/Videos/gameview_<yyyyMMdd_HHmmss>.mp4 (.webm on Linux). Extension must be .mp4 (H.264) or .webm (VP8). Linux rejects .mp4. Used by Start only."
+          },
+          "ResolutionScale": {
+            "type": "number",
+            "description": "Resolution scale (0.1 to 1.0) applied to the Game View size before encoding. 0.5 cuts file size and encoding cost to about a quarter. Used by Start only.",
+            "default": 1
+          },
+          "Quality": {
+            "type": "string",
+            "enum": [
+              "Low",
+              "Medium",
+              "High"
+            ],
+            "description": "Encoder bitrate preset: Low, Medium, or High. Used by Start only.",
+            "default": "Medium"
           }
         }
       }

@@ -10,13 +10,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class RecordVideoParameterValidatorTests
     {
+        private static ValidationResult Validate(
+            int frameRate,
+            int maxDurationSeconds,
+            string outputPath,
+            bool isLinux)
+        {
+            return RecordVideoParameterValidator.Validate(
+                frameRate,
+                maxDurationSeconds,
+                outputPath,
+                isLinux,
+                1.0f);
+        }
+
         /// <summary>
         /// What: frame rate 0 is rejected as below the 1–60 range.
         /// </summary>
         [Test]
         public void Validate_WhenFrameRateIs0_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(0, 60, "", false);
+            ValidationResult result = Validate(0, 60, "", false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("FrameRate"));
@@ -28,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenFrameRateIs1_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(1, 60, "", false);
+            ValidationResult result = Validate(1, 60, "", false);
 
             Assert.That(result.IsValid, Is.True);
         }
@@ -39,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenFrameRateIs60_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(60, 60, "", false);
+            ValidationResult result = Validate(60, 60, "", false);
 
             Assert.That(result.IsValid, Is.True);
         }
@@ -50,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenFrameRateIs61_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(61, 60, "", false);
+            ValidationResult result = Validate(61, 60, "", false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("FrameRate"));
@@ -62,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenMaxDurationIs0_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 0, "", false);
+            ValidationResult result = Validate(30, 0, "", false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("MaxDurationSeconds"));
@@ -74,7 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenMaxDurationIs1_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 1, "", false);
+            ValidationResult result = Validate(30, 1, "", false);
 
             Assert.That(result.IsValid, Is.True);
         }
@@ -85,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenMaxDurationIs600_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 600, "", false);
+            ValidationResult result = Validate(30, 600, "", false);
 
             Assert.That(result.IsValid, Is.True);
         }
@@ -96,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenMaxDurationIs601_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 601, "", false);
+            ValidationResult result = Validate(30, 601, "", false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("MaxDurationSeconds"));
@@ -108,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenOutputPathIsEmpty_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false);
+            ValidationResult result = Validate(30, 60, "", false);
 
             Assert.That(result.IsValid, Is.True);
         }
@@ -119,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenOutputPathIsMov_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "clip.mov", false);
+            ValidationResult result = Validate(30, 60, "clip.mov", false);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain(".mp4").And.Contain(".webm"));
@@ -131,7 +145,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenLinuxAndMp4_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "clip.mp4", true);
+            ValidationResult result = Validate(30, 60, "clip.mp4", true);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(
@@ -145,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenLinuxAndWebm_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "clip.webm", true);
+            ValidationResult result = Validate(30, 60, "clip.webm", true);
 
             Assert.That(result.IsValid, Is.True);
         }
@@ -156,9 +170,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenNonLinuxAndWebm_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "clip.webm", false);
+            ValidationResult result = Validate(30, 60, "clip.webm", false);
 
             Assert.That(result.IsValid, Is.True);
+        }
+
+        /// <summary>
+        /// What: resolution scale 0.1 is the inclusive lower bound.
+        /// </summary>
+        [Test]
+        public void Validate_WhenResolutionScaleIs0_1_IsValid()
+        {
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.1f);
+
+            Assert.That(result.IsValid, Is.True);
+        }
+
+        /// <summary>
+        /// What: resolution scale 1.0 is the inclusive upper bound.
+        /// </summary>
+        [Test]
+        public void Validate_WhenResolutionScaleIs1_IsValid()
+        {
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.0f);
+
+            Assert.That(result.IsValid, Is.True);
+        }
+
+        /// <summary>
+        /// What: resolution scale 0.09 is rejected as below the 0.1–1.0 range.
+        /// </summary>
+        [Test]
+        public void Validate_WhenResolutionScaleIs0_09_IsInvalid()
+        {
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.09f);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("ResolutionScale must be between 0.1 and 1.0, got: 0.09"));
+        }
+
+        /// <summary>
+        /// What: resolution scale 1.01 is rejected as above the 0.1–1.0 range.
+        /// </summary>
+        [Test]
+        public void Validate_WhenResolutionScaleIs1_01_IsInvalid()
+        {
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.01f);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(
+                result.ErrorMessage,
+                Is.EqualTo("ResolutionScale must be between 0.1 and 1.0, got: 1.01"));
         }
     }
 }

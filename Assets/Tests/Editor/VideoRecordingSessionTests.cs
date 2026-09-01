@@ -28,7 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => _now,
                 30,
                 60.0,
-                "/tmp/gameview.mp4");
+                "/tmp/gameview.mp4",
+                RecordVideoQuality.Medium);
         }
 
         [TearDown]
@@ -123,7 +124,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => _now,
                 30,
                 1.0,
-                "/tmp/gameview.mp4");
+                "/tmp/gameview.mp4",
+                RecordVideoQuality.Medium);
             _now = 1.0;
 
             _session.Tick();
