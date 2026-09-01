@@ -29,14 +29,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int maxDurationSeconds,
             string outputPath,
             bool usedDefaultOutputPath,
-            bool isLinux)
+            bool isLinux,
+            int width,
+            int height)
         {
             Debug.Assert(!IsRecording, "Start must not run while a recording is already active.");
             Debug.Assert(!string.IsNullOrEmpty(outputPath), "outputPath must not be empty.");
+            Debug.Assert(width > 0, "encoder width must be a positive even size.");
+            Debug.Assert(height > 0, "encoder height must be a positive even size.");
+            Debug.Assert((width & 1) == 0, "encoder width must be even.");
+            Debug.Assert((height & 1) == 0, "encoder height must be even.");
 
             PlayModeViewFrameSource frameSource = new PlayModeViewFrameSource();
-            bool hasSize = frameSource.TryGetSize(out int width, out int height);
-            Debug.Assert(hasSize, "Start requires a Play Mode view RenderTexture size.");
 
             string directory = Path.GetDirectoryName(outputPath);
             Debug.Assert(!string.IsNullOrEmpty(directory), "outputPath must include a directory.");

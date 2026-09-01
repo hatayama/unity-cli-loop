@@ -14,6 +14,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "A recording is already in progress. Stop it first.";
         internal const string RenderTextureUnavailableMessage =
             "Play Mode view RenderTexture is not available. Open the Game View and make sure a camera renders.";
+        internal const string FrameSizeTooSmallMessage =
+            "Play Mode view size is too small to record after rounding to even encoder dimensions.";
         internal const string NoRecordingMessage = "No recording is in progress.";
         internal const string StartedMessage = "Recording started.";
         internal const string StoppedMessage = "Recording stopped.";

@@ -58,11 +58,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateFailure(RecordVideoAction.Start, validation.ErrorMessage);
             }
 
-            if (GameViewBridge.GetRenderTexture() == null)
+            RenderTexture renderTexture = GameViewBridge.GetRenderTexture();
+            if (renderTexture == null)
             {
                 return CreateFailure(
                     RecordVideoAction.Start,
                     RecordVideoConstants.RenderTextureUnavailableMessage);
+            }
+
+            int width = VideoFrameSizePolicy.RoundDownToEven(renderTexture.width);
+            int height = VideoFrameSizePolicy.RoundDownToEven(renderTexture.height);
+            if (width == 0 || height == 0)
+            {
+                return CreateFailure(RecordVideoAction.Start, RecordVideoConstants.FrameSizeTooSmallMessage);
             }
 
             string outputPath = RecordVideoOutputPathResolver.Resolve(
@@ -76,7 +84,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxDurationSeconds,
                 outputPath,
                 usedDefaultOutputPath,
-                isLinux);
+                isLinux,
+                width,
+                height);
             return CreateResponse(
                 true,
                 RecordVideoConstants.StartedMessage,
