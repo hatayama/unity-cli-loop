@@ -41,11 +41,12 @@ func tryHandleUpdateRequest(ctx context.Context, args []string, stdout io.Writer
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{Command: clicore.UpdateCommandName})
 		return true, 1
 	}
-	if update.IsHomebrewManagedPath(executablePath) {
+	managedInstall := update.DetectManagedInstall(executablePath)
+	if managedInstall.IsManaged() {
 		clierrors.WriteErrorEnvelope(stderr, invalidArgumentExecutionError(
-			"uloop is managed by Homebrew ("+executablePath+"); self-update would create a second install in ~/.local/bin",
+			"uloop is managed by "+managedInstall.DisplayName+" ("+executablePath+"); self-update would create a second install outside the package manager",
 			clierrors.ErrorContext{Command: clicore.UpdateCommandName},
-			[]string{"Run `brew upgrade uloop` to update."},
+			[]string{"Run `" + managedInstall.UpgradeCommand + "` to update."},
 		))
 		return true, 1
 	}
@@ -177,8 +178,8 @@ func printUpdateHelp(stdout io.Writer) {
 }
 
 // resolveUpdateExecutablePath returns the on-disk path of this dispatcher binary.
-// Why: Homebrew installs link <prefix>/bin/uloop to Cellar; EvalSymlinks is required
-// so IsHomebrewManagedPath sees the Cellar segment instead of the shim path.
+// Why: package managers may link the invoked binary to their managed install directory;
+// EvalSymlinks ensures managed-install detection sees the owning path instead of a shim.
 func resolveUpdateExecutablePath() (string, error) {
 	executablePath, err := os.Executable()
 	if err != nil {

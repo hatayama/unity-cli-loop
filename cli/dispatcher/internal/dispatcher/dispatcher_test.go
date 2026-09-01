@@ -419,6 +419,9 @@ func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t 
 	if !bytes.Contains(stderr.Bytes(), []byte(clierrors.ErrorCodeCLIUpdateRequired)) {
 		t.Fatalf("freshness output mismatch: %s", stderr.String())
 	}
+	if !strings.Contains(stderr.String(), "Run `uloop update` and retry the command.") {
+		t.Fatalf("expected self-update NextActions guidance in stderr, got: %s", stderr.String())
+	}
 }
 
 func TestEnforceDispatcherFreshnessRequiresBrewUpgradeWhenHomebrewManagedAndUpdateRequired(t *testing.T) {
@@ -452,6 +455,67 @@ func TestEnforceDispatcherFreshnessRequiresBrewUpgradeWhenHomebrewManagedAndUpda
 	}
 	if !bytes.Contains(stderr.Bytes(), []byte(clierrors.ErrorCodeCLIUpdateRequired)) {
 		t.Fatalf("freshness output mismatch: %s", stderr.String())
+	}
+}
+
+func TestEnforceDispatcherFreshnessRequiresWingetUpgradeWhenWingetManagedAndUpdateRequired(t *testing.T) {
+	// Verifies winget-managed installs return their reason and package-manager retry action for required updates.
+	previousResolver := resolveUpdateExecutablePathFunc
+	defer func() {
+		resolveUpdateExecutablePathFunc = previousResolver
+	}()
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return `C:\Program Files\WinGet\Links\uloop.exe`, nil
+	}
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(context.Context) (bool, error) {
+		t.Fatal("runUpdate must not run for winget-managed required freshness")
+		return false, nil
+	}
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshnessWithDeps(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: "999.0.0"},
+		&stderr,
+		deps)
+
+	if !handled || code != 1 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "This uloop install is managed by winget. Run `winget upgrade --id hatayama.uloop` to update.") {
+		t.Fatalf("expected winget-managed reason in stderr, got: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Run `winget upgrade --id hatayama.uloop` and retry the command.") {
+		t.Fatalf("expected winget NextActions guidance in stderr, got: %s", stderr.String())
+	}
+}
+
+func TestEnforceDispatcherFreshnessSkipsOptionalUpdateWhenWingetManaged(t *testing.T) {
+	// Verifies winget-managed installs skip optional auto-update without running the installer.
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
+	previousResolver := resolveUpdateExecutablePathFunc
+	defer func() {
+		resolveUpdateExecutablePathFunc = previousResolver
+	}()
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return `C:\Program Files\WinGet\Links\uloop.exe`, nil
+	}
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(context.Context) (bool, error) {
+		t.Fatal("runUpdate must not run for winget-managed optional freshness")
+		return false, nil
+	}
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshnessWithDeps(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
+		&stderr,
+		deps)
+
+	if handled || code != 0 || stderr.Len() != 0 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
 	}
 }
 
@@ -778,9 +842,10 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 		selfUpdateDisabled bool
 		hasSiblingRealCLI  bool
 		updateDue          bool
-		homebrewManaged    bool
+		managedInstall     update.ManagedInstall
 		expectedAction     dispatcherFreshnessAction
 		expectedReason     string
+		expectedNextAction string
 	}{
 		{
 			name:           "no minimum",
@@ -795,15 +860,27 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			updateDue:          true,
 			expectedAction:     dispatcherFreshnessManualUpdateRequired,
 			expectedReason:     dispatcherFreshnessReasonSelfUpdateDisabled,
+			expectedNextAction: "Run `uloop update` and retry the command.",
 		},
 		{
-			name:            "required update homebrew managed",
-			minimumVersion:  "999.0.0",
-			currentVersion:  dispatcherVersion,
-			homebrewManaged: true,
-			updateDue:       true,
-			expectedAction:  dispatcherFreshnessManualUpdateRequired,
-			expectedReason:  dispatcherFreshnessReasonHomebrewManaged,
+			name:               "required update homebrew managed",
+			minimumVersion:     "999.0.0",
+			currentVersion:     dispatcherVersion,
+			managedInstall:     update.DetectManagedInstall("/opt/homebrew/Cellar/uloop/3.1.0/bin/uloop"),
+			updateDue:          true,
+			expectedAction:     dispatcherFreshnessManualUpdateRequired,
+			expectedReason:     "This uloop install is managed by Homebrew. Run `brew upgrade uloop` to update.",
+			expectedNextAction: "Run `brew upgrade uloop` and retry the command.",
+		},
+		{
+			name:               "required update winget managed",
+			minimumVersion:     "999.0.0",
+			currentVersion:     dispatcherVersion,
+			managedInstall:     update.DetectManagedInstall(`C:\Program Files\WinGet\Links\uloop.exe`),
+			updateDue:          true,
+			expectedAction:     dispatcherFreshnessManualUpdateRequired,
+			expectedReason:     "This uloop install is managed by winget. Run `winget upgrade --id hatayama.uloop` to update.",
+			expectedNextAction: "Run `winget upgrade --id hatayama.uloop` and retry the command.",
 		},
 		{
 			name:           "required update runs immediately",
@@ -820,12 +897,12 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			expectedAction:    dispatcherFreshnessNoop,
 		},
 		{
-			name:            "optional homebrew skip",
-			minimumVersion:  dispatcherVersion,
-			currentVersion:  dispatcherVersion,
-			homebrewManaged: true,
-			updateDue:       true,
-			expectedAction:  dispatcherFreshnessNoop,
+			name:           "optional homebrew skip",
+			minimumVersion: dispatcherVersion,
+			currentVersion: dispatcherVersion,
+			managedInstall: update.DetectManagedInstall("/opt/homebrew/Cellar/uloop/3.1.0/bin/uloop"),
+			updateDue:      true,
+			expectedAction: dispatcherFreshnessNoop,
 		},
 		{
 			name:           "optional due",
@@ -850,7 +927,7 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 				SelfUpdateDisabled: tt.selfUpdateDisabled,
 				HasSiblingRealCLI:  tt.hasSiblingRealCLI,
 				UpdateDue:          tt.updateDue,
-				HomebrewManaged:    tt.homebrewManaged,
+				ManagedInstall:     tt.managedInstall,
 			})
 
 			if plan.Action != tt.expectedAction {
@@ -861,6 +938,9 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			}
 			if plan.Reason != tt.expectedReason {
 				t.Fatalf("reason mismatch: %q", plan.Reason)
+			}
+			if plan.NextAction != tt.expectedNextAction {
+				t.Fatalf("next action mismatch: %q", plan.NextAction)
 			}
 		})
 	}
