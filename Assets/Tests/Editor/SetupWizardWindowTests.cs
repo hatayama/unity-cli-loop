@@ -563,6 +563,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(ManagedCliKind.Winget, "2.9.0", true, true,
             "winget-managed CLI v2.9.0 does not meet the required v3.0.0.\n"
             + "Run this command in your terminal:\nwinget upgrade --id hatayama.uloop")]
+        [TestCase(ManagedCliKind.Winget, null, true, true,
+            "winget-managed CLI did not report a version.\n"
+            + "Run these commands in your terminal:\n"
+            + "winget uninstall --id hatayama.uloop\n"
+            + "winget install --id hatayama.uloop")]
+        [TestCase(ManagedCliKind.Winget, "3.0.0", false, true,
+            "winget-managed CLI v3.0.0 did not answer as the required uloop CLI.\n"
+            + "Run these commands in your terminal:\n"
+            + "winget uninstall --id hatayama.uloop\n"
+            + "winget install --id hatayama.uloop")]
         [TestCase(ManagedCliKind.Homebrew, "3.0.0", true, false, "")]
         [TestCase(ManagedCliKind.None, "2.9.0", true, false, "")]
         [TestCase(ManagedCliKind.None, null, true, false, "")]

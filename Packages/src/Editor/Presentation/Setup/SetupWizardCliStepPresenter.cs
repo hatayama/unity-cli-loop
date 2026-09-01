@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private readonly VisualElement _statusIcon;
         private readonly Label _statusLabel;
-        private readonly Label _homebrewUpgradeMessage;
+        private readonly Label _managedUpgradeMessage;
         private readonly Button _installButton;
 
         internal SetupWizardCliStepPresenter(
@@ -31,12 +31,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             _statusIcon = statusIcon ?? throw new System.ArgumentNullException(nameof(statusIcon));
             _statusLabel = statusLabel ?? throw new System.ArgumentNullException(nameof(statusLabel));
-            _homebrewUpgradeMessage = homebrewUpgradeMessage
+            _managedUpgradeMessage = homebrewUpgradeMessage
                 ?? throw new System.ArgumentNullException(nameof(homebrewUpgradeMessage));
             // Why: the warning carries a command to run, so it must be copyable.
             // UI Toolkit only starts a selection on a focusable text element.
-            _homebrewUpgradeMessage.focusable = true;
-            _homebrewUpgradeMessage.selection.isSelectable = true;
+            _managedUpgradeMessage.focusable = true;
+            _managedUpgradeMessage.selection.isSelectable = true;
             _installButton = installButton ?? throw new System.ArgumentNullException(nameof(installButton));
             _installButton.clicked += onInstallClicked
                 ?? throw new System.ArgumentNullException(nameof(onInstallClicked));
@@ -116,13 +116,13 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string cliVersion,
             string requiredCliVersion)
         {
-            _homebrewUpgradeMessage.text = isVisible
+            _managedUpgradeMessage.text = isVisible
                 ? CliSetupLabelFormatter.GetManagedUpgradeGuidanceText(
                     managedCliKind,
                     cliVersion,
                     requiredCliVersion)
                 : string.Empty;
-            ViewDataBinder.ToggleClass(_homebrewUpgradeMessage, "setup-warning-message--visible", isVisible);
+            ViewDataBinder.ToggleClass(_managedUpgradeMessage, "setup-warning-message--visible", isVisible);
         }
 
         internal static string GetCliStatusTextForSetupWizard(

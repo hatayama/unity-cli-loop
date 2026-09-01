@@ -16,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private readonly VisualElement _cliStatusIcon;
         private readonly Label _cliStatusLabel;
-        private readonly Label _cliHomebrewUpgradeMessage;
+        private readonly Label _cliManagedUpgradeMessage;
         private readonly Button _refreshCliVersionButton;
         private readonly Button _installCliButton;
         private readonly CliInstallProgressView _installProgressView;
@@ -37,11 +37,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         {
             _cliStatusIcon = root.Q<VisualElement>("cli-status-icon");
             _cliStatusLabel = root.Q<Label>("cli-status-label");
-            _cliHomebrewUpgradeMessage = root.Q<Label>("cli-homebrew-upgrade-message");
+            _cliManagedUpgradeMessage = root.Q<Label>("cli-homebrew-upgrade-message");
             // Why: the warning carries a command to run, so it must be copyable.
             // UI Toolkit only starts a selection on a focusable text element.
-            _cliHomebrewUpgradeMessage.focusable = true;
-            _cliHomebrewUpgradeMessage.selection.isSelectable = true;
+            _cliManagedUpgradeMessage.focusable = true;
+            _cliManagedUpgradeMessage.selection.isSelectable = true;
             _refreshCliVersionButton = root.Q<Button>("refresh-cli-version-button");
             _installCliButton = root.Q<Button>("install-cli-button");
             _installProgressView = new CliInstallProgressView(
@@ -117,14 +117,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isCliUsable = !string.IsNullOrEmpty(data.CliVersion) && !data.NeedsUpdate;
             bool isVisible = !data.IsChecking
                 && ManagedCliPolicy.ShouldShowUpgradeGuidance(data.ManagedCliKind, isCliUsable);
-            _cliHomebrewUpgradeMessage.text = isVisible
+            _cliManagedUpgradeMessage.text = isVisible
                 ? CliSetupLabelFormatter.GetManagedUpgradeGuidanceText(
                     data.ManagedCliKind,
                     data.CliVersion,
                     data.RequiredCliVersion)
                 : string.Empty;
             ViewDataBinder.ToggleClass(
-                _cliHomebrewUpgradeMessage,
+                _cliManagedUpgradeMessage,
                 "unity-cli-loop-warning-message--visible",
                 isVisible);
         }

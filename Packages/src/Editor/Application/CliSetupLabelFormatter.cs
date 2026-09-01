@@ -44,9 +44,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
             string managedDescription = kind == ManagedCliKind.Homebrew
                 ? "Homebrew-managed"
                 : "winget-managed";
-            string reinstallCommand = kind == ManagedCliKind.Homebrew
-                ? CliConstants.HOMEBREW_REINSTALL_COMMAND
-                : CliConstants.WINGET_REINSTALL_COMMAND;
+            // Why two winget lines: Windows PowerShell 5.1 rejects &&, and a single install command
+            // does not reliably reinstall an existing portable package.
+            string reinstallGuidance = kind == ManagedCliKind.Homebrew
+                ? "Run this command in your terminal:\n" + CliConstants.HOMEBREW_REINSTALL_COMMAND
+                : "Run these commands in your terminal:\n"
+                    + CliConstants.WINGET_UNINSTALL_COMMAND + "\n"
+                    + CliConstants.WINGET_INSTALL_COMMAND;
             string upgradeCommand = kind == ManagedCliKind.Homebrew
                 ? CliConstants.HOMEBREW_UPGRADE_COMMAND
                 : CliConstants.WINGET_UPGRADE_COMMAND;
@@ -54,15 +58,13 @@ namespace io.github.hatayama.UnityCliLoop.Application
             if (string.IsNullOrEmpty(cliVersion))
             {
                 return managedDescription + " CLI did not report a version.\n"
-                    + "Run this command in your terminal:\n"
-                    + reinstallCommand;
+                    + reinstallGuidance;
             }
 
             if (CliVersionComparer.IsVersionGreaterThanOrEqual(cliVersion, requiredCliVersion))
             {
                 return $"{managedDescription} CLI v{cliVersion} did not answer as the required uloop CLI.\n"
-                    + "Run this command in your terminal:\n"
-                    + reinstallCommand;
+                    + reinstallGuidance;
             }
 
             return $"{managedDescription} CLI v{cliVersion} does not meet the required v{requiredCliVersion}.\n"
