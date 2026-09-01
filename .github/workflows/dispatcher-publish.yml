@@ -427,6 +427,18 @@ jobs:
           --tag "${{ needs.build.outputs.release_tag }}"
           --tap-repo hatayama/homebrew-tap
 
+      - name: Open winget-pkgs pull request
+        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
+        run: >-
+          go run ./cmd/update-winget-manifest
+          --repo "${{ github.repository }}"
+          --tag "${{ needs.build.outputs.release_tag }}"
+          --fork-repo hatayama/winget-pkgs
+
       # Fresh installs follow the package pin, so a published stable dispatcher
       # only reaches new users once the pin records it. Pre-releases are never
       # stamped on main.

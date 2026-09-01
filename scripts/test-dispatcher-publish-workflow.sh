@@ -69,6 +69,22 @@ post_publish_section() {
   ' "$WORKFLOW"
 }
 
+winget_pull_request_section() {
+  awk '
+    /^      - name: Open winget-pkgs pull request$/ { printing = 1; next }
+    printing && /^      - name:/ { exit }
+    printing { print }
+  ' "$WORKFLOW"
+}
+
+assert_winget_pull_request_contains() {
+  expected=$1
+  if ! winget_pull_request_section | grep -F -- "$expected" >/dev/null 2>&1; then
+    echo "Expected workflow to contain: $expected" >&2
+    exit 1
+  fi
+}
+
 assert_post_publish_before() {
   earlier=$1
   later=$2
@@ -213,6 +229,16 @@ test_dispatcher_release_target_and_prerelease_state_remain_verified() {
   assert_post_publish_before "      - name: Setup Go" "      - name: Sync release-please package releases"
 }
 
+test_winget_pull_request_follows_homebrew_update_for_stable_releases() {
+  assert_contains "      - name: Open winget-pkgs pull request"
+  assert_winget_pull_request_contains "        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'"
+  assert_winget_pull_request_contains '          WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}'
+  assert_winget_pull_request_contains "          go run ./cmd/update-winget-manifest"
+  assert_winget_pull_request_contains "          --fork-repo hatayama/winget-pkgs"
+  assert_before "      - name: Update Homebrew formula" "      - name: Open winget-pkgs pull request"
+  assert_before "      - name: Open winget-pkgs pull request" "      - name: Open dispatcher pin stamp pull request"
+}
+
 test_build_and_publish_jobs_have_separate_trust_boundaries
 test_unprivileged_build_uses_only_the_approved_event_commit
 test_publish_validates_metadata_without_checking_out_source
@@ -225,3 +251,4 @@ test_draft_creation_accepts_only_the_known_missing_tag_responses
 test_dispatcher_publish_rechecks_the_tag_before_publishing
 test_dispatcher_build_preserves_release_checks
 test_dispatcher_release_target_and_prerelease_state_remain_verified
+test_winget_pull_request_follows_homebrew_update_for_stable_releases
