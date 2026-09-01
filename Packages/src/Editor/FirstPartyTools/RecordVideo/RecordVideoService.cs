@@ -52,17 +52,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 height,
                 frameRate,
                 isLinux);
-            _session = new VideoRecordingSession(
-                encoder,
-                frameSource,
-                () => EditorApplication.timeSinceStartup,
-                frameRate,
-                maxDurationSeconds,
-                outputPath);
-            _usedDefaultOutputPath = usedDefaultOutputPath;
-            EditorApplication.update -= OnEditorUpdate;
-            EditorApplication.update += OnEditorUpdate;
-            return _session.Snapshot();
+            try
+            {
+                _session = new VideoRecordingSession(
+                    encoder,
+                    frameSource,
+                    () => EditorApplication.timeSinceStartup,
+                    frameRate,
+                    maxDurationSeconds,
+                    outputPath);
+                _usedDefaultOutputPath = usedDefaultOutputPath;
+                LastCompletedRecordingStore.Clear();
+                EditorApplication.update -= OnEditorUpdate;
+                EditorApplication.update += OnEditorUpdate;
+                return _session.Snapshot();
+            }
+            finally
+            {
+                if (_session == null)
+                {
+                    encoder.Dispose();
+                }
+            }
         }
 
         internal static VideoRecordingSnapshot Stop(string reason)

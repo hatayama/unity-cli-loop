@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SessionState.SetInt(ReportedKey, 1);
         }
 
-        internal static void ClearForTests()
+        internal static void Clear()
         {
             SessionState.SetString(OutputPathKey, string.Empty);
             SessionState.SetInt(WidthKey, 0);

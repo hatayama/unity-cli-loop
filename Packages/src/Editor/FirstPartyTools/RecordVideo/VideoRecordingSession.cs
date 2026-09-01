@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             double elapsed = _clock() - _startedAt;
             if (elapsed >= _maxDurationSeconds)
             {
-                Stop("max-duration");
+                Stop(RecordVideoConstants.StoppedByMaxDuration);
                 return;
             }
 
