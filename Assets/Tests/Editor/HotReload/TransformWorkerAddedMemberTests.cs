@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -921,9 +922,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(result.Output.hasAccessorDelegates, Is.True);
+            // Unity 6.5+ bundled Roslyn formats `[] { typeof(`; drop whitespace so we only
+            // assert that delegateArgs is an explicit Type[] rather than a trailing null.
+            string normalizedShimSource = Regex.Replace(result.Output.shimSource, @"\s+", string.Empty);
             Assert.That(
-                result.Output.shimSource,
-                Does.Contain(", false, new global::System.Type[]{typeof("),
+                normalizedShimSource,
+                Does.Contain(",false,newglobal::System.Type[]{typeof("),
                 "Instance MethodDelegate bind must pass explicit delegateArgs, not null.\n"
                 + result.Output.shimSource);
         }
