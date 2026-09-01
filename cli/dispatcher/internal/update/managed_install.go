@@ -43,6 +43,8 @@ func DetectManagedInstall(executablePath string) ManagedInstall {
 }
 
 // IsWingetManagedPath reports whether executablePath is under a WinGet Packages or Links directory.
+// Why: WinGet supports custom portable package roots, so ownership must key on
+// its Packages or Links path segments instead of fixed AppData or Program Files roots.
 func IsWingetManagedPath(executablePath string) bool {
 	normalizedPath := strings.ReplaceAll(executablePath, "\\", "/")
 	segments := strings.Split(normalizedPath, "/")
