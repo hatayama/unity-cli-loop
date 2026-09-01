@@ -113,20 +113,21 @@ Use `CaptureMode: rendering` to capture the Game View's rendering output directl
 Add `AnnotateRaycastGrid: true` to overlay a coordinate grid on the captured image, which makes it easier for an AI looking at the image to pick coordinates to pass to `simulate-mouse-input`.
 
 Use `uloop set-game-view-size --width 1920 --height 1080` to pin a custom Game View resolution. Do this when you want the coordinate space of `CaptureMode: rendering` to stay stable across runs (run it without arguments to read the current resolution).
-
-Use `uloop record-video` to record the Game View while Play Mode runs. Start returns immediately so other commands can run during capture; Stop finalizes an MP4 (WebM on Linux) under `.uloop/outputs/Videos/`:
-```text
-uloop record-video --action Start
-uloop simulate-keyboard --key W --duration 2
-uloop record-video --action Stop
-```
 ```text
 → screenshot (WindowName: "Console")
 → Save Console window state as PNG
 → Provide visual feedback to AI
 ```
 
-### 11. control-play-mode - Control Play Mode
+### 11. record-video - Record the Game View During Play Mode
+Use `uloop record-video` to record the Game View while Play Mode runs. Start returns immediately so other commands can run during capture; Stop finalizes an MP4 (WebM on Linux) under `.uloop/outputs/Videos/`:
+```text
+uloop record-video --action Start
+uloop simulate-keyboard --key W --duration 2
+uloop record-video --action Stop
+```
+
+### 12. control-play-mode - Control Play Mode
 Control Unity Editor's Play Mode. Supports three actions: Play (start/resume), Stop, and Pause.
 ```text
 → control-play-mode (Action: Play)
@@ -135,7 +136,7 @@ Control Unity Editor's Play Mode. Supports three actions: Play (start/resume), S
 → Pause to inspect state
 ```
 
-### 12. execute-dynamic-code - Dynamic C# Code Execution
+### 13. execute-dynamic-code - Dynamic C# Code Execution
 Execute C# code dynamically within Unity Editor.
 
 Async support:
@@ -151,7 +152,7 @@ When enabled, dynamic code execution runs with full Unity Editor process permiss
 
 ## PlayMode Automated Testing Tools
 
-### 13. simulate-mouse-ui - Simulate Mouse Input on PlayMode UI
+### 14. simulate-mouse-ui - Simulate Mouse Input on PlayMode UI
 Simulate mouse click, long-press, and drag on PlayMode UI elements. Uses EventSystem and ExecuteEvents to dispatch pointer events directly — works independently of both old and new Input System. For game logic that reads Input System (e.g. `Mouse.current.leftButton.wasPressedThisFrame`), use `simulate-mouse-input` instead.
 
 Supports 6 actions: Click, LongPress, Drag (one-shot), DragStart/DragMove/DragEnd (split drag).
@@ -168,7 +169,7 @@ Supports 6 actions: Click, LongPress, Drag (one-shot), DragStart/DragMove/DragEn
 ```
 https://github.com/user-attachments/assets/c7ee9103-c282-4f90-8b01-64bb17400f3e
 
-### 14. simulate-mouse-input - Simulate Mouse Input in PlayMode via Input System
+### 15. simulate-mouse-input - Simulate Mouse Input in PlayMode via Input System
 Simulate mouse input in PlayMode via Input System. Injects button clicks, mouse delta, and scroll wheel directly into `Mouse.current`. Unlike `simulate-mouse-ui`, which fires EventSystem pointer events, this tool targets game logic that reads `Mouse.current` directly. It is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings.
 
 Supports 5 actions: Click, LongPress, MoveDelta, SmoothDelta, Scroll.
@@ -185,7 +186,7 @@ Add `--dry-run` to check what a Game View coordinate hits in 3D physics (GameObj
 → simulate-mouse-input (Action: SmoothDelta, DeltaX: 300, DeltaY: 0, Duration: 0.5)
 ```
 
-### 15. simulate-keyboard - Simulate Keyboard Input in PlayMode
+### 16. simulate-keyboard - Simulate Keyboard Input in PlayMode
 Simulate keyboard key input in PlayMode via Input System. Supports single key taps, sustained holds, and multi-key combinations (e.g. Shift+W for sprinting). This tool is available only when the Input System package is installed, and Active Input Handling must be set to `Input System Package (New)` or `Both` in Player Settings. Game code must read input via Input System API (e.g. `Keyboard.current[Key.W].isPressed`), not legacy `Input.GetKey()`.
 
 Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down), KeyUp (release held key). Use Press for edge-triggered gameplay such as `Keyboard.current.spaceKey.wasPressedThisFrame`; KeyDown emits only one initial press edge and then becomes held state, so use KeyDown/KeyUp only when the test intentionally needs a held key.
@@ -200,7 +201,7 @@ Supports 3 actions: Press (one-shot tap or timed hold), KeyDown (hold key down),
 → simulate-keyboard (Action: KeyUp, Key: LeftShift)
 ```
 
-### 16. replay-input - Replay Recorded Input During PlayMode
+### 17. replay-input - Replay Recorded Input During PlayMode
 Replay recorded keyboard and mouse input during PlayMode. Loads a JSON recording and injects input frame-by-frame via Input System. Supports looping and progress monitoring. This tool is available only when the Input System package is installed. Create recording files first in the Unity Editor from **Window > Unity CLI Loop > Recordings** using **Start Recording** and **Stop Recording**. There is no CLI command for recording input.
 
 ```text

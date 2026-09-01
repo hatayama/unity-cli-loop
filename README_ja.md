@@ -182,7 +182,7 @@ V2 のプロジェクトの Settings ウィンドウで **Update CLI** や **Dow
 
 
 <details>
-<summary>バンドルされている全18個のSkills一覧</summary>
+<summary>バンドルされている全19個のSkills一覧</summary>
 
 - `/uloop-launch` - 正しいバージョンでUnityを起動
 - `/uloop-compile` - コンパイルの実行

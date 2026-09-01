@@ -113,20 +113,21 @@ macOS / Windows Editor上で、Unity Editor ウィンドウを最前面に表示
 `AnnotateRaycastGrid: true` を併用すると、キャプチャ画像に座標グリッドが重ねて描画されます。画像を見たAIが `simulate-mouse-input` に渡す座標を決めやすくなります。
 
 `uloop set-game-view-size --width 1920 --height 1080` でGame Viewのカスタム解像度を固定できます。`CaptureMode: rendering` の座標系を実行ごとに安定させたいときに使ってください（引数なしで実行すると現在の解像度を取得できます）。
-
-`uloop record-video` でPlay Mode中のGame Viewを録画できます。Startはすぐ戻るので録画中に他コマンドを実行でき、Stopで `.uloop/outputs/Videos/` にMP4（LinuxではWebM）を確定します。
-```text
-uloop record-video --action Start
-uloop simulate-keyboard --key W --duration 2
-uloop record-video --action Stop
-```
 ```text
 → screenshot (WindowName: "Console")
 → Console画面の状態をPNGで保存
 → AIに視覚的なフィードバックを提供
 ```
 
-### 11. control-play-mode - Play Modeの制御
+### 11. record-video - Play Mode中のGame View録画
+`uloop record-video` でPlay Mode中のGame Viewを録画できます。Startはすぐ戻るので録画中に他コマンドを実行でき、Stopで `.uloop/outputs/Videos/` にMP4（LinuxではWebM）を確定します。
+```text
+uloop record-video --action Start
+uloop simulate-keyboard --key W --duration 2
+uloop record-video --action Stop
+```
+
+### 12. control-play-mode - Play Modeの制御
 Unity EditorのPlay Modeを制御します。Play（再生開始/一時停止解除）、Stop（停止）、Pause（一時停止）の3つのアクションを実行できます。
 ```text
 → control-play-mode (Action: Play)
@@ -135,7 +136,7 @@ Unity EditorのPlay Modeを制御します。Play（再生開始/一時停止解
 → 一時停止して状態を確認
 ```
 
-### 12. execute-dynamic-code - 動的C#コード実行
+### 13. execute-dynamic-code - 動的C#コード実行
 Unity Editor内で動的にC#コードを実行します。
 
 **Async対応**:
@@ -151,7 +152,7 @@ Unity Editor内で動的にC#コードを実行します。
 
 ## PlayMode 自動テスト系ツール
 
-### 13. simulate-mouse-ui - PlayMode UI要素のマウス操作シミュレーション
+### 14. simulate-mouse-ui - PlayMode UI要素のマウス操作シミュレーション
 PlayMode中のUI要素に対してマウスクリック・長押し・ドラッグをシミュレーションします。EventSystemとExecuteEventsを使ってポインタイベントを直接ディスパッチするため、旧Input System・新Input Systemの両方に依存せず動作します。ゲームロジックがInput Systemを直接読み取る場合（例：`Mouse.current.leftButton.wasPressedThisFrame`）は、`simulate-mouse-input` を使用してください。
 
 6つのアクションに対応: Click、LongPress、Drag（ワンショット）、DragStart/DragMove/DragEnd（分割ドラッグ）
@@ -168,7 +169,7 @@ PlayMode中のUI要素に対してマウスクリック・長押し・ドラッ�
 ```
 https://github.com/user-attachments/assets/c7ee9103-c282-4f90-8b01-64bb17400f3e
 
-### 14. simulate-mouse-input - Input System経由のPlayModeマウス入力シミュレーション
+### 15. simulate-mouse-input - Input System経由のPlayModeマウス入力シミュレーション
 Input System経由でPlayMode中のマウス入力をシミュレーションします。ボタンクリック、マウスデルタ、スクロールホイールを`Mouse.current`に直接注入します。EventSystemのポインタイベントを発火する`simulate-mouse-ui`と異なり、`Mouse.current`を直接読み取るゲームロジック向けのツールです。このツールは Input System パッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを`Input System Package (New)`または`Both`に設定する必要があります。
 
 5つのアクションに対応: Click、LongPress、MoveDelta、SmoothDelta、Scroll
@@ -185,7 +186,7 @@ Input System経由でPlayMode中のマウス入力をシミュレーションし
 → simulate-mouse-input (Action: SmoothDelta, DeltaX: 300, DeltaY: 0, Duration: 0.5)
 ```
 
-### 15. simulate-keyboard - PlayModeでのキーボード入力シミュレーション
+### 16. simulate-keyboard - PlayModeでのキーボード入力シミュレーション
 Input System経由でPlayMode中のキーボード入力をシミュレーションします。単発のキータップ、長押し、複数キーの同時押し（例：Shift+Wでスプリント）に対応しています。このツールは Input System パッケージ導入時のみ利用可能で、Player SettingsのActive Input Handlingを `Input System Package (New)` または `Both` に設定する必要があります。ゲームコードがInput System API（例: `Keyboard.current[Key.W].isPressed`）で入力を読み取っている必要があり、レガシーの `Input.GetKey()` には対応していません。
 
 3つのアクションに対応: Press（ワンショットタップまたは時間指定ホールド）、KeyDown（キーを押し続ける）、KeyUp（押下中のキーを解放）。`Keyboard.current.spaceKey.wasPressedThisFrame` のような立ち上がり検出には Press を使います。KeyDown は最初の押下エッジを1回だけ発行し、その後は押下状態を保つだけなので、意図的にキーを保持したい場合だけ KeyDown/KeyUp を使います。
@@ -200,7 +201,7 @@ Input System経由でPlayMode中のキーボード入力をシミュレーショ
 → simulate-keyboard (Action: KeyUp, Key: LeftShift)
 ```
 
-### 16. replay-input - 記録された入力のPlayMode再生
+### 17. replay-input - 記録された入力のPlayMode再生
 記録されたキーボード・マウス入力をPlayMode中に再生します。JSON記録を読み込み、Input System経由でフレーム単位で入力を注入します。ループ再生と進捗モニタリングに対応しています。このツールは Input System パッケージ導入時のみ利用可能です。記録ファイルは、まず Unity Editor の **Window > Unity CLI Loop > Recordings** で **Start Recording** と **Stop Recording** を使って作成します。CLI に記録コマンドはありません。
 
 ```text

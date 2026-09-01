@@ -106,19 +106,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             EditorApplication.update -= OnEditorUpdate;
             VideoRecordingSnapshot snapshot = _session.Snapshot();
-            if (_usedDefaultOutputPath)
+            try
             {
-                ApplyDefaultDirectoryRetention();
-            }
+                if (reason != RecordVideoConstants.StoppedByCli)
+                {
+                    LastCompletedRecordingStore.Save(snapshot);
+                }
 
-            if (reason != RecordVideoConstants.StoppedByCli)
+                if (_usedDefaultOutputPath)
+                {
+                    ApplyDefaultDirectoryRetention();
+                }
+
+                return snapshot;
+            }
+            finally
             {
-                LastCompletedRecordingStore.Save(snapshot);
+                _session = null;
+                _usedDefaultOutputPath = false;
             }
-
-            _session = null;
-            _usedDefaultOutputPath = false;
-            return snapshot;
         }
 
         private static void ApplyDefaultDirectoryRetention()

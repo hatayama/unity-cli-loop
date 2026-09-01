@@ -182,7 +182,7 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 
 
 <details>
-<summary>All 18 Bundled Skills</summary>
+<summary>All 19 Bundled Skills</summary>
 
 - `/uloop-launch` - Launch Unity with correct version
 - `/uloop-compile` - Execute compilation
