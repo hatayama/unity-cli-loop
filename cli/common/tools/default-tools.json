@@ -746,6 +746,39 @@
           }
         }
       }
+    },
+    {
+      "name": "record-video",
+      "description": "Record the Unity Game View to an MP4 (WebM on Linux) while Play Mode runs. Use to capture gameplay for later review; other uloop commands can run while recording.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "Action": {
+            "type": "string",
+            "enum": [
+              "Start",
+              "Stop",
+              "Status"
+            ],
+            "description": "Start - begin recording, Stop - finalize the file, Status - report progress",
+            "default": "Start"
+          },
+          "FrameRate": {
+            "type": "integer",
+            "description": "Output video fps. Valid range 1–60. Used by Start only.",
+            "default": 30
+          },
+          "MaxDurationSeconds": {
+            "type": "integer",
+            "description": "Auto-stop safety limit in seconds. Valid range 1–600. Used by Start only.",
+            "default": 60
+          },
+          "OutputPath": {
+            "type": "string",
+            "description": "Output file path. Empty uses .uloop/outputs/Videos/gameview_<yyyyMMdd_HHmmss>.mp4 (.webm on Linux). Extension must be .mp4 or .webm. Linux rejects .mp4. Used by Start only."
+          }
+        }
+      }
     }
   ]
 }

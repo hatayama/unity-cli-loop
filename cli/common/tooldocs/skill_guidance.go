@@ -14,6 +14,7 @@ var commandSkillNames = map[string]string{
 	"focus-window":         "uloop-focus-window",
 	"get-hierarchy":        "uloop-get-hierarchy",
 	"get-logs":             "uloop-get-logs",
+	"record-video":         "uloop-record-video",
 	"replay-input":         "uloop-replay-input",
 	"run-tests":            "uloop-run-tests",
 	"screenshot":           "uloop-screenshot",
