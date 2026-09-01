@@ -432,11 +432,13 @@ jobs:
         working-directory: cli/release-automation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
           WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}
         run: >-
           go run ./cmd/update-winget-manifest
-          --repo "${{ github.repository }}"
-          --tag "${{ needs.build.outputs.release_tag }}"
+          --repo "${GITHUB_REPOSITORY}"
+          --tag "${RELEASE_TAG}"
           --fork-repo hatayama/winget-pkgs
 
       # Fresh installs follow the package pin, so a published stable dispatcher

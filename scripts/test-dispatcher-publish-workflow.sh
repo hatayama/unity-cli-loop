@@ -232,8 +232,12 @@ test_dispatcher_release_target_and_prerelease_state_remain_verified() {
 test_winget_pull_request_follows_homebrew_update_for_stable_releases() {
   assert_contains "      - name: Open winget-pkgs pull request"
   assert_winget_pull_request_contains "        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'"
+  assert_winget_pull_request_contains '          GITHUB_REPOSITORY: ${{ github.repository }}'
+  assert_winget_pull_request_contains '          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}'
   assert_winget_pull_request_contains '          WINGET_PKGS_TOKEN: ${{ secrets.WINGET_PKGS_TOKEN }}'
   assert_winget_pull_request_contains "          go run ./cmd/update-winget-manifest"
+  assert_winget_pull_request_contains '          --repo "${GITHUB_REPOSITORY}"'
+  assert_winget_pull_request_contains '          --tag "${RELEASE_TAG}"'
   assert_winget_pull_request_contains "          --fork-repo hatayama/winget-pkgs"
   assert_before "      - name: Update Homebrew formula" "      - name: Open winget-pkgs pull request"
   assert_before "      - name: Open winget-pkgs pull request" "      - name: Open dispatcher pin stamp pull request"
