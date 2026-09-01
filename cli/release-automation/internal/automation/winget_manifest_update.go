@@ -2,6 +2,7 @@ package automation
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -85,6 +86,11 @@ type wingetManifestData struct {
 	ReleaseDate string
 }
 
+type wingetReleaseMetadata struct {
+	PublishedAt  string `json:"publishedAt"`
+	IsPrerelease bool   `json:"isPrerelease"`
+}
+
 // RunUpdateWingetManifest opens a winget-pkgs pull request for a stable dispatcher release.
 func RunUpdateWingetManifest(ctx context.Context, stdout io.Writer, stderr io.Writer, args []string) int {
 	config, err := parseWingetManifestUpdateFlags(args)
@@ -143,10 +149,6 @@ func runUpdateWingetManifestWithDeps(
 		return 0
 	}
 
-	data, err := loadWingetManifestData(ctx, deps, config, version)
-	if err != nil {
-		return writeWingetManifestUpdateError(stderr, err)
-	}
 	versionPath := wingetPackageManifestPath() + "/" + version
 	versionExists, err := wingetUpstreamPathExists(ctx, deps, token, versionPath)
 	if err != nil {
@@ -155,6 +157,18 @@ func runUpdateWingetManifestWithDeps(
 	if versionExists {
 		writeWingetManifestUpdateLine(stdout, fmt.Sprintf("winget manifest for %s already exists upstream; skipping.", version))
 		return 0
+	}
+	metadata, err := downloadWingetReleaseMetadata(ctx, deps, config.repository, config.tag)
+	if err != nil {
+		return writeWingetManifestUpdateError(stderr, err)
+	}
+	if metadata.IsPrerelease {
+		writeWingetManifestUpdateLine(stdout, fmt.Sprintf("GitHub release %s is marked as a pre-release; winget receives stable releases only. Skipping.", config.tag))
+		return 0
+	}
+	data, err := loadWingetManifestData(ctx, deps, config, version, metadata.PublishedAt)
+	if err != nil {
+		return writeWingetManifestUpdateError(stderr, err)
 	}
 
 	packageExists, err := wingetUpstreamPathExists(ctx, deps, token, wingetPackageManifestPath())
@@ -195,12 +209,9 @@ func loadWingetManifestData(
 	deps wingetManifestUpdateDeps,
 	config wingetManifestUpdateConfig,
 	version string,
+	releaseDate string,
 ) (wingetManifestData, error) {
 	sha256, err := downloadWingetAssetSHA256(ctx, deps, config.repository, config.tag)
-	if err != nil {
-		return wingetManifestData{}, err
-	}
-	releaseDate, err := downloadWingetReleaseDate(ctx, deps, config.repository, config.tag)
 	if err != nil {
 		return wingetManifestData{}, err
 	}
@@ -238,12 +249,12 @@ func downloadWingetAssetSHA256(
 	return parseSha256Asset(output, wingetWindowsAmd64AssetName)
 }
 
-func downloadWingetReleaseDate(
+func downloadWingetReleaseMetadata(
 	ctx context.Context,
 	deps wingetManifestUpdateDeps,
 	repository string,
 	tag string,
-) (string, error) {
+) (wingetReleaseMetadata, error) {
 	output, err := deps.runOutput(
 		ctx,
 		nil,
@@ -254,18 +265,20 @@ func downloadWingetReleaseDate(
 		"--repo",
 		repository,
 		"--json",
-		"publishedAt",
-		"--jq",
-		".publishedAt",
+		"publishedAt,isPrerelease",
 	)
 	if err != nil {
-		return "", err
+		return wingetReleaseMetadata{}, err
 	}
-	publishedAt := strings.TrimSpace(output)
-	if len(publishedAt) < len("2006-01-02") {
-		return "", fmt.Errorf("release %s has an invalid publishedAt value %q", tag, publishedAt)
+	metadata := wingetReleaseMetadata{}
+	if err = json.Unmarshal([]byte(output), &metadata); err != nil {
+		return wingetReleaseMetadata{}, fmt.Errorf("failed to parse release metadata for %s: %w", tag, err)
 	}
-	return publishedAt[:len("2006-01-02")], nil
+	if len(metadata.PublishedAt) < len("2006-01-02") {
+		return wingetReleaseMetadata{}, fmt.Errorf("release %s has an invalid publishedAt value %q", tag, metadata.PublishedAt)
+	}
+	metadata.PublishedAt = metadata.PublishedAt[:len("2006-01-02")]
+	return metadata, nil
 }
 
 func renderWingetManifests(data wingetManifestData) (map[string]string, error) {

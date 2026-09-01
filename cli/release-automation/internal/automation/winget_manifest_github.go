@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -155,7 +156,7 @@ func wingetForkContentSHA(
 		wingetTokenEnvironment(token),
 		"gh",
 		"api",
-		"repos/"+forkRepo+"/contents/"+path+"?ref="+branch,
+		"repos/"+forkRepo+"/contents/"+path+"?ref="+url.QueryEscape(branch),
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "HTTP 404") {
@@ -182,7 +183,7 @@ func wingetPullRequestOpen(
 		wingetTokenEnvironment(token),
 		"gh",
 		"api",
-		"repos/"+wingetUpstreamRepo+"/pulls?head="+forkOwner+":"+branch+"&state=open",
+		"repos/"+wingetUpstreamRepo+"/pulls?head="+url.QueryEscape(forkOwner+":"+branch)+"&state=open",
 	)
 	if err != nil {
 		return false, err

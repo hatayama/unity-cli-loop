@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -60,6 +62,23 @@ func TestUpdateWingetManifestSkipsPrerelease(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("runOutput called %d times", calls)
+	}
+}
+
+// TestUpdateWingetManifestSkipsGitHubPrerelease verifies release metadata prevents stable-looking prereleases from publishing.
+func TestUpdateWingetManifestSkipsGitHubPrerelease(t *testing.T) {
+	scenario := newWingetTestScenario()
+	scenario.releasePrerelease = true
+	stdout, code := runWingetTestScenarioWithTag(t, scenario, "dispatcher-v3.2.0")
+
+	if code != 0 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if !strings.Contains(stdout, "GitHub release dispatcher-v3.2.0 is marked as a pre-release; winget receives stable releases only. Skipping.") {
+		t.Fatalf("unexpected stdout: %s", stdout)
+	}
+	if scenario.putCalls != 0 || scenario.pullRequestCreateCalls != 0 {
+		t.Fatalf("PUT calls = %d, PR creation calls = %d", scenario.putCalls, scenario.pullRequestCreateCalls)
 	}
 }
 
@@ -149,6 +168,9 @@ func TestUpdateWingetManifestSkipsExistingVersion(t *testing.T) {
 	if scenario.putCalls != 0 || scenario.pullRequestCreateCalls != 0 {
 		t.Fatalf("PUT calls = %d, PR creation calls = %d", scenario.putCalls, scenario.pullRequestCreateCalls)
 	}
+	if scenario.releaseDownloadCalls != 0 || scenario.releaseViewCalls != 0 {
+		t.Fatalf("release download calls = %d, release view calls = %d", scenario.releaseDownloadCalls, scenario.releaseViewCalls)
+	}
 }
 
 // TestUpdateWingetManifestUsesNewPackageTitle verifies a missing upstream package uses the initial-submission PR title.
@@ -210,11 +232,48 @@ func TestUpdateWingetManifestSkipsOpenPullRequest(t *testing.T) {
 	}
 }
 
+// TestWingetQueriesEncodeBuildMetadata verifies branch names with SemVer build metadata are URL encoded in query values.
+func TestWingetQueriesEncodeBuildMetadata(t *testing.T) {
+	endpoints := []string{}
+	deps := wingetManifestUpdateDeps{
+		runOutput: func(_ context.Context, _ []string, _ string, args ...string) (string, error) {
+			endpoint := args[len(args)-1]
+			endpoints = append(endpoints, endpoint)
+			if strings.Contains(endpoint, "/contents/") {
+				return "", errors.New("gh api failed: HTTP 404 Not Found")
+			}
+			return `[]`, nil
+		},
+	}
+	branch := "hatayama-uloop-3.1.0+build"
+
+	_, err := wingetForkContentSHA(context.Background(), deps, "token", "hatayama/winget-pkgs", branch, "manifest.yaml")
+	if err != nil {
+		t.Fatalf("wingetForkContentSHA failed: %v", err)
+	}
+	_, err = wingetPullRequestOpen(context.Background(), deps, "token", "hatayama", branch)
+	if err != nil {
+		t.Fatalf("wingetPullRequestOpen failed: %v", err)
+	}
+
+	joined := strings.Join(endpoints, "\n")
+	if !strings.Contains(joined, "?ref=hatayama-uloop-3.1.0%2Bbuild") {
+		t.Fatalf("encoded ref query missing from endpoints: %s", joined)
+	}
+	if !strings.Contains(joined, "?head=hatayama%3Ahatayama-uloop-3.1.0%2Bbuild&state=open") {
+		t.Fatalf("encoded head query missing from endpoints: %s", joined)
+	}
+}
+
 type wingetTestScenario struct {
+	version                string
 	versionExists          bool
 	packageExists          bool
 	branchExists           bool
 	pullRequestOpen        bool
+	releasePrerelease      bool
+	releaseDownloadCalls   int
+	releaseViewCalls       int
 	putCalls               int
 	pullRequestCreateCalls int
 	pullRequestTitle       string
@@ -234,14 +293,20 @@ func testWingetConfig(tag string) wingetManifestUpdateConfig {
 
 func runWingetTestScenario(t *testing.T, scenario *wingetTestScenario) (string, int) {
 	t.Helper()
+	return runWingetTestScenarioWithTag(t, scenario, "dispatcher-v3.1.0")
+}
+
+func runWingetTestScenarioWithTag(t *testing.T, scenario *wingetTestScenario, tag string) (string, int) {
+	t.Helper()
 	t.Setenv(wingetPkgsTokenEnvName, "winget-token")
+	scenario.version = strings.TrimPrefix(tag, "dispatcher-v")
 	stdout := bytes.Buffer{}
 	stderr := bytes.Buffer{}
 	code := runUpdateWingetManifestWithDeps(
 		context.Background(),
 		&stdout,
 		&stderr,
-		testWingetConfig("dispatcher-v3.1.0"),
+		testWingetConfig(tag),
 		wingetManifestUpdateDeps{runOutput: scenario.runOutput},
 	)
 	if code != 0 && stderr.Len() > 0 {
@@ -270,16 +335,19 @@ func (s *wingetTestScenario) runOutput(_ context.Context, extraEnv []string, nam
 
 func (s *wingetTestScenario) releaseOutput(_ []string, joined string) (string, bool, error) {
 	if strings.Contains(joined, "release download") {
+		s.releaseDownloadCalls++
 		return testWingetSHA256 + "  " + wingetWindowsAmd64AssetName + "\n", true, nil
 	}
 	if strings.Contains(joined, "release view") {
-		return "2026-08-31T12:34:56Z\n", true, nil
+		s.releaseViewCalls++
+		return fmt.Sprintf(`{"publishedAt":"2026-08-31T12:34:56Z","isPrerelease":%t}`, s.releasePrerelease), true, nil
 	}
 	return "", false, nil
 }
 
 func (s *wingetTestScenario) upstreamOutput(_ []string, joined string) (string, bool, error) {
-	if strings.Contains(joined, "repos/microsoft/winget-pkgs/contents/manifests/h/hatayama/uloop/3.1.0?ref=master") {
+	versionPath := "repos/microsoft/winget-pkgs/contents/manifests/h/hatayama/uloop/" + s.version + "?ref=master"
+	if strings.Contains(joined, versionPath) {
 		if s.versionExists {
 			return `{}`, true, nil
 		}
@@ -311,7 +379,8 @@ func (s *wingetTestScenario) branchOutput(_ []string, joined string) (string, bo
 }
 
 func (s *wingetTestScenario) manifestFileOutput(args []string, joined string) (string, bool, error) {
-	if strings.Contains(joined, "repos/hatayama/winget-pkgs/contents/manifests/h/hatayama/uloop/3.1.0/") {
+	versionPath := "repos/hatayama/winget-pkgs/contents/manifests/h/hatayama/uloop/" + s.version + "/"
+	if strings.Contains(joined, versionPath) {
 		if strings.Contains(joined, "-X PUT") {
 			s.putCalls++
 			encodedContent := flagValue(args, "content")
@@ -330,7 +399,8 @@ func (s *wingetTestScenario) manifestFileOutput(args []string, joined string) (s
 }
 
 func (s *wingetTestScenario) pullRequestOutput(args []string, joined string) (string, bool, error) {
-	if strings.Contains(joined, "repos/microsoft/winget-pkgs/pulls?head=hatayama:hatayama-uloop-3.1.0&state=open") {
+	headQuery := "repos/microsoft/winget-pkgs/pulls?head=" + url.QueryEscape("hatayama:hatayama-uloop-"+s.version) + "&state=open"
+	if strings.Contains(joined, headQuery) {
 		if s.pullRequestOpen {
 			return `[{"html_url":"https://example.invalid/existing"}]`, true, nil
 		}
