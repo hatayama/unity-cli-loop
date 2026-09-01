@@ -53,38 +53,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.EqualTo(expected));
         }
 
-        [TestCase(true, "3.0.0", true, true, false, "RepairPath")]
-        [TestCase(true, "3.0.1", true, true, false, "RepairPath")]
-        [TestCase(true, "3.0.0", false, true, false, "InstallOrUpdate")]
-        [TestCase(true, "2.9.0", true, true, false, "InstallOrUpdate")]
-        [TestCase(false, "3.0.0", true, true, false, "Uninstall")]
-        [TestCase(false, "3.0.1", true, true, false, "Uninstall")]
-        [TestCase(false, "3.0.0", false, true, false, "InstallOrUpdate")]
-        [TestCase(false, "3.0.0", true, false, false, "InstallOrUpdate")]
-        [TestCase(false, null, false, true, false, "InstallOrUpdate")]
-        [TestCase(false, "", false, true, false, "InstallOrUpdate")]
-        [TestCase(false, "3.0.0", true, false, true, "None")]
-        [TestCase(false, "2.9.0", true, false, true, "None")]
-        [TestCase(false, null, false, false, true, "None")]
-        [TestCase(true, "3.0.0", true, false, true, "RepairPath")]
-        [TestCase(true, "2.9.0", true, false, true, "RepairPath")]
+        [TestCase(true, "3.0.0", true, true, ManagedCliKind.None, "RepairPath")]
+        [TestCase(true, "3.0.1", true, true, ManagedCliKind.None, "RepairPath")]
+        [TestCase(true, "3.0.0", false, true, ManagedCliKind.None, "InstallOrUpdate")]
+        [TestCase(true, "2.9.0", true, true, ManagedCliKind.None, "InstallOrUpdate")]
+        [TestCase(false, "3.0.0", true, true, ManagedCliKind.None, "Uninstall")]
+        [TestCase(false, "3.0.1", true, true, ManagedCliKind.None, "Uninstall")]
+        [TestCase(false, "3.0.0", false, true, ManagedCliKind.None, "InstallOrUpdate")]
+        [TestCase(false, "3.0.0", true, false, ManagedCliKind.None, "InstallOrUpdate")]
+        [TestCase(false, null, false, true, ManagedCliKind.None, "InstallOrUpdate")]
+        [TestCase(false, "", false, true, ManagedCliKind.None, "InstallOrUpdate")]
+        [TestCase(false, "3.0.0", true, false, ManagedCliKind.Homebrew, "None")]
+        [TestCase(false, "2.9.0", true, false, ManagedCliKind.Homebrew, "None")]
+        [TestCase(false, null, false, false, ManagedCliKind.Homebrew, "None")]
+        [TestCase(true, "3.0.0", true, false, ManagedCliKind.Homebrew, "RepairPath")]
+        [TestCase(true, "2.9.0", true, false, ManagedCliKind.Homebrew, "RepairPath")]
+        [TestCase(false, "2.9.0", true, false, ManagedCliKind.Winget, "None")]
+        [TestCase(true, "2.9.0", true, false, ManagedCliKind.Winget, "RepairPath")]
         public void ResolveCliPrimaryButtonAction_ReturnsClickedPrimaryAction(
             bool needsCliPathSetup,
             string cliVersion,
             bool cliIsDispatcher,
             bool canUninstallCli,
-            bool isHomebrewManagedCli,
+            ManagedCliKind managedCliKind,
             string expected)
         {
             // Verifies that the Settings window chooses repair only when dispatcher replacement is unnecessary,
-            // and that a Homebrew-managed path leaves PATH repair as its only executable action.
+            // and that a managed path leaves PATH repair as its only executable action.
             CliSetupPrimaryAction result =
                 UnityCliLoopSettingsCliSetupPresenter.ResolveCliPrimaryButtonAction(
                     needsCliPathSetup,
                     cliVersion,
                     cliIsDispatcher,
                     canUninstallCli,
-                    isHomebrewManagedCli,
+                    managedCliKind,
                     TestMinimumDispatcherVersion);
 
             Assert.That(result.ToString(), Is.EqualTo(expected));

@@ -49,8 +49,8 @@ winget receives stable dispatcher releases only. Prereleases are not submitted.
   repair is the one action that survives the
   stand-down, because it writes no binary and only makes an already installed
   package-owned CLI reachable.
-- The Unity Settings window and Setup Wizard will display `Managed by winget`
-  for a winget-managed CLI and will not overwrite it.
+- The Unity Settings window and Setup Wizard display `Managed by winget` for a
+  winget-managed CLI and do not overwrite it.
 
 ## Known follow-ups
 

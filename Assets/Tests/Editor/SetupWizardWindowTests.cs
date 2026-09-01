@@ -478,28 +478,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(canManageSkills, Is.True);
         }
 
-        [TestCase(false, false, false, false, false, false, null, "3.0.0", "Install CLI")]
-        [TestCase(false, false, false, false, true, false, null, "3.0.0", "Fix PATH")]
-        [TestCase(true, false, false, false, false, false, "3.0.0", "3.0.0", "Installed")]
-        [TestCase(true, false, false, false, true, false, "3.0.0", "3.0.0", "Fix PATH")]
-        [TestCase(true, false, false, true, false, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
-        [TestCase(true, false, false, true, true, false, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
-        [TestCase(true, false, false, true, false, false, "3.0.0", "3.0.0", "Update CLI (v3.0.0 required)")]
-        [TestCase(true, true, false, false, false, false, "3.0.0", "3.0.0", "Installing...")]
-        [TestCase(true, true, false, false, true, false, "3.0.0", "3.0.0", "Fixing PATH...")]
-        [TestCase(false, false, true, false, false, false, null, "3.0.0", "Checking...")]
-        [TestCase(true, false, false, false, false, true, "3.0.0", "3.0.0", "Managed by Homebrew")]
-        [TestCase(true, false, false, true, false, true, "2.9.0", "3.0.0", "Managed by Homebrew")]
-        [TestCase(false, false, false, false, false, true, null, "3.0.0", "Managed by Homebrew")]
-        [TestCase(true, false, false, false, true, true, "3.0.0", "3.0.0", "Fix PATH")]
-        [TestCase(true, true, false, false, true, true, "3.0.0", "3.0.0", "Fixing PATH...")]
+        [TestCase(false, false, false, false, false, ManagedCliKind.None, null, "3.0.0", "Install CLI")]
+        [TestCase(false, false, false, false, true, ManagedCliKind.None, null, "3.0.0", "Fix PATH")]
+        [TestCase(true, false, false, false, false, ManagedCliKind.None, "3.0.0", "3.0.0", "Installed")]
+        [TestCase(true, false, false, false, true, ManagedCliKind.None, "3.0.0", "3.0.0", "Fix PATH")]
+        [TestCase(true, false, false, true, false, ManagedCliKind.None, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
+        [TestCase(true, false, false, true, true, ManagedCliKind.None, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
+        [TestCase(true, false, false, true, false, ManagedCliKind.None, "3.0.0", "3.0.0", "Update CLI (v3.0.0 required)")]
+        [TestCase(true, true, false, false, false, ManagedCliKind.None, "3.0.0", "3.0.0", "Installing...")]
+        [TestCase(true, true, false, false, true, ManagedCliKind.None, "3.0.0", "3.0.0", "Fixing PATH...")]
+        [TestCase(false, false, true, false, false, ManagedCliKind.None, null, "3.0.0", "Checking...")]
+        [TestCase(true, false, false, false, false, ManagedCliKind.Homebrew, "3.0.0", "3.0.0", "Managed by Homebrew")]
+        [TestCase(true, false, false, true, false, ManagedCliKind.Homebrew, "2.9.0", "3.0.0", "Managed by Homebrew")]
+        [TestCase(false, false, false, false, false, ManagedCliKind.Homebrew, null, "3.0.0", "Managed by Homebrew")]
+        [TestCase(true, false, false, false, false, ManagedCliKind.Winget, "3.0.0", "3.0.0", "Managed by winget")]
+        [TestCase(true, false, false, false, true, ManagedCliKind.Homebrew, "3.0.0", "3.0.0", "Fix PATH")]
+        [TestCase(true, true, false, false, true, ManagedCliKind.Homebrew, "3.0.0", "3.0.0", "Fixing PATH...")]
         public void GetCliButtonTextForSetupWizard_ReturnsExpectedLabel(
             bool cliInstalled,
             bool isInstallingCli,
             bool isChecking,
             bool needsUpdate,
             bool needsCliPathSetup,
-            bool isHomebrewManagedCli,
+            ManagedCliKind managedCliKind,
             string cliVersion,
             string requiredCliVersion,
             string expectedLabel)
@@ -510,7 +511,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isChecking,
                 needsUpdate,
                 needsCliPathSetup,
-                isHomebrewManagedCli,
+                managedCliKind,
                 cliVersion,
                 requiredCliVersion);
 
@@ -539,37 +540,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [TestCase(
-            true,
+            ManagedCliKind.Homebrew,
             "2.9.0",
             true,
             true,
             "Homebrew-managed CLI v2.9.0 does not meet the required v3.0.0.\n"
             + "Run this command in your terminal:\nbrew upgrade uloop")]
         [TestCase(
-            true,
+            ManagedCliKind.Homebrew,
             null,
             true,
             true,
             "Homebrew-managed CLI did not report a version.\n"
             + "Run this command in your terminal:\nbrew reinstall uloop")]
         [TestCase(
-            true,
+            ManagedCliKind.Homebrew,
             "3.0.0",
             false,
             true,
             "Homebrew-managed CLI v3.0.0 did not answer as the required uloop CLI.\n"
             + "Run this command in your terminal:\nbrew reinstall uloop")]
-        [TestCase(true, "3.0.0", true, false, "")]
-        [TestCase(false, "2.9.0", true, false, "")]
-        [TestCase(false, null, true, false, "")]
-        public void Update_TogglesHomebrewUpgradeWarning(
-            bool isHomebrewManagedCli,
+        [TestCase(ManagedCliKind.Winget, "2.9.0", true, true,
+            "winget-managed CLI v2.9.0 does not meet the required v3.0.0.\n"
+            + "Run this command in your terminal:\nwinget upgrade --id hatayama.uloop")]
+        [TestCase(ManagedCliKind.Winget, null, true, true,
+            "winget-managed CLI did not report a version.\n"
+            + "Run these commands in your terminal:\n"
+            + "winget uninstall --id hatayama.uloop\n"
+            + "winget install --id hatayama.uloop")]
+        [TestCase(ManagedCliKind.Winget, "3.0.0", false, true,
+            "winget-managed CLI v3.0.0 did not answer as the required uloop CLI.\n"
+            + "Run these commands in your terminal:\n"
+            + "winget uninstall --id hatayama.uloop\n"
+            + "winget install --id hatayama.uloop")]
+        [TestCase(ManagedCliKind.Homebrew, "3.0.0", true, false, "")]
+        [TestCase(ManagedCliKind.None, "2.9.0", true, false, "")]
+        [TestCase(ManagedCliKind.None, null, true, false, "")]
+        public void Update_TogglesManagedUpgradeWarning(
+            ManagedCliKind managedCliKind,
             string cliVersion,
             bool cliIsDispatcher,
             bool expectedVisible,
             string expectedText)
         {
-            // Verifies the wizard explains every unusable Homebrew CLI, and stays silent otherwise.
+            // Verifies the wizard explains every unusable managed CLI, and stays silent otherwise.
             VisualElement statusIcon = new();
             Label statusLabel = new();
             Label homebrewUpgradeMessage = new() { name = "cli-homebrew-upgrade-message" };
@@ -588,7 +602,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 requiredCliVersion: "3.0.0",
                 isInstallingCli: false,
                 needsCliPathSetup: false,
-                isHomebrewManagedCli);
+                managedCliKind);
 
             Assert.That(
                 homebrewUpgradeMessage.ClassListContains("setup-warning-message--visible"),
@@ -596,32 +610,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(homebrewUpgradeMessage.text, Is.EqualTo(expectedText));
         }
 
-        [TestCase(false, false, false, false, false, false, true)]
-        [TestCase(true, false, true, false, false, false, true)]
-        [TestCase(true, false, false, false, false, false, true)]
-        [TestCase(true, true, false, false, false, false, false)]
-        [TestCase(false, false, false, true, false, false, false)]
-        [TestCase(false, false, false, false, true, false, false)]
-        [TestCase(true, false, false, false, false, true, false)]
-        [TestCase(false, false, false, false, false, true, false)]
-        [TestCase(true, false, true, false, false, true, true)]
+        [TestCase(false, false, false, false, false, ManagedCliKind.None, true)]
+        [TestCase(true, false, true, false, false, ManagedCliKind.None, true)]
+        [TestCase(true, false, false, false, false, ManagedCliKind.None, true)]
+        [TestCase(true, true, false, false, false, ManagedCliKind.None, false)]
+        [TestCase(false, false, false, true, false, ManagedCliKind.None, false)]
+        [TestCase(false, false, false, false, true, ManagedCliKind.None, false)]
+        [TestCase(true, false, false, false, false, ManagedCliKind.Homebrew, false)]
+        [TestCase(false, false, false, false, false, ManagedCliKind.Winget, false)]
+        [TestCase(true, false, true, false, false, ManagedCliKind.Winget, true)]
         public void IsCliButtonEnabledForSetupWizard_ReturnsExpectedValue(
             bool cliInstalled,
             bool cliVersionMatched,
             bool needsCliPathSetup,
             bool isInstallingCli,
             bool isChecking,
-            bool isHomebrewManagedCli,
+            ManagedCliKind managedCliKind,
             bool expectedEnabled)
         {
-            // Verifies a Homebrew-managed CLI leaves only PATH repair, which writes no binary, enabled.
+            // Verifies a managed CLI leaves only PATH repair, which writes no binary, enabled.
             bool enabled = SetupWizardCliStepPresenter.IsCliButtonEnabledForSetupWizard(
                 cliInstalled,
                 cliVersionMatched,
                 needsCliPathSetup,
                 isInstallingCli,
                 isChecking,
-                isHomebrewManagedCli);
+                managedCliKind);
 
             Assert.That(enabled, Is.EqualTo(expectedEnabled));
         }

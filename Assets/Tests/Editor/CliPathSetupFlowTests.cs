@@ -174,9 +174,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return true;
             }
 
-            public bool IsHomebrewManagedInstallPath(string cliExecutablePath)
+            public ManagedCliKind ResolveManagedCliKind(string cliExecutablePath)
             {
-                return false;
+                return ManagedCliKind.None;
             }
 
             public bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform)

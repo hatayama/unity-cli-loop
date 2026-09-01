@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
     {
         private readonly VisualElement _statusIcon;
         private readonly Label _statusLabel;
-        private readonly Label _homebrewUpgradeMessage;
+        private readonly Label _managedUpgradeMessage;
         private readonly Button _installButton;
 
         internal SetupWizardCliStepPresenter(
@@ -31,12 +31,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             _statusIcon = statusIcon ?? throw new System.ArgumentNullException(nameof(statusIcon));
             _statusLabel = statusLabel ?? throw new System.ArgumentNullException(nameof(statusLabel));
-            _homebrewUpgradeMessage = homebrewUpgradeMessage
+            _managedUpgradeMessage = homebrewUpgradeMessage
                 ?? throw new System.ArgumentNullException(nameof(homebrewUpgradeMessage));
             // Why: the warning carries a command to run, so it must be copyable.
             // UI Toolkit only starts a selection on a focusable text element.
-            _homebrewUpgradeMessage.focusable = true;
-            _homebrewUpgradeMessage.selection.isSelectable = true;
+            _managedUpgradeMessage.focusable = true;
+            _managedUpgradeMessage.selection.isSelectable = true;
             _installButton = installButton ?? throw new System.ArgumentNullException(nameof(installButton));
             _installButton.clicked += onInstallClicked
                 ?? throw new System.ArgumentNullException(nameof(onInstallClicked));
@@ -47,7 +47,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--success", false);
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--pending", true);
             _statusLabel.text = "Checking...";
-            UpdateHomebrewUpgradeMessage(isVisible: false, cliVersion: null, requiredCliVersion: null);
+            UpdateManagedUpgradeMessage(
+                isVisible: false,
+                managedCliKind: ManagedCliKind.None,
+                cliVersion: null,
+                requiredCliVersion: null);
             _installButton.SetEnabled(false);
             _installButton.text = "Checking...";
         }
@@ -65,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string requiredCliVersion,
             bool isInstallingCli,
             bool needsCliPathSetup,
-            bool isHomebrewManagedCli)
+            ManagedCliKind managedCliKind)
         {
             CliSetupCompatibilityState state = CliSetupCompatibility.Evaluate(
                 cliVersion,
@@ -77,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 false,
                 state.NeedsUpdate,
                 needsCliPathSetup,
-                isHomebrewManagedCli,
+                managedCliKind,
                 cliVersion,
                 requiredCliVersion);
             bool cliVersionMatched = state.IsCompatible && cliInstalled;
@@ -87,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 needsCliPathSetup,
                 isInstallingCli,
                 isChecking: false,
-                isHomebrewManagedCli);
+                managedCliKind);
 
             bool cliCompatible = cliInstalled && cliVersionMatched;
             _statusLabel.text = GetCliStatusTextForSetupWizard(
@@ -95,8 +99,9 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliCompatible,
                 cliVersion,
                 requiredCliVersion);
-            UpdateHomebrewUpgradeMessage(
-                HomebrewManagedCliPolicy.ShouldShowUpgradeGuidance(isHomebrewManagedCli, cliCompatible),
+            UpdateManagedUpgradeMessage(
+                ManagedCliPolicy.ShouldShowUpgradeGuidance(managedCliKind, cliCompatible),
+                managedCliKind,
                 cliVersion,
                 requiredCliVersion);
             ViewDataBinder.ToggleClass(_statusIcon, "setup-status-icon--success", cliCompatible);
@@ -105,12 +110,19 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             _installButton.text = buttonText;
         }
 
-        private void UpdateHomebrewUpgradeMessage(bool isVisible, string cliVersion, string requiredCliVersion)
+        private void UpdateManagedUpgradeMessage(
+            bool isVisible,
+            ManagedCliKind managedCliKind,
+            string cliVersion,
+            string requiredCliVersion)
         {
-            _homebrewUpgradeMessage.text = isVisible
-                ? CliSetupLabelFormatter.GetHomebrewUpgradeGuidanceText(cliVersion, requiredCliVersion)
+            _managedUpgradeMessage.text = isVisible
+                ? CliSetupLabelFormatter.GetManagedUpgradeGuidanceText(
+                    managedCliKind,
+                    cliVersion,
+                    requiredCliVersion)
                 : string.Empty;
-            ViewDataBinder.ToggleClass(_homebrewUpgradeMessage, "setup-warning-message--visible", isVisible);
+            ViewDataBinder.ToggleClass(_managedUpgradeMessage, "setup-warning-message--visible", isVisible);
         }
 
         internal static string GetCliStatusTextForSetupWizard(
@@ -143,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isChecking,
             bool needsUpdate,
             bool needsCliPathSetup,
-            bool isHomebrewManagedCli,
+            ManagedCliKind managedCliKind,
             string cliVersion,
             string requiredCliVersion)
         {
@@ -152,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 return "Checking...";
             }
 
-            if (isHomebrewManagedCli)
+            if (managedCliKind != ManagedCliKind.None)
             {
                 if (isInstallingCli)
                 {
@@ -161,7 +173,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
                 return needsCliPathSetup
                     ? "Fix PATH"
-                    : CliSetupLabelFormatter.HOMEBREW_MANAGED_BUTTON_TEXT;
+                    : CliSetupLabelFormatter.GetManagedButtonText(managedCliKind);
             }
 
             if (isInstallingCli)
@@ -198,14 +210,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsCliPathSetup,
             bool isInstallingCli,
             bool isChecking,
-            bool isHomebrewManagedCli)
+            ManagedCliKind managedCliKind)
         {
             if (isInstallingCli || isChecking)
             {
                 return false;
             }
 
-            if (isHomebrewManagedCli)
+            if (managedCliKind != ManagedCliKind.None)
             {
                 return needsCliPathSetup;
             }
