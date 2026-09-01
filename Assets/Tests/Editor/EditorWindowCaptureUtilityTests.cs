@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -53,6 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ReadPlayModeViewTexture_WithSrgbSourceInLinearColorSpace_PreservesBrightnessAndFlips()
         {
+            IgnoreWhenGpuBlitIsUnavailable();
             Assert.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Linear));
 
             const int SIZE = 4;
@@ -100,6 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ReadPlayModeViewTexture_WithResolutionScaleInLinearColorSpace_PreservesBrightness()
         {
+            IgnoreWhenGpuBlitIsUnavailable();
             Assert.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Linear));
 
             const int SOURCE_SIZE = 8;
@@ -136,6 +139,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 {
                     UnityEngine.Object.DestroyImmediate(result);
                 }
+            }
+        }
+
+        // Null (-nographics) does not run Blit, and CI llvmpipe (OpenGLCore) does not
+        // match real-GPU sRGB write encoding, so pixel-value checks cannot hold there.
+        private static void IgnoreWhenGpuBlitIsUnavailable()
+        {
+            GraphicsDeviceType deviceType = SystemInfo.graphicsDeviceType;
+            if (deviceType == GraphicsDeviceType.Null || deviceType == GraphicsDeviceType.OpenGLCore)
+            {
+                Assert.Ignore($"sRGB RenderTexture blits need a real GPU; skipped on {deviceType}.");
             }
         }
 
