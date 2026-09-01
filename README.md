@@ -196,6 +196,7 @@ That's it! After installing Skills, LLM tools can automatically handle instructi
 - `/uloop-screenshot` - Capture EditorWindow
 - `/uloop-pause-point` - Pause execution at any line and capture variables
 - `/uloop-set-game-view-size` - Read and set the Game View custom resolution
+- `/uloop-record-video` - Record the Game View to a video file while Play Mode runs
 - `/uloop-simulate-mouse-ui` - Simulate mouse click, long-press, and drag on PlayMode UI elements
 - `/uloop-simulate-mouse-input` - Simulate mouse input in PlayMode via Input System
 - `/uloop-simulate-keyboard` - Simulate keyboard input in PlayMode via Input System
@@ -298,6 +299,7 @@ For detailed descriptions and usage examples of every tool, see the **[Tool Refe
 - `focus-window` - Bring the Unity Editor window to the front
 - `screenshot` - Save screenshots of EditorWindows or the Game View
 - `set-game-view-size` - Read and set the Game View custom resolution
+- `record-video` - Record the Game View to MP4 (WebM on Linux) during Play Mode
 - `control-play-mode` - Play, stop, and pause Play Mode
 - `execute-dynamic-code` - Execute dynamic C# code
 

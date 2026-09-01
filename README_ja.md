@@ -196,6 +196,7 @@ V2 のプロジェクトの Settings ウィンドウで **Update CLI** や **Dow
 - `/uloop-screenshot` - EditorWindowのキャプチャ
 - `/uloop-pause-point` - 任意の行で実行を止めて変数をキャプチャ
 - `/uloop-set-game-view-size` - Game Viewのカスタム解像度の取得・設定
+- `/uloop-record-video` - Play Mode中のGame Viewを動画ファイルへ録画
 - `/uloop-simulate-mouse-ui` - PlayMode UI要素のクリック・長押し・ドラッグシミュレーション
 - `/uloop-simulate-mouse-input` - Input System経由のPlayModeマウス入力シミュレーション
 - `/uloop-simulate-keyboard` - Input System経由のPlayModeキーボード入力シミュレーション
@@ -298,6 +299,7 @@ Unity CLI Loop はツールの数を追い求めません。C#コードの動的
 - `focus-window` - Unity Editorウィンドウを前面化
 - `screenshot` - EditorWindowやGame Viewのスクリーンショットを保存
 - `set-game-view-size` - Game Viewのカスタム解像度を取得・設定
+- `record-video` - Play Mode中のGame ViewをMP4（LinuxではWebM）へ録画
 - `control-play-mode` - Play Modeの再生・停止・一時停止
 - `execute-dynamic-code` - 動的C#コード実行
 

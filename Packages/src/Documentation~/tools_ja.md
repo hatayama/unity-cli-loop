@@ -113,6 +113,13 @@ macOS / Windows Editor上で、Unity Editor ウィンドウを最前面に表示
 `AnnotateRaycastGrid: true` を併用すると、キャプチャ画像に座標グリッドが重ねて描画されます。画像を見たAIが `simulate-mouse-input` に渡す座標を決めやすくなります。
 
 `uloop set-game-view-size --width 1920 --height 1080` でGame Viewのカスタム解像度を固定できます。`CaptureMode: rendering` の座標系を実行ごとに安定させたいときに使ってください（引数なしで実行すると現在の解像度を取得できます）。
+
+`uloop record-video` でPlay Mode中のGame Viewを録画できます。Startはすぐ戻るので録画中に他コマンドを実行でき、Stopで `.uloop/outputs/Videos/` にMP4（LinuxではWebM）を確定します。
+```text
+uloop record-video --action Start
+uloop simulate-keyboard --key W --duration 2
+uloop record-video --action Stop
+```
 ```text
 → screenshot (WindowName: "Console")
 → Console画面の状態をPNGで保存
