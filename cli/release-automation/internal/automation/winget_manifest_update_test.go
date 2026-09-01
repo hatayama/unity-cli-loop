@@ -80,6 +80,7 @@ func TestUpdateWingetManifestSkipsGitHubPrerelease(t *testing.T) {
 	if scenario.putCalls != 0 || scenario.pullRequestCreateCalls != 0 {
 		t.Fatalf("PUT calls = %d, PR creation calls = %d", scenario.putCalls, scenario.pullRequestCreateCalls)
 	}
+	assertWingetPublishSetupNotCalled(t, scenario)
 }
 
 // TestRenderWingetManifests verifies all three winget manifests render the exact release metadata.
@@ -171,6 +172,7 @@ func TestUpdateWingetManifestSkipsExistingVersion(t *testing.T) {
 	if scenario.releaseDownloadCalls != 0 || scenario.releaseViewCalls != 0 {
 		t.Fatalf("release download calls = %d, release view calls = %d", scenario.releaseDownloadCalls, scenario.releaseViewCalls)
 	}
+	assertWingetPublishSetupNotCalled(t, scenario)
 }
 
 // TestUpdateWingetManifestUsesNewPackageTitle verifies a missing upstream package uses the initial-submission PR title.
@@ -274,6 +276,9 @@ type wingetTestScenario struct {
 	releasePrerelease      bool
 	releaseDownloadCalls   int
 	releaseViewCalls       int
+	mergeUpstreamCalls     int
+	upstreamRefCalls       int
+	branchCreationCalls    int
 	putCalls               int
 	pullRequestCreateCalls int
 	pullRequestTitle       string
@@ -317,6 +322,9 @@ func runWingetTestScenarioWithTag(t *testing.T, scenario *wingetTestScenario, ta
 
 func (s *wingetTestScenario) runOutput(_ context.Context, extraEnv []string, name string, args ...string) (string, error) {
 	joined := strings.Join(args, " ")
+	if err := validateWingetTestEnvironment(extraEnv, joined); err != nil {
+		return "", err
+	}
 	handlers := []func([]string, string) (string, bool, error){
 		s.releaseOutput,
 		s.upstreamOutput,
@@ -360,16 +368,22 @@ func (s *wingetTestScenario) upstreamOutput(_ []string, joined string) (string, 
 		return "", true, errors.New("gh api failed: HTTP 404 Not Found")
 	}
 	if strings.Contains(joined, "repos/hatayama/winget-pkgs/merge-upstream") {
+		s.mergeUpstreamCalls++
 		return `{}`, true, nil
 	}
 	if strings.Contains(joined, "repos/microsoft/winget-pkgs/git/ref/heads/master") {
+		s.upstreamRefCalls++
 		return "upstream-master-sha\n", true, nil
 	}
 	return "", false, nil
 }
 
-func (s *wingetTestScenario) branchOutput(_ []string, joined string) (string, bool, error) {
+func (s *wingetTestScenario) branchOutput(args []string, joined string) (string, bool, error) {
 	if strings.Contains(joined, "repos/hatayama/winget-pkgs/git/refs") {
+		s.branchCreationCalls++
+		if err := validateWingetBranchCreationArgs(args, s.version); err != nil {
+			return "", true, err
+		}
 		if s.branchExists {
 			return "", true, errors.New("gh api failed: HTTP 422 Reference already exists")
 		}
@@ -383,8 +397,7 @@ func (s *wingetTestScenario) manifestFileOutput(args []string, joined string) (s
 	if strings.Contains(joined, versionPath) {
 		if strings.Contains(joined, "-X PUT") {
 			s.putCalls++
-			encodedContent := flagValue(args, "content")
-			decodedContent, err := base64.StdEncoding.DecodeString(encodedContent)
+			decodedContent, err := validateWingetManifestPutArgs(args, s.version)
 			if err != nil {
 				return "", true, err
 			}
@@ -408,10 +421,90 @@ func (s *wingetTestScenario) pullRequestOutput(args []string, joined string) (st
 	}
 	if strings.Contains(joined, "repos/microsoft/winget-pkgs/pulls") && strings.Contains(joined, "-X POST") {
 		s.pullRequestCreateCalls++
+		if err := validateWingetPullRequestArgs(args, s.version); err != nil {
+			return "", true, err
+		}
 		s.pullRequestTitle = flagValue(args, "title")
 		return `{"html_url":"https://example.invalid/new"}`, true, nil
 	}
 	return "", false, nil
+}
+
+func validateWingetTestEnvironment(extraEnv []string, joined string) error {
+	if strings.Contains(joined, "release download") || strings.Contains(joined, "release view") {
+		if len(extraEnv) != 0 {
+			return fmt.Errorf("gh release call has unexpected environment: %v", extraEnv)
+		}
+		return nil
+	}
+	if len(extraEnv) != 1 || extraEnv[0] != "GH_TOKEN=winget-token" {
+		return fmt.Errorf("gh api call environment = %v, want GH_TOKEN=winget-token", extraEnv)
+	}
+	return nil
+}
+
+func validateWingetBranchCreationArgs(args []string, version string) error {
+	expectedRef := "refs/heads/hatayama-uloop-" + version
+	if flagValue(args, "ref") != expectedRef {
+		return fmt.Errorf("branch ref = %q, want %q", flagValue(args, "ref"), expectedRef)
+	}
+	if flagValue(args, "sha") != "upstream-master-sha" {
+		return fmt.Errorf("branch sha = %q, want upstream-master-sha", flagValue(args, "sha"))
+	}
+	return nil
+}
+
+func validateWingetManifestPutArgs(args []string, version string) ([]byte, error) {
+	if flagValue(args, "message") == "" {
+		return nil, errors.New("manifest PUT message is empty")
+	}
+	encodedContent := flagValue(args, "content")
+	if encodedContent == "" {
+		return nil, errors.New("manifest PUT content is empty")
+	}
+	decodedContent, err := base64.StdEncoding.DecodeString(encodedContent)
+	if err != nil {
+		return nil, fmt.Errorf("manifest PUT content is not valid base64: %w", err)
+	}
+	if len(decodedContent) == 0 {
+		return nil, errors.New("manifest PUT decoded content is empty")
+	}
+	expectedBranch := "hatayama-uloop-" + version
+	if flagValue(args, "branch") != expectedBranch {
+		return nil, fmt.Errorf("manifest PUT branch = %q, want %q", flagValue(args, "branch"), expectedBranch)
+	}
+	if containsFlagName(args, "sha") {
+		return nil, errors.New("manifest PUT unexpectedly includes sha after a 404 response")
+	}
+	return decodedContent, nil
+}
+
+func validateWingetPullRequestArgs(args []string, version string) error {
+	expectedHead := "hatayama:hatayama-uloop-" + version
+	if flagValue(args, "head") != expectedHead {
+		return fmt.Errorf("pull request head = %q, want %q", flagValue(args, "head"), expectedHead)
+	}
+	if flagValue(args, "base") != "master" {
+		return fmt.Errorf("pull request base = %q, want master", flagValue(args, "base"))
+	}
+	body := flagValue(args, "body")
+	expectedReleaseURL := "https://github.com/hatayama/unity-cli-loop/releases/tag/dispatcher-v" + version
+	if body == "" || !strings.Contains(body, expectedReleaseURL) {
+		return fmt.Errorf("pull request body = %q, want release URL %q", body, expectedReleaseURL)
+	}
+	return nil
+}
+
+func assertWingetPublishSetupNotCalled(t *testing.T, scenario *wingetTestScenario) {
+	t.Helper()
+	if scenario.mergeUpstreamCalls != 0 || scenario.upstreamRefCalls != 0 || scenario.branchCreationCalls != 0 {
+		t.Fatalf(
+			"merge-upstream calls = %d, upstream ref calls = %d, branch creation calls = %d",
+			scenario.mergeUpstreamCalls,
+			scenario.upstreamRefCalls,
+			scenario.branchCreationCalls,
+		)
+	}
 }
 
 func flagValue(args []string, name string) string {
