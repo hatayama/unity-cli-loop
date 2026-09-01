@@ -57,7 +57,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
-            int due = VideoRecordingFramePacer.FramesDue(elapsed, _frameRate, _encodedFrameCount);
+            int due = VideoRecordingFramePacer.FramesDue(
+                elapsed,
+                _frameRate,
+                _encodedFrameCount + _skippedFrameCount);
             if (due == 0)
             {
                 return;

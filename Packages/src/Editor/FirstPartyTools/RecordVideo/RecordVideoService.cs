@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
@@ -22,6 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+            EditorApplication.quitting -= OnEditorQuitting;
+            EditorApplication.quitting += OnEditorQuitting;
         }
 
         internal static VideoRecordingSnapshot Start(
@@ -29,7 +32,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int maxDurationSeconds,
             string outputPath,
             bool usedDefaultOutputPath,
-            bool isLinux,
             int width,
             int height)
         {
@@ -46,12 +48,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(directory), "outputPath must include a directory.");
             Directory.CreateDirectory(directory);
 
+            bool useVp8 = string.Equals(
+                Path.GetExtension(outputPath),
+                RecordVideoConstants.WebmExtension,
+                StringComparison.OrdinalIgnoreCase);
             MediaEncoderVideoFrameEncoder encoder = new MediaEncoderVideoFrameEncoder(
                 outputPath,
                 width,
                 height,
                 frameRate,
-                isLinux);
+                useVp8);
             try
             {
                 _session = new VideoRecordingSession(
@@ -171,6 +177,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Stop(RecordVideoConstants.StoppedByAssemblyReload);
+        }
+
+        private static void OnEditorQuitting()
+        {
+            if (_session == null)
+            {
+                return;
+            }
+
+            Stop(RecordVideoConstants.StoppedByEditorQuit);
         }
     }
 }

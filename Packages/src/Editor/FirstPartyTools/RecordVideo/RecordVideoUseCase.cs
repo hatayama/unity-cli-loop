@@ -84,7 +84,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxDurationSeconds,
                 outputPath,
                 usedDefaultOutputPath,
-                isLinux,
                 width,
                 height);
             return CreateResponse(

@@ -40,14 +40,14 @@ Returns JSON containing:
 - `EncodedFrameCount`: Frames written to the encoder.
 - `SkippedFrameCount`: Frames skipped for size mismatch, missing RT, or `AddFrame` failure.
 - `ElapsedSeconds`: Seconds since start (frozen after stop).
-- `StoppedBy`: `"cli"`, `"max-duration"`, `"play-mode-exit"`, or `"assembly-reload"` after stop; omitted while recording.
+- `StoppedBy`: `"cli"`, `"max-duration"`, `"play-mode-exit"`, `"assembly-reload"`, or `"editor-quit"` after stop; omitted while recording.
 
 ## Notes
 
 - `Start` is allowed only while Play Mode is active. Edit Mode returns `Success: false`.
 - Recording continues in the Editor after `Start` returns, so other uloop commands can run during capture.
 - Recording stops automatically when `MaxDurationSeconds` is reached.
-- Play Mode exit and assembly reload (`uloop compile` and similar) also auto-stop and finalize the file.
-- Linux writes VP8 `.webm`. macOS and Windows write H.264 `.mp4`.
+- Play Mode exit, assembly reload (`uloop compile` and similar), and Editor quit also auto-stop and finalize the file.
+- Default output is H.264 `.mp4` on macOS/Windows and VP8 `.webm` on Linux. An explicit `.webm` path uses VP8 on every host.
 - Changing Game View size during recording skips those frames instead of failing.
 - An unfocused Editor can skip or thin Game View draws. Use `uloop focus-window` when frame counts look low.

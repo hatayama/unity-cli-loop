@@ -9,21 +9,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class PlayModeViewFrameSource : IGameViewFrameSource
     {
-        public bool TryGetSize(out int width, out int height)
-        {
-            RenderTexture renderTexture = GameViewBridge.GetRenderTexture();
-            if (renderTexture == null)
-            {
-                width = 0;
-                height = 0;
-                return false;
-            }
-
-            width = renderTexture.width;
-            height = renderTexture.height;
-            return true;
-        }
-
         public bool TryReadFrame(Texture2D destination)
         {
             RenderTexture renderTexture = GameViewBridge.GetRenderTexture();

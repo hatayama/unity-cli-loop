@@ -149,5 +149,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(result.IsValid, Is.True);
         }
+
+        /// <summary>
+        /// What: a non-Linux host accepts .webm so VP8 can be requested by extension.
+        /// </summary>
+        [Test]
+        public void Validate_WhenNonLinuxAndWebm_IsValid()
+        {
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "clip.webm", false);
+
+            Assert.That(result.IsValid, Is.True);
+        }
     }
 }

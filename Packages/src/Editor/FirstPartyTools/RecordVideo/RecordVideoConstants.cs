@@ -9,6 +9,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal const string StoppedByMaxDuration = "max-duration";
         internal const string StoppedByPlayModeExit = "play-mode-exit";
         internal const string StoppedByAssemblyReload = "assembly-reload";
+        internal const string StoppedByEditorQuit = "editor-quit";
+        internal const string WebmExtension = ".webm";
 
         internal const string AlreadyRecordingMessage =
             "A recording is already in progress. Stop it first.";

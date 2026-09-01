@@ -8,7 +8,5 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal interface IGameViewFrameSource
     {
         bool TryReadFrame(Texture2D destination);
-
-        bool TryGetSize(out int width, out int height);
     }
 }

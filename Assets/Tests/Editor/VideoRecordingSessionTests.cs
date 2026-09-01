@@ -75,6 +75,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: two ticks at the same clock time do not double-count already skipped slots.
+        /// </summary>
+        [Test]
+        public void Tick_WhenFrameSourceFailsTwiceAtSameTime_DoesNotDoubleCountSkipped()
+        {
+            _frameSource.ReadSucceeds = false;
+            _now = 0.5;
+
+            _session.Tick();
+            _session.Tick();
+
+            VideoRecordingSnapshot snapshot = _session.Snapshot();
+            Assert.That(snapshot.SkippedFrameCount, Is.EqualTo(15));
+            Assert.That(snapshot.EncodedFrameCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// What: AddFrame false increments skipped frames and leaves encoded count unchanged.
         /// </summary>
         [Test]
@@ -176,13 +193,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public bool TryReadFrame(Texture2D destination)
             {
                 return ReadSucceeds;
-            }
-
-            public bool TryGetSize(out int width, out int height)
-            {
-                width = 2;
-                height = 2;
-                return true;
             }
         }
     }

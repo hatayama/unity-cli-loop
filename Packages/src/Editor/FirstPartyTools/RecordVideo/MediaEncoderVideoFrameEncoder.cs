@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int width,
             int height,
             int frameRate,
-            bool isLinux)
+            bool useVp8)
         {
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be empty.");
             Debug.Assert(width > 0, "width must be positive.");
@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             _width = width;
             _height = height;
-            _encoder = new MediaEncoder(filePath, CreateAttributes(width, height, frameRate, isLinux));
+            _encoder = new MediaEncoder(filePath, CreateAttributes(width, height, frameRate, useVp8));
         }
 
         public int Width => _width;
@@ -57,9 +57,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int width,
             int height,
             int frameRate,
-            bool isLinux)
+            bool useVp8)
         {
-            VideoTrackEncoderAttributes attributes = isLinux
+            VideoTrackEncoderAttributes attributes = useVp8
                 ? new VideoTrackEncoderAttributes(new VP8EncoderAttributes
                 {
                     keyframeDistance = RecordVideoConstants.Vp8KeyframeDistance
