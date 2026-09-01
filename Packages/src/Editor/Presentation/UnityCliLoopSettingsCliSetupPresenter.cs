@@ -116,14 +116,14 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
                 cliExecutablePath,
                 UnityEngine.Application.platform);
-            bool isHomebrewManagedCli = _cliSetupApplicationService.IsHomebrewManagedInstallPath(cliExecutablePath);
+            ManagedCliKind managedCliKind = _cliSetupApplicationService.ResolveManagedCliKind(cliExecutablePath);
             string requiredCliVersion = _cliSetupApplicationService.GetMinimumRequiredCliVersion();
             return ResolveCliPrimaryButtonAction(
                 needsCliPathSetup,
                 cliVersion,
                 cliIsDispatcher,
                 canUninstallCli,
-                isHomebrewManagedCli,
+                managedCliKind,
                 requiredCliVersion);
         }
 
@@ -146,7 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string cliVersion,
             bool cliIsDispatcher,
             bool canUninstallCli,
-            bool isHomebrewManagedCli,
+            ManagedCliKind managedCliKind,
             string requiredCliVersion)
         {
             bool needsUpdate = IsCliUpdateNeeded(cliVersion, cliIsDispatcher, requiredCliVersion);
@@ -156,7 +156,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 needsUpdate,
                 isCliInstalled,
                 canUninstallCli,
-                isHomebrewManagedCli);
+                managedCliKind);
         }
 
         internal static CliSetupPrimaryAction ResolveExecutableCliPrimaryButtonAction(
@@ -446,7 +446,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
                 cliExecutablePath,
                 UnityEngine.Application.platform);
-            bool isHomebrewManagedCli = _cliSetupApplicationService.IsHomebrewManagedInstallPath(cliExecutablePath);
+            ManagedCliKind managedCliKind = _cliSetupApplicationService.ResolveManagedCliKind(cliExecutablePath);
             bool isChecking = !_cliSetupApplicationService.IsCliCheckCompleted()
                 || isRefreshingVersion
                 || isRefreshingCliPathSetup;
@@ -470,7 +470,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 state.NeedsUpdate,
                 canUninstallCli,
                 needsCliPathSetup,
-                isHomebrewManagedCli,
+                managedCliKind,
                 isInstallingCli,
                 isChecking,
                 isSkillStateChecking,
