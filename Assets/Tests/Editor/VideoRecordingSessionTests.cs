@@ -149,6 +149,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: Snapshot reports the quality value passed to the constructor.
+        /// </summary>
+        [Test]
+        public void Snapshot_ReturnsQualityPassedToConstructor()
+        {
+            _session.Stop("teardown");
+            FakeVideoFrameEncoder encoder = new FakeVideoFrameEncoder();
+            _encoder = encoder;
+            _session = new VideoRecordingSession(
+                encoder,
+                _frameSource,
+                () => _now,
+                30,
+                60.0,
+                "/tmp/gameview.mp4",
+                RecordVideoQuality.High);
+
+            Assert.That(_session.Snapshot().Quality, Is.EqualTo("High"));
+        }
+
+        /// <summary>
         /// What: Snapshot elapsed seconds stay frozen after Stop even if the clock advances.
         /// </summary>
         [Test]

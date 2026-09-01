@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: scale 0.5 of 1286×723 matches a 642×360 encoder within the pre-even ±1 window.
+        /// What: scale 0.5 of 1286×723 matches a 642×360 encoder after Resolve.
         /// </summary>
         [Test]
         public void MatchesEncoderSize_WhenHalfOf1286x723_Matches642x360()
@@ -127,6 +127,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool matches = VideoFrameSizePolicy.MatchesEncoderSize(
                 1288,
                 724,
+                0.5f,
+                642,
+                360);
+
+            Assert.That(matches, Is.False);
+        }
+
+        /// <summary>
+        /// What: a 3px-narrower Game View at 0.5 does not match the original encoder size.
+        /// </summary>
+        [Test]
+        public void MatchesEncoderSize_WhenSourceShrinksByThreePixelsAtHalf_DoesNotMatch()
+        {
+            bool matches = VideoFrameSizePolicy.MatchesEncoderSize(
+                1283,
+                723,
                 0.5f,
                 642,
                 360);

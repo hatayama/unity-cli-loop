@@ -31,11 +31,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int encoderWidth,
             int encoderHeight)
         {
-            Debug.Assert(scale > 0f, "scale must be positive.");
-            int scaledWidth = FloorScaled(sourceWidth, scale);
-            int scaledHeight = FloorScaled(sourceHeight, scale);
-            return Math.Abs(scaledWidth - encoderWidth) <= 1
-                && Math.Abs(scaledHeight - encoderHeight) <= 1;
+            (int width, int height) resolved = Resolve(sourceWidth, sourceHeight, scale);
+            return resolved.width == encoderWidth && resolved.height == encoderHeight;
         }
 
         private static int FloorScaled(int sourceSize, float scale)
