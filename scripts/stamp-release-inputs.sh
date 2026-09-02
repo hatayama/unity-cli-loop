@@ -11,6 +11,9 @@ SCRIPT_ROOT=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 ROOT_DIR=${ULOOP_REPO_ROOT:-$SCRIPT_ROOT}
 
 cd "$ROOT_DIR"
+# Resolve a relative ULOOP_REPO_ROOT after the cd so later `go run -path`
+# still points at the fixture when the digest command changes directory.
+ROOT_DIR=$(pwd)
 
 # Input selection mirrors the release trigger guard
 # (cli/release-automation/internal/automation/release_trigger_guard.go):
