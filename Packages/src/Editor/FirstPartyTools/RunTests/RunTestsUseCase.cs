@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<string[]> _clearActivePausePoints;
         private readonly Func<CancellationToken, Task> _waitForTestRunnerCleanupAsync;
         private readonly Func<int> _getActiveHotReloadChangeCount;
+        private readonly Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> _proposeTestAsmdef;
         private const int TestRunnerCleanupFallbackDelayMilliseconds = 3000;
 
         public RunTestsUseCase()
@@ -40,7 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<string[]> clearActivePausePoints = null,
             Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null,
             Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> appendNoTestsDiagnostics = null,
-            Func<int> getActiveHotReloadChangeCount = null)
+            Func<int> getActiveHotReloadChangeCount = null,
+            Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> proposeTestAsmdef = null)
         {
             Debug.Assert(filterService != null, "filterService must not be null");
             Debug.Assert(executionService != null, "executionService must not be null");
@@ -55,6 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _clearActivePausePoints = clearActivePausePoints ?? ClearActivePausePointsDefault;
             _waitForTestRunnerCleanupAsync = waitForTestRunnerCleanupAsync ?? WaitForTestRunnerCleanupAsync;
             _getActiveHotReloadChangeCount = getActiveHotReloadChangeCount ?? ReadActiveHotReloadChangeCount;
+            _proposeTestAsmdef = proposeTestAsmdef ?? RunTestsTestAsmdefProposalBuilder.Propose;
         }
 
         /// <summary>
@@ -198,6 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.TestMode,
                     parameters.FilterType));
             AppendPredefinedAssemblyTestNoticeIfNeeded(response, parameters);
+            AttachTestAsmdefProposalIfNeeded(response, parameters);
             await ApplyUnfilteredFilterEchoIfNeededAsync(response, parameters, ct)
                 .ConfigureAwait(false);
             return response;
@@ -234,6 +238,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.Message = RunTestsPredefinedAssemblyTestNoticeFormatter.AppendIfNeeded(
                 response.Message,
                 findings);
+        }
+
+        // Why after the predefined-assembly notice: that notice names the stranded test methods,
+        // and this one tells the caller where to put them.
+        private void AttachTestAsmdefProposalIfNeeded(RunTestsResponse response, RunTestsSchema parameters)
+        {
+            Debug.Assert(response != null, "response must not be null");
+            Debug.Assert(parameters != null, "parameters must not be null");
+
+            if (!RunTestsNoTestsDiagnosticService.ShouldAppendDiagnostics(
+                    response.NoTestsFound,
+                    parameters.FilterType))
+            {
+                return;
+            }
+
+            RunTestsTestAsmdefProposal proposal = RunTestsNoTestsDiagnosticService.InspectAsmdefsOrFallback<RunTestsTestAsmdefProposal>(
+                null,
+                () => _proposeTestAsmdef(parameters.TestMode));
+            if (proposal == null)
+            {
+                return;
+            }
+
+            response.ProposedTestAsmdef = proposal;
+            response.Message = RunTestsTestAsmdefProposal.AppendNotice(response.Message, proposal);
         }
 
         private async Task ApplyUnfilteredFilterEchoIfNeededAsync(
