@@ -177,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ClearedCount = clearedCount;
             if (resumedFromPause)
             {
-                response.Warning = SourcePausePointConstants.ClearResumedPlayModeWarning;
+                response.Warning = SourcePausePointConstants.ClearReleasedOwnedPauseWarning;
             }
 
             return response;
