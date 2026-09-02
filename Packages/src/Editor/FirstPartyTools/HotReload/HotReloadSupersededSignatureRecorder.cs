@@ -5,7 +5,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Records superseded compiled signatures from a worker output so --status can explain
-    /// leftover Active rows after a signature change.
+    /// leftover Active rows after a return-type change.
     /// </summary>
     internal static class HotReloadSupersededSignatureRecorder
     {
@@ -23,8 +23,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 StringComparer.Ordinal);
             TransformWorkerEntryDto[] entries =
                 workerOutput.entries ?? Array.Empty<TransformWorkerEntryDto>();
-            TransformWorkerRemovedMemberDto[] removedMembers =
-                workerOutput.removedMembers ?? Array.Empty<TransformWorkerRemovedMemberDto>();
 
             foreach (TransformWorkerRemovedMethodSignatureDto signature in workerOutput.removedMethodSignatures)
             {
@@ -45,96 +43,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
+                TransformWorkerEntryDto replacement = FindReplacingCompiledMethodEntry(
+                    wireKey,
+                    entries);
+                if (replacement == null)
+                {
+                    continue;
+                }
+
                 string oldKey = HotReloadPatcher.FormatMethodKeyParts(
                     signature.typeMetadataName,
                     signature.methodName,
                     parameterTypeFullNames,
                     signature.genericArity);
-                string newDisplayName = ResolveReplacementDisplayName(
-                    signature,
-                    entries,
-                    removedMembers,
-                    oldKey);
+                string newDisplayName = HotReloadPatcher.FormatMethodKeyParts(
+                    replacement.typeMetadataName,
+                    replacement.methodName,
+                    replacement.parameterTypeFullNames ?? Array.Empty<string>(),
+                    replacement.genericArity);
                 HotReloadSupersededSignatureRegistry.Record(oldKey, newDisplayName);
             }
         }
 
-        private static string ResolveReplacementDisplayName(
-            TransformWorkerRemovedMethodSignatureDto signature,
-            TransformWorkerEntryDto[] entries,
-            TransformWorkerRemovedMemberDto[] removedMembers,
-            string oldKey)
-        {
-            TransformWorkerEntryDto matchingEntry = FindMatchingEntry(signature, entries);
-            if (matchingEntry != null)
-            {
-                return HotReloadPatcher.FormatMethodKeyParts(
-                    matchingEntry.typeMetadataName,
-                    matchingEntry.methodName,
-                    matchingEntry.parameterTypeFullNames ?? Array.Empty<string>(),
-                    matchingEntry.genericArity);
-            }
-
-            string matchingRemovedName = FindMatchingRemovedMemberName(signature, removedMembers);
-            if (matchingRemovedName != null)
-            {
-                return matchingRemovedName;
-            }
-
-            return oldKey;
-        }
-
-        private static TransformWorkerEntryDto FindMatchingEntry(
-            TransformWorkerRemovedMethodSignatureDto signature,
+        private static TransformWorkerEntryDto FindReplacingCompiledMethodEntry(
+            string removedWireKey,
             TransformWorkerEntryDto[] entries)
         {
-            string oldType = NormalizeTypeName(signature.typeMetadataName);
             for (int index = 0; index < entries.Length; index++)
             {
                 TransformWorkerEntryDto entry = entries[index];
-                if (entry == null || entry.methodName != signature.methodName)
+                if (entry == null || !entry.replacesCompiledMethod)
                 {
                     continue;
                 }
 
-                if (NormalizeTypeName(entry.typeMetadataName) == oldType)
+                string entryWireKey = HotReloadWireMethodKeys.BuildMethodKey(entry);
+                if (entryWireKey == removedWireKey)
                 {
                     return entry;
                 }
             }
 
             return null;
-        }
-
-        private static string FindMatchingRemovedMemberName(
-            TransformWorkerRemovedMethodSignatureDto signature,
-            TransformWorkerRemovedMemberDto[] removedMembers)
-        {
-            for (int index = 0; index < removedMembers.Length; index++)
-            {
-                TransformWorkerRemovedMemberDto removed = removedMembers[index];
-                if (removed == null || removed.name != signature.methodName)
-                {
-                    continue;
-                }
-
-                if (removed.kind == HotReloadConstants.RemovedMemberKindMethod)
-                {
-                    return removed.name;
-                }
-            }
-
-            return null;
-        }
-
-        private static string NormalizeTypeName(string typeMetadataName)
-        {
-            if (string.IsNullOrEmpty(typeMetadataName))
-            {
-                return string.Empty;
-            }
-
-            return typeMetadataName.Replace('/', '+');
         }
     }
 }

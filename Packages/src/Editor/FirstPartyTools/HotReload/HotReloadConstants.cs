@@ -233,7 +233,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: replacement display name for an Active row whose compiled signature was
         // replaced in a later edit. Supersedes ActivePatchNeverInvokedReason when both apply.
         public const string ActivePatchSupersededReasonFormat =
-            "Superseded by {0}: the edited source now declares a different signature. This compiled signature stays patched so existing callers keep working; it is not the entry point for new calls.";
+            "Superseded by a new declaration of {0}: the edited source now declares a different signature. This compiled signature stays patched so existing callers keep working; it is not the entry point for new calls.";
 
         // Format: count of Active rows whose InvocationCount is 0.
         public const string NeverInvokedActiveAggregatedMessageFormat =

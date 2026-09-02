@@ -3949,7 +3949,102 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 out string replacement);
 
             Assert.That(recorded, Is.True);
-            Assert.That(replacement, Is.Not.Null.And.Not.Empty);
+            Assert.That(replacement, Is.EqualTo(oldKey));
+        }
+
+        /// <summary>
+        /// What: deleting a compiled method while another method patches does not record
+        /// the deleted signature as superseded.
+        /// </summary>
+        [Test]
+        public async Task Run_DeletedMethod_OtherMethodPatched_DoesNotRecordSupersededSignature()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int Unrelated(int value)\n        {\n            return value;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ToDelete(int value)\n        {\n            return value;\n        }",
+                "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            Assert.That(edited, Does.Not.Contain("ToDelete"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeDeletedNoSupersede.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
+            MethodInfo deleted = typeof(HotReloadSignatureChangeExternalHost).GetMethod(
+                nameof(HotReloadSignatureChangeExternalHost.ToDelete),
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(deleted, Is.Not.Null);
+            string deletedKey = HotReloadPatcher.FormatMethodKey(deleted);
+            bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                deletedKey,
+                out string _);
+
+            Assert.That(recorded, Is.False);
+        }
+
+        /// <summary>
+        /// What: a return-type change on one Target overload records only that overload's
+        /// compiled key and display name, not a same-named sibling.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_OneOverload_RecordsOnlyThatSignature()
+        {
+            string fixturePath = ResolveSignatureChangeOverloadFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Target(long value)\n        {\n            return (int)value;\n        }",
+                    "        public int Target(long value)\n        {\n            return (int)value + 1;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeOverloadSupersede.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            MethodInfo intTarget = typeof(HotReloadSignatureChangeOverloadFixture).GetMethod(
+                nameof(HotReloadSignatureChangeOverloadFixture.Target),
+                BindingFlags.Instance | BindingFlags.Public,
+                binder: null,
+                types: new[] { typeof(int) },
+                modifiers: null);
+            MethodInfo longTarget = typeof(HotReloadSignatureChangeOverloadFixture).GetMethod(
+                nameof(HotReloadSignatureChangeOverloadFixture.Target),
+                BindingFlags.Instance | BindingFlags.Public,
+                binder: null,
+                types: new[] { typeof(long) },
+                modifiers: null);
+            Assert.That(intTarget, Is.Not.Null);
+            Assert.That(longTarget, Is.Not.Null);
+            string intKey = HotReloadPatcher.FormatMethodKey(intTarget);
+            string longKey = HotReloadPatcher.FormatMethodKey(longTarget);
+            bool intRecorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                intKey,
+                out string intReplacement);
+            bool longRecorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                longKey,
+                out string _);
+
+            Assert.That(intRecorded, Is.True);
+            Assert.That(intReplacement, Is.EqualTo(intKey));
+            Assert.That(longRecorded, Is.False);
         }
 
         /// <summary>
@@ -6062,6 +6157,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 File.Exists(path),
                 Is.True,
                 "Signature-change same-file fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string ResolveSignatureChangeOverloadFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSignatureChangeOverloadFixture.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Signature-change overload fixture source missing: " + path);
             return Path.GetFullPath(path);
         }
 
