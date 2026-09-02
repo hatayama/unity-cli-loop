@@ -16,7 +16,7 @@ Active pause points are automatically cleared (the underlying code patches are r
 
 A test run can end by discarding active hot-reload changes: script edits imported during the run are compiled when the test runner releases its assembly-reload lock, and that deferred domain reload wipes the patches even though the tests themselves ran patched. The response's Warning field reports this; re-apply 'uloop hot-reload' or bake the edits in with 'uloop compile' before the next Play or test run.
 
-`NoTestsFound` means zero tests matched — not a test failure. Check `NoTestsFoundExplanation` and `Message` for asmdef hints.
+`NoTestsFound` means zero tests matched — not a test failure. Check `NoTestsFoundExplanation` and `Message` for asmdef hints. When the project has no test assembly for the TestMode, `ProposedTestAsmdef` carries a ready-to-write `.asmdef`: save `Content` at `AssetPath`, move the test scripts under that folder, then compile and rerun.
 
 ## Usage
 
@@ -56,6 +56,7 @@ Returns JSON with:
 - `ClearedPausePointIds` (string[], optional): IDs of pause points that were cleared before test execution. Omitted from JSON when no pause points were active.
 - `FailedTests` (array, optional): Up to 10 failed leaf tests with `FullName`, `Message`, and when the stack trace contains a path:line location, `File` and `Line`. Omitted when no tests failed. When `FailedCount` is greater than 10, `Message` ends with `first 10 of N failures listed; see XmlPath for full results.`
 - `SkippedTests` (string[], optional): Up to 10 full names of skipped leaf tests. Omitted when no tests were skipped. When `SkippedCount` is greater than 10, only the first 10 names are listed.
+- `ProposedTestAsmdef` (object, optional): `AssetPath` and `Content` of a ready-to-write test `.asmdef` (test-assembly wiring plus references to the project's assemblies under test). Present only when an unfiltered run found no tests and no test assembly exists for the TestMode.
 - `CompileNote` (string, optional): States that the automatic compile ran and succeeded before the tests and names `--skip-compile` as the opt-out. Omitted when `--skip-compile` was passed; a failed compile returns the compile error response instead.
 
 ### XML Result File

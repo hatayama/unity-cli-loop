@@ -15,11 +15,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class RunTestsNoTestsDiagnosticService
     {
         private const string HintPrefix = " Possible asmdef issues:";
-        private const string TestAssembliesReference = "TestAssemblies";
-        private const string UnityEngineTestRunnerReference = "UnityEngine.TestRunner";
-        private const string UnityEditorTestRunnerReference = "UnityEditor.TestRunner";
-        private const string UnityEngineTestRunnerGuidReference = "GUID:27619889b8ba8c24980f49ee34dbb44a";
-        private const string UnityEditorTestRunnerGuidReference = "GUID:0acc523941302664db1f4e527237feb3";
         private const int MaxFindings = 4;
 
         public string AppendDiagnosticsIfNeeded(
@@ -44,16 +39,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static string AppendDiagnosticsOrOriginalMessage(string message, Func<string> appendDiagnostics)
         {
-            Debug.Assert(appendDiagnostics != null, "appendDiagnostics must not be null");
+            return InspectAsmdefsOrFallback(message, appendDiagnostics);
+        }
+
+        /// <summary>
+        /// Runs an asmdef inspection and returns the fallback when the project files cannot be
+        /// read, so optional no-tests guidance never replaces the run-tests result with an I/O failure.
+        /// </summary>
+        internal static T InspectAsmdefsOrFallback<T>(T fallback, Func<T> inspect)
+        {
+            Debug.Assert(inspect != null, "inspect must not be null");
 
             try
             {
-                return appendDiagnostics();
+                return inspect();
             }
             catch (Exception exception) when (IsRecoverableAsmdefInspectionException(exception))
             {
                 Debug.LogWarning($"Failed to build no-tests diagnostics: {exception}");
-                return message;
+                return fallback;
             }
         }
 
@@ -156,7 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return filterType == TestFilterType.all && noTestsFound;
         }
 
-        private static RunTestsAsmdefInfo[] LoadProjectAsmdefs()
+        internal static RunTestsAsmdefInfo[] LoadProjectAsmdefs()
         {
             string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
             string[] asmdefGuids = AssetDatabase.FindAssets("t:AssemblyDefinitionAsset");
@@ -285,32 +289,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(asmdef != null, "asmdef must not be null");
 
-            return asmdef.TestAssemblies
-                   || asmdef.OptionalUnityReferences.Contains(TestAssembliesReference);
-        }
-
-        private static bool HasNamedDirectTestRunnerReference(RunTestsAsmdefInfo asmdef)
-        {
-            Debug.Assert(asmdef != null, "asmdef must not be null");
-
-            return asmdef.References.Contains(UnityEngineTestRunnerReference)
-                   || asmdef.References.Contains(UnityEditorTestRunnerReference);
+            return asmdef.HasTestAssemblyMarker();
         }
 
         private static bool HasAnyDirectTestRunnerReference(RunTestsAsmdefInfo asmdef)
         {
             Debug.Assert(asmdef != null, "asmdef must not be null");
 
-            return HasNamedDirectTestRunnerReference(asmdef)
-                   || asmdef.References.Contains(UnityEngineTestRunnerGuidReference)
-                   || asmdef.References.Contains(UnityEditorTestRunnerGuidReference);
+            return asmdef.HasDirectTestRunnerReference();
         }
 
         private static bool IncludesEditorPlatform(RunTestsAsmdefInfo asmdef)
         {
             Debug.Assert(asmdef != null, "asmdef must not be null");
 
-            return asmdef.IncludePlatforms.Contains("Editor");
+            return asmdef.IncludesEditorPlatform();
         }
 
         private static bool LooksLikeEditModeAsmdef(RunTestsAsmdefInfo asmdef)
@@ -399,6 +392,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TestAssemblies = testAssemblies;
         }
 
+        private const string TestAssembliesReference = "TestAssemblies";
+        private const string UnityEngineTestRunnerReference = "UnityEngine.TestRunner";
+        private const string UnityEditorTestRunnerReference = "UnityEditor.TestRunner";
+        private const string UnityEngineTestRunnerGuidReference = "GUID:27619889b8ba8c24980f49ee34dbb44a";
+        private const string UnityEditorTestRunnerGuidReference = "GUID:0acc523941302664db1f4e527237feb3";
+
         public string AssetPath { get; }
         public string Guid { get; }
         public string Name { get; }
@@ -406,6 +405,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] OptionalUnityReferences { get; }
         public string[] IncludePlatforms { get; }
         public bool TestAssemblies { get; }
+
+        public bool HasTestAssemblyMarker()
+        {
+            return TestAssemblies || OptionalUnityReferences.Contains(TestAssembliesReference);
+        }
+
+        // Why GUIDs as well as names: the Inspector writes TestRunner references as GUIDs, so a
+        // name-only check would miss every asmdef created through the UI.
+        public bool HasDirectTestRunnerReference()
+        {
+            return References.Contains(UnityEngineTestRunnerReference)
+                   || References.Contains(UnityEditorTestRunnerReference)
+                   || References.Contains(UnityEngineTestRunnerGuidReference)
+                   || References.Contains(UnityEditorTestRunnerGuidReference);
+        }
+
+        public bool IsTestAssembly()
+        {
+            return HasTestAssemblyMarker() || HasDirectTestRunnerReference();
+        }
+
+        public bool IncludesEditorPlatform()
+        {
+            return IncludePlatforms.Contains("Editor");
+        }
     }
 
     /// <summary>
