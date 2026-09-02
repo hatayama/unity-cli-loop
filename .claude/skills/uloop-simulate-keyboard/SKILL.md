@@ -38,7 +38,7 @@ uloop simulate-keyboard --action ReleaseAll
 | `Press` | KeyDown → wait → KeyUp | One-shot tap (jump, use item) |
 | `KeyDown` | KeyDown only (held until KeyUp) | Start continuous movement, hold sprint |
 | `KeyUp` | KeyUp only (release held key) | Stop movement, release sprint |
-| `ReleaseAll` | Force-releases every tracked and device-pressed key (bookkeeping and Input System device state) | Recover a clean keyboard state after a pause-point interruption |
+| `ReleaseAll` | Injects a release for every tracked and device-pressed key and resets the hold tracker; confirm the device via `ReleasedKeyStates` | Recover a clean keyboard state after a pause-point interruption |
 
 There is no separate hold action: to hold a key, use `Press --duration <seconds>` (fixed-time hold) or `KeyDown` followed later by `KeyUp` (open-ended hold).
 
@@ -46,7 +46,7 @@ Use `Press` for edge-triggered keyboard code such as `Keyboard.current.spaceKey.
 `KeyDown` emits one initial press edge, then only keeps the key held. It does not keep `wasPressedThisFrame` true while the key remains held.
 If a successful `Press` or `KeyDown` leaves `Keyboard.current.<key>.isPressed` true but runtime state does not change, do not immediately rewrite the user's runtime code to `isPressed`. First verify that the target component is active during the command, that it polls input in the configured Input System update phase, and that a missed `KeyDown` edge is followed by `KeyUp` before retrying.
 
-`ReleaseAll` is a recovery action, not part of normal gameplay simulation: after a pause-point interruption, bookkeeping and the Input System device can disagree, or a stale press latch can keep `isPressed` true after resume. `ReleaseAll` forces both back to a clean slate; it works while Unity is still paused and does not clear pause-point captures. For ordinary releases during gameplay simulation, keep using `KeyUp`.
+`ReleaseAll` is a recovery action, not part of normal gameplay simulation: after a pause-point interruption, bookkeeping and the Input System device can disagree, or a stale press latch can keep `isPressed` true after resume. `ReleaseAll` resets the tracker and injects a release for every such key; it works while Unity is still paused and does not clear pause-point captures. `Success: true` alone is not proof the device is clean: read `ReleasedKeyStates` in the response, and for any entry with `DeviceIsPressedAfterRelease: true` resume PlayMode (the deferred latch sync runs on the next gameplay input update) and re-check with `pause-point-status`, a log, or `Keyboard.current.<key>.isPressed` via `execute-dynamic-code` before sending the next key. For ordinary releases during gameplay simulation, keep using `KeyUp`.
 
 ### Pause Point Inspection (Standard for E2E)
 

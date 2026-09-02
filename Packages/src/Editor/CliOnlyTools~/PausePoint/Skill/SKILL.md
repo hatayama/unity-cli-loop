@@ -3,7 +3,7 @@ name: uloop-pause-point
 description: "Pauses Unity playback at any source file:line without editing code or recompiling, and returns a snapshot of the locals, parameters, and instance fields at that exact frame. Use for bug investigation, PlayMode/E2E verification, checking variable values at a specific frame, or confirming that a code path executed."
 ---
 
-# uloop await-pause-point
+# uloop pause-point
 
 A pause point captures locals and branch reasons at an exact frame without a source edit. Use it instead of sleeps or after-the-fact reads when input delivery, event ordering, or transition-frame fidelity matters.
 
@@ -14,6 +14,7 @@ A pause point captures locals and branch reasons at an exact frame without a sou
 
 ```bash
 uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 60 --await --trigger "simulate-keyboard --action Press --key Space"
+# paused the game in step 1? add --resume-play, or the input never lands
 ```
 
 3. Read `CapturedVariables` in the hit response first, then gather extra evidence while still paused (`execute-dynamic-code`, one screenshot).
@@ -23,7 +24,7 @@ A hit pauses Unity at the next frame boundary — the rest of that frame still r
 
 ## Parameters
 
-The tables list only parameters Unity itself accepts; CLI-only flags (`--await`, `--trigger`,
+The tables list only parameters Unity accepts; CLI-only flags (`--await`, `--trigger`,
 `--resume-play`, `--expect`, capture filters) are in the reference guides below.
 
 ### enable-pause-point
@@ -87,7 +88,7 @@ On a wait timeout or `PAUSE_POINT_EXPIRED`, read `Error.Details.Hint`, then `Rec
 
 ## Requirements & Safety
 
-- On the automatic Debug-switch warning: the pause point is already armed - do not interrupt the task or ask the user mid-flow. The setting reverts on every Editor restart and each re-switch costs a full script recompile, so at the next natural stopping point, propose making Debug the startup default; only if the user approves, run `uloop set-code-optimization debug --startup` (without `--startup` the switch is session-only). It changes a machine-wide preference affecting every Unity project on this machine; only the project's C# script execution slows down, mainly during Play Mode - the Unity Editor itself is not slowed.
+- On the automatic Debug-switch warning: the pause point is already armed - do not interrupt the task or ask the user mid-flow. The setting reverts on every Editor restart and each re-switch costs a full script recompile, so at the next natural stopping point, propose making Debug the startup default; only if the user approves, run `uloop set-code-optimization debug --startup` (without `--startup` the switch is session-only). It is a machine-wide preference affecting every Unity project; only the project's C# scripts run slower, mainly in Play Mode - the Editor itself is not slowed.
 
 - Patches do not survive compiles or domain reloads — re-enable afterwards (a Play entry with Domain Reload enabled removes every source pause point; the enable response warns). `uloop compile` during PlayMode also resets the session.
 - Physics message methods, their helpers, and pre-bound delegates can miss hits on pre-existing GameObjects; the enable response warns where detectable.

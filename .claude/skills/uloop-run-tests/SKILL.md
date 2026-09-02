@@ -35,7 +35,7 @@ uloop run-tests [options]
 | `--skip-compile` | flag | - | Skip the automatic compile before running tests; use only while validating active hot-reload patches. |
 | `--timeout-seconds` | integer | `600` | Maximum seconds to wait for RunFinished before canceling the await (max `1500`). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands |
 
-exact matches the full test name (Namespace.Class.Method); use regex to run a whole test class, e.g. --filter-type regex --filter 'MyGame\.Tests\.PlayerTests\.'
+exact matches the full test name (Namespace.Class.Method); use regex to run a whole test class, e.g. --filter-type regex --filter-value 'MyGame\.Tests\.PlayerTests\.'
 
 ## Output
 
