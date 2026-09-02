@@ -9,6 +9,11 @@ GO_WINRES_MODULE="github.com/tc-hib/go-winres@v0.3.3"
 . "$ROOT_DIR/scripts/go-cli-toolchain.sh"
 require_go_cli_toolchain "$ROOT_DIR"
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required to stamp Windows version resources. Install it before running scripts/build-go-cli.sh." >&2
+  exit 1
+fi
+
 # stripped and unsigned Go binaries without VERSIONINFO are a strong "unknown software"
 # signal for Microsoft Defender's ML classifier (Issue #2503), so the Windows builds
 # carry version resources generated from the release version.

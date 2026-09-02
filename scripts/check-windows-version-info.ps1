@@ -33,12 +33,18 @@ function Assert-WindowsVersionInfo {
 
     $VersionInfo = (Get-Item -LiteralPath $ExePath).VersionInfo
     [string]$ProductVersion = [string]$VersionInfo.ProductVersion
+    [string]$FileVersion = [string]$VersionInfo.FileVersion
     [string]$ProductName = [string]$VersionInfo.ProductName
     [string]$CompanyName = [string]$VersionInfo.CompanyName
     [string]$FileDescription = [string]$VersionInfo.FileDescription
 
     if ($ProductVersion -ne $ExpectedProductVersion) {
         Write-Error "ProductVersion mismatch for $ExePath. Expected '$ExpectedProductVersion', got '$ProductVersion'."
+        exit 1
+    }
+
+    if ($FileVersion -ne $ExpectedProductVersion) {
+        Write-Error "FileVersion mismatch for $ExePath. Expected '$ExpectedProductVersion', got '$FileVersion'."
         exit 1
     }
 
@@ -57,7 +63,7 @@ function Assert-WindowsVersionInfo {
         exit 1
     }
 
-    Write-Host "VERSIONINFO ok: $ExePath ProductVersion=$ProductVersion ProductName=$ProductName CompanyName=$CompanyName FileDescription=$FileDescription"
+    Write-Host "VERSIONINFO ok: $ExePath ProductVersion=$ProductVersion FileVersion=$FileVersion ProductName=$ProductName CompanyName=$CompanyName FileDescription=$FileDescription"
 }
 
 $DispatcherContract = Read-JsonObject -Path $DispatcherContractPath
