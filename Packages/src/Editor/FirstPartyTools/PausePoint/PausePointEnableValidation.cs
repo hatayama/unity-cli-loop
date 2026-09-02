@@ -78,6 +78,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return $"MaxCallerFrames must be between 0 and {UloopPausePointRegistry.MaxCallerFramesLimit}.";
             }
 
+            bool isIdMarker = !string.IsNullOrWhiteSpace(parameters.Id) && string.IsNullOrWhiteSpace(parameters.File);
+            if (isIdMarker && parameters.SnapshotTiming != SourcePausePointConstants.PreLineSnapshotTimingValue)
+            {
+                return "--snapshot-timing requires a --file/--line marker.";
+            }
+
             if (string.IsNullOrEmpty(hitWhen))
             {
                 return null;

@@ -107,11 +107,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why conditional no-op: ShouldInject can leave a prior injection inert (e.g. stale
             // OriginalBody under an active shim). Re-enable must replace mismatched ledger state
             // instead of reporting success while the call site never fires.
+            bool moveDisplacedMetadata = MovesDisplacedMetadata(resolution.SnapshotTiming);
             if (TryReuseExistingPatch(
                     id,
                     SourcePausePointPatchInjectionTargetKind.OriginalBody,
                     method,
-                    donorShim: null))
+                    donorShim: null,
+                    resolution.InstructionIndex,
+                    moveDisplacedMetadata))
             {
                 RememberRequest(id, normalizedFile, requestedLine, resolution.SnapshotTiming);
                 LogicalOwnerById[id] = logicalOwner;
@@ -129,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SourcePausePointPatchInjectionTargetKind.OriginalBody,
                 donorShim: null,
                 instanceFromFirstArgument: false,
-                moveDisplacedMetadata: MovesDisplacedMetadata(resolution.SnapshotTiming));
+                moveDisplacedMetadata);
 
             return CommitPatch(
                 id, method, logicalOwner, injection, normalizedFile, requestedLine, resolution.SnapshotTiming);
@@ -167,7 +170,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ? SourcePausePointPatchInjectionTargetKind.TransplantChainJoin
                     : SourcePausePointPatchInjectionTargetKind.ShimDirect;
 
-            if (TryReuseExistingPatch(id, targetKind, method, shim.DonorShim))
+            int injectionIndex = InstructionIndexForInjection(targetKind, method, shim.InstructionIndex);
+            bool moveDisplacedMetadata = MovesDisplacedMetadata(shim.SnapshotTiming);
+            if (TryReuseExistingPatch(id, targetKind, method, shim.DonorShim, injectionIndex, moveDisplacedMetadata))
             {
                 RememberRequest(id, normalizedFile, requestedLine, shim.SnapshotTiming);
                 UloopPausePointRegistry.SetMethodEntryInstrumented(id);
@@ -183,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             SourcePausePointPatchInjection injection = new(
                 id,
-                InstructionIndexForInjection(targetKind, method, shim.InstructionIndex),
+                injectionIndex,
                 isStatic,
                 isDeclaringTypeValueType,
                 shim.Parameters,
@@ -191,7 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetKind,
                 shim.DonorShim,
                 shim.InstanceFromFirstArgument,
-                MovesDisplacedMetadata(shim.SnapshotTiming));
+                moveDisplacedMetadata);
 
             return CommitPatch(
                 id, method, shim.LogicalOwner, injection, normalizedFile, requestedLine, shim.SnapshotTiming);
@@ -220,11 +225,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return instructionIndex + getPreambleLength(method);
         }
 
+        // Why compare the injection site too: the same file:line id re-enabled with the other
+        // snapshot timing lands on a different instruction, and the existing transpiled body
+        // cannot be edited in place. Reusing it would keep capturing at the old timing while
+        // the remembered request claims the new one.
         private static bool TryReuseExistingPatch(
             string id,
             SourcePausePointPatchInjectionTargetKind targetKind,
             MethodBase physicalTarget,
-            MethodBase donorShim)
+            MethodBase donorShim,
+            int instructionIndex,
+            bool moveDisplacedMetadata)
         {
             if (!MethodById.TryGetValue(id, out MethodBase existingPhysical)
                 || !InjectionsByMethod.TryGetValue(existingPhysical, out List<SourcePausePointPatchInjection> injections))
@@ -242,7 +253,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool sameTarget = existingPhysical.Equals(physicalTarget);
             bool sameDonor = targetKind != SourcePausePointPatchInjectionTargetKind.TransplantChainJoin
                 || (existing.DonorShim != null && donorShim != null && existing.DonorShim.Equals(donorShim));
-            if (sameKind && sameTarget && sameDonor)
+            bool sameSite = existing.InstructionIndex == instructionIndex
+                && existing.MoveDisplacedMetadata == moveDisplacedMetadata;
+            if (sameKind && sameTarget && sameDonor && sameSite)
             {
                 return true;
             }

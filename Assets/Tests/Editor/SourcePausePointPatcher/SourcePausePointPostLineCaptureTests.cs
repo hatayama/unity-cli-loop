@@ -110,6 +110,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void ReenablingWithTheOtherTiming_ReplacesTheInjectionInsteadOfReusingIt()
+        {
+            // Verifies a marker re-enabled on the same line with post-line timing captures at the
+            // new site rather than silently keeping the pre-line injection.
+            const string id = "timing-switch";
+            SourcePausePointResolveResult preLine = SourcePausePointResolver.Resolve(FixturePath, AssignmentLine);
+            UloopPausePointRegistry.Enable(id, 30);
+            Assert.That(SourcePausePointPatcher.Patch(id, preLine.Resolution).Success, Is.True);
+
+            SourcePausePointResolveResult postLine = SourcePausePointResolver.Resolve(
+                FixturePath, AssignmentLine, null, SourcePausePointSnapshotTiming.PostLine);
+            UloopPausePointRegistry.Enable(id, 30);
+            Assert.That(SourcePausePointPatcher.Patch(id, postLine.Resolution).Success, Is.True);
+
+            PatcherPostLineFixture.Double(3);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(id);
+            Assert.That(snapshot.IsHit, Is.True);
+            Assert.That(snapshot.CapturedVariables.First(v => v.Name == "doubled").Value, Is.EqualTo("6"));
+        }
+
+        [Test]
         public void PostLine_OnAlwaysThrowingLine_FailsToResolve()
         {
             // Verifies a statement that always throws is rejected for post-line timing instead of

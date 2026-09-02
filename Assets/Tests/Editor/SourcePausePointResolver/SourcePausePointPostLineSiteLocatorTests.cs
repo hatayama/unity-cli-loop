@@ -106,6 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.BeforeControlTransfer));
             Assert.That(site.InstructionIndex, Is.EqualTo(2));
+            Assert.That(site.ScopeOffset, Is.EqualTo(2));
         }
 
         /// <summary>
@@ -131,6 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.BeforeControlTransfer));
             Assert.That(site.InstructionIndex, Is.EqualTo(2));
+            Assert.That(site.ScopeOffset, Is.EqualTo(2));
         }
 
         /// <summary>
@@ -191,6 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.BeforeControlTransfer));
             Assert.That(site.InstructionIndex, Is.EqualTo(2));
+            Assert.That(site.ScopeOffset, Is.EqualTo(2));
         }
 
         /// <summary>
@@ -220,6 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.BeforeControlTransfer));
             Assert.That(site.InstructionIndex, Is.EqualTo(2));
+            Assert.That(site.ScopeOffset, Is.EqualTo(2));
         }
 
         /// <summary>
@@ -246,6 +250,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.AlwaysThrows));
             Assert.That(site.InstructionIndex, Is.EqualTo(-1));
+            Assert.That(site.ScopeOffset, Is.EqualTo(-1));
         }
 
         /// <summary>
@@ -271,6 +276,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.BeforeControlTransfer));
             Assert.That(site.InstructionIndex, Is.EqualTo(2));
+            Assert.That(site.ScopeOffset, Is.EqualTo(2));
         }
     }
 }
