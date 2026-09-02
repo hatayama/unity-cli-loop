@@ -23,6 +23,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
@@ -1574,5 +1575,78 @@ func assertStringSliceEqual(t *testing.T, actual []string, expected []string) {
 		if actual[index] != expectedValue {
 			t.Fatalf("value mismatch at %d: actual=%#v expected=%#v", index, actual, expected)
 		}
+	}
+}
+
+// Verifies a rate-limited runner download tells the user about GH_TOKEN and the quota reset time.
+func TestDispatcherRealCLIResolutionErrorExplainsRateLimit(t *testing.T) {
+	resetAt := time.Date(2026, 9, 2, 1, 30, 0, 0, time.UTC)
+	cause := fmt.Errorf("release tag commit SHA lookup failed: %w", githubapi.RateLimitError{ResetAt: resetAt})
+
+	cliErr := dispatcherRealCLIResolutionError("/project", dispatcherPin{ProjectRunnerVersion: "3.0.0"}, cause)
+
+	if len(cliErr.NextActions) != 3 || !strings.Contains(cliErr.NextActions[0], "GH_TOKEN") {
+		t.Fatalf("unexpected next actions: %v", cliErr.NextActions)
+	}
+	if !strings.Contains(cliErr.NextActions[1], "retry after") {
+		t.Fatalf("expected reset-time retry hint, got: %v", cliErr.NextActions)
+	}
+	if cliErr.Details["GitHubRateLimitResetAt"] != "2026-09-02T01:30:00Z" {
+		t.Fatalf("unexpected reset detail: %v", cliErr.Details["GitHubRateLimitResetAt"])
+	}
+}
+
+// Verifies an authenticated rate limit does not ask for a token and still reports the reset time.
+func TestDispatcherRealCLIResolutionErrorAuthenticatedRateLimitSkipsTokenHint(t *testing.T) {
+	resetAt := time.Date(2026, 9, 2, 1, 30, 0, 0, time.UTC)
+	cause := fmt.Errorf("lookup failed: %w", githubapi.RateLimitError{ResetAt: resetAt, Authenticated: true})
+
+	cliErr := dispatcherRealCLIResolutionError("/project", dispatcherPin{ProjectRunnerVersion: "3.0.0"}, cause)
+
+	if len(cliErr.NextActions) != 2 || strings.Contains(cliErr.NextActions[0], "GH_TOKEN") {
+		t.Fatalf("unexpected next actions: %v", cliErr.NextActions)
+	}
+	if !strings.Contains(cliErr.NextActions[0], "Retry after") {
+		t.Fatalf("expected reset-time retry hint, got: %v", cliErr.NextActions)
+	}
+	if cliErr.Details["GitHubRateLimitResetAt"] != "2026-09-02T01:30:00Z" {
+		t.Fatalf("unexpected reset detail: %v", cliErr.Details["GitHubRateLimitResetAt"])
+	}
+}
+
+// Verifies a non-rate-limit download failure keeps the generic network guidance.
+func TestDispatcherRealCLIResolutionErrorKeepsGenericGuidance(t *testing.T) {
+	cliErr := dispatcherRealCLIResolutionError("/project", dispatcherPin{}, errors.New("connection refused"))
+
+	if len(cliErr.NextActions) != 2 || !strings.Contains(cliErr.NextActions[0], "network access") {
+		t.Fatalf("unexpected next actions: %v", cliErr.NextActions)
+	}
+	if _, present := cliErr.Details["GitHubRateLimitResetAt"]; present {
+		t.Fatalf("reset detail must be absent for non-rate-limit causes")
+	}
+}
+
+// Verifies a rate-limited optional self-update adds the token hint after the skip warning.
+func TestEnforceDispatcherFreshnessRateLimitedOptionalUpdateSuggestsToken(t *testing.T) {
+	cacheRoot := t.TempDir()
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(context.Context) (bool, error) {
+		return false, fmt.Errorf("list releases: %w", githubapi.RateLimitError{})
+	}
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshnessWithDeps(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
+		&stderr,
+		deps)
+
+	if handled || code != 0 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
+	}
+	if !strings.Contains(stderr.String(), "rate limit exhausted") || !strings.Contains(stderr.String(), "GH_TOKEN") {
+		t.Fatalf("expected rate-limit warning with token hint, got: %s", stderr.String())
 	}
 }
