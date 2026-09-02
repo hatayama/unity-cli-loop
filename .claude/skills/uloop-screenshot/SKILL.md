@@ -52,7 +52,7 @@ Returns JSON with:
 
 - `ScreenshotCount`: Number of windows captured
 - `ResolvedCaptureMode`: `"window"` or `"rendering"` — the mode actually used after resolving `auto`
-- `Warning`: Appears only for window captures taken while Play Mode is running with at least one image.
+- `Warning`: Appears for window captures taken while Play Mode is running with at least one image, and for any image captured while Play Mode is paused (UGUI/canvas content may show the frame rendered before the pause; run `uloop control-play-mode --action Step` once and capture again to refresh it).
 - `Screenshots`: Array of screenshot info, each containing:
   - `ImagePath`: Absolute path to the saved PNG file. Empty when `--elements-only` is used because no image file is written. Always open the file named here — the output directory accumulates every past capture, so guessing the newest file with directory listing (`ls -t` or similar) can silently pick a stale screenshot from an earlier run.
   - `FileSizeBytes`: Size of the saved file in bytes

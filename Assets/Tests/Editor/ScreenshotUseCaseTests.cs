@@ -184,6 +184,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
 
             public bool IsPlaying { get; }
+            public bool IsPaused => false;
         }
     }
 }
