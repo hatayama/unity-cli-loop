@@ -381,8 +381,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PatchedTotal = result.PatchedTotal,
                 ActivePatchTotal = result.ActivePatchTotal,
                 UnchangedTotal = result.UnchangedTotal,
-                AddedFields = CopyOrEmpty(result.AddedFields),
-                AddedConsts = CopyOrEmpty(result.AddedConsts),
+                AddedFields = result.AddedFields,
+                AddedConsts = result.AddedConsts,
                 Message = BuildApplyMessage(
                     result,
                     hasFailure,
@@ -394,11 +394,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     result.PatchedTotal,
                     CountAddedOutcomes(result))
             };
-        }
-
-        private static string[] CopyOrEmpty(string[] values)
-        {
-            return values ?? Array.Empty<string>();
         }
 
         // What: drains retarget line-drift triples recorded by SourcePausePointPatcher into Warnings.
