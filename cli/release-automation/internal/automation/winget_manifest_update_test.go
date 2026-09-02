@@ -96,13 +96,15 @@ func TestRenderWingetManifests(t *testing.T) {
 	}
 
 	expected := map[string]string{
-		"hatayama.uloop.yaml": `PackageIdentifier: hatayama.uloop
+		"hatayama.uloop.yaml": `# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.10.0.schema.json
+PackageIdentifier: hatayama.uloop
 PackageVersion: 3.1.0
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.10.0
 `,
-		"hatayama.uloop.installer.yaml": `PackageIdentifier: hatayama.uloop
+		"hatayama.uloop.installer.yaml": `# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
+PackageIdentifier: hatayama.uloop
 PackageVersion: 3.1.0
 InstallerType: zip
 NestedInstallerType: portable
@@ -119,7 +121,8 @@ Installers:
 ManifestType: installer
 ManifestVersion: 1.10.0
 `,
-		"hatayama.uloop.locale.en-US.yaml": `PackageIdentifier: hatayama.uloop
+		"hatayama.uloop.locale.en-US.yaml": `# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
+PackageIdentifier: hatayama.uloop
 PackageVersion: 3.1.0
 PackageLocale: en-US
 Publisher: hatayama
@@ -151,6 +154,58 @@ ManifestVersion: 1.10.0
 	}
 	if wingetManifestSchemaVersion != "1.10.0" {
 		t.Fatalf("manifest schema version = %q, want 1.10.0", wingetManifestSchemaVersion)
+	}
+}
+
+// TestRenderWingetManifestsIncludesSchemaHeader verifies every rendered manifest starts
+// with the yaml-language-server schema header winget-pkgs validation requires (missing
+// headers fail SchemaHeaderNotFound for ManifestVersion 1.7.0+), and that the header's
+// manifest type and version match the ManifestType/ManifestVersion fields in the same file.
+func TestRenderWingetManifestsIncludesSchemaHeader(t *testing.T) {
+	manifests, err := renderWingetManifests(wingetManifestData{
+		Version:     "3.1.0",
+		Repository:  "hatayama/unity-cli-loop",
+		SHA256Upper: strings.ToUpper(testWingetSHA256),
+		ReleaseDate: "2026-08-31",
+	})
+	if err != nil {
+		t.Fatalf("renderWingetManifests failed: %v", err)
+	}
+
+	wantHeaderByFilename := map[string]string{
+		"hatayama.uloop.yaml":              "# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.10.0.schema.json",
+		"hatayama.uloop.installer.yaml":    "# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json",
+		"hatayama.uloop.locale.en-US.yaml": "# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json",
+	}
+	wantManifestTypeByFilename := map[string]string{
+		"hatayama.uloop.yaml":              "version",
+		"hatayama.uloop.installer.yaml":    "installer",
+		"hatayama.uloop.locale.en-US.yaml": "defaultLocale",
+	}
+
+	for filename, content := range manifests {
+		lines := strings.SplitN(content, "\n", 2)
+		firstLine := lines[0]
+
+		if !strings.HasPrefix(firstLine, "# yaml-language-server: $schema=https://aka.ms/winget-manifest.") {
+			t.Fatalf("manifest %s first line = %q, want yaml-language-server schema header", filename, firstLine)
+		}
+
+		wantHeader := wantHeaderByFilename[filename]
+		if firstLine != wantHeader {
+			t.Fatalf("manifest %s header = %q, want %q", filename, firstLine, wantHeader)
+		}
+
+		wantManifestType := wantManifestTypeByFilename[filename]
+		if !strings.Contains(content, "ManifestType: "+wantManifestType+"\n") {
+			t.Fatalf("manifest %s missing ManifestType: %s matching its header", filename, wantManifestType)
+		}
+		if !strings.Contains(content, "ManifestVersion: "+wingetManifestSchemaVersion+"\n") {
+			t.Fatalf("manifest %s missing ManifestVersion: %s matching its header", filename, wingetManifestSchemaVersion)
+		}
+		if !strings.HasSuffix(firstLine, wingetManifestSchemaVersion+".schema.json") {
+			t.Fatalf("manifest %s header %q does not end with schema version %s", filename, firstLine, wingetManifestSchemaVersion)
+		}
 	}
 }
 
