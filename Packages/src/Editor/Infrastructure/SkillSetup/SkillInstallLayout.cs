@@ -308,8 +308,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             string installedSkillDirectory)
         {
             Dictionary<string, byte[]> comparableSourceFiles = SelectComparableSkillFiles(sourceFiles);
-            Dictionary<string, byte[]> comparableInstalledFiles = SelectComparableSkillFiles(
-                CollectInstalledSkillFiles(installedSkillDirectory));
+            Dictionary<string, byte[]> comparableInstalledFiles = CollectSkillFiles(
+                installedSkillDirectory,
+                IsComparableSkillFile);
             if (comparableSourceFiles.Count != comparableInstalledFiles.Count)
             {
                 return true;
@@ -368,6 +369,19 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         private static Dictionary<string, byte[]> CollectInstalledSkillFiles(string skillDirectory)
         {
+            return CollectSkillFiles(skillDirectory, _ => true);
+        }
+
+        // Files rejected by the filter are skipped before they are read, so a large or
+        // unreadable file placed next to the skill by another tool never slows down or breaks
+        // the freshness check.
+        private static Dictionary<string, byte[]> CollectSkillFiles(
+            string skillDirectory,
+            Func<string, bool> relativePathFilter)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(skillDirectory), "skillDirectory must not be null or empty");
+            Debug.Assert(relativePathFilter != null, "relativePathFilter must not be null");
+
             Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
             foreach (string filePath in Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories))
             {
@@ -378,6 +392,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string relativePath = Path.GetRelativePath(skillDirectory, filePath);
+                if (!relativePathFilter(relativePath))
+                {
+                    continue;
+                }
+
                 files[relativePath] = SkillFileContentNormalizer.NormalizeSkillFileContent(
                     relativePath,
                     File.ReadAllBytes(filePath));
