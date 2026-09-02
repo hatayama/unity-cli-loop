@@ -61,6 +61,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return $"SnapshotTiming must be one of: {string.Join(", ", supportedSnapshotTimings)}.";
             }
 
+            string limitError = ValidateCaptureLimits(parameters);
+            if (limitError != null)
+            {
+                return limitError;
+            }
+
+            bool isIdMarker = !string.IsNullOrWhiteSpace(parameters.Id) && string.IsNullOrWhiteSpace(parameters.File);
+            if (isIdMarker && parameters.SnapshotTiming != SourcePausePointConstants.PreLineSnapshotTimingValue)
+            {
+                return "--snapshot-timing requires a --file/--line marker.";
+            }
+
+            if (string.IsNullOrEmpty(hitWhen))
+            {
+                return null;
+            }
+
+            if (isIdMarker)
+            {
+                return "--hit-when requires a --file/--line marker.";
+            }
+
+            if (!string.IsNullOrEmpty(hitWhenParseResult.ErrorMessage))
+            {
+                return hitWhenParseResult.ErrorMessage;
+            }
+
+            return null;
+        }
+
+        private static string ValidateCaptureLimits(EnablePausePointSchema parameters)
+        {
             if (parameters.MaxHistory <= 0 || parameters.MaxHistory > UloopPausePointRegistry.MaxHistoryLimit)
             {
                 return $"MaxHistory must be between 1 and {UloopPausePointRegistry.MaxHistoryLimit}.";
@@ -76,27 +108,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxCallerFrames > UloopPausePointRegistry.MaxCallerFramesLimit)
             {
                 return $"MaxCallerFrames must be between 0 and {UloopPausePointRegistry.MaxCallerFramesLimit}.";
-            }
-
-            bool isIdMarker = !string.IsNullOrWhiteSpace(parameters.Id) && string.IsNullOrWhiteSpace(parameters.File);
-            if (isIdMarker && parameters.SnapshotTiming != SourcePausePointConstants.PreLineSnapshotTimingValue)
-            {
-                return "--snapshot-timing requires a --file/--line marker.";
-            }
-
-            if (string.IsNullOrEmpty(hitWhen))
-            {
-                return null;
-            }
-
-            if (!string.IsNullOrWhiteSpace(parameters.Id) && string.IsNullOrWhiteSpace(parameters.File))
-            {
-                return "--hit-when requires a --file/--line marker.";
-            }
-
-            if (!string.IsNullOrEmpty(hitWhenParseResult.ErrorMessage))
-            {
-                return hitWhenParseResult.ErrorMessage;
             }
 
             return null;
