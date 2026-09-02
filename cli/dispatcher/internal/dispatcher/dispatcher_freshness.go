@@ -3,6 +3,7 @@ package dispatcher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	sharedversion "github.com/hatayama/unity-cli-loop/common/version"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 	sharedupdate "github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
@@ -158,6 +160,10 @@ func runDispatcherFreshnessUpdate(ctx context.Context, plan dispatcherFreshnessP
 	// Why: optional update failures should not retry and redraw installer progress on every command.
 	markDispatcherSelfUpdateCheckedWithDeps(deps)
 	clicore.WriteFormat(stderr, "warning: dispatcher self-update skipped: %v\n", err)
+	var rateLimit githubapi.RateLimitError
+	if errors.As(err, &rateLimit) {
+		clicore.WriteFormat(stderr, "warning: %s\n", githubapi.TokenNextAction)
+	}
 	return false, 0
 }
 

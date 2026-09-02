@@ -12,6 +12,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
 	"github.com/hatayama/unity-cli-loop/common/project"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 )
 
@@ -291,6 +292,27 @@ func dispatcherPinResolutionError(projectRoot string, cause error) clierrors.CLI
 }
 
 func dispatcherRealCLIResolutionError(projectRoot string, pin dispatcherPin, cause error) clierrors.CLIError {
+	details := map[string]any{
+		"Cause":                cause.Error(),
+		"ProjectRunnerVersion": pin.ProjectRunnerVersion,
+		"PinSource":            pin.SourcePath,
+	}
+	nextActions := []string{
+		"Check network access to GitHub releases, then retry the command.",
+	}
+	// Why: an exhausted anonymous quota looks like a generic network failure, but
+	// the fix (a token, or waiting for the reset) is specific and cheap to state.
+	var rateLimit githubapi.RateLimitError
+	if errors.As(cause, &rateLimit) {
+		nextActions = rateLimit.NextActions()
+		if !rateLimit.ResetAt.IsZero() {
+			details["GitHubRateLimitResetAt"] = rateLimit.ResetAt.UTC().Format(time.RFC3339)
+		}
+	}
+	nextActions = append(nextActions,
+		"For dogfooding checkouts with an unpublished pin, set "+
+			nativepath.ProjectRunnerPathEnvName+
+			" to a locally built uloop-project-runner binary to bypass the download.")
 	return clierrors.CLIError{
 		ErrorCode:   clierrors.ErrorCodeInternalError,
 		Phase:       clierrors.ErrorPhaseExecution,
@@ -298,16 +320,7 @@ func dispatcherRealCLIResolutionError(projectRoot string, pin dispatcherPin, cau
 		Retryable:   true,
 		SafeToRetry: true,
 		ProjectRoot: projectRoot,
-		NextActions: []string{
-			"Check network access to GitHub releases, then retry the command.",
-			"For dogfooding checkouts with an unpublished pin, set " +
-				nativepath.ProjectRunnerPathEnvName +
-				" to a locally built uloop-project-runner binary to bypass the download.",
-		},
-		Details: map[string]any{
-			"Cause":                cause.Error(),
-			"ProjectRunnerVersion": pin.ProjectRunnerVersion,
-			"PinSource":            pin.SourcePath,
-		},
+		NextActions: nextActions,
+		Details:     details,
 	}
 }

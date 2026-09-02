@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 )
 
 // happyFixture returns fixture values pulled from a real backfilled
@@ -465,5 +467,32 @@ func TestFetchTagCommitSHA_ServerError(t *testing.T) {
 	}
 	if !errors.Is(err, ErrTagRefFetch) {
 		t.Fatalf("expected ErrTagRefFetch, got: %v", err)
+	}
+}
+
+// Verifies FetchTagCommitSHA surfaces an exhausted GitHub quota as a typed
+// rate-limit error while still failing closed under ErrTagRefFetch.
+func TestFetchTagCommitSHA_RateLimited(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", "1790000000")
+		http.Error(w, `{"message":"API rate limit exceeded"}`, http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	original := githubAPIBase()
+	setGithubAPIBase(server.URL)
+	defer setGithubAPIBase(original)
+
+	_, err := FetchTagCommitSHA(context.Background(), "hatayama/unity-cli-loop", "any")
+	if !errors.Is(err, ErrTagRefFetch) {
+		t.Fatalf("expected ErrTagRefFetch, got: %v", err)
+	}
+	var rateLimit githubapi.RateLimitError
+	if !errors.As(err, &rateLimit) {
+		t.Fatalf("expected RateLimitError, got: %v", err)
+	}
+	if rateLimit.ResetAt.Unix() != 1790000000 {
+		t.Fatalf("unexpected reset time: %v", rateLimit.ResetAt)
 	}
 }

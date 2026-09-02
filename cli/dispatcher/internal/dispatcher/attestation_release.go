@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hatayama/unity-cli-loop/dispatcher/attestation"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 	sharedupdate "github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
@@ -112,6 +113,9 @@ func fetchDispatcherReleasePage(ctx context.Context, page int) ([]githubReleaseL
 		_ = response.Body.Close()
 	}()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		if rateLimit, ok := githubapi.DetectRateLimit(response); ok {
+			return nil, fmt.Errorf("list releases: %w", rateLimit)
+		}
 		return nil, fmt.Errorf("list releases: status %s", response.Status)
 	}
 	var entries []githubReleaseListEntry
