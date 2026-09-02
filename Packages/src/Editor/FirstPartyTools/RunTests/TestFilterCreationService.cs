@@ -19,7 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         /// <param name="filterType">Filter type</param>
         /// <param name="filterValue">Filter value</param>
-        /// <returns>Test execution filter or an error message describing an invalid filter type</returns>
+        /// <returns>Test execution filter, or an error message for an unsupported filter type or a blank class filter value</returns>
         public (TestExecutionFilter filter, string errorMessage) TryCreateFilter(TestFilterType filterType, string filterValue)
         {
             switch (filterType)

@@ -27,15 +27,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(errorMessage, Is.Null);
             Assert.That(result.FilterType, Is.EqualTo(TestExecutionFilterType.Regex));
-            Assert.That(result.FilterValue, Is.EqualTo(TestExecutionFilter.ByTestClass("PlayerTests").FilterValue));
+            Assert.That(result.FilterValue, Is.EqualTo(@"(^|[.+])PlayerTests\.[^.(]+(\(.*\))?$"));
         }
 
-        [Test]
-        public void TryCreateFilter_WithClassTypeAndEmptyValue_ShouldReturnErrorMessage()
+        [TestCase("")]
+        [TestCase(" ")]
+        public void TryCreateFilter_WithClassTypeAndBlankValue_ShouldReturnErrorMessage(string filterValue)
         {
-            // Verifies an empty class name is rejected up front instead of producing a pattern that
-            // silently matches nothing.
-            (TestExecutionFilter result, string errorMessage) = filterService.TryCreateFilter(TestFilterType.@class, " ");
+            // Verifies an empty or whitespace class name is rejected up front instead of producing a
+            // pattern that silently matches nothing.
+            (TestExecutionFilter result, string errorMessage) = filterService.TryCreateFilter(TestFilterType.@class, filterValue);
 
             Assert.That(result, Is.Null);
             Assert.That(errorMessage, Does.Contain("class"));
@@ -75,6 +76,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(pattern.IsMatch("MyGame.Tests.PlayerTests.Jump_AddsVelocity"), Is.True);
             Assert.That(pattern.IsMatch("MyGameXTests.PlayerTests.Jump_AddsVelocity"), Is.False);
             Assert.That(pattern.IsMatch("Other.Tests.PlayerTests.Jump_AddsVelocity"), Is.False);
+        }
+
+        [Test]
+        public void ByTestClass_WithPartiallyQualifiedClassName_DoesNotMatchInsideALongerNamespace()
+        {
+            // Verifies a qualified name is anchored at the start of the full name, so a namespace suffix
+            // cannot select the same class under a longer, unintended namespace.
+            Regex pattern = new Regex(TestExecutionFilter.ByTestClass("Tests.PlayerTests").FilterValue);
+
+            Assert.That(pattern.IsMatch("Tests.PlayerTests.Jump_AddsVelocity"), Is.True);
+            Assert.That(pattern.IsMatch("MyGame.Tests.PlayerTests.Jump_AddsVelocity"), Is.False);
         }
 
         [Test]

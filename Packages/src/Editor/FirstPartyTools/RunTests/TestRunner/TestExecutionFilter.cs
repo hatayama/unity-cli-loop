@@ -84,11 +84,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrWhiteSpace(className), "className must not be null or whitespace");
 
             // Why this shape: NUnit leaf full names are "Namespace.Class.Method" or
-            // "Namespace.Class.Method(args)", and nested fixtures are "Outer+Inner". The left
-            // anchor stops "EnemyPlayerTests" matching "PlayerTests"; the right anchor requires
-            // exactly one method segment, so a namespace segment of the same name and the
+            // "Namespace.Class.Method(args)", and nested fixtures are "Outer+Inner". A qualified
+            // name is anchored at the start so "Tests.PlayerTests" cannot match inside
+            // "Other.Tests.PlayerTests"; a bare name is anchored on the namespace or nested-fixture
+            // boundary so "EnemyPlayerTests" does not match "PlayerTests". The right anchor
+            // requires exactly one method segment, so a namespace segment of the same name and the
             // fixture node itself do not match. Args may contain dots, hence the paren branch.
-            string pattern = "(^|[.+])" + Regex.Escape(className) + @"\.[^.(]+(\(.*\))?$";
+            string leftAnchor = className.Contains(".") ? "^" : "(^|[.+])";
+            string pattern = leftAnchor + Regex.Escape(className) + @"\.[^.(]+(\(.*\))?$";
             return new TestExecutionFilter(TestExecutionFilterType.Regex, pattern);
         }
 
