@@ -54,7 +54,7 @@ Returns JSON with:
 - `ResolvedCaptureMode`: `"window"` or `"rendering"` — the mode actually used after resolving `auto`
 - `Warning`: Appears only for window captures taken while Play Mode is running with at least one image.
 - `Screenshots`: Array of screenshot info, each containing:
-  - `ImagePath`: Absolute path to the saved PNG file. Empty (`""`) when `--elements-only` is used because no image file is written; `FileSizeBytes`, `Width`, and `Height` are then `0`, while `GameViewWidth`/`GameViewHeight` and `AnnotatedElements` still carry real values. Always open the file named here — the output directory accumulates every past capture, so guessing the newest file with directory listing (`ls -t` or similar) can silently pick a stale screenshot from an earlier run.
+  - `ImagePath`: Absolute path to the saved PNG file. Empty (`""`) when `--elements-only` is used because no image file is written; `FileSizeBytes`, `Width`, and `Height` are then `0`, while `GameViewWidth`/`GameViewHeight` and `AnnotatedElements` still carry real values. When it is non-empty, always open the file named here — the output directory accumulates every past capture, so guessing the newest file with directory listing (`ls -t` or similar) can silently pick a stale screenshot from an earlier run.
   - `FileSizeBytes`: Size of the saved file in bytes
   - `Width`: Captured image width in pixels
   - `Height`: Captured image height in pixels

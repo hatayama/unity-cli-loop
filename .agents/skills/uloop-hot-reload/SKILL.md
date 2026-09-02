@@ -1,7 +1,7 @@
 ---
 name: uloop-hot-reload
 toolName: hot-reload
-description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible only to edited code in the same file); it can also change signatures: a return-type change applies only when the same reload covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New types, or members other files must reference, require 'uloop compile'."
+description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible only to edited code in the same file); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New types, or members other files must reference, require 'uloop compile'."
 ---
 
 # uloop hot-reload

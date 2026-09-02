@@ -8,7 +8,7 @@ Device Simulator is supported for this flow: prefer `--capture-mode rendering` (
 
 `AnnotatedElements` is empty unless `--annotate-elements` is used, or unless `--annotate-raycast-grid` adds clustered 3D collider candidates (with or without `--raycast-layer-mask`). UI entries are sorted by z-order, frontmost first. That sort uses `SortingOrder` then `SiblingIndex`, so parent-crossing overlaps can disagree with the actual draw order — see `SiblingIndex` below. Each item contains:
 
-- `Label`: Index label in JSON (`A` = first in that sort, `B` = next, ...). Treat it as a stable handle, not as proof of what is actually in front: when overlapping elements cross parents, pick the target by `Path` and confirm with `simulate-mouse-ui`'s `HitGameObjectName`. Screenshot labels also include the interaction hint, such as `A / CLICK` or `B / DRAG`.
+- `Label`: Index label in JSON (`A` = first in that sort, `B` = next, ...). Treat it as a stable handle, not as proof of what is actually in front: when overlapping elements cross parents, pick the target by `Path` and confirm the result with `simulate-mouse-ui`'s `HitGameObjectName`; without `--bypass-raycast` this is the topmost raycast hit, while bypass mode reports the dispatched `--target-path` GameObject. Screenshot labels also include the interaction hint, such as `A / CLICK` or `B / DRAG`.
 - `Name`: Element name
 - `Path`: Hierarchy path from the scene root, for example `Canvas/Panel/Button`. Use this as `simulate-mouse-ui --target-path` when bypassing raycast blockers.
 - `Type`: Element type (`Button`, `Toggle`, `Slider`, `Dropdown`, `InputField`, `Scrollbar`, `Draggable`, `DropTarget`, `Selectable`, `PhysicsCollider`)
