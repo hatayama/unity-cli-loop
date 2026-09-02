@@ -51,6 +51,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return $"Mode must be one of: {string.Join(", ", supportedModes)}.";
             }
 
+            string[] supportedSnapshotTimings =
+            {
+                SourcePausePointConstants.PreLineSnapshotTimingValue,
+                SourcePausePointConstants.PostLineSnapshotTimingValue
+            };
+            if (!supportedSnapshotTimings.Contains(parameters.SnapshotTiming))
+            {
+                return $"SnapshotTiming must be one of: {string.Join(", ", supportedSnapshotTimings)}.";
+            }
+
             if (parameters.MaxHistory <= 0 || parameters.MaxHistory > UloopPausePointRegistry.MaxHistoryLimit)
             {
                 return $"MaxHistory must be between 1 and {UloopPausePointRegistry.MaxHistoryLimit}.";

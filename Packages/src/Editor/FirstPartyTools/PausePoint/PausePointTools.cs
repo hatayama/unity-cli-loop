@@ -36,6 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int MaxCallerFrames { get; set; } = UloopPausePointRegistry.DefaultMaxCallerFrames;
 
         public string Method { get; set; } = string.Empty;
+
+        public string SnapshotTiming { get; set; } = SourcePausePointConstants.PreLineSnapshotTimingValue;
     }
 
     /// <summary>

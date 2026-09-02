@@ -68,10 +68,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     injection.InstructionIndex < list.Count,
                     "An injection's index must exist in the current instruction stream.");
                 CodeInstruction displaced = list[injection.InstructionIndex];
-                emitted[0].labels.AddRange(displaced.labels);
-                displaced.labels.Clear();
-                emitted[0].blocks.AddRange(displaced.blocks);
-                displaced.blocks.Clear();
+                if (injection.MoveDisplacedMetadata)
+                {
+                    emitted[0].labels.AddRange(displaced.labels);
+                    displaced.labels.Clear();
+                    emitted[0].blocks.AddRange(displaced.blocks);
+                    displaced.blocks.Clear();
+                }
 
                 // The not-armed guard above skips straight to the original displaced instruction,
                 // so it needs its own label there to land on.

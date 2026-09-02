@@ -14,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public MethodBase LogicalOwner { get; }
         public MethodBase DonorShim { get; }
         public int InstructionIndex { get; }
+        public SourcePausePointSnapshotTiming SnapshotTiming { get; }
         public int ResolvedLine { get; }
         public IReadOnlyList<SourcePausePointLocalVariable> Locals { get; }
         public IReadOnlyList<SourcePausePointParameter> Parameters { get; }
@@ -29,6 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodBase logicalOwner,
             MethodBase donorShim,
             int instructionIndex,
+            SourcePausePointSnapshotTiming snapshotTiming,
             int resolvedLine,
             IReadOnlyList<SourcePausePointLocalVariable> locals,
             IReadOnlyList<SourcePausePointParameter> parameters,
@@ -43,6 +45,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             LogicalOwner = logicalOwner;
             DonorShim = donorShim;
             InstructionIndex = instructionIndex;
+            SnapshotTiming = snapshotTiming;
             ResolvedLine = resolvedLine;
             Locals = locals;
             Parameters = parameters;
@@ -57,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodBase originalMethod,
             MethodBase donorShim,
             int instructionIndex,
+            SourcePausePointSnapshotTiming snapshotTiming,
             int resolvedLine,
             IReadOnlyList<SourcePausePointLocalVariable> locals,
             IReadOnlyList<SourcePausePointParameter> parameters,
@@ -69,6 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 originalMethod,
                 donorShim,
                 instructionIndex,
+                snapshotTiming,
                 resolvedLine,
                 locals,
                 parameters,
@@ -83,6 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodBase targetMethod,
             MethodBase logicalOwner,
             int instructionIndex,
+            SourcePausePointSnapshotTiming snapshotTiming,
             int resolvedLine,
             IReadOnlyList<SourcePausePointLocalVariable> locals,
             IReadOnlyList<SourcePausePointParameter> parameters,
@@ -96,6 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 logicalOwner,
                 donorShim: null,
                 instructionIndex,
+                snapshotTiming,
                 resolvedLine,
                 locals,
                 parameters,
@@ -114,6 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 logicalOwner: null,
                 donorShim: null,
                 instructionIndex: -1,
+                SourcePausePointSnapshotTiming.PreLine,
                 resolvedLine: 0,
                 locals: null,
                 parameters: null,
@@ -134,6 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 logicalOwner,
                 donorShim: null,
                 instructionIndex: -1,
+                SourcePausePointSnapshotTiming.PreLine,
                 resolvedLine: 0,
                 locals: null,
                 parameters: null,
@@ -154,6 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 logicalOwner,
                 donorShim: null,
                 instructionIndex: -1,
+                SourcePausePointSnapshotTiming.PreLine,
                 resolvedLine: 0,
                 locals: null,
                 parameters: null,

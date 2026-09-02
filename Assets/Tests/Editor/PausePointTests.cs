@@ -2140,6 +2140,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 resolution.IsDeclaringTypeValueType,
                 resolution.InstructionIndex,
                 resolution.IlOffset,
+                resolution.SnapshotTiming,
                 resolution.ResolvedLine,
                 resolution.ResolvedEndLine,
                 resolution.CompiledMethodStartLine,

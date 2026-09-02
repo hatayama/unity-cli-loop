@@ -898,6 +898,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 method.DeclaringType.IsValueType,
                 instructionIndex,
                 0,
+                SourcePausePointSnapshotTiming.PreLine,
                 1,
                 1,
                 compiledMethodStartLine,

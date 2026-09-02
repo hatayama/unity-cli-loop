@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static readonly Dictionary<string, MethodBase> LogicalOwnerById = new();
         // Why store file:line separately: auto-retarget must re-resolve with the original enable
         // request, and parsing the id string would couple us to id formatting.
-        internal static readonly Dictionary<string, (string NormalizedFile, int Line)> RequestById = new();
+        internal static readonly Dictionary<string, SourcePausePointEnableRequest> RequestById = new();
         internal static readonly List<SourcePausePointHotReloadRetarget.RetargetLineDriftWarning> PendingRetargetLineDriftWarnings =
             new List<SourcePausePointHotReloadRetarget.RetargetLineDriftWarning>();
         internal static readonly List<string> PendingExpiredNotRetargetedIds = new List<string>();
@@ -113,7 +113,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     method,
                     donorShim: null))
             {
-                RememberRequest(id, normalizedFile, requestedLine);
+                RememberRequest(id, normalizedFile, requestedLine, resolution.SnapshotTiming);
                 LogicalOwnerById[id] = logicalOwner;
                 UloopPausePointRegistry.SetMethodEntryInstrumented(id);
                 return SourcePausePointPatchResult.SuccessResult();
@@ -126,9 +126,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolution.IsDeclaringTypeValueType,
                 resolution.Parameters,
                 resolution.Locals,
-                SourcePausePointPatchInjectionTargetKind.OriginalBody);
+                SourcePausePointPatchInjectionTargetKind.OriginalBody,
+                donorShim: null,
+                instanceFromFirstArgument: false,
+                moveDisplacedMetadata: MovesDisplacedMetadata(resolution.SnapshotTiming));
 
-            return CommitPatch(id, method, logicalOwner, injection, normalizedFile, requestedLine);
+            return CommitPatch(
+                id, method, logicalOwner, injection, normalizedFile, requestedLine, resolution.SnapshotTiming);
         }
 
         /// <summary>
@@ -165,7 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (TryReuseExistingPatch(id, targetKind, method, shim.DonorShim))
             {
-                RememberRequest(id, normalizedFile, requestedLine);
+                RememberRequest(id, normalizedFile, requestedLine, shim.SnapshotTiming);
                 UloopPausePointRegistry.SetMethodEntryInstrumented(id);
                 return SourcePausePointPatchResult.SuccessResult();
             }
@@ -186,9 +190,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 shim.Locals,
                 targetKind,
                 shim.DonorShim,
-                shim.InstanceFromFirstArgument);
+                shim.InstanceFromFirstArgument,
+                MovesDisplacedMetadata(shim.SnapshotTiming));
 
-            return CommitPatch(id, method, shim.LogicalOwner, injection, normalizedFile, requestedLine);
+            return CommitPatch(
+                id, method, shim.LogicalOwner, injection, normalizedFile, requestedLine, shim.SnapshotTiming);
         }
 
         // Why add preamble only for TransplantChainJoin: the recorded index is from the shim's
@@ -260,9 +266,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        private static void RememberRequest(string id, string normalizedFile, int requestedLine)
+        private static void RememberRequest(
+            string id,
+            string normalizedFile,
+            int requestedLine,
+            SourcePausePointSnapshotTiming snapshotTiming)
         {
-            RequestById[id] = (normalizedFile, requestedLine);
+            RequestById[id] = new SourcePausePointEnableRequest(normalizedFile, requestedLine, snapshotTiming);
+        }
+
+        private static bool MovesDisplacedMetadata(SourcePausePointSnapshotTiming snapshotTiming)
+        {
+            return snapshotTiming == SourcePausePointSnapshotTiming.PreLine;
         }
 
         private static SourcePausePointPatchResult CommitPatch(
@@ -271,7 +286,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodBase logicalOwner,
             SourcePausePointPatchInjection injection,
             string normalizedFile,
-            int requestedLine)
+            int requestedLine,
+            SourcePausePointSnapshotTiming snapshotTiming)
         {
             bool methodAlreadyPatched = InjectionsByMethod.TryGetValue(method, out List<SourcePausePointPatchInjection> injections);
             if (!methodAlreadyPatched)
@@ -283,7 +299,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             injections.Add(injection);
             MethodById[id] = method;
             LogicalOwnerById[id] = logicalOwner;
-            RememberRequest(id, normalizedFile, requestedLine);
+            RememberRequest(id, normalizedFile, requestedLine, snapshotTiming);
 
             // The ledger above is written before Harmony actually rebuilds the method. If
             // Unpatch/Patch throws (e.g. a byref-like `this` produces invalid IL at JIT time), a

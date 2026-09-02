@@ -223,6 +223,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(parameters.File);
             string id = BuildSourcePausePointId(parameters.File, parameters.Line);
             string patchedMethodPdbUnavailableWarning = string.Empty;
+            SourcePausePointSnapshotTiming snapshotTiming = ParseSnapshotTiming(parameters.SnapshotTiming);
 
             HotReloadShimFileLookup shimLookup =
                 HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(normalizedFile);
@@ -230,7 +231,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 SourcePausePointShimResolution shimResolution =
                     SourcePausePointShimResolver.Resolve(
-                        shimLookup, normalizedFile, parameters.Line, parameters.Method);
+                        shimLookup, normalizedFile, parameters.Line, parameters.Method, snapshotTiming);
                 if (shimResolution.Kind == SourcePausePointShimResolveKind.TransplantChainJoin
                     || shimResolution.Kind == SourcePausePointShimResolveKind.ShimDirect)
                 {
@@ -289,7 +290,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             (SourcePausePointResolveResult resolveResult, string editedLineRemapWarning) =
                 PausePointEditedLineRemap.ResolveWithEditedLineRemap(
-                    parameters.File, parameters.Line, parameters.Method);
+                    parameters.File, parameters.Line, parameters.Method, snapshotTiming);
             if (!resolveResult.Success)
             {
                 bool hasActiveHotReloadPatches = shimLookup != null;
@@ -381,6 +382,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 editedLineRemapWarning: editedLineRemapWarning);
         }
 
+        // Validation already rejected anything but the two accepted values.
+        private static SourcePausePointSnapshotTiming ParseSnapshotTiming(string value)
+        {
+            if (value == SourcePausePointConstants.PostLineSnapshotTimingValue)
+            {
+                return SourcePausePointSnapshotTiming.PostLine;
+            }
+
+            Debug.Assert(
+                value == SourcePausePointConstants.PreLineSnapshotTimingValue,
+                "SnapshotTiming must have been validated before use.");
+            return SourcePausePointSnapshotTiming.PreLine;
+        }
+
+        private static string DescribeSnapshotTiming(SourcePausePointSnapshotTiming snapshotTiming)
+        {
+            return snapshotTiming == SourcePausePointSnapshotTiming.PostLine
+                ? SourcePausePointConstants.PostLineSnapshotTimingNote
+                : SourcePausePointConstants.PreLineSnapshotTimingNote;
+        }
+
         private static PausePointResponse FinishEnableBySourceLocation(
             string id,
             EnablePausePointSchema parameters,
@@ -436,7 +458,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedLine = resolvedLine;
             response.ResolvedLineText = resolvedLineText;
             response.ResolvedMethod = resolvedMethod;
-            response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
+            response.SnapshotTiming = DescribeSnapshotTiming(ParseSnapshotTiming(parameters.SnapshotTiming));
             response.LineBasis = lineBasis;
             string enableWarning = PausePointEnableWarnings.MergeWarnings(
                 PausePointEnableWarnings.CreateEnableWarning(),

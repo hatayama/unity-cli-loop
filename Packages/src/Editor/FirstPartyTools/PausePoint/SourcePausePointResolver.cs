@@ -6,7 +6,6 @@ using System.Text.RegularExpressions;
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
-using Mono.Collections.Generic;
 
 using UnityEditor.Compilation;
 
@@ -23,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static SourcePausePointResolveResult Resolve(
             string projectRelativeFilePath,
             int line,
-            string methodFilter = null)
+            string methodFilter = null,
+            SourcePausePointSnapshotTiming snapshotTiming = SourcePausePointSnapshotTiming.PreLine)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRelativeFilePath), "projectRelativeFilePath must not be null or empty.");
             Debug.Assert(line > 0, "line must be a positive 1-based line number.");
@@ -67,7 +67,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 normalizedInputPath,
                 projectRelativeFilePath,
                 line,
-                methodFilter);
+                methodFilter,
+                snapshotTiming);
         }
 
         private static SourcePausePointResolveResult ResolveFromCompiledAssembly(
@@ -77,7 +78,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string normalizedInputPath,
             string originalInputPath,
             int line,
-            string methodFilter)
+            string methodFilter,
+            SourcePausePointSnapshotTiming snapshotTiming)
         {
             using FileStream dllStream = File.Open(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using FileStream pdbStream = File.Open(pdbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -111,10 +113,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     nearbyCompiledMethods);
             }
 
-            int instructionIndex = FindInstructionIndex(method.Body.Instructions, sequencePoint.Offset);
-            Debug.Assert(instructionIndex >= 0, "A sequence point's offset must correspond to an instruction in the same method body.");
+            if (!SourcePausePointInjectionSiteLocator.TryLocate(
+                    method,
+                    sequencePoint,
+                    snapshotTiming,
+                    out int instructionIndex,
+                    out int scopeOffset))
+            {
+                return SourcePausePointResolveResult.Failure(
+                    SourcePausePointResolveFailureReason.PostLineAlwaysThrows,
+                    string.Format(
+                        SourcePausePointConstants.PostLineAlwaysThrowsMessageFormat,
+                        sequencePoint.StartLine,
+                        originalInputPath));
+            }
 
-            List<SourcePausePointLocalVariable> locals = SourcePausePointCaptureEligibility.CollectCapturableLocals(method, sequencePoint.Offset);
+            List<SourcePausePointLocalVariable> locals = SourcePausePointCaptureEligibility.CollectCapturableLocals(method, scopeOffset);
             List<SourcePausePointParameter> parameters = SourcePausePointCaptureEligibility.CollectParameters(method);
             (int compiledMethodStartLine, int compiledMethodEndLine) = CollectCompiledMethodSpan(
                 method,
@@ -128,7 +142,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 method.IsStatic,
                 method.DeclaringType.IsValueType,
                 instructionIndex,
-                sequencePoint.Offset,
+                scopeOffset,
+                snapshotTiming,
                 sequencePoint.StartLine,
                 sequencePoint.EndLine,
                 compiledMethodStartLine,
@@ -544,19 +559,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     yield return method;
                 }
             }
-        }
-
-        internal static int FindInstructionIndex(Collection<Instruction> instructions, int offset)
-        {
-            for (int i = 0; i < instructions.Count; i++)
-            {
-                if (instructions[i].Offset == offset)
-                {
-                    return i;
-                }
-            }
-
-            return -1;
         }
     }
 }

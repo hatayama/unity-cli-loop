@@ -817,6 +817,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 method.DeclaringType.IsValueType,
                 0,
                 0,
+                SourcePausePointSnapshotTiming.PreLine,
                 1,
                 1,
                 compiledMethodStartLine,
