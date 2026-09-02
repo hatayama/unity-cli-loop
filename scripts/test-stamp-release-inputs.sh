@@ -30,7 +30,7 @@ create_fixture_repo() {
     printf 'package subpkg\n' > cli/common/version/subpkg/compare.go
     printf 'module example.test/common\n' > cli/common/go.mod
     printf '{"projectRunnerVersion": "1.0.0"}\n' > cli/common/contract.json
-    printf '{"tools":[]}\n' > cli/common/tools/default-tools.json
+    printf '%s\n' '{"tools":[{"name":"compile","description":"a","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"d"}}}}]}' > cli/common/tools/default-tools.json
     printf 'echo install\n' > scripts/install.sh
     printf 'Write-Host install\n' > scripts/install.ps1
     printf 'echo embedded install\n' > cli/dispatcher/internal/install/scripts/install_darwin.sh
@@ -131,20 +131,29 @@ if [ "$runner_hash_after_common" = "$runner_hash_initial" ] ||
   exit 1
 fi
 
-# Verifies a change to the embedded tool catalog moves both stamps, since it is compiled into both
-# binaries even though it is JSON.
+# Verifies a structural catalog change (an added property) moves both stamps.
 commit_fixture_change "$work_dir" "common source change"
-printf '{"tools":[{"name":"compile"}]}\n' > "$work_dir/cli/common/tools/default-tools.json"
+printf '%s\n' '{"tools":[{"name":"compile","description":"a","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"d"},"Y":{"type":"boolean"}}}}]}' > "$work_dir/cli/common/tools/default-tools.json"
 run_stamp "$work_dir"
 runner_hash_after_catalog=$(stamp_hash "$work_dir" cli/project-runner/shared-inputs-stamp.json)
 dispatcher_hash_after_catalog=$(stamp_hash "$work_dir" cli/dispatcher/shared-inputs-stamp.json)
 if [ "$runner_hash_after_catalog" = "$runner_hash_after_common" ] ||
   [ "$dispatcher_hash_after_catalog" = "$dispatcher_hash_after_common" ]; then
-  echo "Expected an embedded tool catalog change to move both stamps." >&2
+  echo "Expected a structural embedded tool catalog change to move both stamps." >&2
   exit 1
 fi
 runner_hash_after_common=$runner_hash_after_catalog
 dispatcher_hash_after_common=$dispatcher_hash_after_catalog
+
+# Verifies description-only catalog regenerations leave both stamps unchanged.
+commit_fixture_change "$work_dir" "structural catalog change"
+printf '%s\n' '{"tools":[{"name":"compile","description":"b","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"e"},"Y":{"type":"boolean"}}}}]}' > "$work_dir/cli/common/tools/default-tools.json"
+run_stamp "$work_dir"
+if [ "$(stamp_hash "$work_dir" cli/project-runner/shared-inputs-stamp.json)" != "$runner_hash_after_common" ] ||
+  [ "$(stamp_hash "$work_dir" cli/dispatcher/shared-inputs-stamp.json)" != "$dispatcher_hash_after_common" ]; then
+  echo "Expected a description-only catalog change to keep both stamps." >&2
+  exit 1
+fi
 
 # Verifies a nested shared common Go source change also moves both stamps.
 commit_fixture_change "$work_dir" "shared common change"
