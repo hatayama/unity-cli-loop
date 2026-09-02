@@ -317,16 +317,7 @@ func runEnablePausePointAndAwait(
 			writeDebugTiming(stderr, pausePointEnableCommandName, time.Since(startedAt), outcome)
 			return 1
 		}
-		if enableResponse.Success {
-			enableResponse.Warning = joinPausePointWarnings(enableResponse.Warning, pausePointAutoDebugSwitchWarning)
-			// Why skip a nil slice: older packages omit Warnings. Appending here would
-			// invent a one-item array that drops the original joined Warning topics.
-			if len(enableResponse.Warnings) > 0 {
-				enableResponse.Warnings = appendPausePointWarningEntry(
-					enableResponse.Warnings,
-					pausePointAutoDebugSwitchWarning)
-			}
-		}
+		applyPausePointRecoverySwitchWarning(&enableResponse)
 	}
 
 	if !enableResponse.Success {

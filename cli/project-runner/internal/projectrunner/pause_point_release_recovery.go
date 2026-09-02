@@ -55,6 +55,20 @@ func isSuccessfulEnableResponse(raw []byte) bool {
 	return probe.Success
 }
 
+func applyPausePointRecoverySwitchWarning(response *pausePointStatusResponse) {
+	if response == nil || !response.Success {
+		return
+	}
+	response.Warning = joinPausePointWarnings(response.Warning, pausePointAutoDebugSwitchWarning)
+	// Why skip a nil slice: older packages omit Warnings. Appending here would
+	// invent a one-item array that drops the original joined Warning topics.
+	if len(response.Warnings) > 0 {
+		response.Warnings = appendPausePointWarningEntry(
+			response.Warnings,
+			pausePointAutoDebugSwitchWarning)
+	}
+}
+
 func injectPausePointRecoveryWarning(raw []byte) ([]byte, error) {
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(raw, &fields); err != nil {

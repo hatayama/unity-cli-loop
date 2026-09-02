@@ -20,6 +20,34 @@ func TestPausePointAutoDebugSwitchWarningRecommendsApprovedStartupCommand(t *tes
 	}
 }
 
+// Verifies a successful enable with omitted Warnings keeps the array nil after recovery.
+func TestApplyPausePointRecoverySwitchWarning_WhenWarningsOmitted_LeavesWarningsNil(t *testing.T) {
+	response := pausePointStatusResponse{
+		Success: true,
+		Warning: "physics dispatch warning.",
+	}
+	applyPausePointRecoverySwitchWarning(&response)
+	if response.Warning != joinPausePointWarnings("physics dispatch warning.", pausePointAutoDebugSwitchWarning) {
+		t.Fatalf("Warning mismatch: %q", response.Warning)
+	}
+	if response.Warnings != nil {
+		t.Fatalf("omitted Warnings must stay nil: %#v", response.Warnings)
+	}
+}
+
+// Verifies a successful enable with existing Warnings appends the switch note.
+func TestApplyPausePointRecoverySwitchWarning_WhenWarningsPresent_AppendsSwitchEntry(t *testing.T) {
+	response := pausePointStatusResponse{
+		Success:  true,
+		Warning:  "physics dispatch warning.",
+		Warnings: []string{"physics dispatch warning."},
+	}
+	applyPausePointRecoverySwitchWarning(&response)
+	if len(response.Warnings) != 2 || response.Warnings[1] != pausePointAutoDebugSwitchWarning {
+		t.Fatalf("Warnings mismatch: %#v", response.Warnings)
+	}
+}
+
 const releaseCodeOptimizationEnableFailureJSON = `{"Success":false,"ErrorCode":"PAUSE_POINT_RELEASE_CODE_OPTIMIZATION","Message":"Release code optimization"}`
 
 const unrelatedEnableFailureJSON = `{"Success":false,"ErrorCode":"PAUSE_POINT_RESOLVE_FAILED","Message":"No sequence point found"}`
