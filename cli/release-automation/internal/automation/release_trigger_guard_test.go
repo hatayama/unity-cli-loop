@@ -362,9 +362,11 @@ func TestWithoutDescriptionOnlyCatalogChangeLeavesNonCatalogListsAlone(t *testin
 	}
 }
 
-const mergeBaseCatalogInitial = `{"tools":[{"name":"compile","description":"a","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"d"}}}}]}`
-const mergeBaseCatalogStructural = `{"tools":[{"name":"compile","description":"a","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"d"},"Y":{"type":"boolean"}}}}]}`
-const mergeBaseCatalogDescriptionOnly = `{"tools":[{"name":"compile","description":"b","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"e"}}}}]}`
+const (
+	mergeBaseCatalogInitial         = `{"tools":[{"name":"compile","description":"a","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"d"}}}}]}`
+	mergeBaseCatalogStructural      = `{"tools":[{"name":"compile","description":"a","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"d"},"Y":{"type":"boolean"}}}}]}`
+	mergeBaseCatalogDescriptionOnly = `{"tools":[{"name":"compile","description":"b","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"e"}}}}]}`
+)
 
 // Verifies catalog comparison uses merge-base, not the base tip. Comparing against
 // main's tip would treat this description-only topic as a structural change because
