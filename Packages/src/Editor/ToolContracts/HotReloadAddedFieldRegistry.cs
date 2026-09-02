@@ -111,6 +111,50 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         }
 
         /// <summary>
+        /// Lists every live added-field row: file path, then type, then field, all ordinal.
+        /// </summary>
+        public static IReadOnlyList<HotReloadAddedFieldDescription> DescribeAll()
+        {
+            List<HotReloadAddedFieldDescription> descriptions = new List<HotReloadAddedFieldDescription>();
+            foreach (KeyValuePair<string, Dictionary<string, List<string>>> filePair in FieldsByFileAndType)
+            {
+                foreach (KeyValuePair<string, List<string>> typePair in filePair.Value)
+                {
+                    for (int index = 0; index < typePair.Value.Count; index++)
+                    {
+                        descriptions.Add(
+                            new HotReloadAddedFieldDescription(
+                                filePair.Key,
+                                typePair.Key,
+                                typePair.Value[index]));
+                    }
+                }
+            }
+
+            descriptions.Sort(CompareDescriptions);
+            return descriptions;
+        }
+
+        private static int CompareDescriptions(
+            HotReloadAddedFieldDescription left,
+            HotReloadAddedFieldDescription right)
+        {
+            int byPath = string.CompareOrdinal(left.ProjectRelativePath, right.ProjectRelativePath);
+            if (byPath != 0)
+            {
+                return byPath;
+            }
+
+            int byType = string.CompareOrdinal(left.TypeName, right.TypeName);
+            if (byType != 0)
+            {
+                return byType;
+            }
+
+            return string.CompareOrdinal(left.FieldName, right.FieldName);
+        }
+
+        /// <summary>
         /// Drops every file's added-field map. Called from revert-all; domain reload also
         /// drops the tables because they are static.
         /// </summary>

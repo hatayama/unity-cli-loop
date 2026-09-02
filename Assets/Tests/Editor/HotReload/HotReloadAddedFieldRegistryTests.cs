@@ -89,6 +89,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: DescribeAll lists two files' fields in path, type, then field order, and
+        /// drops a file replaced with an empty list.
+        /// </summary>
+        [Test]
+        public void DescribeAll_TwoFiles_ThenEmptyReplace_DropsThatFile()
+        {
+            HotReloadAddedFieldRegistry.ReplaceForFile(
+                FileTwo,
+                new[] { HostType + ".zeta", NestedReflectionType + ".label" });
+            HotReloadAddedFieldRegistry.ReplaceForFile(
+                FileOne,
+                new[] { HostType + ".beta", HostType + ".alpha" });
+
+            IReadOnlyList<HotReloadAddedFieldDescription> first = HotReloadAddedFieldRegistry.DescribeAll();
+            Assert.That(first.Count, Is.EqualTo(4));
+            Assert.That(first[0].ProjectRelativePath, Is.EqualTo(FileOne.Replace('\\', '/')));
+            Assert.That(first[0].TypeName, Is.EqualTo(HostType));
+            Assert.That(first[0].FieldName, Is.EqualTo("alpha"));
+            Assert.That(first[1].ProjectRelativePath, Is.EqualTo(FileOne.Replace('\\', '/')));
+            Assert.That(first[1].TypeName, Is.EqualTo(HostType));
+            Assert.That(first[1].FieldName, Is.EqualTo("beta"));
+            Assert.That(first[2].ProjectRelativePath, Is.EqualTo(FileTwo.Replace('\\', '/')));
+            Assert.That(first[2].TypeName, Is.EqualTo(HostType));
+            Assert.That(first[2].FieldName, Is.EqualTo("zeta"));
+            Assert.That(first[3].ProjectRelativePath, Is.EqualTo(FileTwo.Replace('\\', '/')));
+            Assert.That(first[3].TypeName, Is.EqualTo(NestedReflectionType));
+            Assert.That(first[3].FieldName, Is.EqualTo("label"));
+
+            HotReloadAddedFieldRegistry.ReplaceForFile(FileOne, Array.Empty<string>());
+
+            IReadOnlyList<HotReloadAddedFieldDescription> afterEmpty = HotReloadAddedFieldRegistry.DescribeAll();
+            Assert.That(afterEmpty.Count, Is.EqualTo(2));
+            Assert.That(afterEmpty[0].ProjectRelativePath, Is.EqualTo(FileTwo.Replace('\\', '/')));
+            Assert.That(afterEmpty[0].TypeName, Is.EqualTo(HostType));
+            Assert.That(afterEmpty[0].FieldName, Is.EqualTo("zeta"));
+            Assert.That(afterEmpty[1].TypeName, Is.EqualTo(NestedReflectionType));
+            Assert.That(afterEmpty[1].FieldName, Is.EqualTo("label"));
+        }
+
+        /// <summary>
         /// What: an empty ReplaceForFile deactivates that file and leaves another file intact.
         /// </summary>
         [Test]
