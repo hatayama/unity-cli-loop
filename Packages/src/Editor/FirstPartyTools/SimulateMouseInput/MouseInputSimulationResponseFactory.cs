@@ -47,6 +47,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // (b) WaitForPressLifetime after a successful apply leaves pressWasApplied=true — the press
         // already landed (including when that press itself fired the pause point). Claiming
         // "discarded" in (b) inverts the diagnosis this message exists to prevent.
+        // The verdict is definite: apply only completes inside an Input System update of the
+        // configured gameplay type, so the game's polling in that frame observed the press. A
+        // hedged "may have registered" left callers re-deriving this from world state.
         internal static SimulateMouseInputResponse InterruptedButtonResult(
             UnityCliLoopMouseInputAction action,
             string buttonName,
@@ -54,8 +57,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool pressWasApplied)
         {
             string message = pressWasApplied
-                ? $"Mouse input stopped because Unity paused during Pause Point inspection. Button '{buttonName}' press was already delivered to the game before the pause; Unity CLI Loop released it from bookkeeping, so the game may have registered the press."
-                : $"Mouse input stopped because Unity paused during Pause Point inspection. Button '{buttonName}' was released from Unity CLI Loop bookkeeping; the queued input edge was discarded.";
+                ? $"Mouse input stopped because Unity paused during Pause Point inspection. Button '{buttonName}' press was delivered to the game before the pause: the Input System processed the press edge in a gameplay update, so game code polling that frame observed it and the world state may already have changed. Do not retry the press; re-check the affected state (and pause-point-status) before deciding the next step."
+                : $"Mouse input stopped because Unity paused during Pause Point inspection. Button '{buttonName}' was released from Unity CLI Loop bookkeeping; the queued input edge was discarded before any gameplay update processed it, so the game never observed a press and it is safe to retry after resume.";
             SimulateMouseInputResponse result = new()
             {
                 Success = true,
@@ -64,7 +67,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Button = buttonName,
                 PositionX = inputPos.x,
                 PositionY = inputPos.y,
-                InterruptedByPausePoint = true
+                InterruptedByPausePoint = true,
+                PressDeliveredToGame = pressWasApplied
             };
             AttachPausePointHit(result);
             return result;

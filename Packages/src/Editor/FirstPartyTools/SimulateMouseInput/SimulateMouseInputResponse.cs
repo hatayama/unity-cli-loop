@@ -41,6 +41,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string CoordinateConversionFormula { get; set; } = "";
         public bool InterruptedByPausePoint { get; set; }
         /// <summary>
+        /// Set only on pause-point-interrupted Click/LongPress. True when the Input System processed
+        /// the press edge in a gameplay update before the pause (game code polling that frame
+        /// observed it, so the world state may already have changed); false when the queued edge
+        /// was discarded before any gameplay update, so the game never observed a press. Null for
+        /// non-button actions and for uninterrupted responses.
+        /// </summary>
+        public bool? PressDeliveredToGame { get; set; }
+        /// <summary>
         /// Id of the pause point that refused this call before it ran anything, null otherwise.
         /// Distinct from PausePointId, which reports a marker hit *during* the call: a refusal means
         /// no input was injected at all, so a caller reading only Success would miss that the action
