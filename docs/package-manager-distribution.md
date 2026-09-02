@@ -32,6 +32,14 @@ winget receives stable dispatcher releases only. Prereleases are not submitted.
 - New winget-pkgs pull requests must pass the upstream bot validation and human
   moderation. Moderation commonly takes several days and can take up to two
   weeks.
+- Initial submission: <https://github.com/microsoft/winget-pkgs/pull/427857>
+  (`dispatcher-v3.1.0`). After it merges, verify with
+  `winget install --id hatayama.uloop`.
+- `WINGET_PKGS_TOKEN` is a classic PAT because fine-grained tokens cannot open
+  pull requests against repositories the token owner does not own. It expires
+  after one year; when the `Open winget-pkgs pull request` step fails with an
+  authentication error, issue a new classic PAT with `public_repo` and replace
+  the secret with `gh secret set WINGET_PKGS_TOKEN`.
 - `uloop update` refuses Homebrew-managed installs and directs users to
   `brew upgrade uloop`. The dispatcher freshness path does the same for required
   updates and skips optional auto-updates.
