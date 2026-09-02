@@ -55,15 +55,17 @@ If the quarantined file was the genuine dispatcher, reinstalling with `scripts/i
 Restore alone does not stop the next run from being quarantined again. "Allow on device" is scoped to a `ThreatID`, so a later release that gets a different detection name can be flagged again. After verifying the binary is genuine, add path exclusions from an elevated PowerShell session:
 
 ```powershell
-Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Programs\uloop"
+Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Programs\uloop\bin\uloop.exe"
 Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\uloop"
+if ($env:ULOOP_CACHE_DIR) { Add-MpPreference -ExclusionPath $env:ULOOP_CACHE_DIR }
 ```
 
-If `ULOOP_CACHE_DIR` is set, exclude that path as well. Remove the exclusions when they are no longer needed:
+The cache root stays a directory exclusion because each project-runner release lives under its own versioned path. Remove the exclusions when they are no longer needed:
 
 ```powershell
-Remove-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Programs\uloop"
+Remove-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Programs\uloop\bin\uloop.exe"
 Remove-MpPreference -ExclusionPath "$env:LOCALAPPDATA\uloop"
+if ($env:ULOOP_CACHE_DIR) { Remove-MpPreference -ExclusionPath $env:ULOOP_CACHE_DIR }
 ```
 
 ### What the build does about it
