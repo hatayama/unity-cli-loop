@@ -1688,22 +1688,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: editing only the add accessor of an existing event reports add_Edited as
-        /// Skipped and does not emit a remove_Edited row.
+        /// What: editing only the remove accessor of an existing event reports remove_Edited
+        /// as Skipped and does not emit an add_Edited row.
         /// </summary>
         [Test]
-        public async Task Run_UnsupportedMemberKind_EditedAddAccessorOnly_OmitsUnchangedRemove()
+        public async Task Run_UnsupportedMemberKind_EditedRemoveAccessorOnly_OmitsUnchangedAdd()
         {
             TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
-                "UnsupportedKindEditedAddAccessorOnly.cs",
-                "Marker = 51;",
-                "Marker = 511;");
+                "UnsupportedKindEditedRemoveAccessorOnly.cs",
+                "            add { Marker = 51; }\n            remove { }",
+                "            add { Marker = 51; }\n            remove { Marker = 0; }");
 
             AssertSkippedContains(
                 result,
-                "add_Edited",
+                "remove_Edited",
                 ExpectedUnsupportedMemberKindSkipReason);
-            AssertSkippedDoesNotContain(result, "remove_Edited");
+            AssertSkippedDoesNotContain(result, "add_Edited");
         }
 
         /// <summary>
