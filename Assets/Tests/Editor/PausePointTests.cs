@@ -645,7 +645,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies the still-open window is reconciled before deciding: a hit opened the
             // window, then the Editor was unpaused externally before the update tick observed it.
-            // Clear must not claim it resumed Play Mode (Resume is a no-op on an unpaused Editor)
+            // Clear must not claim it released the pause (Resume is a no-op on an unpaused Editor)
             // and must close the stale window so it stops freezing expiry. ClearAll shares the same
             // ResumeEditorPauseIfOwnedByPausePoint path, so this covers both entry points.
             UloopPausePointRegistry.Enable("jump", 30);
@@ -1020,9 +1020,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task Clear_WhenResumingPausePointOwnedPause_SetsResumedPlayModeWarning()
+        public async Task Clear_WhenReleasingPausePointOwnedPause_SetsReleasedPauseWarning()
         {
-            // Verifies the clear-pause-point tool warns when the clear resumed a pause-point-owned pause.
+            // Verifies the clear-pause-point tool warns when the clear released a pause-point-owned pause.
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
 
@@ -1030,7 +1030,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject parameters = new() { ["id"] = "jump" };
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
-            Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearResumedPlayModeWarning));
+            Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearReleasedOwnedPauseWarning));
         }
 
         [Test]
@@ -1048,7 +1048,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: clearing a non-owner marker does not emit the "this clear resumed Play Mode" warning.
+        /// What: clearing a non-owner marker does not emit the "this clear released the Editor pause" warning.
         /// </summary>
         [Test]
         public async Task Clear_WhenDifferentMarkerOwnsThePause_SetsNoWarning()
@@ -1097,9 +1097,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task ClearAll_WhenResumingPausePointOwnedPause_SetsResumedPlayModeWarning()
+        public async Task ClearAll_WhenReleasingPausePointOwnedPause_SetsReleasedPauseWarning()
         {
-            // Verifies clear-pause-point --all warns when the bulk clear resumed a pause-point-owned pause.
+            // Verifies clear-pause-point --all warns when the bulk clear released a pause-point-owned pause.
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
 
@@ -1107,7 +1107,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject parameters = new() { ["all"] = true };
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
-            Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearResumedPlayModeWarning));
+            Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearReleasedOwnedPauseWarning));
         }
 
         [Test]

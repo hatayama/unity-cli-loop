@@ -171,7 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ? "No active pause points to clear."
                     : "Pause points cleared.",
                 Warning = result.ResumedFromPause
-                    ? SourcePausePointConstants.ClearResumedPlayModeWarning
+                    ? SourcePausePointConstants.ClearReleasedOwnedPauseWarning
                     : string.Empty
             };
         }
