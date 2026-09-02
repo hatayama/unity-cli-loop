@@ -59,9 +59,16 @@ func applyPausePointRecoverySwitchWarning(response *pausePointStatusResponse) {
 	if response == nil || !response.Success {
 		return
 	}
+	appendPausePointWarningToBothForms(response, pausePointAutoDebugSwitchWarning)
+}
+
+func appendPausePointWarningToBothForms(response *pausePointStatusResponse, warning string) {
+	if response == nil {
+		return
+	}
 	originalWarning := response.Warning
-	response.Warning = joinPausePointWarnings(response.Warning, pausePointAutoDebugSwitchWarning)
-	response.Warnings = appendRecoverySwitchToWarnings(response.Warnings, originalWarning)
+	response.Warning = joinPausePointWarnings(response.Warning, warning)
+	response.Warnings = appendPausePointWarningWhenPresent(response.Warnings, originalWarning, warning)
 }
 
 func injectPausePointRecoveryWarning(raw []byte) ([]byte, error) {
@@ -85,7 +92,7 @@ func injectPausePointRecoveryWarning(raw []byte) ([]byte, error) {
 		if unmarshalErr := json.Unmarshal(warningsRaw, &existingWarnings); unmarshalErr != nil {
 			return nil, unmarshalErr
 		}
-		updatedWarnings := appendRecoverySwitchToWarnings(existingWarnings, existing)
+		updatedWarnings := appendPausePointWarningWhenPresent(existingWarnings, existing, pausePointAutoDebugSwitchWarning)
 		updated, marshalErr := json.Marshal(updatedWarnings)
 		if marshalErr != nil {
 			return nil, marshalErr
@@ -98,16 +105,16 @@ func injectPausePointRecoveryWarning(raw []byte) ([]byte, error) {
 // Why skip a nil slice: older packages omit Warnings. Inventing a one-item
 // array would drop topics that exist only in the joined Warning string.
 // A present empty array with an empty Warning is current Unity and must get
-// the switch note. A present empty array with a non-empty Warning is left
+// the new entry. A present empty array with a non-empty Warning is left
 // alone so we do not publish a partial list.
-func appendRecoverySwitchToWarnings(warnings []string, originalWarning string) []string {
+func appendPausePointWarningWhenPresent(warnings []string, originalWarning string, warning string) []string {
 	if warnings == nil {
 		return nil
 	}
 	if len(warnings) == 0 && originalWarning != "" {
 		return warnings
 	}
-	return appendPausePointWarningEntry(warnings, pausePointAutoDebugSwitchWarning)
+	return appendPausePointWarningEntry(warnings, warning)
 }
 
 func waitContextDuration(ctx context.Context, duration time.Duration) error {
