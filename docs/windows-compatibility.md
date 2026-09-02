@@ -63,6 +63,7 @@ If `ULOOP_CACHE_DIR` is set, exclude that path as well. Remove the exclusions wh
 
 ```powershell
 Remove-MpPreference -ExclusionPath "$env:LOCALAPPDATA\Programs\uloop"
+Remove-MpPreference -ExclusionPath "$env:LOCALAPPDATA\uloop"
 ```
 
 ### What the build does about it
