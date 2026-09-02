@@ -58,10 +58,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string? PressEdgeConsumedByUpdateType { get; set; }
 
         /// <summary>
-        /// Whether any Dynamic update ran while waiting for the press edge to be observed.
+        /// Whether any gameplay input update (Dynamic, Fixed, or Manual) ran while waiting for
+        /// the press edge to be observed. Editor updates do not count.
         /// </summary>
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public bool? PressEdgeAnyDynamicUpdateObserved { get; set; }
+        public bool? PressEdgeAnyGameplayUpdateObserved { get; set; }
 
         /// <summary>
         /// Whether the key was already pressed before this action was queued, meaning no press

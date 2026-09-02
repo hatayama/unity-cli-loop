@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             + "\"PausePointHits\":[{\"Id\":\"hit\",\"HitCount\":1}],"
             + "\"PressEdgeObserved\":true,\"PressHoldExtendedFrames\":2,"
             + "\"PressEdgeConsumedByUpdateType\":\"Dynamic\","
-            + "\"PressEdgeAnyDynamicUpdateObserved\":true,"
+            + "\"PressEdgeAnyGameplayUpdateObserved\":true,"
             + "\"PressEdgeKeyAlreadyPressedBeforeQueue\":false,"
             + "\"KeyStateTrackedHeld\":true,\"KeyStateDeviceIsPressed\":false,"
             + "\"ReleasedKeys\":[\"Space\"],\"Success\":true}";
@@ -66,7 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 PressEdgeObserved = true,
                 PressHoldExtendedFrames = 2,
                 PressEdgeConsumedByUpdateType = "Dynamic",
-                PressEdgeAnyDynamicUpdateObserved = true,
+                PressEdgeAnyGameplayUpdateObserved = true,
                 PressEdgeKeyAlreadyPressedBeforeQueue = false,
                 KeyStateTrackedHeld = true,
                 KeyStateDeviceIsPressed = false,

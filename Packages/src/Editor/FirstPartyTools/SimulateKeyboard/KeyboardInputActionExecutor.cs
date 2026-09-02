@@ -215,7 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PressEdgeObserved = pressEdgeObserved,
                 PressHoldExtendedFrames = pressHoldExtendedFrames > 0 ? pressHoldExtendedFrames : null,
                 PressEdgeConsumedByUpdateType = pressEdgeObserved ? null : edgeMissDiagnostics.ConsumedByUpdateType,
-                PressEdgeAnyDynamicUpdateObserved = pressEdgeObserved ? null : edgeMissDiagnostics.AnyDynamicUpdateObserved,
+                PressEdgeAnyGameplayUpdateObserved = pressEdgeObserved ? null : edgeMissDiagnostics.AnyGameplayUpdateObserved,
                 PressEdgeKeyAlreadyPressedBeforeQueue = pressEdgeObserved ? null : edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue
             };
         }
@@ -240,7 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it, so retry or verify with a focused log)" +
                 PressEdgeDiagnosticsMessageFormatter.BuildSuffix(
                     edgeMissDiagnostics.ConsumedByUpdateType,
-                    edgeMissDiagnostics.AnyDynamicUpdateObserved,
+                    edgeMissDiagnostics.AnyGameplayUpdateObserved,
                     edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue);
         }
 
@@ -352,7 +352,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : " (press edge was not observed via wasPressedThisFrame; gameplay polling may have missed it)" +
                   PressEdgeDiagnosticsMessageFormatter.BuildSuffix(
                       edgeMissDiagnostics.ConsumedByUpdateType,
-                      edgeMissDiagnostics.AnyDynamicUpdateObserved,
+                      edgeMissDiagnostics.AnyGameplayUpdateObserved,
                       edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue);
             return new SimulateKeyboardResponse
             {
@@ -362,7 +362,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 KeyName = keyName,
                 PressEdgeObserved = pressEdgeObserved,
                 PressEdgeConsumedByUpdateType = pressEdgeObserved ? null : edgeMissDiagnostics.ConsumedByUpdateType,
-                PressEdgeAnyDynamicUpdateObserved = pressEdgeObserved ? null : edgeMissDiagnostics.AnyDynamicUpdateObserved,
+                PressEdgeAnyGameplayUpdateObserved = pressEdgeObserved ? null : edgeMissDiagnostics.AnyGameplayUpdateObserved,
                 PressEdgeKeyAlreadyPressedBeforeQueue = pressEdgeObserved ? null : edgeMissDiagnostics.KeyAlreadyPressedBeforeQueue
             };
         }
@@ -429,11 +429,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        // Runs inside InputSystem.onAfterUpdate. Editor updates are excluded because a press
-        // consumed there never surfaces as wasPressedThisFrame to gameplay Update polling.
+        // Runs inside InputSystem.onAfterUpdate. Only gameplay update types count because a press
+        // consumed in the Editor tick never surfaces as wasPressedThisFrame to gameplay Update polling.
         private static bool IsGameplayPressEdgeVisible(Keyboard keyboard, Key key)
         {
-            if (InputState.currentUpdateType == InputUpdateType.Editor)
+            if (!InputUpdateTypeResolver.IsGameplayUpdate(InputState.currentUpdateType))
             {
                 return false;
             }
@@ -443,17 +443,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Runs inside InputSystem.onAfterUpdate alongside the edge visibility check above.
         // Why: the root cause of an unobserved edge could not be reproduced (see Round-6
         // investigation), so this records which update type (if any) actually saw
-        // wasPressedThisFrame become true, and whether a Dynamic update ran at all, to diagnose
-        // the next real occurrence directly from the response instead of guessing.
+        // wasPressedThisFrame become true, and whether any gameplay update ran at all, to diagnose
+        // the next real occurrence directly from the response instead of guessing. The gameplay
+        // predicate is shared with IsGameplayPressEdgeVisible so the flag can never contradict it.
         private static void RecordPressEdgeMissDiagnostics(
             Keyboard keyboard,
             Key key,
             PressEdgeMissDiagnostics diagnostics)
         {
             InputUpdateType currentUpdateType = InputState.currentUpdateType;
-            if (currentUpdateType == InputUpdateType.Dynamic)
+            if (InputUpdateTypeResolver.IsGameplayUpdate(currentUpdateType))
             {
-                diagnostics.AnyDynamicUpdateObserved = true;
+                diagnostics.AnyGameplayUpdateObserved = true;
             }
 
             if (diagnostics.ConsumedByUpdateType == null && keyboard[key].wasPressedThisFrame)
@@ -468,7 +469,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private sealed class PressEdgeMissDiagnostics
         {
             public string? ConsumedByUpdateType;
-            public bool AnyDynamicUpdateObserved;
+            public bool AnyGameplayUpdateObserved;
             public bool KeyAlreadyPressedBeforeQueue;
         }
     }
