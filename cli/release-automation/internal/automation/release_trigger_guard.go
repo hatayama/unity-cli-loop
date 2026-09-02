@@ -50,7 +50,8 @@ type ReleaseTriggerGuardConfig struct {
 }
 
 type ReleaseTriggerGuardResult struct {
-	Violations []ReleaseTriggerViolation
+	Violations                    []ReleaseTriggerViolation
+	DescriptionOnlyCatalogSkipped bool
 }
 
 type ReleaseTriggerViolation struct {
@@ -69,6 +70,9 @@ func RunReleaseTriggerGuard(
 	if err != nil {
 		writeReleaseTriggerLine(stderr, err)
 		return 1
+	}
+	if result.DescriptionOnlyCatalogSkipped {
+		writeReleaseTriggerLine(stdout, "catalog changed only in descriptions; not counted as a shared release input")
 	}
 	if len(result.Violations) > 0 {
 		writeReleaseTriggerLine(stderr, FormatReleaseTriggerWarning(result))
@@ -100,7 +104,78 @@ func AnalyzeReleaseTriggerGuardForRefs(
 		return ReleaseTriggerGuardResult{}, fmt.Errorf("failed to inspect changed files: %w", err)
 	}
 
-	return AnalyzeReleaseTriggerGuard(changedFiles), nil
+	filteredFiles, skipped, err := filterDescriptionOnlyCatalogChange(ctx, repoRoot, config, changedFiles)
+	if err != nil {
+		return ReleaseTriggerGuardResult{}, err
+	}
+
+	result := AnalyzeReleaseTriggerGuard(filteredFiles)
+	result.DescriptionOnlyCatalogSkipped = skipped
+	return result, nil
+}
+
+// withoutDescriptionOnlyCatalogChange drops the embedded catalog from the
+// changed-file list when the shape comparison found description-only drift.
+func withoutDescriptionOnlyCatalogChange(changedFiles []string, shapeChanged bool) []string {
+	if shapeChanged {
+		return changedFiles
+	}
+	filtered := []string{}
+	for _, changedFile := range changedFiles {
+		if normalizeChangedFilePath(changedFile) == CatalogRelativePath {
+			continue
+		}
+		filtered = append(filtered, changedFile)
+	}
+	return filtered
+}
+
+func filterDescriptionOnlyCatalogChange(
+	ctx context.Context,
+	repoRoot string,
+	config ReleaseTriggerGuardConfig,
+	changedFiles []string,
+) ([]string, bool, error) {
+	if !changedFilesIncludeCatalog(changedFiles) {
+		return changedFiles, false, nil
+	}
+
+	mergeBase, err := gitMergeBase(ctx, repoRoot, config.BaseRef, config.HeadRef)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to resolve merge-base for catalog shape: %w", err)
+	}
+
+	baseContent, baseExists, err := gitFileAtRef(ctx, repoRoot, mergeBase, CatalogRelativePath)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to read catalog at merge-base: %w", err)
+	}
+	if !baseExists {
+		return changedFiles, false, nil
+	}
+
+	headContent, headExists, err := gitFileAtRef(ctx, repoRoot, config.HeadRef, CatalogRelativePath)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to read catalog at head: %w", err)
+	}
+	if !headExists {
+		return changedFiles, false, nil
+	}
+
+	shapeChanged, err := ToolCatalogShapeChanged(baseContent, headContent)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to compare catalog shape: %w", err)
+	}
+
+	return withoutDescriptionOnlyCatalogChange(changedFiles, shapeChanged), !shapeChanged, nil
+}
+
+func changedFilesIncludeCatalog(changedFiles []string) bool {
+	for _, changedFile := range changedFiles {
+		if normalizeChangedFilePath(changedFile) == CatalogRelativePath {
+			return true
+		}
+	}
+	return false
 }
 
 func AnalyzeReleaseTriggerGuard(changedFiles []string) ReleaseTriggerGuardResult {
@@ -189,9 +264,8 @@ func isCommonGoSourceUnderPackageRoots(file string, packageRoots []string) bool 
 	}
 	// JSON files under common (contract.json) are release-please stamp targets rather than binary
 	// inputs, and test files never ship, so only code and embedded runtime scripts count as release
-	// inputs. The embedded tool catalog is the exception: it is compiled into both binaries and is
-	// generated from the skill parameter tables, so a change to a tool description that shipped no new
-	// binary would be help text nobody receives.
+	// inputs. Structural catalog changes count; description-only regenerations are filtered out
+	// before this function by the shape comparison in AnalyzeReleaseTriggerGuardForRefs.
 	if strings.HasSuffix(file, "_test.go") {
 		return false
 	}
