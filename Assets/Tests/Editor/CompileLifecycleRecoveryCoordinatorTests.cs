@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResult abortedWithResult = null;
             string abortedWithMessage = null;
             CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator(
-                findAssemblyDefinitionErrors: () => assemblyDefinitionErrors,
+                findAssemblyDefinitionErrors: _ => assemblyDefinitionErrors,
                 validateNoDuplicateAsmdefNames: ValidationResult.Success,
                 abortWithResult: result => abortedWithResult = result,
                 abort: message => abortedWithMessage = message);
@@ -51,7 +51,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResult abortedWithResult = null;
             string abortedWithMessage = null;
             CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator(
-                findAssemblyDefinitionErrors: () => new AssemblyDefinitionConsoleErrorResult(
+                findAssemblyDefinitionErrors: _ => new AssemblyDefinitionConsoleErrorResult(
                     new AssemblyDefinitionConsoleError[0]),
                 validateNoDuplicateAsmdefNames: () => ValidationResult.Failure(duplicateAsmdefMessage),
                 abortWithResult: result => abortedWithResult = result,
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             CompileResult abortedWithResult = null;
             string abortedWithMessage = null;
             CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator(
-                findAssemblyDefinitionErrors: () => new AssemblyDefinitionConsoleErrorResult(
+                findAssemblyDefinitionErrors: _ => new AssemblyDefinitionConsoleErrorResult(
                     new AssemblyDefinitionConsoleError[0]),
                 validateNoDuplicateAsmdefNames: ValidationResult.Success,
                 abortWithResult: result => abortedWithResult = result,
@@ -97,7 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 });
             CompileResult abortedWithResult = null;
             CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator(
-                findAssemblyDefinitionErrors: () => assemblyDefinitionErrors,
+                findAssemblyDefinitionErrors: _ => assemblyDefinitionErrors,
                 getCompileMessages: () => new CompilerMessage[0],
                 getIsForceCompile: () => false,
                 abortWithResult: result => abortedWithResult = result);
@@ -126,7 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             };
             CompileResult abortedWithResult = null;
             CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator(
-                findAssemblyDefinitionErrors: () => new AssemblyDefinitionConsoleErrorResult(
+                findAssemblyDefinitionErrors: _ => new AssemblyDefinitionConsoleErrorResult(
                     new AssemblyDefinitionConsoleError[0]),
                 getCompileMessages: () => compileMessages,
                 getIsForceCompile: () => false,
@@ -138,6 +138,81 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(abortedWithResult.Success, Is.Null);
             Assert.That(abortedWithResult.IsIndeterminate, Is.True);
             Assert.That(abortedWithResult.Errors[0].message, Is.EqualTo("CS0000: sample compile error"));
+        }
+
+        [Test]
+        public void HandleCompileStoppedWithoutFinishEvent_WhenConsoleErrorsExist_AppendsSummaryToIndeterminateMessage()
+        {
+            // Verifies the indeterminate message keeps its wording and get-logs pointer while appending
+            // the recent Console errors so the cause is visible without a second round trip.
+            const string consoleError =
+                "Assembly has duplicate references: UnityEngine.TestRunner,UnityEditor.TestRunner";
+            CompileResult abortedWithResult = null;
+            CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator(
+                getConsoleErrorEntries: () => new[]
+                {
+                    new UnityCliLoopConsoleLogEntry(UnityCliLoopLogType.Error, consoleError, string.Empty)
+                },
+                abortWithResult: result => abortedWithResult = result);
+
+            coordinator.HandleCompileStoppedWithoutFinishEvent(500);
+
+            Assert.That(abortedWithResult, Is.Not.Null);
+            Assert.That(abortedWithResult.IsIndeterminate, Is.True);
+            Assert.That(
+                abortedWithResult.Message,
+                Is.EqualTo(
+                    "Unity stopped compiling before Unity CLI Loop received the compilationFinished callback. " +
+                    "The compile result is indeterminate; use get-logs to inspect the compiler output.\n" +
+                    "Recent Console errors:\n- " + consoleError));
+        }
+
+        [Test]
+        public void HandleCompileStoppedWithoutFinishEvent_WhenConsoleErrorsPredateCompileStart_OmitsThemFromSummary()
+        {
+            // Verifies errors logged before the compile request started are not presented as its cause,
+            // while the asmdef validation still sees the full Console snapshot.
+            const string staleError = "NullReferenceException from an earlier Play session";
+            const string freshError = "Assembly has duplicate references: UnityEngine.TestRunner,UnityEditor.TestRunner";
+            UnityCliLoopConsoleLogEntry[] validatedEntries = null;
+            CompileResult abortedWithResult = null;
+            CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator(
+                findAssemblyDefinitionErrors: entries =>
+                {
+                    validatedEntries = entries;
+                    return new AssemblyDefinitionConsoleErrorResult(new AssemblyDefinitionConsoleError[0]);
+                },
+                getConsoleErrorEntries: () => new[]
+                {
+                    new UnityCliLoopConsoleLogEntry(UnityCliLoopLogType.Error, staleError, string.Empty),
+                    new UnityCliLoopConsoleLogEntry(UnityCliLoopLogType.Error, freshError, string.Empty)
+                },
+                getConsoleErrorCountAtCompileStart: () => 1,
+                abortWithResult: result => abortedWithResult = result);
+
+            coordinator.HandleCompileStoppedWithoutFinishEvent(500);
+
+            Assert.That(abortedWithResult.Message, Does.EndWith("Recent Console errors:\n- " + freshError));
+            Assert.That(abortedWithResult.Message, Does.Not.Contain(staleError));
+            Assert.That(validatedEntries, Is.Not.Null);
+            Assert.That(validatedEntries.Length, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void HandleCompileStoppedWithoutFinishEvent_WhenNoConsoleErrorsExist_KeepsIndeterminateMessageUnchanged()
+        {
+            // Verifies an empty Console leaves the indeterminate message exactly as before.
+            CompileResult abortedWithResult = null;
+            CompileLifecycleRecoveryCoordinator coordinator = CreateCoordinator(
+                abortWithResult: result => abortedWithResult = result);
+
+            coordinator.HandleCompileStoppedWithoutFinishEvent(500);
+
+            Assert.That(
+                abortedWithResult.Message,
+                Is.EqualTo(
+                    "Unity stopped compiling before Unity CLI Loop received the compilationFinished callback. " +
+                    "The compile result is indeterminate; use get-logs to inspect the compiler output."));
         }
 
         /// <summary>
@@ -204,7 +279,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         private static CompileLifecycleRecoveryCoordinator CreateCoordinator(
-            Func<AssemblyDefinitionConsoleErrorResult> findAssemblyDefinitionErrors = null,
+            Func<UnityCliLoopConsoleLogEntry[], AssemblyDefinitionConsoleErrorResult> findAssemblyDefinitionErrors = null,
+            Func<UnityCliLoopConsoleLogEntry[]> getConsoleErrorEntries = null,
+            Func<int> getConsoleErrorCountAtCompileStart = null,
             Func<ValidationResult> validateNoDuplicateAsmdefNames = null,
             Func<CompilerMessage[]> getCompileMessages = null,
             Func<int> getAssemblyFinishedCount = null,
@@ -217,7 +294,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 isRequestCompleted: () => false,
                 getCurrentCompileTask: () => null,
                 findAssemblyDefinitionErrors: findAssemblyDefinitionErrors ??
-                    (() => new AssemblyDefinitionConsoleErrorResult(new AssemblyDefinitionConsoleError[0])),
+                    (_ => new AssemblyDefinitionConsoleErrorResult(new AssemblyDefinitionConsoleError[0])),
+                getConsoleErrorEntries: getConsoleErrorEntries ?? (() => new UnityCliLoopConsoleLogEntry[0]),
+                getConsoleErrorCountAtCompileStart: getConsoleErrorCountAtCompileStart ?? (() => 0),
                 validateNoDuplicateAsmdefNames: validateNoDuplicateAsmdefNames ?? ValidationResult.Success,
                 getIsForceCompile: getIsForceCompile ?? (() => false),
                 getCompileMessages: getCompileMessages ?? (() => new CompilerMessage[0]),

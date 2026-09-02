@@ -518,6 +518,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a CS0246 raised from a script that belongs to an asmdef appends the reference-gap hint
+        /// naming that asmdef, resolved through Unity's CompilationPipeline.
+        /// </summary>
+        [Test]
+        public void Apply_WhenCs0246FromScriptUnderAsmdef_AppendsAssemblyDefinitionReferenceHint()
+        {
+            const string scriptPath = "Assets/Tests/Editor/CompileErrorNextActionsComposerTests.cs";
+            const string expectedHint =
+                "error CS0246: 'InputSystem' could not be found from a script under 'Assets/Tests/Editor/UnityCLILoop.Tests.Editor.asmdef'. If that type lives in another assembly (for example the script was recently moved under a new asmdef), add the declaring assembly to that asmdef's references and run 'uloop compile' again; if the name is a typo, fix the name instead.";
+            CompileResponse response = CreateResponse(success: false);
+            CompilerMessage error = new CompilerMessage
+            {
+                type = CompilerMessageType.Error,
+                message = Cs0246Error,
+                file = scriptPath,
+                line = 1
+            };
+
+            CompileErrorNextActionsComposer.Apply(response, new[] { error });
+
+            Assert.That(response.NextActions, Is.EqualTo(new[] { expectedHint }));
+        }
+
+        /// <summary>
         /// What: CreateResponse appends the TypeCache CS0234 action after the API Updater action.
         /// </summary>
         [Test]

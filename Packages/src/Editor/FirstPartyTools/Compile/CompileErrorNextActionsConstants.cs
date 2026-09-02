@@ -21,6 +21,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string Cs0234ErrorCode = "CS0234";
 
+        public const string Cs0246ErrorCode = "CS0246";
+
+        public const string MissingTypePattern =
+            @"The type or namespace name '(?<name>[^']+)' could not be found";
+
+        public const string AssemblyDefinitionReferenceHintFormat =
+            "error {0}: '{1}' could not be found from a script under '{2}'. If that type lives in another assembly (for example the script was recently moved under a new asmdef), add the declaring assembly to that asmdef's references and run 'uloop compile' again; if the name is a typo, fix the name instead.";
+
         public const string SingleDeclaringAssemblyFormat = "assembly '{0}'";
 
         public const string MultipleDeclaringAssembliesFormat = "assemblies '{0}'";
