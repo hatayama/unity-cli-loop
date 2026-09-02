@@ -9,6 +9,8 @@ Use this small loop for one representative frame you care about. No source edit:
 
 ```bash
 uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 60 --await --trigger "simulate-keyboard --action Press --key Space"
+# Game paused in step 1: add --resume-play, or simulate-* input never reaches the game and the wait times out
+uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seconds 60 --await --resume-play --trigger "simulate-keyboard --action Press --key Space"
 ```
 
 Digit keys are `Digit0`-`Digit9` or `Numpad0`-`Numpad9` — bare `0`-`9` is rejected.
@@ -23,6 +25,6 @@ The response returns the derived marker `Id` (`Assets/Scripts/Enemy.cs:42`), the
 
 3. Read `CapturedVariables` in the hit response first: the locals, parameters, and `this` instance fields at the paused line are already there (see [captured-variables.md](captured-variables.md)).
 4. While Unity is still paused, capture any additional evidence with `uloop execute-dynamic-code`, `uloop get-hierarchy`, `uloop find-game-objects`, and one screenshot.
-5. A `single-shot` marker (the default) disarms itself after the hit, so no clear call is required before moving on. Clearing is still what removes the underlying code patch (a disarmed marker leaves the patch installed), so for `continuous`/`trace` markers, or when the method must run fully untouched again, clear it with `uloop clear-pause-point --id "Assets/Scripts/Enemy.cs:42"` (or `--all` to clear every non-cleared pause point marker (armed, auto-disarmed, or expired) at once) or stop PlayMode. Clearing resumes Play Mode only when the cleared marker (or `--all`) owns the current pause-point hit — the clear response then carries a `Warning` saying it resumed Play Mode. Clearing a different marker leaves that pause in place. A manual pause (`control-play-mode --action Pause` or the Editor pause button) is left untouched by clear.
+5. A `single-shot` marker (the default) disarms itself after the hit, so no clear call is required before moving on. Clearing is still what removes the underlying code patch (a disarmed marker leaves the patch installed), so for `continuous`/`trace` markers, or when the method must run fully untouched again, clear it with `uloop clear-pause-point --id <Id returned by enable-pause-point>` (or `--all` to clear every non-cleared pause point marker (armed, auto-disarmed, or expired) at once) or stop PlayMode. Clearing resumes Play Mode only when the cleared marker (or `--all`) owns the current pause-point hit — the clear response then carries a `Warning` saying it resumed Play Mode. Clearing a different marker leaves that pause in place. A manual pause (`control-play-mode --action Pause` or the Editor pause button) is left untouched by clear.
 
 A hit pauses Unity at the next frame boundary — the patched method and the rest of that frame still run to completion. Only `CapturedVariables` is evidence of the values at the patched line; state read after the pause (for example via `execute-dynamic-code`) may already have advanced past it.
