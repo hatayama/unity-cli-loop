@@ -21,7 +21,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 maxDurationSeconds,
                 outputPath,
                 isLinux,
-                1.0f);
+                1.0f,
+                RecordVideoQuality.Medium);
         }
 
         /// <summary>
@@ -181,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs0_1_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.1f);
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.1f, RecordVideoQuality.Medium);
 
             Assert.That(result.IsValid, Is.True);
         }
@@ -192,9 +193,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs1_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.0f);
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.0f, RecordVideoQuality.Medium);
 
             Assert.That(result.IsValid, Is.True);
+        }
+
+        /// <summary>
+        /// What: NaN resolution scale is rejected instead of slipping past the range check.
+        /// </summary>
+        [Test]
+        public void Validate_WhenResolutionScaleIsNaN_IsInvalid()
+        {
+            ValidationResult result = RecordVideoParameterValidator.Validate(
+                30, 60, "", false, float.NaN, RecordVideoQuality.Medium);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("ResolutionScale"));
+        }
+
+        /// <summary>
+        /// What: an undefined quality enum value (for example numeric JSON input 3) is rejected.
+        /// </summary>
+        [Test]
+        public void Validate_WhenQualityIsUndefined_IsInvalid()
+        {
+            ValidationResult result = RecordVideoParameterValidator.Validate(
+                30, 60, "", false, 1.0f, (RecordVideoQuality)3);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.ErrorMessage, Is.EqualTo("Quality must be Low, Medium, or High."));
         }
 
         /// <summary>
@@ -203,7 +230,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs0_09_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.09f);
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.09f, RecordVideoQuality.Medium);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(
@@ -217,7 +244,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs1_01_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.01f);
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.01f, RecordVideoQuality.Medium);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(

@@ -129,7 +129,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             VideoRecordingSnapshot snapshot = _session.Snapshot();
             try
             {
-                if (reason != RecordVideoConstants.StoppedByCli)
+                // SessionState does not survive an Editor quit, so saving there on quit is a dead write.
+                if (reason != RecordVideoConstants.StoppedByCli
+                    && reason != RecordVideoConstants.StoppedByEditorQuit)
                 {
                     LastCompletedRecordingStore.Save(snapshot);
                 }

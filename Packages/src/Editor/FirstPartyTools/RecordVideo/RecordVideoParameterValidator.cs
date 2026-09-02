@@ -15,7 +15,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const int MinMaxDurationSeconds = 1;
         private const int MaxMaxDurationSeconds = 600;
         private const string Mp4Extension = ".mp4";
-        private const string WebmExtension = ".webm";
         private const string LinuxH264Message =
             "H.264 is not available on Linux; use a .webm output path.";
 
@@ -24,7 +23,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int maxDurationSeconds,
             string outputPath,
             bool isLinux,
-            float resolutionScale)
+            float resolutionScale,
+            RecordVideoQuality quality)
         {
             if (frameRate < MinFrameRate || frameRate > MaxFrameRate)
             {
@@ -39,10 +39,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     $"MaxDurationSeconds must be between {MinMaxDurationSeconds} and {MaxMaxDurationSeconds}.");
             }
 
-            if (resolutionScale < 0.1f || resolutionScale > 1.0f)
+            // NaN fails both range comparisons, so it must be rejected explicitly.
+            if (float.IsNaN(resolutionScale) || resolutionScale < 0.1f || resolutionScale > 1.0f)
             {
                 return ValidationResult.Failure(
                     $"ResolutionScale must be between 0.1 and 1.0, got: {resolutionScale}");
+            }
+
+            // Newtonsoft maps numeric JSON input onto undefined enum values, so range-check here.
+            if (!Enum.IsDefined(typeof(RecordVideoQuality), quality))
+            {
+                return ValidationResult.Failure("Quality must be Low, Medium, or High.");
             }
 
             if (string.IsNullOrEmpty(outputPath))
@@ -52,7 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string extension = Path.GetExtension(outputPath);
             bool isMp4 = string.Equals(extension, Mp4Extension, StringComparison.OrdinalIgnoreCase);
-            bool isWebm = string.Equals(extension, WebmExtension, StringComparison.OrdinalIgnoreCase);
+            bool isWebm = string.Equals(extension, RecordVideoConstants.WebmExtension, StringComparison.OrdinalIgnoreCase);
             if (!isMp4 && !isWebm)
             {
                 return ValidationResult.Failure("OutputPath extension must be .mp4 or .webm.");

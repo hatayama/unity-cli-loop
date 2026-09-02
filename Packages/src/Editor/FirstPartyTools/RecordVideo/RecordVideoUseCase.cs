@@ -53,7 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxDurationSeconds,
                 parameters.OutputPath,
                 isLinux,
-                parameters.ResolutionScale);
+                parameters.ResolutionScale,
+                parameters.Quality);
             if (!validation.IsValid)
             {
                 return CreateFailure(RecordVideoAction.Start, validation.ErrorMessage);
