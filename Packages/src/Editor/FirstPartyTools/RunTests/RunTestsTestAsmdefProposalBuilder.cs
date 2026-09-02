@@ -47,7 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Editor-only assemblies and PlayMode tests only from the others, so a project with a
             // PlayMode test assembly still has nowhere to put an EditMode test.
             bool hasTestAssemblyForMode = asmdefs.Any(asmdef =>
-                asmdef.IsTestAssembly() && asmdef.IncludesEditorPlatform() == editMode);
+                asmdef.IsTestAssembly() && asmdef.IsEditorOnly() == editMode);
             if (hasTestAssemblyForMode)
             {
                 return null;
@@ -57,12 +57,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // compile against them, so the proposal would fail on its first compile.
             string[] assembliesUnderTest = asmdefs
                 .Where(asmdef => !asmdef.IsTestAssembly())
-                .Where(asmdef => editMode || !asmdef.IncludesEditorPlatform())
+                .Where(asmdef => editMode || !asmdef.IsEditorOnly())
                 .Select(asmdef => asmdef.Name)
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .ToArray();
-            string name = ChooseBaseName(assembliesUnderTest, productName) + (editMode ? ".Tests.Editor" : ".Tests.PlayMode");
+            string preferredName = ChooseBaseName(assembliesUnderTest, productName) + (editMode ? ".Tests.Editor" : ".Tests.PlayMode");
             string folder = editMode ? "Assets/Tests/Editor/" : "Assets/Tests/PlayMode/";
+            string name = ChooseUnusedName(preferredName, folder, asmdefs);
 
             AsmdefTemplate template = new AsmdefTemplate
             {
@@ -74,6 +75,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
             string content = JsonConvert.SerializeObject(template, Formatting.Indented);
             return new RunTestsTestAsmdefProposal(folder + name + ".asmdef", content);
+        }
+
+        // Why a suffix instead of reusing the name: an unmarked asmdef may already own the
+        // preferred name or path, and Unity rejects duplicate assembly names, so the proposal
+        // must never tell the caller to overwrite an existing file.
+        private static string ChooseUnusedName(string preferredName, string folder, IReadOnlyList<RunTestsAsmdefInfo> asmdefs)
+        {
+            string candidate = preferredName;
+            for (int suffix = 2; IsNameOrPathTaken(candidate, folder, asmdefs); suffix++)
+            {
+                candidate = preferredName + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            return candidate;
+        }
+
+        private static bool IsNameOrPathTaken(string name, string folder, IReadOnlyList<RunTestsAsmdefInfo> asmdefs)
+        {
+            string assetPath = folder + name + ".asmdef";
+            return asmdefs.Any(asmdef =>
+                string.Equals(asmdef.Name, name, StringComparison.Ordinal)
+                || string.Equals(asmdef.AssetPath, assetPath, StringComparison.Ordinal));
         }
 
         // Why a single assembly wins: "Game" -> "Game.Tests.Editor" reads as the natural sibling.

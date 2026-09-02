@@ -114,6 +114,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void Build_WhenAnUnmarkedAsmdefOwnsThePreferredName_ChoosesAnUnusedName()
+        {
+            // Verifies the proposal never tells the caller to overwrite an existing asmdef or reuse its
+            // assembly name, which Unity rejects as a duplicate.
+            RunTestsAsmdefInfo[] asmdefs =
+            {
+                Runtime("Assets/Scripts/Game.asmdef", "Game"),
+                Runtime("Assets/Tests/Editor/Game.Tests.Editor.asmdef", "Game.Tests.Editor")
+            };
+
+            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName);
+            JObject content = JObject.Parse(proposal.Content);
+
+            Assert.That(proposal.AssetPath, Is.EqualTo("Assets/Tests/Editor/MyGame.Tests.Editor.asmdef"));
+            Assert.That(content["name"].Value<string>(), Is.EqualTo("MyGame.Tests.Editor"));
+        }
+
+        [Test]
+        public void Build_WhenATestAsmdefTargetsEditorAndAPlayerPlatform_TreatsItAsARuntimeTestAssembly()
+        {
+            // Verifies only a sole Editor platform makes an assembly EditMode: Editor plus a player
+            // platform is a runtime assembly, so it satisfies PlayMode and is referenced by EditMode proposals.
+            RunTestsAsmdefInfo[] asmdefs =
+            {
+                new RunTestsAsmdefInfo("Assets/Scripts/Game.asmdef", "guid-Game", "Game", Array.Empty<string>(), Array.Empty<string>(), new[] { "Editor", "Android" }, testAssemblies: false),
+                new RunTestsAsmdefInfo("Assets/Tests/Game.Tests.asmdef", "guid-Tests", "Game.Tests", new[] { "UnityEngine.TestRunner" }, Array.Empty<string>(), new[] { "Editor", "Android" }, testAssemblies: false)
+            };
+
+            RunTestsTestAsmdefProposal playMode = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.PlayMode, ProductName);
+            RunTestsTestAsmdefProposal editMode = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName);
+            JObject content = JObject.Parse(editMode.Content);
+
+            Assert.That(playMode, Is.Null);
+            Assert.That(content["references"].Values<string>(), Is.EqualTo(new[] { "UnityEngine.TestRunner", "UnityEditor.TestRunner", "Game" }));
+        }
+
+        [Test]
         public void AppendNotice_AddsAPeriodBeforeTheNoticeWhenTheMessageHasNone()
         {
             // Verifies the notice names the proposed path and joins the existing message with a sentence break.

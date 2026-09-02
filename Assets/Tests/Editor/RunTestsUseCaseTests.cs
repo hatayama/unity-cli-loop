@@ -981,6 +981,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: an unfiltered NoTestsFound run whose project already has a test assembly leaves the response untouched.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilterAllNoTestsFoundWithTestAsmdef_LeavesResponseWithoutProposal()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult()
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics,
+                proposeTestAsmdef: _ => null);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.ProposedTestAsmdef, Is.Null);
+            Assert.That(response.ShouldSerializeProposedTestAsmdef(), Is.False);
+            Assert.That(response.Message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
+        }
+
+        /// <summary>
         /// What: a filtered NoTestsFound run never asks for a test .asmdef proposal, because the filter is the likelier cause.
         /// </summary>
         [Test]

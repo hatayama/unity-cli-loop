@@ -430,6 +430,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             return IncludePlatforms.Contains("Editor");
         }
+
+        // Why "sole platform": an asmdef that lists Editor next to a player platform is a runtime
+        // assembly that also compiles in the Editor, so it hosts PlayMode tests, not EditMode ones.
+        public bool IsEditorOnly()
+        {
+            return IncludePlatforms.Length == 1 && IncludePlatforms[0] == "Editor";
+        }
     }
 
     /// <summary>
