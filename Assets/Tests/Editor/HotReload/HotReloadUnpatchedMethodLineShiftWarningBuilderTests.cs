@@ -234,6 +234,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: files whose outcomes are all AlreadyActive collapse into one continuing
+        /// line-shift entry instead of per-file warnings.
+        /// </summary>
+        [Test]
+        public void Append_WhenOnlyAlreadyActiveFilesShift_AddsOneContinuingWarning()
+        {
+            List<string> warnings = new List<string>();
+            List<HotReloadMethodOutcome> methods = new List<HotReloadMethodOutcome>
+            {
+                HotReloadMethodOutcome.AlreadyActive("Player.Jump", "Assets/Scripts/Player.cs"),
+                HotReloadMethodOutcome.AlreadyActive("Enemy.Idle", "Assets/Scripts/Enemy.cs")
+            };
+
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                methods,
+                file => "line1\nline2\nline3",
+                file => "line1\nline2");
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    string.Format(
+                        HotReloadConstants.ContinuingLineShiftWarningFormat,
+                        2,
+                        "Assets/Scripts/Enemy.cs, Assets/Scripts/Player.cs")));
+        }
+
+        /// <summary>
+        /// What: a run that both touches a shifted file and continues another emits the
+        /// per-file warning plus one continuing entry.
+        /// </summary>
+        [Test]
+        public void Append_WhenTouchedAndContinuingFilesBothShift_AddsPerFileAndContinuingWarnings()
+        {
+            List<string> warnings = new List<string>();
+            List<HotReloadMethodOutcome> methods = new List<HotReloadMethodOutcome>
+            {
+                HotReloadMethodOutcome.Patched("Player.Jump", "Assets/Scripts/Player.cs"),
+                HotReloadMethodOutcome.AlreadyActive("Enemy.Idle", "Assets/Scripts/Enemy.cs")
+            };
+
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                methods,
+                file => "line1\nline2\nline3",
+                file => "line1\nline2");
+
+            Assert.That(warnings.Count, Is.EqualTo(2));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
+            Assert.That(
+                warnings[1],
+                Is.EqualTo(
+                    string.Format(
+                        HotReloadConstants.ContinuingLineShiftWarningFormat,
+                        1,
+                        "Assets/Scripts/Enemy.cs")));
+        }
+
+        /// <summary>
         /// What: a line-count warning counted with one other hot-reload warning keeps the
         /// single-compile resolution suffix, because compile restores compiled-source line numbers.
         /// </summary>
