@@ -115,7 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void Build_WhenAnUnmarkedAsmdefOwnsThePreferredName_ChoosesAnUnusedName()
+        public void Build_WhenAPlayModeTestAsmdefOwnsThePreferredName_ChoosesAnUnusedName()
         {
             // Verifies the proposal never tells the caller to overwrite an existing asmdef or reuse its
             // assembly name, which Unity rejects as a duplicate.
