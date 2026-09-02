@@ -5,7 +5,7 @@ Returns JSON with:
 - `Success`: Whether the operation succeeded
 - `Message`: Status message (e.g. "Hit element: ButtonStart" or "No UI element under (x, y)")
 - `Action`: Echoes which action was executed (`Click`, `Drag`, `DragStart`, `DragMove`, `DragEnd`, or `LongPress`)
-- `HitGameObjectName`: Name of the GameObject that received the pointer events (nullable string; null if nothing was hit). Without `--bypass-raycast` this is the topmost EventSystem raycast hit under the pointer; with `--bypass-raycast` it is the `--target-path` GameObject the events were dispatched to, not whatever the raycast would have hit
+- `HitGameObjectName`: Name of the GameObject that received the pointer events (nullable string; null if nothing was hit). It is the event-handler target resolved up the hierarchy from the raycast hit (the first `IPointerDownHandler`, else the first `IPointerClickHandler`, for `Click`/`LongPress`; the first `IDragHandler` for drags), so it can be an ancestor of the topmost raycast hit — a Button's child Text reports the Button. With `--bypass-raycast` it is the handler resolved the same way from `--target-path` (also possibly an ancestor), not the raycast hit and not necessarily the raw path GameObject itself
 - `PositionX`: Target X coordinate that was used
 - `PositionY`: Target Y coordinate that was used
 - `EndPositionX`: Drag end X coordinate (nullable float; populated for drag actions only)
