@@ -28,12 +28,16 @@ Get-MpThreatDetection
 Hash the installed dispatcher and compare it to the `uloop.exe` inside the matching GitHub Release zip. Hash the zip itself against the accompanying `.sha256` file. Then verify the zip attestation.
 
 ```powershell
-certutil -hashfile "$env:LOCALAPPDATA\Programs\uloop\bin\uloop.exe" SHA256
 gh release download dispatcher-v<version> --repo hatayama/unity-cli-loop -p "uloop-dispatcher-windows-amd64.zip*"
+Get-Content -Encoding UTF8 .\uloop-dispatcher-windows-amd64.zip.sha256
+certutil -hashfile .\uloop-dispatcher-windows-amd64.zip SHA256
+Expand-Archive -Path .\uloop-dispatcher-windows-amd64.zip -DestinationPath .\uloop-verify -Force
+certutil -hashfile .\uloop-verify\uloop.exe SHA256
+certutil -hashfile "$env:LOCALAPPDATA\Programs\uloop\bin\uloop.exe" SHA256
 gh attestation verify uloop-dispatcher-windows-amd64.zip --repo hatayama/unity-cli-loop
 ```
 
-If the SHA-256 does not match the release asset, do not allow the binary. Open an issue instead.
+The zip hash must match the `.sha256` file, and the installed `uloop.exe` hash must match the `uloop.exe` inside the zip. If either hash differs, do not allow the binary. Open an issue instead.
 
 ### Restore from quarantine
 
