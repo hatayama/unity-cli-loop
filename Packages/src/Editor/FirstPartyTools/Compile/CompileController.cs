@@ -46,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 IsCompileRequestCompleted,
                 () => _currentCompileTask,
                 () => new AssemblyDefinitionConsoleErrorValidationService().FindCurrentErrors(),
+                ReadConsoleErrorEntries,
                 () => new AssemblyDefinitionDuplicationValidationService().ValidateNoDuplicateAsmdefNames(),
                 () => _isForceCompile,
                 () => _compileMessages.ToArray(),
@@ -243,6 +244,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private bool IsCompileRequestCompleted()
         {
             return _currentCompileTask == null || _currentCompileTask.Task.IsCompleted;
+        }
+
+        /// <summary>
+        /// Snapshots the current Unity Console error entries for indeterminate-result diagnosis.
+        /// </summary>
+        private static UnityCliLoopConsoleLogEntry[] ReadConsoleErrorEntries()
+        {
+            IUnityCliLoopConsoleLogService consoleLogs = new LogRetrievalService();
+            UnityCliLoopConsoleLogResult errorLogs = consoleLogs.GetLogs(UnityCliLoopLogType.Error);
+            return errorLogs.LogEntries;
         }
 
         private Dictionary<string, object> BuildCompileControllerStateContext(

@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<bool> _isRequestCompleted;
         private readonly Func<TaskCompletionSource<CompileResult>> _getCurrentCompileTask;
         private readonly Func<AssemblyDefinitionConsoleErrorResult> _findAssemblyDefinitionErrors;
+        private readonly Func<UnityCliLoopConsoleLogEntry[]> _getConsoleErrorEntries;
         private readonly Func<ValidationResult> _validateNoDuplicateAsmdefNames;
         private readonly Func<bool> _getIsForceCompile;
         private readonly Func<CompilerMessage[]> _getCompileMessages;
@@ -35,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<bool> isRequestCompleted,
             Func<TaskCompletionSource<CompileResult>> getCurrentCompileTask,
             Func<AssemblyDefinitionConsoleErrorResult> findAssemblyDefinitionErrors,
+            Func<UnityCliLoopConsoleLogEntry[]> getConsoleErrorEntries,
             Func<ValidationResult> validateNoDuplicateAsmdefNames,
             Func<bool> getIsForceCompile,
             Func<CompilerMessage[]> getCompileMessages,
@@ -48,6 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(isRequestCompleted != null, "isRequestCompleted must not be null");
             Debug.Assert(getCurrentCompileTask != null, "getCurrentCompileTask must not be null");
             Debug.Assert(findAssemblyDefinitionErrors != null, "findAssemblyDefinitionErrors must not be null");
+            Debug.Assert(getConsoleErrorEntries != null, "getConsoleErrorEntries must not be null");
             Debug.Assert(validateNoDuplicateAsmdefNames != null, "validateNoDuplicateAsmdefNames must not be null");
             Debug.Assert(getIsForceCompile != null, "getIsForceCompile must not be null");
             Debug.Assert(getCompileMessages != null, "getCompileMessages must not be null");
@@ -62,6 +65,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _getCurrentCompileTask = getCurrentCompileTask ?? throw new ArgumentNullException(nameof(getCurrentCompileTask));
             _findAssemblyDefinitionErrors = findAssemblyDefinitionErrors ??
                 throw new ArgumentNullException(nameof(findAssemblyDefinitionErrors));
+            _getConsoleErrorEntries = getConsoleErrorEntries ??
+                throw new ArgumentNullException(nameof(getConsoleErrorEntries));
             _validateNoDuplicateAsmdefNames = validateNoDuplicateAsmdefNames ??
                 throw new ArgumentNullException(nameof(validateNoDuplicateAsmdefNames));
             _getIsForceCompile = getIsForceCompile ?? throw new ArgumentNullException(nameof(getIsForceCompile));
@@ -230,6 +235,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string message =
                 "Unity stopped compiling before Unity CLI Loop received the compilationFinished callback. " +
                 "The compile result is indeterminate; use get-logs to inspect the compiler output.";
+            // Why append the Console errors: the indeterminate result otherwise costs a second
+            // get-logs round trip to see the asmdef or compiler error that aborted the compile.
+            string consoleErrorSummary = CompileIndeterminateErrorSummaryBuilder.Build(_getConsoleErrorEntries());
+            if (consoleErrorSummary != null)
+            {
+                message = message + "\n" + consoleErrorSummary;
+            }
+
             AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors = _findAssemblyDefinitionErrors();
             CompilerMessage[] compileMessages = _getCompileMessages();
             bool isForceCompile = _getIsForceCompile();
