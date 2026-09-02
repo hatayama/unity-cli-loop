@@ -32,7 +32,7 @@ LogTypeや検索対象の文字列で絞り込む事ができます。また、s
 
 ### 3. run-tests - TestRunnerの実行 (PlayMode, EditMode対応)
 Unity Test Runnerを実行し、テスト結果を取得します。FilterTypeとFilterValueで条件を設定できます。
-- FilterType: all（全テスト）、exact（個別テストメソッド名）、regex（クラス名や名前空間）、assembly（アセンブリ名）
+- FilterType: all（全テスト）、exact（個別テストメソッド名）、regex（テストのフルネームに対する正規表現）、assembly（アセンブリ名）、class（テストクラス名。名前空間付きでも可）
 - FilterValue: フィルタータイプに応じた値（クラス名、名前空間など）
 - UnsavedChanges: テスト前の未保存 Scene / Prefab Stage 変更の扱い。`save`（デフォルト）は保存、`fail` は残っていれば停止、`discard` はディスク状態へ戻す（Untitled シーンは破棄できず失敗）。
 テスト結果をxmlで出力する事が可能です。出力pathを返すので、それをAIに読み取ってもらう事ができます。

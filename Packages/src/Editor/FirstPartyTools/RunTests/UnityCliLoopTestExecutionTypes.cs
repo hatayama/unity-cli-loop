@@ -17,7 +17,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         all = 0,
         exact = 1,
         regex = 2,
-        assembly = 3
+        assembly = 3,
+        // Why the verbatim identifier: the CLI spells the option value "class", and the schema
+        // generator emits enum member names verbatim, so the C# keyword has to be escaped here.
+        @class = 4
     }
 
     /// <summary>
