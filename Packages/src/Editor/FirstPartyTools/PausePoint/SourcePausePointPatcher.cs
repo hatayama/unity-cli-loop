@@ -320,9 +320,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            (string warning, bool hasPhysicsCallbackWarning) = BuildPatchWarning(method);
+            (IReadOnlyList<string> warnings, bool hasPhysicsCallbackWarning) = BuildPatchWarning(method);
             UloopPausePointRegistry.SetMethodEntryInstrumented(id);
-            return SourcePausePointPatchResult.SuccessResult(warning, method.DeclaringType, hasPhysicsCallbackWarning);
+            return SourcePausePointPatchResult.SuccessResult(warnings, method.DeclaringType, hasPhysicsCallbackWarning);
         }
 
         // What: removes Harmony instrumentation and patcher ledgers for one id without touching
@@ -479,7 +479,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static (string Warning, bool HasPhysicsCallbackWarning) BuildPatchWarning(MethodBase method)
+        private static (IReadOnlyList<string> Warnings, bool HasPhysicsCallbackWarning) BuildPatchWarning(MethodBase method)
         {
             List<string> warnings = new();
             bool hasPhysicsCallbackWarning = false;
@@ -511,7 +511,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings.Add(SourcePausePointConstants.SmallMethodInliningRiskWarning);
             }
 
-            return (string.Join(" ", warnings), hasPhysicsCallbackWarning);
+            return (warnings, hasPhysicsCallbackWarning);
         }
 
         // Heuristic, not a guarantee: [AggressiveInlining] is only a hint the JIT may ignore, and
