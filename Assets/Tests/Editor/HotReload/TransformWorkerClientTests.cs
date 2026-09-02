@@ -2417,6 +2417,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 JsonConvert.DeserializeObject<TransformWorkerOutputDto>(omittedJson);
             Assert.That(omitted.removedMembers, Is.Null, "Omitted removedMembers must deserialize as null.");
             Assert.That(omitted.addedFieldNames, Is.Null, "Omitted addedFieldNames must deserialize as null.");
+            Assert.That(omitted.addedConstNames, Is.Null, "Omitted addedConstNames must deserialize as null.");
             Assert.That(
                 omitted.entries[0].calledAddedMethodKeys,
                 Is.Null,
@@ -2429,6 +2430,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(omitted.removedMethodSignatures, Is.Empty);
             Assert.That(omitted.addedFieldNames, Is.Not.Null);
             Assert.That(omitted.addedFieldNames, Is.Empty);
+            Assert.That(omitted.addedConstNames, Is.Not.Null);
+            Assert.That(omitted.addedConstNames, Is.Empty);
             string nullNamesJson = "{\"shimSource\":\"\",\"addedFieldNames\":null}";
             TransformWorkerOutputDto nullNames =
                 JsonConvert.DeserializeObject<TransformWorkerOutputDto>(nullNamesJson);

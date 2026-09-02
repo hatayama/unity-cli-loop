@@ -2551,6 +2551,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         Array.Empty<byte>()),
                     entries,
                     addedFieldNames,
+                    Array.Empty<string>(),
                     workerOutput,
                     new HashSet<string>(),
                     new HashSet<string>(),
@@ -2811,6 +2812,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     new byte[] { 1 },
                     Array.Empty<byte>()),
                 entries,
+                Array.Empty<string>(),
                 Array.Empty<string>(),
                 workerOutput,
                 new HashSet<string>(),
@@ -3517,6 +3519,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result.AddedFields,
                 Is.EqualTo(new[] { typeof(HotReloadAddedFieldApplyFixture).FullName + ".UsedScratch" }));
             AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
+        }
+
+        /// <summary>
+        /// What: an added const lands in AddedConsts only — not AddedFields and not the
+        /// added-field lifetime warning — because const folds into the edited body.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedConstWithAddedField_ListsConstSeparatelyWithoutLifetimeWarning()
+        {
+            string applyPath = ResolveAddedFieldApplyFixturePath();
+            string applyOnDisk = File.ReadAllText(applyPath);
+            string applyEdited = WithAddedFieldAndConstAccesses(applyOnDisk);
+            Assert.That(applyEdited, Is.Not.EqualTo(applyOnDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { applyPath },
+                WriteEditedSource("AddedFieldAndConst.cs", applyEdited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            string typeName = typeof(HotReloadAddedFieldApplyFixture).FullName;
+            Assert.That(result.AddedFields, Is.EqualTo(new[] { typeName + ".AddedCount" }));
+            Assert.That(result.AddedConsts, Is.EqualTo(new[] { typeName + ".AddedTuning" }));
+            AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
+            string lifetimePrefix = HotReloadConstants.AddedFieldsLifetimeWarningFormat.Substring(
+                0,
+                HotReloadConstants.AddedFieldsLifetimeWarningFormat.IndexOf("{0}", StringComparison.Ordinal));
+            foreach (string warning in result.Warnings)
+            {
+                if (warning != null && warning.StartsWith(lifetimePrefix, StringComparison.Ordinal))
+                {
+                    Assert.That(warning, Does.Not.Contain("AddedTuning"));
+                }
+            }
         }
 
         /// <summary>
@@ -6405,6 +6442,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public int AddedCount;\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public int ReadAdded()\n        {\n            return AddedCount;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n            AddedCount = value;\n        }",
+                StringComparison.Ordinal);
+        }
+
+        private static string WithAddedFieldAndConstAccesses(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n        }",
+                "        public int AddedCount;\n"
+                + "        public const int AddedTuning = 4;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadAdded()\n        {\n            return AddedCount + AddedTuning;\n        }\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public void WriteAdded(int value)\n        {\n            AddedCount = value;\n        }",
                 StringComparison.Ordinal);

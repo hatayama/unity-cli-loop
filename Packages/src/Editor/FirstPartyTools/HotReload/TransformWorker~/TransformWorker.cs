@@ -427,6 +427,7 @@ public static class TransformWorkerProgram
             HasAccessorDelegates = hasAccessorDelegates,
             HasAddedFieldRewrites = addedFieldCatalog.HasStoreRewrites,
             AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(),
+            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(),
             SourceContentSha256 = sourceContentSha256
         };
     }

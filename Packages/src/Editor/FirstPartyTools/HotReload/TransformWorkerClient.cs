@@ -114,6 +114,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             output.removedMembers ??= Array.Empty<TransformWorkerRemovedMemberDto>();
             output.removedMethodSignatures ??= Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
             output.addedFieldNames ??= Array.Empty<string>();
+            output.addedConstNames ??= Array.Empty<string>();
             output.shimSource ??= string.Empty;
             foreach (TransformWorkerEntryDto entry in output.entries)
             {

@@ -25,6 +25,7 @@ internal sealed class AddedFieldCatalog
         new Dictionary<string, AddedFieldBinding>(StringComparer.Ordinal);
     private readonly HashSet<string> _classifiedAddedKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _rewrittenAddedFieldKeys = new HashSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> _foldedConstKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _addedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _removedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
 
@@ -82,6 +83,18 @@ internal sealed class AddedFieldCatalog
         return names.ToArray();
     }
 
+    public string[] ListFoldedConstDisplayNames()
+    {
+        List<string> names = new List<string>(_foldedConstKeys.Count);
+        foreach (string fieldKey in _foldedConstKeys)
+        {
+            names.Add(FormatAddedFieldDisplayName(fieldKey));
+        }
+
+        names.Sort(StringComparer.Ordinal);
+        return names.ToArray();
+    }
+
     // Why this shape: method labels replace '/' with '+' then join with '.', so field
     // names stay comparable to Methods[].Method (Ns.Type.field).
     private static string FormatAddedFieldDisplayName(string fieldKey)
@@ -125,6 +138,6 @@ internal sealed class AddedFieldCatalog
     public void MarkConstFold(string fieldKey)
     {
         Debug.Assert(!string.IsNullOrEmpty(fieldKey), "fieldKey must not be null or empty.");
-        _rewrittenAddedFieldKeys.Add(fieldKey);
+        _foldedConstKeys.Add(fieldKey);
     }
 }
