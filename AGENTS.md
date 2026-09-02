@@ -104,7 +104,7 @@ All three components release through release-please; `dispatcherVersion` and com
 changelogs are stamped by release PRs — never bump them by hand (sole exception: the
 documented version-series realignment; see `docs/version-series-realignment.md`). Changes to shared release
 inputs outside the package roots (non-test `cli/common/**` sources, `scripts/install.sh`,
-`scripts/install.ps1`) need matching trigger changes and a `scripts/stamp-release-inputs.sh`
+`scripts/install.ps1`, and structural changes to the embedded tool catalog `cli/common/tools/default-tools.json` (description-only regenerations are exempt)) need matching trigger changes and a `scripts/stamp-release-inputs.sh`
 run in the same PR; CI (`check-release-triggers`) fails otherwise. Rules and rationale:
 `docs/shared-release-inputs.md`.
 
