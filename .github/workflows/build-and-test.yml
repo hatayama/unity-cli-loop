@@ -163,6 +163,14 @@ jobs:
         shell: bash
         run: sh scripts/test-stamp-release-inputs.sh
 
+      - name: Build native Go CLI on Windows
+        shell: bash
+        run: sh scripts/build-go-cli.sh
+
+      - name: Verify Windows VERSIONINFO resources
+        shell: powershell
+        run: .\scripts\check-windows-version-info.ps1
+
       - name: Parse PowerShell installer in Windows PowerShell
         shell: powershell
         run: |
@@ -177,6 +185,7 @@ jobs:
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 Assets/Tests/Demo/scripts/verify-replay-via-cli.ps1))
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-powershell51-native-argument-escaping.ps1))
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-install-pin-resolution.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/check-windows-version-info.ps1))
 
       - name: Test release installer smoke helper
         shell: powershell

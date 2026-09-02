@@ -123,6 +123,9 @@ Before changing scripts, skill files, generated-file synchronization, path handl
 parsing, read `docs/windows-compatibility.md` (encoding, line endings, path separators,
 PowerShell validation). Add a regression test whenever a fix depends on encoding, line endings,
 or separator normalization — a passing macOS test alone is not enough for these cases.
+On Windows, an abrupt dispatcher exit or `UNITY_NOT_REACHABLE` can be Microsoft Defender
+quarantining `uloop.exe` rather than an IPC problem; the verification and recovery
+procedure is in `docs/windows-compatibility.md`.
 
 ## Package Manager Distribution
 
