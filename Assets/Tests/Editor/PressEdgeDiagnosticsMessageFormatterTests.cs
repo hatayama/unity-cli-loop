@@ -16,31 +16,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies a pre-existing down state (no edge possible) is reported over other causes.
             string suffix = PressEdgeDiagnosticsMessageFormatter.BuildSuffix(
                 consumedByUpdateType: "Dynamic",
-                anyDynamicUpdateObserved: true,
+                anyGameplayUpdateObserved: true,
                 keyAlreadyPressedBeforeQueue: true);
 
             Assert.That(suffix, Does.Contain("already down"));
         }
 
         [Test]
-        public void BuildSuffix_WhenNotConsumedAndNoDynamicUpdateRan_ReportsNoDynamicUpdate()
+        public void BuildSuffix_WhenNotConsumedAndNoGameplayUpdateRan_ReportsNoGameplayUpdate()
         {
-            // Verifies a stalled Dynamic update loop is distinguished from a dropped event.
+            // Verifies a stalled gameplay update loop is distinguished from a dropped event.
             string suffix = PressEdgeDiagnosticsMessageFormatter.BuildSuffix(
                 consumedByUpdateType: null,
-                anyDynamicUpdateObserved: false,
+                anyGameplayUpdateObserved: false,
                 keyAlreadyPressedBeforeQueue: false);
 
-            Assert.That(suffix, Does.Contain("no Dynamic update ran"));
+            Assert.That(suffix, Does.Contain("no gameplay input update"));
         }
 
         [Test]
-        public void BuildSuffix_WhenNotConsumedButDynamicUpdatesRan_ReportsDroppedEvent()
+        public void BuildSuffix_WhenNotConsumedButGameplayUpdatesRan_ReportsDroppedEvent()
         {
             // Verifies the event-never-consumed case is distinguished from a stalled update loop.
             string suffix = PressEdgeDiagnosticsMessageFormatter.BuildSuffix(
                 consumedByUpdateType: null,
-                anyDynamicUpdateObserved: true,
+                anyGameplayUpdateObserved: true,
                 keyAlreadyPressedBeforeQueue: false);
 
             Assert.That(suffix, Does.Contain("not consumed by any recorded"));
@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies the Editor-update-consumed case names the reason gameplay could not see it.
             string suffix = PressEdgeDiagnosticsMessageFormatter.BuildSuffix(
                 consumedByUpdateType: "Editor",
-                anyDynamicUpdateObserved: false,
+                anyGameplayUpdateObserved: false,
                 keyAlreadyPressedBeforeQueue: false);
 
             Assert.That(suffix, Does.Contain("Editor update"));
@@ -64,7 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies an unexpected consuming update type (e.g. Fixed) is surfaced by name.
             string suffix = PressEdgeDiagnosticsMessageFormatter.BuildSuffix(
                 consumedByUpdateType: "Fixed",
-                anyDynamicUpdateObserved: true,
+                anyGameplayUpdateObserved: true,
                 keyAlreadyPressedBeforeQueue: false);
 
             Assert.That(suffix, Does.Contain("Fixed update"));
