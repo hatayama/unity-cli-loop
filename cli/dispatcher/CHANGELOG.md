@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.1.0...dispatcher-v3.2.0) (2026-09-02)
+
+
+### Features
+
+* **dispatcher:** refuse self-update for winget-managed installs ([e789c54](https://github.com/hatayama/unity-cli-loop/commit/e789c544fea774136b85cdaa6b496bbb6c4e03ab))
+
 ## [3.1.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.0.1...dispatcher-v3.1.0) (2026-08-31)
 
 
