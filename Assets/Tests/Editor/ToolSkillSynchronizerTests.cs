@@ -1232,6 +1232,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(detectedTargets[0].HasExistingSkills, Is.True);
         }
 
+        /// <summary>
+        /// Verifies that extra non-markdown files placed at the skill directory root by other tools
+        /// do not make the skill report as Outdated.
+        /// </summary>
+        [Test]
+        public void DetectTargets_WhenInstalledSkillRootContainsExtraNonMarkdownFile_ReportsInstalled()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            CreateFakeSourceSkill(temporaryRoot, "uloop-fake-skill", "FakeTool", "reference.md", "reference");
+
+            string installedSkillDir = Path.Combine(
+                temporaryRoot,
+                ".claude",
+                SkillInstallLayout.SkillsDirName,
+                SkillInstallLayout.ManagedSkillsDirName,
+                "uloop-fake-skill");
+            WriteSkillFile(installedSkillDir, "---\nname: uloop-fake-skill\n---\n");
+            File.WriteAllText(Path.Combine(installedSkillDir, "reference.md"), "reference");
+            File.WriteAllText(Path.Combine(installedSkillDir, "extra.yml"), "name: uloop-fake-skill\n");
+
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
+                    temporaryRoot,
+                    requireSkillsDirectory: true,
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
+                .ToArray();
+
+            Assert.That(detectedTargets.Length, Is.EqualTo(1));
+            Assert.That(detectedTargets[0].InstallState, Is.EqualTo(SkillInstallState.Installed));
+        }
+
+        /// <summary>
+        /// Verifies that a shipped non-markdown file inside a skill subdirectory is still compared,
+        /// so a changed script makes the skill report as Outdated.
+        /// </summary>
+        [Test]
+        public void DetectTargets_WhenShippedScriptInSubdirectoryDiffers_ReportsOutdated()
+        {
+            string temporaryRoot = CreateTemporaryProjectRoot();
+            string scriptRelativePath = Path.Combine("scripts", "run.sh");
+            CreateFakeSourceSkill(temporaryRoot, "uloop-fake-skill", "FakeTool", scriptRelativePath, "echo source");
+
+            string installedSkillDir = Path.Combine(
+                temporaryRoot,
+                ".claude",
+                SkillInstallLayout.SkillsDirName,
+                SkillInstallLayout.ManagedSkillsDirName,
+                "uloop-fake-skill");
+            WriteSkillFile(installedSkillDir, "---\nname: uloop-fake-skill\n---\n");
+            string installedScriptPath = Path.Combine(installedSkillDir, scriptRelativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(installedScriptPath));
+            File.WriteAllText(installedScriptPath, "echo installed");
+
+            ToolSkillSynchronizer.SkillTargetInfo[] detectedTargets = SkillTargetDetector.DetectTargetsForLayoutStateAtProjectRoot(
+                    temporaryRoot,
+                    requireSkillsDirectory: true,
+                    groupSkillsUnderUnityCliLoop: true,
+                    includeFreshnessCheck: true)
+                .ToArray();
+
+            Assert.That(detectedTargets.Length, Is.EqualTo(1));
+            Assert.That(detectedTargets[0].InstallState, Is.EqualTo(SkillInstallState.Outdated));
+        }
+
         // Tests that CRLF-only drift from Windows checkouts does not mark installed skills stale.
         [Test]
         public void DetectTargets_WhenInstalledSkillUsesCrlfLineEndings_ReportsInstalled()
@@ -1862,7 +1926,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             File.WriteAllText(
                 Path.Combine(skillDir, SkillInstallLayout.SkillFileName),
                 $"---\nname: {skillName}\n{internalLine}---\n");
-            File.WriteAllText(Path.Combine(skillDir, additionalFileRelativePath), additionalFileContent);
+            string additionalFilePath = Path.Combine(skillDir, additionalFileRelativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(additionalFilePath));
+            File.WriteAllText(additionalFilePath, additionalFileContent);
             if (!string.IsNullOrEmpty(sourceMetaFileRelativePath))
             {
                 File.WriteAllText(Path.Combine(skillDir, sourceMetaFileRelativePath), "meta");
