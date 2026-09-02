@@ -36,10 +36,11 @@ winget receives stable dispatcher releases only. Prereleases are not submitted.
   (`dispatcher-v3.1.0`). After it merges, verify with
   `winget install --id hatayama.uloop`.
 - `WINGET_PKGS_TOKEN` is a classic PAT because fine-grained tokens cannot open
-  pull requests against repositories the token owner does not own. It expires
-  after one year; when the `Open winget-pkgs pull request` step fails with an
-  authentication error, issue a new classic PAT with `public_repo` and replace
-  the secret with `gh secret set WINGET_PKGS_TOKEN`.
+  pull requests against repositories the token owner does not own. It is
+  configured to expire after one year; when the `Open winget-pkgs pull
+  request` step fails with an authentication error, issue a new classic PAT
+  with `public_repo` and replace the secret with
+  `gh secret set WINGET_PKGS_TOKEN --repo hatayama/unity-cli-loop`.
 - `uloop update` refuses Homebrew-managed installs and directs users to
   `brew upgrade uloop`. The dispatcher freshness path does the same for required
   updates and skips optional auto-updates.
