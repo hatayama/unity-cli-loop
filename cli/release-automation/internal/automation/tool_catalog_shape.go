@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 )
 
 // ToolCatalogShapeDigest returns a SHA-256 hex digest of the catalog with every
@@ -41,6 +43,12 @@ func canonicalizeToolCatalogShape(content []byte) ([]byte, error) {
 	var root map[string]any
 	if err := decoder.Decode(&root); err != nil {
 		return nil, fmt.Errorf("invalid tool catalog JSON: %w", err)
+	}
+	// Decode stops after the first JSON value, so a catalog followed by trailing text or a second
+	// value would otherwise hash as if it were well-formed and feed release-trigger decisions.
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("invalid tool catalog JSON: trailing data after the catalog object")
 	}
 
 	stripToolCatalogDescriptions(root)

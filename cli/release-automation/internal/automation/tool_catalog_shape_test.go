@@ -164,6 +164,22 @@ func TestToolCatalogShapeDigestRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
+// Verifies trailing text after the catalog object is rejected instead of being hashed as a valid shape.
+func TestToolCatalogShapeDigestRejectsTrailingText(t *testing.T) {
+	_, err := ToolCatalogShapeDigest([]byte(`{"tools":[]} garbage`))
+	if err == nil {
+		t.Fatal("expected trailing text to return an error")
+	}
+}
+
+// Verifies a second JSON value after the catalog object is rejected instead of being silently ignored.
+func TestToolCatalogShapeDigestRejectsSecondJSONValue(t *testing.T) {
+	_, err := ToolCatalogShapeDigest([]byte(`{"tools":[]} {"tools":[{"name":"compile"}]}`))
+	if err == nil {
+		t.Fatal("expected a second JSON value to return an error")
+	}
+}
+
 // Verifies a description-only edit mixed with an added property is reported as a shape change.
 func TestToolCatalogShapeChangedDetectsMixedDescriptionAndPropertyAdd(t *testing.T) {
 	head := `{
