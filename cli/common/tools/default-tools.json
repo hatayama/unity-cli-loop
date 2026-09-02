@@ -87,18 +87,19 @@
           },
           "FilterType": {
             "type": "string",
-            "description": "Filter type: all, exact, regex, assembly",
+            "description": "Filter type: all, exact, regex, assembly, class",
             "enum": [
               "all",
               "exact",
               "regex",
-              "assembly"
+              "assembly",
+              "class"
             ],
             "default": "all"
           },
           "FilterValue": {
             "type": "string",
-            "description": "Filter value (test name, pattern, or assembly)"
+            "description": "Filter value (test name, pattern, assembly, or class name)"
           },
           "SaveBeforeRun": {
             "type": "boolean",

@@ -29,13 +29,13 @@ uloop run-tests [options]
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--test-mode` | string | `EditMode` | Test mode: `EditMode`, `PlayMode` |
-| `--filter-type` | string | `all` | Filter type: `all`, `exact`, `regex`, `assembly` |
-| `--filter-value` | string | - | Filter value (test name, pattern, or assembly) |
+| `--filter-type` | string | `all` | Filter type: `all`, `exact`, `regex`, `assembly`, `class` |
+| `--filter-value` | string | - | Filter value (test name, pattern, assembly, or class name) |
 | `--fail-on-unsaved-changes` | flag | - | Fail before test execution if unsaved editor changes remain instead of auto-saving them |
 | `--skip-compile` | flag | - | Skip the automatic compile before running tests; use only while validating active hot-reload patches. |
 | `--timeout-seconds` | integer | `600` | Maximum seconds to wait for RunFinished before canceling the await (max `1500`). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands |
 
-exact matches the full test name (Namespace.Class.Method); use regex to run a whole test class, e.g. --filter-type regex --filter 'MyGame\.Tests\.PlayerTests\.'
+exact matches the full test name (Namespace.Class.Method). class runs every test of one class by bare or namespace-qualified name, e.g. --filter-type class --filter-value PlayerTests; the name is matched literally and whole, so PlayerTests does not run EnemyPlayerTests. regex matches a .NET regex against full test names, e.g. --filter-type regex --filter-value '^MyGame\.Tests\.'
 
 ## Output
 
