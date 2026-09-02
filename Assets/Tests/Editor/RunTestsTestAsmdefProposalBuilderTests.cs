@@ -13,6 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class RunTestsTestAsmdefProposalBuilderTests
     {
         private const string ProductName = "My Game";
+        private static readonly string[] NoExistingAssemblies = Array.Empty<string>();
 
         [Test]
         public void Build_WhenAnEditorTestAsmdefExists_ReturnsNullForEditMode()
@@ -24,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 TestAsmdef("Assets/Tests/Editor/Game.Tests.Editor.asmdef", "Game.Tests.Editor", editorOnly: true)
             };
 
-            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName);
+            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName, NoExistingAssemblies);
 
             Assert.That(proposal, Is.Null);
         }
@@ -39,8 +40,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 TestAsmdef("Assets/Tests/PlayMode/Game.Tests.PlayMode.asmdef", "Game.Tests.PlayMode", editorOnly: false)
             };
 
-            RunTestsTestAsmdefProposal editMode = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName);
-            RunTestsTestAsmdefProposal playMode = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.PlayMode, ProductName);
+            RunTestsTestAsmdefProposal editMode = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName, NoExistingAssemblies);
+            RunTestsTestAsmdefProposal playMode = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.PlayMode, ProductName, NoExistingAssemblies);
 
             Assert.That(editMode, Is.Not.Null);
             Assert.That(playMode, Is.Null);
@@ -53,7 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Assets/Tests/Editor, marked as a test assembly, Editor-only, and referencing that assembly.
             RunTestsAsmdefInfo[] asmdefs = { Runtime("Assets/Scripts/Game.asmdef", "Game") };
 
-            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName);
+            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName, NoExistingAssemblies);
             JObject content = JObject.Parse(proposal.Content);
 
             Assert.That(proposal.AssetPath, Is.EqualTo("Assets/Tests/Editor/Game.Tests.Editor.asmdef"));
@@ -76,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 EditorAsmdef("Assets/Editor/Game.Editor.asmdef", "Game.Editor")
             };
 
-            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.PlayMode, ProductName);
+            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.PlayMode, ProductName, NoExistingAssemblies);
             JObject content = JObject.Parse(proposal.Content);
 
             Assert.That(proposal.AssetPath, Is.EqualTo("Assets/Tests/PlayMode/Game.Tests.PlayMode.asmdef"));
@@ -95,7 +96,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Runtime("Assets/Scripts/Game.UI.asmdef", "Game.UI")
             };
 
-            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName);
+            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName, NoExistingAssemblies);
             JObject content = JObject.Parse(proposal.Content);
 
             Assert.That(content["name"].Value<string>(), Is.EqualTo("MyGame.Tests.Editor"));
@@ -106,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Build_WithNoAsmdefsAndUnusableProductName_FallsBackToAGenericName()
         {
             // Verifies a project with no asmdefs and a product name made of symbols still gets a valid proposal.
-            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(Array.Empty<RunTestsAsmdefInfo>(), UnityCliLoopTestMode.EditMode, "!!!");
+            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(Array.Empty<RunTestsAsmdefInfo>(), UnityCliLoopTestMode.EditMode, "!!!", NoExistingAssemblies);
             JObject content = JObject.Parse(proposal.Content);
 
             Assert.That(content["name"].Value<string>(), Is.EqualTo("Project.Tests.Editor"));
@@ -118,17 +119,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies the proposal never tells the caller to overwrite an existing asmdef or reuse its
             // assembly name, which Unity rejects as a duplicate.
+            // Why a PlayMode test asmdef: it keeps "Game" the sole assembly under test (so the
+            // preferred name is Game.Tests.Editor) without satisfying the EditMode check.
             RunTestsAsmdefInfo[] asmdefs =
             {
                 Runtime("Assets/Scripts/Game.asmdef", "Game"),
-                Runtime("Assets/Tests/Editor/Game.Tests.Editor.asmdef", "Game.Tests.Editor")
+                TestAsmdef("Assets/Tests/Editor/Game.Tests.Editor.asmdef", "Game.Tests.Editor", editorOnly: false)
             };
 
-            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName);
+            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName, NoExistingAssemblies);
             JObject content = JObject.Parse(proposal.Content);
 
-            Assert.That(proposal.AssetPath, Is.EqualTo("Assets/Tests/Editor/MyGame.Tests.Editor.asmdef"));
-            Assert.That(content["name"].Value<string>(), Is.EqualTo("MyGame.Tests.Editor"));
+            Assert.That(proposal.AssetPath, Is.EqualTo("Assets/Tests/Editor/Game.Tests.Editor2.asmdef"));
+            Assert.That(content["name"].Value<string>(), Is.EqualTo("Game.Tests.Editor2"));
+        }
+
+        [Test]
+        public void Build_WhenACompiledAssemblyOutsideAssetsOwnsThePreferredName_ChoosesAnUnusedName()
+        {
+            // Verifies package and predefined assemblies, which are not loaded as project asmdefs, still
+            // reserve their names, because Unity rejects duplicate assembly names project-wide.
+            RunTestsAsmdefInfo[] asmdefs = { Runtime("Assets/Scripts/Game.asmdef", "Game") };
+            string[] existingAssemblyNames = { "Game.Tests.Editor", "Game.Tests.Editor2" };
+
+            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName, existingAssemblyNames);
+            JObject content = JObject.Parse(proposal.Content);
+
+            Assert.That(content["name"].Value<string>(), Is.EqualTo("Game.Tests.Editor3"));
         }
 
         [Test]
@@ -142,8 +159,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new RunTestsAsmdefInfo("Assets/Tests/Game.Tests.asmdef", "guid-Tests", "Game.Tests", new[] { "UnityEngine.TestRunner" }, Array.Empty<string>(), new[] { "Editor", "Android" }, testAssemblies: false)
             };
 
-            RunTestsTestAsmdefProposal playMode = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.PlayMode, ProductName);
-            RunTestsTestAsmdefProposal editMode = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName);
+            RunTestsTestAsmdefProposal playMode = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.PlayMode, ProductName, NoExistingAssemblies);
+            RunTestsTestAsmdefProposal editMode = RunTestsTestAsmdefProposalBuilder.Build(asmdefs, UnityCliLoopTestMode.EditMode, ProductName, NoExistingAssemblies);
             JObject content = JObject.Parse(editMode.Content);
 
             Assert.That(playMode, Is.Null);
@@ -154,7 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void AppendNotice_AddsAPeriodBeforeTheNoticeWhenTheMessageHasNone()
         {
             // Verifies the notice names the proposed path and joins the existing message with a sentence break.
-            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(Array.Empty<RunTestsAsmdefInfo>(), UnityCliLoopTestMode.EditMode, ProductName);
+            RunTestsTestAsmdefProposal proposal = RunTestsTestAsmdefProposalBuilder.Build(Array.Empty<RunTestsAsmdefInfo>(), UnityCliLoopTestMode.EditMode, ProductName, NoExistingAssemblies);
 
             string message = RunTestsTestAsmdefProposal.AppendNotice(RunTestsResponse.NoTestsFoundMessage, proposal);
 

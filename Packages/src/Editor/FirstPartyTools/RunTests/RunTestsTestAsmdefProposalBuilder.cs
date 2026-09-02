@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using UnityEditor;
+using UnityEditor.Compilation;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -31,16 +32,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "Test asmdef proposals must run on the main thread because AssetDatabase and PlayerSettings are Unity APIs.");
 
             RunTestsAsmdefInfo[] asmdefs = RunTestsNoTestsDiagnosticService.LoadProjectAsmdefs();
-            return Build(asmdefs, testMode, PlayerSettings.productName);
+            // Why the compilation pipeline: the loaded asmdefs cover Assets/ only, while a
+            // package or predefined assembly may already own the proposed name, and Unity rejects
+            // duplicate assembly names project-wide.
+            string[] compiledAssemblyNames = CompilationPipeline.GetAssemblies()
+                .Select(assembly => assembly.name)
+                .ToArray();
+            return Build(asmdefs, testMode, PlayerSettings.productName, compiledAssemblyNames);
         }
 
         internal static RunTestsTestAsmdefProposal Build(
             IReadOnlyList<RunTestsAsmdefInfo> asmdefs,
             UnityCliLoopTestMode testMode,
-            string productName)
+            string productName,
+            IReadOnlyList<string> existingAssemblyNames)
         {
             Debug.Assert(asmdefs != null, "asmdefs must not be null");
             Debug.Assert(productName != null, "productName must not be null");
+            Debug.Assert(existingAssemblyNames != null, "existingAssemblyNames must not be null");
 
             bool editMode = testMode == UnityCliLoopTestMode.EditMode;
             // Why the Editor platform decides relevance: EditMode tests are discovered only from
@@ -63,7 +72,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ToArray();
             string preferredName = ChooseBaseName(assembliesUnderTest, productName) + (editMode ? ".Tests.Editor" : ".Tests.PlayMode");
             string folder = editMode ? "Assets/Tests/Editor/" : "Assets/Tests/PlayMode/";
-            string name = ChooseUnusedName(preferredName, folder, asmdefs);
+            string name = ChooseUnusedName(preferredName, folder, asmdefs, existingAssemblyNames);
 
             AsmdefTemplate template = new AsmdefTemplate
             {
@@ -80,10 +89,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why a suffix instead of reusing the name: an unmarked asmdef may already own the
         // preferred name or path, and Unity rejects duplicate assembly names, so the proposal
         // must never tell the caller to overwrite an existing file.
-        private static string ChooseUnusedName(string preferredName, string folder, IReadOnlyList<RunTestsAsmdefInfo> asmdefs)
+        private static string ChooseUnusedName(
+            string preferredName,
+            string folder,
+            IReadOnlyList<RunTestsAsmdefInfo> asmdefs,
+            IReadOnlyList<string> existingAssemblyNames)
         {
             string candidate = preferredName;
-            for (int suffix = 2; IsNameOrPathTaken(candidate, folder, asmdefs); suffix++)
+            for (int suffix = 2; IsNameOrPathTaken(candidate, folder, asmdefs, existingAssemblyNames); suffix++)
             {
                 candidate = preferredName + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
@@ -91,12 +104,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return candidate;
         }
 
-        private static bool IsNameOrPathTaken(string name, string folder, IReadOnlyList<RunTestsAsmdefInfo> asmdefs)
+        private static bool IsNameOrPathTaken(
+            string name,
+            string folder,
+            IReadOnlyList<RunTestsAsmdefInfo> asmdefs,
+            IReadOnlyList<string> existingAssemblyNames)
         {
             string assetPath = folder + name + ".asmdef";
-            return asmdefs.Any(asmdef =>
-                string.Equals(asmdef.Name, name, StringComparison.Ordinal)
-                || string.Equals(asmdef.AssetPath, assetPath, StringComparison.Ordinal));
+            return existingAssemblyNames.Contains(name, StringComparer.Ordinal)
+                   || asmdefs.Any(asmdef =>
+                       string.Equals(asmdef.Name, name, StringComparison.Ordinal)
+                       || string.Equals(asmdef.AssetPath, assetPath, StringComparison.Ordinal));
         }
 
         // Why a single assembly wins: "Game" -> "Game.Tests.Editor" reads as the natural sibling.

@@ -16,7 +16,7 @@ Active pause points are automatically cleared (the underlying code patches are r
 
 A test run can end by discarding active hot-reload changes: script edits imported during the run are compiled when the test runner releases its assembly-reload lock, and that deferred domain reload wipes the patches even though the tests themselves ran patched. The response's Warning field reports this; re-apply 'uloop hot-reload' or bake the edits in with 'uloop compile' before the next Play or test run.
 
-`NoTestsFound` means zero tests matched — not a test failure. Check `NoTestsFoundExplanation` and `Message` for asmdef hints. When the project has no test assembly for the TestMode, `ProposedTestAsmdef` carries a ready-to-write `.asmdef`: save `Content` at `AssetPath`, move the test scripts under that folder, then compile and rerun.
+`NoTestsFound` means zero tests matched — not a test failure. Check `NoTestsFoundExplanation` and `Message` for asmdef hints. When an unfiltered run finds no tests and the project has no test assembly for the TestMode, `ProposedTestAsmdef` carries a ready-to-write `.asmdef`: save `Content` at `AssetPath`, move the test scripts under that folder, then compile and rerun.
 
 ## Usage
 
