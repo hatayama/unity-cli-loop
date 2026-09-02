@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.1.0...uloop-project-runner-v3.1.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* Skill instructions now match what the tools actually guarantee ([#2498](https://github.com/hatayama/unity-cli-loop/issues/2498)) ([e839eef](https://github.com/hatayama/unity-cli-loop/commit/e839eefe29900eb370d8522fb2979c9e0db36127))
+
 ## [3.1.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.0.0...uloop-project-runner-v3.1.0) (2026-08-31)
 
 
