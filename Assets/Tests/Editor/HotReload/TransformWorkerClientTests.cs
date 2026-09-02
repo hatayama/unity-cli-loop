@@ -1667,9 +1667,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: editing one explicit event accessor reports that event's add and remove as
-        /// Skipped (member-level equivalence, same granularity as property accessors) and omits
-        /// accessors of an unedited event in the same type.
+        /// What: editing one explicit event accessor reports only that accessor as Skipped
+        /// and omits the unchanged peer plus accessors of an unedited event in the same type.
         /// </summary>
         [Test]
         public async Task Run_UnsupportedMemberKind_EventAccessor_SkipsEditedOmitsUnedited()
@@ -1683,12 +1682,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 "add_Edited",
                 ExpectedUnsupportedMemberKindSkipReason);
-            AssertSkippedContains(
-                result,
-                "remove_Edited",
-                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "remove_Edited");
             AssertSkippedDoesNotContain(result, "add_Unedited");
             AssertSkippedDoesNotContain(result, "remove_Unedited");
+        }
+
+        /// <summary>
+        /// What: editing only the add accessor of an existing event reports add_Edited as
+        /// Skipped and does not emit a remove_Edited row.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_EditedAddAccessorOnly_OmitsUnchangedRemove()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindEditedAddAccessorOnly.cs",
+                "Marker = 51;",
+                "Marker = 511;");
+
+            AssertSkippedContains(
+                result,
+                "add_Edited",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "remove_Edited");
         }
 
         /// <summary>
@@ -1768,10 +1783,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 "add_Edited",
                 ExpectedUnsupportedMemberKindSkipReason);
-            AssertSkippedContains(
-                result,
-                "remove_Edited",
-                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "remove_Edited");
             AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
         }
 
