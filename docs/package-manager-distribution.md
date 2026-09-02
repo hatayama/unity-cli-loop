@@ -32,8 +32,11 @@ winget receives stable dispatcher releases only. Prereleases are not submitted.
 - New winget-pkgs pull requests must pass the upstream bot validation and human
   moderation. Moderation commonly takes several days and can take up to two
   weeks.
-- Initial submission: <https://github.com/microsoft/winget-pkgs/pull/427857>
-  (`dispatcher-v3.1.0`). After it merges, verify with
+- Initial submission: <https://github.com/microsoft/winget-pkgs/pull/427976>
+  (`dispatcher-v3.2.0`, opened by the `dispatcher-publish` workflow). The
+  earlier 3.1.0 submissions were withdrawn because that dispatcher predates the
+  winget-managed self-update refusal and would have updated itself outside
+  winget's control. After it merges, verify with
   `winget install --id hatayama.uloop`.
 - `WINGET_PKGS_TOKEN` is a classic PAT because fine-grained tokens cannot open
   pull requests against repositories the token owner does not own. It is
