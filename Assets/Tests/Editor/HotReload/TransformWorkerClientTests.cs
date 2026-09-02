@@ -1707,6 +1707,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: adding a new explicit event with no snapshot peer reports both add_X and
+        /// remove_X as Skipped. Existing events stay off the skipped list.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_AddedExplicitEvent_SkipsBothAccessors()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindAddedExplicitEvent.cs",
+                "        public event Action Unedited\n"
+                + "        {\n"
+                + "            add { Marker = 52; }\n"
+                + "            remove { }\n"
+                + "        }",
+                "        public event Action Unedited\n"
+                + "        {\n"
+                + "            add { Marker = 52; }\n"
+                + "            remove { }\n"
+                + "        }\n\n"
+                + "        public event Action AddedExplicit\n"
+                + "        {\n"
+                + "            add { Marker = 91; }\n"
+                + "            remove { Marker = 92; }\n"
+                + "        }");
+
+            AssertSkippedContains(
+                result,
+                "add_AddedExplicit",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedContains(
+                result,
+                "remove_AddedExplicit",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "add_Edited");
+            AssertSkippedDoesNotContain(result, "remove_Edited");
+            AssertSkippedDoesNotContain(result, "add_Unedited");
+            AssertSkippedDoesNotContain(result, "remove_Unedited");
+        }
+
+        /// <summary>
         /// What: a constructor body-only edit reports the ctor as Skipped and does not emit
         /// the outside-method-body drift warning.
         /// </summary>
