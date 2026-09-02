@@ -59,7 +59,9 @@ func (e RateLimitError) NextActions() []string {
 	}
 	actions := []string{tokenNextAction}
 	if e.ResetAt.IsZero() {
-		return actions
+		// Why the wait hint: an unknown reset means a headerless secondary limit, which
+		// clears on its own even without a token.
+		return append(actions, "Or: "+secondaryLimitFallbackWait)
 	}
 	return append(actions, "Or retry after "+e.ResetAt.Local().Format(resetTimeLayout)+" when the anonymous quota resets.")
 }

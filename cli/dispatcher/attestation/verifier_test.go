@@ -473,6 +473,9 @@ func TestFetchTagCommitSHA_ServerError(t *testing.T) {
 // Verifies FetchTagCommitSHA surfaces an exhausted GitHub quota as a typed
 // rate-limit error while still failing closed under ErrTagRefFetch.
 func TestFetchTagCommitSHA_RateLimited(t *testing.T) {
+	// Why clear both: a token in the developer's shell would turn this into the authenticated case.
+	t.Setenv(envAuthTokenPrimary, "")
+	t.Setenv(envAuthTokenSecondary, "")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-RateLimit-Remaining", "0")
 		w.Header().Set("X-RateLimit-Reset", "1790000000")

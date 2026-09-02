@@ -100,7 +100,7 @@ func TestRateLimitErrorMessageWithoutResetTime(t *testing.T) {
 	}
 }
 
-// Verifies NextActions offers the token hint first and the reset-time retry only when known.
+// Verifies NextActions offers the token hint first, then the reset-time retry when known or the wait hint otherwise.
 func TestNextActionsIncludeTokenHintAndResetRetry(t *testing.T) {
 	withReset := RateLimitError{ResetAt: time.Date(2026, 9, 2, 10, 30, 0, 0, time.Local)}.NextActions()
 	if len(withReset) != 2 || !strings.Contains(withReset[0], "GH_TOKEN") || !strings.Contains(withReset[1], "10:30") {
@@ -108,7 +108,7 @@ func TestNextActionsIncludeTokenHintAndResetRetry(t *testing.T) {
 	}
 
 	withoutReset := RateLimitError{}.NextActions()
-	if len(withoutReset) != 1 || !strings.Contains(withoutReset[0], "GH_TOKEN") {
+	if len(withoutReset) != 2 || !strings.Contains(withoutReset[0], "GH_TOKEN") || !strings.Contains(withoutReset[1], "minute") {
 		t.Fatalf("unexpected next actions without reset: %v", withoutReset)
 	}
 }
