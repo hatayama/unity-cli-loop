@@ -247,6 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransplantPreambleLengthByMethod.Clear();
             HotReloadInvocationRegistry.Clear();
             HotReloadAppliedSourceLedger.ClearAll();
+            HotReloadSupersededSignatureRegistry.ClearAll();
             _pendingShimMethod = null;
             _pendingOriginalMethod = null;
             HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
