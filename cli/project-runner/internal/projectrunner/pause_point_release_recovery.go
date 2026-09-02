@@ -59,14 +59,9 @@ func applyPausePointRecoverySwitchWarning(response *pausePointStatusResponse) {
 	if response == nil || !response.Success {
 		return
 	}
+	originalWarning := response.Warning
 	response.Warning = joinPausePointWarnings(response.Warning, pausePointAutoDebugSwitchWarning)
-	// Why skip a nil slice: older packages omit Warnings. Appending here would
-	// invent a one-item array that drops the original joined Warning topics.
-	if len(response.Warnings) > 0 {
-		response.Warnings = appendPausePointWarningEntry(
-			response.Warnings,
-			pausePointAutoDebugSwitchWarning)
-	}
+	response.Warnings = appendRecoverySwitchToWarnings(response.Warnings, originalWarning)
 }
 
 func injectPausePointRecoveryWarning(raw []byte) ([]byte, error) {
@@ -85,24 +80,34 @@ func injectPausePointRecoveryWarning(raw []byte) ([]byte, error) {
 		return nil, err
 	}
 	fields["Warning"] = joined
-	// Why skip a missing or empty Warnings: older packages omit the array. Adding
-	// a one-item Warnings here would drop the original joined Warning topics.
 	if warningsRaw, ok := fields["Warnings"]; ok {
 		var existingWarnings []string
 		if unmarshalErr := json.Unmarshal(warningsRaw, &existingWarnings); unmarshalErr != nil {
 			return nil, unmarshalErr
 		}
-		if len(existingWarnings) > 0 {
-			updatedWarnings, marshalErr := json.Marshal(appendPausePointWarningEntry(
-				existingWarnings,
-				pausePointAutoDebugSwitchWarning))
-			if marshalErr != nil {
-				return nil, marshalErr
-			}
-			fields["Warnings"] = updatedWarnings
+		updatedWarnings := appendRecoverySwitchToWarnings(existingWarnings, existing)
+		updated, marshalErr := json.Marshal(updatedWarnings)
+		if marshalErr != nil {
+			return nil, marshalErr
 		}
+		fields["Warnings"] = updated
 	}
 	return json.Marshal(fields)
+}
+
+// Why skip a nil slice: older packages omit Warnings. Inventing a one-item
+// array would drop topics that exist only in the joined Warning string.
+// A present empty array with an empty Warning is current Unity and must get
+// the switch note. A present empty array with a non-empty Warning is left
+// alone so we do not publish a partial list.
+func appendRecoverySwitchToWarnings(warnings []string, originalWarning string) []string {
+	if warnings == nil {
+		return nil
+	}
+	if len(warnings) == 0 && originalWarning != "" {
+		return warnings
+	}
+	return appendPausePointWarningEntry(warnings, pausePointAutoDebugSwitchWarning)
 }
 
 func waitContextDuration(ctx context.Context, duration time.Duration) error {
