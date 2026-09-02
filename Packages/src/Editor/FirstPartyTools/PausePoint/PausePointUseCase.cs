@@ -180,7 +180,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ClearedCount = clearedCount;
             if (resumedFromPause)
             {
-                response.Warning = SourcePausePointConstants.ClearReleasedOwnedPauseWarning;
+                List<string> warningEntries = new List<string>();
+                PausePointEnableWarningList.AddIfNotEmpty(
+                    warningEntries,
+                    SourcePausePointConstants.ClearReleasedOwnedPauseWarning);
+                PausePointEnableWarningList.Assign(response, warningEntries);
             }
 
             return response;

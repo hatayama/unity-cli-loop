@@ -71,6 +71,23 @@ func injectPausePointRecoveryWarning(raw []byte) ([]byte, error) {
 		return nil, err
 	}
 	fields["Warning"] = joined
+	// Why skip a missing or empty Warnings: older packages omit the array. Adding
+	// a one-item Warnings here would drop the original joined Warning topics.
+	if warningsRaw, ok := fields["Warnings"]; ok {
+		var existingWarnings []string
+		if unmarshalErr := json.Unmarshal(warningsRaw, &existingWarnings); unmarshalErr != nil {
+			return nil, unmarshalErr
+		}
+		if len(existingWarnings) > 0 {
+			updatedWarnings, marshalErr := json.Marshal(appendPausePointWarningEntry(
+				existingWarnings,
+				pausePointAutoDebugSwitchWarning))
+			if marshalErr != nil {
+				return nil, marshalErr
+			}
+			fields["Warnings"] = updatedWarnings
+		}
+	}
 	return json.Marshal(fields)
 }
 

@@ -114,6 +114,9 @@ func TestCompleteEnableWithReleaseRecovery_WhenReleaseError_RecoversAndJoinsWarn
 	if warning != pausePointAutoDebugSwitchWarning {
 		t.Fatalf("Warning mismatch: %q", warning)
 	}
+	if _, ok := payload["Warnings"]; ok {
+		t.Fatalf("nil Warnings must stay omitted after recovery: %#v", payload["Warnings"])
+	}
 }
 
 // Verifies a failed resend is written as-is and enable is not sent a third time.
@@ -302,6 +305,9 @@ func TestRunEnablePausePointAndAwait_WhenReleaseError_RecoversAndSetsEnableTimeW
 	}
 	if strings.Contains(response.Warning, pausePointAutoDebugSwitchWarning) {
 		t.Fatalf("recovery warning must not fold into hit-time Warning: %q", response.Warning)
+	}
+	if len(response.EnableTimeWarnings) != 0 {
+		t.Fatalf("nil enable Warnings must stay omitted after recovery: %#v", response.EnableTimeWarnings)
 	}
 }
 
