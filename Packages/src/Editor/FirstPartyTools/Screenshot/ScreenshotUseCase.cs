@@ -36,6 +36,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 request.CaptureMode,
                 _editorStateReader.IsPlaying);
             string resolvedCaptureMode = ScreenshotCaptureModeResolver.ToWireName(request.CaptureMode);
+            // Why sample before capturing: the paused Warning describes the state the image was
+            // taken in; a resume or pause racing the capture must not flip it afterwards.
+            bool wasPlaying = _editorStateReader.IsPlaying;
+            bool wasPaused = _editorStateReader.IsPaused;
 
             string correlationId = UnityCliLoopConstants.GenerateCorrelationId();
 
@@ -61,6 +65,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             response.ResolvedCaptureMode = resolvedCaptureMode;
+            response.Warning = ScreenshotPausedPlayModeWarningBuilder.Append(
+                response.Warning,
+                wasPlaying,
+                wasPaused,
+                request.ElementsOnly,
+                response.Screenshots.Count);
             return response;
         }
 

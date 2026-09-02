@@ -3,11 +3,12 @@ using UnityEditor;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Reads Editor Play Mode for screenshot capture-mode auto resolution.
+    /// Reads Editor Play Mode state for capture-mode auto resolution and the paused-capture Warning.
     /// </summary>
     internal interface IScreenshotEditorStateReader
     {
         bool IsPlaying { get; }
+        bool IsPaused { get; }
     }
 
     /// <summary>
@@ -16,5 +17,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal sealed class ScreenshotEditorStateReader : IScreenshotEditorStateReader
     {
         public bool IsPlaying => EditorApplication.isPlaying;
+        public bool IsPaused => EditorApplication.isPaused;
     }
 }
