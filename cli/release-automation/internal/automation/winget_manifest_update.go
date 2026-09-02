@@ -23,14 +23,19 @@ const (
 	wingetLocaleManifestFilename    = "hatayama.uloop.locale.en-US.yaml"
 )
 
-const wingetVersionManifestTemplate = `PackageIdentifier: hatayama.uloop
+// winget-pkgs validation rejects manifests at ManifestVersion 1.7.0 or later
+// with SchemaHeaderNotFound when the yaml-language-server schema header is
+// missing, so every generated manifest must start with it.
+const wingetVersionManifestTemplate = `# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.` + wingetManifestSchemaVersion + `.schema.json
+PackageIdentifier: hatayama.uloop
 PackageVersion: {{.Version}}
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: ` + wingetManifestSchemaVersion + `
 `
 
-const wingetInstallerManifestTemplate = `PackageIdentifier: hatayama.uloop
+const wingetInstallerManifestTemplate = `# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.` + wingetManifestSchemaVersion + `.schema.json
+PackageIdentifier: hatayama.uloop
 PackageVersion: {{.Version}}
 InstallerType: zip
 NestedInstallerType: portable
@@ -48,7 +53,8 @@ ManifestType: installer
 ManifestVersion: ` + wingetManifestSchemaVersion + `
 `
 
-const wingetLocaleManifestTemplate = `PackageIdentifier: hatayama.uloop
+const wingetLocaleManifestTemplate = `# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.` + wingetManifestSchemaVersion + `.schema.json
+PackageIdentifier: hatayama.uloop
 PackageVersion: {{.Version}}
 PackageLocale: en-US
 Publisher: hatayama
