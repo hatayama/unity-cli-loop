@@ -91,9 +91,6 @@ func optionValueName(property tools.ToolProperty) string {
 }
 
 func optionDescription(toolName string, propertyName string, property tools.ToolProperty) string {
-	if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
-		return OptionSummary(toolName, propertyName, property) + "; default: auto-save enabled"
-	}
 	if isCompileReloadExternalSceneChangesOption(toolName, propertyName, property) {
 		return OptionSummary(toolName, propertyName, property) + "; default: auto-reload enabled"
 	}

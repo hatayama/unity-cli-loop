@@ -86,12 +86,12 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 requiredCliVersion,
                 _isInstallingCli,
                 _needsCliPathSetup,
-                IsHomebrewManagedCli());
+                ResolveManagedCliKind());
         }
 
-        private bool IsHomebrewManagedCli()
+        private ManagedCliKind ResolveManagedCliKind()
         {
-            return _cliSetupApplicationService.IsHomebrewManagedInstallPath(
+            return _cliSetupApplicationService.ResolveManagedCliKind(
                 _cliSetupApplicationService.GetCachedCliExecutablePath());
         }
 
@@ -106,10 +106,10 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             string cliVersion = _cliSetupApplicationService.GetCachedCliVersion();
             bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
-            // Why here: the refresh above can reveal a Homebrew install that appeared after the click,
-            // and installing over it would leave a second binary beside the one brew owns.
+            // Why here: the refresh above can reveal a managed install that appeared after the click,
+            // and installing over it would leave a second binary beside the package manager's own.
             // PATH repair stays allowed because it writes no binary.
-            if (IsHomebrewManagedCli())
+            if (ResolveManagedCliKind() != ManagedCliKind.None)
             {
                 if (_needsCliPathSetup)
                 {
@@ -141,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 requiredCliVersion: GetMinimumRequiredCliVersion(),
                 isInstallingCli: _isInstallingCli,
                 needsCliPathSetup: _needsCliPathSetup,
-                isHomebrewManagedCli: IsHomebrewManagedCli());
+                managedCliKind: ResolveManagedCliKind());
             _installProgressView.Show();
             Progress<string> installProgress = new(_installProgressView.SetDetailLine);
 
@@ -213,7 +213,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 requiredCliVersion: GetMinimumRequiredCliVersion(),
                 isInstallingCli: _isInstallingCli,
                 needsCliPathSetup: _needsCliPathSetup,
-                isHomebrewManagedCli: IsHomebrewManagedCli());
+                managedCliKind: ResolveManagedCliKind());
 
             try
             {

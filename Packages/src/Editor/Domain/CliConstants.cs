@@ -40,6 +40,13 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         public const string HOMEBREW_CELLAR_DIR_NAME = "Cellar";
         public const string HOMEBREW_UPGRADE_COMMAND = "brew upgrade " + EXECUTABLE_NAME;
         public const string HOMEBREW_REINSTALL_COMMAND = "brew reinstall " + EXECUTABLE_NAME;
+        public const string WINGET_PACKAGE_IDENTIFIER = "hatayama.uloop";
+        public const string WINGET_UPGRADE_COMMAND = "winget upgrade --id " + WINGET_PACKAGE_IDENTIFIER;
+        public const string WINGET_UNINSTALL_COMMAND = "winget uninstall --id " + WINGET_PACKAGE_IDENTIFIER;
+        public const string WINGET_INSTALL_COMMAND = "winget install --id " + WINGET_PACKAGE_IDENTIFIER;
+        public const string WINGET_ROOT_DIR_NAME = "WinGet";
+        public const string WINGET_PACKAGES_DIR_NAME = "Packages";
+        public const string WINGET_LINKS_DIR_NAME = "Links";
         public const string GLOBAL_UNIX_COMMAND_NAME = EXECUTABLE_NAME;
         public const string GLOBAL_WINDOWS_COMMAND_NAME = EXECUTABLE_NAME + ".exe";
     }

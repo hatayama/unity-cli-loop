@@ -10,9 +10,21 @@ namespace io.github.hatayama.UnityCliLoop.Application
         // Why: uloop installed by Homebrew must be updated and removed through brew itself,
         // so the package offers no primary action for it.
         public const string HOMEBREW_MANAGED_BUTTON_TEXT = "Managed by Homebrew";
+        public const string WINGET_MANAGED_BUTTON_TEXT = "Managed by winget";
 
         /// <summary>
-        /// Formats the warning text that tells a Homebrew user which brew command makes the CLI usable.
+        /// Returns the disabled primary-button label for a package-manager-owned CLI.
+        /// </summary>
+        public static string GetManagedButtonText(ManagedCliKind kind)
+        {
+            System.Diagnostics.Debug.Assert(kind != ManagedCliKind.None, "kind must identify a package manager");
+            return kind == ManagedCliKind.Homebrew
+                ? HOMEBREW_MANAGED_BUTTON_TEXT
+                : WINGET_MANAGED_BUTTON_TEXT;
+        }
+
+        /// <summary>
+        /// Formats the warning text that tells a package-manager user which command makes the CLI usable.
         /// </summary>
         /// <remarks>
         /// Why the line breaks: the command is not run by Unity, so the text has to say where it belongs,
@@ -23,25 +35,41 @@ namespace io.github.hatayama.UnityCliLoop.Application
         /// such a user to upgrade names a command that reports nothing to do, so those cases point at a
         /// reinstall instead and the text never claims a comparison that is not true.
         /// </remarks>
-        public static string GetHomebrewUpgradeGuidanceText(string cliVersion, string requiredCliVersion)
+        public static string GetManagedUpgradeGuidanceText(
+            ManagedCliKind kind,
+            string cliVersion,
+            string requiredCliVersion)
         {
+            System.Diagnostics.Debug.Assert(kind != ManagedCliKind.None, "kind must identify a package manager");
+            string managedDescription = kind == ManagedCliKind.Homebrew
+                ? "Homebrew-managed"
+                : "winget-managed";
+            // Why two winget lines: Windows PowerShell 5.1 rejects &&, and a single install command
+            // does not reliably reinstall an existing portable package.
+            string reinstallGuidance = kind == ManagedCliKind.Homebrew
+                ? "Run this command in your terminal:\n" + CliConstants.HOMEBREW_REINSTALL_COMMAND
+                : "Run these commands in your terminal:\n"
+                    + CliConstants.WINGET_UNINSTALL_COMMAND + "\n"
+                    + CliConstants.WINGET_INSTALL_COMMAND;
+            string upgradeCommand = kind == ManagedCliKind.Homebrew
+                ? CliConstants.HOMEBREW_UPGRADE_COMMAND
+                : CliConstants.WINGET_UPGRADE_COMMAND;
+
             if (string.IsNullOrEmpty(cliVersion))
             {
-                return "Homebrew-managed CLI did not report a version.\n"
-                    + "Run this command in your terminal:\n"
-                    + $"{CliConstants.HOMEBREW_REINSTALL_COMMAND}";
+                return managedDescription + " CLI did not report a version.\n"
+                    + reinstallGuidance;
             }
 
             if (CliVersionComparer.IsVersionGreaterThanOrEqual(cliVersion, requiredCliVersion))
             {
-                return $"Homebrew-managed CLI v{cliVersion} did not answer as the required uloop CLI.\n"
-                    + "Run this command in your terminal:\n"
-                    + $"{CliConstants.HOMEBREW_REINSTALL_COMMAND}";
+                return $"{managedDescription} CLI v{cliVersion} did not answer as the required uloop CLI.\n"
+                    + reinstallGuidance;
             }
 
-            return $"Homebrew-managed CLI v{cliVersion} does not meet the required v{requiredCliVersion}.\n"
+            return $"{managedDescription} CLI v{cliVersion} does not meet the required v{requiredCliVersion}.\n"
                 + "Run this command in your terminal:\n"
-                + $"{CliConstants.HOMEBREW_UPGRADE_COMMAND}";
+                + upgradeCommand;
         }
 
         public static string GetCliReplacementButtonText(string action, string cliVersion, string requiredCliVersion)

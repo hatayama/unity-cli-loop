@@ -482,9 +482,9 @@ func TestRunDispatcherRunTestsHelpDoesNotRequireUnityProject(t *testing.T) {
 		"--test-mode",
 		"--filter-type",
 		"--filter-value",
-		"--fail-on-unsaved-changes",
-		"Fail before test execution if unsaved editor changes remain instead of auto-saving them",
-		"default: auto-save enabled",
+		"--unsaved-changes",
+		"default: save",
+		"values: save|fail|discard",
 	} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("run-tests help missing %q:\n%s", expected, output)

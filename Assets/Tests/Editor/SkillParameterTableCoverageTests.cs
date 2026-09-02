@@ -186,11 +186,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return kebabName;
             }
 
-            // These two flags read as an action rather than as the negation of a property name.
-            if (toolName == "run-tests" && propertyName == "SaveBeforeRun")
-            {
-                return "fail-on-unsaved-changes";
-            }
+            // This flag reads as an action rather than as the negation of a property name.
             if (toolName == "compile" && propertyName == "ReloadExternalSceneChanges")
             {
                 return "stop-on-external-scene-changes";

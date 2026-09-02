@@ -23,18 +23,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Tests cannot run while the editor has unsaved scene or prefab changes. Save or discard these changes before running tests.";
         private const string UnsavedEditorChangesSaveFailureMessage =
             "Tests cannot save unsaved scene or prefab changes before running tests.";
+        private const string UnsavedEditorChangesDiscardFailureMessage =
+            "Tests cannot discard unsaved scene or prefab changes before running tests.";
 
         private readonly IEditorUnsavedChangesQuietSaver _unsavedChangesQuietSaver;
+        private readonly IEditorUnsavedChangesDiscarder _unsavedChangesDiscarder;
 
         public TestExecutionStateValidationService()
-            : this(new EditorUnsavedChangesQuietSaver())
+            : this(new EditorUnsavedChangesQuietSaver(), new EditorUnsavedChangesDiscarder())
         {
         }
 
-        public TestExecutionStateValidationService(IEditorUnsavedChangesQuietSaver unsavedChangesQuietSaver)
+        public TestExecutionStateValidationService(
+            IEditorUnsavedChangesQuietSaver unsavedChangesQuietSaver,
+            IEditorUnsavedChangesDiscarder unsavedChangesDiscarder)
         {
             Debug.Assert(unsavedChangesQuietSaver != null, "unsavedChangesQuietSaver must not be null");
+            Debug.Assert(unsavedChangesDiscarder != null, "unsavedChangesDiscarder must not be null");
             _unsavedChangesQuietSaver = unsavedChangesQuietSaver;
+            _unsavedChangesDiscarder = unsavedChangesDiscarder;
         }
 
         protected virtual bool IsPlaying => EditorApplication.isPlaying;
@@ -57,7 +64,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ValidationResult.Success();
         }
 
-        public virtual ValidationResult Validate(UnityCliLoopTestMode testMode, bool saveBeforeRun)
+        protected virtual ValidationResult DiscardUnsavedEditorChanges()
+        {
+            string[] failedChanges = _unsavedChangesDiscarder.DiscardUnsavedEditorChanges();
+            Debug.Assert(failedChanges != null, "Unsaved editor change discard must return an array");
+            if (failedChanges.Length > 0)
+            {
+                return ValidationResult.Failure(CreateUnsavedEditorChangesDiscardFailureMessage(failedChanges));
+            }
+
+            return ValidationResult.Success();
+        }
+
+        public virtual ValidationResult Validate(UnityCliLoopTestMode testMode, RunTestsUnsavedChangesMode unsavedChanges)
         {
             if (IsCompiling)
             {
@@ -79,13 +98,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return ValidationResult.Failure(PlayModePausedMessage);
             }
 
-            if (saveBeforeRun)
+            ValidationResult applyResult = ApplyUnsavedChangesMode(unsavedChanges);
+            if (!applyResult.IsValid)
             {
-                ValidationResult saveResult = SaveUnsavedEditorChanges();
-                if (!saveResult.IsValid)
-                {
-                    return saveResult;
-                }
+                return applyResult;
             }
 
             string[] unsavedEditorChanges = DetectUnsavedEditorChanges();
@@ -95,6 +111,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return ValidationResult.Failure(CreateUnsavedEditorChangesFailureMessage(unsavedEditorChanges));
             }
 
+            return ValidationResult.Success();
+        }
+
+        private ValidationResult ApplyUnsavedChangesMode(RunTestsUnsavedChangesMode unsavedChanges)
+        {
+            if (unsavedChanges == RunTestsUnsavedChangesMode.save)
+            {
+                return SaveUnsavedEditorChanges();
+            }
+
+            if (unsavedChanges == RunTestsUnsavedChangesMode.discard)
+            {
+                return DiscardUnsavedEditorChanges();
+            }
+
+            Debug.Assert(
+                unsavedChanges == RunTestsUnsavedChangesMode.fail,
+                "unsavedChanges must be save, fail, or discard");
             return ValidationResult.Success();
         }
 
@@ -112,6 +146,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(failedChanges.Length > 0, "failedChanges must not be empty");
 
             return UnsavedEditorChangesSaveFailureMessage + " Unsaved changes that failed to save: " + string.Join(", ", failedChanges);
+        }
+
+        private static string CreateUnsavedEditorChangesDiscardFailureMessage(string[] failedChanges)
+        {
+            Debug.Assert(failedChanges != null, "failedChanges must not be null");
+            Debug.Assert(failedChanges.Length > 0, "failedChanges must not be empty");
+
+            return UnsavedEditorChangesDiscardFailureMessage + " Unsaved changes that failed to discard: " + string.Join(", ", failedChanges);
         }
     }
 }

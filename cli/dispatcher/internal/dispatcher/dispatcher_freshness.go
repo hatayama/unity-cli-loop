@@ -35,19 +35,18 @@ type dispatcherFreshnessInputs struct {
 	SelfUpdateDisabled bool
 	HasSiblingRealCLI  bool
 	UpdateDue          bool
-	HomebrewManaged    bool
+	ManagedInstall     sharedupdate.ManagedInstall
 }
 
 type dispatcherFreshnessPlan struct {
 	Action         dispatcherFreshnessAction
 	MinimumVersion string
 	Reason         string
+	NextAction     string
 }
 
 const (
 	dispatcherFreshnessReasonSelfUpdateDisabled = "Automatic update is disabled."
-	// Why: Homebrew installs must not run the curl installer; brew upgrade is the only safe path.
-	dispatcherFreshnessReasonHomebrewManaged = "This uloop install is managed by Homebrew. Run `brew upgrade uloop` to update."
 )
 
 func enforceDispatcherFreshnessWithDeps(ctx context.Context, pin dispatcherPin, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
@@ -70,20 +69,20 @@ func enforceDispatcherFreshnessWithDeps(ctx context.Context, pin dispatcherPin, 
 		SelfUpdateDisabled: selfUpdateDisabled,
 		HasSiblingRealCLI:  hasSiblingRealCLI,
 		UpdateDue:          updateDue,
-		HomebrewManaged:    isHomebrewManagedDispatcherInstall(),
+		ManagedInstall:     detectManagedDispatcherInstall(),
 	})
 	return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
 }
 
-// isHomebrewManagedDispatcherInstall reports whether this dispatcher binary lives under Homebrew.
+// detectManagedDispatcherInstall reports whether a package manager owns this dispatcher binary.
 // Why: freshness is best-effort background work — path resolution failures stay false here so
 // ordinary commands keep running; explicit `uloop update` is what surfaces resolution errors.
-func isHomebrewManagedDispatcherInstall() bool {
+func detectManagedDispatcherInstall() sharedupdate.ManagedInstall {
 	executablePath, err := resolveUpdateExecutablePathFunc()
 	if err != nil {
-		return false
+		return sharedupdate.ManagedInstall{}
 	}
-	return sharedupdate.IsHomebrewManagedPath(executablePath)
+	return sharedupdate.DetectManagedInstall(executablePath)
 }
 
 func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFreshnessPlan {
@@ -92,11 +91,12 @@ func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFresh
 		return dispatcherFreshnessPlan{Action: dispatcherFreshnessNoop}
 	}
 	updateRequired := sharedversion.IsLessThan(inputs.CurrentVersion, minimumVersion)
-	if updateRequired && inputs.HomebrewManaged {
+	if updateRequired && inputs.ManagedInstall.IsManaged() {
 		return dispatcherFreshnessPlan{
 			Action:         dispatcherFreshnessManualUpdateRequired,
 			MinimumVersion: minimumVersion,
-			Reason:         dispatcherFreshnessReasonHomebrewManaged,
+			Reason:         managedInstallFreshnessReason(inputs.ManagedInstall),
+			NextAction:     "Run `" + inputs.ManagedInstall.UpgradeCommand + "` and retry the command.",
 		}
 	}
 	if updateRequired && inputs.SelfUpdateDisabled {
@@ -104,15 +104,20 @@ func decideDispatcherFreshness(inputs dispatcherFreshnessInputs) dispatcherFresh
 			Action:         dispatcherFreshnessManualUpdateRequired,
 			MinimumVersion: minimumVersion,
 			Reason:         dispatcherFreshnessReasonSelfUpdateDisabled,
+			NextAction:     "Run `uloop update` and retry the command.",
 		}
 	}
 	if updateRequired {
 		return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunRequiredUpdate, MinimumVersion: minimumVersion}
 	}
-	if inputs.HomebrewManaged || inputs.HasSiblingRealCLI || !inputs.UpdateDue {
+	if inputs.ManagedInstall.IsManaged() || inputs.HasSiblingRealCLI || !inputs.UpdateDue {
 		return dispatcherFreshnessPlan{Action: dispatcherFreshnessNoop, MinimumVersion: minimumVersion}
 	}
 	return dispatcherFreshnessPlan{Action: dispatcherFreshnessRunOptionalUpdate, MinimumVersion: minimumVersion}
+}
+
+func managedInstallFreshnessReason(managedInstall sharedupdate.ManagedInstall) string {
+	return "This uloop install is managed by " + managedInstall.DisplayName + ". Run `" + managedInstall.UpgradeCommand + "` to update."
 }
 
 func executeDispatcherFreshnessPlan(ctx context.Context, plan dispatcherFreshnessPlan, stderr io.Writer, deps dispatcherRunDeps) (bool, int) {
@@ -120,7 +125,7 @@ func executeDispatcherFreshnessPlan(ctx context.Context, plan dispatcherFreshnes
 	case dispatcherFreshnessNoop:
 		return false, 0
 	case dispatcherFreshnessManualUpdateRequired:
-		writeDispatcherManualUpdateRequiredError(stderr, plan.MinimumVersion, plan.Reason)
+		writeDispatcherManualUpdateRequiredError(stderr, plan)
 		return true, 1
 	case dispatcherFreshnessRunRequiredUpdate, dispatcherFreshnessRunOptionalUpdate:
 		return runDispatcherFreshnessUpdate(ctx, plan, stderr, deps)
@@ -151,8 +156,10 @@ func runDispatcherFreshnessUpdate(ctx context.Context, plan dispatcherFreshnessP
 	}
 
 	if plan.Action == dispatcherFreshnessRunRequiredUpdate {
-		writeDispatcherManualUpdateRequiredError(stderr, plan.MinimumVersion, "Automatic update failed: "+err.Error())
-		return true, 1
+		plan.Action = dispatcherFreshnessManualUpdateRequired
+		plan.Reason = "Automatic update failed: " + err.Error()
+		plan.NextAction = "Run `uloop update` and retry the command."
+		return executeDispatcherFreshnessPlan(ctx, plan, stderr, deps)
 	}
 
 	// Why: optional update failures should not retry and redraw installer progress on every command.
@@ -184,22 +191,17 @@ func writeDispatcherSelfUpdateRequiredError(stderr io.Writer, updatedVersion str
 	})
 }
 
-func writeDispatcherManualUpdateRequiredError(stderr io.Writer, minimumVersion string, reason string) {
-	nextActions := []string{"Run `uloop update` and retry the command."}
-	if reason == dispatcherFreshnessReasonHomebrewManaged {
-		// Why: uloop update refuses Homebrew installs; brew upgrade is the only safe next step.
-		nextActions = []string{"Run `brew upgrade uloop` and retry the command."}
-	}
+func writeDispatcherManualUpdateRequiredError(stderr io.Writer, plan dispatcherFreshnessPlan) {
 	clierrors.WriteErrorEnvelope(stderr, clierrors.CLIError{
 		ErrorCode:   clierrors.ErrorCodeCLIUpdateRequired,
 		Phase:       clierrors.ErrorPhaseExecution,
-		Message:     "This project requires uloop dispatcher >= " + minimumVersion + ". " + reason,
+		Message:     "This project requires uloop dispatcher >= " + plan.MinimumVersion + ". " + plan.Reason,
 		Retryable:   true,
 		SafeToRetry: true,
-		NextActions: nextActions,
+		NextActions: []string{plan.NextAction},
 		Details: map[string]any{
 			"CurrentDispatcherVersion": dispatcherVersion,
-			"MinimumDispatcherVersion": minimumVersion,
+			"MinimumDispatcherVersion": plan.MinimumVersion,
 		},
 	})
 }

@@ -87,7 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateFailureResponse(timeoutError);
             }
 
-            ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.SaveBeforeRun);
+            ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.UnsavedChanges);
             if (!validation.IsValid)
             {
                 return CreateFailureResponse(validation.ErrorMessage);

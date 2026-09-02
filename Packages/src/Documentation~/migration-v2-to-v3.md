@@ -125,7 +125,7 @@ For any boolean not listed below, run `uloop <command> --help`: every V3 flag pr
 | `uloop compile` | `--reload-external-scene-changes true` | remove |
 | `uloop compile` | `--reload-external-scene-changes false` | `--stop-on-external-scene-changes` |
 | `uloop run-tests` | `--save-before-run true` or bare | remove |
-| `uloop run-tests` | `--save-before-run false` | `--fail-on-unsaved-changes` |
+| `uloop run-tests` | `--save-before-run false` | `--unsaved-changes fail` |
 | `uloop replay-input` | `--show-overlay true` | remove |
 | `uloop replay-input` | `--show-overlay false` | `--no-show-overlay` |
 | `uloop get-hierarchy` | `--include-components true` | remove |

@@ -138,8 +138,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void ResolveForFocusReturn()
         {
-            // Focus return treats Unity's in-memory editor state as authoritative because source-control
-            // operations can replace files while Unity is unfocused and would otherwise trigger reload dialogs.
+            // Focus return treats Unity's in-memory editor state as authoritative for assets whose file
+            // was replaced while Unity was unfocused (source-control operations), because Unity would
+            // otherwise raise a reload dialog for them. Dirty assets whose file is unchanged are left
+            // unsaved: saving them would silently commit the user's in-progress edits on every focus switch.
             (string AssetPath, bool IsDirty)[] openScenesBefore = GetOpenSceneStates();
             object[] fingerprintDiffsBefore =
                 BuildFingerprintDiffContexts(openScenesBefore, SceneSnapshots, ReadAssetFileFingerprint);
@@ -155,28 +157,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 },
                 includeStackTrace: false);
 
-            string[] dirtySceneSaveFailures = SaveDirtyOpenScenesBeforeReload();
-            LogFocusReturnFailures("save dirty Scene files", dirtySceneSaveFailures);
+            string[] dirtySceneSaveFailures = SaveDirtyOpenScenesChangedExternally();
+            LogFocusReturnFailures("save dirty Scene files that changed on disk", dirtySceneSaveFailures);
 
             string[] missingSceneSaveFailures = SaveMissingOpenScenesFromUnity();
             LogFocusReturnFailures("restore missing Scene files from the Unity state", missingSceneSaveFailures);
 
-            string[] dirtyPrefabSaveFailures = ExternalPrefabStageChangeTracker.SaveDirty();
-            LogFocusReturnFailures("save the dirty Prefab Stage", dirtyPrefabSaveFailures);
+            string[] dirtyPrefabSaveFailures = ExternalPrefabStageChangeTracker.SaveDirtyIfChangedExternally();
+            LogFocusReturnFailures("save the dirty Prefab Stage that changed on disk", dirtyPrefabSaveFailures);
 
             string[] missingPrefabSaveFailures = ExternalPrefabStageChangeTracker.SaveMissingAsset();
             LogFocusReturnFailures("restore the missing Prefab asset from the Unity state", missingPrefabSaveFailures);
 
             ResolveSceneExternalChangesForFocusReturn();
-            if (dirtyPrefabSaveFailures.Length > 0 ||
-                missingPrefabSaveFailures.Length > 0 ||
-                ExternalPrefabStageChangeTracker.IsCurrentDirty())
+            // A dirty Prefab Stage that survived the save step is unchanged on disk, so the reload below
+            // is a no-op for it; only a failed save leaves a real conflict that reload must not overwrite.
+            if (dirtyPrefabSaveFailures.Length > 0 || missingPrefabSaveFailures.Length > 0)
             {
                 Debug.LogWarning(
-                    "Unity CLI Loop skipped Prefab Stage external-change reload because the current Prefab Stage is still dirty or could not be saved.");
+                    "Unity CLI Loop skipped Prefab Stage external-change reload because the current Prefab Stage could not be saved.");
                 VibeLogger.LogInfo(
                     "external_scene_resolve_focus_return",
-                    "ResolveForFocusReturn finished early (Prefab Stage still dirty or unsaved)",
+                    "ResolveForFocusReturn finished early (Prefab Stage could not be saved)",
                     new
                     {
                         phase = "end",
@@ -334,6 +336,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             Debug.LogWarning("Unity CLI Loop could not resolve external Scene changes on focus return. " +
                              result.Message);
+        }
+
+        internal static string[] SaveDirtyOpenScenesChangedExternally()
+        {
+            string[] scenePathsToSave = ExternalAssetFocusReturnSavePolicy.SelectDirtyAssetsToSave(
+                GetOpenSceneStates(), SceneSnapshots, ReadAssetFileFingerprint);
+            List<string> failedScenePaths = new List<string>();
+            bool hasRecordedSceneSnapshot = false;
+            for (int i = 0; i < scenePathsToSave.Length; i++)
+            {
+                Scene scene = SceneManager.GetSceneByPath(scenePathsToSave[i]);
+                if (!EditorSceneManager.SaveScene(scene))
+                {
+                    failedScenePaths.Add(scenePathsToSave[i]);
+                    continue;
+                }
+
+                hasRecordedSceneSnapshot = RecordSceneSnapshotIfTrackable(scene) || hasRecordedSceneSnapshot;
+            }
+
+            if (hasRecordedSceneSnapshot)
+            {
+                SaveSceneSnapshotsToSessionState();
+            }
+
+            return failedScenePaths.ToArray();
         }
 
         private static string[] SaveDirtyOpenScenesBeforeReload()

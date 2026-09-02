@@ -1,0 +1,41 @@
+name: Dispatcher Pin Freshness
+
+# Fails while Packages/src/project-runner-pin.json records an older dispatcher
+# release than the newest published stable one, so a skipped pin stamp is
+# visible on main instead of silently sending fresh installs to a stale release.
+#
+# Not on pull_request: while the automated pin-stamp pull request is open, the
+# pin on every other branch legitimately lags, and failing there would turn all
+# open pull requests red for a state only main can fix. The schedule covers the
+# case where a release is published and nothing is pushed to main afterwards.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version-file: cli/.go-version
+          cache: false
+
+      - name: Check dispatcher pin freshness
+        working-directory: cli/release-automation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: go run ./cmd/check-dispatcher-pin-freshness

@@ -25,21 +25,12 @@ func FindProperty(tool tools.ToolDefinition, kebabName string) (string, tools.To
 func OptionNameForProperty(toolName string, propertyName string, property tools.ToolProperty) string {
 	kebabName := pascalToKebab(propertyName)
 	if IsNegatedBooleanProperty(property) {
-		if isRunTestsSaveBeforeRunOption(toolName, propertyName, property) {
-			return "fail-on-unsaved-changes"
-		}
 		if isCompileReloadExternalSceneChangesOption(toolName, propertyName, property) {
 			return "stop-on-external-scene-changes"
 		}
 		return "no-" + kebabName
 	}
 	return kebabName
-}
-
-func isRunTestsSaveBeforeRunOption(toolName string, propertyName string, property tools.ToolProperty) bool {
-	return toolName == runTestsCommandName &&
-		propertyName == "SaveBeforeRun" &&
-		IsNegatedBooleanProperty(property)
 }
 
 func isCompileReloadExternalSceneChangesOption(toolName string, propertyName string, property tools.ToolProperty) bool {

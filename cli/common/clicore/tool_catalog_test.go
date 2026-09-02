@@ -11,13 +11,13 @@ import (
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
 )
 
-// Tests that run-tests-specific help text does not leak into unrelated tool schemas.
-func TestVisibleOptionHelpEntriesKeepsGenericSaveBeforeRunHelpForOtherTools(t *testing.T) {
+// Tests that negated-boolean help stays generic for tools that are not run-tests.
+func TestVisibleOptionHelpEntriesKeepsGenericNegatedBooleanHelpForOtherTools(t *testing.T) {
 	tool := ToolDefinition{
 		Name: "sample-tool",
 		InputSchema: InputSchema{
 			Properties: map[string]ToolProperty{
-				"SaveBeforeRun": {Type: "boolean", Default: true},
+				"AutoSaveDrafts": {Type: "boolean", Default: true},
 			},
 		},
 	}
@@ -27,10 +27,10 @@ func TestVisibleOptionHelpEntriesKeepsGenericSaveBeforeRunHelpForOtherTools(t *t
 	if len(entries) != 1 {
 		t.Fatalf("entry count mismatch: %#v", entries)
 	}
-	if entries[0].Name != "--no-save-before-run" {
+	if entries[0].Name != "--no-auto-save-drafts" {
 		t.Fatalf("option name mismatch: %#v", entries[0].Name)
 	}
-	if entries[0].Description != "Disable save before run; default: enabled" {
+	if entries[0].Description != "Disable auto save drafts; default: enabled" {
 		t.Fatalf("description mismatch: %#v", entries[0].Description)
 	}
 }

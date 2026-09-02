@@ -25,7 +25,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// • assembly: Assembly name (e.g.: UnityCliLoop.Tests.Editor)
         /// </summary>
         public string FilterValue { get; set; } = "";
-        public bool SaveBeforeRun { get; set; } = true;
+
+        /// <summary>
+        /// How to handle unsaved Scene and Prefab Stage changes before running tests.
+        /// </summary>
+        public RunTestsUnsavedChangesMode UnsavedChanges { get; set; } = RunTestsUnsavedChangesMode.save;
 
         /// <summary>
         /// Maximum seconds to wait for Unity Test Runner RunFinished before canceling the await.

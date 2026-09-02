@@ -10,7 +10,7 @@ Execute Unity Test Runner. When tests fail, NUnit XML results with error message
 
 `uloop run-tests` automatically compiles pending script changes before running tests. Pass `--skip-compile` only while validating active hot-reload patches, because the compile clears those patches; otherwise let the default compile surface errors and run against current scripts.
 
-Before executing tests, `uloop run-tests` saves unsaved loaded Scene changes and unsaved current Prefab Stage changes by default. If saving fails, it returns `Success: false`, keeps `TestCount` at `0`, lists the unsaved items in `Message`, and does not start the Unity Test Runner.
+Before executing tests, `uloop run-tests` handles unsaved loaded Scene and Prefab Stage changes according to `--unsaved-changes` (default `save`): `save` writes them first, `fail` stops if any remain, and `discard` reloads disk state so tests run against saved files. Untitled scenes cannot be discarded and fail. If the chosen mode cannot proceed, it returns `Success: false`, keeps `TestCount` at `0`, lists the items in `Message`, and does not start the Unity Test Runner.
 
 Active pause points are automatically cleared (the underlying code patches are removed as well) before test execution begins. Cleared IDs are reported in the response's `ClearedPausePointIds` field.
 
@@ -31,7 +31,7 @@ uloop run-tests [options]
 | `--test-mode` | string | `EditMode` | Test mode: `EditMode`, `PlayMode` |
 | `--filter-type` | string | `all` | Filter type: `all`, `exact`, `regex`, `assembly` |
 | `--filter-value` | string | - | Filter value (test name, pattern, or assembly) |
-| `--fail-on-unsaved-changes` | flag | - | Fail before test execution if unsaved editor changes remain instead of auto-saving them |
+| `--unsaved-changes` | string | `save` | `save` writes unsaved Scene/Prefab Stage changes; `fail` stops if any remain; `discard` reloads disk state (Untitled scenes fail) |
 | `--skip-compile` | flag | - | Skip the automatic compile before running tests; use only while validating active hot-reload patches. |
 | `--timeout-seconds` | integer | `600` | Maximum seconds to wait for RunFinished before canceling the await (max `1500`). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands |
 
