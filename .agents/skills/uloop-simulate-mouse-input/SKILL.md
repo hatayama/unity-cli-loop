@@ -59,7 +59,7 @@ uloop simulate-mouse-input --dry-run --x <x> --y <y> [--layer-mask <mask>] [--ma
 
 ### Pause Point Inspection (Standard for E2E)
 
-For standard frame proof when this input drives a state transition, follow the `uloop-pause-point` skill — it covers line placement and interruption semantics. Tool-specific note: if `InterruptedByPausePoint: true`, Unity is paused and input bookkeeping was safely released. Clear inspection-only pause points (`uloop clear-pause-point --all`) before final validation.
+For standard frame proof when this input drives a state transition, follow the `uloop-pause-point` skill — it covers line placement and interruption semantics. Tool-specific note: if `InterruptedByPausePoint: true`, Unity is paused; read `PressDeliveredToGame` before retrying. Clear inspection-only pause points (`uloop clear-pause-point --all`) before final validation.
 
 ## When to use this vs simulate-mouse-ui
 
