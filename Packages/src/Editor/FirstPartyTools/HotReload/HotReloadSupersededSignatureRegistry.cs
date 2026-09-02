@@ -38,6 +38,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ReplacementByOldMethodKey.TryGetValue(methodKey, out replacementDisplayName);
         }
 
+        public static void Remove(string methodKey)
+        {
+            if (string.IsNullOrEmpty(methodKey))
+            {
+                return;
+            }
+
+            ReplacementByOldMethodKey.Remove(methodKey);
+        }
+
         public static void ClearAll()
         {
             ReplacementByOldMethodKey.Clear();

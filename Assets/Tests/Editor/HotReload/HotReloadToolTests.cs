@@ -236,6 +236,43 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: Revert of one method drops that method's superseded mapping so a later
+        /// patch of the same key does not keep a stale Reason.
+        /// </summary>
+        [Test]
+        public void Revert_RemovesSupersededMappingForThatMethod()
+        {
+            HotReloadPatcher.RevertAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                IReadOnlyList<HotReloadActivePatchInfo> patches =
+                    HotReloadPatcher.DescribeActivePatches();
+                Assert.That(patches.Count, Is.EqualTo(1));
+                string methodKey = patches[0].MethodKey;
+                HotReloadSupersededSignatureRegistry.Record(methodKey, "Host.Replacement()");
+
+                MethodInfo original = typeof(HotReloadCoreFixture).GetMethod(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public);
+                Assert.That(original, Is.Not.Null);
+                Assert.That(HotReloadPatcher.Revert(original), Is.True);
+
+                bool found = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                    methodKey,
+                    out string _);
+                Assert.That(found, Is.False);
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
         /// What: --status Active rows prefer the superseded Reason over the never-invoked
         /// Reason when the old compiled signature is recorded.
         /// </summary>

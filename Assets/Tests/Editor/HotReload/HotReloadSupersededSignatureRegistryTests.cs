@@ -48,6 +48,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: Remove drops one recorded key and leaves others.
+        /// </summary>
+        [Test]
+        public void Remove_DropsOnlyThatKey()
+        {
+            HotReloadSupersededSignatureRegistry.Record("Old.One()", "New.One()");
+            HotReloadSupersededSignatureRegistry.Record("Old.Two()", "New.Two()");
+            HotReloadSupersededSignatureRegistry.Remove("Old.One()");
+
+            bool removed = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                "Old.One()",
+                out string _);
+            bool kept = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                "Old.Two()",
+                out string keptReplacement);
+
+            Assert.That(removed, Is.False);
+            Assert.That(kept, Is.True);
+            Assert.That(keptReplacement, Is.EqualTo("New.Two()"));
+        }
+
+        /// <summary>
         /// What: ClearAll drops every recorded superseded signature.
         /// </summary>
         [Test]
