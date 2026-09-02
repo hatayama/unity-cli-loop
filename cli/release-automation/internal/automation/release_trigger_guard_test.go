@@ -2,6 +2,7 @@ package automation
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -108,9 +109,9 @@ func TestReleaseTriggerGuardIgnoresNonBinaryCommonChanges(t *testing.T) {
 	}
 }
 
-// Verifies the embedded tool catalog counts as a shared release input, since it is compiled into both
-// binaries and now changes whenever a skill parameter table does - a description-only change that
-// shipped no new binary would be help text nobody receives.
+// Verifies structural catalog changes count as a shared release input. Description-only
+// regenerations are filtered out before this function by the shape comparison in
+// AnalyzeReleaseTriggerGuardForRefs.
 func TestReleaseTriggerGuardCoversTheEmbeddedToolCatalog(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{CatalogRelativePath})
 
@@ -122,8 +123,7 @@ func TestReleaseTriggerGuardCoversTheEmbeddedToolCatalog(t *testing.T) {
 	}
 }
 
-// Verifies the catalog passes once both release triggers are stamped, the sequence a skill edit and a
-// regeneration go through together.
+// Verifies a structural catalog change passes once both release triggers are stamped.
 func TestReleaseTriggerGuardAcceptsTheEmbeddedToolCatalogWithBothTriggers(t *testing.T) {
 	result := AnalyzeReleaseTriggerGuard([]string{
 		CatalogRelativePath,
@@ -328,4 +328,105 @@ func TestFormatReleaseTriggerWarningNamesStampCommand(t *testing.T) {
 			t.Fatalf("expected warning to contain %q, got:\n%s", expected, warning)
 		}
 	}
+}
+
+// Verifies a description-only catalog change is dropped from the shared-input list.
+func TestWithoutDescriptionOnlyCatalogChangeRemovesCatalogWhenShapeUnchanged(t *testing.T) {
+	filtered := withoutDescriptionOnlyCatalogChange([]string{
+		CatalogRelativePath,
+		"docs/shared-release-inputs.md",
+	}, false)
+
+	if len(filtered) != 1 || filtered[0] != "docs/shared-release-inputs.md" {
+		t.Fatalf("expected only the non-catalog file, got %v", filtered)
+	}
+}
+
+// Verifies a structural catalog change stays on the shared-input list.
+func TestWithoutDescriptionOnlyCatalogChangeKeepsCatalogWhenShapeChanged(t *testing.T) {
+	changedFiles := []string{CatalogRelativePath, "docs/shared-release-inputs.md"}
+	filtered := withoutDescriptionOnlyCatalogChange(changedFiles, true)
+
+	if len(filtered) != 2 || filtered[0] != CatalogRelativePath || filtered[1] != "docs/shared-release-inputs.md" {
+		t.Fatalf("expected the original list, got %v", filtered)
+	}
+}
+
+// Verifies a file list without the catalog is left unchanged.
+func TestWithoutDescriptionOnlyCatalogChangeLeavesNonCatalogListsAlone(t *testing.T) {
+	changedFiles := []string{"cli/common/clicore/output.go"}
+	filtered := withoutDescriptionOnlyCatalogChange(changedFiles, false)
+
+	if len(filtered) != 1 || filtered[0] != "cli/common/clicore/output.go" {
+		t.Fatalf("expected the original list, got %v", filtered)
+	}
+}
+
+const (
+	mergeBaseCatalogInitial         = `{"tools":[{"name":"compile","description":"a","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"d"}}}}]}`
+	mergeBaseCatalogStructural      = `{"tools":[{"name":"compile","description":"a","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"d"},"Y":{"type":"boolean"}}}}]}`
+	mergeBaseCatalogDescriptionOnly = `{"tools":[{"name":"compile","description":"b","inputSchema":{"type":"object","properties":{"X":{"type":"string","description":"e"}}}}]}`
+)
+
+// Verifies catalog comparison uses merge-base, not the base tip. Comparing against
+// main's tip would treat this description-only topic as a structural change because
+// main later added a property.
+func TestAnalyzeReleaseTriggerGuardForRefsUsesMergeBaseForCatalogShape(t *testing.T) {
+	repoRoot := t.TempDir()
+	runGitInRepo(t, repoRoot, "init", "-b", "main")
+
+	catalogPath := filepath.Join(repoRoot, filepath.FromSlash(CatalogRelativePath))
+	if err := os.MkdirAll(filepath.Dir(catalogPath), 0o755); err != nil {
+		t.Fatalf("failed to create catalog directory: %v", err)
+	}
+	if err := os.WriteFile(catalogPath, []byte(mergeBaseCatalogInitial+"\n"), 0o644); err != nil {
+		t.Fatalf("failed to write initial catalog: %v", err)
+	}
+	runGitInRepo(t, repoRoot, "add", CatalogRelativePath)
+	runGitInRepo(t, repoRoot, "commit", "-m", "initial catalog")
+	initialCommit := strings.TrimSpace(runGitInRepoOutput(t, repoRoot, "rev-parse", "HEAD"))
+
+	if err := os.WriteFile(catalogPath, []byte(mergeBaseCatalogStructural+"\n"), 0o644); err != nil {
+		t.Fatalf("failed to write structural catalog: %v", err)
+	}
+	runGitInRepo(t, repoRoot, "add", CatalogRelativePath)
+	runGitInRepo(t, repoRoot, "commit", "-m", "structural catalog change on main")
+
+	runGitInRepo(t, repoRoot, "switch", "-c", "topic", initialCommit)
+	if err := os.WriteFile(catalogPath, []byte(mergeBaseCatalogDescriptionOnly+"\n"), 0o644); err != nil {
+		t.Fatalf("failed to write description-only catalog: %v", err)
+	}
+	runGitInRepo(t, repoRoot, "add", CatalogRelativePath)
+	runGitInRepo(t, repoRoot, "commit", "-m", "description-only catalog change")
+
+	t.Chdir(repoRoot)
+
+	result, err := AnalyzeReleaseTriggerGuardForRefs(context.Background(), ReleaseTriggerGuardConfig{
+		BaseRef: "main",
+		HeadRef: "topic",
+	})
+	if err != nil {
+		t.Fatalf("expected merge-base comparison to succeed, got %v", err)
+	}
+	if len(result.Violations) != 0 {
+		t.Fatalf("expected no violations when comparing against merge-base, got %v", result.Violations)
+	}
+	if !result.DescriptionOnlyCatalogSkipped {
+		t.Fatal("expected the description-only catalog change to be filtered out")
+	}
+}
+
+func runGitInRepo(t *testing.T, repoRoot string, args ...string) {
+	t.Helper()
+	_ = runGitInRepoOutput(t, repoRoot, args...)
+}
+
+func runGitInRepoOutput(t *testing.T, repoRoot string, args ...string) string {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", repoRoot, "-c", "user.name=test", "-c", "user.email=test@example.com"}, args...)...)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, output)
+	}
+	return string(output)
 }

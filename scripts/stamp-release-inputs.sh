@@ -5,17 +5,22 @@ set -eu
 # release-please attributes a commit to a component only when the commit
 # touches that package root, so changes to shared inputs (the common module,
 # installer assets) need these stamp updates to reach every affected release.
-ROOT_DIR=${ULOOP_REPO_ROOT:-$(CDPATH= cd "$(dirname "$0")/.." && pwd)}
+# SCRIPT_ROOT is the checkout that owns this script so `go run` can find the
+# digest command even when ULOOP_REPO_ROOT points at a fixture repository.
+SCRIPT_ROOT=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
+ROOT_DIR=${ULOOP_REPO_ROOT:-$SCRIPT_ROOT}
 
 cd "$ROOT_DIR"
+# Resolve a relative ULOOP_REPO_ROOT after the cd so later `go run -path`
+# still points at the fixture when the digest command changes directory.
+ROOT_DIR=$(pwd)
 
 # Input selection mirrors the release trigger guard
 # (cli/release-automation/internal/automation/release_trigger_guard.go):
 # only package roots imported by shipped binaries count; release-please stamp
 # targets such as contract.json do not. The embedded tool catalog is the one
-# JSON that does count - it is compiled into both binaries and is generated
-# from the skill parameter tables, so a tool description change has to reach a
-# release.
+# JSON that does count, structure only; descriptions are excluded because the
+# CLI reloads them from SKILL.md at run time.
 list_shared_common_inputs() {
   git ls-files -- \
     cli/common/go.mod \
@@ -62,7 +67,11 @@ hash_input_list() {
   # plausible-looking stamp over a truncated manifest.
   input_manifest=$(LC_ALL=C sort | while IFS= read -r input_file; do
     [ -n "$input_file" ] || continue
-    object_hash=$(git hash-object "$input_file") || exit 1
+    if [ "$input_file" = "cli/common/tools/default-tools.json" ]; then
+      object_hash=$(cd "$SCRIPT_ROOT/cli/release-automation" && go run ./cmd/tool-catalog-shape-digest -path "$ROOT_DIR/$input_file") || exit 1
+    else
+      object_hash=$(git hash-object "$input_file") || exit 1
+    fi
     printf '%s %s\n' "$input_file" "$object_hash"
   done) || {
     echo "Failed to hash a shared release input." >&2

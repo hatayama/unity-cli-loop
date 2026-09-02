@@ -102,3 +102,15 @@ files mean one platform is not representative.
 
 Reversal condition: revisit if CI ends up building the full release matrix on every pull
 request for other reasons, which would make the marginal cost of the comparison near zero.
+
+## Addendum (2026-09-02): data inputs
+
+The embedded tool catalog is classified by a field-level JSON diff that drops
+`description` keys. This is not Go reachability analysis: the ground truth is
+the one-line question "does anything other than a description differ", which
+stays reviewable. The miss direction is stale help-text fallback wording
+(outside a project, or inside one when SKILL.md has no entry for the item)
+until the next real CLI release; it cannot produce functional version skew.
+
+Reversal condition: withdraw this exception if embedded descriptions start to
+affect runtime behavior, or if the CLI stops reloading them from SKILL.md.

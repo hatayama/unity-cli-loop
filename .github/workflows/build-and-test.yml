@@ -106,6 +106,9 @@ jobs:
         working-directory: cli/release-automation
         run: go run ./cmd/check-skill-size --root "$GITHUB_WORKSPACE"
 
+      - name: Test shared-inputs stamp script
+        run: scripts/test-stamp-release-inputs.sh
+
       # The stamp script derives its manifest from git ls-files, so a stamp generated before a new
       # input file was git-added is silently stale; check-release-triggers only checks that the
       # stamp files were touched, not that their values are current. Regenerate and diff instead.
@@ -155,6 +158,10 @@ jobs:
       - name: Test install release filter in Git Bash
         shell: bash
         run: sh scripts/test-install-release-filter.sh
+
+      - name: Test shared-inputs stamp script in Git Bash
+        shell: bash
+        run: sh scripts/test-stamp-release-inputs.sh
 
       - name: Parse PowerShell installer in Windows PowerShell
         shell: powershell
