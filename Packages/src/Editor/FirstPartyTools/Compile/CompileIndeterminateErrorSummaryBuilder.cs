@@ -53,6 +53,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return Header + "\n" + string.Join("\n", lines);
         }
 
+        /// <summary>
+        /// Returns the entries logged after the compile request started.
+        /// Why fall back to every entry: a Console cleared during the request shrinks below the
+        /// boundary, and dropping everything would hide the error that aborted the compile.
+        /// </summary>
+        internal static UnityCliLoopConsoleLogEntry[] TakeEntriesAfter(
+            UnityCliLoopConsoleLogEntry[] consoleEntries,
+            int boundaryCount)
+        {
+            Debug.Assert(consoleEntries != null, "consoleEntries must not be null");
+            Debug.Assert(boundaryCount >= 0, "boundaryCount must not be negative");
+
+            if (boundaryCount <= 0 || boundaryCount > consoleEntries.Length)
+            {
+                return consoleEntries;
+            }
+
+            UnityCliLoopConsoleLogEntry[] recent = new UnityCliLoopConsoleLogEntry[consoleEntries.Length - boundaryCount];
+            Array.Copy(consoleEntries, boundaryCount, recent, 0, recent.Length);
+            return recent;
+        }
+
         private static string ToSummaryLine(UnityCliLoopConsoleLogEntry entry)
         {
             if (entry == null ||

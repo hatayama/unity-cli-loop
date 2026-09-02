@@ -14,14 +14,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// Decides and triggers recovery actions when CompileLifecycleWatchdog observes a stalled or
     /// faulted compile request. Assembly Definition validation, message building, and abort actions
     /// are injected so these recovery decisions can be pinned with tests without running Unity compilation.
+    /// Why one Console snapshot per recovery: asmdef validation and the indeterminate summary both read
+    /// the Console, and scanning it twice on the main thread doubles recovery work for nothing.
     /// </summary>
     internal sealed class CompileLifecycleRecoveryCoordinator
     {
         private readonly Func<bool> _isEditorCompiling;
         private readonly Func<bool> _isRequestCompleted;
         private readonly Func<TaskCompletionSource<CompileResult>> _getCurrentCompileTask;
-        private readonly Func<AssemblyDefinitionConsoleErrorResult> _findAssemblyDefinitionErrors;
+        private readonly Func<UnityCliLoopConsoleLogEntry[], AssemblyDefinitionConsoleErrorResult> _findAssemblyDefinitionErrors;
         private readonly Func<UnityCliLoopConsoleLogEntry[]> _getConsoleErrorEntries;
+        private readonly Func<int> _getConsoleErrorCountAtCompileStart;
         private readonly Func<ValidationResult> _validateNoDuplicateAsmdefNames;
         private readonly Func<bool> _getIsForceCompile;
         private readonly Func<CompilerMessage[]> _getCompileMessages;
@@ -35,8 +38,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<bool> isEditorCompiling,
             Func<bool> isRequestCompleted,
             Func<TaskCompletionSource<CompileResult>> getCurrentCompileTask,
-            Func<AssemblyDefinitionConsoleErrorResult> findAssemblyDefinitionErrors,
+            Func<UnityCliLoopConsoleLogEntry[], AssemblyDefinitionConsoleErrorResult> findAssemblyDefinitionErrors,
             Func<UnityCliLoopConsoleLogEntry[]> getConsoleErrorEntries,
+            Func<int> getConsoleErrorCountAtCompileStart,
             Func<ValidationResult> validateNoDuplicateAsmdefNames,
             Func<bool> getIsForceCompile,
             Func<CompilerMessage[]> getCompileMessages,
@@ -51,6 +55,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(getCurrentCompileTask != null, "getCurrentCompileTask must not be null");
             Debug.Assert(findAssemblyDefinitionErrors != null, "findAssemblyDefinitionErrors must not be null");
             Debug.Assert(getConsoleErrorEntries != null, "getConsoleErrorEntries must not be null");
+            Debug.Assert(
+                getConsoleErrorCountAtCompileStart != null,
+                "getConsoleErrorCountAtCompileStart must not be null");
             Debug.Assert(validateNoDuplicateAsmdefNames != null, "validateNoDuplicateAsmdefNames must not be null");
             Debug.Assert(getIsForceCompile != null, "getIsForceCompile must not be null");
             Debug.Assert(getCompileMessages != null, "getCompileMessages must not be null");
@@ -67,6 +74,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(findAssemblyDefinitionErrors));
             _getConsoleErrorEntries = getConsoleErrorEntries ??
                 throw new ArgumentNullException(nameof(getConsoleErrorEntries));
+            _getConsoleErrorCountAtCompileStart = getConsoleErrorCountAtCompileStart ??
+                throw new ArgumentNullException(nameof(getConsoleErrorCountAtCompileStart));
             _validateNoDuplicateAsmdefNames = validateNoDuplicateAsmdefNames ??
                 throw new ArgumentNullException(nameof(validateNoDuplicateAsmdefNames));
             _getIsForceCompile = getIsForceCompile ?? throw new ArgumentNullException(nameof(getIsForceCompile));
@@ -187,7 +196,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal void HandleCompileStartTimeout(int waitedMs)
         {
-            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors = _findAssemblyDefinitionErrors();
+            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
+                _findAssemblyDefinitionErrors(_getConsoleErrorEntries());
             if (assemblyDefinitionErrors.HasErrors)
             {
                 VibeLogger.LogWarning(
@@ -237,13 +247,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "The compile result is indeterminate; use get-logs to inspect the compiler output.";
             // Why append the Console errors: the indeterminate result otherwise costs a second
             // get-logs round trip to see the asmdef or compiler error that aborted the compile.
-            string consoleErrorSummary = CompileIndeterminateErrorSummaryBuilder.Build(_getConsoleErrorEntries());
+            // Why only entries after the compile-start boundary: older Console errors belong to
+            // earlier sessions and would be misread as this compile's cause.
+            UnityCliLoopConsoleLogEntry[] consoleErrorEntries = _getConsoleErrorEntries();
+            string consoleErrorSummary = CompileIndeterminateErrorSummaryBuilder.Build(
+                CompileIndeterminateErrorSummaryBuilder.TakeEntriesAfter(
+                    consoleErrorEntries,
+                    _getConsoleErrorCountAtCompileStart()));
             if (consoleErrorSummary != null)
             {
                 message = message + "\n" + consoleErrorSummary;
             }
 
-            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors = _findAssemblyDefinitionErrors();
+            AssemblyDefinitionConsoleErrorResult assemblyDefinitionErrors =
+                _findAssemblyDefinitionErrors(consoleErrorEntries);
             CompilerMessage[] compileMessages = _getCompileMessages();
             bool isForceCompile = _getIsForceCompile();
             CompileResult result = CompileResultFactory.CreateStoppedWithoutFinishResult(

@@ -122,6 +122,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: entries at or before the compile-start boundary are dropped, later ones kept in order.
+        /// </summary>
+        [Test]
+        public void TakeEntriesAfter_WhenBoundaryWithinSnapshot_ReturnsEntriesAfterBoundary()
+        {
+            UnityCliLoopConsoleLogEntry[] entries =
+            {
+                new(UnityCliLoopLogType.Error, "stale", string.Empty),
+                new(UnityCliLoopLogType.Error, "fresh 1", string.Empty),
+                new(UnityCliLoopLogType.Error, "fresh 2", string.Empty)
+            };
+
+            UnityCliLoopConsoleLogEntry[] recent = CompileIndeterminateErrorSummaryBuilder.TakeEntriesAfter(entries, 1);
+
+            Assert.That(recent.Length, Is.EqualTo(2));
+            Assert.That(recent[0].Message, Is.EqualTo("fresh 1"));
+            Assert.That(recent[1].Message, Is.EqualTo("fresh 2"));
+        }
+
+        /// <summary>
+        /// What: a boundary larger than the snapshot (Console cleared mid-request) keeps every entry.
+        /// </summary>
+        [Test]
+        public void TakeEntriesAfter_WhenBoundaryExceedsSnapshot_ReturnsAllEntries()
+        {
+            UnityCliLoopConsoleLogEntry[] entries =
+            {
+                new(UnityCliLoopLogType.Error, "fresh", string.Empty)
+            };
+
+            UnityCliLoopConsoleLogEntry[] recent = CompileIndeterminateErrorSummaryBuilder.TakeEntriesAfter(entries, 5);
+
+            Assert.That(recent, Is.SameAs(entries));
+        }
+
+        /// <summary>
+        /// What: a zero boundary (nothing logged before the compile) keeps every entry.
+        /// </summary>
+        [Test]
+        public void TakeEntriesAfter_WhenBoundaryIsZero_ReturnsAllEntries()
+        {
+            UnityCliLoopConsoleLogEntry[] entries =
+            {
+                new(UnityCliLoopLogType.Error, "fresh", string.Empty)
+            };
+
+            UnityCliLoopConsoleLogEntry[] recent = CompileIndeterminateErrorSummaryBuilder.TakeEntriesAfter(entries, 0);
+
+            Assert.That(recent, Is.SameAs(entries));
+        }
+
+        /// <summary>
         /// What: blank error messages are skipped instead of producing empty bullet lines.
         /// </summary>
         [Test]
