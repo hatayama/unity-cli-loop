@@ -1,6 +1,7 @@
 package automation
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -35,8 +36,10 @@ func ToolCatalogShapeChanged(base []byte, head []byte) (bool, error) {
 }
 
 func canonicalizeToolCatalogShape(content []byte) ([]byte, error) {
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.UseNumber()
 	var root map[string]any
-	if err := json.Unmarshal(content, &root); err != nil {
+	if err := decoder.Decode(&root); err != nil {
 		return nil, fmt.Errorf("invalid tool catalog JSON: %w", err)
 	}
 

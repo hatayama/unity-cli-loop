@@ -19,7 +19,8 @@ trigger updates in the same PR:
 - The embedded tool catalog (`cli/common/tools/default-tools.json`) is the one
   non-Go shared input: structural changes count; description-only regenerations
   do not, because the CLI reloads descriptions from SKILL.md at run time and
-  the embedded text is only the out-of-project `--help` fallback.
+  the embedded text is only a help-text fallback: outside a project, or inside
+  one when SKILL.md has no entry for the item.
 
 Run `scripts/stamp-release-inputs.sh` to refresh
 `cli/project-runner/shared-inputs-stamp.json` and

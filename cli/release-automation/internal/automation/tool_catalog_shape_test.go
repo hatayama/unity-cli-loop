@@ -149,6 +149,13 @@ func TestToolCatalogShapeDigestDetectsUnknownTopLevelField(t *testing.T) {
 	assertDifferentShapeDigest(t, catalogShapeBase, changed)
 }
 
+// Verifies defaults that collapse under float64 still produce different shape digests.
+func TestToolCatalogShapeDigestPreservesIntegersBeyondFloat64ExactRange(t *testing.T) {
+	left := `{"tools":[{"name":"compile","inputSchema":{"type":"object","properties":{"X":{"type":"integer","default":9007199254740992}}}}]}`
+	right := `{"tools":[{"name":"compile","inputSchema":{"type":"object","properties":{"X":{"type":"integer","default":9007199254740993}}}}]}`
+	assertDifferentShapeDigest(t, left, right)
+}
+
 // Verifies invalid catalog JSON is an error rather than a silent shape change.
 func TestToolCatalogShapeDigestRejectsInvalidJSON(t *testing.T) {
 	_, err := ToolCatalogShapeDigest([]byte(`{"tools":[`))
