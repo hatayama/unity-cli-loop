@@ -293,12 +293,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     sourceContentSha256: workerOutput.sourceContentSha256);
             }
 
-            // Why after FileFailed: a failed gate did not apply the replacement, so leftover
-            // Active rows must not claim they were superseded.
-            HotReloadSupersededSignatureRecorder.RecordFromWorkerOutput(
-                workerOutput,
-                gateResult.GatedReplacementMethodKeys);
-
             outcomes.AddRange(gateResult.SkippedOutcomes);
             warnings.AddRange(gateResult.Warnings);
 
@@ -367,7 +361,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            return HotReloadEntryApplier.ApplyEntriesAndBuildResult(
+            HotReloadFileProcessResult applied = HotReloadEntryApplier.ApplyEntriesAndBuildResult(
                 assemblyName,
                 assemblyResolvePath,
                 projectRelativePath,
@@ -383,6 +377,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 retargetedPausePointIds,
                 unchangedMethodCount,
                 oneShotCallerNoteCandidates);
+            // Why after apply: earlier returns (gate fail, shim compile, coverage loss)
+            // never applied the replacement, so leftover Active rows must not claim they
+            // were superseded.
+            RecordSupersededSignaturesAfterApply(
+                applied,
+                workerOutput,
+                gateResult.GatedReplacementMethodKeys);
+            return applied;
+        }
+
+        private static void RecordSupersededSignaturesAfterApply(
+            HotReloadFileProcessResult applied,
+            TransformWorkerOutputDto workerOutput,
+            IReadOnlyCollection<string> gatedReplacementMethodKeys)
+        {
+            if (!HasAppliedChange(applied.Outcomes))
+            {
+                return;
+            }
+
+            HotReloadSupersededSignatureRecorder.RecordFromWorkerOutput(
+                workerOutput,
+                gatedReplacementMethodKeys);
+        }
+
+        private static bool HasAppliedChange(IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            for (int index = 0; index < outcomes.Count; index++)
+            {
+                HotReloadMethodOutcomeKind kind = outcomes[index].Kind;
+                if (kind == HotReloadMethodOutcomeKind.Patched
+                    || kind == HotReloadMethodOutcomeKind.Added)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         // Why after the worker: const-only / empty files have no patch candidates, so the
