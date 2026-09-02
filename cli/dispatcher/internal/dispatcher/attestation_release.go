@@ -101,7 +101,8 @@ func fetchDispatcherReleasePage(ctx context.Context, page int) ([]githubReleaseL
 	}
 	request.Header.Set("Accept", "application/vnd.github+json")
 	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	if token := lookupGitHubAPIToken(); token != "" {
+	token := lookupGitHubAPIToken()
+	if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)
 	}
 	response, err := dispatcherHTTPClient.Do(request)
@@ -113,7 +114,7 @@ func fetchDispatcherReleasePage(ctx context.Context, page int) ([]githubReleaseL
 		_ = response.Body.Close()
 	}()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		if rateLimit, ok := githubapi.DetectRateLimit(response); ok {
+		if rateLimit, ok := githubapi.DetectRateLimit(response, token != ""); ok {
 			return nil, fmt.Errorf("list releases: %w", rateLimit)
 		}
 		return nil, fmt.Errorf("list releases: status %s", response.Status)

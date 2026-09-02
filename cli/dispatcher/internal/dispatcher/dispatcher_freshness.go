@@ -162,7 +162,9 @@ func runDispatcherFreshnessUpdate(ctx context.Context, plan dispatcherFreshnessP
 	clicore.WriteFormat(stderr, "warning: dispatcher self-update skipped: %v\n", err)
 	var rateLimit githubapi.RateLimitError
 	if errors.As(err, &rateLimit) {
-		clicore.WriteFormat(stderr, "warning: %s\n", githubapi.TokenNextAction)
+		for _, action := range rateLimit.NextActions() {
+			clicore.WriteFormat(stderr, "warning: %s\n", action)
+		}
 	}
 	return false, 0
 }

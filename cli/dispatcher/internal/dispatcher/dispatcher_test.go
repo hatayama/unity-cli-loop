@@ -1596,6 +1596,24 @@ func TestDispatcherRealCLIResolutionErrorExplainsRateLimit(t *testing.T) {
 	}
 }
 
+// Verifies an authenticated rate limit does not ask for a token and still reports the reset time.
+func TestDispatcherRealCLIResolutionErrorAuthenticatedRateLimitSkipsTokenHint(t *testing.T) {
+	resetAt := time.Date(2026, 9, 2, 1, 30, 0, 0, time.UTC)
+	cause := fmt.Errorf("lookup failed: %w", githubapi.RateLimitError{ResetAt: resetAt, Authenticated: true})
+
+	cliErr := dispatcherRealCLIResolutionError("/project", dispatcherPin{ProjectRunnerVersion: "3.0.0"}, cause)
+
+	if len(cliErr.NextActions) != 2 || strings.Contains(cliErr.NextActions[0], "GH_TOKEN") {
+		t.Fatalf("unexpected next actions: %v", cliErr.NextActions)
+	}
+	if !strings.Contains(cliErr.NextActions[0], "Retry after") {
+		t.Fatalf("expected reset-time retry hint, got: %v", cliErr.NextActions)
+	}
+	if cliErr.Details["GitHubRateLimitResetAt"] != "2026-09-02T01:30:00Z" {
+		t.Fatalf("unexpected reset detail: %v", cliErr.Details["GitHubRateLimitResetAt"])
+	}
+}
+
 // Verifies a non-rate-limit download failure keeps the generic network guidance.
 func TestDispatcherRealCLIResolutionErrorKeepsGenericGuidance(t *testing.T) {
 	cliErr := dispatcherRealCLIResolutionError("/project", dispatcherPin{}, errors.New("connection refused"))

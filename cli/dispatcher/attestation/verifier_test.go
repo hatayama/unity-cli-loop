@@ -495,4 +495,31 @@ func TestFetchTagCommitSHA_RateLimited(t *testing.T) {
 	if rateLimit.ResetAt.Unix() != 1790000000 {
 		t.Fatalf("unexpected reset time: %v", rateLimit.ResetAt)
 	}
+	if rateLimit.Authenticated {
+		t.Fatalf("expected an anonymous rate limit without a token in the environment")
+	}
+}
+
+// Verifies a rate limit hit with a token in the environment is reported as authenticated
+// so the guidance does not ask for a token that is already set.
+func TestFetchTagCommitSHA_RateLimitedWithToken(t *testing.T) {
+	t.Setenv(envAuthTokenPrimary, "test-token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		http.Error(w, `{"message":"API rate limit exceeded"}`, http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	original := githubAPIBase()
+	setGithubAPIBase(server.URL)
+	defer setGithubAPIBase(original)
+
+	_, err := FetchTagCommitSHA(context.Background(), "hatayama/unity-cli-loop", "any")
+	var rateLimit githubapi.RateLimitError
+	if !errors.As(err, &rateLimit) {
+		t.Fatalf("expected RateLimitError, got: %v", err)
+	}
+	if !rateLimit.Authenticated {
+		t.Fatalf("expected an authenticated rate limit error, got: %+v", rateLimit)
+	}
 }
