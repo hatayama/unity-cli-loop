@@ -3925,6 +3925,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: applying a same-file return-type change records the old compiled signature
+        /// as superseded using the Active --status Method key.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_SameFileCallers_RecordsSupersededOldSignature()
+        {
+            string fixturePath = ResolveSignatureChangeSameFileFixturePath();
+            string edited = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSupersededRecord.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            MethodInfo oldTarget = typeof(HotReloadSignatureChangeSameFileFixture).GetMethod(
+                nameof(HotReloadSignatureChangeSameFileFixture.Target),
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(oldTarget, Is.Not.Null);
+            string oldKey = HotReloadPatcher.FormatMethodKey(oldTarget);
+            bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                oldKey,
+                out string replacement);
+
+            Assert.That(recorded, Is.True);
+            Assert.That(replacement, Is.Not.Null.And.Not.Empty);
+        }
+
+        /// <summary>
         /// What: after a same-file return-type change applies, a later run that skips the
         /// covering caller still reports the replacement as already-active instead of a fresh
         /// gate skip.
@@ -4122,6 +4150,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.Unrelated(3), Is.EqualTo(4));
             Assert.That(host.Target(3), Is.EqualTo(3));
             Assert.That(host.SameFileCaller(3), Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: a gated return-type change does not record the skipped replacement as superseded.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_GatedReplacement_DoesNotRecordSupersededSignature()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                    "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeGatedNoSupersede.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            MethodInfo gatedTarget = typeof(HotReloadSignatureChangeExternalHost).GetMethod(
+                nameof(HotReloadSignatureChangeExternalHost.Target),
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(gatedTarget, Is.Not.Null);
+            string gatedKey = HotReloadPatcher.FormatMethodKey(gatedTarget);
+            bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                gatedKey,
+                out string _);
+
+            Assert.That(recorded, Is.False);
         }
 
         /// <summary>

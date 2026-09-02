@@ -293,6 +293,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     sourceContentSha256: workerOutput.sourceContentSha256);
             }
 
+            // Why after FileFailed: a failed gate did not apply the replacement, so leftover
+            // Active rows must not claim they were superseded.
+            HotReloadSupersededSignatureRecorder.RecordFromWorkerOutput(
+                workerOutput,
+                gateResult.GatedReplacementMethodKeys);
+
             outcomes.AddRange(gateResult.SkippedOutcomes);
             warnings.AddRange(gateResult.Warnings);
 
