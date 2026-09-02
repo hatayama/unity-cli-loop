@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.2](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.1.1...uloop-project-runner-v3.1.2) (2026-09-02)
+
+
+### Bug Fixes
+
+* embed VERSIONINFO into Windows CLI binaries and document Defender false positives ([#2512](https://github.com/hatayama/unity-cli-loop/issues/2512)) ([01c219b](https://github.com/hatayama/unity-cli-loop/commit/01c219bcb16380ec4ff0d8216be394221cf0221b))
+* **release-automation:** skip CLI stamps for description-only catalog changes ([#2502](https://github.com/hatayama/unity-cli-loop/issues/2502)) ([4c7b2c7](https://github.com/hatayama/unity-cli-loop/commit/4c7b2c7f11e86cb882135bb54429bd56bc5c3233))
+
 ## [3.1.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.1.0...uloop-project-runner-v3.1.1) (2026-09-02)
 
 
