@@ -34,6 +34,47 @@ func TestRunPausePointWaitAfterEnableSeparatesEnableTimeWarningOnHit(t *testing.
 	}
 }
 
+// Verifies enable-response Warnings are copied onto EnableTimeWarnings on a successful hit.
+func TestRunPausePointWaitAfterEnableCopiesWarningsOntoEnableTimeWarnings(t *testing.T) {
+	stubPausePointHit(t, "")
+	stubPausePointMatchingLogs(t, nil)
+	stubPausePointTriggerDispatch(t, `{"Success":true}`)
+
+	enableWarnings := []string{"physics dispatch warning.", "mid-solver values warning."}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointWaitAfterEnable(
+		context.Background(),
+		unityipc.Connection{},
+		waitForPausePointOptions{
+			id:                   "jump",
+			timeoutSeconds:       1,
+			timeout:              time.Second,
+			matchingLogsMaxCount: 5,
+			triggerCommand:       "simulate-keyboard",
+			triggerArgs:          []string{"--action", "Press", "--key", "W"},
+		},
+		enablePausePointPropagatedFields{
+			Warning:  strings.Join(enableWarnings, " "),
+			Warnings: enableWarnings,
+		},
+		&stdout,
+		&stderr,
+	)
+	if code != 0 {
+		t.Fatalf("expected hit success, got %d: %s", code, stdout.String())
+	}
+	result := decodePausePointWaitResult(t, stdout.String())
+	if result.EnableTimeWarning != strings.Join(enableWarnings, " ") {
+		t.Fatalf("EnableTimeWarning mismatch: %q", result.EnableTimeWarning)
+	}
+	if len(result.EnableTimeWarnings) != 2 ||
+		result.EnableTimeWarnings[0] != enableWarnings[0] ||
+		result.EnableTimeWarnings[1] != enableWarnings[1] {
+		t.Fatalf("EnableTimeWarnings mismatch: %#v", result.EnableTimeWarnings)
+	}
+}
+
 // Verifies a non-hit enable --await path still surfaces the enable-time warning on the existing
 // Details.EnableWarning key (unchanged; not folded into Details.Warning).
 func TestRunPausePointWaitAfterEnableKeepsEnableWarningDetailOnExpired(t *testing.T) {
