@@ -199,6 +199,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // Null when unset so the status contract omits Warning (matches Go omitempty).
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string Warning { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> Warnings { get; set; }
         // Why DefaultValue/Null ignore: match Go omitempty so unresolved markers omit the fields
         // from the status contract shape (0 / empty must not appear in the shared JSON fixture).
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
@@ -265,6 +267,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 SuppressedByHotReloadReason = snapshot.SuppressedByHotReloadReason,
                 // Why reason as Warning: agents already read Warning; suppressed=false clears both.
                 Warning = snapshot.SuppressedByHotReload ? snapshot.SuppressedByHotReloadReason : null,
+                Warnings = snapshot.SuppressedByHotReload && !string.IsNullOrEmpty(snapshot.SuppressedByHotReloadReason)
+                    ? new[] { snapshot.SuppressedByHotReloadReason }
+                    : null,
                 ResolvedLine = snapshot.ResolvedLine,
                 ResolvedLineText = string.IsNullOrEmpty(snapshot.ResolvedLineText)
                     ? null
