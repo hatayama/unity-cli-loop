@@ -14,7 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public UnityCliLoopTestMode TestMode { get; set; } = UnityCliLoopTestMode.EditMode;
 
         /// <summary>
-        /// Type of test filter - all(0), exact(1), regex(2), assembly(3)
+        /// Type of test filter - all(0), exact(1), regex(2), assembly(3), class(4)
         /// </summary>
         public TestFilterType FilterType { get; set; } = TestFilterType.all;
 
@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// • exact: Individual test method name (e.g.: io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs)
         /// • regex: Class name or namespace (e.g.: io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests, io.github.hatayama.UnityCliLoop)
         /// • assembly: Assembly name (e.g.: UnityCliLoop.Tests.Editor)
+        /// • class: Test class name, bare or namespace-qualified (e.g.: ConsoleLogRetrieverTests)
         /// </summary>
         public string FilterValue { get; set; } = "";
         public bool SaveBeforeRun { get; set; } = true;
