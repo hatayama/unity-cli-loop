@@ -34,9 +34,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 result.ErrorMessage,
                 Is.EqualTo(UnityCliLoopConstants.ERROR_MESSAGE_NO_EXECUTE_METHOD));
+            // The literal keeps the guidance itself under test: comparing against the shared
+            // constant alone would still pass if that constant were emptied or reworded.
+            Assert.That(result.NextActions, Has.Count.EqualTo(1));
             Assert.That(
-                result.NextActions,
-                Is.EqualTo(UnityCliLoopConstants.DYNAMIC_CODE_NO_EXECUTE_METHOD_NEXT_ACTIONS));
+                result.NextActions[0],
+                Is.EqualTo(
+                    "Remove the class and method wrapper and pass the statements themselves, e.g. " +
+                    "--code \"return GameObject.Find(\\\"Player\\\").transform.position;\""));
         }
 
         private static Assembly CreateAssemblyWithoutExecuteMethod()
