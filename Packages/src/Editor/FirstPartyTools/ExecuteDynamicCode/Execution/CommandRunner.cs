@@ -221,10 +221,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 
                 if (targetType == null || executeMethod == null)
                 {
-                    return CapturePartialResults(
-                        CreateErrorResult(
-                            UnityCliLoopConstants.ERROR_MESSAGE_NO_EXECUTE_METHOD,
-                            new List<string> { "Assembly types checked but no Execute method found" }));
+                    ExecutionResult result = CreateErrorResult(
+                        UnityCliLoopConstants.ERROR_MESSAGE_NO_EXECUTE_METHOD,
+                        new List<string> { "Assembly types checked but no Execute method found" });
+                    result.NextActions = new List<string>(
+                        UnityCliLoopConstants.DYNAMIC_CODE_NO_EXECUTE_METHOD_NEXT_ACTIONS);
+                    return CapturePartialResults(result);
                 }
 
                 // Create instance

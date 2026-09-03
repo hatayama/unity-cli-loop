@@ -126,9 +126,21 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string ERROR_MESSAGE_DYNAMIC_CODE_RUNTIME_RESTARTING =
             "Dynamic-code runtime was disposed during a server reset or domain reload; retry the same command shortly.";
         public const string ERROR_MESSAGE_NO_COMPILED_ASSEMBLY = "No compiled assembly provided";
-        public const string ERROR_MESSAGE_NO_EXECUTE_METHOD = "No Execute method found in compiled assembly";
+        public const string ERROR_MESSAGE_NO_EXECUTE_METHOD =
+            "No Execute method found in compiled assembly. --code is compiled as the body of a generated Execute method, " +
+            "so write top-level statements directly (no class, namespace, or entry-point method); 'return' is optional " +
+            "and 'using' directives may appear at the top.";
         public const string ERROR_MESSAGE_FAILED_TO_CREATE_INSTANCE = "Failed to create instance of target type";
         public const string ERROR_MESSAGE_UNSUPPORTED_SIGNATURE = "Execute method signature not supported";
+
+        /// <summary>
+        /// Recovery step when execute-dynamic-code receives an entry-point wrapper instead of statements.
+        /// </summary>
+        public static readonly string[] DYNAMIC_CODE_NO_EXECUTE_METHOD_NEXT_ACTIONS =
+        {
+            "Remove the class, namespace, and method wrapper and pass the statements themselves, e.g. " +
+            "--code \"return GameObject.Find(\\\"Player\\\").transform.position;\"",
+        };
 
         /// <summary>
         /// Recovery steps when execute-dynamic-code hits a disposed runtime during reset/reload.
