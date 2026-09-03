@@ -16,23 +16,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // pressEdgeObserved stays nullable because KeyUp has no press edge to report;
         // Press/KeyDown must pass their observation so pause-point interruptions (the
         // most common E2E path) do not silently drop the field.
+        // Why branch on action then pressWasApplied: KeyUp is a release, not a press
+        // edge, so discarded/retry wording inverts the diagnosis. For Press/KeyDown,
+        // Paused has two sources. (a) apply never completed — the queued edge never
+        // reached the game. (b) WaitForPressLifetime after a successful apply — the
+        // press already landed (including when that press itself fired the pause).
+        // Claiming "discarded" in (b) inverts the diagnosis this message exists to
+        // prevent. PressEdgeObserved is a separate observation and can stay false
+        // even when pressWasApplied is true.
         internal static SimulateKeyboardResponse InterruptedKeyResult(
             UnityCliLoopKeyboardAction action,
             string keyName,
-            bool? pressEdgeObserved)
+            bool? pressEdgeObserved,
+            bool pressWasApplied)
         {
             SimulateKeyboardResponse result = new()
             {
                 Success = true,
-                Message =
-                    $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping; queued input edge was discarded.",
+                Message = BuildInterruptedKeyMessage(action, keyName, pressWasApplied),
                 Action = action.ToString(),
                 KeyName = keyName,
                 InterruptedByPausePoint = true,
-                PressEdgeObserved = pressEdgeObserved
+                PressEdgeObserved = pressEdgeObserved,
+                PressDeliveredToGame = action == UnityCliLoopKeyboardAction.KeyUp ? null : pressWasApplied
             };
             AttachPausePointHit(result);
             return result;
+        }
+
+        private static string BuildInterruptedKeyMessage(
+            UnityCliLoopKeyboardAction action,
+            string keyName,
+            bool pressWasApplied)
+        {
+            if (action == UnityCliLoopKeyboardAction.KeyUp)
+            {
+                return
+                    $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' release was interrupted by the pause; the key is no longer held by Unity CLI Loop.";
+            }
+
+            if (pressWasApplied)
+            {
+                return
+                    $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' press was delivered to the game before the pause: the Input System processed the press edge in a gameplay update, so game code polling that frame observed it and the game state may already have changed. Do not retry the press; re-check the affected state (and pause-point-status) before deciding the next step.";
+            }
+
+            return
+                $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' was released from Unity CLI Loop bookkeeping; the queued input edge was discarded before any gameplay update processed it, so the game never observed a press and it is safe to retry after resume.";
         }
 
         internal static SimulateKeyboardResponse AlreadyHeldRejection(string keyName, bool deviceIsPressed)
