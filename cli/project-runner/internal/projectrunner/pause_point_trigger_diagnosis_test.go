@@ -31,19 +31,35 @@ func stubPausePointHit(t *testing.T, unityWarning string) {
 		queryPausePointStatus = originalQuery
 	})
 
+	// The first query answers the wait's arm confirmation with an armed-but-unhit marker: a marker
+	// already hit at wait start suppresses --resume-play and --trigger, which is the opposite of the
+	// dispatched-trigger scenarios these stubs serve. Every later poll reports the hit.
+	queryCount := 0
 	queryPausePointStatus = func(
 		ctx context.Context,
 		connection unityipc.Connection,
 		id string,
 	) (pausePointStatusResponse, error) {
+		queryCount++
+		if queryCount == 1 {
+			return pausePointStatusResponse{
+				Success:     true,
+				Id:          id,
+				Status:      pausePointStatusEnabled,
+				IsEnabled:   true,
+				Warning:     unityWarning,
+				EditorState: pausePointEditorState{IsPlaying: true, CapturedAt: "Current"},
+			}, nil
+		}
 		return pausePointStatusResponse{
-			Success:     true,
-			Id:          id,
-			Status:      pausePointStatusHit,
-			IsHit:       true,
-			HitCount:    1,
-			Warning:     unityWarning,
-			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+			Success:         true,
+			Id:              id,
+			Status:          pausePointStatusHit,
+			IsHit:           true,
+			HitCount:        1,
+			LastHitSequence: 1,
+			Warning:         unityWarning,
+			EditorState:     pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
 		}, nil
 	}
 }
