@@ -41,6 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> retargetedPausePointIds = new List<string>();
             List<string> inlineRiskMethodLabels = new List<string>();
             List<string> addedFields = new List<string>();
+            List<string> addedConsts = new List<string>();
             List<string> siblingDerivedWarnings = new List<string>();
             List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates =
                 new List<HotReloadOneShotCallerNoteEnricher.Candidate>();
@@ -82,6 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 patchedTotal += fileResult.PatchedCount;
                 unchangedTotal += fileResult.UnchangedMethodCount;
                 addedFields.AddRange(fileResult.AddedFieldNames);
+                addedConsts.AddRange(fileResult.AddedConstNames);
                 HotReloadAppliedSourceLifecycle.StageAppliedSourceHash(
                     appliedSourceHashByPath,
                     HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath),
@@ -113,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             addedFields.Sort(StringComparer.Ordinal);
+            addedConsts.Sort(StringComparer.Ordinal);
             if (addedFields.Count > 0)
             {
                 // Why from this list: AddedFields and the lifetime warning must name the same
@@ -144,7 +147,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 suppressedPausePointIds,
                 unchangedTotal,
                 retargetedPausePointIds,
-                addedFields.ToArray());
+                addedFields.ToArray(),
+                addedConsts.ToArray());
         }
 
         private static async Task<HotReloadFileProcessResult> ProcessFileAsync(
@@ -299,7 +303,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             (HotReloadFileProcessResult earlyEntries,
                 TransformWorkerEntryDto[] entriesToPatch,
                 HotReloadShimCompileResult compileResult,
-                string[] resolvedAddedFieldNames) = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                string[] resolvedAddedFieldNames,
+                string[] resolvedAddedConstNames) = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
                 gateResult,
                 workerInput,
                 workerOutput,
@@ -368,6 +373,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compileResult,
                 entriesToPatch,
                 addedFieldNames,
+                resolvedAddedConstNames,
                 workerOutput,
                 snapshotLabels,
                 snapshotAddedLabels,
@@ -508,6 +514,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public List<string> InlineRiskMethodLabels { get; }
             public int UnchangedMethodCount { get; }
             public string[] AddedFieldNames { get; }
+            public string[] AddedConstNames { get; }
             public string SourceContentSha256 { get; }
 
             public HotReloadFileProcessResult(
@@ -519,7 +526,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 int unchangedMethodCount = 0,
                 List<string> retargetedPausePointIds = null,
                 string[] addedFieldNames = null,
-                string sourceContentSha256 = null)
+                string sourceContentSha256 = null,
+                string[] addedConstNames = null)
             {
                 Outcomes = outcomes;
                 Warnings = warnings;
@@ -530,6 +538,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RetargetedPausePointIds = retargetedPausePointIds ?? new List<string>();
                 AddedFieldNames = addedFieldNames ?? Array.Empty<string>();
                 SourceContentSha256 = sourceContentSha256;
+                AddedConstNames = addedConstNames ?? Array.Empty<string>();
             }
         }
     }
