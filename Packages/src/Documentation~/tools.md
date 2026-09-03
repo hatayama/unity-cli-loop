@@ -32,7 +32,7 @@ This allows you to retrieve logs while keeping the context small.
 
 ### 3. run-tests - Execute TestRunner (PlayMode, EditMode supported)
 Executes Unity Test Runner and retrieves test results. You can set conditions with FilterType and FilterValue.
-- FilterType: all (all tests), exact (individual test method name), regex (class name or namespace), assembly (assembly name)
+- FilterType: all (all tests), exact (individual test method name), regex (regex over full test names), assembly (assembly name), class (test class name, bare or namespace-qualified)
 - FilterValue: Value according to filter type (class name, namespace, etc.)
 - UnsavedChanges: How to handle unsaved loaded Scene and Prefab Stage changes before tests. `save` (default) writes them, `fail` stops if any remain, `discard` reloads disk state (Untitled scenes fail).
 Test results can be output as xml. The output path is returned so AI can read it.
