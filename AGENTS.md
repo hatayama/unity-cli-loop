@@ -200,4 +200,10 @@ tests (especially anything touching async execution, cancellation, threads, or d
 runtime paths), read `docs/unity-editmode-test-guardrails.md` and follow its rules. If a new
 test makes `uloop run-tests` stall, remove or disable it instead of retrying the suite. If
 Unity freezes or stops responding to `uloop`, restart the Editor with `uloop launch -r`.
-CI runs the full EditMode suite only on a schedule or a manual `workflow_dispatch` of `unity-editmode-tests.yml` — pull-request CI never runs it, so full-suite EditMode verification before a merge has to happen locally with `uloop run-tests`.
+CI runs the full EditMode suite on a schedule (and on a manual `workflow_dispatch` of
+`unity-editmode-tests.yml`); that scheduled run is the full-suite gate. Pull-request CI and local
+pre-commit verification do not run the full suite — it takes far too long. Before a commit or
+pull request, run only the tests that cover the code you changed, scoped with
+`--filter-type class` / `--filter-value <TestClass>` (`regex` for a few classes, `assembly` for
+one test assembly). Run the full unfiltered suite locally only when the change touches shared
+test infrastructure or a reviewer explicitly asks for it.
