@@ -913,7 +913,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a skipped-only run uses the no-patch message that also names AlreadyActive.
+        /// What: a skipped-only run uses the no-patch message that also names AlreadyActive, and
+        /// carries the skipped method in Warnings.
         /// </summary>
         [Test]
         public void BuildApplyResponse_SkippedOnly_KeepsExistingSkippedMessage()
@@ -929,9 +930,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
+            Assert.That(response.Warnings, Is.EqualTo(new[] { "Skipped T.M: reason" }));
             Assert.That(
                 response.Message,
-                Is.EqualTo(HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage));
+                Is.EqualTo(
+                    HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage
+                    + " 1 warning(s). See Warnings."));
         }
 
         /// <summary>
@@ -1020,7 +1024,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 skippedOnly.Message,
                 Is.EqualTo(
                     HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage
-                    + " 1 warning(s). See Warnings."));
+                    + " 2 warning(s). See Warnings. "
+                    + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
 
             HotReloadResponse applied = HotReloadTool.BuildApplyResponse(
                 new HotReloadOrchestratorResult(
@@ -1052,7 +1057,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 appliedWithSkipped.Message,
                 Is.EqualTo(
                     "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
-                    + "See Methods for Skipped reasons. 2 warning(s). See Warnings. "
+                    + "3 warning(s). See Warnings. "
                     + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
         }
 
@@ -1243,10 +1248,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an applied run with Skipped outcomes and no warnings still points at Methods.
+        /// What: an applied run with a Skipped outcome and no other warnings lists the skipped
+        /// method in Warnings and lets the warning-count suffix point the reader there.
         /// </summary>
         [Test]
-        public void BuildApplyResponse_AppliedWithSkipped_AppendsSkippedNoteWithoutWarningSuffix()
+        public void BuildApplyResponse_AppliedWithSkipped_ListsSkippedInWarnings()
         {
             HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
                 new List<HotReloadMethodOutcome>
@@ -1260,11 +1266,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
+            Assert.That(response.Warnings, Is.EqualTo(new[] { "Skipped T.Skip: reason" }));
             Assert.That(
                 response.Message,
                 Is.EqualTo(
                     "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
-                    + "See Methods for Skipped reasons."));
+                    + "1 warning(s). See Warnings."));
+        }
+
+        /// <summary>
+        /// What: an applied run without any Skipped outcome adds no Skipped-derived warning.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AppliedWithoutSkipped_AddsNoSkippedWarning()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Warnings, Is.Empty);
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Hot reload applied. PatchedTotal=1, ActivePatchTotal=1."));
+        }
+
+        /// <summary>
+        /// What: every Skipped outcome gets its own Warnings line, in Methods order.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_MultipleSkipped_ListsEverySkippedMethod()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Skipped("T.First", "first reason", "file.cs"),
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Skipped("T.Second", "second reason", "file.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Warnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Skipped T.First: first reason",
+                        "Skipped T.Second: second reason"
+                    }));
         }
 
         /// <summary>
@@ -1406,9 +1465,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
+            Assert.That(response.Warnings, Is.EqualTo(new[] { "Skipped T.Skip: reason" }));
             Assert.That(
                 response.Message,
-                Is.EqualTo(HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage));
+                Is.EqualTo(
+                    HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage
+                    + " 1 warning(s). See Warnings."));
         }
 
         // Applies a handwritten transplant to a HotReloadCoreFixture method without invoking it.

@@ -56,6 +56,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 result.Methods,
                 HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadEditedSourceFromDisk,
                 HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadCompiledSnapshot);
+
+            // Why before the count snapshot: a Skipped method is applied by 'uloop compile' like
+            // the warnings above it, so it must count toward the single-compile resolution suffix.
+            AppendSkippedWarnings(warnings, result.Methods);
             int orchestratorWarningCount = warnings.Count;
             AppendRetargetLineDriftWarnings(warnings);
             AppendExpiredNotRetargetedWarnings(warnings);
@@ -170,49 +174,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     appendCompileResolution);
             }
 
-            string message;
-            bool isAppliedBranch;
-            (message, isAppliedBranch) = BuildApplyOutcomeMessage(result, hasFailure);
+            string message = BuildApplyOutcomeMessage(result, hasFailure);
             message = AppendUnchangedAndLifecycleNotes(message, result);
-
-            if (isAppliedBranch && HasSkippedOutcome(result))
-            {
-                message += " See Methods for Skipped reasons.";
-            }
 
             return AppendWarningCount(message, warningCount, appendCompileResolution);
         }
 
-        private static (string Message, bool IsAppliedBranch) BuildApplyOutcomeMessage(
+        private static string BuildApplyOutcomeMessage(
             HotReloadOrchestratorResult result,
             bool hasFailure)
         {
             int addedCount = CountAddedOutcomes(result);
             if (hasFailure)
             {
-                return ("Hot reload finished with one or more Failed method outcomes. See Methods.", false);
+                return "Hot reload finished with one or more Failed method outcomes. See Methods.";
             }
 
             if (result.Methods.Count == 0)
             {
-                return (
-                    "Hot reload found no patchable method bodies in the given files; nothing was changed. "
-                    + "Hot reload only replaces existing ordinary method bodies; use uloop compile for other edits.",
-                    false);
+                return "Hot reload found no patchable method bodies in the given files; nothing was changed. "
+                    + "Hot reload only replaces existing ordinary method bodies; use uloop compile for other edits.";
             }
 
             if (AreAllOutcomesAlreadyActive(result))
             {
-                return (
-                    string.Format(
-                        HotReloadConstants.AlreadyActiveApplyMessageFormat,
-                        result.Methods.Count),
-                    false);
+                return string.Format(
+                    HotReloadConstants.AlreadyActiveApplyMessageFormat,
+                    result.Methods.Count);
             }
 
             if (result.PatchedTotal == 0 && addedCount == 0)
             {
-                return (HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage, false);
+                return HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage;
             }
 
             string message = "Hot reload applied. PatchedTotal=" + result.PatchedTotal
@@ -222,7 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message += " Added: " + addedCount + ".";
             }
 
-            return (message, true);
+            return message;
         }
 
         private static string AppendUnchangedAndLifecycleNotes(
@@ -279,17 +272,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        private static bool HasSkippedOutcome(HotReloadOrchestratorResult result)
+        /// <summary>
+        /// Lists every Skipped method in Warnings so a reader who only checks Warnings still sees
+        /// that the edit was not applied.
+        /// </summary>
+        private static void AppendSkippedWarnings(
+            List<string> warnings,
+            IReadOnlyList<HotReloadMethodOutcome> methods)
         {
-            for (int index = 0; index < result.Methods.Count; index++)
+            for (int index = 0; index < methods.Count; index++)
             {
-                if (result.Methods[index].Kind == HotReloadMethodOutcomeKind.Skipped)
+                HotReloadMethodOutcome outcome = methods[index];
+                if (outcome.Kind != HotReloadMethodOutcomeKind.Skipped)
                 {
-                    return true;
+                    continue;
                 }
-            }
 
-            return false;
+                warnings.Add(
+                    string.Format(
+                        HotReloadConstants.SkippedMethodWarningFormat,
+                        outcome.Method,
+                        outcome.Reason ?? string.Empty));
+            }
         }
 
         private static string AppendWarningCount(

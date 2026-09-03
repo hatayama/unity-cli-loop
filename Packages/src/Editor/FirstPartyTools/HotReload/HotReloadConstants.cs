@@ -259,7 +259,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "active with their InvocationCount preserved. Edit and reload again to apply new changes.";
 
         public const string NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage =
-            "Hot reload finished with no methods patched. See Methods for Skipped and AlreadyActive reasons.";
+            "Hot reload finished with no methods patched. See Warnings for Skipped reasons and Methods for AlreadyActive reasons.";
+
+        // Format: skipped method identity, then the reason it could not be patched.
+        public const string SkippedMethodWarningFormat = "Skipped {0}: {1}";
 
         public const string VibeLogFileStart = "hot_reload_file_start";
         public const string VibeLogWorkerResult = "hot_reload_worker_result";
