@@ -124,7 +124,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
                 {
-                    result = await _executionService.ExecutePlayModeTestAsync(filter, executionCt).ConfigureAwait(false);
+                    result = await _executionService.ExecutePlayModeTestAsync(
+                        filter,
+                        executionCt,
+                        CreatePlayModeRunOptions(parameters)).ConfigureAwait(false);
                 }
                 else
                 {
@@ -245,6 +248,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.FilterType,
                 parameters.FilterValue,
                 unfiltered);
+        }
+
+        private static RunTestsPlayModeRunOptions CreatePlayModeRunOptions(RunTestsSchema parameters)
+        {
+            Debug.Assert(parameters != null, "parameters must not be null");
+
+            if (!parameters.RespectEnterPlayModeSettings)
+            {
+                return RunTestsPlayModeRunOptions.WithoutRespect();
+            }
+
+            return new RunTestsPlayModeRunOptions(
+                true,
+                parameters.RequestId,
+                DateTime.UtcNow.AddSeconds(parameters.TimeoutSeconds + 120));
         }
 
         private static bool IsSupportedTestMode(UnityCliLoopTestMode testMode)
