@@ -28,6 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
                 new UnityCliLoopCompileResultSessionRepository();
             IPendingCompileSessionRepository pendingCompileSessionRepository =
                 new UnityCliLoopPendingCompileSessionRepository();
+            IRunTestsSessionRepository runTestsSessionRepository =
+                new UnityCliLoopRunTestsSessionRepository();
             UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService = new(
                 sessionFlagsRepository,
                 compileResultSessionRepository,
@@ -35,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.CompositionRoot
             UnityCliLoopSessionFlagsFacade.RegisterRepository(sessionFlagsRepository);
             UnityCliLoopCompileResultSessionRepositoryFacade.RegisterRepository(compileResultSessionRepository);
             UnityCliLoopPendingCompileSessionRepositoryFacade.RegisterRepository(pendingCompileSessionRepository);
+            UnityCliLoopRunTestsSessionRepositoryFacade.RegisterRepository(runTestsSessionRepository);
             UnityCliLoopCompileSessionLifecycleFacade.RegisterService(compileSessionLifecycleService);
             UnityCliLoopFirstPartyServerLifecycleBinding firstPartyServerLifecycle = new(new ProjectIpcWarmupClient());
             DomainReloadDetectionFileService domainReloadDetectionService = new(
