@@ -951,7 +951,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string ExpectedAddedPropertySkipReason =
             "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
-            + "Use a 'const' or a plain added field for the value, or run 'uloop compile'.";
+            + "For a computed value, add a same-file method instead (e.g. 'private T GetX()'), which applies "
+            + "through hot reload; for a constant, use a 'const' or a plain added field; otherwise run "
+            + "'uloop compile'.";
 
         private const string ExpectedExplicitAccessorSkipReason =
             "Property setter, init, or indexer accessors are out of scope for v1; "
@@ -980,6 +982,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 });
 
             AssertSkippedContains(result, "get_AddedProbe", ExpectedAddedPropertySkipReason);
+            AssertSkippedReasonContains(result, "get_AddedProbe", "same-file method");
             AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
             AssertPatchedComputeWithPrivate(result);
         }
@@ -2143,6 +2146,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail(
                 "Expected skip containing '" + methodFragment + "' with the unsupported-member reason; got: "
+                + FormatSkippedMethodNames(result.Output.skipped));
+        }
+
+        private static void AssertSkippedReasonContains(
+            TransformWorkerClientResult result,
+            string methodFragment,
+            string expectedReasonFragment)
+        {
+            Assert.That(result.Output.skipped, Is.Not.Null, "Expected a skipped list from the worker.");
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null
+                    && skipped.method.Contains(methodFragment)
+                    && skipped.reason.Contains(expectedReasonFragment))
+                {
+                    return;
+                }
+            }
+
+            Assert.Fail(
+                "Expected skip containing '" + methodFragment + "' with reason fragment '"
+                + expectedReasonFragment + "'; got: "
                 + FormatSkippedMethodNames(result.Output.skipped));
         }
 
