@@ -83,7 +83,7 @@ func waitForPausePoint(
 }
 
 // pausePointWaitSideEffects is what the pre-wait --resume-play / --trigger stage produced. Why a
-// type: the stage has six outputs and one of them (immediateHit) changes what the caller does next,
+// type: the stage has seven outputs and one of them (immediateHit) changes what the caller does next,
 // which a positional tuple made impossible to read at the call site.
 type pausePointWaitSideEffects struct {
 	triggerHandle        *pausePointTriggerHandle
