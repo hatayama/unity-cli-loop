@@ -2255,7 +2255,7 @@ func TestRunWaitForPausePointCommandIncludesStatusNoteOnTraceHit(t *testing.T) {
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
 
-	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
+	assertStdoutHasPausePointTraceAwaitStatusNote(t, stdout.Bytes())
 }
 
 // Verifies await-pause-point stdout includes the frame-boundary StatusNote on a
@@ -2325,6 +2325,12 @@ func assertStdoutHasPausePointTraceStatusNote(t *testing.T, stdout []byte) {
 	t.Helper()
 	assertStdoutHasPausePointStatusNote(t, stdout,
 		"Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running.")
+}
+
+func assertStdoutHasPausePointTraceAwaitStatusNote(t *testing.T, stdout []byte) {
+	t.Helper()
+	assertStdoutHasPausePointStatusNote(t, stdout,
+		"Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running. The wait returned on the first hit; to count hits over a period, enable without --await and read pause-point-status after the trigger.")
 }
 
 func assertStdoutHasPausePointStatusNote(t *testing.T, stdout []byte, wantNote string) {

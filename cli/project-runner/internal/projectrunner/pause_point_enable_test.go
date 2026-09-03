@@ -370,7 +370,7 @@ func TestRunEnablePausePointCommandIncludesStatusNoteOnTraceHit(t *testing.T) {
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
 
-	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
+	assertStdoutHasPausePointTraceAwaitStatusNote(t, stdout.Bytes())
 }
 
 // Verifies enable-pause-point --await stdout includes the frame-boundary StatusNote
