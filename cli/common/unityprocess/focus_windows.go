@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sync"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -50,19 +51,35 @@ func focusUnityWindow(ctx context.Context, pid int) error {
 	if err := restoreUnityWindowIfMinimized(handle); err != nil {
 		return err
 	}
-	focusViaSetForegroundWindow(handle)
-	if waitForForegroundPID(ctx, processID) {
-		return nil
+	reached, err := tryFocusStage(ctx, processID, func() {
+		focusViaSetForegroundWindow(handle)
+	})
+	if err != nil || reached {
+		return err
 	}
-	focusViaAttachThreadInput(handle)
-	if waitForForegroundPID(ctx, processID) {
-		return nil
+	reached, err = tryFocusStage(ctx, processID, func() {
+		focusViaAttachThreadInput(handle)
+	})
+	if err != nil || reached {
+		return err
 	}
-	focusViaAltKey(handle)
-	if waitForForegroundPID(ctx, processID) {
-		return nil
+	reached, err = tryFocusStage(ctx, processID, func() {
+		focusViaAltKey(handle)
+	})
+	if err != nil || reached {
+		return err
 	}
 	return fmt.Errorf("Windows refused to bring the Unity window (PID: %d) to the foreground (foreground lock). Click the Unity window or its taskbar icon to focus it manually.", pid)
+}
+
+// tryFocusStage refuses a later focus fallback after cancel so Ctrl+C cannot
+// still inject Alt or attach input queues into the user's session.
+func tryFocusStage(ctx context.Context, pid uint32, stage func()) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	stage()
+	return waitForForegroundPID(ctx, pid)
 }
 
 func unityProcessExists(pid int) bool {
@@ -77,33 +94,36 @@ func unityProcessExists(pid int) bool {
 	return true
 }
 
+type mainWindowSearch struct {
+	pid   uint32
+	found windows.HWND
+}
+
 var (
 	mainWindowEnumOnce     sync.Once
 	mainWindowEnumCallback uintptr
-	mainWindowSearchMu     sync.Mutex
-	mainWindowSearchPID    uint32
-	mainWindowSearchFound  windows.HWND
 )
 
 func findMainWindowHandle(pid uint32) (windows.HWND, error) {
 	mainWindowEnumOnce.Do(func() {
 		mainWindowEnumCallback = windows.NewCallback(enumMainWindow)
 	})
-	mainWindowSearchMu.Lock()
-	defer mainWindowSearchMu.Unlock()
-	mainWindowSearchPID = pid
-	mainWindowSearchFound = 0
-	_ = windows.EnumWindows(mainWindowEnumCallback, nil)
-	if mainWindowSearchFound == 0 {
+	search := &mainWindowSearch{pid: pid}
+	// EnumWindows invokes the callback synchronously, so a per-call search
+	// pointer in lparam avoids mutable package state for pid/found.
+	_ = windows.EnumWindows(mainWindowEnumCallback, unsafe.Pointer(search))
+	runtime.KeepAlive(search)
+	if search.found == 0 {
 		return 0, fmt.Errorf("Unity process has no main window handle: %d", pid)
 	}
-	return mainWindowSearchFound, nil
+	return search.found, nil
 }
 
-func enumMainWindow(hwnd windows.HWND, _ uintptr) uintptr {
+func enumMainWindow(hwnd windows.HWND, lparam unsafe.Pointer) uintptr {
+	search := (*mainWindowSearch)(lparam)
 	var windowPID uint32
 	_, _ = windows.GetWindowThreadProcessId(hwnd, &windowPID)
-	if windowPID != mainWindowSearchPID {
+	if windowPID != search.pid {
 		return 1
 	}
 	if !windows.IsWindowVisible(hwnd) {
@@ -112,7 +132,7 @@ func enumMainWindow(hwnd windows.HWND, _ uintptr) uintptr {
 	if user32.GetWindow(hwnd, GW_OWNER) != 0 {
 		return 1
 	}
-	mainWindowSearchFound = hwnd
+	search.found = hwnd
 	return 0
 }
 
@@ -126,23 +146,23 @@ func restoreUnityWindowIfMinimized(handle windows.HWND) error {
 	return nil
 }
 
-func waitForForegroundPID(ctx context.Context, pid uint32) bool {
+func waitForForegroundPID(ctx context.Context, pid uint32) (bool, error) {
 	for attempt := 0; attempt < foregroundPollAttempts; attempt++ {
-		if ctx.Err() != nil {
-			return false
+		if err := ctx.Err(); err != nil {
+			return false, err
 		}
 		if readForegroundPID() == pid {
-			return true
+			return true, nil
 		}
 		timer := time.NewTimer(foregroundPollInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return false
+			return false, ctx.Err()
 		case <-timer.C:
 		}
 	}
-	return false
+	return false, nil
 }
 
 func readForegroundPID() uint32 {

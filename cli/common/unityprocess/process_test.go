@@ -116,7 +116,7 @@ func TestParseWindowsUnityProcessesExtractsProjectPath(t *testing.T) {
 	}
 }
 
-// Verifies non-ASCII project paths survive the Windows process-list boundary because command lines travel as UTF-8 Base64.
+// Verifies non-ASCII project paths survive the PowerShell boundary because command lines travel as UTF-8 Base64.
 func TestParseWindowsUnityProcessesPreservesNonASCIIProjectPath(t *testing.T) {
 	projectPath := `C:\Users\<USER_NAME>\test[1] 検証用\proj`
 	commandLine := `C:\Program Files\Unity\Hub\Editor\2022.3.62f3\Editor\Unity.exe -projectPath "` + projectPath + `" -useHub`
@@ -135,7 +135,7 @@ func TestParseWindowsUnityProcessesPreservesNonASCIIProjectPath(t *testing.T) {
 // Verifies command fields that are not valid Base64 (e.g. legacy plain-text or OEM code page bytes) are skipped instead of mis-parsed.
 func TestParseWindowsUnityProcessesSkipsNonBase64CommandLines(t *testing.T) {
 	// 0x8C9F 0x8FD8 0x9770 is the measured CP932 byte sequence for "検証用"
-	// that the Windows process-list helper emitted before the Base64 contract.
+	// that Windows PowerShell 5.1 emitted before the Base64 contract.
 	cp932KenshouYou := string([]byte{0x8C, 0x9F, 0x8F, 0xD8, 0x97, 0x70})
 	output := "123|" + `C:\Editor\Unity.exe -projectPath "C:\Users\<USER_NAME>\` + cp932KenshouYou + `\proj"` + "\r\n"
 
