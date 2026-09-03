@@ -15,9 +15,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     {
         private static SourcePausePointInstructionCandidate Instruction(
             int offset,
-            SourcePausePointInstructionFlow flow = SourcePausePointInstructionFlow.Next)
+            SourcePausePointInstructionFlow flow = SourcePausePointInstructionFlow.Next,
+            int branchTargetOffset = -1)
         {
-            return new SourcePausePointInstructionCandidate(offset, flow);
+            return new SourcePausePointInstructionCandidate(offset, flow, branchTargetOffset);
         }
 
         private static SourcePausePointSequencePointCandidate Point(int line, int offset, bool hidden = false)
@@ -79,6 +80,130 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.BeforeControlTransfer));
             Assert.That(site.InstructionIndex, Is.EqualTo(2));
             Assert.That(site.ScopeOffset, Is.EqualTo(2));
+        }
+
+        /// <summary>
+        /// What: a same-line if body extends post-line capture through the body to the
+        /// forward branch's join point.
+        /// </summary>
+        [Test]
+        public void Locate_SameLineIfBody_ExtendsThroughTheBodyToTheJoinPoint()
+        {
+            List<SourcePausePointInstructionCandidate> instructions = new List<SourcePausePointInstructionCandidate>
+            {
+                Instruction(0),
+                Instruction(1),
+                Instruction(2, SourcePausePointInstructionFlow.ConditionalBranch, branchTargetOffset: 5),
+                Instruction(3),
+                Instruction(4),
+                Instruction(5),
+                Instruction(6, SourcePausePointInstructionFlow.Return),
+            };
+            List<SourcePausePointSequencePointCandidate> points = new List<SourcePausePointSequencePointCandidate>
+            {
+                Point(10, 0),
+                Point(10, 3),
+                Point(11, 5),
+                Point(12, 6),
+            };
+
+            SourcePausePointPostLineSite site = SourcePausePointPostLineSiteLocator.Locate(instructions, points, 0);
+
+            Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.Fallthrough));
+            Assert.That(site.InstructionIndex, Is.EqualTo(5));
+            Assert.That(site.ScopeOffset, Is.EqualTo(4));
+        }
+
+        /// <summary>
+        /// What: a hidden sequence point that contains a same-line if branch remains in the
+        /// same-line run when the following visible point is the if body.
+        /// </summary>
+        [Test]
+        public void Locate_SameLineIfBodyWithHiddenBranch_ExtendsThroughTheBodyToTheJoinPoint()
+        {
+            List<SourcePausePointInstructionCandidate> instructions = new List<SourcePausePointInstructionCandidate>
+            {
+                Instruction(0),
+                Instruction(1),
+                Instruction(2),
+                Instruction(3, SourcePausePointInstructionFlow.ConditionalBranch, branchTargetOffset: 6),
+                Instruction(4),
+                Instruction(5),
+                Instruction(6),
+                Instruction(7, SourcePausePointInstructionFlow.Return),
+            };
+            List<SourcePausePointSequencePointCandidate> points = new List<SourcePausePointSequencePointCandidate>
+            {
+                Point(10, 0),
+                Point(0, 2, hidden: true),
+                Point(10, 4),
+                Point(11, 6),
+                Point(12, 7),
+            };
+
+            SourcePausePointPostLineSite site = SourcePausePointPostLineSiteLocator.Locate(instructions, points, 0);
+
+            Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.Fallthrough));
+            Assert.That(site.InstructionIndex, Is.EqualTo(6));
+            Assert.That(site.ScopeOffset, Is.EqualTo(5));
+        }
+
+        /// <summary>
+        /// What: a same-line conditional branch back to an earlier instruction keeps
+        /// post-line capture before the branch.
+        /// </summary>
+        [Test]
+        public void Locate_SameLineBackwardConditionalBranch_StaysBeforeTheBranch()
+        {
+            List<SourcePausePointInstructionCandidate> instructions = new List<SourcePausePointInstructionCandidate>
+            {
+                Instruction(0),
+                Instruction(1, SourcePausePointInstructionFlow.ConditionalBranch, branchTargetOffset: 0),
+                Instruction(2),
+                Instruction(3),
+                Instruction(4, SourcePausePointInstructionFlow.Return),
+            };
+            List<SourcePausePointSequencePointCandidate> points = new List<SourcePausePointSequencePointCandidate>
+            {
+                Point(10, 0),
+                Point(10, 2),
+                Point(11, 3),
+            };
+
+            SourcePausePointPostLineSite site = SourcePausePointPostLineSiteLocator.Locate(instructions, points, 0);
+
+            Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.BeforeControlTransfer));
+            Assert.That(site.InstructionIndex, Is.EqualTo(1));
+            Assert.That(site.ScopeOffset, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a conditional branch into the same-line sequence-point run keeps
+        /// post-line capture before the branch.
+        /// </summary>
+        [Test]
+        public void Locate_SameLineConditionalBranchIntoSameLine_StaysBeforeTheBranch()
+        {
+            List<SourcePausePointInstructionCandidate> instructions = new List<SourcePausePointInstructionCandidate>
+            {
+                Instruction(0),
+                Instruction(1, SourcePausePointInstructionFlow.ConditionalBranch, branchTargetOffset: 2),
+                Instruction(2),
+                Instruction(3),
+                Instruction(4, SourcePausePointInstructionFlow.Return),
+            };
+            List<SourcePausePointSequencePointCandidate> points = new List<SourcePausePointSequencePointCandidate>
+            {
+                Point(10, 0),
+                Point(10, 2),
+                Point(11, 3),
+            };
+
+            SourcePausePointPostLineSite site = SourcePausePointPostLineSiteLocator.Locate(instructions, points, 0);
+
+            Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.BeforeControlTransfer));
+            Assert.That(site.InstructionIndex, Is.EqualTo(1));
+            Assert.That(site.ScopeOffset, Is.EqualTo(1));
         }
 
         /// <summary>

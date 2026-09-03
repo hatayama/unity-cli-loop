@@ -7,11 +7,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public int Offset { get; }
         public SourcePausePointInstructionFlow Flow { get; }
+        public int BranchTargetOffset { get; }
 
-        public SourcePausePointInstructionCandidate(int offset, SourcePausePointInstructionFlow flow)
+        public SourcePausePointInstructionCandidate(
+            int offset,
+            SourcePausePointInstructionFlow flow,
+            int branchTargetOffset)
         {
             Offset = offset;
             Flow = flow;
+            BranchTargetOffset = branchTargetOffset;
         }
     }
 }

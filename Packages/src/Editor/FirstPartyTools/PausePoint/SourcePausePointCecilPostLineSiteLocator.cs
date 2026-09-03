@@ -20,7 +20,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (Instruction instruction in method.Body.Instructions)
             {
                 instructions.Add(
-                    new SourcePausePointInstructionCandidate(instruction.Offset, ToFlow(instruction.OpCode)));
+                    new SourcePausePointInstructionCandidate(
+                        instruction.Offset,
+                        ToFlow(instruction.OpCode),
+                        ToBranchTargetOffset(instruction)));
             }
 
             List<SourcePausePointSequencePointCandidate> points = new List<SourcePausePointSequencePointCandidate>();
@@ -58,6 +61,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 default:
                     return SourcePausePointInstructionFlow.Next;
             }
+        }
+
+        private static int ToBranchTargetOffset(Instruction instruction)
+        {
+            if (instruction.OpCode.FlowControl != FlowControl.Branch &&
+                instruction.OpCode.FlowControl != FlowControl.Cond_Branch)
+            {
+                return -1;
+            }
+
+            Instruction branchTarget = instruction.Operand as Instruction;
+            return branchTarget == null ? -1 : branchTarget.Offset;
         }
     }
 }
