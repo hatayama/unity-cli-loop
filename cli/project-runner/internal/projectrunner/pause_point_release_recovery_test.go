@@ -20,6 +20,47 @@ func TestPausePointAutoDebugSwitchWarningRecommendsApprovedStartupCommand(t *tes
 	}
 }
 
+// Verifies a successful enable with omitted Warnings keeps the array nil after recovery.
+func TestApplyPausePointRecoverySwitchWarning_WhenWarningsOmitted_LeavesWarningsNil(t *testing.T) {
+	response := pausePointStatusResponse{
+		Success: true,
+		Warning: "physics dispatch warning.",
+	}
+	applyPausePointRecoverySwitchWarning(&response)
+	want := "physics dispatch warning. " + pausePointAutoDebugSwitchWarning
+	if response.Warning != want {
+		t.Fatalf("Warning mismatch: %q", response.Warning)
+	}
+	if response.Warnings != nil {
+		t.Fatalf("omitted Warnings must stay nil: %#v", response.Warnings)
+	}
+}
+
+// Verifies a successful enable with existing Warnings appends the switch note.
+func TestApplyPausePointRecoverySwitchWarning_WhenWarningsPresent_AppendsSwitchEntry(t *testing.T) {
+	response := pausePointStatusResponse{
+		Success:  true,
+		Warning:  "physics dispatch warning.",
+		Warnings: []string{"physics dispatch warning."},
+	}
+	applyPausePointRecoverySwitchWarning(&response)
+	if len(response.Warnings) != 2 || response.Warnings[1] != pausePointAutoDebugSwitchWarning {
+		t.Fatalf("Warnings mismatch: %#v", response.Warnings)
+	}
+}
+
+// Verifies a present empty Warnings array receives the switch note when Warning is empty.
+func TestApplyPausePointRecoverySwitchWarning_WhenWarningsEmptyAndWarningEmpty_AppendsSwitchEntry(t *testing.T) {
+	response := pausePointStatusResponse{
+		Success:  true,
+		Warnings: []string{},
+	}
+	applyPausePointRecoverySwitchWarning(&response)
+	if len(response.Warnings) != 1 || response.Warnings[0] != pausePointAutoDebugSwitchWarning {
+		t.Fatalf("Warnings mismatch: %#v", response.Warnings)
+	}
+}
+
 const releaseCodeOptimizationEnableFailureJSON = `{"Success":false,"ErrorCode":"PAUSE_POINT_RELEASE_CODE_OPTIMIZATION","Message":"Release code optimization"}`
 
 const unrelatedEnableFailureJSON = `{"Success":false,"ErrorCode":"PAUSE_POINT_RESOLVE_FAILED","Message":"No sequence point found"}`
@@ -113,6 +154,61 @@ func TestCompleteEnableWithReleaseRecovery_WhenReleaseError_RecoversAndJoinsWarn
 	warning, _ := payload["Warning"].(string)
 	if warning != pausePointAutoDebugSwitchWarning {
 		t.Fatalf("Warning mismatch: %q", warning)
+	}
+	if _, ok := payload["Warnings"]; ok {
+		t.Fatalf("nil Warnings must stay omitted after recovery: %#v", payload["Warnings"])
+	}
+}
+
+// Verifies non-await recovery appends the switch note onto a present empty Warnings array.
+func TestCompleteEnableWithReleaseRecovery_WhenEmptyWarnings_AppendsSwitchEntry(t *testing.T) {
+	originalSwitch := sendSetCodeOptimizationDebug
+	originalCompile := runFreshCompileForPausePointRecovery
+	t.Cleanup(func() {
+		sendSetCodeOptimizationDebug = originalSwitch
+		runFreshCompileForPausePointRecovery = originalCompile
+	})
+	sendSetCodeOptimizationDebug = func(ctx context.Context, connection unityipc.Connection) error {
+		return nil
+	}
+	runFreshCompileForPausePointRecovery = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		params map[string]any,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		return 0
+	}
+
+	sendCount := 0
+	var stdout bytes.Buffer
+	code := completeEnableWithReleaseRecovery(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		&stdout,
+		io.Discard,
+		func(writer io.Writer) int {
+			sendCount++
+			if sendCount == 1 {
+				_, _ = writer.Write([]byte(releaseCodeOptimizationEnableFailureJSON))
+				return 1
+			}
+			_, _ = writer.Write([]byte(
+				`{"Success":true,"Id":"jump","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30,"Warnings":[]}`))
+			return 0
+		},
+	)
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stdout %s", code, stdout.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout.String())
+	}
+	warnings, _ := payload["Warnings"].([]any)
+	if len(warnings) != 1 || warnings[0] != pausePointAutoDebugSwitchWarning {
+		t.Fatalf("Warnings mismatch: %#v", payload["Warnings"])
 	}
 }
 
@@ -302,6 +398,13 @@ func TestRunEnablePausePointAndAwait_WhenReleaseError_RecoversAndSetsEnableTimeW
 	}
 	if strings.Contains(response.Warning, pausePointAutoDebugSwitchWarning) {
 		t.Fatalf("recovery warning must not fold into hit-time Warning: %q", response.Warning)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(stdout.Bytes(), &raw); err != nil {
+		t.Fatalf("failed to decode raw stdout: %v\n%s", err, stdout.String())
+	}
+	if _, ok := raw["EnableTimeWarnings"]; ok {
+		t.Fatalf("nil EnableTimeWarnings must stay omitted after recovery")
 	}
 }
 

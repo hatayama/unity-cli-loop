@@ -39,9 +39,10 @@ type pausePointMatchingLogsResult struct {
 // EnableTimeWarning so a successful hit is not contradicted by "may not hit" text.
 type pausePointWaitResult struct {
 	pausePointStatusResponse
-	MatchingLogs      []pausePointMatchingLog `json:"MatchingLogs"`
-	Warning           string                  `json:"Warning,omitempty"`
-	EnableTimeWarning string                  `json:"EnableTimeWarning,omitempty"`
+	MatchingLogs       []pausePointMatchingLog `json:"MatchingLogs"`
+	Warning            string                  `json:"Warning,omitempty"`
+	EnableTimeWarning  string                  `json:"EnableTimeWarning,omitempty"`
+	EnableTimeWarnings []string                `json:"EnableTimeWarnings,omitempty"`
 
 	// Expectations and AllExpectationsPassed are populated only when --expect was passed, so a
 	// caller that never used --expect sees neither field rather than a vacuous
@@ -71,6 +72,9 @@ type pausePointHitPayloadInputs struct {
 	// enableTimeWarning is the enable-pause-point patch diagnostic. Empty on plain await.
 	enableTimeWarning string
 
+	// enableTimeWarnings is the array form of enableTimeWarning. Empty on plain await.
+	enableTimeWarnings []string
+
 	triggerResult       *pausePointTriggerResult
 	awaitedPausePointID string
 	expectations        []pausePointExpectationResult
@@ -90,6 +94,7 @@ func buildPausePointHitPayload(inputs pausePointHitPayloadInputs) any {
 			pausePointStatusResponse
 			Warning               string                        `json:"Warning,omitempty"`
 			EnableTimeWarning     string                        `json:"EnableTimeWarning,omitempty"`
+			EnableTimeWarnings    []string                      `json:"EnableTimeWarnings,omitempty"`
 			Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
 			AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
 		}{
@@ -99,6 +104,7 @@ func buildPausePointHitPayload(inputs pausePointHitPayloadInputs) any {
 				triggerWarning,
 				buildPausePointExpectNotFoundWarning(inputs.expectations)),
 			EnableTimeWarning:     inputs.enableTimeWarning,
+			EnableTimeWarnings:    inputs.enableTimeWarnings,
 			Expectations:          inputs.expectations,
 			AllExpectationsPassed: pausePointAllExpectationsPassedPointer(inputs.expectations),
 		}
@@ -113,6 +119,7 @@ func buildPausePointHitPayload(inputs pausePointHitPayloadInputs) any {
 			triggerWarning,
 			buildPausePointExpectNotFoundWarning(inputs.expectations)),
 		EnableTimeWarning:     inputs.enableTimeWarning,
+		EnableTimeWarnings:    inputs.enableTimeWarnings,
 		Expectations:          inputs.expectations,
 		AllExpectationsPassed: pausePointAllExpectationsPassedPointer(inputs.expectations),
 	}

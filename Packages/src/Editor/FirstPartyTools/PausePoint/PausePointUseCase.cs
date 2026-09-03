@@ -104,9 +104,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hitWhen,
                 hitWhenCondition);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
-            response.Warning = PausePointEnableWarnings.MergeWarnings(
-                PausePointEnableWarnings.CreateEnableWarning(),
-                rearmWarning);
+            List<string> warningEntries = new List<string>();
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
+                PausePointEnableWarnings.CreateEnableWarning());
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, rearmWarning);
+            PausePointEnableWarningList.Assign(response, warningEntries);
             response.RecommendedNextAction = PausePointEnableWarnings
                 .ResolveSuccessEnableRecommendedNextAction(response.RecommendedNextAction, response.Id);
             LogEnable(response.Id, resolvedMethod: string.Empty, fileLine: string.Empty, response.Mode, response.Warning);
@@ -177,7 +180,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ClearedCount = clearedCount;
             if (resumedFromPause)
             {
-                response.Warning = SourcePausePointConstants.ClearReleasedOwnedPauseWarning;
+                List<string> warningEntries = new List<string>();
+                PausePointEnableWarningList.AddIfNotEmpty(
+                    warningEntries,
+                    SourcePausePointConstants.ClearReleasedOwnedPauseWarning);
+                PausePointEnableWarningList.Assign(response, warningEntries);
             }
 
             return response;
@@ -335,11 +342,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     message,
                     SourcePausePointConstants.ErrorCodeResolveFailed,
                     recommendedNextAction);
-                response.Warning = PausePointEnableWarnings.ChooseCompiledLineMapWarning(
-                    patchedMethodPdbUnavailableWarning,
-                    PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
-                        hasActiveHotReloadPatches,
-                        parameters.File));
+                List<string> resolveFailureWarnings = new List<string>();
+                PausePointEnableWarningList.AddIfNotEmpty(
+                    resolveFailureWarnings,
+                    PausePointEnableWarnings.ChooseCompiledLineMapWarning(
+                        patchedMethodPdbUnavailableWarning,
+                        PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
+                            hasActiveHotReloadPatches,
+                            parameters.File)));
+                PausePointEnableWarningList.Assign(response, resolveFailureWarnings);
                 return response;
             }
 
@@ -460,11 +471,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedMethod = resolvedMethod;
             response.SnapshotTiming = DescribeSnapshotTiming(ParseSnapshotTiming(parameters.SnapshotTiming));
             response.LineBasis = lineBasis;
-            string enableWarning = PausePointEnableWarnings.MergeWarnings(
-                PausePointEnableWarnings.CreateEnableWarning(),
-                editedLineRemapWarning);
-            enableWarning = PausePointEnableWarnings.MergeWarnings(
-                enableWarning,
+            List<string> warningEntries = new List<string>();
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
+                PausePointEnableWarnings.CreateEnableWarning());
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, editedLineRemapWarning);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
                 PausePointEnableWarnings.BuildRetargetedToHotReloadPatchWarningOrEmpty(
                     retargetedToHotReloadPatch,
                     resolvedMethod,
@@ -496,38 +509,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         compiledSourceLines);
             }
 
-            string compiledLineMapWarning = PausePointEnableWarnings.ChooseCompiledLineMapWarning(
-                patchedMethodPdbUnavailableWarning,
-                PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
-                    compareCompiledLineDrift,
-                    parameters.File,
-                    resolvedMethod,
-                    comparedAndMatched));
-            enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, compiledLineMapWarning);
-            enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, comparisonWarning);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
+                PausePointEnableWarnings.ChooseCompiledLineMapWarning(
+                    patchedMethodPdbUnavailableWarning,
+                    PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
+                        compareCompiledLineDrift,
+                        parameters.File,
+                        resolvedMethod,
+                        comparedAndMatched)));
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, comparisonWarning);
             if (comparisonWarning.Length > 0)
             {
                 response.RecommendedNextAction =
                     SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction;
             }
 
-            response.Warning = PausePointEnableWarnings.MergeWarnings(enableWarning, patchResult.Warning);
-            response.Warning = PausePointEnableWarnings.MergeWarnings(
-                response.Warning,
+            PausePointEnableWarningList.AddRangeIfNotEmpty(warningEntries, patchResult.Warnings);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
                 PausePointEnableWarnings.BuildAddedFieldsNotCapturedWarningOrEmpty(patchResult.DeclaringType));
-            response.Warning = PausePointPerFrameEnableWarnings.MergePerFrameEnableWarnings(
-                response.Warning,
-                parameters.Mode,
-                resolvedMethod,
-                snapshot.MaxHistory);
-            response.Warning = PausePointEnableWarnings.MergeWarnings(
-                PausePointEnableWarnings.MergeWarnings(response.Warning, rearmWarning),
+            PausePointEnableWarningList.AddRangeIfNotEmpty(
+                warningEntries,
+                PausePointPerFrameEnableWarnings.CollectPerFrameEnableWarnings(
+                    parameters.Mode,
+                    resolvedMethod,
+                    snapshot.MaxHistory));
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, rearmWarning);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
                 PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(
                     resolvedLineText,
                     resolvedLine,
                     resolvedMethod,
                     compiledMethodEndLine,
                     editedMethodEndLine));
+            PausePointEnableWarningList.Assign(response, warningEntries);
             response.RecommendedNextAction = PausePointEnableWarnings
                 .ResolveSuccessEnableRecommendedNextAction(response.RecommendedNextAction, id);
             LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);

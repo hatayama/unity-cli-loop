@@ -9,6 +9,8 @@ const (
 	// pausePointCapturedVariablesTruncatedNote explains why CapturedVariablesTruncated
 	// can stay true after --captured-variable-names dropped every clipped variable.
 	pausePointCapturedVariablesTruncatedNote = "the truncation flag refers to a variable excluded by --captured-variable-names; every variable listed here is complete."
+
+	pausePointCapturedVariableNameFilterNoMatchWarning = "No captured variable matched the requested names; the hit captured other variables. Check CapturedVariableNamesNotFound for the names that were absent."
 )
 
 // parsePausePointCapturedVariableNames splits the comma-separated --captured-variable-names
@@ -79,9 +81,7 @@ func filterPausePointCapturedVariablesByName(
 	// snapshots (unchanged), but a human Warning must not claim a name miss when the hit has
 	// not produced any variables yet.
 	if hadCapturedVariables && response.CapturedVariableNameFilterNoMatch {
-		response.Warning = joinPausePointWarnings(
-			response.Warning,
-			"No captured variable matched the requested names; the hit captured other variables. Check CapturedVariableNamesNotFound for the names that were absent.")
+		appendPausePointWarningToBothForms(&response, pausePointCapturedVariableNameFilterNoMatchWarning)
 	}
 
 	return applyPausePointCapturedVariablesTruncatedNote(response, hadListedTruncated)

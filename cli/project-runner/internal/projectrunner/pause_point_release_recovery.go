@@ -55,6 +55,22 @@ func isSuccessfulEnableResponse(raw []byte) bool {
 	return probe.Success
 }
 
+func applyPausePointRecoverySwitchWarning(response *pausePointStatusResponse) {
+	if response == nil || !response.Success {
+		return
+	}
+	appendPausePointWarningToBothForms(response, pausePointAutoDebugSwitchWarning)
+}
+
+func appendPausePointWarningToBothForms(response *pausePointStatusResponse, warning string) {
+	if response == nil {
+		return
+	}
+	originalWarning := response.Warning
+	response.Warning = joinPausePointWarnings(response.Warning, warning)
+	response.Warnings = appendPausePointWarningWhenPresent(response.Warnings, originalWarning, warning)
+}
+
 func injectPausePointRecoveryWarning(raw []byte) ([]byte, error) {
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(raw, &fields); err != nil {
@@ -71,7 +87,34 @@ func injectPausePointRecoveryWarning(raw []byte) ([]byte, error) {
 		return nil, err
 	}
 	fields["Warning"] = joined
+	if warningsRaw, ok := fields["Warnings"]; ok {
+		var existingWarnings []string
+		if unmarshalErr := json.Unmarshal(warningsRaw, &existingWarnings); unmarshalErr != nil {
+			return nil, unmarshalErr
+		}
+		updatedWarnings := appendPausePointWarningWhenPresent(existingWarnings, existing, pausePointAutoDebugSwitchWarning)
+		updated, marshalErr := json.Marshal(updatedWarnings)
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		fields["Warnings"] = updated
+	}
 	return json.Marshal(fields)
+}
+
+// Why skip a nil slice: older packages omit Warnings. Inventing a one-item
+// array would drop topics that exist only in the joined Warning string.
+// A present empty array with an empty Warning is current Unity and must get
+// the new entry. A present empty array with a non-empty Warning is left
+// alone so we do not publish a partial list.
+func appendPausePointWarningWhenPresent(warnings []string, originalWarning string, warning string) []string {
+	if warnings == nil {
+		return nil
+	}
+	if len(warnings) == 0 && originalWarning != "" {
+		return warnings
+	}
+	return appendPausePointWarningEntry(warnings, warning)
 }
 
 func waitContextDuration(ctx context.Context, duration time.Duration) error {
