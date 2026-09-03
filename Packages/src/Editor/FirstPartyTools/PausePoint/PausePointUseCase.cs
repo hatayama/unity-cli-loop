@@ -104,9 +104,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hitWhen,
                 hitWhenCondition);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
-            response.Warning = PausePointEnableWarnings.MergeWarnings(
-                PausePointEnableWarnings.CreateEnableWarning(),
-                rearmWarning);
+            List<string> warningEntries = new List<string>();
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
+                PausePointEnableWarnings.CreateEnableWarning());
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, rearmWarning);
+            PausePointEnableWarningList.Assign(response, warningEntries);
             response.RecommendedNextAction = PausePointEnableWarnings
                 .ResolveSuccessEnableRecommendedNextAction(response.RecommendedNextAction, response.Id);
             LogEnable(response.Id, resolvedMethod: string.Empty, fileLine: string.Empty, response.Mode, response.Warning);
@@ -177,7 +180,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ClearedCount = clearedCount;
             if (resumedFromPause)
             {
-                response.Warning = SourcePausePointConstants.ClearReleasedOwnedPauseWarning;
+                List<string> warningEntries = new List<string>();
+                PausePointEnableWarningList.AddIfNotEmpty(
+                    warningEntries,
+                    SourcePausePointConstants.ClearReleasedOwnedPauseWarning);
+                PausePointEnableWarningList.Assign(response, warningEntries);
             }
 
             return response;
@@ -223,6 +230,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string normalizedFile = SourcePausePointPathNormalizer.ToForwardSlashes(parameters.File);
             string id = BuildSourcePausePointId(parameters.File, parameters.Line);
             string patchedMethodPdbUnavailableWarning = string.Empty;
+            SourcePausePointSnapshotTiming snapshotTiming = ParseSnapshotTiming(parameters.SnapshotTiming);
 
             HotReloadShimFileLookup shimLookup =
                 HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(normalizedFile);
@@ -230,7 +238,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 SourcePausePointShimResolution shimResolution =
                     SourcePausePointShimResolver.Resolve(
-                        shimLookup, normalizedFile, parameters.Line, parameters.Method);
+                        shimLookup, normalizedFile, parameters.Line, parameters.Method, snapshotTiming);
                 if (shimResolution.Kind == SourcePausePointShimResolveKind.TransplantChainJoin
                     || shimResolution.Kind == SourcePausePointShimResolveKind.ShimDirect)
                 {
@@ -289,7 +297,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             (SourcePausePointResolveResult resolveResult, string editedLineRemapWarning) =
                 PausePointEditedLineRemap.ResolveWithEditedLineRemap(
-                    parameters.File, parameters.Line, parameters.Method);
+                    parameters.File, parameters.Line, parameters.Method, snapshotTiming);
             if (!resolveResult.Success)
             {
                 bool hasActiveHotReloadPatches = shimLookup != null;
@@ -334,11 +342,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     message,
                     SourcePausePointConstants.ErrorCodeResolveFailed,
                     recommendedNextAction);
-                response.Warning = PausePointEnableWarnings.ChooseCompiledLineMapWarning(
-                    patchedMethodPdbUnavailableWarning,
-                    PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
-                        hasActiveHotReloadPatches,
-                        parameters.File));
+                List<string> resolveFailureWarnings = new List<string>();
+                PausePointEnableWarningList.AddIfNotEmpty(
+                    resolveFailureWarnings,
+                    PausePointEnableWarnings.ChooseCompiledLineMapWarning(
+                        patchedMethodPdbUnavailableWarning,
+                        PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
+                            hasActiveHotReloadPatches,
+                            parameters.File)));
+                PausePointEnableWarningList.Assign(response, resolveFailureWarnings);
                 return response;
             }
 
@@ -379,6 +391,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compiledMethodEndLine: resolveResult.Resolution.CompiledMethodEndLine,
                 patchedMethodPdbUnavailableWarning: patchedMethodPdbUnavailableWarning,
                 editedLineRemapWarning: editedLineRemapWarning);
+        }
+
+        // Validation already rejected anything but the two accepted values.
+        private static SourcePausePointSnapshotTiming ParseSnapshotTiming(string value)
+        {
+            if (value == SourcePausePointConstants.PostLineSnapshotTimingValue)
+            {
+                return SourcePausePointSnapshotTiming.PostLine;
+            }
+
+            Debug.Assert(
+                value == SourcePausePointConstants.PreLineSnapshotTimingValue,
+                "SnapshotTiming must have been validated before use.");
+            return SourcePausePointSnapshotTiming.PreLine;
+        }
+
+        private static string DescribeSnapshotTiming(SourcePausePointSnapshotTiming snapshotTiming)
+        {
+            return snapshotTiming == SourcePausePointSnapshotTiming.PostLine
+                ? SourcePausePointConstants.PostLineSnapshotTimingNote
+                : SourcePausePointConstants.PreLineSnapshotTimingNote;
         }
 
         private static PausePointResponse FinishEnableBySourceLocation(
@@ -436,13 +469,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedLine = resolvedLine;
             response.ResolvedLineText = resolvedLineText;
             response.ResolvedMethod = resolvedMethod;
-            response.SnapshotTiming = SourcePausePointConstants.PreLineSnapshotTimingNote;
+            response.SnapshotTiming = DescribeSnapshotTiming(ParseSnapshotTiming(parameters.SnapshotTiming));
             response.LineBasis = lineBasis;
-            string enableWarning = PausePointEnableWarnings.MergeWarnings(
-                PausePointEnableWarnings.CreateEnableWarning(),
-                editedLineRemapWarning);
-            enableWarning = PausePointEnableWarnings.MergeWarnings(
-                enableWarning,
+            List<string> warningEntries = new List<string>();
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
+                PausePointEnableWarnings.CreateEnableWarning());
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, editedLineRemapWarning);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
                 PausePointEnableWarnings.BuildRetargetedToHotReloadPatchWarningOrEmpty(
                     retargetedToHotReloadPatch,
                     resolvedMethod,
@@ -474,38 +509,42 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         compiledSourceLines);
             }
 
-            string compiledLineMapWarning = PausePointEnableWarnings.ChooseCompiledLineMapWarning(
-                patchedMethodPdbUnavailableWarning,
-                PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
-                    compareCompiledLineDrift,
-                    parameters.File,
-                    resolvedMethod,
-                    comparedAndMatched));
-            enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, compiledLineMapWarning);
-            enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, comparisonWarning);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
+                PausePointEnableWarnings.ChooseCompiledLineMapWarning(
+                    patchedMethodPdbUnavailableWarning,
+                    PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
+                        compareCompiledLineDrift,
+                        parameters.File,
+                        resolvedMethod,
+                        comparedAndMatched)));
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, comparisonWarning);
             if (comparisonWarning.Length > 0)
             {
                 response.RecommendedNextAction =
                     SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction;
             }
 
-            response.Warning = PausePointEnableWarnings.MergeWarnings(enableWarning, patchResult.Warning);
-            response.Warning = PausePointEnableWarnings.MergeWarnings(
-                response.Warning,
+            PausePointEnableWarningList.AddRangeIfNotEmpty(warningEntries, patchResult.Warnings);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
                 PausePointEnableWarnings.BuildAddedFieldsNotCapturedWarningOrEmpty(patchResult.DeclaringType));
-            response.Warning = PausePointPerFrameEnableWarnings.MergePerFrameEnableWarnings(
-                response.Warning,
-                parameters.Mode,
-                resolvedMethod,
-                snapshot.MaxHistory);
-            response.Warning = PausePointEnableWarnings.MergeWarnings(
-                PausePointEnableWarnings.MergeWarnings(response.Warning, rearmWarning),
+            PausePointEnableWarningList.AddRangeIfNotEmpty(
+                warningEntries,
+                PausePointPerFrameEnableWarnings.CollectPerFrameEnableWarnings(
+                    parameters.Mode,
+                    resolvedMethod,
+                    snapshot.MaxHistory));
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, rearmWarning);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
                 PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(
                     resolvedLineText,
                     resolvedLine,
                     resolvedMethod,
                     compiledMethodEndLine,
                     editedMethodEndLine));
+            PausePointEnableWarningList.Assign(response, warningEntries);
             response.RecommendedNextAction = PausePointEnableWarnings
                 .ResolveSuccessEnableRecommendedNextAction(response.RecommendedNextAction, id);
             LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,125 @@ func TestRunPausePointWaitAfterEnableSeparatesEnableTimeWarningOnHit(t *testing.
 	}
 	if strings.Contains(result.Warning, enableTimePatchWarning) {
 		t.Fatalf("enable-time warning must not appear in Warning: %q", result.Warning)
+	}
+}
+
+// Verifies enable-response Warnings are copied onto EnableTimeWarnings on a successful hit.
+func TestRunPausePointWaitAfterEnableCopiesWarningsOntoEnableTimeWarnings(t *testing.T) {
+	stubPausePointHit(t, "")
+	stubPausePointMatchingLogs(t, nil)
+	stubPausePointTriggerDispatch(t, `{"Success":true}`)
+
+	enableWarnings := []string{"physics dispatch warning.", "mid-solver values warning."}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runPausePointWaitAfterEnable(
+		context.Background(),
+		unityipc.Connection{},
+		waitForPausePointOptions{
+			id:                   "jump",
+			timeoutSeconds:       1,
+			timeout:              time.Second,
+			matchingLogsMaxCount: 5,
+			triggerCommand:       "simulate-keyboard",
+			triggerArgs:          []string{"--action", "Press", "--key", "W"},
+		},
+		enablePausePointPropagatedFields{
+			Warning:  strings.Join(enableWarnings, " "),
+			Warnings: enableWarnings,
+		},
+		&stdout,
+		&stderr,
+	)
+	if code != 0 {
+		t.Fatalf("expected hit success, got %d: %s", code, stdout.String())
+	}
+	result := decodePausePointWaitResult(t, stdout.String())
+	if result.EnableTimeWarning != strings.Join(enableWarnings, " ") {
+		t.Fatalf("EnableTimeWarning mismatch: %q", result.EnableTimeWarning)
+	}
+	if len(result.EnableTimeWarnings) != 2 ||
+		result.EnableTimeWarnings[0] != enableWarnings[0] ||
+		result.EnableTimeWarnings[1] != enableWarnings[1] {
+		t.Fatalf("EnableTimeWarnings mismatch: %#v", result.EnableTimeWarnings)
+	}
+}
+
+// Verifies runEnablePausePointAndAwait copies enable-response Warnings onto EnableTimeWarnings.
+func TestRunEnablePausePointAndAwait_WhenEnableReturnsWarnings_CopiesThemOntoEnableTimeWarnings(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalPoll := pausePointStatusPoll
+	originalFetch := fetchMatchingLogs
+	originalSend := sendEnablePausePointIPC
+	pausePointStatusPoll = time.Millisecond
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		pausePointStatusPoll = originalPoll
+		fetchMatchingLogs = originalFetch
+		sendEnablePausePointIPC = originalSend
+	})
+
+	statusResponses := []pausePointStatusResponse{
+		{Id: "jump", Status: pausePointStatusEnabled, IsEnabled: true},
+		{Id: "jump", Status: pausePointStatusHit, IsHit: true, HitCount: 1},
+	}
+	statusCallCount := 0
+	queryPausePointStatus = func(ctx context.Context, connection unityipc.Connection, id string) (pausePointStatusResponse, error) {
+		response := statusResponses[statusCallCount]
+		statusCallCount++
+		return response, nil
+	}
+	fetchMatchingLogs = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		searchText string,
+		maxCount int,
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{SearchText: searchText, Logs: []pausePointMatchingLog{}}, nil
+	}
+
+	enableWarnings := []string{"a.", "b."}
+	sendEnablePausePointIPC = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		params map[string]any,
+		stderr io.Writer,
+	) (unityipc.UnitySendOutcome, error) {
+		payload := `{"Success":true,"Id":"jump","Status":"Enabled","IsEnabled":true,"TimeoutSeconds":30,"Warning":"a. b.","Warnings":["a.","b."]}`
+		return unityipc.UnitySendOutcome{Result: []byte(payload)}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runEnablePausePointAndAwait(
+		context.Background(),
+		unityipc.Connection{ProjectRoot: t.TempDir()},
+		map[string]any{"Id": "jump"},
+		pausePointCapturedVariablesModeFull,
+		nil,
+		nil,
+		"",
+		nil,
+		false,
+		t.TempDir(),
+		&stdout,
+		&stderr,
+	)
+	if code != 0 {
+		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
+	}
+
+	var response pausePointWaitResult
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
+	}
+	if response.EnableTimeWarning != "a. b." {
+		t.Fatalf("EnableTimeWarning mismatch: %q", response.EnableTimeWarning)
+	}
+	if len(response.EnableTimeWarnings) != 2 ||
+		response.EnableTimeWarnings[0] != enableWarnings[0] ||
+		response.EnableTimeWarnings[1] != enableWarnings[1] {
+		t.Fatalf("EnableTimeWarnings mismatch: %#v", response.EnableTimeWarnings)
 	}
 }
 

@@ -58,7 +58,44 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             StringComparer fileComparer = Application.platform == RuntimePlatform.WindowsEditor
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal;
-            HashSet<string> seenFiles = new HashSet<string>(fileComparer);
+            List<LineShiftFileBucket> buckets = CollectUniqueFileBuckets(methods, fileComparer);
+            List<string> continuingFiles = new List<string>();
+            for (int index = 0; index < buckets.Count; index++)
+            {
+                LineShiftFileBucket bucket = buckets[index];
+                string warning = Build(
+                    bucket.CanonicalFile,
+                    readEditedSource(bucket.CanonicalFile),
+                    readCompiledSource(bucket.CanonicalFile));
+                if (warning.Length == 0)
+                {
+                    continue;
+                }
+
+                if (bucket.TouchedThisRun)
+                {
+                    warnings.Add(warning);
+                    continue;
+                }
+
+                continuingFiles.Add(bucket.CanonicalFile);
+            }
+
+            AppendContinuingWarning(warnings, continuingFiles);
+        }
+
+        private sealed class LineShiftFileBucket
+        {
+            public string CanonicalFile;
+            public bool TouchedThisRun;
+        }
+
+        private static List<LineShiftFileBucket> CollectUniqueFileBuckets(
+            IReadOnlyList<HotReloadMethodOutcome> methods,
+            StringComparer fileComparer)
+        {
+            List<LineShiftFileBucket> buckets = new List<LineShiftFileBucket>();
+            Dictionary<string, LineShiftFileBucket> byFile = new Dictionary<string, LineShiftFileBucket>(fileComparer);
             for (int index = 0; index < methods.Count; index++)
             {
                 string filePath = methods[index].FilePath;
@@ -68,22 +105,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 string canonicalFile = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath);
-                if (!seenFiles.Add(canonicalFile))
+                if (!byFile.TryGetValue(canonicalFile, out LineShiftFileBucket bucket))
                 {
-                    continue;
+                    bucket = new LineShiftFileBucket { CanonicalFile = canonicalFile };
+                    byFile.Add(canonicalFile, bucket);
+                    buckets.Add(bucket);
                 }
 
-                string warning = Build(
-                    canonicalFile,
-                    readEditedSource(canonicalFile),
-                    readCompiledSource(canonicalFile));
-                if (warning.Length == 0)
+                if (methods[index].Kind != HotReloadMethodOutcomeKind.AlreadyActive)
                 {
-                    continue;
+                    bucket.TouchedThisRun = true;
                 }
-
-                warnings.Add(warning);
             }
+
+            return buckets;
+        }
+
+        private static void AppendContinuingWarning(List<string> warnings, List<string> continuingFiles)
+        {
+            if (continuingFiles.Count == 0)
+            {
+                return;
+            }
+
+            continuingFiles.Sort(StringComparer.Ordinal);
+            warnings.Add(
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    HotReloadConstants.ContinuingLineShiftWarningFormat,
+                    continuingFiles.Count,
+                    string.Join(", ", continuingFiles)));
         }
 
         internal static string ReadEditedSourceFromDisk(string projectRelativePath)

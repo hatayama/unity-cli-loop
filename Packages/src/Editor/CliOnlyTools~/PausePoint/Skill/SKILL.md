@@ -23,7 +23,7 @@ A hit pauses Unity at the next frame boundary — the rest of that frame still r
 
 ## Parameters
 
-The tables list only parameters Unity itself accepts; CLI-only flags (`--await`, `--trigger`,
+Only parameters Unity itself accepts are listed; CLI-only flags (`--await`, `--trigger`,
 `--resume-play`, `--expect`, capture filters) are in the reference guides below.
 
 ### enable-pause-point
@@ -39,9 +39,10 @@ Enable a pause point so Unity pauses when that code path is reached, either by a
 | `--mode` | enum | `single-shot` | Capture mode: single-shot pauses once, continuous pauses on every hit, trace records hits without pausing |
 | `--hit-when` | string | - | Conditional capture expression (`<name> <op> <literal>`). Only matching hits are captured; requires File and Line |
 | `--max-history` | integer | `20` | Maximum number of captured hit frames to retain (1-100) |
-| `--max-preview-elements` | integer | `10` | Maximum number of elements to include in a captured collection's preview (1-1000). The value set at enable time also caps the previews in every later pause-point-status response for that marker; status has no flag to change it. |
-| `--max-caller-frames` | integer | `2` | Maximum number of caller stack frames to record on each hit (0-8). 0 disables capture (`CallerFrames` stays an empty array). The value set at enable time also caps every later pause-point-status response for that marker; status has no flag to change it. |
+| `--max-preview-elements` | integer | `10` | Maximum number of elements to include in a captured collection's preview (1-1000). Also caps previews in later pause-point-status responses; status cannot change it. |
+| `--max-caller-frames` | integer | `2` | Maximum number of caller stack frames to record on each hit (0-8). 0 disables capture. Also caps later pause-point-status responses; status cannot change it. |
 | `--method` | string | - | Optional method simple name or `Type.Method`. When set, `--line` resolves only inside matching methods |
+| `--snapshot-timing` | enum | `pre-line` | pre-line captures before the resolved line runs; post-line captures after that line's statement finished, without arming the next line |
 
 ### clear-pause-point
 

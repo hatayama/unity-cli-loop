@@ -1031,6 +1031,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearReleasedOwnedPauseWarning));
+            Assert.That(
+                response.Warnings,
+                Is.EqualTo(new[] { SourcePausePointConstants.ClearReleasedOwnedPauseWarning }));
         }
 
         [Test]
@@ -1045,6 +1048,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Warning, Is.Empty);
+            Assert.That(response.Warnings, Is.Empty);
         }
 
         /// <summary>
@@ -1062,6 +1066,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Warning, Is.Empty);
+            Assert.That(response.Warnings, Is.Empty);
             Assert.That(_pauseController.IsPaused, Is.True);
         }
 
@@ -1108,6 +1113,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearReleasedOwnedPauseWarning));
+            Assert.That(
+                response.Warnings,
+                Is.EqualTo(new[] { SourcePausePointConstants.ClearReleasedOwnedPauseWarning }));
         }
 
         [Test]
@@ -2140,6 +2148,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 resolution.IsDeclaringTypeValueType,
                 resolution.InstructionIndex,
                 resolution.IlOffset,
+                resolution.SnapshotTiming,
                 resolution.ResolvedLine,
                 resolution.ResolvedEndLine,
                 resolution.CompiledMethodStartLine,

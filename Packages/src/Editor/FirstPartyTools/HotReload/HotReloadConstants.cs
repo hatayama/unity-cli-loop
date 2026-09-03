@@ -242,6 +242,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string MultiWarningSingleCompileResolutionMessage =
             "A single 'uloop compile' clears all of them at once.";
 
+        // Format: continuing file count, then comma-separated project-relative paths (ordinal).
+        public const string ContinuingLineShiftWarningFormat =
+            "Continuing from earlier runs: {0} file(s) still differ in line count from the last compiled source ({1}). 'enable-pause-point --line' targeting caveats from the earlier warning still apply; pass --method together with --line to pin the target.";
+
         // Format: project-relative path of the source that matched a non-baseline ledger entry.
         public const string UnchangedSourceNonBaselineWarningFormat =
             "Source of '{0}' is unchanged since the last reload, but that run had Skipped or Failed "

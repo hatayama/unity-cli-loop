@@ -47,6 +47,9 @@ internal sealed class WorkerOutput
     // Keep in sync with TransformWorkerOutputDto.addedFieldNames.
     public string[] AddedFieldNames { get; set; }
 
+    // Keep in sync with TransformWorkerOutputDto.addedConstNames.
+    public string[] AddedConstNames { get; set; }
+
     // Keep in sync with TransformWorkerOutputDto.sourceContentSha256.
     public string SourceContentSha256 { get; set; }
 }

@@ -9,6 +9,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         ScriptNotInAnyAssembly,
         CompiledAssemblyNotFound,
         SymbolsUnavailable,
-        NoSequencePointOnOrAfterLine
+        NoSequencePointOnOrAfterLine,
+        PostLineAlwaysThrows
     }
 }

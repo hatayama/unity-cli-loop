@@ -91,7 +91,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ActivePatchTotal = result.ActivePatchTotal,
                 AddedFieldTotal = HotReloadAddedFieldRegistry.DescribeAll().Count,
                 UnchangedTotal = result.UnchangedTotal,
-                AddedFields = result.AddedFields ?? Array.Empty<string>(),
+                AddedFields = result.AddedFields,
+                AddedConsts = result.AddedConsts,
                 Message = BuildApplyMessage(
                     result,
                     hasFailure,

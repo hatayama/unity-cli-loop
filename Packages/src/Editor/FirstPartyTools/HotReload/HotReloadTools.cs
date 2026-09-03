@@ -78,6 +78,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string[] AddedFields { get; set; } = Array.Empty<string>();
 
+        public IReadOnlyList<string> AddedConsts { get; set; } = Array.Empty<string>();
+
         public string Message { get; set; } = string.Empty;
 
         public string ErrorCode { get; set; } = string.Empty;

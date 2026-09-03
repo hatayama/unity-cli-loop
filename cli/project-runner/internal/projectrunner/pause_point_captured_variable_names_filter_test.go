@@ -118,6 +118,25 @@ func assertFilterComposesWithCapturedVariablesNamesMode(t *testing.T) {
 	}
 }
 
+// Verifies a suppressed status Warnings list stays in sync with Warning after a name-filter miss.
+func TestFilterPausePointCapturedVariablesByName_WhenWarningsPresentAndNoMatch_AppendsNoMatchEntry(t *testing.T) {
+	const suppressedReason = "suppressed by hot reload"
+	const noMatchWarning = pausePointCapturedVariableNameFilterNoMatchWarning
+	response := capturedVariableNamesFilterResponse()
+	response.Warning = suppressedReason
+	response.Warnings = []string{suppressedReason}
+
+	result := filterPausePointCapturedVariablesByName(response, []string{"doesNotExist"})
+
+	if len(result.Warnings) != 2 || result.Warnings[0] != suppressedReason || result.Warnings[1] != noMatchWarning {
+		t.Fatalf("Warnings mismatch: %#v", result.Warnings)
+	}
+	wantWarning := suppressedReason + " " + noMatchWarning
+	if result.Warning != wantWarning {
+		t.Fatalf("Warning mismatch: %q", result.Warning)
+	}
+}
+
 func assertFilterLeavesResponseUnchangedWhenNamesEmpty(t *testing.T) {
 	t.Helper()
 	original := capturedVariableNamesFilterResponse()
