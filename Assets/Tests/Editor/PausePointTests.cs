@@ -1118,6 +1118,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(new[] { SourcePausePointConstants.ClearReleasedOwnedPauseWarning }));
         }
 
+        /// <summary>
+        /// Verifies clear-pause-point --id tells the caller how to recover the paused state it just resumed.
+        /// </summary>
+        [Test]
+        public async Task Clear_WhenReleasingPausePointOwnedPause_SetsResumedPlayModeRecommendedNextAction()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "jump" };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(SourcePausePointConstants.ClearResumedPlayModeRecommendedNextAction));
+        }
+
+        /// <summary>
+        /// Verifies clear-pause-point --id recommends nothing when it preserved a manual pause instead of resuming.
+        /// </summary>
+        [Test]
+        public async Task Clear_WhenManualPausePreserved_SetsNoRecommendedNextAction()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            _pauseController.PauseExternally();
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "jump" };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.RecommendedNextAction, Is.Empty);
+        }
+
+        /// <summary>
+        /// Verifies clear-pause-point --all tells the caller how to recover the paused state it just resumed.
+        /// </summary>
+        [Test]
+        public async Task ClearAll_WhenReleasingPausePointOwnedPause_SetsResumedPlayModeRecommendedNextAction()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["all"] = true };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(SourcePausePointConstants.ClearResumedPlayModeRecommendedNextAction));
+        }
+
+        /// <summary>
+        /// Verifies clear-pause-point --all recommends nothing when no pause-point-owned pause was released.
+        /// </summary>
+        [Test]
+        public async Task ClearAll_WhenNoPauseReleased_SetsNoRecommendedNextAction()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["all"] = true };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.RecommendedNextAction, Is.Empty);
+        }
+
         [Test]
         public async Task Enable_WhenMarkerCreated_ReturnsStateManagementFields()
         {

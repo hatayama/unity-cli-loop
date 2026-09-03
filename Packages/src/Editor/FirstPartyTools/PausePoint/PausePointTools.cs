@@ -178,7 +178,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     : string.Empty,
                 Warnings = result.ResumedFromPause
                     ? new[] { SourcePausePointConstants.ClearReleasedOwnedPauseWarning }
-                    : Array.Empty<string>()
+                    : Array.Empty<string>(),
+                RecommendedNextAction = result.ResumedFromPause
+                    ? SourcePausePointConstants.ClearResumedPlayModeRecommendedNextAction
+                    : string.Empty
             };
         }
 

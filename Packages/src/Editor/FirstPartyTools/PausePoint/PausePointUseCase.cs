@@ -185,6 +185,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     warningEntries,
                     SourcePausePointConstants.ClearReleasedOwnedPauseWarning);
                 PausePointEnableWarningList.Assign(response, warningEntries);
+
+                // Overwrites whatever FromSnapshot derived from StatusBeforeClear (the expired
+                // hint, for instance): the caller has just lost the paused state to a resume that
+                // happened during this call, so recovering it comes before re-arming advice.
+                response.RecommendedNextAction =
+                    SourcePausePointConstants.ClearResumedPlayModeRecommendedNextAction;
             }
 
             return response;
