@@ -16,5 +16,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             if (condition) return 1;
             return 0;
         }
+
+        public async System.Threading.Tasks.Task<int> AwaitThenAssign()
+        {
+            int flag = 0;
+            await System.Threading.Tasks.Task.Yield(); flag = 1;
+            return flag;
+        }
     }
 }

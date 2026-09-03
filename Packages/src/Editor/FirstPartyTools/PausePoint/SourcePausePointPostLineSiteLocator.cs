@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             SourcePausePointSequencePointCandidate selected = points[selectedPointIndex];
             int rangeStartOffset = selected.Offset;
-            int sameLineRunEndOffset = FindSameLineRunEndOffset(points, selected);
+            int sameLineRunEndOffset = FindSameLineRunEndOffset(instructions, points, selected);
             int lastIndex;
             int boundaryPointIndex;
             int firstCrossedConditionalBranchIndex = -1;
@@ -118,6 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static int FindSameLineRunEndOffset(
+            IReadOnlyList<SourcePausePointInstructionCandidate> instructions,
             IReadOnlyList<SourcePausePointSequencePointCandidate> points,
             SourcePausePointSequencePointCandidate selected)
         {
@@ -131,7 +132,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 SourcePausePointSequencePointCandidate boundary = points[boundaryPointIndex];
-                if (!IsPartOfSameLineRun(points, boundaryPointIndex, selected.StartLine))
+                if (!IsPartOfSameLineRun(instructions, points, boundaryPointIndex, selected.StartLine))
                 {
                     return boundary.Offset;
                 }
@@ -141,6 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static bool IsPartOfSameLineRun(
+            IReadOnlyList<SourcePausePointInstructionCandidate> instructions,
             IReadOnlyList<SourcePausePointSequencePointCandidate> points,
             int pointIndex,
             int selectedLine)
@@ -158,7 +160,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             SourcePausePointSequencePointCandidate nextPoint = points[nextPointIndex];
-            return !nextPoint.IsHidden && nextPoint.StartLine == selectedLine;
+            if (nextPoint.IsHidden || nextPoint.StartLine != selectedLine)
+            {
+                return false;
+            }
+
+            return IsConditionalBranchOnlyRange(instructions, point.Offset, nextPoint.Offset);
+        }
+
+        // Debug builds put a one-line if's test in a hidden range shaped `ldloc tmp; brfalse`.
+        // An await continuation is also hidden and can be followed by a visible point on the
+        // same line, but it carries the suspend `leave` and resumes before that point, so only
+        // a range whose sole control transfer is its final conditional branch counts.
+        private static bool IsConditionalBranchOnlyRange(
+            IReadOnlyList<SourcePausePointInstructionCandidate> instructions,
+            int rangeStartOffset,
+            int rangeEndOffset)
+        {
+            int lastIndex = FindLastInstructionIndexBefore(instructions, rangeEndOffset);
+            if (lastIndex < 0 ||
+                instructions[lastIndex].Flow != SourcePausePointInstructionFlow.ConditionalBranch)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < lastIndex; index++)
+            {
+                SourcePausePointInstructionCandidate instruction = instructions[index];
+                if (instruction.Offset >= rangeStartOffset &&
+                    instruction.Flow != SourcePausePointInstructionFlow.Next)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         // The next sequence point in IL order after the range start, hidden ones included.

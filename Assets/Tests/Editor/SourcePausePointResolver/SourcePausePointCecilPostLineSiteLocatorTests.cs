@@ -7,6 +7,7 @@ using Mono.Cecil.Cil;
 
 using NUnit.Framework;
 
+
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
@@ -59,9 +60,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Is.EqualTo(FlowControl.Cond_Branch));
         }
 
+        /// <summary>
+        /// What: an await followed by another statement on the same line keeps the capture
+        /// before the awaited continuation, so the hidden state-machine points never extend the
+        /// run into the resumed statement.
+        /// </summary>
+        [Test]
+        public void Locate_RealAssemblyAwaitThenSameLineAssignment_StaysBeforeTheContinuation()
+        {
+            using AssemblyDefinition assembly = ReadEditorTestAssembly();
+            MethodDefinition method = FindStateMachineMoveNext(assembly, "AwaitThenAssign");
+            SequencePoint selected = FindVisibleSequencePoint(method, 23);
+            SequencePoint resumedStatement = method.DebugInformation.SequencePoints
+                .Where(point => !point.IsHidden && point.StartLine == 23 && point.Offset > selected.Offset)
+                .OrderBy(point => point.Offset)
+                .First();
+
+            SourcePausePointPostLineSite site = SourcePausePointCecilPostLineSiteLocator.Locate(method, selected);
+
+            Assert.That(site.Kind, Is.Not.EqualTo(SourcePausePointPostLineSiteKind.AlwaysThrows));
+            Assert.That(method.Body.Instructions[site.InstructionIndex].Offset, Is.LessThan(resumedStatement.Offset));
+        }
+
+        private static MethodDefinition FindStateMachineMoveNext(AssemblyDefinition assembly, string methodName)
+        {
+            TypeDefinition fixture = assembly.MainModule.GetType(FixtureTypeName);
+            Debug.Assert(fixture != null, "The compiled fixture type must exist.");
+            TypeDefinition stateMachine = fixture.NestedTypes.Single(type => type.Name.Contains(methodName));
+            return stateMachine.Methods.Single(method => method.Name == "MoveNext");
+        }
+
         private static AssemblyDefinition ReadEditorTestAssembly()
         {
-            string assemblyPath = Path.GetFullPath(AssemblyRelativePath);
+            // Unity's working directory is not guaranteed to be the project root, so anchor the
+            // path on Assets instead of the process cwd.
+            string projectRoot = Path.GetDirectoryName(UnityEngine.Application.dataPath);
+            string assemblyPath = Path.Combine(projectRoot, AssemblyRelativePath);
             ReaderParameters readerParameters = new ReaderParameters
             {
                 InMemory = true,
