@@ -33,6 +33,9 @@ internal static class AddedFieldSkipReasons
     public const string FieldTypeNotExternallyVisible =
         "Added field type is not visible to the shim assembly. Run 'uloop compile'.";
 
+    public const string FieldTypeUnresolvedFormat =
+        "Added field type '{0}' could not be resolved; check for a missing using directive or a typo, fix the declaration, and rerun. Run 'uloop compile' if the type is new.";
+
     public const string IncrementNotNumeric =
         "Increment or decrement of an added field is skipped unless the type is a numeric "
         + "primitive or enum. Run 'uloop compile'.";
