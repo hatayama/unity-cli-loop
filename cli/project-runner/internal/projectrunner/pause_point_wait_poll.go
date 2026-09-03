@@ -202,8 +202,8 @@ const (
 	pausePointTriggerNotArmedAtWaitStartError = "trigger was not dispatched: the marker could not be confirmed armed at wait start"
 
 	pausePointResumeSkippedForExistingHitMessage = "resume was skipped: the marker had already hit " +
-		"before this wait started, so the recorded hit is returned as-is and Unity stays paused by that " +
-		"hit; clear or re-enable the marker and wait again to capture a new hit"
+		"before this wait started, so the recorded hit is returned as-is and Play Mode is left as it is; " +
+		"clear or re-enable the marker and wait again to capture a new hit"
 	pausePointTriggerSkippedForExistingHitError = "trigger was not dispatched: the marker had already " +
 		"hit before this wait started, so the recorded hit is returned as-is; clear or re-enable the " +
 		"marker and wait again to capture a new hit"
