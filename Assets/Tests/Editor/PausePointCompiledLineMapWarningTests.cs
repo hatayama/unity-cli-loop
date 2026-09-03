@@ -714,7 +714,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + ResolveFailureFile
                     + ":"
                     + requestedLine
-                    + "\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time.";
+                    + "\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\" next time.";
                 Assert.That(response.RecommendedNextAction, Is.EqualTo(expectedArming));
                 AssertLineBasis(response, "LastCompiledSource");
             }

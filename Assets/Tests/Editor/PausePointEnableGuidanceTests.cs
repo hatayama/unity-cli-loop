@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const int FixtureClosingBraceLine = 13;
 
         private const string ExpectedArmingNextActionForJump =
-            "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time.";
+            "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\" next time.";
 
         private const string ExpectedRearmDiscardWarningGeneration1 =
             "Generation 1 of this pause point had already hit; this re-arm discarded its CapturedVariables and CapturedVariableHistory. Read results with pause-point-status before re-arming when you need them.";
@@ -64,6 +64,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "jump");
 
             Assert.That(action, Is.EqualTo(ExpectedArmingNextActionForJump));
+        }
+
+        /// <summary>
+        /// What: arming guidance describes the trigger as a subcommand without a leading uloop command.
+        /// </summary>
+        [Test]
+        public void ResolveSuccessEnableRecommendedNextAction_WhenExistingIsEmpty_ExplainsTriggerSubcommandFormat()
+        {
+            const string deprecatedPlaceholder = "<uloop " + "command>";
+            string action = PausePointEnableWarnings.ResolveSuccessEnableRecommendedNextAction(
+                string.Empty,
+                "jump");
+
+            Assert.That(action, Does.Not.Contain(deprecatedPlaceholder));
+            Assert.That(action, Does.Contain("without"));
         }
 
         /// <summary>
@@ -129,7 +144,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 + FixtureFilePath
                 + ":"
                 + FixtureStatementLine
-                + "\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time.";
+                + "\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\" next time.";
             Assert.That(response.RecommendedNextAction, Is.EqualTo(expected));
             string json = JsonConvert.SerializeObject(
                 response,
