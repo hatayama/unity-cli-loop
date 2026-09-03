@@ -20,14 +20,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void Initialize()
         {
             UnityTestFrameworkExecutionServiceRegistry.Register(new UnityTestFrameworkExecutionService());
+            RunTestsPendingRunCallbackRegistrar.RegisterIfPending();
         }
     }
 
     internal sealed class UnityTestFrameworkExecutionService : IUnityTestFrameworkExecutionService
     {
-        public Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
+        public Task<SerializableTestResult> ExecutePlayModeTestAsync(
+            TestExecutionFilter filter,
+            CancellationToken ct,
+            RunTestsPlayModeRunOptions options)
         {
-            return PlayModeTestExecuter.ExecutePlayModeTest(filter, ct);
+            return PlayModeTestExecuter.ExecutePlayModeTest(filter, ct, options);
         }
 
         public Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
@@ -52,13 +56,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public static async Task<SerializableTestResult> ExecutePlayModeTest(
             TestExecutionFilter filter,
-            CancellationToken ct)
+            CancellationToken ct,
+            RunTestsPlayModeRunOptions options)
         {
+            Debug.Assert(options != null, "options must not be null");
             ct.ThrowIfCancellationRequested();
             DomainReloadDisableScope.RecoverAbandonedScopeBeforeNewRun();
+            bool respectEnterPlayModeSettings = options.RespectEnterPlayModeSettings;
+            if (respectEnterPlayModeSettings)
+            {
+                Debug.Assert(
+                    !string.IsNullOrEmpty(options.RequestId),
+                    "requestId must not be empty on the respect path; the CLI always supplies it");
+            }
+
             // Why not `using`: Dispose must run only after cancel-time stop/restore finishes.
             // Disposing earlier re-enables domain reload while Test Runner / Play Mode may still be active.
-            DomainReloadDisableScope scope = new DomainReloadDisableScope();
+            DomainReloadDisableScope scope = RunTestsPlayModeRunOptions.ShouldDisableDomainReload(
+                respectEnterPlayModeSettings)
+                ? new DomainReloadDisableScope()
+                : null;
+            RunTestsPendingRunScope pendingScope = respectEnterPlayModeSettings
+                ? new RunTestsPendingRunScope(options.RequestId, options.PendingRunExpiresAtUtc)
+                : null;
+            pendingScope?.Begin();
             string runGuid = null;
             try
             {
@@ -70,6 +91,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             catch (OperationCanceledException originalException)
             {
+                if (respectEnterPlayModeSettings && pendingScope != null && pendingScope.ReloadObserved)
+                {
+                    // Why not stop/restore: RunTestsCancelStopRestore also calls TryCancelTestRun,
+                    // which would tear down the Test Runner that must finish in the next domain.
+                    // The server's beforeAssemblyReload handler cancels the in-flight request, but
+                    // TaskCompletionSource uses RunContinuationsAsynchronously so this catch does
+                    // not run synchronously; the same event delivery sets ReloadObserved first.
+                    throw;
+                }
+
                 // Why switch first: ExecuteTestWithEventNotification may resume off-thread via
                 // ConfigureAwait(false), but stop/restore hooks call Unity Play Mode APIs.
                 await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
@@ -82,7 +113,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             finally
             {
                 await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
-                scope.Dispose();
+                // Why not only on success/cancel: any other failure would leave a pending id,
+                // and a later unrelated RunFinished would store against it after reload.
+                if (pendingScope != null && !pendingScope.ReloadObserved)
+                {
+                    pendingScope.ClearPending();
+                }
+
+                pendingScope?.End();
+                scope?.Dispose();
             }
         }
 

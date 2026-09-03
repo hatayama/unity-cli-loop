@@ -36,6 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             "Packages/src/Editor/Domain/UnityCliLoopCompileResultSessionRepositoryFacade.cs",
             "Packages/src/Editor/Domain/UnityCliLoopPendingCompileSessionRepositoryFacade.cs",
             "Packages/src/Editor/Domain/UnityCliLoopCompileSessionLifecycleFacade.cs",
+            "Packages/src/Editor/Domain/UnityCliLoopRunTestsSessionRepositoryFacade.cs",
             "Packages/src/Runtime/RecordInput/RecordInputOverlayState.cs",
             "Packages/src/Runtime/ReplayInput/ReplayInputOverlayState.cs",
             "Packages/src/Runtime/SimulateKeyboard/SimulateKeyboardOverlayState.cs",

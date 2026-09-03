@@ -34,6 +34,9 @@ uloop run-tests [options]
 | `--unsaved-changes` | string | `save` | `save` writes unsaved Scene/Prefab Stage changes; `fail` stops if any remain; `discard` reloads disk state (Untitled scenes fail) |
 | `--skip-compile` | flag | - | Skip the automatic compile before running tests; use only while validating active hot-reload patches. |
 | `--timeout-seconds` | integer | `600` | Maximum seconds to wait for RunFinished before canceling the await (max `1500`). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands |
+| `--respect-enter-play-mode-settings` | flag | - | PlayMode only: keep the project's Enter Play Mode settings instead of forcing Domain Reload off. A Domain Reload during the run is survived; the result is recovered after the reload. Use for projects whose libraries require a Domain Reload on Play entry. |
+
+By default PlayMode still forces Domain Reload off. With `--respect-enter-play-mode-settings`, a Domain Reload may run and the command takes longer; pause-point and hot-reload notes are omitted from a result recovered after reload. Canceling the CLI (Ctrl-C) does not stop the Unity-side run on this path.
 
 exact matches the full test name (Namespace.Class.Method); use regex to run a whole test class, e.g. --filter-type regex --filter-value 'MyGame\.Tests\.PlayerTests\.'
 

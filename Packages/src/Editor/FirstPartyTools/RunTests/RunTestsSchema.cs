@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -36,5 +38,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Kept below the CLI absolute response timeout so hung runs free the single-flight slot first.
         /// </summary>
         public int TimeoutSeconds { get; set; } = RunTestsExecutionTimeout.DefaultTimeoutSeconds;
+
+        /// <summary>
+        /// When true and TestMode is PlayMode, keeps the project's Enter Play Mode settings instead of forcing Domain Reload off; a Domain Reload during the run is survived by storing the result in SessionState for CLI polling. Ignored for EditMode.
+        /// </summary>
+        public bool RespectEnterPlayModeSettings { get; set; } = false;
+
+        /// <summary>
+        /// Internal request identifier used for delayed result recovery across domain reload.
+        /// </summary>
+        [Browsable(false)]
+        public string RequestId { get; set; } = "";
     }
 } 
