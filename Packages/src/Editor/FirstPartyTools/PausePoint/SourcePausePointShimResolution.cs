@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
@@ -18,6 +19,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int ResolvedLine { get; }
         public IReadOnlyList<SourcePausePointLocalVariable> Locals { get; }
         public IReadOnlyList<SourcePausePointParameter> Parameters { get; }
+        // Parameters left out of Parameters because their type cannot be boxed, each with the
+        // reason. Reported so a missing name is explained instead of looking like a capture bug.
+        public IReadOnlyList<string> NotCapturableVariables { get; }
         public bool InstanceFromFirstArgument { get; }
         public string MethodDisplayName { get; }
         public string ErrorMessage { get; }
@@ -34,6 +38,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int resolvedLine,
             IReadOnlyList<SourcePausePointLocalVariable> locals,
             IReadOnlyList<SourcePausePointParameter> parameters,
+            IReadOnlyList<string> notCapturableVariables,
             bool instanceFromFirstArgument,
             string methodDisplayName,
             string errorMessage,
@@ -49,6 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ResolvedLine = resolvedLine;
             Locals = locals;
             Parameters = parameters;
+            NotCapturableVariables = notCapturableVariables;
             InstanceFromFirstArgument = instanceFromFirstArgument;
             MethodDisplayName = methodDisplayName;
             ErrorMessage = errorMessage;
@@ -64,6 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int resolvedLine,
             IReadOnlyList<SourcePausePointLocalVariable> locals,
             IReadOnlyList<SourcePausePointParameter> parameters,
+            IReadOnlyList<string> notCapturableVariables,
             int sourceStartLine,
             int sourceEndLine)
         {
@@ -77,6 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedLine,
                 locals,
                 parameters,
+                notCapturableVariables,
                 instanceFromFirstArgument: false,
                 originalMethod.ToString(),
                 errorMessage: null,
@@ -92,6 +100,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int resolvedLine,
             IReadOnlyList<SourcePausePointLocalVariable> locals,
             IReadOnlyList<SourcePausePointParameter> parameters,
+            IReadOnlyList<string> notCapturableVariables,
             bool instanceFromFirstArgument,
             int sourceStartLine,
             int sourceEndLine)
@@ -106,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedLine,
                 locals,
                 parameters,
+                notCapturableVariables,
                 instanceFromFirstArgument,
                 logicalOwner.ToString(),
                 errorMessage: null,
@@ -125,6 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedLine: 0,
                 locals: null,
                 parameters: null,
+                notCapturableVariables: Array.Empty<string>(),
                 instanceFromFirstArgument: false,
                 methodDisplayName: null,
                 errorMessage: null,
@@ -146,6 +157,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedLine: 0,
                 locals: null,
                 parameters: null,
+                notCapturableVariables: Array.Empty<string>(),
                 instanceFromFirstArgument: false,
                 typeName + "." + logicalOwner.Name,
                 errorMessage: null,
@@ -167,6 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolvedLine: 0,
                 locals: null,
                 parameters: null,
+                notCapturableVariables: Array.Empty<string>(),
                 instanceFromFirstArgument: false,
                 logicalOwner.ToString(),
                 errorMessage,

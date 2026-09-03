@@ -130,6 +130,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<SourcePausePointLocalVariable> locals = SourcePausePointCaptureEligibility.CollectCapturableLocals(method, scopeOffset);
             List<SourcePausePointParameter> parameters = SourcePausePointCaptureEligibility.CollectParameters(method);
+            List<string> notCapturableVariables =
+                SourcePausePointCaptureEligibility.CollectNotCapturableParameters(method);
             (int compiledMethodStartLine, int compiledMethodEndLine) = CollectCompiledMethodSpan(
                 method,
                 normalizedInputPath);
@@ -149,7 +151,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compiledMethodStartLine,
                 compiledMethodEndLine,
                 locals,
-                parameters);
+                parameters,
+                notCapturableVariables);
 
             return SourcePausePointResolveResult.SuccessResult(resolution);
         }

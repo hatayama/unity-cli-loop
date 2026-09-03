@@ -112,6 +112,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     SourcePausePointCaptureEligibility.CollectParametersFromReflection(
                         methodEntry.OriginalMethod,
                         skipFirstParameter: false);
+                List<string> notCapturableVariables =
+                    SourcePausePointCaptureEligibility.CollectNotCapturableParametersFromReflection(
+                        methodEntry.OriginalMethod,
+                        skipFirstParameter: false);
                 return SourcePausePointShimResolution.TransplantChainJoin(
                     methodEntry.OriginalMethod,
                     methodEntry.ShimMethod,
@@ -120,6 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     sequencePoint.StartLine,
                     locals,
                     parameters,
+                    notCapturableVariables,
                     methodEntry.SourceStartLine,
                     methodEntry.SourceEndLine);
             }
@@ -134,6 +139,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SourcePausePointCaptureEligibility.CollectParametersFromReflection(
                     targetMethod,
                     skipFirstParameter: instanceFromFirstArgument);
+            List<string> shimNotCapturableVariables =
+                SourcePausePointCaptureEligibility.CollectNotCapturableParametersFromReflection(
+                    targetMethod,
+                    skipFirstParameter: instanceFromFirstArgument);
 
             return SourcePausePointShimResolution.ShimDirect(
                 targetMethod,
@@ -143,6 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sequencePoint.StartLine,
                 locals,
                 shimParameters,
+                shimNotCapturableVariables,
                 instanceFromFirstArgument,
                 methodEntry.SourceStartLine,
                 methodEntry.SourceEndLine);

@@ -182,6 +182,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string PostLineSnapshotTimingValue = "post-line";
 
+        // Reasons a parameter is left out of CapturedVariables. Capture boxes every value into
+        // the snapshot, and these three shapes cannot be boxed at all, so naming the shape tells
+        // the caller why a name they expected is absent and which workaround applies.
+        public const string NotCapturableByRefParameterReason = "ref/out/in parameter cannot be boxed";
+        public const string NotCapturablePointerReason = "pointer cannot be boxed";
+        public const string NotCapturableRefStructReason = "ref struct cannot be boxed";
+
+        // Named at enable time so the caller learns the parameter is missing before running the
+        // code path, instead of reading CapturedVariables afterwards and suspecting a capture bug.
+        public const string NotCapturableParametersWarningFormat =
+            "Parameters not captured because they cannot be boxed: {0}. Copy the value it refers to"
+            + " into a plain local (dereference a pointer, ToArray() a span), or use"
+            + " --snapshot-timing post-line on the line that consumes it.";
+
         // Why a resolve failure rather than a silent pre-line fallback: a statement that
         // always throws has no "after", and capturing before it would report values the
         // caller explicitly asked not to see.

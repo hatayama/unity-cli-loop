@@ -49,6 +49,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             CapturedVariables = Array.Empty<UloopCapturedVariable>();
             CallerFrames = Array.Empty<UloopPausePointCallerFrame>();
             TruncatedVariableNames = Array.Empty<string>();
+            NotCapturableVariables = Array.Empty<string>();
             _capturedVariableHistory = new Queue<UloopPausePointCapturedHistoryFrame>(maxHistory);
         }
 
@@ -92,6 +93,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // 0 / null-or-empty means unresolved (not yet written by enable or retarget).
         public int ResolvedLine { get; set; }
         public string ResolvedLineText { get; set; }
+        // Parameters the resolved method has that capture cannot box, each with the reason.
+        // Written by enable and by hot-reload retarget alongside ResolvedLine, and emptied
+        // whenever the resolution behind it is discarded.
+        public IReadOnlyList<string> NotCapturableVariables { get; set; }
 
         public void IncrementMethodEntryCount()
         {
@@ -336,6 +341,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 CapturedVariablesTruncated,
                 TruncatedVariableNames,
                 TruncatedVariableCount,
+                NotCapturableVariables,
                 ClearedReason,
                 StatusBeforeClear,
                 LateHitDiscardedAfterClear,

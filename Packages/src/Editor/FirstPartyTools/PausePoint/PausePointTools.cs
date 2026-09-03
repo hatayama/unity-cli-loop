@@ -75,6 +75,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int MaxCallerFrames { get; set; }
         public IReadOnlyList<PausePointCapturedHistoryFrame> CapturedVariableHistory { get; set; } =
             Array.Empty<PausePointCapturedHistoryFrame>();
+        // Parameters of the armed method that capture cannot box, each with the reason.
+        // Null when there are none so the response omits the field (matches Go omitempty).
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> NotCapturableVariables { get; set; }
         public int HistoryDroppedCount { get; set; }
         public bool Expired { get; set; }
         public string EnabledAtUtc { get; set; } = string.Empty;
@@ -104,6 +108,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string LineBasis { get; set; } = string.Empty;
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string SuppressedByHotReloadReason { get; set; }
+
+        // Why null for empty: the response omits the field entirely when every parameter of the
+        // armed method can be captured, so a reader never sees an empty list to interpret.
+        internal static IReadOnlyList<string> NormalizeNotCapturableVariables(IReadOnlyList<string> values)
+        {
+            return values == null || values.Count == 0 ? null : values;
+        }
 
         public bool ShouldSerializeLineBasis()
         {
@@ -137,6 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     .Select(PausePointCapturedHistoryFrame.FromSnapshot)
                     .ToList(),
                 HistoryDroppedCount = snapshot.HistoryDroppedCount,
+                NotCapturableVariables = NormalizeNotCapturableVariables(snapshot.NotCapturableVariables),
                 Expired = snapshot.Expired,
                 EnabledAtUtc = snapshot.EnabledAtUtc,
                 ElapsedSinceEnabledMilliseconds = snapshot.ElapsedSinceEnabledMilliseconds,

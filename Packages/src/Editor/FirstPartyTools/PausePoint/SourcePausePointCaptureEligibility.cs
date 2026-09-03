@@ -163,7 +163,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             // byref locals/parameters (ref, out, in) and pointers cannot be boxed; ref structs
             // (Span<T>, and any user-defined "ref struct") cannot be boxed either.
-            return type.IsByReference || type.IsPointer || IsRefStructType(type);
+            // Why derived from the reason: the excluded set and the reported set must stay the
+            // same set, so a parameter is never both captured and named as not capturable.
+            return DescribeNotCapturableReason(type).Length > 0;
         }
 
         private static bool IsRefStructType(TypeReference type)
@@ -206,6 +208,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // avoids forcing assembly resolution for a framework type on the hot path.
             TypeReference elementType = type.IsGenericInstance ? type.GetElementType() : type;
             return elementType.FullName == "System.Span`1" || elementType.FullName == "System.ReadOnlySpan`1";
+        }
+
+        /// <summary>
+        /// Names the parameters CollectParameters leaves out, each with the reason its type cannot
+        /// be boxed, so the enable response can say why an expected name is missing.
+        /// Locals are deliberately not reported: their names come from the PDB and change with
+        /// compiler-generated hoisting, so a name list built from them would be unstable.
+        /// </summary>
+        internal static List<string> CollectNotCapturableParameters(MethodDefinition method)
+        {
+            List<string> results = new List<string>();
+            foreach (ParameterDefinition parameter in method.Parameters)
+            {
+                string reason = DescribeNotCapturableReason(parameter.ParameterType);
+                if (reason.Length == 0)
+                {
+                    continue;
+                }
+
+                results.Add(FormatNotCapturableParameter(parameter.Name, reason));
+            }
+
+            return results;
         }
 
         internal static List<SourcePausePointParameter> CollectParameters(MethodDefinition method)
@@ -261,9 +286,86 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return parameters;
         }
 
+        /// <summary>
+        /// Reflection counterpart of CollectNotCapturableParameters, for the shim path.
+        /// </summary>
+        internal static List<string> CollectNotCapturableParametersFromReflection(
+            MethodBase method,
+            bool skipFirstParameter)
+        {
+            Debug.Assert(method != null, "method must not be null.");
+
+            // Fully qualify: ToolContracts also defines ParameterInfo (tool schema DTO).
+            System.Reflection.ParameterInfo[] runtimeParameters = method.GetParameters();
+            List<string> results = new List<string>();
+            int startIndex = skipFirstParameter ? 1 : 0;
+            for (int index = startIndex; index < runtimeParameters.Length; index++)
+            {
+                System.Reflection.ParameterInfo parameter = runtimeParameters[index];
+                string reason = DescribeNotCapturableReasonFromReflection(parameter.ParameterType);
+                if (reason.Length == 0)
+                {
+                    continue;
+                }
+
+                results.Add(FormatNotCapturableParameter(parameter.Name, reason));
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// The reason a Cecil type is excluded from capture, or empty when it is capturable.
+        /// </summary>
+        internal static string DescribeNotCapturableReason(TypeReference type)
+        {
+            // Byref first: a `ref Span&lt;int&gt;` is both byref and a ref struct, and the byref
+            // shape is the one the caller can act on by copying the value into a local.
+            if (type.IsByReference)
+            {
+                return SourcePausePointConstants.NotCapturableByRefParameterReason;
+            }
+
+            if (type.IsPointer)
+            {
+                return SourcePausePointConstants.NotCapturablePointerReason;
+            }
+
+            return IsRefStructType(type)
+                ? SourcePausePointConstants.NotCapturableRefStructReason
+                : string.Empty;
+        }
+
+        /// <summary>
+        /// The reason a reflection type is excluded from capture, or empty when it is capturable.
+        /// </summary>
+        internal static string DescribeNotCapturableReasonFromReflection(Type type)
+        {
+            if (type.IsByRef)
+            {
+                return SourcePausePointConstants.NotCapturableByRefParameterReason;
+            }
+
+            if (type.IsPointer)
+            {
+                return SourcePausePointConstants.NotCapturablePointerReason;
+            }
+
+            return IsByRefLikeTypeReflection(type)
+                ? SourcePausePointConstants.NotCapturableRefStructReason
+                : string.Empty;
+        }
+
+        private static string FormatNotCapturableParameter(string name, string reason)
+        {
+            return name + " (" + reason + ")";
+        }
+
         private static bool IsCaptureExcludedReflection(Type type)
         {
-            return type.IsByRef || type.IsPointer || IsByRefLikeTypeReflection(type);
+            // Why derived from the reason: the excluded set and the reported set must stay the
+            // same set, so a parameter is never both captured and named as not capturable.
+            return DescribeNotCapturableReasonFromReflection(type).Length > 0;
         }
 
         private static bool IsByRefLikeTypeReflection(Type type)

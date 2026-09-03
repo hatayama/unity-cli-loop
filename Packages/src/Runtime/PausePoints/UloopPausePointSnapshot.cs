@@ -42,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             bool capturedVariablesTruncated,
             IReadOnlyList<string> truncatedVariableNames,
             int truncatedVariableCount,
+            IReadOnlyList<string> notCapturableVariables,
             string clearedReason,
             string statusBeforeClear,
             bool lateHitDiscardedAfterClear,
@@ -55,6 +56,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string hitWhenErrorNote)
         {
             Debug.Assert(editorState != null, "editorState must not be null");
+            // Why a precondition instead of a null coalesce: every writer already supplies a list
+            // (the entry initializes it, SetNotCapturableVariables asserts non-null, and the
+            // NotEnabled factory passes Array.Empty), so a null here is a caller bug to surface.
+            Debug.Assert(notCapturableVariables != null, "notCapturableVariables must not be null");
 
             Id = id ?? string.Empty;
             Status = status ?? UloopPausePointStatus.NotEnabled;
@@ -86,6 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             CapturedVariablesTruncated = capturedVariablesTruncated;
             TruncatedVariableNames = truncatedVariableNames ?? Array.Empty<string>();
             TruncatedVariableCount = truncatedVariableCount;
+            NotCapturableVariables = notCapturableVariables;
             ClearedReason = clearedReason ?? string.Empty;
             StatusBeforeClear = statusBeforeClear ?? string.Empty;
             LateHitDiscardedAfterClear = lateHitDiscardedAfterClear;
@@ -129,6 +135,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool CapturedVariablesTruncated { get; }
         public IReadOnlyList<string> TruncatedVariableNames { get; }
         public int TruncatedVariableCount { get; }
+        // Parameters of the resolved method that capture cannot box, each with the reason.
+        public IReadOnlyList<string> NotCapturableVariables { get; }
         public string ClearedReason { get; }
         public string StatusBeforeClear { get; }
         public bool LateHitDiscardedAfterClear { get; }
@@ -184,6 +192,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 false,
                 Array.Empty<string>(),
                 0,
+                Array.Empty<string>(),
                 string.Empty,
                 string.Empty,
                 false,

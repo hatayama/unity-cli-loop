@@ -229,6 +229,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             id,
                             shimResolution.ResolvedLine,
                             newLineText);
+                        UloopPausePointRegistry.SetNotCapturableVariables(
+                            id,
+                            shimResolution.NotCapturableVariables);
                         if (!string.IsNullOrEmpty(previousLineText)
                             && !string.Equals(previousLineText, newLineText, StringComparison.Ordinal))
                         {
@@ -259,6 +262,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!SourcePausePointPatcher.RequestById.TryGetValue(id, out SourcePausePointEnableRequest request))
                 {
                     UloopPausePointRegistry.SetResolvedLine(id, 0, null);
+                    UloopPausePointRegistry.SetNotCapturableVariables(id, Array.Empty<string>());
                     SuppressMarkerRestoreFailed(id);
                     continue;
                 }
@@ -271,6 +275,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (!resolveResult.Success)
                 {
                     UloopPausePointRegistry.SetResolvedLine(id, 0, null);
+                    UloopPausePointRegistry.SetNotCapturableVariables(id, Array.Empty<string>());
                     SuppressMarkerRestoreFailed(id);
                     continue;
                 }
@@ -282,6 +287,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     || !IsSameLogicalMethodOrItsStateMachine(restoredMethod, logicalOwner))
                 {
                     UloopPausePointRegistry.SetResolvedLine(id, 0, null);
+                    UloopPausePointRegistry.SetNotCapturableVariables(id, Array.Empty<string>());
                     SuppressMarkerRestoreFailed(id);
                     continue;
                 }
@@ -314,6 +320,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             id,
                             resolveResult.Resolution.ResolvedLine,
                             restoredLineText);
+                        UloopPausePointRegistry.SetNotCapturableVariables(
+                            id,
+                            resolveResult.Resolution.NotCapturableVariables);
                         UloopPausePointRegistry.SetSuppressedByHotReload(id, false, null);
                         UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, false);
                     }
@@ -322,8 +331,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     if (!committed)
                     {
-                        // Why clear: restore failed, so previously stored shim line is no longer trustworthy.
+                        // Why clear: restore failed, so previously stored shim line and its
+                        // exclusion list are no longer trustworthy.
                         UloopPausePointRegistry.SetResolvedLine(id, 0, null);
+                        UloopPausePointRegistry.SetNotCapturableVariables(id, Array.Empty<string>());
                         ReanchorMarkerWithoutInjection(id, logicalOwner, request);
                         SuppressMarkerRestoreFailed(id);
                     }
