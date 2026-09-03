@@ -76,6 +76,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string[] AddedFields { get; set; } = Array.Empty<string>();
 
+        public IReadOnlyList<string> AddedConsts { get; set; } = Array.Empty<string>();
+
         public string Message { get; set; } = string.Empty;
 
         public string ErrorCode { get; set; } = string.Empty;
@@ -379,7 +381,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PatchedTotal = result.PatchedTotal,
                 ActivePatchTotal = result.ActivePatchTotal,
                 UnchangedTotal = result.UnchangedTotal,
-                AddedFields = result.AddedFields ?? Array.Empty<string>(),
+                AddedFields = result.AddedFields,
+                AddedConsts = result.AddedConsts,
                 Message = BuildApplyMessage(
                     result,
                     hasFailure,

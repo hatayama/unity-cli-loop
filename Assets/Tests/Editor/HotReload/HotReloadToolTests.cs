@@ -1046,6 +1046,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: BuildApplyResponse copies orchestrator AddedConsts onto the public response
+        /// and uses an empty array when the result has none.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_CopiesAddedConstsOrEmptyArray()
+        {
+            string[] addedConsts =
+            {
+                "Ns.Host.AddedTuning"
+            };
+            HotReloadResponse withConsts = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1,
+                    addedConsts: addedConsts));
+            Assert.That(withConsts.AddedConsts, Is.EqualTo(addedConsts));
+
+            HotReloadResponse withoutConsts = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1));
+            Assert.That(withoutConsts.AddedConsts, Is.Not.Null);
+            Assert.That(withoutConsts.AddedConsts, Is.Empty);
+        }
+
+        /// <summary>
         /// What: an applied run with Skipped outcomes and no warnings still points at Methods.
         /// </summary>
         [Test]

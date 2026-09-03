@@ -252,8 +252,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(slice, Does.Not.Contain("HotReloadAddedFieldStore"));
             Assert.That(slice, Does.Not.Contain("AddedConst"));
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+            Assert.That(result.Output.addedFieldNames, Is.Empty);
             Assert.That(
-                result.Output.addedFieldNames,
+                result.Output.addedConstNames,
                 Is.EqualTo(new[] { typeof(HotReloadAddedMemberHost).FullName + ".AddedConst" }));
         }
 

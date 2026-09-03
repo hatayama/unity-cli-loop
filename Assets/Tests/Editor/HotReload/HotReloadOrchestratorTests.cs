@@ -2551,6 +2551,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         Array.Empty<byte>()),
                     entries,
                     addedFieldNames,
+                    Array.Empty<string>(),
                     workerOutput,
                     new HashSet<string>(),
                     new HashSet<string>(),
@@ -2811,6 +2812,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     new byte[] { 1 },
                     Array.Empty<byte>()),
                 entries,
+                Array.Empty<string>(),
                 Array.Empty<string>(),
                 workerOutput,
                 new HashSet<string>(),
@@ -3520,6 +3522,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added const lands in AddedConsts only — not AddedFields and not the
+        /// added-field lifetime warning — because const folds into the edited body.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedConstWithAddedField_ListsConstSeparatelyWithoutLifetimeWarning()
+        {
+            string applyPath = ResolveAddedFieldApplyFixturePath();
+            string applyOnDisk = File.ReadAllText(applyPath);
+            string applyEdited = WithAddedFieldAndConstAccesses(applyOnDisk);
+            Assert.That(applyEdited, Is.Not.EqualTo(applyOnDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { applyPath },
+                WriteEditedSource("AddedFieldAndConst.cs", applyEdited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            string typeName = typeof(HotReloadAddedFieldApplyFixture).FullName;
+            Assert.That(result.AddedFields, Is.EqualTo(new[] { typeName + ".AddedCount" }));
+            Assert.That(result.AddedConsts, Is.EqualTo(new[] { typeName + ".AddedTuning" }));
+            AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
+            string lifetimePrefix = HotReloadConstants.AddedFieldsLifetimeWarningFormat.Substring(
+                0,
+                HotReloadConstants.AddedFieldsLifetimeWarningFormat.IndexOf("{0}", StringComparison.Ordinal));
+            foreach (string warning in result.Warnings)
+            {
+                if (warning != null && warning.StartsWith(lifetimePrefix, StringComparison.Ordinal))
+                {
+                    Assert.That(warning, Does.Not.Contain("AddedTuning"));
+                }
+            }
+        }
+
+        /// <summary>
         /// What: re-applying without the added method clears that file's added-member ledger
         /// so --status cannot keep a method the source no longer declares.
         /// </summary>
@@ -4122,6 +4159,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.Unrelated(3), Is.EqualTo(4));
             Assert.That(host.Target(3), Is.EqualTo(3));
             Assert.That(host.SameFileCaller(3), Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: a signature-change gate retry that applies a surviving method reports only
+        /// that method's folded const in AddedConsts, not a const used only by the gated
+        /// replacement. First-pass names would still list the gated const.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_GateRetrySurvivorConst_ListsOnlySurvivorAddedConst()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public const int GatedTuning = 3;\n"
+                    + "        public const int SurvivorTuning = 7;\n\n"
+                    + "        public long Target(int value)\n        {\n            return value + 1L + GatedTuning;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                    "        public int Unrelated(int value)\n        {\n            return value + SurvivorTuning;\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeGateRetrySurvivorConst.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasSkipped(
+                result,
+                nameof(HotReloadSignatureChangeExternalHost.Target),
+                string.Format(
+                    HotReloadConstants.SignatureChangedGateSkipReasonFormat,
+                    "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                    + ".HotReloadSignatureChangeExternalHost.Target(System.Int32)"));
+            AssertHasSkipped(
+                result,
+                nameof(HotReloadSignatureChangeExternalHost.SameFileCaller),
+                HotReloadConstants.SignatureChangedGatedCallerSkipReason);
+            AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
+
+            string typeName = typeof(HotReloadSignatureChangeExternalHost).FullName;
+            Assert.That(result.AddedConsts, Is.EqualTo(new[] { typeName + ".SurvivorTuning" }));
+            Assert.That(result.AddedFields, Is.Empty);
+            AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
+
+            HotReloadSignatureChangeExternalHost host = new HotReloadSignatureChangeExternalHost();
+            Assert.That(host.Unrelated(3), Is.EqualTo(10));
         }
 
         /// <summary>
@@ -6405,6 +6497,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public int AddedCount;\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public int ReadAdded()\n        {\n            return AddedCount;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n            AddedCount = value;\n        }",
+                StringComparison.Ordinal);
+        }
+
+        private static string WithAddedFieldAndConstAccesses(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n        }",
+                "        public int AddedCount;\n"
+                + "        public const int AddedTuning = 4;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadAdded()\n        {\n            return AddedCount + AddedTuning;\n        }\n\n"
                 + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
                 + "        public void WriteAdded(int value)\n        {\n            AddedCount = value;\n        }",
                 StringComparison.Ordinal);

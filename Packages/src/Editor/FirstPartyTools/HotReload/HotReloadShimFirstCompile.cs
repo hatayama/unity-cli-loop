@@ -24,7 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOrchestrator.HotReloadFileProcessResult EarlyResult,
             TransformWorkerEntryDto[] EntriesToPatch,
             HotReloadShimCompileResult CompileResult,
-            string[] AddedFieldNames)> ResolveEntriesToPatchAsync(
+            string[] AddedFieldNames,
+            string[] AddedConstNames)> ResolveEntriesToPatchAsync(
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
             TransformWorkerInputDto workerInput,
             TransformWorkerOutputDto workerOutput,
@@ -45,9 +46,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> siblingDerivedWarnings,
             CancellationToken ct)
         {
+            string[] addedConstNames = workerOutput.addedConstNames;
             if (gateResult.UsedWorkerRetry)
             {
                 addedFieldNames = gateResult.Isolation.AddedFieldNames;
+                addedConstNames = gateResult.Isolation.AddedConstNames;
                 if (gateResult.Isolation.RetryEntries.Length == 0)
                 {
                     return (
@@ -63,10 +66,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             sourceContentSha256: workerOutput.sourceContentSha256),
                         null,
                         null,
-                        addedFieldNames);
+                        addedFieldNames,
+                        addedConstNames);
                 }
 
-                return (null, gateResult.Isolation.RetryEntries, gateResult.Isolation.RetryCompileResult, addedFieldNames);
+                return (
+                    null,
+                    gateResult.Isolation.RetryEntries,
+                    gateResult.Isolation.RetryCompileResult,
+                    addedFieldNames,
+                    addedConstNames);
             }
 
             if (string.IsNullOrEmpty(workerOutput.shimSource)
@@ -101,7 +110,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         sourceContentSha256: workerOutput.sourceContentSha256),
                     null,
                     null,
-                    addedFieldNames);
+                    addedFieldNames,
+                    addedConstNames);
             }
 
             ShimFirstCompileResult firstCompile = await CompileShimFirstPassAsync(
@@ -131,7 +141,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         sourceContentSha256: workerOutput.sourceContentSha256),
                     null,
                     null,
-                    addedFieldNames);
+                    addedFieldNames,
+                    addedConstNames);
             }
 
             outcomes.AddRange(firstCompile.Outcomes);
@@ -150,10 +161,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         sourceContentSha256: workerOutput.sourceContentSha256),
                     null,
                     null,
-                    addedFieldNames);
+                    addedFieldNames,
+                    addedConstNames);
             }
 
-            return (null, firstCompile.EntriesToPatch, firstCompile.CompileResult, addedFieldNames);
+            return (null, firstCompile.EntriesToPatch, firstCompile.CompileResult, addedFieldNames, addedConstNames);
         }
 
         /// <summary>

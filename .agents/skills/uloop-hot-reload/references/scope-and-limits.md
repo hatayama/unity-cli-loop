@@ -47,7 +47,11 @@ member is reported in `Warnings`, but its IL remains callable from unedited code
 until `uloop compile`.
 
 Adding a constructor, operator, or explicit event accessor is still out of
-scope and is reported as `Skipped`, same as edits to them. Adding a type
+scope and is reported as `Skipped`, same as edits to them. With a verified
+baseline, event declarations are compared per accessor, so only the edited
+add or remove appears as a `Skipped` row. A newly added explicit event, or
+an edit before the first compile snapshot, still reports both accessors.
+Adding a type
 (`class`, `struct`, `enum`, `record`), a property, an event, or an indexer
 is still out of scope. Added properties are reported per member: the
 property's getter appears as a `Skipped` row that says to use a 'const' or

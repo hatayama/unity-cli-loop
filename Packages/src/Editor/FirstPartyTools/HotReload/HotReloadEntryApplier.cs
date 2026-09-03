@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadShimCompileResult compileResult,
             TransformWorkerEntryDto[] entriesToPatch,
             string[] addedFieldNames,
+            string[] addedConstNames,
             TransformWorkerOutputDto workerOutput,
             HashSet<string> snapshotLabels,
             HashSet<string> snapshotAddedLabels,
@@ -53,7 +54,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     retargetedPausePointIds,
                     unchangedMethodCount,
                     patchedCount: 0,
-                    addedFieldNames: null);
+                    addedFieldNames: null,
+                    addedConstNames: null);
             }
 
             HotReloadShimRegistry.BeginFileGeneration(
@@ -92,6 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unchangedMethodCount,
                 patchedCount,
                 addedFieldNames,
+                addedConstNames,
                 inlineRiskMethodLabels);
         }
 
@@ -107,6 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int unchangedMethodCount,
             int patchedCount,
             string[] addedFieldNames,
+            string[] addedConstNames = null,
             List<string> inlineRiskMethodLabels = null)
         {
             // Why here as well as the empty-entries return: apply can drop a still-declared
@@ -127,7 +131,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unchangedMethodCount,
                 retargetedPausePointIds,
                 addedFieldNames,
-                workerOutput.sourceContentSha256);
+                workerOutput.sourceContentSha256,
+                addedConstNames);
         }
 
         private static int ApplyResolvedEntries(
