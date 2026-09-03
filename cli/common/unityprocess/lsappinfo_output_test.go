@@ -121,7 +121,7 @@ func TestCountLsappinfoBundlePath(t *testing.T) {
 		{name: "zero", listOutput: listOutput, bundlePath: "/Applications/Other.app", want: 0},
 		{name: "one", listOutput: listOutput, bundlePath: "/Applications/cmux.app", want: 1},
 		{name: "two", listOutput: listOutput, bundlePath: "/Applications/Unity.app", want: 2},
-		{name: "prefix must not match", listOutput: listOutput, bundlePath: "/Applications/Unity.app", want: 2},
+		{name: "prefix must not match", listOutput: listOutput, bundlePath: "/Applications/Unity", want: 0},
 		{name: "empty list", listOutput: "", bundlePath: "/Applications/Unity.app", want: 0},
 		{name: "garbage", listOutput: "not a list", bundlePath: "/Applications/Unity.app", want: 0},
 	}

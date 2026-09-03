@@ -64,6 +64,8 @@ func bundlePathForPIDMac(ctx context.Context, pid int) string {
 }
 
 func countProcessesWithBundlePathMac(ctx context.Context, bundlePath string) int {
+	// 0 means the count could not be determined: list failed, or no matching process.
+	// open -a is only safe when this returns exactly 1.
 	output, err := runFocusCommand(ctx, lsappinfoCommand, "list")
 	if err != nil {
 		return 0
@@ -73,10 +75,11 @@ func countProcessesWithBundlePathMac(ctx context.Context, bundlePath string) int
 
 func setFrontmostProcessMac(ctx context.Context, pid int) error {
 	bundlePath := bundlePathForPIDMac(ctx, pid)
-	if bundlePath == "" {
-		return setFrontmostProcessViaOsascriptMac(ctx, pid)
+	matchingCount := 0
+	if bundlePath != "" {
+		matchingCount = countProcessesWithBundlePathMac(ctx, bundlePath)
 	}
-	if countProcessesWithBundlePathMac(ctx, bundlePath) >= 2 {
+	if shouldActivateViaOsascriptMac(bundlePath, matchingCount) {
 		return setFrontmostProcessViaOsascriptMac(ctx, pid)
 	}
 	return activateAppViaOpenMac(ctx, bundlePath)
