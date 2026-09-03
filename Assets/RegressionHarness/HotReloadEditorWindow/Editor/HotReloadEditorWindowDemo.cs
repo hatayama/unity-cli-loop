@@ -4,9 +4,10 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.RegressionHarness
 {
     // Minimal EditorWindow demo for manual hot-reload checks in EditMode: a square orbits the
-    // window center while the Editor is not playing. The orbit radius, speed, and color are
-    // literals inside DrawOrbit on purpose so they can be tuned with
-    // `uloop hot-reload --files <this file>` without PlayMode and without a domain reload.
+    // window center while the Editor is not playing. The tunable values are literals inside
+    // method bodies on purpose: radius, squareSize, and squareColor in DrawOrbit, and
+    // degreesPerSecond in Advance. Edit one and run `uloop hot-reload --files <this file>`
+    // to see it change without PlayMode and without a domain reload.
     // Why body literals (not a const or field): hot-reload shims contain only the rewritten
     // method body, so anything outside the body is read from the stale compiled assembly and a
     // hot-reload of it would be a silent no-op.
@@ -49,7 +50,8 @@ namespace io.github.hatayama.UnityCliLoop.RegressionHarness
         private void Advance(float deltaTime)
         {
             float degreesPerSecond = 90f;
-            _angleDegrees += degreesPerSecond * deltaTime;
+            // Why wrap: the window can stay open for hours, and an unbounded float loses precision.
+            _angleDegrees = (_angleDegrees + degreesPerSecond * deltaTime) % 360f;
         }
 
         private void OnGUI()

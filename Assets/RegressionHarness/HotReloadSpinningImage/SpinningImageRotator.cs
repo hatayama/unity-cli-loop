@@ -25,7 +25,8 @@ namespace io.github.hatayama.UnityCliLoop.RegressionHarness
             float radius = 300f;
             float degreesPerSecond = 90f;
 
-            _angleDegrees += degreesPerSecond * Time.deltaTime;
+            // Why wrap: a long PlayMode session would otherwise lose float precision.
+            _angleDegrees = (_angleDegrees + degreesPerSecond * Time.deltaTime) % 360f;
             float radians = _angleDegrees * Mathf.Deg2Rad;
             _rectTransform.anchoredPosition = new Vector2(Mathf.Cos(radians), Mathf.Sin(radians)) * radius;
             _rectTransform.localRotation = Quaternion.Euler(0f, 0f, _angleDegrees);
