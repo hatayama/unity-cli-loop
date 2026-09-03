@@ -68,6 +68,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "Error should be retrieved even with mask off");
         }
 
+        /// <summary>
+        /// What: GetAllLogs routes assertion mode flags through the classifier and returns Error severity.
+        /// </summary>
+        [Test]
+        public void GetAllLogs_WhenDebugAssertFails_ReturnsErrorEntry()
+        {
+            string uniqueTestId = System.Guid.NewGuid().ToString("N")[..8];
+            string testMessage = $"AssertionMode_{uniqueTestId}";
+            LogAssert.Expect(LogType.Assert, testMessage);
+            Debug.Assert(false, testMessage);
+
+            List<LogEntryDto> logs = new ConsoleLogRetriever().GetAllLogs();
+
+            LogEntryDto assertionLog = logs.FirstOrDefault(log => log.Message.Contains(testMessage));
+            Assert.IsNotNull(assertionLog, "Assertion log should be found");
+            Assert.That(assertionLog.LogType, Is.EqualTo(UnityCliLoopLogType.Error));
+        }
+
 
         [Test]
         public void GetLogsByType_TemporarilyChangeMask_RestoresOriginalMask()
