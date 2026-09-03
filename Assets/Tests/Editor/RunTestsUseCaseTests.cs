@@ -127,6 +127,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(validationService.WasCalled, Is.False);
         }
 
+        /// <summary>
+        /// Verifies PlayMode respect options and request id are forwarded to the execution stub.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayModeRespectsEnterPlayModeSettings_ForwardsOptionsToStub()
+        {
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait
+            );
+            RunTestsSchema parameters = new()
+            {
+                TestMode = UnityCliLoopTestMode.PlayMode,
+                RespectEnterPlayModeSettings = true,
+                RequestId = "run_tests_x"
+            };
+
+            await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(executionService.PlayModeWasCalled, Is.True);
+            Assert.That(executionService.LastRespectEnterPlayModeSettings, Is.True);
+            Assert.That(executionService.LastRequestId, Is.EqualTo("run_tests_x"));
+        }
+
+        /// <summary>
+        /// Verifies EditMode ignores respect settings and does not call the PlayMode stub.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenEditModeRespectsEnterPlayModeSettings_DoesNotCallPlayModeStub()
+        {
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait
+            );
+            RunTestsSchema parameters = new()
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                RespectEnterPlayModeSettings = true,
+                RequestId = "run_tests_x"
+            };
+
+            await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(executionService.PlayModeWasCalled, Is.False);
+            Assert.That(executionService.WasCalled, Is.True);
+            Assert.That(executionService.LastRequestId, Is.Null);
+        }
+
         [Test]
         public async Task ExecuteAsync_WithDefaultRequest_ShouldSaveBeforeRun()
         {
@@ -1217,6 +1273,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             public bool TestFrameworkAvailable { get; set; } = true;
             public bool WasCalled { get; private set; }
+            public bool PlayModeWasCalled { get; private set; }
+            public bool LastRespectEnterPlayModeSettings { get; private set; }
+            public string LastRequestId { get; private set; }
             // Default stub result satisfies RunTestsResponse preconditions (non-null status
             // and noTestsFoundExplanation); individual tests override NextResult when they
             // need a specific execution status.
@@ -1234,10 +1293,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public RunTestsPredefinedAssemblyTestFindings PredefinedAssemblyTestFindings { get; set; } =
                 RunTestsPredefinedAssemblyTestFindings.None();
 
-            public override Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
+            public override Task<SerializableTestResult> ExecutePlayModeTestAsync(
+                TestExecutionFilter filter,
+                CancellationToken ct,
+                RunTestsPlayModeRunOptions options)
             {
                 ct.ThrowIfCancellationRequested();
                 WasCalled = true;
+                PlayModeWasCalled = true;
+                LastRespectEnterPlayModeSettings = options.RespectEnterPlayModeSettings;
+                LastRequestId = options.RequestId;
                 return Task.FromResult(NextResult);
             }
 

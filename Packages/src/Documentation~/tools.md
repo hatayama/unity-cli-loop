@@ -45,6 +45,7 @@ This is also a strategy to avoid consuming context.
 > [!WARNING]
 > During PlayMode test execution, Domain Reload is forcibly turned OFF. (Settings are restored after test completion)
 > Note that static variables will not be reset during this period.
+> Pass `--respect-enter-play-mode-settings` to keep the project's Enter Play Mode settings instead of forcing Domain Reload off.
 
 ### 4. hot-reload - Apply Method-Body Changes Instantly Without Recompiling
 Applies the method bodies of edited `.cs` files directly to the running Editor (EditMode / PlayMode) without a recompile or a Domain Reload in between. No attributes or source markers are required, and access to private / internal members, static methods, async methods, and iterators all work. You can fix game logic without leaving PlayMode and see the new behavior on the spot.
