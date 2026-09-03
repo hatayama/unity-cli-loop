@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -51,5 +52,40 @@ func TestRunWaitForPausePointKeepsUnityWarningWhenTheLogFetchFails(t *testing.T)
 
 	if !strings.Contains(result.Warning, "Unity-side enable warning.") {
 		t.Errorf("Unity's warning was dropped on the failed-fetch branch: %q", result.Warning)
+	}
+}
+
+// Verifies Warnings carries every topic Warning joins, so a caller reading only the array never
+// sees fewer warnings than the string — the shape a hit payload used to emit.
+func TestRunWaitForPausePointKeepsWarningAndWarningsInAgreement(t *testing.T) {
+	stubPausePointHit(t, "Unity-side enable warning.")
+	stubPausePointMatchingLogs(t, nil)
+
+	result := decodePausePointWaitResult(t, runAwaitWithoutTrigger(t))
+
+	if len(result.Warnings) == 0 {
+		t.Fatalf("Warning must never be non-empty while Warnings is empty: %q", result.Warning)
+	}
+	if result.Warning != strings.Join(result.Warnings, " ") {
+		t.Errorf("Warning must be the joined form of Warnings: %q vs %#v", result.Warning, result.Warnings)
+	}
+}
+
+// Verifies a hit that warned about nothing omits both warning fields rather than emitting an
+// empty string next to a missing array.
+func TestRunWaitForPausePointOmitsBothWarningFieldsWhenNothingWarned(t *testing.T) {
+	stubPausePointHit(t, "")
+	stubPausePointMatchingLogs(t, nil)
+
+	output := runAwaitWithoutTrigger(t)
+
+	raw := map[string]json.RawMessage{}
+	if err := json.Unmarshal([]byte(output), &raw); err != nil {
+		t.Fatalf("failed to decode raw stdout: %v\n%s", err, output)
+	}
+	for _, warningKey := range []string{"Warning", "Warnings"} {
+		if _, ok := raw[warningKey]; ok {
+			t.Errorf("%s must be omitted when nothing warned: %s", warningKey, output)
+		}
 	}
 }

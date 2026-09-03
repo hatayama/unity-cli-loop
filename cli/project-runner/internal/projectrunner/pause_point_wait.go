@@ -318,7 +318,6 @@ func runWaitForPausePoint(
 			response:            response,
 			logs:                logs,
 			logsErr:             logsErr,
-			unityWarning:        response.Warning,
 			triggerResult:       triggerResult,
 			awaitedPausePointID: options.id,
 			expectations:        expectations,

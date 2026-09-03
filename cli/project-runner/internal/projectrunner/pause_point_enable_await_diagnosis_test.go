@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -61,8 +62,8 @@ func TestRunPausePointWaitAfterEnableWarnsWhenTheTriggerWasRefusedByThisMarker(t
 	}
 }
 
-// Verifies the enable-time warning is exposed as EnableTimeWarning (not folded into Warning) next
-// to the CLI's refusal warning, and that both survive a failed matching-log fetch.
+// Verifies the enable-time warning joins the CLI's refusal warning in the single Warnings
+// aggregate, carries the enable-time prefix, and survives a failed matching-log fetch.
 func TestRunPausePointWaitAfterEnableKeepsEnableWarningWithTheRefusalWarning(t *testing.T) {
 	stubPausePointHit(t, "")
 	stubPausePointMatchingLogs(t, errors.New("unity busy"))
@@ -74,11 +75,11 @@ func TestRunPausePointWaitAfterEnableKeepsEnableWarningWithTheRefusalWarning(t *
 		t.Errorf("a failed fetch must omit MatchingLogs entirely: %s", output)
 	}
 	result := decodePausePointWaitResult(t, output)
-	if result.EnableTimeWarning != "Enable-time warning." {
-		t.Errorf("enable-time warning mismatch: %q", result.EnableTimeWarning)
+	if !slices.Contains(result.Warnings, pausePointEnableTimeWarningPrefix+"Enable-time warning.") {
+		t.Errorf("the prefixed enable-time warning is missing from Warnings: %#v", result.Warnings)
 	}
-	if strings.Contains(result.Warning, "Enable-time warning.") {
-		t.Errorf("enable-time warning must not be folded into Warning: %q", result.Warning)
+	if !strings.Contains(result.Warning, pausePointEnableTimeWarningPrefix+"Enable-time warning.") {
+		t.Errorf("the prefixed enable-time warning is missing from Warning: %q", result.Warning)
 	}
 	if !strings.Contains(result.Warning, "refused") {
 		t.Errorf("the refusal warning was dropped: %q", result.Warning)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -303,8 +304,9 @@ func TestRecoverReleaseCodeOptimization_CallsFreshCompileNotAttach(t *testing.T)
 	}
 }
 
-// Verifies await recovery joins the switch Warning onto EnableTimeWarning, not hit-time Warning.
-func TestRunEnablePausePointAndAwait_WhenReleaseError_RecoversAndSetsEnableTimeWarning(t *testing.T) {
+// Verifies await recovery carries the switch warning into the hit response's Warnings aggregate
+// with the enable-time prefix, rather than on a warning field of its own.
+func TestRunEnablePausePointAndAwait_WhenReleaseError_RecoversAndListsSwitchWarning(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalPoll := pausePointStatusPoll
 	originalFetch := fetchMatchingLogs
@@ -393,18 +395,21 @@ func TestRunEnablePausePointAndAwait_WhenReleaseError_RecoversAndSetsEnableTimeW
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
 	}
-	if response.EnableTimeWarning != pausePointAutoDebugSwitchWarning {
-		t.Fatalf("EnableTimeWarning mismatch: %q", response.EnableTimeWarning)
+	prefixedSwitchWarning := pausePointEnableTimeWarningPrefix + pausePointAutoDebugSwitchWarning
+	if !slices.Contains(response.Warnings, prefixedSwitchWarning) {
+		t.Fatalf("Warnings mismatch: %#v", response.Warnings)
 	}
-	if strings.Contains(response.Warning, pausePointAutoDebugSwitchWarning) {
-		t.Fatalf("recovery warning must not fold into hit-time Warning: %q", response.Warning)
+	if response.Warning != strings.Join(response.Warnings, " ") {
+		t.Fatalf("Warning must be the joined form of Warnings: %q vs %#v", response.Warning, response.Warnings)
 	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(stdout.Bytes(), &raw); err != nil {
 		t.Fatalf("failed to decode raw stdout: %v\n%s", err, stdout.String())
 	}
-	if _, ok := raw["EnableTimeWarnings"]; ok {
-		t.Fatalf("nil EnableTimeWarnings must stay omitted after recovery")
+	for _, retiredKey := range []string{"EnableTimeWarning", "EnableTimeWarnings"} {
+		if _, ok := raw[retiredKey]; ok {
+			t.Fatalf("%s must no longer appear on a hit payload", retiredKey)
+		}
 	}
 }
 
