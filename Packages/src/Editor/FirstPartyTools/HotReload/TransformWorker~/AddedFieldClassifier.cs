@@ -160,12 +160,12 @@ internal static class AddedFieldClassifier
 
         // Why unresolved types before visibility: TypeKind.Error is not externally
         // visible, so the shim-visibility reason would hide a missing using or typo.
-        if (fieldSymbol.Type.TypeKind == TypeKind.Error)
+        if (TryFindUnresolvedType(fieldSymbol.Type, out ITypeSymbol unresolvedType))
         {
             return string.Format(
                 CultureInfo.InvariantCulture,
                 AddedFieldSkipReasons.FieldTypeUnresolvedFormat,
-                fieldSymbol.Type.ToDisplayString());
+                unresolvedType.ToDisplayString());
         }
 
         if (!AccessibilityRules.IsExternallyVisibleType(fieldSymbol.Type))
@@ -184,6 +184,51 @@ internal static class AddedFieldClassifier
         }
 
         return null;
+    }
+
+    // Why recurse the same shapes as IsExternallyVisibleType: List<Missing> and Missing[]
+    // would otherwise keep the shim-visibility reason even though the inner type is unresolved.
+    private static bool TryFindUnresolvedType(ITypeSymbol typeSymbol, out ITypeSymbol unresolvedType)
+    {
+        unresolvedType = null;
+        if (typeSymbol == null)
+        {
+            return false;
+        }
+
+        if (typeSymbol.TypeKind == TypeKind.Error)
+        {
+            unresolvedType = typeSymbol;
+            return true;
+        }
+
+        if (typeSymbol is ITypeParameterSymbol)
+        {
+            return false;
+        }
+
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            return TryFindUnresolvedType(arrayType.ElementType, out unresolvedType);
+        }
+
+        if (typeSymbol is IPointerTypeSymbol pointerType)
+        {
+            return TryFindUnresolvedType(pointerType.PointedAtType, out unresolvedType);
+        }
+
+        if (typeSymbol is INamedTypeSymbol namedType)
+        {
+            foreach (ITypeSymbol typeArgument in namedType.TypeArguments)
+            {
+                if (TryFindUnresolvedType(typeArgument, out unresolvedType))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     internal static string EvaluateAddedFieldSkipReason(

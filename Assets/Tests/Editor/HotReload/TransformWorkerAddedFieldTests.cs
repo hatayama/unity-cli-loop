@@ -795,6 +795,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added field whose generic argument cannot be resolved is skipped with a
+        /// reason that names the inner type, not shim visibility.
+        /// </summary>
+        [Test]
+        public async Task Skip_UnresolvedAddedFieldTypeInGenericList_ReportsInnerTypeNameAndUsingHint()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public System.Collections.Generic.List<NoSuchAddedFieldType> Added;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Added == null ? value : value + 1;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldUnresolvedTypeInList.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "NoSuchAddedFieldType");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "missing using directive");
+        }
+
+        /// <summary>
+        /// What: an added field whose array element type cannot be resolved is skipped with a
+        /// reason that names the element type, not shim visibility.
+        /// </summary>
+        [Test]
+        public async Task Skip_UnresolvedAddedFieldTypeInArray_ReportsTypeNameAndUsingHint()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public NoSuchAddedFieldType[] Added;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Added == null ? value : value + 1;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldUnresolvedTypeInArray.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "NoSuchAddedFieldType");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "missing using directive");
+        }
+
+        /// <summary>
         /// What: an added const on a struct host still folds to a literal because const folding
         /// does not use the instance store.
         /// </summary>
