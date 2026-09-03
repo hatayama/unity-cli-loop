@@ -1134,7 +1134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.RecommendedNextAction,
                 Is.EqualTo(
-                    "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time."));
+                    "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\" next time."));
         }
 
         [Test]
