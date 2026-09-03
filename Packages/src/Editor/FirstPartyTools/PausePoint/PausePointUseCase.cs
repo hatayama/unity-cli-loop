@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (hitCount == 0 && PhysicsFlaggedDeclaringTypesById.TryGetValue(id, out Type declaringType))
             {
-                LogPhysicsDispatchDiagnostics("pause_point_cleared_without_hit_physics", id, declaringType, statusBeforeClear);
+                PausePointUseCaseLogger.LogPhysicsDispatchDiagnostics("pause_point_cleared_without_hit_physics", id, declaringType, statusBeforeClear);
             }
             PhysicsFlaggedDeclaringTypesById.Remove(id);
         }
@@ -104,12 +104,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hitWhen,
                 hitWhenCondition);
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
-            response.Warning = PausePointEnableWarnings.MergeWarnings(
-                PausePointEnableWarnings.CreateEnableWarning(),
-                rearmWarning);
+            List<string> warningEntries = new List<string>();
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
+                PausePointEnableWarnings.CreateEnableWarning());
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, rearmWarning);
+            PausePointEnableWarningList.Assign(response, warningEntries);
             response.RecommendedNextAction = PausePointEnableWarnings
                 .ResolveSuccessEnableRecommendedNextAction(response.RecommendedNextAction, response.Id);
-            LogEnable(response.Id, resolvedMethod: string.Empty, fileLine: string.Empty, response.Mode, response.Warning);
+            PausePointUseCaseLogger.LogEnable(response.Id, resolvedMethod: string.Empty, fileLine: string.Empty, response.Mode, response.Warning);
             return response;
         }
 
@@ -136,7 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     UloopPausePointSnapshot trackedSnapshot = UloopPausePointRegistry.GetStatus(tracked.Key);
                     if (trackedSnapshot.HitCount == 0)
                     {
-                        LogPhysicsDispatchDiagnostics(
+                        PausePointUseCaseLogger.LogPhysicsDispatchDiagnostics(
                             "pause_point_cleared_without_hit_physics", tracked.Key, tracked.Value, trackedSnapshot.Status);
                     }
                 }
@@ -145,7 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // SourcePausePointPatcher wires into it; this use case never references the
                 // Patcher directly.
                 UloopPausePointClearAllResult clearAllResult = UloopPausePointRegistry.ClearAll();
-                LogCleared("all", string.Empty);
+                PausePointUseCaseLogger.LogCleared("all", string.Empty);
                 PhysicsFlaggedDeclaringTypesById.Clear();
                 return PausePointResponse.FromClearAll(clearAllResult);
             }
@@ -161,10 +164,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             (UloopPausePointSnapshot snapshot, bool resumedFromPause, int clearedCount) =
                 UloopPausePointRegistry.Clear(parameters.Id);
-            LogCleared(snapshot.Id, snapshot.StatusBeforeClear);
+            PausePointUseCaseLogger.LogCleared(snapshot.Id, snapshot.StatusBeforeClear);
             if (snapshot.StatusBeforeClear == UloopPausePointStatus.Expired)
             {
-                LogExpired(snapshot.Id, snapshot.ElapsedSinceEnabledMilliseconds);
+                PausePointUseCaseLogger.LogExpired(snapshot.Id, snapshot.ElapsedSinceEnabledMilliseconds);
             }
 
             // The zero-hit physics diagnostic (for any StatusBeforeClear, not just Expired - the
@@ -177,32 +180,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ClearedCount = clearedCount;
             if (resumedFromPause)
             {
-                response.Warning = SourcePausePointConstants.ClearReleasedOwnedPauseWarning;
+                List<string> warningEntries = new List<string>();
+                PausePointEnableWarningList.AddIfNotEmpty(
+                    warningEntries,
+                    SourcePausePointConstants.ClearReleasedOwnedPauseWarning);
+                PausePointEnableWarningList.Assign(response, warningEntries);
             }
 
             return response;
-        }
-
-        // Why: PausePointStatusBridgeCommand duplicates this instead of sharing it, since that
-        // bridge must not reference this Editor-only tool assembly. Keep both in sync if the
-        // log shape or wording changes.
-        private static void LogCleared(string target, string statusBeforeClear)
-        {
-            VibeLogger.LogInfo(
-                "pause_point_cleared",
-                $"Pause point cleared: {target}",
-                new { Target = target, StatusBeforeClear = statusBeforeClear });
-        }
-
-        // Why: PausePointStatusBridgeCommand duplicates this instead of sharing it, since that
-        // bridge must not reference this Editor-only tool assembly. Keep both in sync if the
-        // log shape or wording changes.
-        private static void LogExpired(string id, long elapsedSinceEnabledMilliseconds)
-        {
-            VibeLogger.LogInfo(
-                "pause_point_expired",
-                $"Pause point expired before being cleared: {id}",
-                new { Id = id, ElapsedSinceEnabledMilliseconds = elapsedSinceEnabledMilliseconds });
         }
 
         // Resolves File:Line to a patch location via the Resolver, patches it via Harmony, then
@@ -335,11 +320,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     message,
                     SourcePausePointConstants.ErrorCodeResolveFailed,
                     recommendedNextAction);
-                response.Warning = PausePointEnableWarnings.ChooseCompiledLineMapWarning(
-                    patchedMethodPdbUnavailableWarning,
-                    PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
-                        hasActiveHotReloadPatches,
-                        parameters.File));
+                List<string> resolveFailureWarnings = new List<string>();
+                PausePointEnableWarningList.AddIfNotEmpty(
+                    resolveFailureWarnings,
+                    PausePointEnableWarnings.ChooseCompiledLineMapWarning(
+                        patchedMethodPdbUnavailableWarning,
+                        PausePointEnableWarnings.BuildCompiledLineMapResolveFailureWarningOrEmpty(
+                            hasActiveHotReloadPatches,
+                            parameters.File)));
+                PausePointEnableWarningList.Assign(response, resolveFailureWarnings);
                 return response;
             }
 
@@ -460,11 +449,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ResolvedMethod = resolvedMethod;
             response.SnapshotTiming = DescribeSnapshotTiming(ParseSnapshotTiming(parameters.SnapshotTiming));
             response.LineBasis = lineBasis;
-            string enableWarning = PausePointEnableWarnings.MergeWarnings(
-                PausePointEnableWarnings.CreateEnableWarning(),
-                editedLineRemapWarning);
-            enableWarning = PausePointEnableWarnings.MergeWarnings(
-                enableWarning,
+            List<string> warningEntries = new List<string>();
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
+                PausePointEnableWarnings.CreateEnableWarning());
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, editedLineRemapWarning);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
                 PausePointEnableWarnings.BuildRetargetedToHotReloadPatchWarningOrEmpty(
                     retargetedToHotReloadPatch,
                     resolvedMethod,
@@ -496,99 +487,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         compiledSourceLines);
             }
 
-            string compiledLineMapWarning = PausePointEnableWarnings.ChooseCompiledLineMapWarning(
-                patchedMethodPdbUnavailableWarning,
-                PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
-                    compareCompiledLineDrift,
-                    parameters.File,
-                    resolvedMethod,
-                    comparedAndMatched));
-            enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, compiledLineMapWarning);
-            enableWarning = PausePointEnableWarnings.MergeWarnings(enableWarning, comparisonWarning);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
+                PausePointEnableWarnings.ChooseCompiledLineMapWarning(
+                    patchedMethodPdbUnavailableWarning,
+                    PausePointEnableWarnings.BuildCompiledLineMapWarningOrEmpty(
+                        compareCompiledLineDrift,
+                        parameters.File,
+                        resolvedMethod,
+                        comparedAndMatched)));
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, comparisonWarning);
             if (comparisonWarning.Length > 0)
             {
                 response.RecommendedNextAction =
                     SourcePausePointConstants.HotReloadCompiledLineMapLineDriftNextAction;
             }
 
-            response.Warning = PausePointEnableWarnings.MergeWarnings(enableWarning, patchResult.Warning);
-            response.Warning = PausePointEnableWarnings.MergeWarnings(
-                response.Warning,
+            PausePointEnableWarningList.AddRangeIfNotEmpty(warningEntries, patchResult.Warnings);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
                 PausePointEnableWarnings.BuildAddedFieldsNotCapturedWarningOrEmpty(patchResult.DeclaringType));
-            response.Warning = PausePointPerFrameEnableWarnings.MergePerFrameEnableWarnings(
-                response.Warning,
-                parameters.Mode,
-                resolvedMethod,
-                snapshot.MaxHistory);
-            response.Warning = PausePointEnableWarnings.MergeWarnings(
-                PausePointEnableWarnings.MergeWarnings(response.Warning, rearmWarning),
+            PausePointEnableWarningList.AddRangeIfNotEmpty(
+                warningEntries,
+                PausePointPerFrameEnableWarnings.CollectPerFrameEnableWarnings(
+                    parameters.Mode,
+                    resolvedMethod,
+                    snapshot.MaxHistory));
+            PausePointEnableWarningList.AddIfNotEmpty(warningEntries, rearmWarning);
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
                 PausePointEnableWarnings.BuildClosingBraceWarningOrEmpty(
                     resolvedLineText,
                     resolvedLine,
                     resolvedMethod,
                     compiledMethodEndLine,
                     editedMethodEndLine));
+            PausePointEnableWarningList.Assign(response, warningEntries);
             response.RecommendedNextAction = PausePointEnableWarnings
                 .ResolveSuccessEnableRecommendedNextAction(response.RecommendedNextAction, id);
-            LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
+            PausePointUseCaseLogger.LogEnable(response.Id, response.ResolvedMethod, $"{parameters.File}:{response.ResolvedLine}", response.Mode, response.Warning);
 
             if (patchResult.HasPhysicsCallbackWarning)
             {
                 PhysicsFlaggedDeclaringTypesById[id] = patchResult.DeclaringType;
-                LogPhysicsDispatchDiagnostics(
+                PausePointUseCaseLogger.LogPhysicsDispatchDiagnostics(
                     "pause_point_physics_dispatch_diagnostics", id, patchResult.DeclaringType, statusBeforeClear: string.Empty);
             }
 
             return response;
-        }
-
-        private static void LogEnable(string id, string resolvedMethod, string fileLine, string mode, string warning)
-        {
-            VibeLogger.LogInfo(
-                "pause_point_enable",
-                $"Pause point enabled: {id}",
-                new { Id = id, ResolvedMethod = resolvedMethod, FileLine = fileLine, Mode = mode, HasWarning = !string.IsNullOrEmpty(warning) });
-        }
-
-        // Captures the state needed to diagnose a physics-callback dispatch miss if one recurs:
-        // whether Play Mode is running, how long the current domain has been alive without a
-        // reload (a suspected factor -- see docs/regression-harness.md), the declaring type, and
-        // (for MonoBehaviour-derived types only) how many instances currently exist in the loaded
-        // scenes. statusBeforeClear is empty at enable time (no clear has happened yet) and
-        // Enabled/Expired at clear time.
-        private static void LogPhysicsDispatchDiagnostics(string operation, string id, Type declaringType, string statusBeforeClear)
-        {
-            // Only reachable via PhysicsFlaggedDeclaringTypesById, which is populated solely from
-            // a successful patch's method.DeclaringType -- a C#-sourced method always has one.
-            Debug.Assert(declaringType != null, "declaringType must not be null");
-
-            bool isMonoBehaviourDerived = typeof(MonoBehaviour).IsAssignableFrom(declaringType);
-            // -1 signals "not applicable": counting instances only means something when the
-            // declaring type is a MonoBehaviour (the physics dispatch miss this diagnostic exists
-            // for is scoped to MonoBehaviour physics message methods).
-#if UNITY_6000_4_OR_NEWER
-            int instanceCount = isMonoBehaviourDerived
-                ? UnityEngine.Object.FindObjectsByType(declaringType, FindObjectsInactive.Include).Length
-                : -1;
-#else
-            int instanceCount = isMonoBehaviourDerived
-                ? UnityEngine.Object.FindObjectsByType(declaringType, FindObjectsInactive.Include, FindObjectsSortMode.None).Length
-                : -1;
-#endif
-
-            VibeLogger.LogInfo(
-                operation,
-                $"Physics-callback pause point dispatch diagnostics: {id}",
-                new
-                {
-                    Id = id,
-                    IsPlaying = EditorApplication.isPlaying,
-                    IsPaused = EditorApplication.isPaused,
-                    SecondsSinceLastDomainReload = PausePointDomainReloadTracker.SecondsSinceLoad(),
-                    DeclaringType = declaringType.FullName,
-                    InstanceCount = instanceCount,
-                    StatusBeforeClear = statusBeforeClear
-                });
         }
 
         // The derived id must use the originally requested file/line (not the resolved/rounded

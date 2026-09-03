@@ -83,6 +83,10 @@ type pausePointStatusResponse struct {
 	// on the wait payload, not as hit-time Warning.
 	Warning string `json:"Warning,omitempty"`
 
+	// Warnings is the enable/status array form of Warning. omitempty keeps the field off
+	// payloads that only carry the joined string (older Unity packages).
+	Warnings []string `json:"Warnings,omitempty"`
+
 	// ResolvedLine / ResolvedLineText are merged as a pair on the --await hit path and the
 	// --await Expired path: when status carries a non-zero ResolvedLine (retarget-updated),
 	// both fields come from status; otherwise both fall back to the enable-pause-point response.

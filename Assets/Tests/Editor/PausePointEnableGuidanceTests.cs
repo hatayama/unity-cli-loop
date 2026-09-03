@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -302,6 +303,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     SourcePausePointConstants.SmallMethodInliningRiskWarning),
                 ExpectedClosingBraceWarningForFixture);
             Assert.That(response.Warning, Is.EqualTo(expectedWarning));
+        }
+
+        /// <summary>
+        /// What: enabling a physics-callback method puts the dispatch warning and the mid-solver
+        /// warning in separate Warnings entries, while Warning stays their space-joined form.
+        /// </summary>
+        [Test]
+        public void Enable_WhenPhysicsCallbackMethod_SplitsDispatchAndMidSolverWarnings()
+        {
+            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = "Assets/Tests/Editor/PausePointToolsPhysicsFixture.cs",
+                Line = 11,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+
+            Assert.That(
+                response.Success,
+                Is.True,
+                response.ErrorCode + " / " + response.Message);
+            Assert.That(
+                response.Warnings,
+                Does.Contain(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning));
+            Assert.That(
+                response.Warnings,
+                Does.Contain(SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning));
+            int dispatchIndex = IndexOfWarning(
+                response.Warnings,
+                SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning);
+            int midSolverIndex = IndexOfWarning(
+                response.Warnings,
+                SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning);
+            Assert.That(dispatchIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(midSolverIndex, Is.EqualTo(dispatchIndex + 1));
+            Assert.That(
+                response.Warning,
+                Is.EqualTo(string.Join(" ", response.Warnings)));
+            Assert.That(
+                response.Warning,
+                Does.Contain(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning));
+            Assert.That(
+                response.Warning,
+                Does.Contain(SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning));
+        }
+
+        private static int IndexOfWarning(IReadOnlyList<string> warnings, string expected)
+        {
+            for (int index = 0; index < warnings.Count; index++)
+            {
+                if (warnings[index] == expected)
+                {
+                    return index;
+                }
+            }
+
+            return -1;
         }
 
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController

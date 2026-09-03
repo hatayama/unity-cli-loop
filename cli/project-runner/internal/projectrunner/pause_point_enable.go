@@ -317,9 +317,7 @@ func runEnablePausePointAndAwait(
 			writeDebugTiming(stderr, pausePointEnableCommandName, time.Since(startedAt), outcome)
 			return 1
 		}
-		if enableResponse.Success {
-			enableResponse.Warning = joinPausePointWarnings(enableResponse.Warning, pausePointAutoDebugSwitchWarning)
-		}
+		applyPausePointRecoverySwitchWarning(&enableResponse)
 	}
 
 	if !enableResponse.Success {
@@ -351,6 +349,7 @@ func runEnablePausePointAndAwait(
 		waitOptions,
 		enablePausePointPropagatedFields{
 			Warning:          enableResponse.Warning,
+			Warnings:         enableResponse.Warnings,
 			ResolvedLine:     enableResponse.ResolvedLine,
 			ResolvedLineText: enableResponse.ResolvedLineText,
 			ResolvedMethod:   enableResponse.ResolvedMethod,
@@ -409,6 +408,7 @@ func runPausePointWaitAfterEnable(
 			logsErr:             logsErr,
 			unityWarning:        response.Warning,
 			enableTimeWarning:   enableFields.Warning,
+			enableTimeWarnings:  enableFields.Warnings,
 			triggerResult:       triggerResult,
 			awaitedPausePointID: options.id,
 			expectations:        expectations,
@@ -482,4 +482,11 @@ func joinPausePointWarnings(warnings ...string) string {
 		unique = append(unique, warning)
 	}
 	return strings.Join(unique, " ")
+}
+
+func appendPausePointWarningEntry(existing []string, warning string) []string {
+	if warning == "" || slices.Contains(existing, warning) {
+		return existing
+	}
+	return append(existing, warning)
 }

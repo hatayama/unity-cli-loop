@@ -91,6 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string RecommendedNextAction { get; set; } = string.Empty;
         public string ErrorCode { get; set; } = string.Empty;
         public string Warning { get; set; } = string.Empty;
+        public IReadOnlyList<string> Warnings { get; set; } = Array.Empty<string>();
         public string ClearedReason { get; set; } = string.Empty;
         public string StatusBeforeClear { get; set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; set; }
@@ -174,7 +175,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     : "Pause points cleared.",
                 Warning = result.ResumedFromPause
                     ? SourcePausePointConstants.ClearReleasedOwnedPauseWarning
-                    : string.Empty
+                    : string.Empty,
+                Warnings = result.ResumedFromPause
+                    ? new[] { SourcePausePointConstants.ClearReleasedOwnedPauseWarning }
+                    : Array.Empty<string>()
             };
         }
 
