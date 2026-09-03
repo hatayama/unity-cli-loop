@@ -6,7 +6,7 @@ code_generation:
 early_access: true
 reviews:
   profile: "chill"
-  request_changes_workflow: true
+  request_changes_workflow: false
   high_level_summary: false
   poem: false
   auto_review:
