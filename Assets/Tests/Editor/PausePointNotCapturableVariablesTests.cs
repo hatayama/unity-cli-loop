@@ -25,7 +25,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const string ExpectedWarningForTwoEntries =
             "Parameters not captured because they cannot be boxed: "
             + "accumulator (ref/out/in parameter cannot be boxed), scratch (ref struct cannot be boxed). "
-            + "Copy the value to a local, or use --snapshot-timing post-line on the line that consumes it.";
+            + "Copy the value it refers to into a plain local (dereference a pointer, ToArray() a span), "
+            + "or use --snapshot-timing post-line on the line that consumes it.";
 
         /// <summary>
         /// What: a non-empty list produces the warning naming every entry with its reason.
