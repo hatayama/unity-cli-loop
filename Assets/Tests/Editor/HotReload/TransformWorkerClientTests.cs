@@ -1667,9 +1667,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: editing one explicit event accessor reports that event's add and remove as
-        /// Skipped (member-level equivalence, same granularity as property accessors) and omits
-        /// accessors of an unedited event in the same type.
+        /// What: editing one explicit event accessor reports only that accessor as Skipped
+        /// and omits the unchanged peer plus accessors of an unedited event in the same type.
         /// </summary>
         [Test]
         public async Task Run_UnsupportedMemberKind_EventAccessor_SkipsEditedOmitsUnedited()
@@ -1683,10 +1682,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 "add_Edited",
                 ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "remove_Edited");
+            AssertSkippedDoesNotContain(result, "add_Unedited");
+            AssertSkippedDoesNotContain(result, "remove_Unedited");
+        }
+
+        /// <summary>
+        /// What: editing only the remove accessor of an existing event reports remove_Edited
+        /// as Skipped and does not emit an add_Edited row.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_EditedRemoveAccessorOnly_OmitsUnchangedAdd()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindEditedRemoveAccessorOnly.cs",
+                "            add { Marker = 51; }\n            remove { }",
+                "            add { Marker = 51; }\n            remove { Marker = 0; }");
+
             AssertSkippedContains(
                 result,
                 "remove_Edited",
                 ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "add_Edited");
+        }
+
+        /// <summary>
+        /// What: adding a new explicit event with no snapshot peer reports both add_X and
+        /// remove_X as Skipped. Existing events stay off the skipped list.
+        /// </summary>
+        [Test]
+        public async Task Run_UnsupportedMemberKind_AddedExplicitEvent_SkipsBothAccessors()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnUnsupportedKindEditAsync(
+                "UnsupportedKindAddedExplicitEvent.cs",
+                "        public event Action Unedited\n"
+                + "        {\n"
+                + "            add { Marker = 52; }\n"
+                + "            remove { }\n"
+                + "        }",
+                "        public event Action Unedited\n"
+                + "        {\n"
+                + "            add { Marker = 52; }\n"
+                + "            remove { }\n"
+                + "        }\n\n"
+                + "        public event Action AddedExplicit\n"
+                + "        {\n"
+                + "            add { Marker = 91; }\n"
+                + "            remove { Marker = 92; }\n"
+                + "        }");
+
+            AssertSkippedContains(
+                result,
+                "add_AddedExplicit",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedContains(
+                result,
+                "remove_AddedExplicit",
+                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "add_Edited");
+            AssertSkippedDoesNotContain(result, "remove_Edited");
             AssertSkippedDoesNotContain(result, "add_Unedited");
             AssertSkippedDoesNotContain(result, "remove_Unedited");
         }
@@ -1768,10 +1822,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 "add_Edited",
                 ExpectedUnsupportedMemberKindSkipReason);
-            AssertSkippedContains(
-                result,
-                "remove_Edited",
-                ExpectedUnsupportedMemberKindSkipReason);
+            AssertSkippedDoesNotContain(result, "remove_Edited");
             AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
         }
 
@@ -2417,6 +2468,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 JsonConvert.DeserializeObject<TransformWorkerOutputDto>(omittedJson);
             Assert.That(omitted.removedMembers, Is.Null, "Omitted removedMembers must deserialize as null.");
             Assert.That(omitted.addedFieldNames, Is.Null, "Omitted addedFieldNames must deserialize as null.");
+            Assert.That(omitted.addedConstNames, Is.Null, "Omitted addedConstNames must deserialize as null.");
             Assert.That(
                 omitted.entries[0].calledAddedMethodKeys,
                 Is.Null,
@@ -2429,6 +2481,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(omitted.removedMethodSignatures, Is.Empty);
             Assert.That(omitted.addedFieldNames, Is.Not.Null);
             Assert.That(omitted.addedFieldNames, Is.Empty);
+            Assert.That(omitted.addedConstNames, Is.Not.Null);
+            Assert.That(omitted.addedConstNames, Is.Empty);
             string nullNamesJson = "{\"shimSource\":\"\",\"addedFieldNames\":null}";
             TransformWorkerOutputDto nullNames =
                 JsonConvert.DeserializeObject<TransformWorkerOutputDto>(nullNamesJson);
