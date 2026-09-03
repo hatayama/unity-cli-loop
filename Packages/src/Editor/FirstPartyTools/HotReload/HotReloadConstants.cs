@@ -63,6 +63,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // --status Kind for rows sourced from HotReloadAddedMemberRegistry (no compiled MethodBase).
         public const string AddedMemberStatusKind = "Added";
 
+        // --status Kind for rows sourced from HotReloadAddedFieldRegistry (live added fields).
+        public const string AddedFieldKind = "AddedField";
+
         // Isolation retry drops callers of a failed added shim so retry does not CS0103; they
         // are not Failed (the compile error was in the added body) and must not stay silent.
         public const string IsolatedAddedMethodCallerSkipReason =
@@ -226,6 +229,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // initialization-only methods that is the non-obvious step.
         public const string ActivePatchNeverInvokedReason =
             "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called. If this method only runs during initialization, trigger that path again — re-create the object that runs it, or run 'uloop compile' and enter Play Mode again.";
+
+        // Format: replacement display name for an Active row whose compiled signature was
+        // replaced in a later edit. Supersedes ActivePatchNeverInvokedReason when both apply.
+        public const string ActivePatchSupersededReasonFormat =
+            "Superseded by a new declaration of {0}: the edited source now declares a different signature. This compiled signature stays patched so existing callers keep working; it is not the entry point for new calls.";
 
         // Format: count of Active rows whose InvocationCount is 0.
         public const string NeverInvokedActiveAggregatedMessageFormat =
