@@ -407,12 +407,12 @@
           },
           "MaxPreviewElements": {
             "type": "integer",
-            "description": "Maximum number of elements to include in a captured collection's preview (1-1000). Also caps previews in later pause-point-status responses; status cannot change it.",
+            "description": "Maximum elements in a captured collection's preview (1-1000). Also caps previews in later pause-point-status responses; status cannot change it.",
             "default": 10
           },
           "MaxCallerFrames": {
             "type": "integer",
-            "description": "Maximum number of caller stack frames to record on each hit (0-8). 0 disables capture. Also caps later pause-point-status responses; status cannot change it.",
+            "description": "Maximum caller stack frames recorded per hit (0-8). 0 disables capture. Also caps later pause-point-status responses; status cannot change it.",
             "default": 2
           },
           "Method": {
