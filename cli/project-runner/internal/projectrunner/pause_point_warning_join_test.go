@@ -89,3 +89,77 @@ func TestRunWaitForPausePointOmitsBothWarningFieldsWhenNothingWarned(t *testing.
 		}
 	}
 }
+
+// Verifies a hit Message ends by naming both aggregates, so an agent that stops at Message still
+// learns a warning and a status note are waiting for it.
+func TestRunWaitForPausePointPointsMessageAtWarningsAndStatusNote(t *testing.T) {
+	stubPausePointHit(t, "Unity-side enable warning.")
+	stubPausePointMatchingLogs(t, nil)
+
+	result := decodePausePointWaitResult(t, runAwaitWithoutTrigger(t))
+
+	if result.StatusNote == "" {
+		t.Fatal("this scenario is meant to produce a StatusNote")
+	}
+	expectedSuffix := "1 warning(s). See Warnings. See StatusNote."
+	if !strings.HasSuffix(result.Message, expectedSuffix) {
+		t.Errorf("Message must end with %q, got %q", expectedSuffix, result.Message)
+	}
+}
+
+// Verifies a hit that warned about nothing gets no warning-count clause, while the StatusNote
+// pointer still lands.
+func TestRunWaitForPausePointOmitsTheWarningCountWhenNothingWarned(t *testing.T) {
+	stubPausePointHit(t, "")
+	stubPausePointMatchingLogs(t, nil)
+
+	result := decodePausePointWaitResult(t, runAwaitWithoutTrigger(t))
+
+	if strings.Contains(result.Message, "warning(s). See Warnings.") {
+		t.Errorf("Message must not claim warnings when there are none: %q", result.Message)
+	}
+	if result.Message != "See StatusNote." {
+		t.Errorf("Message must still point at StatusNote: %q", result.Message)
+	}
+}
+
+// Verifies pause-point-status appends the same pointers: the two commands shape their payloads
+// separately, so a pointer wired into only one is invisible to callers of the other.
+func TestRunPausePointStatusPointsMessageAtWarningsAndStatusNote(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+	})
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Success:  true,
+			Id:       id,
+			Status:   pausePointStatusHit,
+			IsHit:    true,
+			HitCount: 1,
+			Message:  "Pause point hit.",
+			Warnings: []string{"Suppressed by hot reload."},
+		}, nil
+	}
+
+	code, output := runPausePointStatusForExpect(t, []string{"--id", "jump"})
+	if code != 0 {
+		t.Fatalf("expected success, got %d: %s", code, output)
+	}
+
+	result := pausePointStatusResult{}
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("stdout parse failed: %v from %s", err, output)
+	}
+	expected := "Pause point hit. 1 warning(s). See Warnings. See StatusNote."
+	if result.Message != expected {
+		t.Errorf("Message = %q, want %q", result.Message, expected)
+	}
+	if result.Warning != "Suppressed by hot reload." {
+		t.Errorf("Warning must be derived from Warnings: %q", result.Warning)
+	}
+}

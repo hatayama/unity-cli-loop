@@ -1,14 +1,50 @@
 package projectrunner
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 )
 
-// pausePointEnableTimeWarningPrefix marks an enable-time patch diagnostic listed next to hit-time
-// warnings. Without it, text such as "may not hit on pre-existing GameObjects" reads as a
-// contradiction of the Hit it is reported with.
-const pausePointEnableTimeWarningPrefix = "At enable time: "
+const (
+	// pausePointEnableTimeWarningPrefix marks an enable-time patch diagnostic listed next to
+	// hit-time warnings. Without it, text such as "may not hit on pre-existing GameObjects" reads
+	// as a contradiction of the Hit it is reported with.
+	pausePointEnableTimeWarningPrefix = "At enable time: "
+
+	// pausePointWarningCountMessageFormat repeats hot reload's Message suffix verbatim, so the one
+	// habit an agent already has — read Message, follow the pointer it gives — reaches pause-point
+	// warnings too.
+	pausePointWarningCountMessageFormat = "%d warning(s). See Warnings."
+
+	// pausePointStatusNoteMessagePointer points at StatusNote for the same reason: mode-specific
+	// hit guidance that is only reachable by scanning the payload is guidance agents miss.
+	pausePointStatusNoteMessagePointer = "See StatusNote."
+)
+
+// applyPausePointMessagePointers ends Message with the fields a caller would otherwise have to
+// discover on its own. Message is what an agent reads first, so evidence Message does not name is
+// evidence that goes unread.
+func applyPausePointMessagePointers(response pausePointStatusResponse) pausePointStatusResponse {
+	if len(response.Warnings) > 0 {
+		response.Message = appendPausePointMessagePart(
+			response.Message,
+			fmt.Sprintf(pausePointWarningCountMessageFormat, len(response.Warnings)))
+	}
+	if response.StatusNote != "" {
+		response.Message = appendPausePointMessagePart(response.Message, pausePointStatusNoteMessagePointer)
+	}
+	return response
+}
+
+// appendPausePointMessagePart joins one pointer onto Message without leaving a leading space when
+// Unity sent no message at all.
+func appendPausePointMessagePart(message string, part string) string {
+	if message == "" {
+		return part
+	}
+	return message + " " + part
+}
 
 // applyPausePointWarnings makes Warnings the single aggregate for a pause-point response and
 // Warning its joined form, so no caller can read a Warning whose topics are missing from Warnings.

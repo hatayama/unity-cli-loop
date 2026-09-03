@@ -77,6 +77,7 @@ func buildPausePointHitPayload(inputs pausePointHitPayloadInputs) any {
 	response := inputs.response
 	response.TriggerFailed = pausePointTriggerFailedPointer(inputs.triggerResult)
 	response = applyPausePointWarnings(response, buildPausePointHitWarnings(inputs, response.HitCount)...)
+	response = applyPausePointMessagePointers(response)
 
 	if inputs.logsErr != nil {
 		// Best-effort: a failed log fetch must not also drop the CLI-side evidence — the warnings

@@ -259,6 +259,11 @@ func runPausePointStatusCommand(
 	response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 	response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 	response = applyPausePointCapturedVariablePreviewNote(response)
+	// Why here and not on the Unity side: pause-point-status returns Unity's status envelope as
+	// it stands, and StatusNote does not exist until the notes above are applied. The enable and
+	// clear tool responses get the same suffix from Unity instead, so neither path double-appends.
+	response = applyPausePointWarnings(response)
+	response = applyPausePointMessagePointers(response)
 
 	// Expectation verdicts never change the exit code: whether the query succeeded and whether the
 	// captured state matched are separate questions, as on await-pause-point.
