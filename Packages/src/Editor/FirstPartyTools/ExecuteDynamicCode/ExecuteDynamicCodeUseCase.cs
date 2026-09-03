@@ -158,7 +158,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             response.ActivePausePointId = activePausePointId;
             response.Warning = EditorUnfocusedWarningBuilder.BuildPlayModeProgressHint(
                 response.EditorPlaying,
-                _editorFocusStateProvider.IsFocused);
+                _editorFocusStateProvider.IsFocused,
+                response.EditorPaused);
         }
 
         private static void LogExecutionStart(
