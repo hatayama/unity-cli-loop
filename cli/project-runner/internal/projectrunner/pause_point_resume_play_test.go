@@ -1,6 +1,7 @@
 package projectrunner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -96,19 +97,7 @@ func TestWaitForPausePointResumesPlayBeforeTriggerWhenPaused(t *testing.T) {
 		resumePlayModeForPausePoint = originalResume
 	}()
 
-	queryPausePointStatus = func(
-		ctx context.Context,
-		connection unityipc.Connection,
-		id string,
-	) (pausePointStatusResponse, error) {
-		return pausePointStatusResponse{
-			Id:          id,
-			Status:      pausePointStatusHit,
-			IsHit:       true,
-			HitCount:    1,
-			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
-		}, nil
-	}
+	queryPausePointStatus = pausePointEnabledThenHitStatusQuery()
 
 	calls := make([]string, 0, 2)
 	resumePlayModeForPausePoint = func(
@@ -166,19 +155,7 @@ func TestWaitForPausePointSkipsPlayWhenAlreadyUnpaused(t *testing.T) {
 		resumePlayModeForPausePoint = originalResume
 	}()
 
-	queryPausePointStatus = func(
-		ctx context.Context,
-		connection unityipc.Connection,
-		id string,
-	) (pausePointStatusResponse, error) {
-		return pausePointStatusResponse{
-			Id:          id,
-			Status:      pausePointStatusHit,
-			IsHit:       true,
-			HitCount:    1,
-			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: false, CapturedAt: "PausePointHit"},
-		}, nil
-	}
+	queryPausePointStatus = pausePointEnabledThenHitStatusQuery()
 
 	triggerDispatched := false
 	resumePlayModeForPausePoint = func(
@@ -237,19 +214,7 @@ func TestWaitForPausePointSkipsTriggerWhenResumePlayFails(t *testing.T) {
 		resumePlayModeForPausePoint = originalResume
 	}()
 
-	queryPausePointStatus = func(
-		ctx context.Context,
-		connection unityipc.Connection,
-		id string,
-	) (pausePointStatusResponse, error) {
-		return pausePointStatusResponse{
-			Id:          id,
-			Status:      pausePointStatusHit,
-			IsHit:       true,
-			HitCount:    1,
-			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
-		}, nil
-	}
+	queryPausePointStatus = pausePointEnabledThenHitStatusQuery()
 
 	dispatchCalled := false
 	resumePlayModeForPausePoint = func(
@@ -441,19 +406,7 @@ func TestWaitForPausePointResumesWithoutTriggerWhenArmed(t *testing.T) {
 		resumePlayModeForPausePoint = originalResume
 	}()
 
-	queryPausePointStatus = func(
-		ctx context.Context,
-		connection unityipc.Connection,
-		id string,
-	) (pausePointStatusResponse, error) {
-		return pausePointStatusResponse{
-			Id:          id,
-			Status:      pausePointStatusHit,
-			IsHit:       true,
-			HitCount:    1,
-			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
-		}, nil
-	}
+	queryPausePointStatus = pausePointEnabledThenHitStatusQuery()
 
 	resumeCalled := false
 	resumePlayModeForPausePoint = func(
@@ -637,5 +590,343 @@ func TestWaitForPausePointUnarmedErrorIncludesClearedReasonWhenQuerySucceeded(t 
 		" marker status was 'Cleared' (ClearedReason: AwaitTimeoutAutoClear)"
 	if resumeResult == nil || resumeResult.Error != wantError {
 		t.Fatalf("ResumePlayResult.Error mismatch: got %#v, want %q", resumeResult, wantError)
+	}
+}
+
+// pausePointEnabledThenHitStatusQuery answers the arm-confirmation query with an armed-but-unhit
+// marker and every later poll with a hit. Why not a fixed Hit response: a marker that was already
+// hit when the wait started makes the wait settle on that old hit, which is exactly the case where
+// no resume or trigger may run, so it cannot model a wait whose own side effects produce the hit.
+func pausePointEnabledThenHitStatusQuery() func(
+	context.Context,
+	unityipc.Connection,
+	string,
+) (pausePointStatusResponse, error) {
+	queryCount := 0
+	return func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		queryCount++
+		if queryCount == 1 {
+			return pausePointArmedStatusResponse(id), nil
+		}
+		return pausePointStatusResponse{
+			Id:              id,
+			Status:          pausePointStatusHit,
+			IsHit:           true,
+			HitCount:        1,
+			LastHitSequence: 1,
+			EditorState:     pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+		}, nil
+	}
+}
+
+// pausePointAlreadyHitSingleShotStatusQuery answers every query with a single-shot marker that was
+// already hit before the wait started — the case the wait settles on immediately.
+func pausePointAlreadyHitSingleShotStatusQuery(mode string) func(
+	context.Context,
+	unityipc.Connection,
+	string,
+) (pausePointStatusResponse, error) {
+	return func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointStatusResponse{
+			Id:              id,
+			Status:          pausePointStatusHit,
+			IsHit:           true,
+			HitCount:        1,
+			Mode:            mode,
+			LastHitSequence: 1,
+			EditorState:     pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+		}, nil
+	}
+}
+
+// Verifies --resume-play never resumes a single-shot marker that had already hit before the wait
+// started: the wait settles on that old hit, so resuming would report a hit while Unity is running.
+func TestWaitForPausePointSkipsResumeWhenMarkerAlreadyHitAtWaitStart(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalResume := resumePlayModeForPausePoint
+	defer func() {
+		queryPausePointStatus = originalQuery
+		resumePlayModeForPausePoint = originalResume
+	}()
+
+	queryPausePointStatus = pausePointAlreadyHitSingleShotStatusQuery("single-shot")
+	resumePlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+	) pausePointResumePlayResult {
+		t.Fatal("expected no resume for a marker that had already hit at wait start")
+		return pausePointResumePlayResult{}
+	}
+
+	_, state, triggerResult, resumeResult, hasNewHitBaseline, err := waitForPausePoint(
+		context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+			id:             "jump",
+			timeoutSeconds: 1,
+			timeout:        time.Second,
+			resumePlay:     true,
+		})
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if state != pausePointWaitStateHit {
+		t.Fatalf("expected the recorded hit to still be returned, got %q", state)
+	}
+	if hasNewHitBaseline {
+		t.Fatal("single-shot must not establish a new-hit baseline")
+	}
+	if triggerResult != nil {
+		t.Fatalf("expected nil TriggerResult when --trigger was not given, got %#v", triggerResult)
+	}
+	if resumeResult == nil {
+		t.Fatal("expected a ResumePlayResult explaining the skip, got nil")
+	}
+	if resumeResult.Resumed || resumeResult.WasPaused {
+		t.Fatalf("expected no resume to be reported, got %#v", resumeResult)
+	}
+	if resumeResult.Error != "" {
+		t.Fatalf("a deliberate skip must not be reported as a resume failure: %#v", resumeResult)
+	}
+	if resumeResult.Skipped != pausePointResumeSkippedForExistingHitMessage {
+		t.Fatalf("ResumePlayResult.Skipped mismatch: %#v", resumeResult)
+	}
+}
+
+// Verifies a marker whose Mode is absent (older Unity package) is treated like single-shot, so its
+// already-recorded hit also suppresses --resume-play and --trigger.
+func TestWaitForPausePointSkipsSideEffectsWhenAlreadyHitMarkerHasNoMode(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalResume := resumePlayModeForPausePoint
+	originalDispatch := dispatchPausePointTriggerCommand
+	defer func() {
+		queryPausePointStatus = originalQuery
+		resumePlayModeForPausePoint = originalResume
+		dispatchPausePointTriggerCommand = originalDispatch
+	}()
+
+	queryPausePointStatus = pausePointAlreadyHitSingleShotStatusQuery("")
+	resumePlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+	) pausePointResumePlayResult {
+		t.Fatal("expected no resume for a marker that had already hit at wait start")
+		return pausePointResumePlayResult{}
+	}
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		t.Fatal("expected no trigger dispatch for a marker that had already hit at wait start")
+		return 0
+	}
+
+	_, state, triggerResult, resumeResult, _, err := waitForPausePoint(
+		context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+			id:             "jump",
+			timeoutSeconds: 1,
+			timeout:        time.Second,
+			resumePlay:     true,
+			triggerCommand: "simulate-keyboard",
+			triggerArgs:    []string{"--action", "Press"},
+		})
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if state != pausePointWaitStateHit {
+		t.Fatalf("expected the recorded hit to still be returned, got %q", state)
+	}
+	if resumeResult == nil || resumeResult.Skipped != pausePointResumeSkippedForExistingHitMessage {
+		t.Fatalf("ResumePlayResult.Skipped mismatch: %#v", resumeResult)
+	}
+	if triggerResult == nil || triggerResult.Completed {
+		t.Fatalf("expected a skipped TriggerResult, got %#v", triggerResult)
+	}
+	if triggerResult.Error != pausePointTriggerSkippedForExistingHitError {
+		t.Fatalf("TriggerResult.Error mismatch: %#v", triggerResult)
+	}
+	if triggerResult.Command != "simulate-keyboard --action Press" {
+		t.Fatalf("TriggerResult.Command mismatch: %#v", triggerResult)
+	}
+}
+
+// Verifies an already-hit continuous marker keeps resuming: its wait awaits a later hit, so the
+// resume is what lets that next hit happen.
+func TestWaitForPausePointStillResumesAlreadyHitContinuousMarker(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalResume := resumePlayModeForPausePoint
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		resumePlayModeForPausePoint = originalResume
+		pausePointStatusPoll = originalPoll
+	}()
+
+	queryCount := 0
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		queryCount++
+		sequence := 5
+		if queryCount >= 2 {
+			sequence = 6
+		}
+		return pausePointStatusResponse{
+			Id:              id,
+			Status:          pausePointStatusHit,
+			IsHit:           true,
+			HitCount:        sequence,
+			Mode:            pausePointModeContinuous,
+			LastHitSequence: sequence,
+			EditorState:     pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
+		}, nil
+	}
+	resumeCalled := false
+	resumePlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+	) pausePointResumePlayResult {
+		resumeCalled = true
+		return pausePointResumePlayResult{WasPaused: true, Resumed: true}
+	}
+
+	_, state, _, resumeResult, hasNewHitBaseline, err := waitForPausePoint(
+		context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+			id:             "jump",
+			timeoutSeconds: 1,
+			timeout:        time.Second,
+			resumePlay:     true,
+		})
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if state != pausePointWaitStateHit {
+		t.Fatalf("state mismatch: %q", state)
+	}
+	if !resumeCalled {
+		t.Fatal("expected an already-hit continuous marker to still be resumed")
+	}
+	if !hasNewHitBaseline {
+		t.Fatal("expected a new-hit baseline for an already-hit continuous marker")
+	}
+	if resumeResult == nil || !resumeResult.Resumed || resumeResult.Skipped != "" {
+		t.Fatalf("ResumePlayResult mismatch: %#v", resumeResult)
+	}
+}
+
+// Verifies enable-pause-point --await --resume-play still resumes when its own enable raced a hit:
+// that hit is the wait's success, and the marker was armed by this very command.
+func TestWaitForPausePointStillResumesWhenMarkerJustEnabled(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalResume := resumePlayModeForPausePoint
+	defer func() {
+		queryPausePointStatus = originalQuery
+		resumePlayModeForPausePoint = originalResume
+	}()
+
+	queryPausePointStatus = pausePointAlreadyHitSingleShotStatusQuery("single-shot")
+	resumeCalled := false
+	resumePlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+	) pausePointResumePlayResult {
+		resumeCalled = true
+		return pausePointResumePlayResult{WasPaused: true, Resumed: true}
+	}
+
+	_, state, _, resumeResult, _, err := waitForPausePoint(
+		context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+			id:                "jump",
+			timeoutSeconds:    1,
+			timeout:           time.Second,
+			resumePlay:        true,
+			markerJustEnabled: true,
+		})
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if state != pausePointWaitStateHit {
+		t.Fatalf("state mismatch: %q", state)
+	}
+	if !resumeCalled {
+		t.Fatal("expected enable --await --resume-play to still resume")
+	}
+	if resumeResult == nil || resumeResult.Skipped != "" {
+		t.Fatalf("ResumePlayResult mismatch: %#v", resumeResult)
+	}
+}
+
+// Verifies the public await-pause-point success payload carries the skip on
+// ResumePlayResult.Skipped (and no Error), so a caller reading only the JSON learns that Unity is
+// still paused by the hit it is looking at rather than running.
+func TestRunWaitForPausePointCommandReportsResumeSkipForAlreadyHitMarker(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalResume := resumePlayModeForPausePoint
+	originalFetch := fetchMatchingLogs
+	t.Cleanup(func() {
+		queryPausePointStatus = originalQuery
+		resumePlayModeForPausePoint = originalResume
+		fetchMatchingLogs = originalFetch
+	})
+
+	queryPausePointStatus = pausePointAlreadyHitSingleShotStatusQuery("single-shot")
+	resumePlayModeForPausePoint = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+	) pausePointResumePlayResult {
+		t.Fatal("expected no resume for a marker that had already hit at wait start")
+		return pausePointResumePlayResult{}
+	}
+	fetchMatchingLogs = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		searchText string,
+		maxCount int,
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{SearchText: searchText}, nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePointCommand(
+		context.Background(),
+		unityipc.Connection{},
+		[]string{"--id", "jump", "--timeout-seconds", "1", "--resume-play"},
+		"",
+		&stdout,
+		&stderr,
+	)
+	if code != 0 {
+		t.Fatalf("expected hit success, got %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	payload := decodeJSONObject(t, stdout.Bytes())
+	resumeResult, ok := payload["ResumePlayResult"].(map[string]any)
+	if !ok {
+		t.Fatalf("ResumePlayResult missing or wrong shape: %#v", payload)
+	}
+	if resumeResult["Resumed"] != false {
+		t.Fatalf("expected Resumed=false, got %#v", resumeResult)
+	}
+	if _, hasError := resumeResult["Error"]; hasError {
+		t.Fatalf("a deliberate skip must not be reported as an Error: %#v", resumeResult)
+	}
+	skipped, _ := resumeResult["Skipped"].(string)
+	if skipped != pausePointResumeSkippedForExistingHitMessage {
+		t.Fatalf("Skipped mismatch: %#v", resumeResult)
 	}
 }

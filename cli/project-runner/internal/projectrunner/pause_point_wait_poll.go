@@ -117,6 +117,14 @@ func startPausePointWaitSideEffects(
 
 	baselineSequence, hasBaseline, baselineDecided := decidePausePointNewHitBaseline(armResponse, options.markerJustEnabled)
 
+	if pausePointWaitSucceedsOnExistingHit(armResponse, options.markerJustEnabled) {
+		// The very first poll will return this already-recorded hit, so resuming Play (or firing the
+		// trigger into the running game) would restart the game and then report the old hit as if the
+		// wait had just observed it — the response would claim Unity is paused while it is running.
+		skippedResumeResult, skippedTriggerResult := pausePointSideEffectsSkippedForExistingHit(options)
+		return nil, skippedTriggerResult, skippedResumeResult, baselineSequence, hasBaseline, baselineDecided
+	}
+
 	var resumeResult *pausePointResumePlayResult
 	if options.resumePlay {
 		result := resumePlayModeForPausePoint(ctx, connection)
@@ -140,6 +148,39 @@ func startPausePointWaitSideEffects(
 	return handle, nil, resumeResult, baselineSequence, hasBaseline, baselineDecided
 }
 
+// pausePointWaitSucceedsOnExistingHit reports that the wait will settle immediately on the hit the
+// marker already carried at wait start, so no pre-wait side effect may run. That is every already-hit
+// marker without a new-hit baseline: single-shot (and the empty-Mode package-skew case) never gets a
+// baseline, so nothing later than the recorded hit is ever awaited. markerJustEnabled is excluded
+// because enable --await deliberately accepts the hit that races its own enable as the wait success.
+func pausePointWaitSucceedsOnExistingHit(response pausePointStatusResponse, markerJustEnabled bool) bool {
+	if markerJustEnabled || response.Status != pausePointStatusHit {
+		return false
+	}
+	_, hasBaseline := pausePointNewHitBaseline(response)
+	return !hasBaseline
+}
+
+// pausePointSideEffectsSkippedForExistingHit builds the reported outcomes for the flags that were
+// passed but deliberately not performed. Both are reported rather than omitted for the same reason as
+// on the not-armed path: a silently missing result is indistinguishable from one that never reported.
+func pausePointSideEffectsSkippedForExistingHit(
+	options waitForPausePointOptions,
+) (*pausePointResumePlayResult, *pausePointTriggerResult) {
+	var resumeResult *pausePointResumePlayResult
+	if options.resumePlay {
+		resumeResult = &pausePointResumePlayResult{Skipped: pausePointResumeSkippedForExistingHitMessage}
+	}
+	var triggerResult *pausePointTriggerResult
+	if options.triggerCommand != "" {
+		triggerResult = &pausePointTriggerResult{
+			Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
+			Error:   pausePointTriggerSkippedForExistingHitError,
+		}
+	}
+	return resumeResult, triggerResult
+}
+
 // queryPausePointArmStatus reports whether the marker is enabled or already hit. A query failure is
 // treated as not armed: dispatching a --trigger command against a marker this CLI cannot even
 // confirm exists would inject the trigger's action into the game with no corresponding wait.
@@ -159,6 +200,13 @@ func queryPausePointArmStatus(
 const (
 	pausePointResumeNotArmedAtWaitStartError  = "resume was not dispatched: the marker could not be confirmed armed at wait start"
 	pausePointTriggerNotArmedAtWaitStartError = "trigger was not dispatched: the marker could not be confirmed armed at wait start"
+
+	pausePointResumeSkippedForExistingHitMessage = "resume was skipped: the marker had already hit " +
+		"before this wait started, so the recorded hit is returned as-is and Unity stays paused by that " +
+		"hit; clear or re-enable the marker and wait again to capture a new hit"
+	pausePointTriggerSkippedForExistingHitError = "trigger was not dispatched: the marker had already " +
+		"hit before this wait started, so the recorded hit is returned as-is; clear or re-enable the " +
+		"marker and wait again to capture a new hit"
 )
 
 func pausePointUnarmedAtWaitStartSuffix(response pausePointStatusResponse, queryErr error) string {

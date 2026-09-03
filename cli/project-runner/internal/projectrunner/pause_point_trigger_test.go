@@ -342,21 +342,10 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 		dispatchPausePointTriggerCommand = originalDispatch
 	}()
 
-	queryPausePointStatus = func(
-		ctx context.Context,
-		connection unityipc.Connection,
-		id string,
-	) (pausePointStatusResponse, error) {
-		return pausePointStatusResponse{
-			Id:          id,
-			Status:      pausePointStatusHit,
-			IsHit:       true,
-			HitCount:    1,
-			EditorState: pausePointEditorState{IsPlaying: true, IsPaused: true, CapturedAt: "PausePointHit"},
-		}, nil
-	}
-
 	t.Run("trigger completes before the wait settles", func(t *testing.T) {
+		// Re-stubbed per subtest: the stub's first answer is the wait's arm confirmation, so a shared
+		// instance would hand the second subtest an already-hit marker and suppress its trigger.
+		queryPausePointStatus = pausePointEnabledThenHitStatusQuery()
 		dispatchPausePointTriggerCommand = func(
 			ctx context.Context,
 			connection unityipc.Connection,
@@ -390,6 +379,7 @@ func TestWaitForPausePointJoinsTriggerResult(t *testing.T) {
 	})
 
 	t.Run("trigger still running past the join grace window reports Completed=false", func(t *testing.T) {
+		queryPausePointStatus = pausePointEnabledThenHitStatusQuery()
 		release := make(chan struct{})
 		t.Cleanup(func() { close(release) })
 

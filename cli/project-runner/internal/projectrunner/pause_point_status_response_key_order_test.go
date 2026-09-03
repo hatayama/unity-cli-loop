@@ -158,6 +158,7 @@ func fullyPopulatedPausePointStatusResponse() pausePointStatusResponse {
 			WasPaused:    true,
 			Resumed:      true,
 			Error:        "e",
+			Skipped:      "s",
 			Repaused:     true,
 			RepauseError: "e",
 		},
