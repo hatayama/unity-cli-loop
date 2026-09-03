@@ -175,11 +175,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string PreLineSnapshotTimingNote =
             "pre-line: variables are captured before ResolvedLine executes";
 
-        // Surfaced only when a clear actually resumed Play Mode, so the caller understands the
-        // clear had a side effect on run state. A manual pause (control-play-mode --action Pause
-        // or the Editor pause button) is left untouched by clear and never triggers this.
-        public const string ClearResumedPlayModeWarning =
-            "This clear resumed Play Mode because the pause was owned by a pause-point hit. "
+        // Surfaced only when a clear actually released EditorApplication.isPaused, so the caller
+        // understands the clear had a side effect on run state. Worded around the Editor pause
+        // rather than Play Mode because a hit can also pause in EditMode (a marker reached through
+        // execute-dynamic-code), where "resumed Play Mode" would describe a state that never
+        // existed. A manual pause (control-play-mode --action Pause or the Editor pause button)
+        // is left untouched by clear and never triggers this.
+        public const string ClearReleasedOwnedPauseWarning =
+            "This clear released the Editor pause because it was owned by a pause-point hit. "
             + "A manual pause set outside the pause-point workflow would have been left untouched.";
 
         // Release code optimization strips most sequence points and hoists/elides locals, so the
