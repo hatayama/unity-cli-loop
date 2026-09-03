@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool IsDeclaringTypeValueType { get; }
         public int InstructionIndex { get; }
         public int IlOffset { get; }
+        public SourcePausePointSnapshotTiming SnapshotTiming { get; }
         public int ResolvedLine { get; }
         // Sequence-point EndLine is internal transport for joining ResolvedLineText.
         // It is not a CLI response field.
@@ -36,6 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool isDeclaringTypeValueType,
             int instructionIndex,
             int ilOffset,
+            SourcePausePointSnapshotTiming snapshotTiming,
             int resolvedLine,
             int resolvedEndLine,
             int compiledMethodStartLine,
@@ -51,6 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IsDeclaringTypeValueType = isDeclaringTypeValueType;
             InstructionIndex = instructionIndex;
             IlOffset = ilOffset;
+            SnapshotTiming = snapshotTiming;
             ResolvedLine = resolvedLine;
             ResolvedEndLine = resolvedEndLine;
             CompiledMethodStartLine = compiledMethodStartLine;

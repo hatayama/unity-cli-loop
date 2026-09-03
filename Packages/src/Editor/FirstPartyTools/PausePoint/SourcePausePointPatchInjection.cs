@@ -18,6 +18,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public SourcePausePointPatchInjectionTargetKind TargetKind { get; }
         public MethodBase DonorShim { get; }
         public bool InstanceFromFirstArgument { get; }
+        // Why optional: a pre-line capture must run for every path that reaches the
+        // statement, so the displaced instruction's labels and exception-block markers move
+        // onto the injected prefix. A post-line capture must run only when the requested
+        // statement itself fell through into this instruction, so they stay put.
+        public bool MoveDisplacedMetadata { get; }
 
         public SourcePausePointPatchInjection(
             string id,
@@ -29,7 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourcePausePointPatchInjectionTargetKind targetKind =
                 SourcePausePointPatchInjectionTargetKind.OriginalBody,
             MethodBase donorShim = null,
-            bool instanceFromFirstArgument = false)
+            bool instanceFromFirstArgument = false,
+            bool moveDisplacedMetadata = true)
         {
             Id = id;
             InstructionIndex = instructionIndex;
@@ -40,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TargetKind = targetKind;
             DonorShim = donorShim;
             InstanceFromFirstArgument = instanceFromFirstArgument;
+            MoveDisplacedMetadata = moveDisplacedMetadata;
         }
     }
 }

@@ -175,6 +175,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string PreLineSnapshotTimingNote =
             "pre-line: variables are captured before ResolvedLine executes";
 
+        public const string PostLineSnapshotTimingNote =
+            "post-line: variables are captured after ResolvedLine finishes, before control leaves it";
+
+        public const string PreLineSnapshotTimingValue = "pre-line";
+
+        public const string PostLineSnapshotTimingValue = "post-line";
+
+        // Why a resolve failure rather than a silent pre-line fallback: a statement that
+        // always throws has no "after", and capturing before it would report values the
+        // caller explicitly asked not to see.
+        public const string PostLineAlwaysThrowsMessageFormat =
+            "Line {0} of {1} always throws, so there is no point after it to capture. Use --snapshot-timing pre-line or choose another line.";
+
         // Surfaced only when a clear actually released EditorApplication.isPaused, so the caller
         // understands the clear had a side effect on run state. Worded around the Editor pause
         // rather than Play Mode because a hit can also pause in EditMode (a marker reached through

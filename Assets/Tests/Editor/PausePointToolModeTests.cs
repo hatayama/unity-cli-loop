@@ -76,6 +76,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a non-default snapshot timing is rejected for an id marker, which has no source line to time against.
+        /// </summary>
+        [Test]
+        public async Task Enable_WhenIdMarkerUsesPostLineSnapshotTiming_ReturnsSourceMarkerValidationFailure()
+        {
+            EnablePausePointTool tool = new();
+            JObject parameters = new()
+            {
+                ["id"] = "jump",
+                ["snapshotTiming"] = "post-line"
+            };
+
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("--snapshot-timing requires a --file/--line marker."));
+        }
+
+        /// <summary>
         /// What: whitespace-only hit-when input is treated as an absent condition before arming an id marker.
         /// </summary>
         [Test]
