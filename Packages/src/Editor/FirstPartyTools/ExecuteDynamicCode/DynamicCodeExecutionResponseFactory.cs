@@ -96,7 +96,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PartialResults = result.PartialResults != null
                     ? new Dictionary<string, string>(result.PartialResults)
                     : new Dictionary<string, string>(),
-                Timings = result.Timings != null ? new List<string>(result.Timings) : new List<string>()
+                Timings = result.Timings != null ? new List<string>(result.Timings) : new List<string>(),
+                NextActions = result.NextActions.Count > 0 ? result.NextActions.ToArray() : null
             };
 
             if (!result.Success)

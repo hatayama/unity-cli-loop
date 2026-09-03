@@ -39,6 +39,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Verifies execution result next actions are exposed in the tool response.
+        /// </summary>
+        [Test]
+        public void ConvertExecutionResultToResponse_WhenNextActionsExist_MapsNextActions()
+        {
+            DynamicCodeExecutionResponseFactory factory = new();
+            ExecutionResult result = new()
+            {
+                Success = false,
+                NextActions = new List<string> { "Retry with statements only." }
+            };
+
+            ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result);
+
+            Assert.That(response.NextActions, Is.EqualTo(new[] { "Retry with statements only." }));
+        }
+
+        /// <summary>
+        /// Verifies an empty execution result action list stays absent from the tool response.
+        /// </summary>
+        [Test]
+        public void ConvertExecutionResultToResponse_WhenNextActionsAreEmpty_LeavesNextActionsNull()
+        {
+            DynamicCodeExecutionResponseFactory factory = new();
+            ExecutionResult result = new()
+            {
+                Success = true,
+                NextActions = new List<string>()
+            };
+
+            ExecuteDynamicCodeResponse response = factory.ConvertExecutionResultToResponse(result);
+
+            Assert.That(response.NextActions, Is.Null);
+        }
+
+        /// <summary>
         /// Verifies compilation failures expose deduplicated diagnostics, summary, hints, suggestions, and source context.
         /// </summary>
         [Test]
