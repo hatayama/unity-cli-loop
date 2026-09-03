@@ -29,6 +29,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             Debug.Assert(expiresAtUtc.Kind == DateTimeKind.Utc, "expiresAtUtc must be UTC");
             Debug.Assert(expiresAtUtc.Ticks > 0, "expiresAtUtc ticks must be positive");
 
+            // Why: a reused request id must not surface the previous run's result to the new poll.
+            ClearRunResult(requestId);
             SetPendingRequestIds(
                 UnityCliLoopEditorSessionStateStorage.AddRequestIdToIndex(GetPendingRequestIds(), requestId));
             SetPendingExpiresAtUtcTicks(requestId, expiresAtUtc.Ticks.ToString());

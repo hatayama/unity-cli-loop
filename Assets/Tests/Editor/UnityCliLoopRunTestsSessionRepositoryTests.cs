@@ -64,6 +64,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// Verifies registering a pending run under a reused request id drops the previous stored result.
+        /// </summary>
+        [Test]
+        public void StorePendingRun_WhenResultExistsForSameId_ClearsStaleResult()
+        {
+            _repository.StoreRunResult(
+                "run_tests_reused",
+                "{\"Success\":true}",
+                DateTime.UtcNow);
+
+            _repository.StorePendingRun("run_tests_reused", DateTime.UtcNow.AddMinutes(10));
+
+            UnityCliLoopStoredRunTestsResult storedResult = _repository.GetRunResult("run_tests_reused");
+            Assert.That(storedResult.HasResult, Is.False);
+            Assert.That(_repository.HasPendingRun("run_tests_reused"), Is.True);
+        }
+
+        /// <summary>
         /// Verifies ClearExpired drops an expired pending run and a result older than the result lifetime.
         /// </summary>
         [Test]

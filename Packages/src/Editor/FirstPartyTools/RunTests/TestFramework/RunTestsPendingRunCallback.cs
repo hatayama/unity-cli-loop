@@ -40,8 +40,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Formatting.None,
                 UnityCliLoopJsonResponseSerializerSettings.Settings);
             IRunTestsSessionRepository repository = UnityCliLoopRunTestsSessionRepositoryFacade.Repository;
-            IReadOnlyList<string> requestIds = repository.GetPendingRunRequestIds();
             DateTime completedAtUtc = DateTime.UtcNow;
+            // Why: an expired pending id from an abandoned run must not receive this unrelated result.
+            repository.ClearExpired(completedAtUtc);
+            IReadOnlyList<string> requestIds = repository.GetPendingRunRequestIds();
             foreach (string requestId in requestIds)
             {
                 repository.StoreRunResult(requestId, resultJson, completedAtUtc);

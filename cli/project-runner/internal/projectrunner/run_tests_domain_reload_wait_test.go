@@ -319,3 +319,14 @@ func runTestsStatusResultOnSecondQuery(
 		}, nil
 	}
 }
+
+// Verifies the wait timeout error is retryable but not marked safe to retry, because Unity may still be running the suite.
+func TestRunTestsWaitTimeoutErrorIsNotSafeToRetry(t *testing.T) {
+	cliErr := runTestsWaitTimeoutError("/project", 30*time.Second)
+	if cliErr.ErrorCode != runTestsWaitTimeoutErrorCode {
+		t.Fatalf("error code mismatch: %s", cliErr.ErrorCode)
+	}
+	if !cliErr.Retryable || cliErr.SafeToRetry {
+		t.Fatalf("retry flags mismatch: retryable=%v safeToRetry=%v", cliErr.Retryable, cliErr.SafeToRetry)
+	}
+}

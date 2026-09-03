@@ -280,8 +280,10 @@ func runTestsWaitTimeoutError(projectRoot string, timeout time.Duration) clierro
 		Message: fmt.Sprintf(
 			"run-tests status wait timed out after %dms. This does not mean the Unity Editor is frozen; the PlayMode test run may still be finishing after Domain Reload.",
 			timeout.Milliseconds()),
-		Retryable:   true,
-		SafeToRetry: true,
+		Retryable: true,
+		// Why not SafeToRetry: Unity may still be running the accepted suite after the reload,
+		// so an immediate rerun would start a duplicate run.
+		SafeToRetry: false,
 		ProjectRoot: projectRoot,
 		Command:     clicore.RunTestsCommandName,
 		NextActions: []string{

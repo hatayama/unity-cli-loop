@@ -44,7 +44,7 @@ This is also a strategy to avoid consuming context.
 ```
 > [!WARNING]
 > During PlayMode test execution, Domain Reload is forcibly turned OFF. (Settings are restored after test completion)
-> Note that static variables will not be reset during this period.
+> Note that static variables will not be reset while Domain Reload is forced OFF. With `--respect-enter-play-mode-settings`, the project setting decides whether they are reset.
 > Pass `--respect-enter-play-mode-settings` to keep the project's Enter Play Mode settings instead of forcing Domain Reload off.
 
 ### 4. hot-reload - Apply Method-Body Changes Instantly Without Recompiling
