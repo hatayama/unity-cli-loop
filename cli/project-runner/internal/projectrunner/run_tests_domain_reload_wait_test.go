@@ -1,8 +1,10 @@
 package projectrunner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -189,5 +191,131 @@ func TestWaitForRunTestsResultReturnsContextError(t *testing.T) {
 	}
 	if result != nil {
 		t.Fatalf("cancelled result should be nil: %s", result)
+	}
+}
+
+// Verifies accepted-after-send disconnect polls get-run-tests-status and returns the stored JSON.
+func TestRunRunTestsWithDomainReloadWaitRecoversStoredResultAfterAcceptedDisconnect(t *testing.T) {
+	connection := compileWaitTestConnection(t)
+	params := map[string]any{
+		runTestsRespectEnterPlayModeSettingsParam: true,
+		runTestsTestModeParam:                     "PlayMode",
+	}
+	queryCalls := 0
+	stderr := bytes.Buffer{}
+	execution := runRunTestsWithDomainReloadWaitWithDeps(
+		context.Background(),
+		connection,
+		params,
+		&stderr,
+		runTestsWaitDeps{
+			send:  runTestsAcceptedDisconnectSend,
+			query: runTestsStatusResultOnSecondQuery(&queryCalls, `{"Success":true,"TestCount":1}`),
+		},
+	)
+	if execution.exitCode != 0 {
+		t.Fatalf("exit code mismatch: got %d want 0 stderr=%s", execution.exitCode, stderr.String())
+	}
+	if string(execution.result) != `{"Success":true,"TestCount":1}` {
+		t.Fatalf("recovered result mismatch: %s", execution.result)
+	}
+	if queryCalls != 2 {
+		t.Fatalf("query call count mismatch: got %d want 2", queryCalls)
+	}
+	requestID, ok := params[runTestsRequestIDParam].(string)
+	if !ok || !strings.HasPrefix(requestID, "run_tests_") {
+		t.Fatalf("generated request id mismatch: %#v", params[runTestsRequestIDParam])
+	}
+}
+
+// Verifies a send error that is not waitable fails immediately without polling.
+func TestRunRunTestsWithDomainReloadWaitDoesNotPollWhenSendIsNotWaitable(t *testing.T) {
+	connection := compileWaitTestConnection(t)
+	params := map[string]any{
+		runTestsRespectEnterPlayModeSettingsParam: true,
+		runTestsTestModeParam:                     "PlayMode",
+	}
+	queryCalls := 0
+	stderr := bytes.Buffer{}
+	execution := runRunTestsWithDomainReloadWaitWithDeps(
+		context.Background(),
+		connection,
+		params,
+		&stderr,
+		runTestsWaitDeps{
+			send: func(
+				context.Context,
+				unityipc.Connection,
+				string,
+				map[string]any,
+				unityipc.ProgressFunc,
+			) (unityipc.UnitySendOutcome, error) {
+				return unityipc.UnitySendOutcome{}, fmt.Errorf("missing")
+			},
+			query: func(context.Context, unityipc.Connection, string) (runTestsStatusResponse, error) {
+				queryCalls++
+				return runTestsStatusResponse{}, nil
+			},
+		},
+	)
+	if execution.exitCode != 1 {
+		t.Fatalf("exit code mismatch: got %d want 1", execution.exitCode)
+	}
+	if queryCalls != 0 {
+		t.Fatalf("query must not run for a non-waitable send error: calls=%d", queryCalls)
+	}
+}
+
+// Verifies toolEnvelopeExitCode is applied to a recovered unsuccessful result.
+func TestRunRunTestsWithDomainReloadWaitUsesRecoveredResultExitCode(t *testing.T) {
+	connection := compileWaitTestConnection(t)
+	params := map[string]any{
+		runTestsRespectEnterPlayModeSettingsParam: true,
+		runTestsTestModeParam:                     "PlayMode",
+	}
+	queryCalls := 0
+	stderr := bytes.Buffer{}
+	execution := runRunTestsWithDomainReloadWaitWithDeps(
+		context.Background(),
+		connection,
+		params,
+		&stderr,
+		runTestsWaitDeps{
+			send:  runTestsAcceptedDisconnectSend,
+			query: runTestsStatusResultOnSecondQuery(&queryCalls, `{"Success":false}`),
+		},
+	)
+	if execution.exitCode != 1 {
+		t.Fatalf("exit code mismatch: got %d want 1 stderr=%s", execution.exitCode, stderr.String())
+	}
+	if string(execution.result) != `{"Success":false}` {
+		t.Fatalf("recovered result mismatch: %s", execution.result)
+	}
+}
+
+func runTestsAcceptedDisconnectSend(
+	context.Context,
+	unityipc.Connection,
+	string,
+	map[string]any,
+	unityipc.ProgressFunc,
+) (unityipc.UnitySendOutcome, error) {
+	return unityipc.UnitySendOutcome{RequestDispatched: true, RequestAccepted: true},
+		fmt.Errorf("read tcp 127.0.0.1:1: i/o timeout")
+}
+
+func runTestsStatusResultOnSecondQuery(
+	queryCalls *int,
+	resultJSON string,
+) runTestsStatusQueryFunc {
+	return func(context.Context, unityipc.Connection, string) (runTestsStatusResponse, error) {
+		*queryCalls++
+		if *queryCalls < 2 {
+			return runTestsStatusResponse{HasResult: false}, nil
+		}
+		return runTestsStatusResponse{
+			HasResult: true,
+			Result:    json.RawMessage(resultJSON),
+		}, nil
 	}
 }

@@ -45,6 +45,26 @@ type runTestsStatusResponse struct {
 
 type runTestsStatusQueryFunc func(context.Context, unityipc.Connection, string) (runTestsStatusResponse, error)
 
+type runTestsSendFunc func(
+	ctx context.Context,
+	connection unityipc.Connection,
+	method string,
+	params map[string]any,
+	progress unityipc.ProgressFunc,
+) (unityipc.UnitySendOutcome, error)
+
+type runTestsWaitDeps struct {
+	send  runTestsSendFunc
+	query runTestsStatusQueryFunc
+}
+
+func defaultRunTestsWaitDeps() runTestsWaitDeps {
+	return runTestsWaitDeps{
+		send:  sendWithTransientConnectionRetry,
+		query: queryRunTestsStatusFromUnity,
+	}
+}
+
 // shouldWaitForRunTestsDomainReload is true only for PlayMode runs that keep the
 // project's Enter Play Mode settings. EditMode and the default force-off path
 // still use the in-memory response and must not poll get-run-tests-status.
@@ -149,15 +169,15 @@ func runRunTestsWithDomainReloadWait(
 	params map[string]any,
 	stderr io.Writer,
 ) toolExecutionResult {
-	return runRunTestsWithDomainReloadWaitWithQuery(ctx, connection, params, stderr, queryRunTestsStatusFromUnity)
+	return runRunTestsWithDomainReloadWaitWithDeps(ctx, connection, params, stderr, defaultRunTestsWaitDeps())
 }
 
-func runRunTestsWithDomainReloadWaitWithQuery(
+func runRunTestsWithDomainReloadWaitWithDeps(
 	ctx context.Context,
 	connection unityipc.Connection,
 	params map[string]any,
 	stderr io.Writer,
-	query runTestsStatusQueryFunc,
+	deps runTestsWaitDeps,
 ) toolExecutionResult {
 	requestID, err := prepareRunTestsWaitParams(params)
 	if err != nil {
@@ -171,7 +191,7 @@ func runRunTestsWithDomainReloadWaitWithQuery(
 	applyDebugTimingParams(clicore.RunTestsCommandName, params)
 	startedAt := time.Now()
 	spinner := clicore.NewToolSpinner(stderr, clicore.RunTestsCommandName)
-	outcome, err := sendWithTransientConnectionRetry(
+	outcome, err := deps.send(
 		ctx,
 		connection,
 		clicore.RunTestsCommandName,
@@ -201,7 +221,7 @@ func runRunTestsWithDomainReloadWaitWithQuery(
 		spinner,
 		startedAt,
 		outcome,
-		query,
+		deps.query,
 	)
 }
 
