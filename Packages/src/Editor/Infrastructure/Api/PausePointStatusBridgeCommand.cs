@@ -216,6 +216,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 throw new ArgumentNullException(nameof(snapshot));
             }
 
+            IReadOnlyList<string> warnings = BuildStatusWarnings(snapshot);
             return new PausePointStatusResponse
             {
                 Id = snapshot.Id,
@@ -265,16 +266,27 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 SuppressedByHotReload = snapshot.SuppressedByHotReload,
                 RetargetedToHotReloadPatch = snapshot.RetargetedToHotReloadPatch,
                 SuppressedByHotReloadReason = snapshot.SuppressedByHotReloadReason,
-                // Why reason as Warning: agents already read Warning; suppressed=false clears both.
-                Warning = snapshot.SuppressedByHotReload ? snapshot.SuppressedByHotReloadReason : null,
-                Warnings = snapshot.SuppressedByHotReload && !string.IsNullOrEmpty(snapshot.SuppressedByHotReloadReason)
-                    ? new[] { snapshot.SuppressedByHotReloadReason }
-                    : null,
+                // Warning is only ever the joined form of Warnings: a caller reading one of the
+                // two must never see fewer topics than the other carries.
+                Warning = warnings == null ? null : string.Join(" ", warnings),
+                Warnings = warnings,
                 ResolvedLine = snapshot.ResolvedLine,
                 ResolvedLineText = string.IsNullOrEmpty(snapshot.ResolvedLineText)
                     ? null
                     : snapshot.ResolvedLineText
             };
+        }
+
+        // Why a list and not a string: Warnings is the single aggregate, and Warning is derived
+        // from it. Null (rather than an empty list) so both fields stay omitted when nothing warned.
+        private static IReadOnlyList<string> BuildStatusWarnings(UloopPausePointSnapshot snapshot)
+        {
+            if (!snapshot.SuppressedByHotReload || string.IsNullOrEmpty(snapshot.SuppressedByHotReloadReason))
+            {
+                return null;
+            }
+
+            return new[] { snapshot.SuppressedByHotReloadReason };
         }
 
         // Why duplicate: this bridge must not reference the Editor-only PausePoint assembly.

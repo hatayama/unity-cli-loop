@@ -165,7 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(result));
             }
 
-            return new PausePointResponse
+            PausePointResponse response = new()
             {
                 Status = UloopPausePointStatus.Cleared,
                 ClearedCount = result.ClearedCount,
@@ -173,16 +173,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Message = result.ClearedCount == 0
                     ? "No active pause points to clear."
                     : "Pause points cleared.",
-                Warning = result.ResumedFromPause
-                    ? SourcePausePointConstants.ClearReleasedOwnedPauseWarning
-                    : string.Empty,
-                Warnings = result.ResumedFromPause
-                    ? new[] { SourcePausePointConstants.ClearReleasedOwnedPauseWarning }
-                    : Array.Empty<string>(),
                 RecommendedNextAction = result.ResumedFromPause
                     ? SourcePausePointConstants.ClearReleasedPauseRecommendedNextAction
                     : string.Empty
             };
+            // Why routed through the shared list: it is the one place that keeps Warning the joined
+            // form of Warnings and points Message at the aggregate.
+            List<string> warnings = new();
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warnings,
+                result.ResumedFromPause
+                    ? SourcePausePointConstants.ClearReleasedOwnedPauseWarning
+                    : string.Empty);
+            PausePointEnableWarningList.Assign(response, warnings);
+            return response;
         }
 
         private static string ResolveExpiredRecommendedNextAction(string status, string recommendedNextAction)
