@@ -177,7 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < markerIds.Count; index++)
             {
                 string id = markerIds[index];
-                if (!SourcePausePointPatcher.RequestById.TryGetValue(id, out (string NormalizedFile, int Line) request))
+                if (!SourcePausePointPatcher.RequestById.TryGetValue(id, out SourcePausePointEnableRequest request))
                 {
                     SuppressMarkerRetargetFailed(id);
                     continue;
@@ -194,7 +194,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SourcePausePointShimResolution shimResolution = SourcePausePointShimResolver.Resolve(
                     lookup,
                     request.NormalizedFile,
-                    request.Line);
+                    request.Line,
+                    methodFilter: null,
+                    request.SnapshotTiming);
                 if (shimResolution.Kind != SourcePausePointShimResolveKind.TransplantChainJoin
                     && shimResolution.Kind != SourcePausePointShimResolveKind.ShimDirect)
                 {
@@ -254,15 +256,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < markerIds.Count; index++)
             {
                 string id = markerIds[index];
-                if (!SourcePausePointPatcher.RequestById.TryGetValue(id, out (string NormalizedFile, int Line) request))
+                if (!SourcePausePointPatcher.RequestById.TryGetValue(id, out SourcePausePointEnableRequest request))
                 {
                     UloopPausePointRegistry.SetResolvedLine(id, 0, null);
                     SuppressMarkerRestoreFailed(id);
                     continue;
                 }
 
-                SourcePausePointResolveResult resolveResult =
-                    SourcePausePointResolver.Resolve(request.NormalizedFile, request.Line);
+                SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(
+                    request.NormalizedFile,
+                    request.Line,
+                    methodFilter: null,
+                    request.SnapshotTiming);
                 if (!resolveResult.Success)
                 {
                     UloopPausePointRegistry.SetResolvedLine(id, 0, null);
@@ -346,10 +351,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void ReanchorMarkerWithoutInjection(
             string id,
             MethodBase logicalOwner,
-            (string NormalizedFile, int Line) request)
+            SourcePausePointEnableRequest request)
         {
             SourcePausePointPatcher.LogicalOwnerById[id] = logicalOwner;
-            SourcePausePointPatcher.RequestById[id] = (request.NormalizedFile, request.Line);
+            SourcePausePointPatcher.RequestById[id] = request;
         }
 
         private static void SuppressMarkerRetargetFailed(string id)
