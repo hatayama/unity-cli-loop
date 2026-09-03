@@ -20,6 +20,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             return scratch[0] * multiplier;
         }
 
+        // The leading parameter is byref here specifically so skipFirstParameter is observable:
+        // skipping it changes the reported list, which a fixture with a capturable first
+        // parameter could never show.
+        public int CombineLeadingByRef(ref int accumulator, int value, in int multiplier)
+        {
+            accumulator += value;
+            return accumulator * multiplier;
+        }
+
         // The capturable-only counterpart, so the empty not-capturable list is asserted against
         // a method that really has nothing to report.
         public int Add(int left, int right)

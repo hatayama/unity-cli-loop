@@ -56,6 +56,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string hitWhenErrorNote)
         {
             Debug.Assert(editorState != null, "editorState must not be null");
+            // Why a precondition instead of a null coalesce: every writer already supplies a list
+            // (the entry initializes it, SetNotCapturableVariables asserts non-null, and the
+            // NotEnabled factory passes Array.Empty), so a null here is a caller bug to surface.
+            Debug.Assert(notCapturableVariables != null, "notCapturableVariables must not be null");
 
             Id = id ?? string.Empty;
             Status = status ?? UloopPausePointStatus.NotEnabled;
@@ -87,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             CapturedVariablesTruncated = capturedVariablesTruncated;
             TruncatedVariableNames = truncatedVariableNames ?? Array.Empty<string>();
             TruncatedVariableCount = truncatedVariableCount;
-            NotCapturableVariables = notCapturableVariables ?? Array.Empty<string>();
+            NotCapturableVariables = notCapturableVariables;
             ClearedReason = clearedReason ?? string.Empty;
             StatusBeforeClear = statusBeforeClear ?? string.Empty;
             LateHitDiscardedAfterClear = lateHitDiscardedAfterClear;

@@ -124,6 +124,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: skipFirstParameter drops a leading byref parameter from the reflection
+        /// not-capturable list, so the skip is observable in the reported names.
+        /// </summary>
+        [Test]
+        public void CollectNotCapturableParametersFromReflection_SkipFirstParameter_DropsLeadingByRefParameter()
+        {
+            MethodBase method = FindReflectionFixtureMethod("CombineLeadingByRef");
+
+            List<string> notCapturable =
+                SourcePausePointCaptureEligibility.CollectNotCapturableParametersFromReflection(
+                    method,
+                    skipFirstParameter: true);
+
+            Assert.That(
+                notCapturable,
+                Is.EqualTo(new[] { "multiplier (" + SourcePausePointConstants.NotCapturableByRefParameterReason + ")" }));
+        }
+
+        /// <summary>
+        /// What: without the skip, the same leading byref parameter is reported, which is what
+        /// makes the skipping assertion above meaningful.
+        /// </summary>
+        [Test]
+        public void CollectNotCapturableParametersFromReflection_WithoutSkip_KeepsLeadingByRefParameter()
+        {
+            MethodBase method = FindReflectionFixtureMethod("CombineLeadingByRef");
+
+            List<string> notCapturable =
+                SourcePausePointCaptureEligibility.CollectNotCapturableParametersFromReflection(
+                    method,
+                    skipFirstParameter: false);
+
+            Assert.That(
+                notCapturable,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "accumulator (" + SourcePausePointConstants.NotCapturableByRefParameterReason + ")",
+                        "multiplier (" + SourcePausePointConstants.NotCapturableByRefParameterReason + ")"
+                    }));
+        }
+
+        /// <summary>
         /// What: a reflection method whose parameters are all capturable reports an empty list.
         /// </summary>
         [Test]
