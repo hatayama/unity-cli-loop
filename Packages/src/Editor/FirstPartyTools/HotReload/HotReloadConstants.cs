@@ -261,6 +261,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage =
             "Hot reload finished with no methods patched. See Warnings for Skipped reasons and Methods for AlreadyActive reasons.";
 
+        // Format: leftover patches peeled because source matched compiled IL again.
+        public const string StalePatchesRevertedMessageFormat =
+            "{0} stale patch(es) were reverted so those methods run the compiled IL again.";
+
         // Format: skipped method identity, then the reason it could not be patched.
         public const string SkippedMethodWarningFormat = "Skipped {0}: {1}";
 

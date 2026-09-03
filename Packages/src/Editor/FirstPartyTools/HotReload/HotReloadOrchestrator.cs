@@ -47,6 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new List<HotReloadOneShotCallerNoteEnricher.Candidate>();
             int patchedTotal = 0;
             int unchangedTotal = 0;
+            int revertedUnchangedTotal = 0;
             // Why after the file loop (not inside ProcessFileAsync): duplicate paths in one
             // run must still apply twice; recording mid-run would short-circuit the second copy.
             Dictionary<string, (string Hash, bool IsFullyApplied)> appliedSourceHashByPath =
@@ -82,6 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadOutcomeAggregation.AppendDistinct(inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
                 patchedTotal += fileResult.PatchedCount;
                 unchangedTotal += fileResult.UnchangedMethodCount;
+                revertedUnchangedTotal += fileResult.RevertedUnchangedCount;
                 addedFields.AddRange(fileResult.AddedFieldNames);
                 addedConsts.AddRange(fileResult.AddedConstNames);
                 HotReloadAppliedSourceLifecycle.StageAppliedSourceHash(
@@ -148,7 +150,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unchangedTotal,
                 retargetedPausePointIds,
                 addedFields.ToArray(),
-                addedConsts.ToArray());
+                addedConsts.ToArray(),
+                revertedUnchangedTotal);
         }
 
         private static async Task<HotReloadFileProcessResult> ProcessFileAsync(
@@ -254,7 +257,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why before the empty-entries return: all-unchanged runs exit there, and those are
             // exactly the runs that must peel leftover patches so behavior converges to compiled IL.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            HotReloadEntryApplier.RevertUnchangedPatches(assemblyName, unchangedMethods);
+            int revertedUnchangedCount = HotReloadEntryApplier.RevertUnchangedPatches(
+                assemblyName,
+                unchangedMethods);
 
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = await HotReloadSignatureChangeGate.TryApplySignatureChangeGateAsync(
                 projectRoot,
@@ -294,7 +299,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     warnings,
                     0,
                     unchangedMethodCount: unchangedMethodCount,
-                    sourceContentSha256: workerOutput.sourceContentSha256);
+                    sourceContentSha256: workerOutput.sourceContentSha256)
+                    .WithRevertedUnchangedCount(revertedUnchangedCount);
             }
 
             outcomes.AddRange(gateResult.SkippedOutcomes);
@@ -326,7 +332,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ct).ConfigureAwait(false);
             if (earlyEntries != null)
             {
-                return earlyEntries;
+                return earlyEntries.WithRevertedUnchangedCount(revertedUnchangedCount);
             }
 
             addedFieldNames = resolvedAddedFieldNames;
@@ -354,7 +360,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         warnings,
                         0,
                         unchangedMethodCount: unchangedMethodCount,
-                        sourceContentSha256: workerOutput.sourceContentSha256);
+                        sourceContentSha256: workerOutput.sourceContentSha256)
+                        .WithRevertedUnchangedCount(revertedUnchangedCount);
                 }
 
                 HotReloadSignatureChangeCoverage.AppendSignatureChangeCallersRepatchedWarnings(
@@ -390,7 +397,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 applied,
                 workerOutput,
                 gateResult.GatedReplacementMethodKeys);
-            return applied;
+            return applied.WithRevertedUnchangedCount(revertedUnchangedCount);
         }
 
         private static void RecordSupersededSignaturesAfterApply(
@@ -540,44 +547,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return contentPathOverride;
-        }
-
-        internal sealed class HotReloadFileProcessResult
-        {
-            public List<HotReloadMethodOutcome> Outcomes { get; }
-            public List<string> Warnings { get; }
-            public int PatchedCount { get; }
-            public List<string> SuppressedPausePointIds { get; }
-            public List<string> RetargetedPausePointIds { get; }
-            public List<string> InlineRiskMethodLabels { get; }
-            public int UnchangedMethodCount { get; }
-            public string[] AddedFieldNames { get; }
-            public string[] AddedConstNames { get; }
-            public string SourceContentSha256 { get; }
-
-            public HotReloadFileProcessResult(
-                List<HotReloadMethodOutcome> outcomes,
-                List<string> warnings,
-                int patchedCount,
-                List<string> suppressedPausePointIds = null,
-                List<string> inlineRiskMethodLabels = null,
-                int unchangedMethodCount = 0,
-                List<string> retargetedPausePointIds = null,
-                string[] addedFieldNames = null,
-                string sourceContentSha256 = null,
-                string[] addedConstNames = null)
-            {
-                Outcomes = outcomes;
-                Warnings = warnings;
-                PatchedCount = patchedCount;
-                SuppressedPausePointIds = suppressedPausePointIds ?? new List<string>();
-                InlineRiskMethodLabels = inlineRiskMethodLabels ?? new List<string>();
-                UnchangedMethodCount = unchangedMethodCount;
-                RetargetedPausePointIds = retargetedPausePointIds ?? new List<string>();
-                AddedFieldNames = addedFieldNames ?? Array.Empty<string>();
-                SourceContentSha256 = sourceContentSha256;
-                AddedConstNames = addedConstNames ?? Array.Empty<string>();
-            }
         }
     }
 }

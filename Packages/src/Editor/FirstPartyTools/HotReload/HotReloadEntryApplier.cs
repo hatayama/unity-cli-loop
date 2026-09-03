@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         // Why preflight before BeginFileGeneration: a match/bind/CheckPatchable failure
         // must not replace the file's shim or added-member generation.
-        internal static HotReloadOrchestrator.HotReloadFileProcessResult ApplyEntriesAndBuildResult(
+        internal static HotReloadFileProcessResult ApplyEntriesAndBuildResult(
             string assemblyName,
             string assemblyResolvePath,
             string projectRelativePath,
@@ -98,7 +98,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 inlineRiskMethodLabels);
         }
 
-        private static HotReloadOrchestrator.HotReloadFileProcessResult FinishFileResult(
+        private static HotReloadFileProcessResult FinishFileResult(
             List<HotReloadMethodOutcome> outcomes,
             List<string> warnings,
             HashSet<string> snapshotLabels,
@@ -122,7 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 workerOutput,
                 outcomes);
-            return new HotReloadOrchestrator.HotReloadFileProcessResult(
+            return new HotReloadFileProcessResult(
                 outcomes,
                 warnings,
                 patchedCount,
@@ -240,13 +240,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Peels leftover Harmony patches when the source again matches the verified baseline.
         // Resolve failures are silent: unchanged identities already matched compile-time IL.
-        internal static void RevertUnchangedPatches(
+        // Returns how many Revert calls actually removed a live patch.
+        internal static int RevertUnchangedPatches(
             string assemblyName,
             TransformWorkerUnchangedMethodDto[] unchangedMethods)
         {
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
             Debug.Assert(unchangedMethods != null, "unchangedMethods must not be null.");
 
+            int revertedCount = 0;
             for (int index = 0; index < unchangedMethods.Length; index++)
             {
                 TransformWorkerUnchangedMethodDto unchanged = unchangedMethods[index];
@@ -272,8 +274,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                HotReloadPatcher.Revert(matchResult.Method);
+                if (HotReloadPatcher.Revert(matchResult.Method))
+                {
+                    revertedCount++;
+                }
             }
+
+            return revertedCount;
         }
 
         private static HotReloadMethodOutcome ApplyResolvedEntry(

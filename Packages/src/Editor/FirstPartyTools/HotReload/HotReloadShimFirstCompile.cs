@@ -21,7 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why a helper: the gate-retry / empty-entries / first-pass compile fork is one
         // entries-to-patch stage and kept ProcessFileAsync over CA1502.
         internal static async Task<(
-            HotReloadOrchestrator.HotReloadFileProcessResult EarlyResult,
+            HotReloadFileProcessResult EarlyResult,
             TransformWorkerEntryDto[] EntriesToPatch,
             HotReloadShimCompileResult CompileResult,
             string[] AddedFieldNames,
@@ -54,7 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (gateResult.Isolation.RetryEntries.Length == 0)
                 {
                     return (
-                        new HotReloadOrchestrator.HotReloadFileProcessResult(
+                        new HotReloadFileProcessResult(
                             outcomes,
                             warnings,
                             0,
@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     workerOutput,
                     outcomes);
                 return (
-                    new HotReloadOrchestrator.HotReloadFileProcessResult(
+                    new HotReloadFileProcessResult(
                         outcomes,
                         warnings,
                         0,
@@ -133,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 outcomes.AddRange(firstCompile.Outcomes);
                 return (
-                    new HotReloadOrchestrator.HotReloadFileProcessResult(
+                    new HotReloadFileProcessResult(
                         outcomes,
                         warnings,
                         0,
@@ -149,7 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (firstCompile.EntriesToPatch.Length == 0)
             {
                 return (
-                    new HotReloadOrchestrator.HotReloadFileProcessResult(
+                    new HotReloadFileProcessResult(
                         outcomes,
                         warnings,
                         0,

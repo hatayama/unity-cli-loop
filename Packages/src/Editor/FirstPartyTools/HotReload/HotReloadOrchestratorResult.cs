@@ -15,6 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public IReadOnlyList<string> SuppressedPausePointIds { get; }
         public IReadOnlyList<string> RetargetedPausePointIds { get; }
         public int UnchangedTotal { get; }
+        public int RevertedUnchangedTotal { get; }
         public string[] AddedFields { get; }
         public string[] AddedConsts { get; }
 
@@ -27,7 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int unchangedTotal = 0,
             IReadOnlyList<string> retargetedPausePointIds = null,
             string[] addedFields = null,
-            string[] addedConsts = null)
+            string[] addedConsts = null,
+            int revertedUnchangedTotal = 0)
         {
             Methods = methods;
             Warnings = warnings;
@@ -38,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RetargetedPausePointIds = retargetedPausePointIds ?? Array.Empty<string>();
             AddedFields = addedFields ?? Array.Empty<string>();
             AddedConsts = addedConsts ?? Array.Empty<string>();
+            RevertedUnchangedTotal = revertedUnchangedTotal;
         }
     }
 
