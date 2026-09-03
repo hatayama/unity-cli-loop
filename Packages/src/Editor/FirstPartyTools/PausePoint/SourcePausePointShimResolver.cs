@@ -21,7 +21,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadShimFileLookup lookup,
             string normalizedFilePath,
             int line,
-            string methodFilter = null)
+            string methodFilter = null,
+            SourcePausePointSnapshotTiming snapshotTiming = SourcePausePointSnapshotTiming.PreLine)
         {
             Debug.Assert(lookup != null, "lookup must not be null.");
             Debug.Assert(!string.IsNullOrEmpty(normalizedFilePath), "normalizedFilePath must not be empty.");
@@ -76,15 +77,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "match the file on disk.");
             }
 
-            int instructionIndex = SourcePausePointResolver.FindInstructionIndex(
-                containingMethod.Body.Instructions,
-                sequencePoint.Offset);
-            Debug.Assert(
-                instructionIndex >= 0,
-                "A sequence point's offset must correspond to an instruction in the same method body.");
+            if (!SourcePausePointInjectionSiteLocator.TryLocate(
+                    containingMethod,
+                    sequencePoint,
+                    snapshotTiming,
+                    out int instructionIndex,
+                    out int scopeOffset))
+            {
+                return SourcePausePointShimResolution.NoStatementInPatchedMethod(
+                    methodEntry.OriginalMethod,
+                    string.Format(
+                        SourcePausePointConstants.PostLineAlwaysThrowsMessageFormat,
+                        sequencePoint.StartLine,
+                        normalizedFilePath));
+            }
 
             List<SourcePausePointLocalVariable> locals =
-                SourcePausePointCaptureEligibility.CollectCapturableLocals(containingMethod, sequencePoint.Offset);
+                SourcePausePointCaptureEligibility.CollectCapturableLocals(containingMethod, scopeOffset);
             // Why fallback: observed during PR-3 development — shim PDBs with #line can place the
             // return sequence point after lexical local scopes close, so in-scope collection is
             // empty while named locals still exist in the method debug info.
@@ -107,6 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     methodEntry.OriginalMethod,
                     methodEntry.ShimMethod,
                     instructionIndex,
+                    snapshotTiming,
                     sequencePoint.StartLine,
                     locals,
                     parameters,
@@ -129,6 +139,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetMethod,
                 methodEntry.OriginalMethod,
                 instructionIndex,
+                snapshotTiming,
                 sequencePoint.StartLine,
                 locals,
                 shimParameters,

@@ -11,15 +11,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class PausePointEditedLineRemap
     {
         internal static (SourcePausePointResolveResult resolveResult, string remapWarning)
-            ResolveWithEditedLineRemap(string file, int line, string method)
+            ResolveWithEditedLineRemap(
+                string file,
+                int line,
+                string method,
+                SourcePausePointSnapshotTiming snapshotTiming)
         {
-            SourcePausePointResolveResult resolveResult = SourcePausePointResolver.Resolve(file, line, method);
+            SourcePausePointResolveResult resolveResult =
+                SourcePausePointResolver.Resolve(file, line, method, snapshotTiming);
             if (resolveResult.Success)
             {
                 return (resolveResult, string.Empty);
             }
 
-            return TryRemapAfterResolveFailure(resolveResult, file, line, method);
+            return TryRemapAfterResolveFailure(resolveResult, file, line, method, snapshotTiming);
         }
 
         internal static (SourcePausePointResolveResult resolveResult, string remapWarning)
@@ -27,7 +32,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 SourcePausePointResolveResult failedResult,
                 string file,
                 int line,
-                string method)
+                string method,
+                SourcePausePointSnapshotTiming snapshotTiming)
         {
             Debug.Assert(failedResult != null, "failedResult must not be null.");
             Debug.Assert(!failedResult.Success, "TryRemapAfterResolveFailure requires a failed resolve.");
@@ -72,7 +78,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return (failedResult, string.Empty);
             }
 
-            SourcePausePointResolveResult retry = SourcePausePointResolver.Resolve(file, remappedLine, method);
+            SourcePausePointResolveResult retry =
+                SourcePausePointResolver.Resolve(file, remappedLine, method, snapshotTiming);
             // Why exact line: Resolve rounds a comment or continuation forward, and the
             // remap warning claims the marker was placed at remappedLine.
             if (!retry.Success || retry.Resolution.ResolvedLine != remappedLine)
