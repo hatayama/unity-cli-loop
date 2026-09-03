@@ -185,6 +185,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     warningEntries,
                     SourcePausePointConstants.ClearReleasedOwnedPauseWarning);
                 PausePointEnableWarningList.Assign(response, warningEntries);
+
+                // FromSnapshot leaves this empty on a clear: the snapshot only carries a
+                // recommendation while Status is Expired, and Status is Cleared by now. So this
+                // fills the field rather than competing with an existing recommendation.
+                response.RecommendedNextAction =
+                    SourcePausePointConstants.ClearReleasedPauseRecommendedNextAction;
             }
 
             return response;

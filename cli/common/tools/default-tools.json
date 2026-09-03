@@ -433,7 +433,7 @@
     },
     {
       "name": "clear-pause-point",
-      "description": "Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is the number of markers this call transitioned to Cleared: 0 or 1 for `--id`, and the number transitioned for `--all`. Auto-disarmed and expired markers still count as 1; the record stays readable via `pause-point-status` (`StatusBeforeClear` keeps the prior state).",
+      "description": "Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is the number of markers this call transitioned to Cleared: 0 or 1 for `--id`, and the number transitioned for `--all`. Auto-disarmed and expired markers still count as 1; the record stays readable via `pause-point-status` (`StatusBeforeClear` keeps the prior state). Clearing the marker that owns the current pause releases the Editor pause and lets the game consume any state you arranged while paused: arm the next marker first, then clear the old id, or re-arm it with `--await --resume-play` instead of clearing.",
       "inputSchema": {
         "type": "object",
         "properties": {
