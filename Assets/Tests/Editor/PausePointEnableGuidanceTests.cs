@@ -72,6 +72,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void ResolveSuccessEnableRecommendedNextAction_WhenExistingIsEmpty_ExplainsTriggerSubcommandFormat()
         {
+            // Keep the deprecated placeholder split so repository searches for its contiguous spelling
+            // report only real regressions in user-facing guidance.
             const string deprecatedPlaceholder = "<uloop " + "command>";
             string action = PausePointEnableWarnings.ResolveSuccessEnableRecommendedNextAction(
                 string.Empty,
