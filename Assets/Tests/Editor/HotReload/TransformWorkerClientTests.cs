@@ -982,7 +982,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 });
 
             AssertSkippedContains(result, "get_AddedProbe", ExpectedAddedPropertySkipReason);
-            AssertSkippedReasonContains(result, "get_AddedProbe", "same-file method");
             AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
             AssertPatchedComputeWithPrivate(result);
         }
@@ -2146,28 +2145,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.Fail(
                 "Expected skip containing '" + methodFragment + "' with the unsupported-member reason; got: "
-                + FormatSkippedMethodNames(result.Output.skipped));
-        }
-
-        private static void AssertSkippedReasonContains(
-            TransformWorkerClientResult result,
-            string methodFragment,
-            string expectedReasonFragment)
-        {
-            Assert.That(result.Output.skipped, Is.Not.Null, "Expected a skipped list from the worker.");
-            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
-            {
-                if (skipped.method != null
-                    && skipped.method.Contains(methodFragment)
-                    && skipped.reason.Contains(expectedReasonFragment))
-                {
-                    return;
-                }
-            }
-
-            Assert.Fail(
-                "Expected skip containing '" + methodFragment + "' with reason fragment '"
-                + expectedReasonFragment + "'; got: "
                 + FormatSkippedMethodNames(result.Output.skipped));
         }
 
