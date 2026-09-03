@@ -5,7 +5,7 @@ description: "Pauses Unity playback at any source file:line without editing code
 
 # uloop pause-point
 
-A pause point captures locals and branch reasons at an exact frame without a source edit. Use it instead of sleeps or after-the-fact reads when input delivery, event ordering, or transition-frame fidelity matters.
+A pause point captures locals and branch reasons at an exact frame without a source edit.
 
 ## Quick Check
 
@@ -47,7 +47,7 @@ Enable a pause point so Unity pauses when that code path is reached, either by a
 
 ### clear-pause-point
 
-Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is the number of markers this call transitioned to Cleared: 0 or 1 for `--id`, and the number transitioned for `--all`. Auto-disarmed and expired markers still count as 1; the record stays readable via `pause-point-status` (`StatusBeforeClear` keeps the prior state).
+Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is the number of markers this call transitioned to Cleared: 0 or 1 for `--id`, and the number transitioned for `--all`. Auto-disarmed and expired markers still count as 1; the record stays readable via `pause-point-status` (`StatusBeforeClear` keeps the prior state). Clearing the marker that owns the current pause resumes Play Mode and consumes any state you arranged while paused: arm the next marker first, then clear the old id, or re-arm the same marker with `--await --resume-play` instead of clearing.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -85,7 +85,7 @@ Clear one or all registered C# watch expressions
 
 `uloop pause-point-status` with no target lists every marker; inspect one with `--id "<file>:<line>"` or with `--file`/`--line` together (never both). `await-pause-point` takes the same two forms but always requires a target.
 
-On a wait timeout or `PAUSE_POINT_EXPIRED`, read `Error.Details.Hint`, then `RecommendedNextAction`; see `references/troubleshooting.md` for diagnosis. After hot reload, use `--method <Type.Method>` to constrain `--line`.
+On a wait timeout, `PAUSE_POINT_EXPIRED`, or an enable failure, read `Error.Details.Hint` or the failure `ErrorCode`, then `RecommendedNextAction`. After hot reload, use `--method <Type.Method>` to constrain `--line`.
 
 ## Requirements & Safety
 
@@ -94,12 +94,11 @@ On a wait timeout or `PAUSE_POINT_EXPIRED`, read `Error.Details.Hint`, then `Rec
 - Patches do not survive compiles or domain reloads — re-enable afterwards (a Play entry with Domain Reload enabled removes every source pause point; the enable response warns). `uloop compile` during PlayMode also resets the session.
 - Physics message methods, their helpers, and pre-bound delegates can miss hits on pre-existing GameObjects; the enable response warns where detectable.
 - An `--id` marker waits on a hand-written `UloopPausePoint.Pause(id)` call; its hits record no `CapturedVariables`.
-- On an enable failure, branch on the failure `ErrorCode` and follow `RecommendedNextAction`.
 - For scripts under `Packages/`, pass the package-id path form (`Packages/<package-id>/...`); physical checkout paths do not resolve.
 
 ## Reference Guides
 
-All live in `references/` beside this skill; read the one whose trigger matches:
+Read the one whose trigger matches:
 
 - `references/quick-check-template.md` — full `--trigger`/`--await`/`--resume-play` loop, timeouts, hit fields.
 - `references/captured-variables.md` — captures, name filters, `--expect` value forms, caller frames, raw values.
