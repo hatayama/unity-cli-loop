@@ -115,6 +115,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a hidden sequence point that contains a same-line if branch remains in the
+        /// same-line run when the following visible point is the if body.
+        /// </summary>
+        [Test]
+        public void Locate_SameLineIfBodyWithHiddenBranch_ExtendsThroughTheBodyToTheJoinPoint()
+        {
+            List<SourcePausePointInstructionCandidate> instructions = new List<SourcePausePointInstructionCandidate>
+            {
+                Instruction(0),
+                Instruction(1),
+                Instruction(2),
+                Instruction(3, SourcePausePointInstructionFlow.ConditionalBranch, branchTargetOffset: 6),
+                Instruction(4),
+                Instruction(5),
+                Instruction(6),
+                Instruction(7, SourcePausePointInstructionFlow.Return),
+            };
+            List<SourcePausePointSequencePointCandidate> points = new List<SourcePausePointSequencePointCandidate>
+            {
+                Point(10, 0),
+                Point(0, 2, hidden: true),
+                Point(10, 4),
+                Point(11, 6),
+                Point(12, 7),
+            };
+
+            SourcePausePointPostLineSite site = SourcePausePointPostLineSiteLocator.Locate(instructions, points, 0);
+
+            Assert.That(site.Kind, Is.EqualTo(SourcePausePointPostLineSiteKind.Fallthrough));
+            Assert.That(site.InstructionIndex, Is.EqualTo(6));
+            Assert.That(site.ScopeOffset, Is.EqualTo(5));
+        }
+
+        /// <summary>
         /// What: a same-line conditional branch back to an earlier instruction keeps
         /// post-line capture before the branch.
         /// </summary>

@@ -5,9 +5,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Finds where "after line N" lands: the end of the selected statement's own IL range,
-    /// extending across same-line fallthrough and conditionals that jump forward beyond the
-    /// same-line run. Other successor sequence points can be join points reached by paths that
-    /// never ran line N, so the capture remains inside the selected statement's range.
+    /// extending across same-line fallthrough and compiler-hidden branch ranges when their
+    /// conditionals jump forward beyond the same-line run. If the body exits, or another
+    /// successor can skip line N, the capture remains before the relevant control transfer.
     /// </summary>
     internal static class SourcePausePointPostLineSiteLocator
     {
@@ -27,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int sameLineRunEndOffset = FindSameLineRunEndOffset(points, selected);
             int lastIndex;
             int boundaryPointIndex;
+            int firstCrossedConditionalBranchIndex = -1;
             while (true)
             {
                 boundaryPointIndex = FindBoundaryPointIndex(points, rangeStartOffset);
@@ -44,10 +45,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     break;
                 }
 
-                // `a = 1; b = 2;` and `if (c) a = 1;` both finish after their same-line
-                // continuation. Backward branches and branches into that run remain control
-                // transfers because following them would capture a different execution path.
+                if (firstCrossedConditionalBranchIndex < 0 &&
+                    instructions[lastIndex].Flow == SourcePausePointInstructionFlow.ConditionalBranch)
+                {
+                    firstCrossedConditionalBranchIndex = lastIndex;
+                }
+
+                // Same-line statements and compiler-hidden if branches extend through their
+                // continuation. The first crossed branch remains the safe fallback when that
+                // continuation exits instead of reaching the join point.
                 rangeStartOffset = points[boundaryPointIndex].Offset;
+            }
+
+            if (firstCrossedConditionalBranchIndex >= 0 &&
+                instructions[lastIndex].Flow != SourcePausePointInstructionFlow.Next)
+            {
+                int conditionalBranchOffset = instructions[firstCrossedConditionalBranchIndex].Offset;
+                return new SourcePausePointPostLineSite(
+                    SourcePausePointPostLineSiteKind.BeforeControlTransfer,
+                    firstCrossedConditionalBranchIndex,
+                    conditionalBranchOffset);
             }
 
             int scopeOffset = instructions[lastIndex].Offset;
@@ -86,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             SourcePausePointSequencePointCandidate boundary = points[boundaryPointIndex];
-            if (boundary.IsHidden || boundary.StartLine != selectedLine)
+            if (boundary.Offset >= sameLineRunEndOffset)
             {
                 return false;
             }
@@ -114,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 SourcePausePointSequencePointCandidate boundary = points[boundaryPointIndex];
-                if (boundary.IsHidden || boundary.StartLine != selected.StartLine)
+                if (!IsPartOfSameLineRun(points, boundaryPointIndex, selected.StartLine))
                 {
                     return boundary.Offset;
                 }
@@ -123,9 +140,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        // The next sequence point in IL order after the range start, hidden ones included:
-        // a hidden point marks compiler-generated code (await continuations, foreach
-        // MoveNext) that is not part of the requested statement.
+        private static bool IsPartOfSameLineRun(
+            IReadOnlyList<SourcePausePointSequencePointCandidate> points,
+            int pointIndex,
+            int selectedLine)
+        {
+            SourcePausePointSequencePointCandidate point = points[pointIndex];
+            if (!point.IsHidden)
+            {
+                return point.StartLine == selectedLine;
+            }
+
+            int nextPointIndex = FindBoundaryPointIndex(points, point.Offset);
+            if (nextPointIndex < 0)
+            {
+                return false;
+            }
+
+            SourcePausePointSequencePointCandidate nextPoint = points[nextPointIndex];
+            return !nextPoint.IsHidden && nextPoint.StartLine == selectedLine;
+        }
+
+        // The next sequence point in IL order after the range start, hidden ones included.
+        // A hidden point belongs to a same-line run only when its immediate successor is a
+        // visible point on that line; await and foreach continuations therefore remain bounds.
         private static int FindBoundaryPointIndex(
             IReadOnlyList<SourcePausePointSequencePointCandidate> points,
             int rangeStartOffset)
