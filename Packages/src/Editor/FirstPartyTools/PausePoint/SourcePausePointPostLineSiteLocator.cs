@@ -5,9 +5,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Finds where "after line N" lands: the end of the selected statement's own IL range,
-    /// never a successor sequence point. A successor is a join point that other paths (an
-    /// early return, the else branch) reach too, so injecting there would capture executions
-    /// that never ran line N.
+    /// extending across same-line fallthrough and conditionals that jump forward beyond the
+    /// same-line run. Other successor sequence points can be join points reached by paths that
+    /// never ran line N, so the capture remains inside the selected statement's range.
     /// </summary>
     internal static class SourcePausePointPostLineSiteLocator
     {
@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             SourcePausePointSequencePointCandidate selected = points[selectedPointIndex];
             int rangeStartOffset = selected.Offset;
+            int sameLineRunEndOffset = FindSameLineRunEndOffset(points, selected);
             int lastIndex;
             int boundaryPointIndex;
             while (true)
@@ -33,14 +34,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 lastIndex = FindLastInstructionIndexBefore(instructions, rangeEndOffset);
                 Debug.Assert(lastIndex >= 0, "A sequence point range must contain at least one instruction.");
 
-                if (!ContinuesOnSameLine(instructions[lastIndex], points, boundaryPointIndex, selected.StartLine))
+                if (!ContinuesOnSameLine(
+                        instructions[lastIndex],
+                        points,
+                        boundaryPointIndex,
+                        selected.StartLine,
+                        sameLineRunEndOffset))
                 {
                     break;
                 }
 
-                // Why extend: `a = 1; b = 2;` on one line is two sequence points, and "after
-                // this line" means after both. A range that ends in a branch (a for-loop
-                // initializer jumping to its same-line condition) is never extended.
+                // `a = 1; b = 2;` and `if (c) a = 1;` both finish after their same-line
+                // continuation. Backward branches and branches into that run remain control
+                // transfers because following them would capture a different execution path.
                 rangeStartOffset = points[boundaryPointIndex].Offset;
             }
 
@@ -71,15 +77,50 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourcePausePointInstructionCandidate last,
             IReadOnlyList<SourcePausePointSequencePointCandidate> points,
             int boundaryPointIndex,
-            int selectedLine)
+            int selectedLine,
+            int sameLineRunEndOffset)
         {
-            if (last.Flow != SourcePausePointInstructionFlow.Next || boundaryPointIndex < 0)
+            if (boundaryPointIndex < 0)
             {
                 return false;
             }
 
             SourcePausePointSequencePointCandidate boundary = points[boundaryPointIndex];
-            return !boundary.IsHidden && boundary.StartLine == selectedLine;
+            if (boundary.IsHidden || boundary.StartLine != selectedLine)
+            {
+                return false;
+            }
+
+            if (last.Flow == SourcePausePointInstructionFlow.Next)
+            {
+                return true;
+            }
+
+            return last.Flow == SourcePausePointInstructionFlow.ConditionalBranch &&
+                   last.BranchTargetOffset >= sameLineRunEndOffset;
+        }
+
+        private static int FindSameLineRunEndOffset(
+            IReadOnlyList<SourcePausePointSequencePointCandidate> points,
+            SourcePausePointSequencePointCandidate selected)
+        {
+            int rangeStartOffset = selected.Offset;
+            while (true)
+            {
+                int boundaryPointIndex = FindBoundaryPointIndex(points, rangeStartOffset);
+                if (boundaryPointIndex < 0)
+                {
+                    return int.MaxValue;
+                }
+
+                SourcePausePointSequencePointCandidate boundary = points[boundaryPointIndex];
+                if (boundary.IsHidden || boundary.StartLine != selected.StartLine)
+                {
+                    return boundary.Offset;
+                }
+
+                rangeStartOffset = boundary.Offset;
+            }
         }
 
         // The next sequence point in IL order after the range start, hidden ones included:
