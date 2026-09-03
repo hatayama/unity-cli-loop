@@ -16,7 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies non-compile accepted work is tied to the CLI connection lifetime.
             bool shouldCancel = JsonRpcAcceptedRequestCancellationPolicy.ShouldCancelOnClientDisconnect(
                 UnityCliLoopConstants.TOOL_NAME_GET_LOGS,
-                true);
+                true,
+                false);
 
             Assert.That(shouldCancel, Is.True);
         }
@@ -27,7 +28,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies long compile requests can persist after the CLI connection closes.
             bool shouldCancel = JsonRpcAcceptedRequestCancellationPolicy.ShouldCancelOnClientDisconnect(
                 UnityCliLoopConstants.TOOL_NAME_COMPILE,
-                true);
+                true,
+                false);
 
             Assert.That(shouldCancel, Is.False);
         }
@@ -38,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies fire-and-forget compile requests keep the usual disconnect cancellation behavior.
             bool shouldCancel = JsonRpcAcceptedRequestCancellationPolicy.ShouldCancelOnClientDisconnect(
                 UnityCliLoopConstants.TOOL_NAME_COMPILE,
+                false,
                 false);
 
             Assert.That(shouldCancel, Is.True);
@@ -49,9 +52,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies missing, null, or non-boolean transport values preserve the compile default wait contract.
             bool shouldCancel = JsonRpcAcceptedRequestCancellationPolicy.ShouldCancelOnClientDisconnect(
                 UnityCliLoopConstants.TOOL_NAME_COMPILE,
-                null);
+                null,
+                false);
 
             Assert.That(shouldCancel, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies respect-path PlayMode run-tests keeps running after the CLI disconnects.
+        /// </summary>
+        [Test]
+        public void ShouldCancelOnClientDisconnect_WhenRunTestsRespectsEnterPlayModeSettings_ReturnsFalse()
+        {
+            bool shouldCancel = JsonRpcAcceptedRequestCancellationPolicy.ShouldCancelOnClientDisconnect(
+                UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
+                null,
+                true);
+
+            Assert.That(shouldCancel, Is.False);
+        }
+
+        /// <summary>
+        /// Verifies default run-tests requests still cancel when the CLI disconnects.
+        /// </summary>
+        [Test]
+        public void ShouldCancelOnClientDisconnect_WhenRunTestsDoesNotRespectEnterPlayModeSettings_ReturnsTrue()
+        {
+            bool shouldCancel = JsonRpcAcceptedRequestCancellationPolicy.ShouldCancelOnClientDisconnect(
+                UnityCliLoopConstants.TOOL_NAME_RUN_TESTS,
+                null,
+                false);
+
+            Assert.That(shouldCancel, Is.True);
         }
     }
 }

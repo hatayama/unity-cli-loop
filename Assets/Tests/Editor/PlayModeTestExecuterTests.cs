@@ -12,6 +12,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public class PlayModeTestExecuterTests
     {
         /// <summary>
+        /// Verifies Domain Reload is forced off when respect is false.
+        /// </summary>
+        [Test]
+        public void ShouldDisableDomainReload_WhenRespectIsFalse_ReturnsTrue()
+        {
+            Assert.That(RunTestsPlayModeRunOptions.ShouldDisableDomainReload(false), Is.True);
+        }
+
+        /// <summary>
+        /// Verifies Domain Reload is left to the project settings when respect is true.
+        /// </summary>
+        [Test]
+        public void ShouldDisableDomainReload_WhenRespectIsTrue_ReturnsFalse()
+        {
+            Assert.That(RunTestsPlayModeRunOptions.ShouldDisableDomainReload(true), Is.False);
+        }
+
+        /// <summary>
         /// Test that when filter is null, a filter for all tests is generated
         /// </summary>
         [Test]

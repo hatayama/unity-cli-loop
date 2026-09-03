@@ -208,9 +208,12 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
             bool? compileWaitsForDomainReload =
                 JsonRpcCompileRequestMetadataReader.ReadWaitsForDomainReload(request.Params);
+            bool runTestsRespectsEnterPlayModeSettings =
+                JsonRpcRunTestsRequestMetadataReader.ReadRespectsEnterPlayModeSettings(request.Params);
             return JsonRpcAcceptedRequestCancellationPolicy.ShouldCancelOnClientDisconnect(
                 request.Method,
-                compileWaitsForDomainReload);
+                compileWaitsForDomainReload,
+                runTestsRespectsEnterPlayModeSettings);
         }
 
         private static bool IsCliProtocolMismatch(int? currentProtocolVersion)

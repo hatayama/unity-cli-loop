@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         {
             return methodName == UnityCliLoopConstants.COMMAND_NAME_GET_VERSION ||
                    methodName == UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS ||
+                   methodName == UnityCliLoopConstants.COMMAND_NAME_GET_RUN_TESTS_STATUS ||
                    methodName == UnityCliLoopConstants.COMMAND_NAME_GET_PAUSE_POINT_STATUS ||
                    methodName == UnityCliLoopConstants.COMMAND_NAME_CLEAR_PAUSE_POINT_STATUS ||
                    methodName == UnityCliLoopConstants.COMMAND_NAME_EXTEND_PAUSE_POINT_STATUS ||
@@ -45,6 +46,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             if (methodName == UnityCliLoopConstants.COMMAND_NAME_GET_COMPILE_STATUS)
             {
                 return CompileStatusBridgeCommand.Execute(paramsToken);
+            }
+
+            if (methodName == UnityCliLoopConstants.COMMAND_NAME_GET_RUN_TESTS_STATUS)
+            {
+                return RunTestsStatusBridgeCommand.Execute(paramsToken);
             }
 
             if (methodName == UnityCliLoopConstants.COMMAND_NAME_GET_PAUSE_POINT_STATUS)

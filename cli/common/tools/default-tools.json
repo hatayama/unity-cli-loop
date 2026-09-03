@@ -110,6 +110,11 @@
             "type": "integer",
             "description": "Maximum seconds to wait for RunFinished before canceling the await (max 1500). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands",
             "default": 600
+          },
+          "RespectEnterPlayModeSettings": {
+            "type": "boolean",
+            "description": "PlayMode only: keep the project's Enter Play Mode settings instead of forcing Domain Reload off. A Domain Reload during the run is survived; the result is recovered after the reload. Use for projects whose libraries require a Domain Reload on Play entry.",
+            "default": false
           }
         }
       }
