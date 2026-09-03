@@ -47,7 +47,7 @@ Enable a pause point so Unity pauses when that code path is reached, either by a
 
 ### clear-pause-point
 
-Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is the number of markers this call transitioned to Cleared: 0 or 1 for `--id`, and the number transitioned for `--all`. Auto-disarmed and expired markers still count as 1; the record stays readable via `pause-point-status` (`StatusBeforeClear` keeps the prior state). Clearing the marker that owns the current pause resumes Play Mode and consumes any state you arranged while paused: arm the next marker first, then clear the old id, or re-arm the same marker with `--await --resume-play` instead of clearing.
+Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is the number of markers this call transitioned to Cleared: 0 or 1 for `--id`, and the number transitioned for `--all`. Auto-disarmed and expired markers still count as 1; the record stays readable via `pause-point-status` (`StatusBeforeClear` keeps the prior state). Clearing the marker that owns the current pause releases the Editor pause and lets the game consume any state you arranged while paused: arm the next marker first, then clear the old id, or re-arm it with `--await --resume-play` instead of clearing.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|

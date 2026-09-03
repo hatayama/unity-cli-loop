@@ -1133,11 +1133,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 response.RecommendedNextAction,
-                Is.EqualTo(SourcePausePointConstants.ClearResumedPlayModeRecommendedNextAction));
+                Is.EqualTo(SourcePausePointConstants.ClearReleasedPauseRecommendedNextAction));
         }
 
         /// <summary>
-        /// Verifies clear-pause-point --id recommends nothing when it preserved a manual pause instead of resuming.
+        /// Verifies clear-pause-point --id recommends nothing and keeps the pause when the pause was manual.
         /// </summary>
         [Test]
         public async Task Clear_WhenManualPausePreserved_SetsNoRecommendedNextAction()
@@ -1150,6 +1150,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
             Assert.That(response.RecommendedNextAction, Is.Empty);
+            Assert.That(_pauseController.IsPaused, Is.True);
         }
 
         /// <summary>
@@ -1167,7 +1168,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(
                 response.RecommendedNextAction,
-                Is.EqualTo(SourcePausePointConstants.ClearResumedPlayModeRecommendedNextAction));
+                Is.EqualTo(SourcePausePointConstants.ClearReleasedPauseRecommendedNextAction));
         }
 
         /// <summary>

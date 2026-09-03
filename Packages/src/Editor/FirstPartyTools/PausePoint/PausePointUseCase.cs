@@ -186,11 +186,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     SourcePausePointConstants.ClearReleasedOwnedPauseWarning);
                 PausePointEnableWarningList.Assign(response, warningEntries);
 
-                // Overwrites whatever FromSnapshot derived from StatusBeforeClear (the expired
-                // hint, for instance): the caller has just lost the paused state to a resume that
-                // happened during this call, so recovering it comes before re-arming advice.
+                // FromSnapshot leaves this empty on a clear: the snapshot only carries a
+                // recommendation while Status is Expired, and Status is Cleared by now. So this
+                // fills the field rather than competing with an existing recommendation.
                 response.RecommendedNextAction =
-                    SourcePausePointConstants.ClearResumedPlayModeRecommendedNextAction;
+                    SourcePausePointConstants.ClearReleasedPauseRecommendedNextAction;
             }
 
             return response;

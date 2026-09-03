@@ -199,14 +199,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "A manual pause set outside the pause-point workflow would have been left untouched.";
 
         // Paired with ClearReleasedOwnedPauseWarning, which only explains what happened. Callers
-        // that arranged a scenario while paused lose it the moment the clear resumes playback, so
-        // the recovery path (re-pause, re-arrange) and the ordering that avoids the loss next time
-        // (arm the replacement marker before clearing the current one) have to be stated as the
-        // next action, not left for the caller to infer from the warning.
-        public const string ClearResumedPlayModeRecommendedNextAction =
-            "Play Mode is running again. If the paused state was needed, pause with "
-            + "control-play-mode --action Pause, re-arrange it, and next time arm the new marker "
-            + "before clearing this one.";
+        // that arranged a scenario while paused lose it the moment the clear releases the pause,
+        // so the recovery path (re-pause, re-arrange) and the ordering that avoids the loss next
+        // time (arm the replacement marker before clearing the current one) have to be stated as
+        // the next action, not left for the caller to infer from the warning. Worded around the
+        // Editor pause for the same reason as that warning: a marker reached through
+        // execute-dynamic-code pauses in EditMode, where naming Play Mode would be false.
+        public const string ClearReleasedPauseRecommendedNextAction =
+            "The Editor pause was released. If you needed the paused state, pause again "
+            + "(control-play-mode --action Pause while in Play Mode), re-arrange it, and next "
+            + "time arm the new marker before clearing this one.";
 
         // Release code optimization strips most sequence points and hoists/elides locals, so the
         // Resolver's PDB-driven lookup cannot reliably find a patch location; rejecting up front
