@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static void Initialize()
         {
             UnityTestFrameworkExecutionServiceRegistry.Register(new UnityTestFrameworkExecutionService());
+            RunTestsPendingRunCallbackRegistrar.RegisterIfPending();
         }
     }
 

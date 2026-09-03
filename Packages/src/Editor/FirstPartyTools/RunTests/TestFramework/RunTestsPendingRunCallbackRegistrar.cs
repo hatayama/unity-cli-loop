@@ -1,5 +1,4 @@
 #if ULOOP_HAS_TEST_FRAMEWORK
-using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
@@ -15,17 +14,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class RunTestsPendingRunCallbackRegistrar
     {
-        [InitializeOnLoadMethod]
-        private static void ScheduleRegisterIfPending()
-        {
-            // Why delayCall: Facade registration comes from UnityCliLoopEditorBootstrap's
-            // [InitializeOnLoadMethod]. Unity runs [InitializeOnLoad] static constructors first
-            // and does not order [InitializeOnLoadMethod] peers, so reading Repository here can
-            // throw before CompositionRoot has registered it.
-            EditorApplication.delayCall += RegisterIfPending;
-        }
-
-        private static void RegisterIfPending()
+        // Why not a Unity startup attribute: UnityCliLoopEditorBootstrap owns Editor startup order,
+        // and RunTestsTestFrameworkStartup runs after the composition root has registered the
+        // session repository, so reading the facade here is safe.
+        internal static void RegisterIfPending()
         {
             IRunTestsSessionRepository repository = UnityCliLoopRunTestsSessionRepositoryFacade.Repository;
             if (!repository.HasAnyPendingRun())
