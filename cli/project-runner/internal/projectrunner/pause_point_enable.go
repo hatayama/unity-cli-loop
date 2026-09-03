@@ -394,6 +394,7 @@ func runPausePointWaitAfterEnable(
 		response = mergeEnablePausePointResolvedFields(response, enableFields)
 		response = filterPausePointCapturedVariableHistory(response)
 		response = applyPausePointHitStatusNote(response)
+		response = applyPausePointTraceAwaitReturnedNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 		response = applyPausePointCapturedVariablePreviewNote(response)

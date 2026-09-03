@@ -35,6 +35,10 @@ const (
 	// pausePointTraceStatusNote explains that a trace-mode Hit did not pause Play Mode.
 	pausePointTraceStatusNote = "Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running."
 
+	// pausePointTraceAwaitReturnedNote prevents callers from reading the first observed trace
+	// hit as a count collected over the entire trigger period.
+	pausePointTraceAwaitReturnedNote = "The wait returned on the first hit; to count hits over a period, enable without --await and read pause-point-status after the trigger."
+
 	// Why: a non-trace Hit pauses at the next frame boundary, so live reads after the
 	// pause are already post-frame; agents otherwise treat them as at-line evidence.
 	pausePointHitFrameBoundaryStatusNote = "Unity pauses at the next frame boundary; the rest of the hit frame already ran. Read at-line values from CapturedVariables; live reads via execute-dynamic-code reflect post-frame state."
@@ -148,6 +152,17 @@ func applyPausePointHitStatusNote(response pausePointStatusResponse) pausePointS
 		return response
 	}
 	response.StatusNote = pausePointHitFrameBoundaryStatusNote
+	return response
+}
+
+// applyPausePointTraceAwaitReturnedNote adds guidance that belongs only to wait
+// responses; pause-point-status reports the accumulated trace count instead.
+func applyPausePointTraceAwaitReturnedNote(response pausePointStatusResponse) pausePointStatusResponse {
+	if response.Status != pausePointStatusHit || response.Mode != pausePointModeTrace {
+		return response
+	}
+
+	response.StatusNote += " " + pausePointTraceAwaitReturnedNote
 	return response
 }
 
@@ -293,6 +308,7 @@ func runWaitForPausePoint(
 		response.ResumePlayResult = resumeResult
 		response = filterPausePointCapturedVariableHistory(response)
 		response = applyPausePointHitStatusNote(response)
+		response = applyPausePointTraceAwaitReturnedNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 		response = applyPausePointCapturedVariablePreviewNote(response)
