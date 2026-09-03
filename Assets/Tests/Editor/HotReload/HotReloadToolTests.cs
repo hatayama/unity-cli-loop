@@ -236,6 +236,136 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: Revert of one method drops that method's superseded mapping so a later
+        /// patch of the same key does not keep a stale Reason.
+        /// </summary>
+        [Test]
+        public void Revert_RemovesSupersededMappingForThatMethod()
+        {
+            HotReloadPatcher.RevertAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                IReadOnlyList<HotReloadActivePatchInfo> patches =
+                    HotReloadPatcher.DescribeActivePatches();
+                Assert.That(patches.Count, Is.EqualTo(1));
+                string methodKey = patches[0].MethodKey;
+                HotReloadSupersededSignatureRegistry.Record(methodKey, "Host.Replacement()");
+
+                MethodInfo original = typeof(HotReloadCoreFixture).GetMethod(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public);
+                Assert.That(original, Is.Not.Null);
+                Assert.That(HotReloadPatcher.Revert(original), Is.True);
+
+                bool found = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                    methodKey,
+                    out string _);
+                Assert.That(found, Is.False);
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
+        /// What: --status Active rows prefer the superseded Reason over the never-invoked
+        /// Reason when the old compiled signature is recorded.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_SupersededActiveRow_SetsSupersededReason()
+        {
+            const string replacementDisplayName = "Host.Replacement(System.String)";
+            HotReloadPatcher.RevertAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                IReadOnlyList<HotReloadActivePatchInfo> patches =
+                    HotReloadPatcher.DescribeActivePatches();
+                Assert.That(patches.Count, Is.EqualTo(1));
+                HotReloadSupersededSignatureRegistry.Record(
+                    patches[0].MethodKey,
+                    replacementDisplayName);
+
+                HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+                HotReloadMethodResult activeRow = FindStatusRow(
+                    response,
+                    "Active",
+                    nameof(HotReloadCoreFixture.ReplaceableCompute));
+
+                Assert.That(activeRow.InvocationCount, Is.EqualTo(0L));
+                Assert.That(
+                    activeRow.Reason,
+                    Is.EqualTo(
+                        string.Format(
+                            HotReloadConstants.ActivePatchSupersededReasonFormat,
+                            replacementDisplayName)));
+                Assert.That(
+                    activeRow.Reason,
+                    Is.Not.EqualTo(HotReloadConstants.ActivePatchNeverInvokedReason));
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
+        /// What: --status lists live added-field ledger rows as Kind AddedField and reports
+        /// AddedFieldTotal without counting those rows in ActivePatchTotal.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_RegisteredAddedFields_ListsAddedFieldRowsOutsideActivePatchTotal()
+        {
+            const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedField.cs";
+            const string methodKey = "Host.NewHelper(System.Int32)";
+            HotReloadPatcher.RevertAll();
+            HotReloadAddedFieldRegistry.ClearAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                RegisterAddedMemberForStatus(filePath, methodKey);
+                HotReloadAddedFieldRegistry.ReplaceForFile(
+                    filePath,
+                    new[] { "Ns.Host.alpha", "Ns.Host.beta" });
+
+                HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+                HotReloadMethodResult alphaRow = FindStatusRow(
+                    response,
+                    HotReloadConstants.AddedFieldKind,
+                    "Ns.Host.alpha");
+                HotReloadMethodResult betaRow = FindStatusRow(
+                    response,
+                    HotReloadConstants.AddedFieldKind,
+                    "Ns.Host.beta");
+
+                Assert.That(response.ActivePatchTotal, Is.EqualTo(2));
+                Assert.That(response.AddedFieldTotal, Is.EqualTo(2));
+                Assert.That(response.Methods.Count, Is.EqualTo(4));
+                Assert.That(alphaRow.Method, Is.EqualTo("Ns.Host.alpha"));
+                Assert.That(alphaRow.FilePath, Is.EqualTo(filePath));
+                Assert.That(alphaRow.Reason, Is.EqualTo(string.Empty));
+                Assert.That(betaRow.Method, Is.EqualTo("Ns.Host.beta"));
+                Assert.That(betaRow.FilePath, Is.EqualTo(filePath));
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+                HotReloadAddedFieldRegistry.ClearAll();
+            }
+        }
+
+        /// <summary>
         /// What: composing AlreadyActiveAddedMemberReason from the not-instrumented constant
         /// keeps the historical AlreadyActive added-member sentence byte-identical.
         /// </summary>
@@ -1043,6 +1173,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     activePatchTotal: 1));
             Assert.That(withoutFields.AddedFields, Is.Not.Null);
             Assert.That(withoutFields.AddedFields, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: BuildApplyResponse copies the live added-field ledger count onto AddedFieldTotal.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_CopiesAddedFieldTotalFromLiveRegistry()
+        {
+            HotReloadAddedFieldRegistry.ClearAll();
+            try
+            {
+                HotReloadAddedFieldRegistry.ReplaceForFile(
+                    "Assets/Tests/Editor/HotReload/ApplyAddedFieldTotal.cs",
+                    new[] { "Ns.Host.score" });
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                    new HotReloadOrchestratorResult(
+                        new List<HotReloadMethodOutcome>
+                        {
+                            HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                        },
+                        new List<string>(),
+                        patchedTotal: 1,
+                        activePatchTotal: 1));
+
+                Assert.That(response.AddedFieldTotal, Is.EqualTo(1));
+                Assert.That(response.ActivePatchTotal, Is.EqualTo(1));
+            }
+            finally
+            {
+                HotReloadAddedFieldRegistry.ClearAll();
+            }
         }
 
         /// <summary>
