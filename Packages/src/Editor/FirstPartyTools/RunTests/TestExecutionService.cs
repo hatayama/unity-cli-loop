@@ -18,10 +18,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         /// <param name="filter">Test execution filter</param>
         /// <returns>Test execution result</returns>
-        public virtual Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
+        public virtual Task<SerializableTestResult> ExecutePlayModeTestAsync(
+            TestExecutionFilter filter,
+            CancellationToken ct,
+            RunTestsPlayModeRunOptions options)
         {
             ct.ThrowIfCancellationRequested();
-            return UnityTestFrameworkExecutionServiceRegistry.Current.ExecutePlayModeTestAsync(filter, ct);
+            return UnityTestFrameworkExecutionServiceRegistry.Current.ExecutePlayModeTestAsync(filter, ct, options);
         }
 
         /// <summary>
@@ -57,7 +60,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
     internal interface IUnityTestFrameworkExecutionService
     {
-        Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct);
+        Task<SerializableTestResult> ExecutePlayModeTestAsync(
+            TestExecutionFilter filter,
+            CancellationToken ct,
+            RunTestsPlayModeRunOptions options);
         Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct);
         Task<RunTestsUnfilteredTestListResult> RetrieveUnfilteredTestNamesAsync(
             UnityCliLoopTestMode testMode,
@@ -84,7 +90,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
     internal sealed class TestFrameworkUnavailableExecutionService : IUnityTestFrameworkExecutionService
     {
-        public Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
+        public Task<SerializableTestResult> ExecutePlayModeTestAsync(
+            TestExecutionFilter filter,
+            CancellationToken ct,
+            RunTestsPlayModeRunOptions options)
         {
             ct.ThrowIfCancellationRequested();
             return Task.FromResult(SerializableTestResult.CreateTestFrameworkUnavailable());

@@ -108,7 +108,7 @@ func runDynamicProjectToolWithCompileNote(
 		return runTool(ctx, connection, command, params, stdout, stderr)
 	}
 
-	result := runPlainTool(ctx, connection, command, params, stderr)
+	result := runToolExecution(ctx, connection, command, params, stderr)
 	if len(result.result) == 0 {
 		return result.exitCode
 	}

@@ -28,7 +28,10 @@ namespace io.github.hatayama.UnityCliLoop.Dev
         {
             Debug.Log("Running PlayMode tests!");
 
-            SerializableTestResult result = await PlayModeTestExecuter.ExecutePlayModeTest(null, CancellationToken.None);
+            SerializableTestResult result = await PlayModeTestExecuter.ExecutePlayModeTest(
+                null,
+                CancellationToken.None,
+                RunTestsPlayModeRunOptions.WithoutRespect());
 
             LogTestResult(result);
         }

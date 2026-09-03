@@ -7,6 +7,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public const int FailedTestDetailsLimit = 10;
 
+        public const string DomainReloadRecoveredWarning =
+            "The run entered Play Mode with a Domain Reload, so the result was recovered from SessionState after the reload. Pause-point and hot-reload notes were not evaluated for this run.";
+
         public const int UnfilteredTestNamesLimit = 20;
 
         public const int PredefinedAssemblyTestSampleLimit = 5;
