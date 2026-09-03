@@ -28,6 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private CompileResultRecordingContext _resultRecordingContext = CompileResultRecordingContext.Disabled();
         private DateTime _compileStartedAtUtc = DateTime.MinValue;
         private int _assemblyFinishedCount;
+        private int _consoleErrorCountAtCompileStart;
         private readonly CompileLifecycleRecoveryCoordinator _recoveryCoordinator;
 
         public CompileController(
@@ -45,7 +46,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 () => EditorApplication.isCompiling,
                 IsCompileRequestCompleted,
                 () => _currentCompileTask,
-                () => new AssemblyDefinitionConsoleErrorValidationService().FindCurrentErrors(),
+                entries => new AssemblyDefinitionConsoleErrorValidationService().FindErrors(entries),
+                ReadConsoleErrorEntries,
+                () => _consoleErrorCountAtCompileStart,
                 () => new AssemblyDefinitionDuplicationValidationService().ValidateNoDuplicateAsmdefNames(),
                 () => _isForceCompile,
                 () => _compileMessages.ToArray(),
@@ -178,6 +181,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TaskCompletionSource<CompileResult> compileTask = new();
             _currentCompileTask = compileTask;
             _isForceCompile = forceRecompile;
+            // Why before Refresh: the asmdef import errors that abort a compile are logged during
+            // AssetDatabase.Refresh, so the boundary must precede it to keep them in the summary.
+            _consoleErrorCountAtCompileStart = ReadConsoleErrorEntries().Length;
             bool eventsRegistered = false;
             bool compileTaskTransferred = false;
 
@@ -243,6 +249,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private bool IsCompileRequestCompleted()
         {
             return _currentCompileTask == null || _currentCompileTask.Task.IsCompleted;
+        }
+
+        /// <summary>
+        /// Snapshots the current Unity Console error entries for indeterminate-result diagnosis.
+        /// </summary>
+        private static UnityCliLoopConsoleLogEntry[] ReadConsoleErrorEntries()
+        {
+            IUnityCliLoopConsoleLogService consoleLogs = new LogRetrievalService();
+            UnityCliLoopConsoleLogResult errorLogs = consoleLogs.GetLogs(UnityCliLoopLogType.Error);
+            return errorLogs.LogEntries;
         }
 
         private Dictionary<string, object> BuildCompileControllerStateContext(
