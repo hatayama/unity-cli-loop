@@ -23,13 +23,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public async Task ExecuteAsync_WhenDynamicCommandHasNoExecuteMethod_ReturnsRecoveryGuidance()
         {
             Assembly assembly = CreateAssemblyWithoutExecuteMethod();
+
+            ExecutionResult result = await ExecuteAsync(assembly);
+
+            AssertRecoveryGuidance(result);
+        }
+
+        /// <summary>
+        /// What: a class-wrapped snippet whose Execute is static (the reported input shape) is not
+        /// picked up as the entry point and receives the same recovery guidance.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenDynamicCommandOnlyHasStaticExecute_ReturnsRecoveryGuidance()
+        {
+            Assembly assembly = CreateAssemblyWithStaticExecuteMethod();
+
+            ExecutionResult result = await ExecuteAsync(assembly);
+
+            AssertRecoveryGuidance(result);
+        }
+
+        private static async Task<ExecutionResult> ExecuteAsync(Assembly assembly)
+        {
             DynamicExecutionContext context = new()
             {
                 CompiledAssembly = assembly,
                 CancellationToken = CancellationToken.None
             };
-            ExecutionResult result = await new CommandRunner().ExecuteAsync(context);
+            return await new CommandRunner().ExecuteAsync(context);
+        }
 
+        private static void AssertRecoveryGuidance(ExecutionResult result)
+        {
             Assert.That(result.Success, Is.False);
             Assert.That(
                 result.ErrorMessage,
@@ -40,22 +65,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(
                 result.NextActions[0],
                 Is.EqualTo(
-                    "Remove the class and method wrapper and pass the statements themselves, e.g. " +
+                    "Remove the class, namespace, and method wrapper and pass the statements themselves, e.g. " +
                     "--code \"return GameObject.Find(\\\"Player\\\").transform.position;\""));
         }
 
         private static Assembly CreateAssemblyWithoutExecuteMethod()
         {
-            AssemblyName assemblyName = new("CommandRunnerWithoutExecuteMethodTests");
+            TypeBuilder typeBuilder = DefineDynamicCommandType("CommandRunnerWithoutExecuteMethodTests");
+            typeBuilder.CreateType();
+            return typeBuilder.Assembly;
+        }
+
+        private static Assembly CreateAssemblyWithStaticExecuteMethod()
+        {
+            TypeBuilder typeBuilder = DefineDynamicCommandType("CommandRunnerStaticExecuteMethodTests");
+            MethodBuilder executeMethod = typeBuilder.DefineMethod(
+                "Execute",
+                MethodAttributes.Public | MethodAttributes.Static,
+                typeof(object),
+                System.Type.EmptyTypes);
+            ILGenerator il = executeMethod.GetILGenerator();
+            il.Emit(OpCodes.Ldnull);
+            il.Emit(OpCodes.Ret);
+            typeBuilder.CreateType();
+            return typeBuilder.Assembly;
+        }
+
+        private static TypeBuilder DefineDynamicCommandType(string assemblyNameText)
+        {
+            AssemblyName assemblyName = new(assemblyNameText);
             AssemblyBuilder assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(
                 assemblyName,
                 AssemblyBuilderAccess.Run);
             ModuleBuilder moduleBuilder = assemblyBuilder.DefineDynamicModule(assemblyName.Name);
-            TypeBuilder typeBuilder = moduleBuilder.DefineType(
+            return moduleBuilder.DefineType(
                 "UnityCliLoop.Dynamic.DynamicCommand",
                 TypeAttributes.Public | TypeAttributes.Class);
-            typeBuilder.CreateType();
-            return assemblyBuilder;
         }
     }
 }

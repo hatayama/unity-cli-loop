@@ -138,7 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         /// </summary>
         public static readonly string[] DYNAMIC_CODE_NO_EXECUTE_METHOD_NEXT_ACTIONS =
         {
-            "Remove the class and method wrapper and pass the statements themselves, e.g. " +
+            "Remove the class, namespace, and method wrapper and pass the statements themselves, e.g. " +
             "--code \"return GameObject.Find(\\\"Player\\\").transform.position;\"",
         };
 
