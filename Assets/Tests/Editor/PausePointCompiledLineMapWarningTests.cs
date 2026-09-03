@@ -1769,7 +1769,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(withoutPatches.Success, Is.False);
                 Assert.That(withoutPatches.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-                Assert.That(withoutPatches.Warning, Is.EqualTo(string.Empty));
+                Assert.That(withoutPatches.Warning, Is.Null);
                 Assert.That(
                     withoutPatches.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));

@@ -90,8 +90,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Message { get; set; } = string.Empty;
         public string RecommendedNextAction { get; set; } = string.Empty;
         public string ErrorCode { get; set; } = string.Empty;
-        public string Warning { get; set; } = string.Empty;
-        public IReadOnlyList<string> Warnings { get; set; } = Array.Empty<string>();
+        // Warnings is the single aggregate and Warning only ever its joined form; both are omitted
+        // together so a caller never reads an empty Warning beside a missing Warnings.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string Warning { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> Warnings { get; set; }
         public string ClearedReason { get; set; } = string.Empty;
         public string StatusBeforeClear { get; set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; set; }

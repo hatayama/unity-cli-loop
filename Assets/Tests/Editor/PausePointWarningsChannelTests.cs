@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.Infrastructure;
 using io.github.hatayama.UnityCliLoop.Runtime;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -79,18 +82,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: assigning an empty warning list leaves Message untouched.
+        /// What: assigning an empty warning list leaves Message untouched and nulls both warning
+        /// properties, so NullValueHandling.Ignore omits the pair from the serialized response.
         /// </summary>
         [Test]
-        public void Assign_WhenNoWarnings_LeavesMessageUnchanged()
+        public void Assign_WhenNoWarnings_LeavesMessageUnchangedAndOmitsBothWarningFields()
         {
             PausePointResponse response = new() { Message = "Pause point enabled." };
 
             PausePointEnableWarningList.Assign(response, new List<string>());
 
             Assert.That(response.Message, Is.EqualTo("Pause point enabled."));
-            Assert.That(response.Warning, Is.Empty);
-            Assert.That(response.Warnings, Is.Empty);
+            Assert.That(response.Warning, Is.Null);
+            Assert.That(response.Warnings, Is.Null);
         }
 
         /// <summary>
@@ -110,16 +114,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a clear --all that resumed nothing reports no warning and an unchanged Message.
+        /// What: a clear --all that resumed nothing omits both warning fields and leaves Message
+        /// unchanged.
         /// </summary>
         [Test]
         public void FromClearAll_WhenNothingResumed_LeavesMessageUnchanged()
         {
             PausePointResponse response = PausePointResponse.FromClearAll(CreateClearAllResult(false));
 
-            Assert.That(response.Warnings, Is.Empty);
-            Assert.That(response.Warning, Is.Empty);
+            Assert.That(response.Warnings, Is.Null);
+            Assert.That(response.Warning, Is.Null);
             Assert.That(response.Message, Is.EqualTo("Pause points cleared."));
+        }
+
+        /// <summary>
+        /// What: a response that warned about nothing serializes without either warning key, so the
+        /// documented "both omitted when nothing warned" contract holds on enable and clear too.
+        /// </summary>
+        [Test]
+        public void Assign_WhenNoWarnings_OmitsBothWarningKeysFromTheSerializedResponse()
+        {
+            PausePointResponse response = new() { Message = "Pause point enabled." };
+
+            PausePointEnableWarningList.Assign(response, new List<string>());
+
+            JObject serialized = JObject.Parse(JsonConvert.SerializeObject(response));
+
+            Assert.That(serialized.ContainsKey("Warning"), Is.False);
+            Assert.That(serialized.ContainsKey("Warnings"), Is.False);
+        }
+
+        /// <summary>
+        /// What: the enable/clear Message suffix comes from the shared pointer helper, so it stays
+        /// the same string hot reload appends.
+        /// </summary>
+        [Test]
+        public void Assign_UsesTheSharedWarningsMessagePointer()
+        {
+            PausePointResponse response = new() { Message = "Pause point enabled." };
+
+            PausePointEnableWarningList.Assign(response, new List<string> { "First warning." });
+
+            Assert.That(
+                response.Message,
+                Is.EqualTo(WarningsMessagePointer.Append("Pause point enabled.", 1)));
         }
 
         private static UloopPausePointClearAllResult CreateClearAllResult(bool resumedFromPause)

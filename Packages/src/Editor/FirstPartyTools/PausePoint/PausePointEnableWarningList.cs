@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
@@ -8,10 +10,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class PausePointEnableWarningList
     {
-        // Repeats hot reload's suffix verbatim: an agent reads Message first, and warnings Message
-        // does not point at are warnings that go unread.
-        private const string WarningCountMessageSuffix = " warning(s). See Warnings.";
-
         internal static void AddIfNotEmpty(List<string> warnings, string warning)
         {
             if (string.IsNullOrEmpty(warning))
@@ -37,20 +35,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static void Assign(PausePointResponse response, List<string> warnings)
         {
-            response.Warnings = warnings;
-            response.Warning = string.Join(" ", warnings);
+            // Why null rather than an empty list and an empty string: both properties are serialized
+            // with NullValueHandling.Ignore, so a response that warned about nothing omits the pair
+            // instead of publishing an empty Warning next to an empty Warnings.
             if (warnings.Count == 0)
             {
+                response.Warning = null;
+                response.Warnings = null;
                 return;
             }
 
-            response.Message = AppendMessagePart(response.Message, warnings.Count + WarningCountMessageSuffix);
-        }
-
-        // Keeps the suffix from starting with a stray space when the response carries no message.
-        private static string AppendMessagePart(string message, string part)
-        {
-            return string.IsNullOrEmpty(message) ? part : message + " " + part;
+            response.Warnings = warnings;
+            response.Warning = string.Join(" ", warnings);
+            response.Message = WarningsMessagePointer.Append(response.Message, warnings.Count);
         }
     }
 }
