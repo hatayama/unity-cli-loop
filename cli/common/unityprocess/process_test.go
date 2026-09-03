@@ -116,7 +116,7 @@ func TestParseWindowsUnityProcessesExtractsProjectPath(t *testing.T) {
 	}
 }
 
-// Verifies non-ASCII project paths survive the PowerShell boundary because command lines travel as UTF-8 Base64.
+// Verifies non-ASCII project paths survive the Windows process-list boundary because command lines travel as UTF-8 Base64.
 func TestParseWindowsUnityProcessesPreservesNonASCIIProjectPath(t *testing.T) {
 	projectPath := `C:\Users\<USER_NAME>\test[1] 検証用\proj`
 	commandLine := `C:\Program Files\Unity\Hub\Editor\2022.3.62f3\Editor\Unity.exe -projectPath "` + projectPath + `" -useHub`
@@ -135,7 +135,7 @@ func TestParseWindowsUnityProcessesPreservesNonASCIIProjectPath(t *testing.T) {
 // Verifies command fields that are not valid Base64 (e.g. legacy plain-text or OEM code page bytes) are skipped instead of mis-parsed.
 func TestParseWindowsUnityProcessesSkipsNonBase64CommandLines(t *testing.T) {
 	// 0x8C9F 0x8FD8 0x9770 is the measured CP932 byte sequence for "検証用"
-	// that Windows PowerShell 5.1 emitted before the Base64 contract.
+	// that the Windows process-list helper emitted before the Base64 contract.
 	cp932KenshouYou := string([]byte{0x8C, 0x9F, 0x8F, 0xD8, 0x97, 0x70})
 	output := "123|" + `C:\Editor\Unity.exe -projectPath "C:\Users\<USER_NAME>\` + cp932KenshouYou + `\proj"` + "\r\n"
 
@@ -177,112 +177,6 @@ func TestExtractProjectPathSupportsEqualsAndSpaces(t *testing.T) {
 		if actual != expected {
 			t.Fatalf("project path mismatch for %q: %q", command, actual)
 		}
-	}
-}
-
-// Verifies the embedded Windows focus script verifies the foreground result and throws instead of trusting API return values.
-func TestBuildFocusUnityProcessWindowsScriptVerifiesForegroundAndThrowsOnFailures(t *testing.T) {
-	script := buildFocusUnityProcessWindowsScript(123)
-
-	assertWindowsFocusScriptContract(t, script)
-}
-
-// Verifies the embedded Windows focus-with-restore script captures the previous foreground window and shares the focus contract.
-func TestBuildFocusUnityProcessWindowsWithRestoreScriptCapturesForegroundWindow(t *testing.T) {
-	script := buildFocusUnityProcessWindowsWithRestoreScript(123)
-
-	assertWindowsFocusScriptContract(t, script)
-	for _, expected := range []string{
-		"$previous = [Win32Interop]::GetForegroundWindow()",
-		"Write-Output $previous.ToInt64()",
-	} {
-		if !strings.Contains(script, expected) {
-			t.Fatalf("script missing %q: %s", expected, script)
-		}
-	}
-}
-
-// Asserts the shared Windows focus contract: escalation techniques, foreground verification, and no trust in AppActivate.
-func assertWindowsFocusScriptContract(t *testing.T, script string) {
-	t.Helper()
-	for _, expected := range []string{
-		"throw 'Unity process was not found: 123'",
-		"throw 'Unity process has no main window handle: 123'",
-		"if ([Win32Interop]::IsIconic($handle)) {",
-		"throw 'Failed to show Unity window'",
-		"function Test-TargetForeground",
-		"[Win32Interop]::GetWindowProcessId([Win32Interop]::GetForegroundWindow()) -eq 123",
-		"AttachThreadInput($currentThreadId, $foregroundThreadId, $true)",
-		"AttachThreadInput($currentThreadId, $targetThreadId, $true)",
-		"AttachThreadInput($currentThreadId, $targetThreadId, $false)",
-		"AttachThreadInput($currentThreadId, $foregroundThreadId, $false)",
-		"BringWindowToTop",
-		"keybd_event(0x12, 0, 0, [UIntPtr]::Zero)",
-		"keybd_event(0x12, 0, 2, [UIntPtr]::Zero)",
-		"throw 'Windows refused to bring the Unity window (PID: 123) to the foreground (foreground lock). Click the Unity window or its taskbar icon to focus it manually.'",
-	} {
-		if !strings.Contains(script, expected) {
-			t.Fatalf("script missing %q: %s", expected, script)
-		}
-	}
-	if strings.Contains(script, "AppActivate") {
-		t.Fatalf("script must not trust AppActivate return values: %s", script)
-	}
-	if strings.Contains(script, "catch { return }") || strings.Contains(script, "{ return }") {
-		t.Fatalf("script should not silently return: %s", script)
-	}
-}
-
-// Verifies the embedded Windows restore script fails when the saved foreground window cannot be restored.
-func TestBuildRestoreWindowsForegroundWindowScriptThrowsOnRestoreFailure(t *testing.T) {
-	script := buildRestoreWindowsForegroundWindowScript(123)
-
-	for _, expected := range []string{
-		"$handle = [IntPtr]::new(123)",
-		"if ($handle -eq [IntPtr]::Zero) { throw 'Saved foreground window handle is invalid' }",
-		"GetWindowThreadProcessId",
-		"GetCurrentThreadId",
-		"AttachThreadInput",
-		"BringWindowToTop",
-		"try {",
-		"} finally {",
-		"AttachThreadInput($foregroundThreadId, $targetThreadId, $false)",
-		"AttachThreadInput($currentThreadId, $targetThreadId, $false)",
-		"$restored = [Win32Interop]::SetForegroundWindow($handle)",
-		"if (-not $restored) { throw 'Failed to restore previous foreground window' }",
-	} {
-		if !strings.Contains(script, expected) {
-			t.Fatalf("script missing %q: %s", expected, script)
-		}
-	}
-}
-
-// Verifies the embedded Windows restore script avoids resizing a saved maximized foreground window.
-func TestBuildRestoreWindowsForegroundWindowScriptRestoresOnlyMinimizedWindow(t *testing.T) {
-	script := buildRestoreWindowsForegroundWindowScript(123)
-
-	for _, expected := range []string{
-		"IsIconic",
-		"$isMinimized = [Win32Interop]::IsIconic($handle)",
-		"if ($isMinimized) {",
-		"    $shown = [Win32Interop]::ShowWindowAsync($handle, 9)",
-	} {
-		if !strings.Contains(script, expected) {
-			t.Fatalf("script missing %q: %s", expected, script)
-		}
-	}
-	if strings.Contains(script, "\n  $shown = [Win32Interop]::ShowWindowAsync($handle, 9)") {
-		t.Fatalf("restore script should not unconditionally restore the previous window: %s", script)
-	}
-}
-
-// Verifies Windows foreground handle parsing ignores invalid saved state output.
-func TestParseWindowsForegroundHandle(t *testing.T) {
-	if parseWindowsForegroundHandle("123\r\n") != 123 {
-		t.Fatal("expected numeric handle to parse")
-	}
-	if parseWindowsForegroundHandle("not-a-handle") != 0 {
-		t.Fatal("expected invalid handle to be ignored")
 	}
 }
 
