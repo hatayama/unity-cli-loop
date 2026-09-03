@@ -151,6 +151,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(response.SuppressedByHotReload, Is.True);
                 Assert.That(response.SuppressedByHotReloadReason, Is.EqualTo(reason));
                 Assert.That(response.Warning, Is.EqualTo(reason));
+                Assert.That(response.Warnings, Is.EqualTo(new[] { reason }));
                 Assert.That(response.RetargetedToHotReloadPatch, Is.False);
             }
             finally

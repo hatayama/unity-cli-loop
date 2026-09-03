@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using io.github.hatayama.UnityCliLoop.Runtime;
 
@@ -55,18 +56,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 FormatTypeMethodDisplay(resolvedMethod, simpleName));
         }
 
-        internal static string MergePerFrameEnableWarnings(
-            string warning,
+        internal static IReadOnlyList<string> CollectPerFrameEnableWarnings(
             string captureMode,
             string resolvedMethod,
             int maxHistory)
         {
-            string withTrace = PausePointEnableWarnings.MergeWarnings(
-                warning,
+            List<string> extras = new List<string>();
+            PausePointEnableWarningList.AddIfNotEmpty(
+                extras,
                 BuildPerFrameTraceWarningOrEmpty(captureMode, resolvedMethod, maxHistory));
-            return PausePointEnableWarnings.MergeWarnings(
-                withTrace,
+            PausePointEnableWarningList.AddIfNotEmpty(
+                extras,
                 BuildPerFrameImmediateHitWarningOrEmpty(captureMode, resolvedMethod));
+            return extras;
         }
 
         private static bool IsPerFrameUnityMessageSimpleName(string simpleName)

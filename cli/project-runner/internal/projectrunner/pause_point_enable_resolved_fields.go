@@ -5,6 +5,7 @@ package projectrunner
 // runEnablePausePointAndAwait.
 type enablePausePointPropagatedFields struct {
 	Warning          string
+	Warnings         []string
 	ResolvedLine     int
 	ResolvedLineText string
 	ResolvedMethod   string
