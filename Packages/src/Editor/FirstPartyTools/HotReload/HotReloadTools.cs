@@ -236,13 +236,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static HotReloadResponse CreateValidationFailure(HotReloadValidationFailure failure)
         {
             Debug.Assert(failure != null, "failure must not be null.");
+            int activePatchTotal = HotReloadPatcher.ActiveChangeCount;
+            string message = failure.Message;
+            string[] nextActions = failure.NextActions;
+            if (activePatchTotal > 0)
+            {
+                message += string.Format(
+                    HotReloadConstants.ValidationFailureActiveChangesSuffixFormat,
+                    activePatchTotal);
+                nextActions = AppendNextAction(
+                    nextActions,
+                    HotReloadConstants.ValidationFailureInspectOrRevertNextAction);
+            }
+
             return new HotReloadResponse
             {
                 Success = false,
-                Message = failure.Message,
+                Message = message,
                 ErrorCode = failure.ErrorCode,
-                NextActions = failure.NextActions
+                NextActions = nextActions,
+                ActivePatchTotal = activePatchTotal
             };
+        }
+
+        private static string[] AppendNextAction(string[] nextActions, string extraAction)
+        {
+            Debug.Assert(nextActions != null, "nextActions must not be null.");
+            Debug.Assert(!string.IsNullOrEmpty(extraAction), "extraAction must not be empty.");
+            string[] combined = new string[nextActions.Length + 1];
+            Array.Copy(nextActions, combined, nextActions.Length);
+            combined[nextActions.Length] = extraAction;
+            return combined;
         }
     }
 }
