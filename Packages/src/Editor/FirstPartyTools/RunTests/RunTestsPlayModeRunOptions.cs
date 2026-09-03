@@ -6,9 +6,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// <summary>
     /// PlayMode execution options for Domain Reload respect and pending-run recovery.
     /// </summary>
-    internal sealed class RunTestsPlayModeRunOptions
+    public sealed class RunTestsPlayModeRunOptions
     {
-        internal RunTestsPlayModeRunOptions(
+        public RunTestsPlayModeRunOptions(
             bool respectEnterPlayModeSettings,
             string requestId,
             DateTime pendingRunExpiresAtUtc)
@@ -20,16 +20,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PendingRunExpiresAtUtc = pendingRunExpiresAtUtc;
         }
 
-        internal bool RespectEnterPlayModeSettings { get; }
-        internal string RequestId { get; }
-        internal DateTime PendingRunExpiresAtUtc { get; }
+        public bool RespectEnterPlayModeSettings { get; }
+        public string RequestId { get; }
+        public DateTime PendingRunExpiresAtUtc { get; }
 
-        internal static RunTestsPlayModeRunOptions WithoutRespect()
+        public static RunTestsPlayModeRunOptions WithoutRespect()
         {
             return new RunTestsPlayModeRunOptions(false, "", DateTime.MinValue);
         }
 
-        internal static bool ShouldDisableDomainReload(bool respectEnterPlayModeSettings)
+        public static bool ShouldDisableDomainReload(bool respectEnterPlayModeSettings)
         {
             return !respectEnterPlayModeSettings;
         }

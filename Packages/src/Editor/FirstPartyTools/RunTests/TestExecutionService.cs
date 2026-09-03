@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         /// <param name="filter">Test execution filter</param>
         /// <returns>Test execution result</returns>
-        internal virtual Task<SerializableTestResult> ExecutePlayModeTestAsync(
+        public virtual Task<SerializableTestResult> ExecutePlayModeTestAsync(
             TestExecutionFilter filter,
             CancellationToken ct,
             RunTestsPlayModeRunOptions options)

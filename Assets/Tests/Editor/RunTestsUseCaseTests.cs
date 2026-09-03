@@ -1293,7 +1293,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public RunTestsPredefinedAssemblyTestFindings PredefinedAssemblyTestFindings { get; set; } =
                 RunTestsPredefinedAssemblyTestFindings.None();
 
-            internal override Task<SerializableTestResult> ExecutePlayModeTestAsync(
+            public override Task<SerializableTestResult> ExecutePlayModeTestAsync(
                 TestExecutionFilter filter,
                 CancellationToken ct,
                 RunTestsPlayModeRunOptions options)

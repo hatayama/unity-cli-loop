@@ -9,7 +9,6 @@ using UnityEngine;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 [assembly: InternalsVisibleTo("UnityCLILoop.FirstPartyTools.Editor")]
-[assembly: InternalsVisibleTo("UnityCLILoop.Dev")]
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -54,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
     public static class PlayModeTestExecuter
     {
-        internal static async Task<SerializableTestResult> ExecutePlayModeTest(
+        public static async Task<SerializableTestResult> ExecutePlayModeTest(
             TestExecutionFilter filter,
             CancellationToken ct,
             RunTestsPlayModeRunOptions options)
@@ -83,13 +82,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string runGuid = null;
             try
             {
-                SerializableTestResult result = await ExecuteTestWithEventNotification(
+                return await ExecuteTestWithEventNotification(
                     TestMode.PlayMode,
                     filter,
                     ct,
                     startedRunGuid => runGuid = startedRunGuid).ConfigureAwait(false);
-                pendingScope?.ClearPending();
-                return result;
             }
             catch (OperationCanceledException originalException)
             {
@@ -101,11 +98,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     // TaskCompletionSource uses RunContinuationsAsynchronously so this catch does
                     // not run synchronously; the same event delivery sets ReloadObserved first.
                     throw;
-                }
-
-                if (respectEnterPlayModeSettings)
-                {
-                    pendingScope?.ClearPending();
                 }
 
                 // Why switch first: ExecuteTestWithEventNotification may resume off-thread via
@@ -120,6 +112,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             finally
             {
                 await MainThreadSwitcher.SwitchToMainThread(CancellationToken.None);
+                // Why not only on success/cancel: any other failure would leave a pending id,
+                // and a later unrelated RunFinished would store against it after reload.
+                if (pendingScope != null && !pendingScope.ReloadObserved)
+                {
+                    pendingScope.ClearPending();
+                }
+
                 pendingScope?.End();
                 scope?.Dispose();
             }
