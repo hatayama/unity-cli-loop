@@ -158,6 +158,16 @@ internal static class AddedFieldClassifier
             return AddedFieldSkipReasons.StructHost;
         }
 
+        // Why unresolved types before visibility: TypeKind.Error is not externally
+        // visible, so the shim-visibility reason would hide a missing using or typo.
+        if (fieldSymbol.Type.TypeKind == TypeKind.Error)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                AddedFieldSkipReasons.FieldTypeUnresolvedFormat,
+                fieldSymbol.Type.ToDisplayString());
+        }
+
         if (!AccessibilityRules.IsExternallyVisibleType(fieldSymbol.Type))
         {
             return AddedFieldSkipReasons.FieldTypeNotExternallyVisible;

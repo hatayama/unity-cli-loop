@@ -761,6 +761,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added field whose type cannot be resolved (missing using or typo) is skipped with a reason that names the type and points at the declaration, not at shim visibility.
+        /// </summary>
+        [Test]
+        public async Task Skip_UnresolvedAddedFieldType_ReportsTypeNameAndUsingHint()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public NoSuchAddedFieldType Added;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Added == null ? value : value + 1;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldUnresolvedType.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "NoSuchAddedFieldType");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "missing using directive");
+
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null
+                    && skipped.method.Contains(nameof(HotReloadAddedMemberHost.ExistingCaller)))
+                {
+                    Assert.That(
+                        skipped.reason,
+                        Does.Not.Contain("not visible to the shim assembly"));
+                }
+            }
+        }
+
+        /// <summary>
         /// What: an added const on a struct host still folds to a literal because const folding
         /// does not use the instance store.
         /// </summary>
