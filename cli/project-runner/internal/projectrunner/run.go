@@ -76,11 +76,24 @@ func runTool(ctx context.Context, connection unityipc.Connection, command string
 		return runControlPlayModeWithStateWait(ctx, connection, params, stdout, stderr)
 	}
 
-	result := runPlainTool(ctx, connection, command, params, stderr)
+	result := runToolExecution(ctx, connection, command, params, stderr)
 	if len(result.result) > 0 {
 		clicore.WriteJSON(stdout, result.result)
 	}
 	return result.exitCode
+}
+
+func runToolExecution(
+	ctx context.Context,
+	connection unityipc.Connection,
+	command string,
+	params map[string]any,
+	stderr io.Writer,
+) toolExecutionResult {
+	if command == clicore.RunTestsCommandName && shouldWaitForRunTestsDomainReload(params) {
+		return runRunTestsWithDomainReloadWait(ctx, connection, params, stderr)
+	}
+	return runPlainTool(ctx, connection, command, params, stderr)
 }
 
 type toolExecutionResult struct {
