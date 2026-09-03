@@ -186,7 +186,7 @@ internal static class AddedFieldClassifier
         return null;
     }
 
-    // Why recurse the same shapes as IsExternallyVisibleType: List<Missing> and Missing[]
+    // Why recurse array elements and type arguments: List<Missing> and Missing[]
     // would otherwise keep the shim-visibility reason even though the inner type is unresolved.
     private static bool TryFindUnresolvedType(ITypeSymbol typeSymbol, out ITypeSymbol unresolvedType)
     {
@@ -210,11 +210,6 @@ internal static class AddedFieldClassifier
         if (typeSymbol is IArrayTypeSymbol arrayType)
         {
             return TryFindUnresolvedType(arrayType.ElementType, out unresolvedType);
-        }
-
-        if (typeSymbol is IPointerTypeSymbol pointerType)
-        {
-            return TryFindUnresolvedType(pointerType.PointedAtType, out unresolvedType);
         }
 
         if (typeSymbol is INamedTypeSymbol namedType)
