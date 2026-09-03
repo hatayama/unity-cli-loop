@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Threading.Tasks;
 using System.Threading;
 using UnityEngine;
@@ -156,38 +155,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             // 3. Response creation.
-            RunTestsResponse response = new(
-                success: result.success,
-                message: result.message,
-                completedAt: result.completedAt,
-                testCount: result.testCount,
-                passedCount: result.passedCount,
-                failedCount: result.failedCount,
-                skippedCount: result.skippedCount,
-                xmlPath: result.xmlPath,
-                status: result.status,
-                hasFailures: result.hasFailures,
-                noTestsFound: result.noTestsFound,
-                noTestsFoundExplanation: result.noTestsFoundExplanation);
+            RunTestsResponse response = RunTestsResponseFactory.FromResult(result);
             if (clearedPausePointIds != null && clearedPausePointIds.Length > 0)
             {
                 response.ClearedPausePointIds = clearedPausePointIds;
             }
 
-            CopyTestDetails(result, response);
-
             response.Warning = RunTestsHotReloadDiscardWarningBuilder.Build(activeHotReloadChangeCountAtStart);
-
-            if (result.failedCount > RunTestsConstants.FailedTestDetailsLimit)
-            {
-                response.Message = response.Message
-                    + " "
-                    + string.Format(
-                        CultureInfo.InvariantCulture,
-                        RunTestsConstants.FailedTestDetailsTruncatedMessageFormat,
-                        RunTestsConstants.FailedTestDetailsLimit,
-                        result.failedCount);
-            }
 
             // Why switch here: cleanup waits with ConfigureAwait(false), so this resume is
             // off-thread. No-tests diagnostics call AssetDatabase.FindAssets, and the
@@ -205,19 +179,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await ApplyUnfilteredFilterEchoIfNeededAsync(response, parameters, ct)
                 .ConfigureAwait(false);
             return response;
-        }
-
-        private void CopyTestDetails(SerializableTestResult result, RunTestsResponse response)
-        {
-            if (result.failedTests != null && result.failedTests.Length > 0)
-            {
-                response.FailedTests = result.failedTests;
-            }
-
-            if (result.skippedTests != null && result.skippedTests.Length > 0)
-            {
-                response.SkippedTests = result.skippedTests;
-            }
         }
 
         private void AppendPredefinedAssemblyTestNoticeIfNeeded(
