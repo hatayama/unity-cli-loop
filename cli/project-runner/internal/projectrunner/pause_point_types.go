@@ -55,6 +55,10 @@ type pausePointStatusResponse struct {
 	CapturedVariablesTruncated bool                         `json:"CapturedVariablesTruncated"`
 	TruncatedVariableNames     []string                     `json:"TruncatedVariableNames"`
 	TruncatedVariableCount     int                          `json:"TruncatedVariableCount"`
+	// NotCapturableVariables names the resolved method's parameters that capture cannot box
+	// (ref/out/in, pointer, ref struct), each with the reason. Unity omits the field when every
+	// parameter can be captured, so omitempty keeps the shared contract shape unchanged.
+	NotCapturableVariables []string `json:"NotCapturableVariables,omitempty"`
 
 	// CapturedVariablesTruncatedNote is set by the CLI, not Unity, when
 	// --captured-variable-names dropped every truncated variable so the remaining

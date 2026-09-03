@@ -79,6 +79,9 @@
     "extraField"
   ],
   "TruncatedVariableCount": 1,
+  "NotCapturableVariables": [
+    "accumulator (ref/out/in parameter cannot be boxed)"
+  ],
   "ClearedReason": "",
   "StatusBeforeClear": "",
   "LateHitDiscardedAfterClear": false,

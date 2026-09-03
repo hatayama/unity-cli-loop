@@ -188,6 +188,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public bool CapturedVariablesTruncated { get; set; }
         public IReadOnlyList<string> TruncatedVariableNames { get; set; } = Array.Empty<string>();
         public int TruncatedVariableCount { get; set; }
+        // Parameters of the resolved method that capture cannot box, each with the reason.
+        // Null when there are none so the status contract omits the field (matches Go omitempty).
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> NotCapturableVariables { get; set; }
         public string ClearedReason { get; set; } = string.Empty;
         public string StatusBeforeClear { get; set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; set; }
@@ -208,6 +212,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string ResolvedLineText { get; set; }
+
+        // Why null for empty: the status contract omits the field entirely when every parameter of
+        // the resolved method can be captured, so a reader never sees an empty list to interpret.
+        private static IReadOnlyList<string> NormalizeNotCapturableVariables(IReadOnlyList<string> values)
+        {
+            return values == null || values.Count == 0 ? null : values;
+        }
 
         internal static PausePointStatusResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
@@ -260,6 +271,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CapturedVariablesTruncated = snapshot.CapturedVariablesTruncated,
                 TruncatedVariableNames = snapshot.TruncatedVariableNames,
                 TruncatedVariableCount = snapshot.TruncatedVariableCount,
+                NotCapturableVariables = NormalizeNotCapturableVariables(snapshot.NotCapturableVariables),
                 ClearedReason = snapshot.ClearedReason,
                 StatusBeforeClear = snapshot.StatusBeforeClear,
                 LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear,

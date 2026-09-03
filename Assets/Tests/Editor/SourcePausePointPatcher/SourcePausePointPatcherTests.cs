@@ -823,7 +823,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 compiledMethodStartLine,
                 compiledMethodEndLine,
                 Array.Empty<SourcePausePointLocalVariable>(),
-                Array.Empty<SourcePausePointParameter>());
+                Array.Empty<SourcePausePointParameter>(),
+                Array.Empty<string>());
         }
 
         private abstract class AbstractMethodFixture

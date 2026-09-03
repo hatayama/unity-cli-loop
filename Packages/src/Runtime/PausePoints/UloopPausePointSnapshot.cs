@@ -42,6 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             bool capturedVariablesTruncated,
             IReadOnlyList<string> truncatedVariableNames,
             int truncatedVariableCount,
+            IReadOnlyList<string> notCapturableVariables,
             string clearedReason,
             string statusBeforeClear,
             bool lateHitDiscardedAfterClear,
@@ -86,6 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             CapturedVariablesTruncated = capturedVariablesTruncated;
             TruncatedVariableNames = truncatedVariableNames ?? Array.Empty<string>();
             TruncatedVariableCount = truncatedVariableCount;
+            NotCapturableVariables = notCapturableVariables ?? Array.Empty<string>();
             ClearedReason = clearedReason ?? string.Empty;
             StatusBeforeClear = statusBeforeClear ?? string.Empty;
             LateHitDiscardedAfterClear = lateHitDiscardedAfterClear;
@@ -129,6 +131,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public bool CapturedVariablesTruncated { get; }
         public IReadOnlyList<string> TruncatedVariableNames { get; }
         public int TruncatedVariableCount { get; }
+        // Parameters of the resolved method that capture cannot box, each with the reason.
+        public IReadOnlyList<string> NotCapturableVariables { get; }
         public string ClearedReason { get; }
         public string StatusBeforeClear { get; }
         public bool LateHitDiscardedAfterClear { get; }
@@ -184,6 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 false,
                 Array.Empty<string>(),
                 0,
+                Array.Empty<string>(),
                 string.Empty,
                 string.Empty,
                 false,

@@ -189,6 +189,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string NotCapturablePointerReason = "pointer cannot be boxed";
         public const string NotCapturableRefStructReason = "ref struct cannot be boxed";
 
+        // Named at enable time so the caller learns the parameter is missing before running the
+        // code path, instead of reading CapturedVariables afterwards and suspecting a capture bug.
+        public const string NotCapturableParametersWarningFormat =
+            "Parameters not captured because they cannot be boxed: {0}. Copy the value to a local,"
+            + " or use --snapshot-timing post-line on the line that consumes it.";
+
         // Why a resolve failure rather than a silent pre-line fallback: a statement that
         // always throws has no "after", and capturing before it would report values the
         // caller explicitly asked not to see.

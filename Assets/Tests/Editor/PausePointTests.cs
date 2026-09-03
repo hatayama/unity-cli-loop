@@ -2222,7 +2222,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 resolution.CompiledMethodStartLine,
                 resolution.CompiledMethodEndLine,
                 resolution.Locals,
-                resolution.Parameters);
+                resolution.Parameters,
+                resolution.NotCapturableVariables);
         }
 
         private static async Task<PausePointResponse> EnablePausePointAsync(string id)

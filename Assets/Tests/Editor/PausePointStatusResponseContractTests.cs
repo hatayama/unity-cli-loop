@@ -115,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CapturedVariablesTruncated = true,
                 TruncatedVariableNames = new[] { "extraField" },
                 TruncatedVariableCount = 1,
+                NotCapturableVariables = new[] { "accumulator (ref/out/in parameter cannot be boxed)" },
                 ClearedReason = "",
                 StatusBeforeClear = "",
                 LateHitDiscardedAfterClear = false,

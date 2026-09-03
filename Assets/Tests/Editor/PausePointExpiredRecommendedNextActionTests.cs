@@ -168,6 +168,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 false,
                 Array.Empty<string>(),
                 0,
+                Array.Empty<string>(),
                 string.Empty,
                 string.Empty,
                 false,

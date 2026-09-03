@@ -258,6 +258,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "EditedFile",
                         retargetedToHotReloadPatch: true,
                         hasActiveHotReloadPatches: true,
+                        shimResolution.NotCapturableVariables,
                         editedMethodStartLine: shimResolution.SourceStartLine,
                         editedMethodEndLine: shimResolution.SourceEndLine);
                 }
@@ -371,6 +372,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 "LastCompiledSource",
                 retargetedToHotReloadPatch: false,
                 hasActiveHotReloadPatches: shimLookup != null,
+                resolveResult.Resolution.NotCapturableVariables,
                 compiledMethodStartLine: resolveResult.Resolution.CompiledMethodStartLine,
                 compiledMethodEndLine: resolveResult.Resolution.CompiledMethodEndLine,
                 patchedMethodPdbUnavailableWarning: patchedMethodPdbUnavailableWarning,
@@ -410,6 +412,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string lineBasis,
             bool retargetedToHotReloadPatch,
             bool hasActiveHotReloadPatches,
+            IReadOnlyList<string> notCapturableVariables,
             int editedMethodStartLine = 0,
             int editedMethodEndLine = 0,
             int compiledMethodStartLine = 0,
@@ -447,11 +450,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ? SourcePausePointSourceLineReader.ReadLineTextFromSource(compiledSnapshotSource, resolvedLine)
                 : PausePointLineTextReader.ReadResolvedLineText(parameters.File, resolvedLine, resolvedEndLine);
             UloopPausePointRegistry.SetResolvedLine(id, resolvedLine, resolvedLineText);
+            UloopPausePointRegistry.SetNotCapturableVariables(id, notCapturableVariables);
 
             PausePointResponse response = PausePointResponse.FromSnapshot(snapshot);
             // Why re-read after SetResolvedLine: FromSnapshot above used the pre-write snapshot.
             response.ResolvedLine = resolvedLine;
             response.ResolvedLineText = resolvedLineText;
+            response.NotCapturableVariables =
+                PausePointResponse.NormalizeNotCapturableVariables(notCapturableVariables);
             response.ResolvedMethod = resolvedMethod;
             response.SnapshotTiming = DescribeSnapshotTiming(ParseSnapshotTiming(parameters.SnapshotTiming));
             response.LineBasis = lineBasis;
@@ -519,6 +525,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.Mode,
                     resolvedMethod,
                     snapshot.MaxHistory));
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warningEntries,
+                PausePointNotCapturableWarnings.BuildNotCapturableParametersWarningOrEmpty(
+                    notCapturableVariables));
             PausePointEnableWarningList.AddIfNotEmpty(warningEntries, rearmWarning);
             PausePointEnableWarningList.AddIfNotEmpty(
                 warningEntries,
