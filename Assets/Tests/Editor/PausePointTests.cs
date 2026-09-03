@@ -1047,8 +1047,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject parameters = new() { ["id"] = "jump" };
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
-            Assert.That(response.Warning, Is.Empty);
-            Assert.That(response.Warnings, Is.Empty);
+            Assert.That(response.Warning, Is.Null);
+            Assert.That(response.Warnings, Is.Null);
         }
 
         /// <summary>
@@ -1065,8 +1065,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject parameters = new() { ["id"] = "other" };
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
-            Assert.That(response.Warning, Is.Empty);
-            Assert.That(response.Warnings, Is.Empty);
+            Assert.That(response.Warning, Is.Null);
+            Assert.That(response.Warnings, Is.Null);
             Assert.That(_pauseController.IsPaused, Is.True);
         }
 
@@ -1938,7 +1938,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             PausePointResponse response = await EnablePausePointAsync("dash");
 
-            Assert.That(response.Warning, Is.Empty);
+            Assert.That(response.Warning, Is.Null);
         }
 
         // NOTE: Enabling by File/Line is rejected in Debug-only when

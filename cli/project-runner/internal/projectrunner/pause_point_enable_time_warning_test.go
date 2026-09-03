@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,9 +16,25 @@ import (
 
 const enableTimePatchWarning = "GameObjects that already existed at enable time may never reach the marker."
 
-// Verifies a successful enable --await hit keeps the enable-time patch warning out of Warning and
-// exposes it on EnableTimeWarning instead.
-func TestRunPausePointWaitAfterEnableSeparatesEnableTimeWarningOnHit(t *testing.T) {
+// assertNoRetiredEnableTimeWarningKeys fails when a hit payload still carries the retired
+// enable-time warning fields: the whole point of the prefix is that Warnings is the only array.
+func assertNoRetiredEnableTimeWarningKeys(t *testing.T, output string) {
+	t.Helper()
+
+	raw := map[string]json.RawMessage{}
+	if err := json.Unmarshal([]byte(output), &raw); err != nil {
+		t.Fatalf("failed to decode raw stdout: %v\n%s", err, output)
+	}
+	for _, retiredKey := range []string{"EnableTimeWarning", "EnableTimeWarnings"} {
+		if _, ok := raw[retiredKey]; ok {
+			t.Fatalf("%s must no longer appear on a hit payload: %s", retiredKey, output)
+		}
+	}
+}
+
+// Verifies a successful enable --await hit lists the enable-time patch warning in Warnings with the
+// enable-time prefix, and no longer answers on a warning field of its own.
+func TestRunPausePointWaitAfterEnablePrefixesEnableTimeWarningOnHit(t *testing.T) {
 	stubPausePointHit(t, "")
 	stubPausePointMatchingLogs(t, nil)
 	stubPausePointTriggerDispatch(t, `{"Success":true}`)
@@ -27,16 +44,18 @@ func TestRunPausePointWaitAfterEnableSeparatesEnableTimeWarningOnHit(t *testing.
 		t.Fatalf("expected hit success, got %d: %s", code, output)
 	}
 	result := decodePausePointWaitResult(t, output)
-	if result.EnableTimeWarning != enableTimePatchWarning {
-		t.Fatalf("EnableTimeWarning mismatch: %q", result.EnableTimeWarning)
+	expected := pausePointEnableTimeWarningPrefix + enableTimePatchWarning
+	if !slices.Contains(result.Warnings, expected) {
+		t.Fatalf("Warnings mismatch: %#v", result.Warnings)
 	}
-	if strings.Contains(result.Warning, enableTimePatchWarning) {
-		t.Fatalf("enable-time warning must not appear in Warning: %q", result.Warning)
+	if result.Warning != strings.Join(result.Warnings, " ") {
+		t.Fatalf("Warning must be the joined form of Warnings: %q vs %#v", result.Warning, result.Warnings)
 	}
+	assertNoRetiredEnableTimeWarningKeys(t, output)
 }
 
-// Verifies enable-response Warnings are copied onto EnableTimeWarnings on a successful hit.
-func TestRunPausePointWaitAfterEnableCopiesWarningsOntoEnableTimeWarnings(t *testing.T) {
+// Verifies every enable-response warning reaches Warnings, prefixed and in the enable order.
+func TestRunPausePointWaitAfterEnableCopiesEveryEnableWarningIntoWarnings(t *testing.T) {
 	stubPausePointHit(t, "")
 	stubPausePointMatchingLogs(t, nil)
 	stubPausePointTriggerDispatch(t, `{"Success":true}`)
@@ -66,18 +85,18 @@ func TestRunPausePointWaitAfterEnableCopiesWarningsOntoEnableTimeWarnings(t *tes
 		t.Fatalf("expected hit success, got %d: %s", code, stdout.String())
 	}
 	result := decodePausePointWaitResult(t, stdout.String())
-	if result.EnableTimeWarning != strings.Join(enableWarnings, " ") {
-		t.Fatalf("EnableTimeWarning mismatch: %q", result.EnableTimeWarning)
+	expected := []string{
+		pausePointEnableTimeWarningPrefix + enableWarnings[0],
+		pausePointEnableTimeWarningPrefix + enableWarnings[1],
 	}
-	if len(result.EnableTimeWarnings) != 2 ||
-		result.EnableTimeWarnings[0] != enableWarnings[0] ||
-		result.EnableTimeWarnings[1] != enableWarnings[1] {
-		t.Fatalf("EnableTimeWarnings mismatch: %#v", result.EnableTimeWarnings)
+	if !slices.Equal(result.Warnings, expected) {
+		t.Fatalf("Warnings mismatch: %#v", result.Warnings)
 	}
+	assertNoRetiredEnableTimeWarningKeys(t, stdout.String())
 }
 
-// Verifies runEnablePausePointAndAwait copies enable-response Warnings onto EnableTimeWarnings.
-func TestRunEnablePausePointAndAwait_WhenEnableReturnsWarnings_CopiesThemOntoEnableTimeWarnings(t *testing.T) {
+// Verifies runEnablePausePointAndAwait carries the enable response's Warnings end to end.
+func TestRunEnablePausePointAndAwait_WhenEnableReturnsWarnings_ListsThemInWarnings(t *testing.T) {
 	originalQuery := queryPausePointStatus
 	originalPoll := pausePointStatusPoll
 	originalFetch := fetchMatchingLogs
@@ -140,18 +159,21 @@ func TestRunEnablePausePointAndAwait_WhenEnableReturnsWarnings_CopiesThemOntoEna
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
 
-	var response pausePointWaitResult
+	response := pausePointWaitResult{}
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
 		t.Fatalf("failed to decode stdout: %v\n%s", err, stdout.String())
 	}
-	if response.EnableTimeWarning != "a. b." {
-		t.Fatalf("EnableTimeWarning mismatch: %q", response.EnableTimeWarning)
+	expected := []string{
+		pausePointEnableTimeWarningPrefix + enableWarnings[0],
+		pausePointEnableTimeWarningPrefix + enableWarnings[1],
 	}
-	if len(response.EnableTimeWarnings) != 2 ||
-		response.EnableTimeWarnings[0] != enableWarnings[0] ||
-		response.EnableTimeWarnings[1] != enableWarnings[1] {
-		t.Fatalf("EnableTimeWarnings mismatch: %#v", response.EnableTimeWarnings)
+	if !slices.Equal(response.Warnings, expected) {
+		t.Fatalf("Warnings mismatch: %#v", response.Warnings)
 	}
+	if response.Warning != strings.Join(expected, " ") {
+		t.Fatalf("Warning must be the joined form of Warnings: %q", response.Warning)
+	}
+	assertNoRetiredEnableTimeWarningKeys(t, stdout.String())
 }
 
 // Verifies a non-hit enable --await path still surfaces the enable-time warning on the existing

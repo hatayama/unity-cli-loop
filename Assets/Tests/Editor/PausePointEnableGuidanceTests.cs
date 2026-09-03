@@ -210,7 +210,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             });
 
             Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
-            Assert.That(response.Warning, Is.EqualTo(PausePointEnableWarnings.CreateEnableWarning()));
+            // Normalized to empty because an omitted warning is now null, while the builder returns
+            // empty when it has nothing to say: both mean "no discard warning was added".
+            Assert.That(
+                response.Warning ?? string.Empty,
+                Is.EqualTo(PausePointEnableWarnings.CreateEnableWarning()));
         }
 
         /// <summary>

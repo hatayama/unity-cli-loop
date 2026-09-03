@@ -61,8 +61,8 @@ func TestRunPausePointWaitAfterEnableWarnsWhenTheTriggerWasRefusedByThisMarker(t
 	}
 }
 
-// Verifies the enable-time warning is exposed as EnableTimeWarning (not folded into Warning) next
-// to the CLI's refusal warning, and that both survive a failed matching-log fetch.
+// Verifies the enable-time warning joins the CLI's refusal warning in the single Warnings
+// aggregate, carries the enable-time prefix, and survives a failed matching-log fetch.
 func TestRunPausePointWaitAfterEnableKeepsEnableWarningWithTheRefusalWarning(t *testing.T) {
 	stubPausePointHit(t, "")
 	stubPausePointMatchingLogs(t, errors.New("unity busy"))
@@ -74,13 +74,18 @@ func TestRunPausePointWaitAfterEnableKeepsEnableWarningWithTheRefusalWarning(t *
 		t.Errorf("a failed fetch must omit MatchingLogs entirely: %s", output)
 	}
 	result := decodePausePointWaitResult(t, output)
-	if result.EnableTimeWarning != "Enable-time warning." {
-		t.Errorf("enable-time warning mismatch: %q", result.EnableTimeWarning)
+	if len(result.Warnings) != 2 {
+		t.Fatalf("both topics must be their own Warnings entry: %#v", result.Warnings)
 	}
-	if strings.Contains(result.Warning, "Enable-time warning.") {
-		t.Errorf("enable-time warning must not be folded into Warning: %q", result.Warning)
+	// Asserting the order and the exact join, not just membership: a regression that split the two
+	// topics back into separate channels would still satisfy a Contains-only check.
+	if !strings.Contains(result.Warnings[0], "refused") {
+		t.Errorf("the refusal warning must come first: %#v", result.Warnings)
 	}
-	if !strings.Contains(result.Warning, "refused") {
-		t.Errorf("the refusal warning was dropped: %q", result.Warning)
+	if result.Warnings[1] != pausePointEnableTimeWarningPrefix+"Enable-time warning." {
+		t.Errorf("the prefixed enable-time warning must come last: %#v", result.Warnings)
+	}
+	if result.Warning != strings.Join(result.Warnings, " ") {
+		t.Errorf("Warning must be the joined form of Warnings: %q vs %#v", result.Warning, result.Warnings)
 	}
 }

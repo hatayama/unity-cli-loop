@@ -33,16 +33,13 @@ type pausePointMatchingLogsResult struct {
 	Logs              []pausePointMatchingLog `json:"Logs"`
 }
 
-// pausePointWaitResult extends the hit response with marker-matching logs so
-// agents do not need a separate get-logs call while Unity is paused. Warning
-// carries hit-time diagnosis only; enable-time patch warnings live in
-// EnableTimeWarning so a successful hit is not contradicted by "may not hit" text.
+// pausePointWaitResult extends the hit response with marker-matching logs so agents do not need a
+// separate get-logs call while Unity is paused. Warning and Warnings come from the embedded status
+// response: buildPausePointHitPayload folds every CLI-side and enable-time warning into that one
+// aggregate, so this type deliberately adds no warning channel of its own.
 type pausePointWaitResult struct {
 	pausePointStatusResponse
-	MatchingLogs       []pausePointMatchingLog `json:"MatchingLogs"`
-	Warning            string                  `json:"Warning,omitempty"`
-	EnableTimeWarning  string                  `json:"EnableTimeWarning,omitempty"`
-	EnableTimeWarnings []string                `json:"EnableTimeWarnings,omitempty"`
+	MatchingLogs []pausePointMatchingLog `json:"MatchingLogs"`
 
 	// Expectations and AllExpectationsPassed are populated only when --expect was passed, so a
 	// caller that never used --expect sees neither field rather than a vacuous
@@ -65,14 +62,8 @@ type pausePointHitPayloadInputs struct {
 	logs    pausePointMatchingLogsResult
 	logsErr error
 
-	// unityWarning is the status-poll warning for this hit (plain await or enable --await).
-	// Enable-time patch warnings must not be folded in here — they go to enableTimeWarning.
-	unityWarning string
-
-	// enableTimeWarning is the enable-pause-point patch diagnostic. Empty on plain await.
-	enableTimeWarning string
-
-	// enableTimeWarnings is the array form of enableTimeWarning. Empty on plain await.
+	// enableTimeWarnings carries the enable-pause-point patch diagnostics, already prefixed for
+	// reading next to hit-time warnings. Empty on plain await.
 	enableTimeWarnings []string
 
 	triggerResult       *pausePointTriggerResult
@@ -85,44 +76,47 @@ type pausePointHitPayloadInputs struct {
 func buildPausePointHitPayload(inputs pausePointHitPayloadInputs) any {
 	response := inputs.response
 	response.TriggerFailed = pausePointTriggerFailedPointer(inputs.triggerResult)
-	triggerWarning := pausePointTriggerRefusalWarning(inputs.triggerResult, inputs.awaitedPausePointID)
+	response = applyPausePointWarnings(response, buildPausePointHitWarnings(inputs, response.HitCount)...)
+	response = applyPausePointMessagePointers(response)
 
 	if inputs.logsErr != nil {
 		// Best-effort: a failed log fetch must not also drop the CLI-side evidence — the warnings
-		// or the --expect results, which are the only evidence left in this branch.
+		// or the --expect results, which are the only evidence left in this branch. MatchingLogs is
+		// omitted entirely rather than emitted empty, so "empty array" keeps meaning "the fetch
+		// succeeded and nothing matched".
 		return struct {
 			pausePointStatusResponse
-			Warning               string                        `json:"Warning,omitempty"`
-			EnableTimeWarning     string                        `json:"EnableTimeWarning,omitempty"`
-			EnableTimeWarnings    []string                      `json:"EnableTimeWarnings,omitempty"`
 			Expectations          []pausePointExpectationResult `json:"Expectations,omitempty"`
 			AllExpectationsPassed *bool                         `json:"AllExpectationsPassed,omitempty"`
 		}{
 			pausePointStatusResponse: response,
-			Warning: joinPausePointWarnings(
-				inputs.unityWarning,
-				triggerWarning,
-				buildPausePointExpectNotFoundWarning(inputs.expectations)),
-			EnableTimeWarning:     inputs.enableTimeWarning,
-			EnableTimeWarnings:    inputs.enableTimeWarnings,
-			Expectations:          inputs.expectations,
-			AllExpectationsPassed: pausePointAllExpectationsPassedPointer(inputs.expectations),
+			Expectations:             inputs.expectations,
+			AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(inputs.expectations),
 		}
 	}
 
 	return pausePointWaitResult{
 		pausePointStatusResponse: response,
 		MatchingLogs:             inputs.logs.Logs,
-		Warning: joinPausePointWarnings(
-			inputs.unityWarning,
-			buildPausePointWarning(inputs.logs, response.HitCount),
-			triggerWarning,
-			buildPausePointExpectNotFoundWarning(inputs.expectations)),
-		EnableTimeWarning:     inputs.enableTimeWarning,
-		EnableTimeWarnings:    inputs.enableTimeWarnings,
-		Expectations:          inputs.expectations,
-		AllExpectationsPassed: pausePointAllExpectationsPassedPointer(inputs.expectations),
+		Expectations:             inputs.expectations,
+		AllExpectationsPassed:    pausePointAllExpectationsPassedPointer(inputs.expectations),
 	}
+}
+
+// buildPausePointHitWarnings lists the CLI-side warnings for a hit in reading order: what the logs
+// say about this hit, then what the trigger and --expect did, then the enable-time diagnostics.
+func buildPausePointHitWarnings(inputs pausePointHitPayloadInputs, hitCount int) []string {
+	warnings := []string{}
+	if inputs.logsErr == nil {
+		warnings = append(warnings, buildPausePointLogWarnings(inputs.logs, hitCount)...)
+	}
+
+	warnings = append(
+		warnings,
+		pausePointTriggerRefusalWarning(inputs.triggerResult, inputs.awaitedPausePointID),
+		buildPausePointExpectNotFoundWarning(inputs.expectations),
+	)
+	return append(warnings, inputs.enableTimeWarnings...)
 }
 
 // pausePointAllExpectationsPassedPointer returns nil when no --expect was given, and otherwise
@@ -198,7 +192,10 @@ func fetchMatchingLogsFromUnity(
 	}, nil
 }
 
-func buildPausePointWarning(logs pausePointMatchingLogsResult, hitCount int) string {
+// buildPausePointLogWarnings lists what the matching logs say about this hit, one topic per entry.
+// Why separate entries rather than one sentence-joined string: Warnings is counted, and a caller
+// told "1 warning" while three independent doubts apply reads the evidence as narrower than it is.
+func buildPausePointLogWarnings(logs pausePointMatchingLogsResult, hitCount int) []string {
 	matchingLogCount := logs.TotalCount
 	if matchingLogCount < len(logs.Logs) {
 		matchingLogCount = len(logs.Logs)
@@ -221,5 +218,11 @@ func buildPausePointWarning(logs pausePointMatchingLogsResult, hitCount int) str
 			warnings,
 			"The pause point reports multiple hits; inspect the paused state before treating the scenario as single-fire evidence.")
 	}
-	return strings.Join(warnings, " ")
+	return warnings
+}
+
+// buildPausePointWarning is the joined form for the timeout error envelope, whose Details.Warning
+// is a single string rather than a counted list.
+func buildPausePointWarning(logs pausePointMatchingLogsResult, hitCount int) string {
+	return strings.Join(buildPausePointLogWarnings(logs, hitCount), " ")
 }

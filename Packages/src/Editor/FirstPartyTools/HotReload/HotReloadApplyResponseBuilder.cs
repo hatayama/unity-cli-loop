@@ -306,7 +306,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return message;
             }
 
-            string withCount = message + " " + warningCount + " warning(s). See Warnings.";
+            string withCount = WarningsMessagePointer.Append(message, warningCount);
             if (!appendCompileResolution)
             {
                 return withCount;
