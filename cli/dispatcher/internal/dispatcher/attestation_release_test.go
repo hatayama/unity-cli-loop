@@ -3,10 +3,13 @@ package dispatcher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 	sharedupdate "github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
@@ -122,5 +125,26 @@ func installReleaseListServer(t *testing.T, entries []githubReleaseListEntry) (*
 	dispatcherAPIBaseURL = server.URL
 	return server, func() {
 		dispatcherAPIBaseURL = previousBase
+	}
+}
+
+// Verifies the release listing surfaces an exhausted GitHub quota as a typed rate-limit error.
+func TestFetchDispatcherReleasePageReportsRateLimit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		http.Error(w, `{"message":"API rate limit exceeded"}`, http.StatusForbidden)
+	}))
+	defer server.Close()
+	previousBase := dispatcherAPIBaseURL
+	dispatcherAPIBaseURL = server.URL
+	defer func() { dispatcherAPIBaseURL = previousBase }()
+
+	_, err := fetchDispatcherReleasePage(context.Background(), 1)
+	var rateLimit githubapi.RateLimitError
+	if !errors.As(err, &rateLimit) {
+		t.Fatalf("expected RateLimitError, got: %v", err)
+	}
+	if !strings.HasPrefix(err.Error(), "list releases: ") {
+		t.Fatalf("expected list releases prefix, got: %v", err)
 	}
 }
