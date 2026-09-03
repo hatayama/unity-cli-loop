@@ -43,7 +43,7 @@ Unity Test Runnerを実行し、テスト結果を取得します。FilterType�
 → 失敗したテストを確認、実装を修正してテストをパス
 ```
 > [!WARNING]
-> PlayModeテスト実行の際、Domain Reloadは強制的にOFFにされます。(テスト終了後に元の設定に戻ります)
+> PlayModeテスト実行の際、`--respect-enter-play-mode-settings` を指定しない限りDomain Reloadは強制的にOFFにされます。(テスト終了後に元の設定に戻ります)
 > Domain Reloadが強制OFFの間はStatic変数がリセットされない事に注意して下さい。`--respect-enter-play-mode-settings` を付けた場合はプロジェクト設定に従ってリセットされるかどうかが決まります。
 > Domain Reloadを強制OFFにせずプロジェクトのEnter Play Mode設定を維持したい場合は `--respect-enter-play-mode-settings` を指定してください。
 

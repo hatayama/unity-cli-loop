@@ -43,7 +43,7 @@ This is also a strategy to avoid consuming context.
 → Check failed tests, fix implementation to pass tests
 ```
 > [!WARNING]
-> During PlayMode test execution, Domain Reload is forcibly turned OFF. (Settings are restored after test completion)
+> During PlayMode test execution, Domain Reload is forcibly turned OFF unless `--respect-enter-play-mode-settings` is specified. (Settings are restored after test completion)
 > Note that static variables will not be reset while Domain Reload is forced OFF. With `--respect-enter-play-mode-settings`, the project setting decides whether they are reset.
 > Pass `--respect-enter-play-mode-settings` to keep the project's Enter Play Mode settings instead of forcing Domain Reload off.
 
