@@ -182,7 +182,7 @@ Subscribing to or unsubscribing from a field-like event (`+=`/`-=`) inside an ed
 body works. Methods that raise the event are reported as `Skipped` (see the table
 below) — raising is only expressible inside the declaring type, which a shim is not.
 
-## Skipped — reported per method, never flips `Success`
+## Skipped — reported per method and in `Warnings`, never flips `Success`
 
 | Condition | Why |
 |-----------|-----|
