@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -75,13 +74,18 @@ func TestRunPausePointWaitAfterEnableKeepsEnableWarningWithTheRefusalWarning(t *
 		t.Errorf("a failed fetch must omit MatchingLogs entirely: %s", output)
 	}
 	result := decodePausePointWaitResult(t, output)
-	if !slices.Contains(result.Warnings, pausePointEnableTimeWarningPrefix+"Enable-time warning.") {
-		t.Errorf("the prefixed enable-time warning is missing from Warnings: %#v", result.Warnings)
+	if len(result.Warnings) != 2 {
+		t.Fatalf("both topics must be their own Warnings entry: %#v", result.Warnings)
 	}
-	if !strings.Contains(result.Warning, pausePointEnableTimeWarningPrefix+"Enable-time warning.") {
-		t.Errorf("the prefixed enable-time warning is missing from Warning: %q", result.Warning)
+	// Asserting the order and the exact join, not just membership: a regression that split the two
+	// topics back into separate channels would still satisfy a Contains-only check.
+	if !strings.Contains(result.Warnings[0], "refused") {
+		t.Errorf("the refusal warning must come first: %#v", result.Warnings)
 	}
-	if !strings.Contains(result.Warning, "refused") {
-		t.Errorf("the refusal warning was dropped: %q", result.Warning)
+	if result.Warnings[1] != pausePointEnableTimeWarningPrefix+"Enable-time warning." {
+		t.Errorf("the prefixed enable-time warning must come last: %#v", result.Warnings)
+	}
+	if result.Warning != strings.Join(result.Warnings, " ") {
+		t.Errorf("Warning must be the joined form of Warnings: %q vs %#v", result.Warning, result.Warnings)
 	}
 }

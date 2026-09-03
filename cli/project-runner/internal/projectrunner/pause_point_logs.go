@@ -106,16 +106,16 @@ func buildPausePointHitPayload(inputs pausePointHitPayloadInputs) any {
 // buildPausePointHitWarnings lists the CLI-side warnings for a hit in reading order: what the logs
 // say about this hit, then what the trigger and --expect did, then the enable-time diagnostics.
 func buildPausePointHitWarnings(inputs pausePointHitPayloadInputs, hitCount int) []string {
-	logWarning := ""
+	warnings := []string{}
 	if inputs.logsErr == nil {
-		logWarning = buildPausePointWarning(inputs.logs, hitCount)
+		warnings = append(warnings, buildPausePointLogWarnings(inputs.logs, hitCount)...)
 	}
 
-	warnings := []string{
-		logWarning,
+	warnings = append(
+		warnings,
 		pausePointTriggerRefusalWarning(inputs.triggerResult, inputs.awaitedPausePointID),
 		buildPausePointExpectNotFoundWarning(inputs.expectations),
-	}
+	)
 	return append(warnings, inputs.enableTimeWarnings...)
 }
 
@@ -192,7 +192,10 @@ func fetchMatchingLogsFromUnity(
 	}, nil
 }
 
-func buildPausePointWarning(logs pausePointMatchingLogsResult, hitCount int) string {
+// buildPausePointLogWarnings lists what the matching logs say about this hit, one topic per entry.
+// Why separate entries rather than one sentence-joined string: Warnings is counted, and a caller
+// told "1 warning" while three independent doubts apply reads the evidence as narrower than it is.
+func buildPausePointLogWarnings(logs pausePointMatchingLogsResult, hitCount int) []string {
 	matchingLogCount := logs.TotalCount
 	if matchingLogCount < len(logs.Logs) {
 		matchingLogCount = len(logs.Logs)
@@ -215,5 +218,11 @@ func buildPausePointWarning(logs pausePointMatchingLogsResult, hitCount int) str
 			warnings,
 			"The pause point reports multiple hits; inspect the paused state before treating the scenario as single-fire evidence.")
 	}
-	return strings.Join(warnings, " ")
+	return warnings
+}
+
+// buildPausePointWarning is the joined form for the timeout error envelope, whose Details.Warning
+// is a single string rather than a counted list.
+func buildPausePointWarning(logs pausePointMatchingLogsResult, hitCount int) string {
+	return strings.Join(buildPausePointLogWarnings(logs, hitCount), " ")
 }

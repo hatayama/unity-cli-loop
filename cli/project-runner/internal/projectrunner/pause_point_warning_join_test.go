@@ -163,3 +163,51 @@ func TestRunPausePointStatusPointsMessageAtWarningsAndStatusNote(t *testing.T) {
 		t.Errorf("Warning must be derived from Warnings: %q", result.Warning)
 	}
 }
+
+// stubPausePointTruncatedMultiLogFetch reports more matching logs than it returns, which is the one
+// situation that raises two log-side topics at once: truncation and multiple matches.
+func stubPausePointTruncatedMultiLogFetch(t *testing.T) {
+	t.Helper()
+
+	originalFetch := fetchMatchingLogs
+	t.Cleanup(func() {
+		fetchMatchingLogs = originalFetch
+	})
+
+	fetchMatchingLogs = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		searchText string,
+		maxCount int,
+	) (pausePointMatchingLogsResult, error) {
+		return pausePointMatchingLogsResult{
+			SearchText:     searchText,
+			TotalCount:     5,
+			DisplayedCount: 2,
+			MaxCount:       maxCount,
+			Logs: []pausePointMatchingLog{
+				{Type: "Log", Message: "[jump] hit"},
+				{Type: "Log", Message: "[jump] hit again"},
+			},
+		}, nil
+	}
+}
+
+// Verifies two simultaneous log diagnoses become two Warnings entries and a Message count of 2,
+// rather than one entry holding both sentences under a count of 1.
+func TestRunWaitForPausePointListsEachLogDiagnosisAsItsOwnWarning(t *testing.T) {
+	stubPausePointHit(t, "")
+	stubPausePointTruncatedMultiLogFetch(t)
+
+	result := decodePausePointWaitResult(t, runAwaitWithoutTrigger(t))
+
+	if len(result.Warnings) != 2 {
+		t.Fatalf("each log diagnosis must be its own entry: %#v", result.Warnings)
+	}
+	if !strings.Contains(result.Message, "2 warning(s). See Warnings.") {
+		t.Fatalf("Message must count the entries it points at: %q", result.Message)
+	}
+	if result.Warning != strings.Join(result.Warnings, " ") {
+		t.Fatalf("Warning must be the joined form of Warnings: %q", result.Warning)
+	}
+}

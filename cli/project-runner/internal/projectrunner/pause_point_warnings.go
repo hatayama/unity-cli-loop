@@ -2,6 +2,7 @@ package projectrunner
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -21,6 +22,21 @@ const (
 	// hit guidance that is only reachable by scanning the payload is guidance agents miss.
 	pausePointStatusNoteMessagePointer = "See StatusNote."
 )
+
+// pausePointWarningCountMessagePattern matches a warning-count pointer already present in Message,
+// whether Unity wrote it or this process did. A warning appended after that pointer was built would
+// otherwise leave a count that undercounts the list it names.
+var pausePointWarningCountMessagePattern = regexp.MustCompile(` ?\d+ warning\(s\)\. See Warnings\.`)
+
+// restatePausePointWarningCountMessage replaces Message's warning-count pointer with one that
+// matches warningCount, and removes it outright when nothing warned.
+func restatePausePointWarningCountMessage(message string, warningCount int) string {
+	stripped := strings.TrimSpace(pausePointWarningCountMessagePattern.ReplaceAllString(message, ""))
+	if warningCount == 0 {
+		return stripped
+	}
+	return appendPausePointMessagePart(stripped, fmt.Sprintf(pausePointWarningCountMessageFormat, warningCount))
+}
 
 // applyPausePointMessagePointers ends Message with the fields a caller would otherwise have to
 // discover on its own. Message is what an agent reads first, so evidence Message does not name is
