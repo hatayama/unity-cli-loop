@@ -1,7 +1,6 @@
 # Focus-return handling of open Scenes and the Prefab Stage
 
-The Unity package holds Unity's Auto Refresh (`AssetDatabase.DisallowAutoRefresh`) while the
-Editor is unfocused and releases it only after a preflight runs on focus return. The preflight
+The Unity package runs a preflight on `EditorApplication.focusChanged(true)`. The preflight
 exists so that files replaced outside Unity while it was unfocused — a `git checkout`, a
 revert, an agent editing a Scene file — do not surface as native "changed on disk" dialogs
 that block `uloop` commands. Implementation: `ExternalSceneChangeTracker.ResolveForFocusReturn`
@@ -41,6 +40,23 @@ editor work to disk within seconds of making it — the user saw a Scene they ha
 become saved, and `run-tests --unsaved-changes fail` had nothing left to detect. Saving is
 now gated on an actual external change, which is the only case the dialog-avoidance rationale
 covers.
+
+## Why there is no Auto Refresh hold
+
+Through 3.2.1 the package called `AssetDatabase.DisallowAutoRefresh` on focus loss and released
+it only after the preflight ran. That hold is what caused issue #2575: Unity evaluates its own
+focus-return Auto Refresh while the hold is still active, skips it, and does not reschedule it
+after `AllowAutoRefresh`, so `.cs` files added or edited outside Unity stayed unimported until
+an explicit `uloop compile`.
+
+A/B checks on Unity 2022.3.62f3 and 6000.3.15f1 showed the same Editor order every time:
+native refresh (import) → C# `EditorApplication.focusChanged(true)` (preflight) → Unity's
+scene-change check (the tick that would raise the dialog). With that order the preflight
+alone prevents the native dialog; the hold did not contribute.
+
+Do not reintroduce a hold unless a Unity version is found where the native dialog appears
+before the preflight runs. Even then, prefer a version-specific workaround over holding
+Auto Refresh for every Editor.
 
 ## Related but separate paths
 
