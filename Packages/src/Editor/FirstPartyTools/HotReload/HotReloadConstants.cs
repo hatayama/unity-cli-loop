@@ -123,7 +123,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // installed, so compiled callers keep running the patched body.
         public const string StalePatchRemovedFromSourceReason =
             "The method was removed from the edited source, but its patch stays active until "
-            + "'uloop compile' or '--revert-all'; compiled callers still run the patched body.";
+            + "'uloop compile', '--revert-all', or a reload of a source that declares it again; "
+            + "compiled callers still run the patched body.";
 
         public const string AddedFieldsLifetimeWarningFormat =
             "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";

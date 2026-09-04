@@ -5797,6 +5797,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(secondRun.ActivePatchTotal),
                 "Every active patch must have a row now that stale patches are listed.\n"
                 + FormatOutcomes(secondRun.Methods));
+
+            // Restoring the compiled baseline makes the deleted method unchanged again, so the
+            // stale patch is reverted with the rest. This is the third way out of a stale patch,
+            // alongside 'uloop compile' and '--revert-all'.
+            HotReloadOrchestratorResult restoreRun = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                WriteEditedSource("StaleOutcomeRestorePass.cs", onDisk),
+                CancellationToken.None);
+            Assert.That(
+                restoreRun.ActivePatchTotal,
+                Is.EqualTo(0),
+                "Restoring the source must clear the stale patch.\n"
+                + FormatOutcomes(restoreRun.Methods));
         }
 
         private static string FormatOutcomes(IReadOnlyList<HotReloadMethodOutcome> outcomes)
