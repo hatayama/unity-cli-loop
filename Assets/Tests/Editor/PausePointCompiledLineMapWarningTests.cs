@@ -718,7 +718,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + ResolveFailureFile
                     + ":"
                     + requestedLine
-                    + "\" --timeout-seconds <n>. To arm, trigger, and collect in one call: enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
+                    + "\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
                 Assert.That(response.RecommendedNextAction, Is.EqualTo(expectedArming));
                 AssertLineBasis(response, "LastCompiledSource");
             }

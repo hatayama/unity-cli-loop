@@ -430,7 +430,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // so agents arm a marker and then stall instead of running the path or using --await.
         // Format: marker id.
         public const string EnableSuccessArmingRecommendedNextActionFormat =
-            "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"{0}\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \"{0}\" --timeout-seconds <n>. To arm, trigger, and collect in one call: enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
+            "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"{0}\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \"{0}\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
 
         // Why warn: Registry.Enable replaces the entry and drops CapturedVariables,
         // CapturedVariableHistory, and hit snapshots. The raw capture holder is kept on purpose.
