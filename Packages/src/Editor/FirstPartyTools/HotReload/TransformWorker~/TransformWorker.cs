@@ -411,6 +411,10 @@ public static class TransformWorkerProgram
             }
         }
 
+        // Why stamp here instead of at each row's producer: six separate producers emit these
+        // rows, and stamping at the single output point cannot leave one of them behind.
+        StampSourceProjectRelativePath(entries, skipped, unchangedMethods, projectRelativePath);
+
         string shimSource = ShimSourceEmitter.Emit(root, shimTypes, projectRelativePath);
         return new WorkerOutput
         {
@@ -430,6 +434,29 @@ public static class TransformWorkerProgram
             AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(),
             SourceContentSha256 = sourceContentSha256
         };
+    }
+
+    // Records which edited file every worker row came from, right before the rows leave the worker.
+    private static void StampSourceProjectRelativePath(
+        List<WorkerEntry> entries,
+        List<WorkerSkipped> skipped,
+        List<WorkerUnchangedMethod> unchangedMethods,
+        string projectRelativePath)
+    {
+        foreach (WorkerEntry entry in entries)
+        {
+            entry.SourceProjectRelativePath = projectRelativePath;
+        }
+
+        foreach (WorkerSkipped skippedRow in skipped)
+        {
+            skippedRow.SourceProjectRelativePath = projectRelativePath;
+        }
+
+        foreach (WorkerUnchangedMethod unchangedMethod in unchangedMethods)
+        {
+            unchangedMethod.SourceProjectRelativePath = projectRelativePath;
+        }
     }
 
     // Keep in sync with HotReloadAppliedSourceLedger.ComputeContentHash (lowercase hex SHA-256).
