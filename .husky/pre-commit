@@ -57,6 +57,16 @@ changed_asmdef_inputs="$(git diff --cached --name-only --diff-filter=ACMRD \
   | grep -E '^(Packages/src/.*\.asmdef|tools/asmdef-policy-allowlist\.json)$' || true)"
 
 if [ -n "$changed_asmdef_inputs" ]; then
+  # The checker reads the working tree, so a partially staged .asmdef or allowlist would be judged
+  # on content this commit does not contain. Stop instead of passing or failing the wrong snapshot.
+  for asmdef_input in $changed_asmdef_inputs; do
+    if [ -n "$(git diff --name-only -- "$asmdef_input")" ]; then
+      echo "$asmdef_input is only partially staged." >&2
+      echo "The asmdef policy check reads the working tree, so stage the file fully or unstage it." >&2
+      exit 1
+    fi
+  done
+
   (cd cli/release-automation && go run ./cmd/check-asmdef-policy --root ../..) || exit 1
 fi
 
