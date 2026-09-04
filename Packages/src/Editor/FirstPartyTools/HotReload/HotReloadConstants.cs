@@ -319,5 +319,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // truncates so the cap is never silent.
         public const string SiblingConstDriftScanLimitedWarningFormat =
             "sibling const-drift scan limited to first {0} changed files ({1} total)";
+
+        // Format: remaining ledger count. Appended to every validation-failure Message
+        // when ActiveChangeCount is greater than 0 so callers do not treat 0 as clean.
+        public const string ValidationFailureActiveChangesSuffixFormat =
+            " {0} hot-reload change(s) are still active.";
+
+        public const string ValidationFailureInspectOrRevertNextAction =
+            "Run 'uloop hot-reload --status' to inspect the active changes, or 'uloop hot-reload --revert-all' to drop them.";
     }
 }

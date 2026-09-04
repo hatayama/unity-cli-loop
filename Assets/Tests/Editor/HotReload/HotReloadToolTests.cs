@@ -86,6 +86,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a no-changed-files validation failure reports remaining active patches
+        /// and points at --status / --revert-all when the ledger is not empty.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_NoChangedFiles_WhenActivePatchExists_ReportsActiveCountAndRecovery()
+        {
+            HotReloadPatcher.RevertAll();
+            Func<HotReloadChangedFileAggregationResult> previousDetector =
+                HotReloadTool.DetectChangedFilesForTesting;
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                HotReloadTool.DetectChangedFilesForTesting = CreateNoChangedFilesDetector();
+
+                HotReloadTool tool = new HotReloadTool();
+                UnityCliLoopToolResponse baseResponse =
+                    await tool.ExecuteAsync(new JObject(), CancellationToken.None);
+                HotReloadResponse response = baseResponse as HotReloadResponse;
+
+                Assert.That(response, Is.Not.Null);
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.NoChangedFiles));
+                Assert.That(response.ActivePatchTotal, Is.EqualTo(1));
+                Assert.That(
+                    response.Message,
+                    Does.EndWith("1 hot-reload change(s) are still active."));
+                Assert.That(
+                    response.NextActions[response.NextActions.Length - 1],
+                    Is.EqualTo(
+                        "Run 'uloop hot-reload --status' to inspect the active changes, or 'uloop hot-reload --revert-all' to drop them."));
+            }
+            finally
+            {
+                HotReloadTool.DetectChangedFilesForTesting = previousDetector;
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
+        /// What: a no-changed-files validation failure keeps the original Message and
+        /// NextActions when no hot-reload changes are active.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_NoChangedFiles_WhenNoActivePatches_KeepsOriginalMessageAndNextActions()
+        {
+            HotReloadPatcher.RevertAll();
+            Func<HotReloadChangedFileAggregationResult> previousDetector =
+                HotReloadTool.DetectChangedFilesForTesting;
+            try
+            {
+                HotReloadTool.DetectChangedFilesForTesting = CreateNoChangedFilesDetector();
+
+                HotReloadTool tool = new HotReloadTool();
+                UnityCliLoopToolResponse baseResponse =
+                    await tool.ExecuteAsync(new JObject(), CancellationToken.None);
+                HotReloadResponse response = baseResponse as HotReloadResponse;
+
+                Assert.That(response, Is.Not.Null);
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.NoChangedFiles));
+                Assert.That(response.ActivePatchTotal, Is.EqualTo(0));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        "No .cs files changed since the last compile were found; pass explicit paths with --files."));
+                Assert.That(
+                    response.NextActions,
+                    Is.EqualTo(
+                        new[]
+                        {
+                            "Save the edited .cs files to disk, then run 'uloop hot-reload' again.",
+                            "Pass project-relative .cs paths with --files."
+                        }));
+            }
+            finally
+            {
+                HotReloadTool.DetectChangedFilesForTesting = previousDetector;
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
         /// What: --status Added rows explain InvocationCount 0 with the not-instrumented Reason
         /// only, not the AlreadyActive source-unchanged sentence.
         /// </summary>
@@ -1471,6 +1556,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage
                     + " 1 warning(s). See Warnings."));
+        }
+
+        private static Func<HotReloadChangedFileAggregationResult> CreateNoChangedFilesDetector()
+        {
+            return () => new HotReloadChangedFileAggregationResult(
+                hasBaseline: true,
+                changedProjectRelativePaths: new List<string>(),
+                scanLimitWarnings: new List<string>());
         }
 
         // Applies a handwritten transplant to a HotReloadCoreFixture method without invoking it.
