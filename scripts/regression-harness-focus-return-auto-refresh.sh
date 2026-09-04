@@ -55,6 +55,11 @@ cleanup_temps() {
 trap cleanup_temps EXIT
 
 cleanup() {
+    # INT/TERM/HUP handlers also trigger EXIT; skip a second restore pass.
+    if [ "$CLEANED_UP" = "1" ]; then
+        return
+    fi
+    CLEANED_UP="1"
     # Close the harness scene before restoring the file. A focused Editor that
     # still has MarkerExternal loaded will raise Unity's native reload dialog
     # when git checkout writes Marker back and compile refreshes assets.
@@ -122,7 +127,11 @@ if [ "$IS_FOCUSED" = "True" ]; then
     exit 1
 fi
 
+# EXIT alone misses Ctrl-C / kill during the 180s poll and would leave Assets dirty.
 trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
+trap 'cleanup; exit 129' HUP
 
 log "Writing external .cs and scene changes while unfocused..."
 printf '%s\n' 'public class FocusReturnProbe { }' > "$PROJECT_ROOT/$PROBE_REL"
