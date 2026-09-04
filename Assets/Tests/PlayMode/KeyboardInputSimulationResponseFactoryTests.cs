@@ -45,16 +45,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             SimulateKeyboardResponse response = KeyboardInputSimulationResponseFactory.InterruptedKeyResult(
                 UnityCliLoopKeyboardAction.Press,
                 "Space",
-                pressEdgeObserved);
+                pressEdgeObserved,
+                pressWasApplied: false);
 
             Assert.That(response.Success, Is.True);
-            Assert.That(
-                response.Message,
-                Is.EqualTo(
-                    "Keyboard input stopped because Unity paused during Pause Point inspection. Key 'Space' was released from Unity CLI Loop bookkeeping; queued input edge was discarded."));
+            Assert.That(response.Message, Does.Contain("queued input edge was discarded"));
+            Assert.That(response.Message, Does.Contain("never observed a press"));
+            Assert.That(response.Message, Does.Contain("safe to retry after resume"));
             Assert.That(response.Action, Is.EqualTo(UnityCliLoopKeyboardAction.Press.ToString()));
             Assert.That(response.KeyName, Is.EqualTo("Space"));
             Assert.That(response.InterruptedByPausePoint, Is.True);
+            Assert.That(response.PressDeliveredToGame, Is.False);
             Assert.That(response.PressEdgeObserved, Is.EqualTo(pressEdgeObserved));
             Assert.That(response.PausePointId, Is.EqualTo("latest-hit"));
             Assert.That(response.PausePointHitCount, Is.EqualTo(1));
@@ -75,17 +76,61 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             SimulateKeyboardResponse response = KeyboardInputSimulationResponseFactory.InterruptedKeyResult(
                 UnityCliLoopKeyboardAction.KeyUp,
                 "Enter",
-                null);
+                null,
+                pressWasApplied: false);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Action, Is.EqualTo(UnityCliLoopKeyboardAction.KeyUp.ToString()));
             Assert.That(response.KeyName, Is.EqualTo("Enter"));
             Assert.That(response.InterruptedByPausePoint, Is.True);
+            Assert.That(response.PressDeliveredToGame, Is.Null);
             Assert.That(response.PressEdgeObserved, Is.Null);
+            Assert.That(response.Message, Does.Contain("release was interrupted by the pause"));
+            Assert.That(response.Message, Does.Not.Contain("discarded"));
+            Assert.That(response.Message, Does.Not.Contain("safe to retry"));
             Assert.That(response.PausePointId, Is.EqualTo("key-up-hit"));
             Assert.That(response.PausePointHitCount, Is.EqualTo(1));
             Assert.That(response.PausePointHits, Has.Count.EqualTo(1));
             Assert.That(response.PausePointHits![0].Id, Is.EqualTo("key-up-hit"));
+        }
+
+        /// <summary>
+        /// Verifies an applied press that a pause point then interrupts reports delivery, not discard.
+        /// PressEdgeObserved can stay false even when the press already reached the game.
+        /// </summary>
+        [Test]
+        public void InterruptedKeyResult_WhenPressWasApplied_ReportsPressDeliveredToGame()
+        {
+            SimulateKeyboardResponse response = KeyboardInputSimulationResponseFactory.InterruptedKeyResult(
+                UnityCliLoopKeyboardAction.Press,
+                "Space",
+                pressEdgeObserved: false,
+                pressWasApplied: true);
+
+            Assert.That(response.PressDeliveredToGame, Is.True);
+            Assert.That(response.PressEdgeObserved, Is.False);
+            Assert.That(response.Message, Does.Contain("press was applied to the Input System"));
+            Assert.That(response.Message, Does.Contain("PressEdgeObserved says whether"));
+            Assert.That(response.Message, Does.Not.Contain("game code polling that frame observed it"));
+            Assert.That(response.Message, Does.Not.Contain("discarded"));
+        }
+
+        /// <summary>
+        /// Verifies a press discarded before apply reports that a retry after resume is safe.
+        /// </summary>
+        [Test]
+        public void InterruptedKeyResult_WhenPressWasDiscarded_ReportsPressNotDeliveredToGame()
+        {
+            SimulateKeyboardResponse response = KeyboardInputSimulationResponseFactory.InterruptedKeyResult(
+                UnityCliLoopKeyboardAction.KeyDown,
+                "W",
+                pressEdgeObserved: true,
+                pressWasApplied: false);
+
+            Assert.That(response.PressDeliveredToGame, Is.False);
+            Assert.That(response.Message, Does.Contain("queued input edge was discarded"));
+            Assert.That(response.Message, Does.Contain("never observed a press"));
+            Assert.That(response.Message, Does.Contain("safe to retry after resume"));
         }
 
         /// <summary>

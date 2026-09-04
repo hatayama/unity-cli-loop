@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             + "\"InterruptedByPausePoint\":false,\"RejectedByActivePausePointId\":\"marker\","
             + "\"PausePointId\":\"hit\",\"PausePointHitCount\":1,"
             + "\"PausePointHits\":[{\"Id\":\"hit\",\"HitCount\":1}],"
-            + "\"PressEdgeObserved\":true,\"PressHoldExtendedFrames\":2,"
+            + "\"PressEdgeObserved\":true,\"PressDeliveredToGame\":true,\"PressHoldExtendedFrames\":2,"
             + "\"PressEdgeConsumedByUpdateType\":\"Dynamic\","
             + "\"PressEdgeAnyGameplayUpdateObserved\":true,"
             + "\"PressEdgeKeyAlreadyPressedBeforeQueue\":false,"
@@ -64,6 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     new UnityCliLoopPausePointHit { Id = "hit", HitCount = 1 }
                 },
                 PressEdgeObserved = true,
+                PressDeliveredToGame = true,
                 PressHoldExtendedFrames = 2,
                 PressEdgeConsumedByUpdateType = "Dynamic",
                 PressEdgeAnyGameplayUpdateObserved = true,

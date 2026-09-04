@@ -40,6 +40,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool? PressEdgeObserved { get; set; }
 
         /// <summary>
+        /// Set only on pause-point-interrupted Press/KeyDown. True when the Input System applied
+        /// the press in a gameplay update before the pause (the game may already have consumed it);
+        /// false when the queued edge was discarded before any gameplay update. Null for KeyUp and
+        /// uninterrupted responses. Distinct from PressEdgeObserved, which reports whether a
+        /// gameplay update saw the wasPressedThisFrame edge.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public bool? PressDeliveredToGame { get; set; }
+
+        /// <summary>
         /// Extra observation frames spent holding the key after the normal duration window
         /// while waiting for wasPressedThisFrame. Null when release was not delayed.
         /// </summary>

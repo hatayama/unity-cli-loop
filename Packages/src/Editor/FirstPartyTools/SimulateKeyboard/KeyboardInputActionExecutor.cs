@@ -93,7 +93,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return KeyboardInputSimulationResponseFactory.InterruptedKeyResult(
                     UnityCliLoopKeyboardAction.Press,
                     keyName,
-                    pressEdgeObserved);
+                    pressEdgeObserved,
+                    pressWasApplied);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
@@ -337,7 +338,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return KeyboardInputSimulationResponseFactory.InterruptedKeyResult(
                     UnityCliLoopKeyboardAction.KeyDown,
                     keyName,
-                    pressEdgeObserved);
+                    pressEdgeObserved,
+                    keyDownApplied);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
@@ -405,7 +407,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return KeyboardInputSimulationResponseFactory.InterruptedKeyResult(
                     UnityCliLoopKeyboardAction.KeyUp,
                     keyName,
-                    null);
+                    null,
+                    pressWasApplied: false);
             }
 
             if (waitOutcome == InputSimulationWaitOutcome.TimedOut)
