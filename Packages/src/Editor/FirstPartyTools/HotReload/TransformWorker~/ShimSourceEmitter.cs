@@ -17,6 +17,10 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class ShimSourceEmitter
 {
+    // Host namespace for shim types whose original type lives in the global namespace. The
+    // orchestrator resolves shim types by short name, so the namespace stays invisible to it.
+    private const string GlobalNamespaceShimNamespaceName = "UloopHotReloadGlobalShim";
+
     public static string Emit(List<ShimTypeBuilder> shimTypes)
     {
         if (shimTypes.Count == 0)
@@ -28,12 +32,10 @@ internal static class ShimSourceEmitter
 
         // Emit each shim type in the original type's namespace (and with that type's usings) so
         // unqualified sibling-type references in transplanted bodies still resolve. Manifest
-        // shimTypeName stays the short name; orchestrator resolves by Type.Name.
+        // shimTypeName stays the short name; orchestrator resolves by Type.Name. A type from the
+        // global namespace gets a synthesized namespace for the same reason (see below).
         CompilationUnitSyntax unit = SyntaxFactory.CompilationUnit();
         Dictionary<string, string> projectRelativePathsByShimTypeName = new Dictionary<string, string>();
-        // Why dedupe by normalized text: the shim types of a group can come from several files
-        // whose global-namespace usings overlap, and compilation-unit usings are one flat list.
-        HashSet<string> emittedCompilationUnitUsings = new HashSet<string>();
         foreach (ShimTypeBuilder shimType in shimTypes)
         {
             projectRelativePathsByShimTypeName[shimType.ShimTypeName] = shimType.SourceProjectRelativePath;
@@ -44,29 +46,22 @@ internal static class ShimSourceEmitter
                         SyntaxFactory.Token(SyntaxKind.StaticKeyword)))
                 .WithMembers(SyntaxFactory.List(shimType.EmitMembers()));
 
-            if (string.IsNullOrEmpty(shimType.NamespaceName))
-            {
-                foreach (UsingDirectiveSyntax usingDirective in shimType.Usings)
-                {
-                    if (!emittedCompilationUnitUsings.Add(usingDirective.ToFullString().Trim()))
-                    {
-                        continue;
-                    }
-
-                    unit = unit.AddUsings(usingDirective);
-                }
-
-                unit = unit.AddMembers(classDeclaration);
-            }
-            else
-            {
-                NamespaceDeclarationSyntax namespaceDeclaration = SyntaxFactory.NamespaceDeclaration(
-                        SyntaxFactory.ParseName(shimType.NamespaceName))
-                    .WithUsings(SyntaxFactory.List(shimType.Usings))
-                    .WithMembers(
-                        SyntaxFactory.SingletonList<MemberDeclarationSyntax>(classDeclaration));
-                unit = unit.AddMembers(namespaceDeclaration);
-            }
+            // Why every shim type gets a namespace declaration: a using belongs to the file it was
+            // written in, and the shim types of a group come from several files. Compilation-unit
+            // usings are one flat list shared by all of them, so two files whose usings conflict
+            // (the same alias bound differently, or two namespaces exporting the same type name)
+            // would break the whole shim assembly. A namespace declaration scopes each file's
+            // usings to its own shim type. Unqualified references to global-namespace types still
+            // resolve, because name lookup from inside a namespace walks outward to global.
+            string namespaceName = string.IsNullOrEmpty(shimType.NamespaceName)
+                ? GlobalNamespaceShimNamespaceName
+                : shimType.NamespaceName;
+            NamespaceDeclarationSyntax namespaceDeclaration = SyntaxFactory.NamespaceDeclaration(
+                    SyntaxFactory.ParseName(namespaceName))
+                .WithUsings(SyntaxFactory.List(shimType.Usings))
+                .WithMembers(
+                    SyntaxFactory.SingletonList<MemberDeclarationSyntax>(classDeclaration));
+            unit = unit.AddMembers(namespaceDeclaration);
         }
 
         // Why after NormalizeWhitespace: formatting would otherwise shift #line relative to
