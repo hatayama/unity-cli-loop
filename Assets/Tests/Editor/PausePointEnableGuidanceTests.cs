@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const int FixtureClosingBraceLine = 13;
 
         private const string ExpectedArmingNextActionForJump =
-            "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\" next time.";
+            "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \"jump\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
 
         private const string ExpectedRearmDiscardWarningGeneration1 =
             "Generation 1 of this pause point had already hit; this re-arm discarded its CapturedVariables and CapturedVariableHistory. Read results with pause-point-status before re-arming when you need them.";
@@ -81,6 +81,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(action, Does.Not.Contain(deprecatedPlaceholder));
             Assert.That(action, Does.Contain("without"));
+        }
+
+        /// <summary>
+        /// What: arming guidance offers a blocking wait that needs no --trigger, so a marker driven
+        /// by physics or a multi-step action is not presented as requiring a trigger command.
+        /// </summary>
+        [Test]
+        public void ResolveSuccessEnableRecommendedNextAction_WhenExistingIsEmpty_OffersAwaitWithoutATrigger()
+        {
+            string action = PausePointEnableWarnings.ResolveSuccessEnableRecommendedNextAction(
+                string.Empty,
+                "jump");
+
+            Assert.That(action, Does.Contain("uloop await-pause-point --id \"jump\" --timeout-seconds"));
+            Assert.That(
+                action.IndexOf("await-pause-point", StringComparison.Ordinal),
+                Is.LessThan(action.IndexOf("--trigger", StringComparison.Ordinal)),
+                "the trigger-free wait must be offered before the trigger form");
         }
 
         /// <summary>
@@ -146,7 +164,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 + FixtureFilePath
                 + ":"
                 + FixtureStatementLine
-                + "\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\" next time.";
+                + "\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \""
+                + FixtureFilePath
+                + ":"
+                + FixtureStatementLine
+                + "\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
             Assert.That(response.RecommendedNextAction, Is.EqualTo(expected));
             string json = JsonConvert.SerializeObject(
                 response,

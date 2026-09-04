@@ -13,6 +13,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class KeyboardInputSimulationResponseFactory
     {
+        /// <summary>
+        /// Creates the failure response for a rejected PlayMode preflight. Separate from the other
+        /// failure shapes so only a genuine pre-execution refusal can claim RejectedBeforeExecution:
+        /// the CLI aborts a pause-point wait on that flag.
+        /// </summary>
+        internal static SimulateKeyboardResponse PreflightRejectedResult(
+            UnityCliLoopKeyboardAction action,
+            PlayModeToolPreflightResult preflight)
+        {
+            Debug.Assert(!preflight.IsValid, "PreflightRejectedResult must only be called for a rejected preflight");
+            return new SimulateKeyboardResponse
+            {
+                Success = false,
+                Message = preflight.ErrorMessage,
+                Action = action.ToString(),
+                RejectedByActivePausePointId = preflight.RejectedByActivePausePointId,
+                RejectedBeforeExecution = true
+            };
+        }
+
         // pressEdgeObserved stays nullable because KeyUp has no press edge to report;
         // Press/KeyDown must pass their observation so pause-point interruptions (the
         // most common E2E path) do not silently drop the field.

@@ -13,11 +13,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     public sealed class SimulateKeyboardResponseContractTests
     {
         private const string OmittedOptionalFieldsJson =
-            "{\"Message\":\"\",\"Action\":\"\",\"InterruptedByPausePoint\":false,\"Success\":true}";
+            "{\"Message\":\"\",\"Action\":\"\",\"InterruptedByPausePoint\":false,"
+            + "\"RejectedBeforeExecution\":false,\"Success\":true}";
 
         private const string PopulatedOptionalFieldsJson =
             "{\"Message\":\"ok\",\"Action\":\"Press\",\"Warning\":\"focus editor\",\"KeyName\":\"Space\","
             + "\"InterruptedByPausePoint\":false,\"RejectedByActivePausePointId\":\"marker\","
+            + "\"RejectedBeforeExecution\":false,"
             + "\"PausePointId\":\"hit\",\"PausePointHitCount\":1,"
             + "\"PausePointHits\":[{\"Id\":\"hit\",\"HitCount\":1}],"
             + "\"PressEdgeObserved\":true,\"PressDeliveredToGame\":true,\"PressHoldExtendedFrames\":2,"

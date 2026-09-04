@@ -57,7 +57,8 @@ type pausePointTriggerResult struct {
 // pre-execution rejection keeps the wait running.
 //
 // Only the dispatched command's stderr is inspected, because that is where every error envelope is
-// written; a Unity-side rejection arriving on stdout has no error code to match on.
+// written. A Unity-side rejection arrives on stdout as an ordinary response carrying no error code
+// to match on; pausePointTriggerRejectedByUnityBeforeExecution recognises that shape instead.
 func pausePointTriggerRejectedBeforeExecution(result *pausePointTriggerResult) bool {
 	if result == nil {
 		return false

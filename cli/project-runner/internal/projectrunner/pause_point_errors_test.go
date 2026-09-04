@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -236,7 +237,7 @@ func TestPausePointWaitHintsDifferentiateHitWhenSkips(t *testing.T) {
 				Status:      pausePointStatusEnabled,
 				EditorState: pausePointEditorState{IsPlaying: true},
 			},
-			wantHint: "Marker was enabled but never hit. Confirm the id matches UloopPausePoint.Pause(\"<id>\") and that the code path was executed. In fast-progressing games the state may have already moved past the marker (for example back to Ready or GameOver), so re-trigger the code path and wait again. If the marker targets a Unity message method such as OnCollisionEnter2D/OnTriggerEnter2D, check whether `enable-pause-point`'s response carried a Warning about cached message dispatch: Unity can resolve a GameObject's message dispatch before the marker patch is installed, so a GameObject that already existed at enable time may never reach the marker even though the method body runs. Recreating the GameObject after enabling, or embedding UloopPausePoint.Pause(\"id\") directly in the method body, avoids this. If the target line is inside a very small method, Mono's JIT may have inlined it into callers and the pause point never fires; move the pause point into the calling method. If PlayMode kept progressing on its own while you were arranging state (timers, gravity, spawners), the scenario may have already been consumed before this marker could fire; next time, run `control-play-mode --action Pause` before setup and resume with `control-play-mode --action Play` only after `enable-pause-point` succeeds. If the target line never hit despite the trigger firing, check the non-firing patterns: (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; (3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. (4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable. For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too. Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file.",
+			wantHint: "Marker was enabled but never hit. Confirm the id matches UloopPausePoint.Pause(\"<id>\") and that the code path was executed. In fast-progressing games the state may have already moved past the marker (for example back to Ready or GameOver), so re-trigger the code path and wait again. If the marker targets a Unity message method such as OnCollisionEnter2D/OnTriggerEnter2D, check whether `enable-pause-point`'s response carried a Warning about cached message dispatch: Unity can resolve a GameObject's message dispatch before the marker patch is installed, so a GameObject that already existed at enable time may never reach the marker even though the method body runs. Recreating the GameObject after enabling, or embedding UloopPausePoint.Pause(\"id\") directly in the method body, avoids this. If the target line is inside a very small method, Mono's JIT may have inlined it into callers and the pause point never fires; move the pause point into the calling method. If PlayMode kept progressing on its own while you were arranging state (timers, gravity, spawners), the scenario may have already been consumed before this marker could fire; next time, run `control-play-mode --action Pause` before setup and resume with `control-play-mode --action Play` only after `enable-pause-point` succeeds. If the target line never hit, check the non-firing patterns: (0) the awaited game event never occurred while the marker was armed — check the game state with execute-dynamic-code before suspecting dispatch; (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; (3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. (4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable. For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too. Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file.",
 		},
 		{
 			name:  "expired without skipped conditional hits",
@@ -245,7 +246,7 @@ func TestPausePointWaitHintsDifferentiateHitWhenSkips(t *testing.T) {
 				Status:      pausePointStatusExpired,
 				EditorState: pausePointEditorState{IsPlaying: true},
 			},
-			wantHint: "The enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out before the marker was hit. If the target line never hit despite the trigger firing, check the non-firing patterns: (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; (3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. (4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable. For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too. Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file. Once the cause is addressed, re-enable the marker (raise --timeout-seconds only if the window itself was too short) and trigger the code path again.",
+			wantHint: "The enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out before the marker was hit. If the target line never hit, check the non-firing patterns: (0) the awaited game event never occurred while the marker was armed — check the game state with execute-dynamic-code before suspecting dispatch; (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; (3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. (4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable. For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too. Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file. Once the cause is addressed, re-enable the marker (raise --timeout-seconds only if the window itself was too short) and trigger the code path again.",
 		},
 	}
 
@@ -420,7 +421,10 @@ const wantPausePointTriggerFailedUnknownCommandNextAction = "For an INVALID_ARGU
 // from UNKNOWN_COMMAND's leading-uloop format mistake, so a prefixed value is not sent to
 // the triggered command's --help.
 func TestPausePointTriggerFailedNextActionsDiagnosesUnknownCommandPrefix(t *testing.T) {
-	got := pausePointTriggerFailedNextActions("jump")
+	got := pausePointTriggerFailedNextActions("jump", &pausePointTriggerResult{
+		Completed: true,
+		Error:     argumentErrorTriggerStderr,
+	})
 	want := []string{
 		"Fix the --trigger value in the command you just ran and run that command again. Re-running " +
 			"`enable-pause-point --await` is safe and is the cleanest reset: it restarts the marker's " +
@@ -642,5 +646,206 @@ func TestPausePointTimeoutError_TriggerRejected_WinsOverNewHitBaseline(t *testin
 	}
 	if cliErr.Details["TriggerFailed"] != true {
 		t.Fatalf("TriggerFailed mismatch: %#v", cliErr.Details["TriggerFailed"])
+	}
+}
+
+// Verifies a CLI-side rejection keeps every step that names the --trigger value as what has to
+// change: that is the only cause this shape of rejection can have.
+func TestPausePointTriggerFailedNextActionsForCliRejection(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Error:     argumentErrorTriggerStderr,
+	}
+
+	actions := pausePointTriggerFailedNextActions("jump", result)
+
+	if len(actions) != 3 {
+		t.Fatalf("expected three recovery steps, got %#v", actions)
+	}
+	if !strings.HasPrefix(actions[0], "Fix the --trigger value in the command you just ran") {
+		t.Fatalf("expected the trigger-value fix as the first step, got %q", actions[0])
+	}
+	if !strings.Contains(actions[1], `--trigger "<corrected trigger command>"`) {
+		t.Fatalf("expected the await step to ask for a corrected trigger command, got %q", actions[1])
+	}
+	if !strings.Contains(actions[2], "INVALID_ARGUMENT") {
+		t.Fatalf("expected the argument-syntax recovery step, got %q", actions[2])
+	}
+}
+
+// Verifies a Unity-side pre-execution rejection replaces every step that would blame the trigger's
+// arguments -- the await form included -- with precondition wording: nothing about the trigger's
+// arguments was wrong.
+func TestPausePointTriggerFailedNextActionsForUnityRejection(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Response: []byte(`{"Success":false,"RejectedBeforeExecution":true,` +
+			`"Message":"PlayMode is not active. Use control-play-mode tool to start PlayMode first."}`),
+	}
+
+	actions := pausePointTriggerFailedNextActions("jump", result)
+
+	if len(actions) != 3 {
+		t.Fatalf("expected three recovery steps, got %#v", actions)
+	}
+	if strings.Contains(actions[0], "Fix the --trigger value") {
+		t.Fatalf("a Unity-side rejection must not blame the --trigger value, got %q", actions[0])
+	}
+	if !strings.HasPrefix(actions[0], "The trigger command itself was valid;") {
+		t.Fatalf("expected the first step to clear the trigger value, got %q", actions[0])
+	}
+	if strings.Contains(actions[1], "corrected trigger command") {
+		t.Fatalf("a Unity-side rejection has no correction to make to the trigger command, got %q", actions[1])
+	}
+	if !strings.Contains(actions[1], `--trigger "<the same trigger command>"`) {
+		t.Fatalf("expected the await step to reuse the same trigger command, got %q", actions[1])
+	}
+	if !strings.Contains(actions[1], "once the precondition holds") {
+		t.Fatalf("expected the await step to name the precondition, got %q", actions[1])
+	}
+	if strings.Contains(actions[2], "INVALID_ARGUMENT") {
+		t.Fatalf("the argument-syntax recovery step must not be used for a Unity-side rejection, got %q", actions[2])
+	}
+	if !strings.Contains(actions[2], "uloop control-play-mode --action Play") {
+		t.Fatalf("expected the precondition recovery step, got %q", actions[2])
+	}
+}
+
+// Verifies an expired wait whose trigger failed states that in the top-level message, so an agent
+// reading only Error.Message does not treat it as a missed code path.
+func TestPausePointWaitErrorPrefixesExpiredMessageWhenTriggerFailed(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Response: []byte(`{"Success":false,` +
+			`"Message":"PlayMode is not active. Use control-play-mode tool to start PlayMode first."}`),
+	}
+
+	waitErr := pausePointWaitError(
+		"/project",
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 10},
+		pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired},
+		pausePointWaitStateExpired,
+		false,
+		false,
+		result)
+
+	if !strings.HasPrefix(waitErr.Message, "The --trigger command failed (PlayMode is not active.") {
+		t.Fatalf("expected the trigger failure stated first: %q", waitErr.Message)
+	}
+	if !strings.Contains(waitErr.Message, "Pause point expired before it was hit.") {
+		t.Fatalf("expected the original expiry message preserved: %q", waitErr.Message)
+	}
+}
+
+// Verifies a timed-out wait whose trigger failed carries the same top-level statement.
+func TestPausePointWaitErrorPrefixesTimeoutMessageWhenTriggerFailed(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Response:  []byte(`{"Success":false,"Message":"PlayMode is paused."}`),
+	}
+
+	waitErr := pausePointWaitError(
+		"/project",
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 10},
+		pausePointStatusResponse{Id: "jump", Status: pausePointStatusEnabled},
+		pausePointWaitStateTimeout,
+		false,
+		false,
+		result)
+
+	if !strings.HasPrefix(waitErr.Message, "The --trigger command failed (PlayMode is paused). ") {
+		t.Fatalf("expected the trigger failure stated first: %q", waitErr.Message)
+	}
+	if !strings.Contains(waitErr.Message, "was not hit within 10s") {
+		t.Fatalf("expected the original timeout message preserved: %q", waitErr.Message)
+	}
+}
+
+// Verifies the trigger-failed state does not double-state the failure: its own message already
+// leads with the rejection.
+func TestPausePointWaitErrorDoesNotPrefixTriggerFailedMessage(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Error:     argumentErrorTriggerStderr,
+	}
+
+	waitErr := pausePointWaitError(
+		"/project",
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 10},
+		pausePointStatusResponse{Id: "jump", Status: pausePointStatusEnabled},
+		pausePointWaitStateTriggerFailed,
+		false,
+		false,
+		result)
+
+	if strings.Contains(waitErr.Message, "The --trigger command failed") {
+		t.Fatalf("the trigger-failed message must not be prefixed again: %q", waitErr.Message)
+	}
+	if !strings.HasPrefix(waitErr.Message, `The trigger was rejected before it ran (Invalid value for --action: "Hold")`) {
+		t.Fatalf("expected the rejection's own reason quoted in the message: %q", waitErr.Message)
+	}
+}
+
+// Verifies the non-firing patterns hint leads with the possibility that the awaited event never
+// happened, before any dispatch-bypass explanation.
+func TestPausePointNonFiringPatternsHintLeadsWithEventNeverOccurred(t *testing.T) {
+	if !strings.Contains(pausePointNonFiringPatternsHint, "(0) the awaited game event never occurred") {
+		t.Fatalf("expected pattern (0) in the hint: %q", pausePointNonFiringPatternsHint)
+	}
+	zeroIndex := strings.Index(pausePointNonFiringPatternsHint, "(0)")
+	oneIndex := strings.Index(pausePointNonFiringPatternsHint, "(1)")
+	if zeroIndex < 0 || oneIndex < 0 || zeroIndex > oneIndex {
+		t.Fatalf("pattern (0) must come before pattern (1): %q", pausePointNonFiringPatternsHint)
+	}
+}
+
+// Verifies a trigger whose dispatch died mid-flight (a dropped connection, an unreachable Editor)
+// is quoted by its own error text, not reported as an argument or command-name problem it never had.
+func TestPausePointWaitErrorQuotesDispatchFailureInsteadOfAssertingArgumentParsing(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Error: `{"Success":false,"Error":{"ErrorCode":"UNITY_NOT_REACHABLE",` +
+			`"Message":"Unity Editor is not reachable."}}`,
+	}
+
+	waitErr := pausePointWaitError(
+		"/project",
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 10},
+		pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired},
+		pausePointWaitStateExpired,
+		false,
+		false,
+		result)
+
+	if strings.Contains(waitErr.Message, "argument parsing") {
+		t.Fatalf("a dispatch failure must not be reported as an argument problem: %q", waitErr.Message)
+	}
+	if !strings.HasPrefix(waitErr.Message, "The --trigger command failed (Unity Editor is not reachable). ") {
+		t.Fatalf("expected the dispatch failure's own message quoted: %q", waitErr.Message)
+	}
+}
+
+// Verifies a dispatch failure that produced no error envelope still quotes the raw stderr text it
+// did produce, rather than falling back to a cause it cannot know.
+func TestPausePointWaitErrorQuotesRawDispatchFailureText(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Error:     "trigger command \"simulate-keyboard\" exited with code 2 and produced no parseable output.",
+	}
+
+	waitErr := pausePointWaitError(
+		"/project",
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 10},
+		pausePointStatusResponse{Id: "jump", Status: pausePointStatusEnabled},
+		pausePointWaitStateTimeout,
+		false,
+		false,
+		result)
+
+	if strings.Contains(waitErr.Message, "argument parsing") {
+		t.Fatalf("a dispatch failure must not be reported as an argument problem: %q", waitErr.Message)
+	}
+	if !strings.Contains(waitErr.Message, "exited with code 2 and produced no parseable output") {
+		t.Fatalf("expected the raw dispatch failure text quoted: %q", waitErr.Message)
 	}
 }

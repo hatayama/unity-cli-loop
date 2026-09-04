@@ -397,7 +397,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// reports a bypass warning instead of claiming the method was never invoked.
         /// </summary>
         [Test]
-        public void GetStatus_WhenPhysicsDispatchMayBypassAndMethodNeverEntered_ReportsBypassNotNeverInvoked()
+        public void GetStatus_WhenPhysicsDispatchMayBypassAndNoMethodEntryRecorded_ReportsBypassNotNeverInvoked()
         {
             UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
             UloopPausePointRegistry.Enable("jump", 1, patchDispatchMayBypass: true);
@@ -405,9 +405,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
-            Assert.That(snapshot.Message, Does.Contain("may have bypassed the patch"));
+            Assert.That(snapshot.Message, Does.Contain("the armed patch recorded no method entry"));
             Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
             Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
+        }
+
+        /// <summary>
+        /// What: with the method never entered, expiry leads with the awaited event possibly not
+        /// having happened and keeps the cached-dispatch explanation behind that, so a missing
+        /// collision is not read as a patching bug.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenPhysicsDispatchMayBypassAndMethodNeverEntered_LeadsWithTheEventNotHavingHappened()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1, patchDispatchMayBypass: true);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Does.Contain("execute-dynamic-code"));
+            Assert.That(
+                snapshot.Message.IndexOf("execute-dynamic-code", System.StringComparison.Ordinal),
+                Is.LessThan(snapshot.Message.IndexOf("cached message dispatch", System.StringComparison.Ordinal)),
+                "the game-state check must come before the cached-dispatch explanation");
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("execute-dynamic-code"));
+            Assert.That(
+                snapshot.RecommendedNextAction.IndexOf("execute-dynamic-code", System.StringComparison.Ordinal),
+                Is.LessThan(snapshot.RecommendedNextAction.IndexOf("destroy and recreate", System.StringComparison.Ordinal)),
+                "the game-state check must come before the GameObject-recreation workaround");
+        }
+
+        /// <summary>
+        /// What: without method-entry instrumentation a zero entry count is unmeasured, not
+        /// evidence, so expiry keeps the plain cached-dispatch guidance.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenPhysicsDispatchMayBypassAndNotInstrumented_KeepsCachedDispatchGuidance()
+        {
+            UloopPausePointRegistry.Enable("jump", 1, patchDispatchMayBypass: true);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("cached physics dispatch"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("execute-dynamic-code"));
         }
 
         /// <summary>
@@ -430,7 +472,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(response.Id);
 
-            Assert.That(snapshot.Message, Does.Contain("may have bypassed the patch"));
+            Assert.That(snapshot.Message, Does.Contain("cached message dispatch bypassing the patch"));
             Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
             Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
         }
@@ -463,7 +505,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(secondEnable.Id);
 
-            Assert.That(snapshot.Message, Does.Contain("may have bypassed the patch"));
+            Assert.That(snapshot.Message, Does.Contain("cached message dispatch bypassing the patch"));
             Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
             Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
         }
@@ -1447,7 +1489,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.RecommendedNextAction,
                 Is.EqualTo(
-                    "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\" next time."));
+                    "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \"jump\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\"."));
         }
 
         [Test]

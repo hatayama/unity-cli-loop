@@ -97,13 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PlayModeToolPreflightResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
-                return new ReplayInputResponse
-                {
-                    Success = false,
-                    Message = preflight.ErrorMessage,
-                    Action = ReplayInputAction.Start.ToString(),
-                    RejectedByActivePausePointId = preflight.RejectedByActivePausePointId
-                };
+                return ReplayInputResponseFactory.PreflightRejectedResult(ReplayInputAction.Start, preflight);
             }
 
             if (InputReplayer.IsReplaying)
