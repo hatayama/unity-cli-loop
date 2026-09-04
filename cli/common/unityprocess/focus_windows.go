@@ -219,13 +219,15 @@ func windowThreadID(hwnd windows.HWND) uint32 {
 	return threadID
 }
 
+// restoreWindowsForegroundWindow only honors a context that is already done.
+// The Win32 calls below return without waiting on the target window, and none
+// of them can be interrupted mid-call, so wrapping them in FocusCommandTimeout
+// would promise a bound that nothing enforces.
 func restoreWindowsForegroundWindow(ctx context.Context, handle windows.HWND) error {
-	commandContext, cancel := withCommandTimeout(ctx, FocusCommandTimeout)
-	defer cancel()
-	if err := restoreForegroundWindow(handle); err != nil {
-		return focusCommandError(commandContext.Err(), err, "")
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	return nil
+	return restoreForegroundWindow(handle)
 }
 
 func restoreForegroundWindow(handle windows.HWND) error {
