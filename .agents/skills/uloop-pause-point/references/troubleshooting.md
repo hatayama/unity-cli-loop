@@ -63,4 +63,4 @@ If enable fails with a "No sequence point found" error even for clearly executab
 
 ## Debug-switch trade-offs
 
-The automatic Debug switch is a machine-wide Unity preference that applies to every project. Each re-switch costs a full script recompile, and the setting reverts on every Editor restart unless `uloop set-code-optimization debug --startup` makes Debug the startup default. Only the project's C# scripts run slower, mainly in Play Mode - the Editor itself is not slowed.
+The automatic Debug switch changes only the current project's code optimization for this Editor session; it reverts on every Editor restart, and each re-switch costs a full script recompile. `uloop set-code-optimization debug --startup` makes Debug the startup default through a machine-wide Unity preference that applies to every project. Only the project's C# scripts run slower, mainly in Play Mode - the Editor itself is not slowed.
