@@ -81,6 +81,7 @@ fi
 
 CODE_FILE="$(mktemp)"
 RESULT_FILE="$(mktemp)"
+APPLY_RESULT_FILE="$(mktemp)"
 CLEANED_UP="0"
 SOURCE_DIRTY="0"
 SAVED_SCRIPT_COMPILATION=""
@@ -94,7 +95,7 @@ log() {
 }
 
 cleanup_temps() {
-    rm -f "$CODE_FILE" "$RESULT_FILE"
+    rm -f "$CODE_FILE" "$RESULT_FILE" "$APPLY_RESULT_FILE"
 }
 
 restore_source() {
@@ -292,17 +293,17 @@ if ! grep -q "$NEW_LITERAL" "$SOURCE_ABS"; then
 fi
 
 log "Applying hot-reload to $SOURCE_FILE..."
-if ! run_uloop hot-reload --files "$SOURCE_FILE" > "$RESULT_FILE"; then
+if ! run_uloop hot-reload --files "$SOURCE_FILE" > "$APPLY_RESULT_FILE"; then
     log "FAIL: hot-reload command failed."
-    cat "$RESULT_FILE"
+    cat "$APPLY_RESULT_FILE"
     exit 1
 fi
-SUCCESS="$(jq -r '.Success' "$RESULT_FILE")"
-ACTIVE_BEFORE="$(jq -r '.ActivePatchTotal // 0' "$RESULT_FILE")"
-HELD_AFTER_APPLY="$(jq -r '.AutoRefreshHeld // "null"' "$RESULT_FILE")"
+SUCCESS="$(jq -r '.Success' "$APPLY_RESULT_FILE")"
+ACTIVE_BEFORE="$(jq -r '.ActivePatchTotal // 0' "$APPLY_RESULT_FILE")"
+HELD_AFTER_APPLY="$(jq -r '.AutoRefreshHeld // "null"' "$APPLY_RESULT_FILE")"
 if [ "$SUCCESS" != "true" ] || [ "$ACTIVE_BEFORE" -lt 1 ]; then
     log "FAIL: expected Success=true and ActivePatchTotal>=1"
-    cat "$RESULT_FILE"
+    cat "$APPLY_RESULT_FILE"
     exit 1
 fi
 log "hot-reload applied (ActivePatchTotal=${ACTIVE_BEFORE}, AutoRefreshHeld=${HELD_AFTER_APPLY})."
@@ -401,7 +402,7 @@ if [ "$ACTIVE_AFTER_FOCUS" != "$ACTIVE_BEFORE" ]; then
 fi
 if [ "$HELD_AFTER_APPLY" != "true" ]; then
     log "FAIL: AutoRefreshHeld was not true immediately after apply (${HELD_AFTER_APPLY})."
-    cat "$RESULT_FILE"
+    cat "$APPLY_RESULT_FILE"
     exit 1
 fi
 if [ "$HELD_AFTER_FOCUS" != "true" ]; then
