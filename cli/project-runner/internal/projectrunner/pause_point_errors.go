@@ -138,14 +138,24 @@ func prefixPausePointMessageWithTriggerFailure(
 // exists to prevent.
 func pausePointTriggerFailedNextActions(id string, triggerResult *pausePointTriggerResult) []string {
 	return []string{
-		"Fix the --trigger value in the command you just ran and run that command again. Re-running " +
-			"`enable-pause-point --await` is safe and is the cleanest reset: it restarts the marker's " +
-			"HitCount and --timeout-seconds countdown, and re-patching an already patched id is a no-op.",
+		pausePointTriggerRejectionFirstAction(triggerResult),
 		fmt.Sprintf(
 			"The marker is still armed, so you can also wait on it directly: "+
 				"uloop await-pause-point --id %q --trigger \"<corrected trigger command>\"", id),
 		pausePointTriggerRejectionRecoveryAction(triggerResult),
 	}
+}
+
+// pausePointTriggerRejectionFirstAction states what has to change, which depends on where the
+// rejection came from. Telling a caller to fix a --trigger value that Unity itself accepted as
+// well-formed sends them editing a correct command instead of the Editor state that refused it.
+func pausePointTriggerRejectionFirstAction(triggerResult *pausePointTriggerResult) string {
+	if pausePointTriggerRejectedBeforeExecution(triggerResult) {
+		return "Fix the --trigger value in the command you just ran and run that command again. Re-running " +
+			"`enable-pause-point --await` is safe and is the cleanest reset: it restarts the marker's " +
+			"HitCount and --timeout-seconds countdown, and re-patching an already patched id is a no-op."
+	}
+	return "The trigger command itself was valid; Unity refused to run it because of the state named in the trigger message."
 }
 
 // pausePointTriggerRejectionRecoveryAction picks the recovery step that matches where the rejection

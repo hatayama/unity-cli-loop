@@ -649,8 +649,8 @@ func TestPausePointTimeoutError_TriggerRejected_WinsOverNewHitBaseline(t *testin
 	}
 }
 
-// Verifies a CLI-side rejection keeps the argument/command-name recovery step, which is the only
-// cause that shape of rejection can have.
+// Verifies a CLI-side rejection keeps both steps that name the --trigger value as what has to
+// change: that is the only cause this shape of rejection can have.
 func TestPausePointTriggerFailedNextActionsForCliRejection(t *testing.T) {
 	result := &pausePointTriggerResult{
 		Completed: true,
@@ -661,6 +661,9 @@ func TestPausePointTriggerFailedNextActionsForCliRejection(t *testing.T) {
 
 	if len(actions) != 3 {
 		t.Fatalf("expected three recovery steps, got %#v", actions)
+	}
+	if !strings.HasPrefix(actions[0], "Fix the --trigger value in the command you just ran") {
+		t.Fatalf("expected the trigger-value fix as the first step, got %q", actions[0])
 	}
 	if !strings.Contains(actions[2], "INVALID_ARGUMENT") {
 		t.Fatalf("expected the argument-syntax recovery step, got %q", actions[2])
@@ -680,6 +683,12 @@ func TestPausePointTriggerFailedNextActionsForUnityRejection(t *testing.T) {
 
 	if len(actions) != 3 {
 		t.Fatalf("expected three recovery steps, got %#v", actions)
+	}
+	if strings.Contains(actions[0], "Fix the --trigger value") {
+		t.Fatalf("a Unity-side rejection must not blame the --trigger value, got %q", actions[0])
+	}
+	if !strings.HasPrefix(actions[0], "The trigger command itself was valid;") {
+		t.Fatalf("expected the first step to clear the trigger value, got %q", actions[0])
 	}
 	if strings.Contains(actions[2], "INVALID_ARGUMENT") {
 		t.Fatalf("the argument-syntax recovery step must not be used for a Unity-side rejection, got %q", actions[2])
