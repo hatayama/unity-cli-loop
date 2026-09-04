@@ -397,7 +397,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// reports a bypass warning instead of claiming the method was never invoked.
         /// </summary>
         [Test]
-        public void GetStatus_WhenPhysicsDispatchMayBypassAndMethodNeverEntered_ReportsBypassNotNeverInvoked()
+        public void GetStatus_WhenPhysicsDispatchMayBypassAndNoMethodEntryRecorded_ReportsBypassNotNeverInvoked()
         {
             UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
             UloopPausePointRegistry.Enable("jump", 1, patchDispatchMayBypass: true);
@@ -405,7 +405,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
-            Assert.That(snapshot.Message, Does.Contain("the armed method was never entered"));
+            Assert.That(snapshot.Message, Does.Contain("the armed patch recorded no method entry"));
             Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
             Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
         }

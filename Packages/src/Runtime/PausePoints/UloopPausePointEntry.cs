@@ -403,7 +403,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // awaited event never happened - so that is stated first.
             if (PatchDispatchMayBypass)
             {
-                return "Pause point expired before it was hit and the armed method was never entered. The awaited game event (collision, input, trigger) may simply not have happened during the wait; check the game state with execute-dynamic-code first. Only if the body provably ran, suspect Unity's cached message dispatch bypassing the patch.";
+                return "Pause point expired before it was hit and the armed patch recorded no method entry. The awaited game event (collision, input, trigger) may simply not have happened during the wait; check the game state with execute-dynamic-code first. Only if the body provably ran, suspect Unity's cached message dispatch bypassing the patch.";
             }
 
             return "Pause point expired before it was hit. The armed method was never invoked.";
