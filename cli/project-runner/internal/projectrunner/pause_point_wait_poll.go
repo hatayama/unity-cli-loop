@@ -303,7 +303,8 @@ func waitForPausePointStatus(
 			// buffered value, and the caller reuses the result received here instead of joining.
 			state.triggerResult = result
 			triggerDone = nil
-			if pausePointTriggerRejectedBeforeExecution(result) {
+			if pausePointTriggerRejectedBeforeExecution(result) ||
+				pausePointTriggerRejectedByUnityBeforeExecution(result, options.id) {
 				abortResponse, abortState := abortPausePointWaitAfterTriggerRejection(
 					ctx, connection, options.id, state.lastResponse, state.baselineSequence, state.hasBaseline)
 				return abortResponse, abortState, state.triggerResult, state.hasBaseline, nil

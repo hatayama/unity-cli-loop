@@ -1,12 +1,58 @@
 package projectrunner
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // pausePointTriggerResponseView is the part of a triggered command's response this diagnosis reads.
 // Success is a pointer so a response that omits it is treated as "unknown", not as a failure.
 type pausePointTriggerResponseView struct {
 	Success                      *bool  `json:"Success"`
 	RejectedByActivePausePointId string `json:"RejectedByActivePausePointId"`
+
+	// RejectedBeforeExecution is set by a triggered command whose preflight refused it, so the
+	// command performed no action at all. Unity reports this on stdout as a normal response, which
+	// is why the stderr error-envelope check alone cannot see it.
+	RejectedBeforeExecution bool `json:"RejectedBeforeExecution"`
+
+	// Message carries the triggered command's own reason for failing, so the wait can state it
+	// instead of asserting a cause it did not observe.
+	Message string `json:"Message"`
+}
+
+// pausePointTriggerRejectedByUnityBeforeExecution reports whether Unity refused the triggered
+// command before it executed anything. Like the stderr-envelope check, this proves the trigger
+// performed no action, so waiting out the marker's remaining lifetime cannot change the outcome.
+//
+// Why the awaited marker is excluded: a rejection naming the marker being awaited is the marker
+// having been hit before the trigger ran (pausePointTriggerRefusalWarning diagnoses that case), and
+// the hit itself is the wait's success, not a reason to abort.
+func pausePointTriggerRejectedByUnityBeforeExecution(
+	result *pausePointTriggerResult,
+	awaitedPausePointID string,
+) bool {
+	response, ok := decodePausePointTriggerResponse(result)
+	if !ok || response.Success == nil || *response.Success {
+		return false
+	}
+	if !response.RejectedBeforeExecution {
+		return false
+	}
+	return response.RejectedByActivePausePointId != awaitedPausePointID
+}
+
+// pausePointTriggerRejectionReason returns the triggered command's own reason for the rejection,
+// shaped to read inside a parenthesis: a trailing sentence period is dropped so the enclosing
+// sentence does not end in "..)." Why a fallback: a stderr-envelope rejection carries no Unity
+// response to quote, and its cause is always one of the two shapes
+// pausePointTriggerRejectedBeforeExecution matches.
+func pausePointTriggerRejectionReason(result *pausePointTriggerResult) string {
+	response, ok := decodePausePointTriggerResponse(result)
+	if ok && response.Message != "" {
+		return strings.TrimSuffix(strings.TrimSpace(response.Message), ".")
+	}
+	return "argument parsing or an unknown command name"
 }
 
 // pausePointTriggerRefusalWarning warns about the case where the marker was hit before the trigger

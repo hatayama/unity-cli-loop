@@ -3,6 +3,7 @@ package projectrunner
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -420,7 +421,10 @@ const wantPausePointTriggerFailedUnknownCommandNextAction = "For an INVALID_ARGU
 // from UNKNOWN_COMMAND's leading-uloop format mistake, so a prefixed value is not sent to
 // the triggered command's --help.
 func TestPausePointTriggerFailedNextActionsDiagnosesUnknownCommandPrefix(t *testing.T) {
-	got := pausePointTriggerFailedNextActions("jump")
+	got := pausePointTriggerFailedNextActions("jump", &pausePointTriggerResult{
+		Completed: true,
+		Error:     argumentErrorTriggerStderr,
+	})
 	want := []string{
 		"Fix the --trigger value in the command you just ran and run that command again. Re-running " +
 			"`enable-pause-point --await` is safe and is the cleanest reset: it restarts the marker's " +
@@ -642,5 +646,120 @@ func TestPausePointTimeoutError_TriggerRejected_WinsOverNewHitBaseline(t *testin
 	}
 	if cliErr.Details["TriggerFailed"] != true {
 		t.Fatalf("TriggerFailed mismatch: %#v", cliErr.Details["TriggerFailed"])
+	}
+}
+
+// Verifies a CLI-side rejection keeps the argument/command-name recovery step, which is the only
+// cause that shape of rejection can have.
+func TestPausePointTriggerFailedNextActionsForCliRejection(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Error:     argumentErrorTriggerStderr,
+	}
+
+	actions := pausePointTriggerFailedNextActions("jump", result)
+
+	if len(actions) != 3 {
+		t.Fatalf("expected three recovery steps, got %#v", actions)
+	}
+	if !strings.Contains(actions[2], "INVALID_ARGUMENT") {
+		t.Fatalf("expected the argument-syntax recovery step, got %q", actions[2])
+	}
+}
+
+// Verifies a Unity-side pre-execution rejection replaces the argument-syntax recovery step with the
+// precondition step: nothing about the trigger's arguments was wrong.
+func TestPausePointTriggerFailedNextActionsForUnityRejection(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Response: []byte(`{"Success":false,"RejectedBeforeExecution":true,` +
+			`"Message":"PlayMode is not active. Use control-play-mode tool to start PlayMode first."}`),
+	}
+
+	actions := pausePointTriggerFailedNextActions("jump", result)
+
+	if len(actions) != 3 {
+		t.Fatalf("expected three recovery steps, got %#v", actions)
+	}
+	if strings.Contains(actions[2], "INVALID_ARGUMENT") {
+		t.Fatalf("the argument-syntax recovery step must not be used for a Unity-side rejection, got %q", actions[2])
+	}
+	if !strings.Contains(actions[2], "uloop control-play-mode --action Play") {
+		t.Fatalf("expected the precondition recovery step, got %q", actions[2])
+	}
+}
+
+// Verifies an expired wait whose trigger failed states that in the top-level message, so an agent
+// reading only Error.Message does not treat it as a missed code path.
+func TestPausePointWaitErrorPrefixesExpiredMessageWhenTriggerFailed(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Response: []byte(`{"Success":false,` +
+			`"Message":"PlayMode is not active. Use control-play-mode tool to start PlayMode first."}`),
+	}
+
+	waitErr := pausePointWaitError(
+		"/project",
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 10},
+		pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired},
+		pausePointWaitStateExpired,
+		false,
+		false,
+		result)
+
+	if !strings.HasPrefix(waitErr.Message, "The --trigger command failed (PlayMode is not active.") {
+		t.Fatalf("expected the trigger failure stated first: %q", waitErr.Message)
+	}
+	if !strings.Contains(waitErr.Message, "Pause point expired before it was hit.") {
+		t.Fatalf("expected the original expiry message preserved: %q", waitErr.Message)
+	}
+}
+
+// Verifies a timed-out wait whose trigger failed carries the same top-level statement.
+func TestPausePointWaitErrorPrefixesTimeoutMessageWhenTriggerFailed(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Response:  []byte(`{"Success":false,"Message":"PlayMode is paused."}`),
+	}
+
+	waitErr := pausePointWaitError(
+		"/project",
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 10},
+		pausePointStatusResponse{Id: "jump", Status: pausePointStatusEnabled},
+		pausePointWaitStateTimeout,
+		false,
+		false,
+		result)
+
+	if !strings.HasPrefix(waitErr.Message, "The --trigger command failed (PlayMode is paused). ") {
+		t.Fatalf("expected the trigger failure stated first: %q", waitErr.Message)
+	}
+	if !strings.Contains(waitErr.Message, "was not hit within 10s") {
+		t.Fatalf("expected the original timeout message preserved: %q", waitErr.Message)
+	}
+}
+
+// Verifies the trigger-failed state does not double-state the failure: its own message already
+// leads with the rejection.
+func TestPausePointWaitErrorDoesNotPrefixTriggerFailedMessage(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Error:     argumentErrorTriggerStderr,
+	}
+
+	waitErr := pausePointWaitError(
+		"/project",
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 10},
+		pausePointStatusResponse{Id: "jump", Status: pausePointStatusEnabled},
+		pausePointWaitStateTriggerFailed,
+		false,
+		false,
+		result)
+
+	if strings.Contains(waitErr.Message, "The --trigger command failed") {
+		t.Fatalf("the trigger-failed message must not be prefixed again: %q", waitErr.Message)
+	}
+	if !strings.HasPrefix(waitErr.Message, "The trigger was rejected before it ran (argument parsing or an unknown command name)") {
+		t.Fatalf("expected the rejection reason quoted in the message: %q", waitErr.Message)
 	}
 }

@@ -896,3 +896,243 @@ func TestWaitForPausePointUnarmedErrorOmitsStatusSuffixWhenArmQueryFails(t *test
 		t.Fatalf("ResumePlayResult.Error mismatch: got %#v, want %q", resumeResult, pausePointResumeNotArmedAtWaitStartError)
 	}
 }
+
+// unityPreflightRejectionTriggerStdout is a triggered command's own response for a rejection that
+// happened before the command did anything, reported on stdout as a normal Unity response rather
+// than as a CLI error envelope on stderr.
+const unityPreflightRejectionTriggerStdout = `{"Success":false,` +
+	`"Message":"PlayMode is not active. Use control-play-mode tool to start PlayMode first.",` +
+	`"Action":"Press","RejectedBeforeExecution":true}`
+
+// Verifies a Unity-side pre-execution rejection reported on stdout aborts the wait immediately
+// instead of waiting out the marker's remaining lifetime: the trigger performed no action, so the
+// marker can never be hit by it.
+func TestWaitForPausePointAbortsWhenUnityRejectsTriggerBeforeExecution(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalDispatch := dispatchPausePointTriggerCommand
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		dispatchPausePointTriggerCommand = originalDispatch
+		pausePointStatusPoll = originalPoll
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointArmedStatusResponse(id), nil
+	}
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		_, _ = stdout.Write([]byte(unityPreflightRejectionTriggerStdout))
+		return 1
+	}
+
+	startedAt := time.Now()
+	_, state, triggerResult, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 60,
+		timeout:        10 * time.Second,
+		triggerCommand: "simulate-keyboard",
+		triggerArgs:    []string{"--action", "Press", "--key", "Space"},
+	})
+	elapsed := time.Since(startedAt)
+
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if state != pausePointWaitStateTriggerFailed {
+		t.Fatalf("expected trigger_failed state, got %q", state)
+	}
+	if elapsed >= 5*time.Second {
+		t.Fatalf("expected an early abort, waited %v of a 10s timeout", elapsed)
+	}
+	if triggerResult == nil {
+		t.Fatal("expected a TriggerResult reporting the rejection, got nil")
+	}
+}
+
+// Verifies a rejection owned by the awaited marker itself does not abort: that is the marker
+// having been hit before the trigger ran, which the refusal warning already diagnoses.
+func TestWaitForPausePointDoesNotAbortWhenTriggerRejectionNamesTheAwaitedMarker(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalDispatch := dispatchPausePointTriggerCommand
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		dispatchPausePointTriggerCommand = originalDispatch
+		pausePointStatusPoll = originalPoll
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointArmedStatusResponse(id), nil
+	}
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		_, _ = stdout.Write([]byte(
+			`{"Success":false,"Message":"PlayMode is paused.","RejectedBeforeExecution":true,` +
+				`"RejectedByActivePausePointId":"jump"}`))
+		return 1
+	}
+
+	_, state, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 60,
+		timeout:        50 * time.Millisecond,
+		triggerCommand: "simulate-keyboard",
+		triggerArgs:    []string{"--action", "Press"},
+	})
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if state != pausePointWaitStateTimeout {
+		t.Fatalf("a rejection owned by the awaited marker must let the wait settle on its own, got state %q", state)
+	}
+}
+
+// Verifies a mid-flight failure (the command started and then failed) does not abort the wait:
+// only a rejection that provably happened before execution proves the marker can never be hit.
+func TestWaitForPausePointDoesNotAbortWhenTriggerFailsMidFlight(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalDispatch := dispatchPausePointTriggerCommand
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		dispatchPausePointTriggerCommand = originalDispatch
+		pausePointStatusPoll = originalPoll
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointArmedStatusResponse(id), nil
+	}
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		_, _ = stdout.Write([]byte(`{"Success":false,"Message":"Key 'Spacf' is not a known key name."}`))
+		return 1
+	}
+
+	_, state, _, _, _, err := waitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 60,
+		timeout:        50 * time.Millisecond,
+		triggerCommand: "simulate-keyboard",
+		triggerArgs:    []string{"--action", "Press", "--key", "Spacf"},
+	})
+	if err != nil {
+		t.Fatalf("waitForPausePoint failed: %v", err)
+	}
+	if state != pausePointWaitStateTimeout {
+		t.Fatalf("a mid-flight trigger failure must not abort the wait, got state %q", state)
+	}
+}
+
+// Verifies the abort on a Unity-side pre-execution rejection keeps the marker armed and reports
+// the rejection's own reason in the top-level error message, instead of the argument-parsing
+// wording that only fits a CLI-side rejection.
+func TestRunWaitForPausePointReportsUnityRejectionReasonInMessage(t *testing.T) {
+	originalQuery := queryPausePointStatus
+	originalClear := clearPausePointStatus
+	originalDispatch := dispatchPausePointTriggerCommand
+	originalPoll := pausePointStatusPoll
+	pausePointStatusPoll = time.Millisecond
+	defer func() {
+		queryPausePointStatus = originalQuery
+		clearPausePointStatus = originalClear
+		dispatchPausePointTriggerCommand = originalDispatch
+		pausePointStatusPoll = originalPoll
+	}()
+
+	queryPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		return pausePointArmedStatusResponse(id), nil
+	}
+	clearCalled := false
+	clearPausePointStatus = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		id string,
+	) (pausePointStatusResponse, error) {
+		clearCalled = true
+		return pausePointStatusResponse{Id: id, Status: pausePointStatusCleared}, nil
+	}
+	dispatchPausePointTriggerCommand = func(
+		ctx context.Context,
+		connection unityipc.Connection,
+		command string,
+		commandArgs []string,
+		startPath string,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		_, _ = stdout.Write([]byte(unityPreflightRejectionTriggerStdout))
+		return 1
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runWaitForPausePoint(context.Background(), unityipc.Connection{}, waitForPausePointOptions{
+		id:             "jump",
+		timeoutSeconds: 60,
+		timeout:        10 * time.Second,
+		triggerCommand: "simulate-keyboard",
+		triggerArgs:    []string{"--action", "Press", "--key", "Space"},
+	}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected failure exit code, got %d with stdout %s", code, stdout.String())
+	}
+	if clearCalled {
+		t.Fatal("expected the marker to stay armed: clear must not be called when the trigger was rejected")
+	}
+
+	envelope := parsePausePointErrorEnvelope(t, stderr.Bytes())
+	if envelope.Error.ErrorCode != clierrors.ErrorCodePausePointTriggerFailed {
+		t.Fatalf("error code mismatch: %#v", envelope.Error)
+	}
+	if strings.Contains(envelope.Error.Message, "argument parsing or an unknown command name") {
+		t.Fatalf("the CLI-side rejection wording must not be asserted for a Unity-side rejection: %#v", envelope.Error)
+	}
+	if !strings.Contains(envelope.Error.Message, "PlayMode is not active") {
+		t.Fatalf("expected the rejection's own reason in the top-level message: %#v", envelope.Error)
+	}
+	if !strings.Contains(envelope.Error.Message, "the marker stayed armed and was never hit") {
+		t.Fatalf("expected the marker's state stated in the top-level message: %#v", envelope.Error)
+	}
+}

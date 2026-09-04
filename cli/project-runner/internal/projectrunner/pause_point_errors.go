@@ -51,12 +51,7 @@ func pausePointWaitError(
 	case pausePointWaitStateTriggerFailed:
 		waitErr = pausePointStateError(
 			clierrors.ErrorCodePausePointTriggerFailed,
-			"The --trigger command was rejected before it ran (argument parsing or an unknown command "+
-				"name), so the wait was abandoned instead of waiting out the remaining timeout. This "+
-				"command did not clear the marker: see Details.TriggerResult for the rejection and "+
-				"Details.RemainingMilliseconds for how long the marker stays armed. A zero "+
-				"RemainingMilliseconds with an empty Details.Status means the final status re-read "+
-				"failed — run pause-point-status to confirm the marker.",
+			pausePointTriggerFailedMessage(triggerResult),
 			projectRoot,
 			options,
 			response,
@@ -64,7 +59,7 @@ func pausePointWaitError(
 			// change first. Reporting a permanent failure as retryable is what made the original
 			// incident waste a full timeout window on it.
 			false)
-		waitErr.NextActions = pausePointTriggerFailedNextActions(options.id)
+		waitErr.NextActions = pausePointTriggerFailedNextActions(options.id, triggerResult)
 	case pausePointWaitStateCleared:
 		waitErr = pausePointStateError(
 			clierrors.ErrorCodePausePointCleared,
@@ -91,8 +86,42 @@ func pausePointWaitError(
 	}
 	if pausePointTriggerFailed(triggerResult) {
 		waitErr.Details["TriggerFailed"] = true
+		waitErr.Message = prefixPausePointMessageWithTriggerFailure(waitErr.Message, state, triggerResult)
 	}
 	return waitErr
+}
+
+// pausePointTriggerFailedMessage states what the rejection was and what it left behind. Why the
+// reason is quoted rather than asserted: the rejection can come from this CLI (argument parsing, an
+// unknown command name) or from Unity refusing the command before it ran, and naming the wrong one
+// is what sent agents looking for a typo in a trigger value that was correct.
+func pausePointTriggerFailedMessage(triggerResult *pausePointTriggerResult) string {
+	return fmt.Sprintf(
+		"The trigger was rejected before it ran (%s); the marker stayed armed and was never hit. "+
+			"The wait was abandoned instead of waiting out the remaining timeout. This command did not "+
+			"clear the marker: see Details.TriggerResult for the rejection and "+
+			"Details.RemainingMilliseconds for how long the marker stays armed. A zero "+
+			"RemainingMilliseconds with an empty Details.Status means the final status re-read "+
+			"failed — run pause-point-status to confirm the marker.",
+		pausePointTriggerRejectionReason(triggerResult))
+}
+
+// prefixPausePointMessageWithTriggerFailure states a failed trigger in the top-level message of an
+// expired or timed-out wait. Why: Details.TriggerFailed and Details.Hint already carry it, but an
+// agent that reads only Error.Message otherwise sees a missed code path and re-triggers the same
+// failing command. The trigger-failed state already says this in its own message.
+func prefixPausePointMessageWithTriggerFailure(
+	message string,
+	state pausePointWaitState,
+	triggerResult *pausePointTriggerResult,
+) string {
+	if state == pausePointWaitStateTriggerFailed {
+		return message
+	}
+	return fmt.Sprintf(
+		"The --trigger command failed (%s). %s",
+		pausePointTriggerRejectionReason(triggerResult),
+		message)
 }
 
 // pausePointTriggerFailedNextActions replaces the generic enable/id-mismatch guidance, which does
@@ -107,7 +136,7 @@ func pausePointWaitError(
 // Why the await form carries the real id: it is the one recovery command this function can spell
 // out completely, and naming a command without its arguments is exactly the failure this guidance
 // exists to prevent.
-func pausePointTriggerFailedNextActions(id string) []string {
+func pausePointTriggerFailedNextActions(id string, triggerResult *pausePointTriggerResult) []string {
 	return []string{
 		"Fix the --trigger value in the command you just ran and run that command again. Re-running " +
 			"`enable-pause-point --await` is safe and is the cleanest reset: it restarts the marker's " +
@@ -115,8 +144,18 @@ func pausePointTriggerFailedNextActions(id string) []string {
 		fmt.Sprintf(
 			"The marker is still armed, so you can also wait on it directly: "+
 				"uloop await-pause-point --id %q --trigger \"<corrected trigger command>\"", id),
-		"For an INVALID_ARGUMENT rejection, check the rejected value against the triggered command's own --help; for UNKNOWN_COMMAND, the first token must be a uloop subcommand name written without the leading 'uloop'.",
+		pausePointTriggerRejectionRecoveryAction(triggerResult),
 	}
+}
+
+// pausePointTriggerRejectionRecoveryAction picks the recovery step that matches where the rejection
+// came from. A Unity-side refusal has nothing to do with argument syntax, so the argument/command-name
+// advice would send the caller looking for a typo in a value that was already correct.
+func pausePointTriggerRejectionRecoveryAction(triggerResult *pausePointTriggerResult) string {
+	if pausePointTriggerRejectedBeforeExecution(triggerResult) {
+		return "For an INVALID_ARGUMENT rejection, check the rejected value against the triggered command's own --help; for UNKNOWN_COMMAND, the first token must be a uloop subcommand name written without the leading 'uloop'."
+	}
+	return "Fix the precondition named in the trigger message (for example enter Play Mode with 'uloop control-play-mode --action Play'), then run the same enable-pause-point command again."
 }
 
 const (
