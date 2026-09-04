@@ -156,6 +156,16 @@ When you touch a reported file, split it before adding behavior. Commands, the
 exclusion list, and the two places the threshold is declared:
 `docs/file-length.md`.
 
+## Asmdef Reference Policy
+
+Assembly definitions under `Packages/src` may only reference each other in the directions the
+package architecture allows: no tool references another tool, shared tool utilities
+(`FirstPartyTools.Common.*`) stay below `Application`, and no layer references an outer layer.
+The `Check asmdef reference policy` step in `build-and-test.yml` and the pre-commit hook fail on
+a forbidden reference. Prefer removing the reference (promote to Common, or invert it through a
+`ToolContracts` port); only when that must wait, add the edge with a reason to
+`tools/asmdef-policy-allowlist.json`. Categories, rules, and remedies: `docs/asmdef-policy.md`.
+
 ## Native Go CLI Validation
 
 When running `uloop` commands for this project during CLI development, do not use the `uloop`
