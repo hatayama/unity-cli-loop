@@ -930,6 +930,84 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: two compile-resolvable warnings plus a deferred hold warning still append
+        /// the single-compile resolution sentence.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_TwoCompileWarningsPlusDeferredHold_KeepsSingleCompileSentence()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string> { "compile warning one", "compile warning two" },
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(false, false, true));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Warnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "compile warning one",
+                        "compile warning two",
+                        HotReloadAutoRefreshHoldConstants.ReleaseDeferredWarning
+                    }));
+            Assert.That(
+                response.Message,
+                Does.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+        }
+
+        /// <summary>
+        /// What: --status Sync warnings for a deferred release and a blocked scene Refresh
+        /// appear on the response.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_PropagatesHoldSyncWarnings()
+        {
+            HotReloadAutoRefreshHoldService previous = HotReloadAutoRefreshHold.OverrideServiceForTesting;
+            try
+            {
+                HotReloadPatcher.RevertAll();
+                bool held = true;
+                bool isPlaying = true;
+                bool preflightCanProceed = true;
+                HotReloadAutoRefreshHold.OverrideServiceForTesting = new HotReloadAutoRefreshHoldService(
+                    () => held,
+                    value => held = value,
+                    () => true,
+                    () => isPlaying,
+                    () => { },
+                    () => { },
+                    () => (preflightCanProceed, string.Empty, Array.Empty<string>()),
+                    () => { });
+
+                HotReloadResponse deferred = await ExecuteStatusAsync(CancellationToken.None);
+                Assert.That(
+                    deferred.Warnings,
+                    Does.Contain(HotReloadAutoRefreshHoldConstants.ReleaseDeferredWarning));
+
+                held = true;
+                isPlaying = false;
+                preflightCanProceed = false;
+                HotReloadResponse blocked = await ExecuteStatusAsync(CancellationToken.None);
+                Assert.That(
+                    blocked.Warnings,
+                    Does.Contain(HotReloadAutoRefreshHoldConstants.SceneRefreshBlockedWarning));
+            }
+            finally
+            {
+                HotReloadAutoRefreshHold.OverrideServiceForTesting = previous;
+                HotReloadPatcher.RevertAll();
+                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            }
+        }
+
+        /// <summary>
         /// What: an empty Methods list yields the "no patchable method bodies" message (never "See Methods").
         /// </summary>
         [Test]

@@ -102,10 +102,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HotReloadAutoRefreshHoldSyncResult hold =
                 HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            List<string> warnings = new List<string>();
+            HotReloadAutoRefreshHoldResponseEnricher.AppendDeferredWarning(
+                warnings,
+                hold.ReleaseDeferred);
+            HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
+                warnings,
+                hold.SceneRefreshWarning);
             return new HotReloadResponse
             {
                 Success = true,
                 Methods = methods,
+                Warnings = warnings,
                 ActivePatchTotal = count,
                 AddedFieldTotal = addedFields.Count,
                 AutoRefreshHeld = hold.Held,
