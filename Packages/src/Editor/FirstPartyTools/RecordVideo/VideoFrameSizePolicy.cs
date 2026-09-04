@@ -1,5 +1,4 @@
-using System;
-using System.Diagnostics;
+using UnityEngine;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -37,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static int FloorScaled(int sourceSize, float scale)
         {
-            return (int)Math.Floor(sourceSize * (double)scale);
+            return Mathf.FloorToInt(sourceSize * scale);
         }
     }
 }

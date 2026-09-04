@@ -91,6 +91,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: scale 0.9 of 1280×720 floors in float so 0.9f does not lose a pixel to double rounding.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenScaleIsNineTenthsOf1280x720_Returns1152x648()
+        {
+            (int width, int height) size = VideoFrameSizePolicy.Resolve(1280, 720, 0.9f);
+
+            Assert.That(size.width, Is.EqualTo(1152));
+            Assert.That(size.height, Is.EqualTo(648));
+        }
+
+        /// <summary>
         /// What: a source that shrinks below 2px even-rounds to 0 so Start can reject it.
         /// </summary>
         [Test]
