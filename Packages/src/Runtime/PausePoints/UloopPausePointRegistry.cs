@@ -69,7 +69,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int maxPreviewElements = DefaultMaxPreviewElements,
             int maxCallerFrames = DefaultMaxCallerFrames,
             string hitWhen = "",
-            UloopPausePointHitWhenCondition hitWhenCondition = null)
+            UloopPausePointHitWhenCondition hitWhenCondition = null,
+            bool patchDispatchMayBypass = false)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
             Debug.Assert(timeoutSeconds > 0, "timeoutSeconds must be greater than zero");
@@ -92,7 +93,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int generation = ++_nextGeneration;
             UloopPausePointEntry entry = new(
                 id, timeoutSeconds, mode, maxHistory, maxPreviewElements, maxCallerFrames, now, generation,
-                MethodEntryInstrumentedIds.Contains(id), hitWhen, hitWhenCondition);
+                MethodEntryInstrumentedIds.Contains(id), hitWhen, hitWhenCondition, patchDispatchMayBypass);
             Entries[id] = entry;
             // Why not clear the raw capture holder here: a re-enable does not resume Unity, so the
             // paused-window constraint (see UloopPausePointRawCaptureHolder's class comment) is not

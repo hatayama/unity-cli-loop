@@ -393,6 +393,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: an instrumented physics-dispatch marker that expires with no patch entries
+        /// reports a bypass warning instead of claiming the method was never invoked.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenPhysicsDispatchMayBypassAndMethodNeverEntered_ReportsBypassNotNeverInvoked()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1, patchDispatchMayBypass: true);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Does.Contain("may have bypassed the patch"));
+            Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
+        }
+
+        /// <summary>
+        /// What: a source-location enable on a physics message method expires with the
+        /// cached-dispatch wording rather than "was never invoked".
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenSourceLocationPhysicsMarkerExpiresWithoutHit_ReportsBypassNotNeverInvoked()
+        {
+            PausePointUseCase useCase = new PausePointUseCase();
+            PausePointResponse response = useCase.Enable(new EnablePausePointSchema
+            {
+                File = PhysicsFixtureFilePath,
+                Line = PhysicsFixtureLine,
+                TimeoutSeconds = 1,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+            Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(response.Id);
+
+            Assert.That(snapshot.Message, Does.Contain("may have bypassed the patch"));
+            Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
+        }
+
+        /// <summary>
         /// What: an instrumented marker that skips hits by hit-when reports skipped-hit expiry
         /// evidence and a --hit-when recovery action.
         /// </summary>
@@ -490,7 +533,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 1,
                 true,
                 string.Empty,
-                null);
+                null,
+                false);
             entry.IncrementMethodEntryCount();
             bool expired = entry.ExpireIfNeeded(enabledAtUtc.AddSeconds(2));
             entry.IncrementHitWhenSkippedCount();

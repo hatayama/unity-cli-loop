@@ -430,7 +430,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.MaxPreviewElements,
                 parameters.MaxCallerFrames,
                 hitWhen,
-                hitWhenCondition);
+                hitWhenCondition,
+                patchResult.HasPhysicsCallbackWarning);
             if (retargetedToHotReloadPatch)
             {
                 UloopPausePointRegistry.SetRetargetedToHotReloadPatch(id, true);
