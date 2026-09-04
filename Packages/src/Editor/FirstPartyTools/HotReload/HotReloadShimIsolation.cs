@@ -44,8 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadShimErrorAttribution.ShimCompileErrorAttribution attribution =
                 HotReloadShimErrorAttribution.AttributeErrorsToEntries(
                 workerOutput.entries,
-                compileResult.Errors,
-                workerInput.projectRelativePath);
+                compileResult.Errors);
             if (attribution == null
                 || attribution.FailedEntries.Count == 0
                 || attribution.FailedEntries.Count == workerOutput.entries.Length)
@@ -97,16 +96,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             TransformWorkerInputDto retryInput = new TransformWorkerInputDto
             {
-                sourcePath = workerInput.sourcePath,
+                // Why share the array: the worker only reads it, and each source carries the
+                // snapshotSource the retry needs — omitting it would make the retry patch
+                // unedited methods again and diverge the retry entries from the first pass.
+                sources = workerInput.sources,
                 defines = workerInput.defines,
                 referencePaths = workerInput.referencePaths,
                 targetTypesAssemblyPath = workerInput.targetTypesAssemblyPath,
                 excludedMethodKeys = exclusions.ExcludedMethodKeys,
                 excludedAddedMethodKeys = exclusions.ExcludedAddedMethodKeys,
-                // Why copy: omitting snapshotSource would make the retry patch unedited methods
-                // again and diverge the retry entries set from the first-pass isolation baseline.
-                snapshotSource = workerInput.snapshotSource,
-                projectRelativePath = workerInput.projectRelativePath,
                 assemblySourcePaths = workerInput.assemblySourcePaths,
                 // Why copy: retry must still scan the same snapshot-mismatched siblings so
                 // siblingConstDriftWarnings stay populated on the retry worker output.
@@ -131,6 +129,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             TransformWorkerOutputDto retryOutput = retryWorkerResult.Output;
+            // One source in, one per-file row out. Assembly grouping widens this to the group size.
+            Debug.Assert(
+                retryOutput.files.Length == 1,
+                "A single-source retry worker run must return exactly one per-file output.");
+            TransformWorkerFileOutputDto retryFileOutput = retryOutput.files[0];
             // Why drop first-pass (Method, Reason) pairs: consuming them again would duplicate
             // every per-file skip. Retry-only pairs are new — typically transitive callers of
             // excluded added methods — and must surface or the edit is applied nowhere.
@@ -158,9 +161,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         skippedCallerOutcomes,
                         Array.Empty<TransformWorkerEntryDto>(),
                         null,
-                        retryOutput.addedFieldNames,
+                        retryFileOutput.addedFieldNames,
                         retryOutput.siblingConstDriftWarnings,
-                        retryOutput.addedConstNames));
+                        retryFileOutput.addedConstNames));
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -184,7 +187,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 retryOutput.shimSource,
                 shimReferences,
                 defines,
-                workerInput.projectRelativePath,
+                workerInput.sources[0].projectRelativePath,
                 ct).ConfigureAwait(false);
             if (!retryCompileResult.Success)
             {
@@ -202,9 +205,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     skippedCallerOutcomes,
                     retryOutput.entries,
                     retryCompileResult,
-                    retryOutput.addedFieldNames,
+                    retryFileOutput.addedFieldNames,
                     retryOutput.siblingConstDriftWarnings,
-                    retryOutput.addedConstNames));
+                    retryFileOutput.addedConstNames));
         }
 
         /// <summary>

@@ -81,9 +81,29 @@ public static class TransformWorkerProgram
     private static int RunTransform(string inputJsonPath, string outputJsonPath)
     {
         WorkerInput input = ReadInput(inputJsonPath);
-        WorkerOutput output = TransformFile(input);
+        WorkerOutput unsupportedSourceCount = TryCreateUnsupportedSourceCountOutput(input);
+        WorkerOutput output = unsupportedSourceCount ?? TransformFile(input);
         WriteOutput(outputJsonPath, output);
         return 0;
+    }
+
+    // Why a run-level failure output (not a throw): the source count crosses a process boundary
+    // via JSON, so it is untrusted input rather than a broken internal contract.
+    private static WorkerOutput TryCreateUnsupportedSourceCountOutput(WorkerInput input)
+    {
+        if (input.Sources.Length == 1)
+        {
+            return null;
+        }
+
+        return new WorkerOutput
+        {
+            ShimSource = string.Empty,
+            Entries = Array.Empty<WorkerEntry>(),
+            Skipped = Array.Empty<WorkerSkipped>(),
+            Files = Array.Empty<WorkerFileOutput>(),
+            ParseErrors = new[] { "This worker build accepts exactly one source." }
+        };
     }
 
     private static WorkerInput ReadInput(string inputJsonPath)
@@ -95,11 +115,7 @@ public static class TransformWorkerProgram
             throw new InvalidOperationException("Failed to deserialize worker input JSON.");
         }
 
-        if (string.IsNullOrEmpty(input.SourcePath))
-        {
-            throw new InvalidOperationException("sourcePath is required.");
-        }
-
+        input.Sources ??= Array.Empty<WorkerSourceInput>();
         input.Defines ??= Array.Empty<string>();
         input.ReferencePaths ??= Array.Empty<string>();
         input.ExcludedMethodKeys ??= Array.Empty<string>();
@@ -117,13 +133,14 @@ public static class TransformWorkerProgram
 
     private static WorkerOutput TransformFile(WorkerInput input)
     {
-        WorkerOutput invalidPath = TryCreateInvalidPathOutput(input);
+        WorkerSourceInput source = input.Sources[0];
+        WorkerOutput invalidPath = TryCreateInvalidPathOutput(source);
         if (invalidPath != null)
         {
             return invalidPath;
         }
 
-        (WorkerOutput readFailure, string sourceText, string sourceContentSha256) = TryReadSourceText(input);
+        (WorkerOutput readFailure, string sourceText, string sourceContentSha256) = TryReadSourceText(source);
         if (readFailure != null)
         {
             return readFailure;
@@ -136,7 +153,7 @@ public static class TransformWorkerProgram
         (SyntaxTree syntaxTree, CompilationUnitSyntax plainRoot) = WorkerSourceAnnotator.ParseAndAnnotateSource(
             sourceText,
             parseOptions,
-            input.SourcePath,
+            source.SourcePath,
             parseErrors);
 
         (List<MetadataReference> references, MetadataReference targetTypesReference) =
@@ -172,7 +189,8 @@ public static class TransformWorkerProgram
                 targetTypesAssemblySymbol,
                 declarationDriftWarnings);
 
-        BaselineSnapshotState baseline = BaselineSnapshotBuilder.BuildBaselineSnapshotState(input, parseOptions, plainRoot);
+        BaselineSnapshotState baseline =
+            BaselineSnapshotBuilder.BuildBaselineSnapshotState(source.SnapshotSource, parseOptions, plainRoot);
 
         List<WorkerEntry> entries = new List<WorkerEntry>();
         List<WorkerSkipped> skipped = new List<WorkerSkipped>();
@@ -249,7 +267,7 @@ public static class TransformWorkerProgram
             OutsideMethodBodyDriftChecker.AppendOutsideMethodBodyDriftWarningIfNeeded(
                 baseline.SnapshotRoot,
                 plainRoot,
-                Path.GetFileName(input.SourcePath),
+                Path.GetFileName(source.SourcePath),
                 declarationDriftWarnings,
                 addedMethodCatalog,
                 addedFieldCatalog,
@@ -259,7 +277,7 @@ public static class TransformWorkerProgram
 
         return BuildWorkerOutput(
             root,
-            input.ProjectRelativePath,
+            source.ProjectRelativePath,
             shimTypes,
             entries,
             skipped,
@@ -274,35 +292,54 @@ public static class TransformWorkerProgram
             sourceContentSha256);
     }
 
-    private static WorkerOutput TryCreateInvalidPathOutput(WorkerInput input)
+    private static WorkerOutput TryCreateInvalidPathOutput(WorkerSourceInput source)
     {
         // Why ParseErrors (not Debug.Assert): ProjectRelativePath crosses a process boundary via
         // JSON, and the worker is built without a DEBUG define so Conditional Asserts are stripped.
-        if (string.IsNullOrEmpty(input.ProjectRelativePath)
-            || input.ProjectRelativePath.IndexOf('\\') >= 0
-            || input.ProjectRelativePath.IndexOf('"') >= 0)
+        if (string.IsNullOrEmpty(source.ProjectRelativePath)
+            || source.ProjectRelativePath.IndexOf('\\') >= 0
+            || source.ProjectRelativePath.IndexOf('"') >= 0)
         {
-            return new WorkerOutput
-            {
-                ShimSource = string.Empty,
-                Entries = Array.Empty<WorkerEntry>(),
-                Skipped = Array.Empty<WorkerSkipped>(),
-                ParseErrors = new[]
-                {
-                    "Invalid projectRelativePath: must be a non-empty forward-slash path without quotes."
-                }
-            };
+            return CreateSourceFailureOutput(
+                source,
+                "Invalid projectRelativePath: must be a non-empty forward-slash path without quotes.");
         }
 
         return null;
     }
 
+    // A failure the run can attribute to one source: the row set is empty and the message
+    // travels on that source's per-file parse errors.
+    private static WorkerOutput CreateSourceFailureOutput(WorkerSourceInput source, string parseError)
+    {
+        return new WorkerOutput
+        {
+            ShimSource = string.Empty,
+            Entries = Array.Empty<WorkerEntry>(),
+            Skipped = Array.Empty<WorkerSkipped>(),
+            Files = new[]
+            {
+                new WorkerFileOutput
+                {
+                    ProjectRelativePath = source.ProjectRelativePath,
+                    SourceContentSha256 = string.Empty,
+                    ParseErrors = new[] { parseError },
+                    DeclarationDriftWarnings = Array.Empty<string>(),
+                    RemovedMembers = Array.Empty<WorkerRemovedMember>(),
+                    RemovedMethodSignatures = Array.Empty<WorkerRemovedMethodSignature>(),
+                    AddedFieldNames = Array.Empty<string>(),
+                    AddedConstNames = Array.Empty<string>()
+                }
+            }
+        };
+    }
+
     private static (WorkerOutput Failure, string SourceText, string SourceContentSha256) TryReadSourceText(
-        WorkerInput input)
+        WorkerSourceInput source)
     {
         try
         {
-            byte[] sourceBytes = File.ReadAllBytes(input.SourcePath);
+            byte[] sourceBytes = File.ReadAllBytes(source.SourcePath);
             string sourceContentSha256 = ComputeSourceContentSha256(sourceBytes);
             using MemoryStream memoryStream = new MemoryStream(sourceBytes, writable: false);
             using StreamReader reader = new StreamReader(
@@ -314,13 +351,7 @@ public static class TransformWorkerProgram
         catch (Exception exception)
         {
             return (
-                new WorkerOutput
-                {
-                    ShimSource = string.Empty,
-                    Entries = Array.Empty<WorkerEntry>(),
-                    Skipped = Array.Empty<WorkerSkipped>(),
-                    ParseErrors = new[] { "Failed to read sourcePath: " + exception.Message }
-                },
+                CreateSourceFailureOutput(source, "Failed to read sourcePath: " + exception.Message),
                 null,
                 null);
         }
@@ -416,23 +447,28 @@ public static class TransformWorkerProgram
         StampSourceProjectRelativePath(entries, skipped, unchangedMethods, projectRelativePath);
 
         string shimSource = ShimSourceEmitter.Emit(root, shimTypes, projectRelativePath);
+        WorkerFileOutput fileOutput = new WorkerFileOutput
+        {
+            ProjectRelativePath = projectRelativePath,
+            SourceContentSha256 = sourceContentSha256,
+            ParseErrors = parseErrors.ToArray(),
+            DeclarationDriftWarnings = declarationDriftWarnings.ToArray(),
+            BaselineDisabledByDuplicateKeys = baseline.BaselineDisabledByDuplicateKeys,
+            RemovedMembers = removedMembers.ToArray(),
+            RemovedMethodSignatures = removedMethodSignatures.ToArray(),
+            AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(),
+            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames()
+        };
         return new WorkerOutput
         {
             ShimSource = shimSource,
             Entries = entries.ToArray(),
             Skipped = skipped.ToArray(),
-            DeclarationDriftWarnings = declarationDriftWarnings.ToArray(),
+            Files = new[] { fileOutput },
             SiblingConstDriftWarnings = siblingConstDriftWarnings.ToArray(),
-            ParseErrors = parseErrors.ToArray(),
             UnchangedMethods = unchangedMethods.ToArray(),
-            BaselineDisabledByDuplicateKeys = baseline.BaselineDisabledByDuplicateKeys,
-            RemovedMembers = removedMembers.ToArray(),
-            RemovedMethodSignatures = removedMethodSignatures.ToArray(),
             HasAccessorDelegates = hasAccessorDelegates,
-            HasAddedFieldRewrites = addedFieldCatalog.HasStoreRewrites,
-            AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(),
-            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(),
-            SourceContentSha256 = sourceContentSha256
+            HasAddedFieldRewrites = addedFieldCatalog.HasStoreRewrites
         };
     }
 

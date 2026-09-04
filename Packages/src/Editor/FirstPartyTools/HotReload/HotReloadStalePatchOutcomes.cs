@@ -13,13 +13,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void Append(
             List<HotReloadMethodOutcome> outcomes,
             TransformWorkerOutputDto workerOutput,
+            TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures,
             IReadOnlyCollection<string> gatedReplacementMethodKeys,
             string projectRelativePath,
             string assemblyResolvePath)
         {
-            TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures =
-                workerOutput?.removedMethodSignatures;
-            if (removedMethodSignatures == null || removedMethodSignatures.Length == 0)
+            if (workerOutput == null
+                || removedMethodSignatures == null || removedMethodSignatures.Length == 0)
             {
                 return;
             }

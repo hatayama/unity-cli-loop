@@ -44,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     context.SnapshotAddedLabels,
                     context.ProjectRelativePath,
                     context.WorkerOutput,
+                    context.FileOutput.sourceContentSha256,
                     sinks.SuppressedPausePointIds,
                     sinks.RetargetedPausePointIds,
                     unchangedMethodCount,
@@ -83,6 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.SnapshotAddedLabels,
                 context.ProjectRelativePath,
                 context.WorkerOutput,
+                context.FileOutput.sourceContentSha256,
                 sinks.SuppressedPausePointIds,
                 sinks.RetargetedPausePointIds,
                 unchangedMethodCount,
@@ -100,6 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> snapshotAddedLabels,
             string projectRelativePath,
             TransformWorkerOutputDto workerOutput,
+            string sourceContentSha256,
             List<string> suppressedPausePointIds,
             List<string> retargetedPausePointIds,
             int unchangedMethodCount,
@@ -127,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unchangedMethodCount,
                 retargetedPausePointIds,
                 addedFieldNames,
-                workerOutput.sourceContentSha256,
+                sourceContentSha256,
                 addedConstNames,
                 revertedUnchangedCount);
         }

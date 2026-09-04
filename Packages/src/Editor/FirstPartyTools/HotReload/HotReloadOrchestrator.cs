@@ -133,12 +133,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             TransformWorkerInputDto workerInput = new TransformWorkerInputDto
             {
-                sourcePath = Path.GetFullPath(workerSourcePath),
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = Path.GetFullPath(workerSourcePath),
+                        projectRelativePath = projectRelativePath,
+                        snapshotSource = snapshotSource
+                    }
+                },
                 defines = defines,
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = Path.GetFullPath(targetDllPath),
-                snapshotSource = snapshotSource,
-                projectRelativePath = projectRelativePath,
                 assemblySourcePaths = HotReloadPatchTargetSupport.BuildAssemblySourcePaths(projectRoot, compilationAssembly.sourceFiles),
                 changedSiblingSourcePaths = siblingScan.ChangedSiblingAbsolutePaths
             };
@@ -154,9 +160,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             TransformWorkerOutputDto workerOutput = workerResult.Output;
-            string[] addedFieldNames = workerOutput.addedFieldNames;
+            // One source in, one per-file row out. Assembly grouping widens this to the group size.
+            Debug.Assert(
+                workerOutput.files.Length == 1,
+                "A single-source worker run must return exactly one per-file output.");
+            TransformWorkerFileOutputDto fileOutput = workerOutput.files[0];
+            string[] addedFieldNames = fileOutput.addedFieldNames;
             HotReloadWorkerNoticeAppender.AppendWorkerNotices(
                 workerOutput,
+                fileOutput,
                 snapshotSource,
                 projectRelativePath,
                 assemblyName,
@@ -187,6 +199,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines,
                 workerInput,
                 workerOutput,
+                fileOutput,
                 snapshotLabels,
                 snapshotAddedLabels);
 
@@ -197,8 +210,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why after the gate: a gated replacement is not applied, so listing it under
             // "Removed members stay present... edited bodies no longer call them" is false.
             string removedMembersWarning = HotReloadRemovedMembersWarning.FormatRemovedMembersWarning(
-                workerOutput.removedMembers,
-                workerOutput.removedMethodSignatures,
+                fileOutput.removedMembers,
+                fileOutput.removedMethodSignatures,
                 gateResult.GatedReplacementMethodKeys);
             if (removedMembersWarning != null)
             {
@@ -208,6 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadStalePatchOutcomes.Append(
                 sinks.Outcomes,
                 workerOutput,
+                fileOutput.removedMethodSignatures,
                 gateResult.GatedReplacementMethodKeys,
                 projectRelativePath,
                 assemblyResolvePath);
@@ -226,7 +240,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     sinks.Warnings,
                     0,
                     unchangedMethodCount: unchangedMethodCount,
-                    sourceContentSha256: workerOutput.sourceContentSha256,
+                    sourceContentSha256: fileOutput.sourceContentSha256,
                     revertedUnchangedCount: revertedUnchangedCount);
             }
 
@@ -275,7 +289,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         sinks.Warnings,
                         0,
                         unchangedMethodCount: unchangedMethodCount,
-                        sourceContentSha256: workerOutput.sourceContentSha256,
+                        sourceContentSha256: fileOutput.sourceContentSha256,
                         revertedUnchangedCount: revertedUnchangedCount);
                 }
 
@@ -303,6 +317,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RecordSupersededSignaturesAfterApply(
                 applied,
                 workerOutput,
+                fileOutput.removedMethodSignatures,
                 gateResult.GatedReplacementMethodKeys);
             return applied;
         }
@@ -310,6 +325,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void RecordSupersededSignaturesAfterApply(
             HotReloadFileProcessResult applied,
             TransformWorkerOutputDto workerOutput,
+            TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures,
             IReadOnlyCollection<string> gatedReplacementMethodKeys)
         {
             if (!HasAppliedChange(applied.Outcomes))
@@ -319,6 +335,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HotReloadSupersededSignatureRecorder.RecordFromWorkerOutput(
                 workerOutput,
+                removedMethodSignatures,
                 gatedReplacementMethodKeys);
         }
 

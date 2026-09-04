@@ -18,7 +18,7 @@ using Microsoft.CodeAnalysis.Text;
 internal static class BaselineSnapshotBuilder
 {
     internal static BaselineSnapshotState BuildBaselineSnapshotState(
-        WorkerInput input,
+        string snapshotSource,
         CSharpParseOptions parseOptions,
         CompilationUnitSyntax plainRoot)
     {
@@ -26,13 +26,13 @@ internal static class BaselineSnapshotBuilder
         // same-file old/new comparison only needs syntax keys to stay consistent with each other.
         BaselineSnapshotState baseline = new BaselineSnapshotState();
         // Null disables comparison; empty string is a real (empty) baseline text.
-        if (input.SnapshotSource == null)
+        if (snapshotSource == null)
         {
             return baseline;
         }
 
         baseline.SnapshotRoot = CSharpSyntaxTree.ParseText(
-                SourceText.From(input.SnapshotSource, Encoding.UTF8),
+                SourceText.From(snapshotSource, Encoding.UTF8),
                 parseOptions)
             .GetCompilationUnitRoot();
         Dictionary<string, MethodDeclarationSyntax> snapMethods =
