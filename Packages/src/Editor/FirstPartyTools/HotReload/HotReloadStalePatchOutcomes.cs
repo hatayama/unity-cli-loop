@@ -4,8 +4,9 @@ using System.Collections.Generic;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Reports patches whose method no longer exists in the edited source. No run reverts them,
-    /// so without a row they only show up as an ActivePatchTotal larger than the listed methods.
+    /// Reports patches whose method no longer exists in the edited source. Nothing in the run that
+    /// dropped the method reverts them, so without a row they only show up as an ActivePatchTotal
+    /// larger than the listed methods.
     /// </summary>
     internal static class HotReloadStalePatchOutcomes
     {
@@ -47,9 +48,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string[] parameterTypeFullNames =
                     signature.parameterTypeFullNames ?? Array.Empty<string>();
                 // Why the replacement check matters: a return-type change removes the old signature and
-        // adds a replacement under the same display key, so an earlier body patch on that key is
-        // still reachable and must not be read as a patch left behind by a deleted method.
-        // Why the gate and replacement checks use the wire key: both worker-side sets are
+                // adds a replacement under the same display key, so an earlier body patch on that key
+                // is still reachable and must not be read as a patch left behind by a deleted method.
+                // Why the gate and replacement checks use the wire key: both worker-side sets are
                 // "Type::Method(args)", while the patch ledger keys are display-side
                 // ("Type.Method(args)"). Neither a gated nor an applied replacement is a deletion.
                 string wireKey = HotReloadWireMethodKeys.BuildMethodKeyParts(
