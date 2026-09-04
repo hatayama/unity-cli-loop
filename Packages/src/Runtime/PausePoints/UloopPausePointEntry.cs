@@ -305,10 +305,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                     UloopPausePointEditorStateCapturedAt.Current);
             long elapsedMilliseconds = Math.Max(0, (long)(nowUtc - EnabledAtUtc).TotalMilliseconds);
             long remainingMilliseconds = CalculateRemainingMilliseconds(nowUtc);
-            string recommendedNextAction = expired ? CreateExpiredRecommendedNextAction() : string.Empty;
+            int hitWhenSkippedCount = HitWhenSkippedCount;
+            string recommendedNextAction = expired
+                ? CreateExpiredRecommendedNextAction(MethodEntryCount, hitWhenSkippedCount)
+                : string.Empty;
             string firstHitAtUtc = HitCount > 0 ? FormatUtc(FirstHitAtUtc) : string.Empty;
             string lastHitAtUtc = HitCount > 0 ? FormatUtc(HitAtUtc) : string.Empty;
-            int hitWhenSkippedCount = HitWhenSkippedCount;
 
             return new UloopPausePointSnapshot(
                 Id,
@@ -366,9 +368,29 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return Math.Max(0, remainingMilliseconds);
         }
 
-        private string CreateExpiredRecommendedNextAction()
+        // Why not a single timeout hint: method-entry evidence already tells whether a longer
+        // window can help, and repeating that advice after a branch-not-taken or --hit-when miss
+        // sends the agent down a retry that cannot succeed.
+        private string CreateExpiredRecommendedNextAction(int methodEntryCount, int hitWhenSkippedCount)
         {
-            return "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
+            const string defaultAction =
+                "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
+            if (!HasMethodEntryInstrumentation)
+            {
+                return defaultAction;
+            }
+
+            if (methodEntryCount > 0 && hitWhenSkippedCount == 0)
+            {
+                return "The armed method ran but the armed line was never reached, so a longer --timeout-seconds alone will not help. Check the condition that guards the armed line (the trigger may have fired while it was false), then re-enable the marker and trigger the code path again once the precondition holds; --mode continuous keeps the marker armed across repeated attempts. Clearing the expired marker first is not required.";
+            }
+
+            if (hitWhenSkippedCount > 0)
+            {
+                return $"The armed line executed {hitWhenSkippedCount} time(s) but no hit matched --hit-when. Re-enable the marker, then adjust the --hit-when condition or the trigger input so a hit matches; clearing the expired marker first is not required.";
+            }
+
+            return defaultAction;
         }
 
         private static string FormatUtc(DateTime value)
