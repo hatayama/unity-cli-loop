@@ -16,6 +16,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // Capture can evaluate conditions off the main thread, so its counter and first error use
         // interlocked operations instead of coupling the patched method to Unity main-thread state.
         private int _hitWhenSkippedCount;
+        // Frozen at ExpireIfNeeded so Message and RecommendedNextAction share one measurement.
+        // In-flight increments can still raise the live counters after that compose.
+        private int _expiredMethodEntryCount;
+        private int _expiredHitWhenSkippedCount;
         private string _hitWhenErrorNote = string.Empty;
 
         public UloopPausePointEntry(
@@ -145,6 +149,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // already passed that gate can still reach the snapshot after this message is composed.
             int methodEntryCount = MethodEntryCount;
             int hitWhenSkippedCount = HitWhenSkippedCount;
+            _expiredMethodEntryCount = methodEntryCount;
+            _expiredHitWhenSkippedCount = hitWhenSkippedCount;
             Message = HitCount == 0 && HasMethodEntryInstrumentation
                 ? hitWhenSkippedCount > 0
                     ? $"Pause point expired before any hit matched --hit-when. The method entered {methodEntryCount} time(s); {hitWhenSkippedCount} hit(s) were skipped by the condition."
@@ -307,7 +313,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             long remainingMilliseconds = CalculateRemainingMilliseconds(nowUtc);
             int hitWhenSkippedCount = HitWhenSkippedCount;
             string recommendedNextAction = expired
-                ? CreateExpiredRecommendedNextAction(MethodEntryCount, hitWhenSkippedCount)
+                ? CreateExpiredRecommendedNextAction(_expiredMethodEntryCount, _expiredHitWhenSkippedCount)
                 : string.Empty;
             string firstHitAtUtc = HitCount > 0 ? FormatUtc(FirstHitAtUtc) : string.Empty;
             string lastHitAtUtc = HitCount > 0 ? FormatUtc(HitAtUtc) : string.Empty;

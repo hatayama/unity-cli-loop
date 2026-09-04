@@ -471,6 +471,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("never reached"));
         }
 
+        /// <summary>
+        /// What: RecommendedNextAction uses the expire-time counters even if an in-flight
+        /// increment lands after Message is composed.
+        /// </summary>
+        [Test]
+        public void ToSnapshot_WhenSkipCountIncrementsAfterExpire_KeepsExpireTimeRecommendedNextAction()
+        {
+            DateTime enabledAtUtc = new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc);
+            UloopPausePointEntry entry = new(
+                "jump",
+                1,
+                UloopPausePointCaptureMode.SingleShot,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                enabledAtUtc,
+                1,
+                true,
+                string.Empty,
+                null);
+            entry.IncrementMethodEntryCount();
+            bool expired = entry.ExpireIfNeeded(enabledAtUtc.AddSeconds(2));
+            entry.IncrementHitWhenSkippedCount();
+
+            UloopPausePointSnapshot snapshot = entry.ToSnapshot(enabledAtUtc.AddSeconds(2), _pauseController);
+
+            Assert.That(expired, Is.True);
+            Assert.That(snapshot.Message, Does.Contain("branch not taken"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("a longer --timeout-seconds alone will not help"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("--hit-when"));
+        }
+
         [Test]
         public void GetStatus_WhenExpiredIdContainsShellSyntax_ReturnsShellNeutralRecoveryAction()
         {
