@@ -86,6 +86,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + $"is reverted or compiled for real: {ids}");
             }
 
+            HotReloadAutoRefreshHoldResponseEnricher.AppendDeferredWarning(
+                warnings,
+                result.AutoRefreshHoldReleaseDeferred);
+            string message = BuildApplyMessage(
+                result,
+                hasFailure,
+                warnings.Count,
+                appendCompileResolution: orchestratorWarningCount >= 2
+                    && orchestratorWarningCount == warnings.Count);
             return new HotReloadResponse
             {
                 Success = !hasFailure,
@@ -98,12 +107,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ClearedCount = result.RevertedUnchangedTotal,
                 AddedFields = result.AddedFields,
                 AddedConsts = result.AddedConsts,
-                Message = BuildApplyMessage(
-                    result,
-                    hasFailure,
-                    warnings.Count,
-                    appendCompileResolution: orchestratorWarningCount >= 2
-                        && orchestratorWarningCount == warnings.Count),
+                AutoRefreshHeld = result.AutoRefreshHeld,
+                Message = HotReloadAutoRefreshHoldResponseEnricher.AppendNewlyArmedMessage(
+                    message,
+                    result.AutoRefreshHoldNewlyArmed),
                 RecommendedNextAction = HotReloadRecommendedNextAction.Resolve(
                     hasFailure,
                     result.PatchedTotal,

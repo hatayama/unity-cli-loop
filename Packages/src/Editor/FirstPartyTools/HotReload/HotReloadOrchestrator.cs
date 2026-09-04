@@ -141,6 +141,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 failedCount == 0,
                 correlationId);
             HotReloadOutcomeAggregation.AppendSiblingDerivedWarnings(warnings, siblingDerivedWarnings);
+            HotReloadAutoRefreshHoldSyncResult autoRefreshHold =
+                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
             return new HotReloadOrchestratorResult(
                 outcomes,
                 warnings,
@@ -151,7 +153,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 retargetedPausePointIds,
                 addedFields.ToArray(),
                 addedConsts.ToArray(),
-                revertedUnchangedTotal);
+                revertedUnchangedTotal,
+                autoRefreshHold);
         }
 
         private static async Task<HotReloadFileProcessResult> ProcessFileAsync(

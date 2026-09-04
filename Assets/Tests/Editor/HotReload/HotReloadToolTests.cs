@@ -234,6 +234,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     response.Message,
                     Is.EqualTo(
                         "1 change(s) currently active. 1 change(s) have not been invoked since their patch was applied; see Methods[].Reason."));
+                Assert.That(response.AutoRefreshHeld, Is.True);
             }
             finally
             {
@@ -838,7 +839,87 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(response, Is.Not.Null);
             Assert.That(response.Success, Is.True);
             Assert.That(response.ClearedCount, Is.EqualTo(0));
+            Assert.That(response.AutoRefreshHeld, Is.False);
             Assert.That(response.Message, Is.EqualTo("No active hot-reload changes to revert."));
+        }
+
+        /// <summary>
+        /// What: --revert-all after an armed hold reports AutoRefreshHeld false.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RevertAll_ClearsAutoRefreshHeld()
+        {
+            HotReloadPatcher.RevertAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.True);
+
+                HotReloadTool tool = new HotReloadTool();
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                    new JObject { ["RevertAll"] = true },
+                    CancellationToken.None);
+                HotReloadResponse response = baseResponse as HotReloadResponse;
+
+                Assert.That(response, Is.Not.Null);
+                Assert.That(response.Success, Is.True);
+                Assert.That(response.ActivePatchTotal, Is.EqualTo(0));
+                Assert.That(response.AutoRefreshHeld, Is.False);
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            }
+        }
+
+        /// <summary>
+        /// What: a newly armed apply response appends the fixed Auto Refresh hold sentence.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenHoldNewlyArmed_AppendsFixedHoldSentence()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(true, true, false));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.AutoRefreshHeld, Is.True);
+            Assert.That(
+                response.Message,
+                Does.EndWith(HotReloadAutoRefreshHoldConstants.NewlyArmedMessageSuffix));
+        }
+
+        /// <summary>
+        /// What: a deferred release adds the fixed Warning and reports AutoRefreshHeld false.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenReleaseDeferred_AddsFixedWarning()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0,
+                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(false, false, true));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.AutoRefreshHeld, Is.False);
+            Assert.That(
+                response.Warnings,
+                Does.Contain(HotReloadAutoRefreshHoldConstants.ReleaseDeferredWarning));
         }
 
         /// <summary>

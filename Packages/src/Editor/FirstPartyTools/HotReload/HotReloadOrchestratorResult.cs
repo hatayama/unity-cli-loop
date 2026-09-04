@@ -18,6 +18,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int RevertedUnchangedTotal { get; }
         public string[] AddedFields { get; }
         public string[] AddedConsts { get; }
+        public bool AutoRefreshHeld { get; }
+        public bool AutoRefreshHoldNewlyArmed { get; }
+        public bool AutoRefreshHoldReleaseDeferred { get; }
 
         public HotReloadOrchestratorResult(
             IReadOnlyList<HotReloadMethodOutcome> methods,
@@ -29,7 +32,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> retargetedPausePointIds = null,
             string[] addedFields = null,
             string[] addedConsts = null,
-            int revertedUnchangedTotal = 0)
+            int revertedUnchangedTotal = 0,
+            HotReloadAutoRefreshHoldSyncResult autoRefreshHold = null)
         {
             Methods = methods;
             Warnings = warnings;
@@ -41,6 +45,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AddedFields = addedFields ?? Array.Empty<string>();
             AddedConsts = addedConsts ?? Array.Empty<string>();
             RevertedUnchangedTotal = revertedUnchangedTotal;
+            AutoRefreshHeld = autoRefreshHold != null && autoRefreshHold.Held;
+            AutoRefreshHoldNewlyArmed = autoRefreshHold != null && autoRefreshHold.NewlyArmed;
+            AutoRefreshHoldReleaseDeferred = autoRefreshHold != null && autoRefreshHold.ReleaseDeferred;
         }
     }
 
