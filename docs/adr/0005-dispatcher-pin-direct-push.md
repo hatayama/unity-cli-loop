@@ -24,7 +24,8 @@ the attestations while writing the manifest, `ValidateDispatcherPinOffline`
 checks the shape and the mirror, `VerifyDispatcherPinSubjects` compares the
 manifest with the published release subjects, and `check-dispatcher-pin` repeats
 the check on `main`. A value that does not match the published release cannot
-pass any of these, whoever wrote it; the checks validate content, not authorship.
+pass `VerifyDispatcherPinSubjects`, whoever wrote it; the checks validate
+content, not authorship.
 
 The only human decision in a dispatcher release is whether to publish it, and
 that decision is taken at the `cli-release` environment approval before the

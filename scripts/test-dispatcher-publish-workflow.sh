@@ -289,7 +289,7 @@ test_dispatcher_pin_is_pushed_to_main_with_the_app_token() {
   assert_pin_token_contains '          app-id: ${{ vars.DISPATCHER_PIN_APP_ID }}'
   assert_pin_token_contains '          private-key: ${{ secrets.DISPATCHER_PIN_APP_PRIVATE_KEY }}'
   assert_pin_token_contains "          permission-contents: write"
-  if pin_token_section | grep -E "^          permission-" | grep -v "permission-contents: write" >/dev/null 2>&1; then
+  if pin_token_section | grep -E "^          permission-" | grep -v -x "          permission-contents: write" >/dev/null 2>&1; then
     echo "The pin token must request Contents write and no other App permission." >&2
     exit 1
   fi
