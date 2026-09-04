@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
+using System.Reflection.Emit;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Xml;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -26,6 +29,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
     /// </summary>
     public sealed class RunTestsTestFrameworkResultTests
     {
+        private const short MultiByteOpCodePrefix = 0xFE;
+        private const int SwitchCaseCountSize = 4;
+        private const int SwitchCaseSize = 4;
+
         [Test]
         public void SaveTestResultAsXml_WhenSavingResult_UsesCollisionResistantFileName()
         {
@@ -501,6 +508,142 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string xmlPath = PlayModeTestExecuter.TrySaveFailureXml(result);
 
             Assert.That(xmlPath, Is.Null);
+        }
+
+        [Test]
+        public void SaveTestResultAsXml_DoesNotCallAssetDatabaseRefresh()
+        {
+            // Verifies the exporter never triggers an asset import. Guards against re-adding a
+            // Refresh inside the Test Framework assembly lock: the import it queues reloads the
+            // domain the moment the run unlocks assemblies, discarding hot-reload patches and
+            // dropping the IPC session mid-response.
+            MethodInfo exportMethod = typeof(NUnitXmlResultExporter).GetMethod(
+                "SaveTestResultAsXml",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(exportMethod, Is.Not.Null, "SaveTestResultAsXml must exist for this guard to mean anything.");
+
+            IReadOnlyList<MethodBase> calledMethods = ResolveCalledMethods(exportMethod);
+            Assert.That(
+                calledMethods.Count,
+                Is.GreaterThan(0),
+                "The IL scan resolved no calls, so the guard would pass vacuously.");
+
+            MethodBase refreshCall = null;
+            for (int index = 0; index < calledMethods.Count; index++)
+            {
+                MethodBase candidate = calledMethods[index];
+                if (candidate.DeclaringType == typeof(AssetDatabase) && candidate.Name == "Refresh")
+                {
+                    refreshCall = candidate;
+                    break;
+                }
+            }
+
+            Assert.That(refreshCall, Is.Null, "SaveTestResultAsXml must not call AssetDatabase.Refresh.");
+        }
+
+        // Resolves every method a method body calls, so a test can assert on the callee set
+        // instead of on source text.
+        private static IReadOnlyList<MethodBase> ResolveCalledMethods(MethodInfo method)
+        {
+            MethodBody body = method.GetMethodBody();
+            Assert.That(body, Is.Not.Null, "A managed method body is required for the IL scan.");
+
+            byte[] il = body.GetILAsByteArray();
+            Assert.That(il, Is.Not.Null, "IL bytes are required for the IL scan.");
+
+            IReadOnlyDictionary<short, OpCode> opCodesByValue = BuildOpCodeLookup();
+            Type[] typeGenericArguments = method.DeclaringType.IsGenericType
+                ? method.DeclaringType.GetGenericArguments()
+                : Type.EmptyTypes;
+            Type[] methodGenericArguments = method.IsGenericMethod
+                ? method.GetGenericArguments()
+                : Type.EmptyTypes;
+
+            List<MethodBase> resolved = new List<MethodBase>();
+            int offset = 0;
+            while (offset < il.Length)
+            {
+                short opCodeValue = il[offset];
+                offset++;
+                if (opCodeValue == MultiByteOpCodePrefix)
+                {
+                    opCodeValue = (short)((MultiByteOpCodePrefix << 8) | il[offset]);
+                    offset++;
+                }
+
+                Assert.That(
+                    opCodesByValue.ContainsKey(opCodeValue),
+                    Is.True,
+                    "Unknown IL opcode 0x" + opCodeValue.ToString("X4") + "; the decoder is out of sync.");
+                OpCode opCode = opCodesByValue[opCodeValue];
+                if (opCode.OperandType == OperandType.InlineMethod)
+                {
+                    int metadataToken = BitConverter.ToInt32(il, offset);
+                    resolved.Add(
+                        method.Module.ResolveMethod(
+                            metadataToken,
+                            typeGenericArguments,
+                            methodGenericArguments));
+                }
+
+                offset += MeasureOperandSize(opCode, il, offset);
+            }
+
+            return resolved;
+        }
+
+        // Why the OpCodes reflection table: decoding every instruction exactly keeps token reads
+        // aligned, so no invalid token is ever passed to ResolveMethod.
+        private static IReadOnlyDictionary<short, OpCode> BuildOpCodeLookup()
+        {
+            Dictionary<short, OpCode> lookup = new Dictionary<short, OpCode>();
+            FieldInfo[] fields = typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static);
+            for (int index = 0; index < fields.Length; index++)
+            {
+                if (fields[index].FieldType != typeof(OpCode))
+                {
+                    continue;
+                }
+
+                OpCode opCode = (OpCode)fields[index].GetValue(null);
+                lookup[opCode.Value] = opCode;
+            }
+
+            return lookup;
+        }
+
+        private static int MeasureOperandSize(OpCode opCode, byte[] il, int operandOffset)
+        {
+            if (opCode.OperandType == OperandType.InlineSwitch)
+            {
+                int caseCount = BitConverter.ToInt32(il, operandOffset);
+                return SwitchCaseCountSize + (caseCount * SwitchCaseSize);
+            }
+
+            if (opCode.OperandType == OperandType.InlineNone)
+            {
+                return 0;
+            }
+
+            if (opCode.OperandType == OperandType.ShortInlineBrTarget
+                || opCode.OperandType == OperandType.ShortInlineI
+                || opCode.OperandType == OperandType.ShortInlineVar)
+            {
+                return 1;
+            }
+
+            if (opCode.OperandType == OperandType.InlineVar)
+            {
+                return 2;
+            }
+
+            if (opCode.OperandType == OperandType.InlineI8 || opCode.OperandType == OperandType.InlineR)
+            {
+                return 8;
+            }
+
+            return 4;
         }
 
         private static XmlDocument SaveResultAndLoadXml(ITestResultAdaptor result, out string filePath)
