@@ -110,6 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int skippedCount,
             int alreadyActiveCount,
             int addedCount,
+            int staleCount,
             bool success,
             string correlationId)
         {
@@ -123,6 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     skippedCount,
                     alreadyActiveCount,
                     addedCount,
+                    staleCount,
                     success
                 },
                 correlationId);

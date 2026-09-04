@@ -4053,6 +4053,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a return-type change is a replacement, not a deletion, so the superseded old
+        /// signature must not be reported as a stale patch even though the worker lists it as a
+        /// removed method signature.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_SameFileCallers_ReportsNoStaleOutcome()
+        {
+            string fixturePath = ResolveSignatureChangeSameFileFixturePath();
+            string edited = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSameFileNoStale.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Stale),
+                    "A replaced signature is still declared in the source.\n"
+                    + FormatOutcomes(result.Methods));
+            }
+        }
+
+        /// <summary>
+        /// What: changing the return type of a method that an earlier run already patched is still
+        /// a replacement, so the old signature's surviving patch must not be reported as stale.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_AfterEarlierBodyPatch_ReportsNoStaleOutcome()
+        {
+            string fixturePath = ResolveSignatureChangeSameFileFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string bodyOnlyEdit = onDisk.Replace(
+                "        public int Target(int value)\n        {\n            return value;\n        }",
+                "        public int Target(int value)\n        {\n            return value + 7;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(bodyOnlyEdit, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult firstRun = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSameFileBodyFirst.cs", bodyOnlyEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(firstRun);
+            AssertHasPatched(firstRun, nameof(HotReloadSignatureChangeSameFileFixture.Target));
+
+            HotReloadOrchestratorResult secondRun = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSameFileReturnSecond.cs", WithSameFileReturnTypeChange(onDisk)),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(secondRun);
+            foreach (HotReloadMethodOutcome outcome in secondRun.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Stale),
+                    "A replaced signature is still declared in the source.\n"
+                    + FormatOutcomes(secondRun.Methods));
+            }
+
+            // The first run's patch on the old signature survives alongside the replacement and
+            // the patched caller, so three changes are active behind two rows. That gap is the
+            // superseded-signature case, which --status explains through
+            // HotReloadSupersededSignatureRegistry; it is not a stale patch.
+            Assert.That(secondRun.ActivePatchTotal, Is.EqualTo(3));
+            Assert.That(secondRun.Methods.Count, Is.EqualTo(2), FormatOutcomes(secondRun.Methods));
+        }
+
+        /// <summary>
         /// What: applying a same-file return-type change records the old compiled signature
         /// as superseded using the Active --status Method key.
         /// </summary>
@@ -5658,6 +5729,98 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadAddedMemberHost host = new HotReloadAddedMemberHost();
             Assert.That(host.ExistingCaller(0), Is.EqualTo(7));
+        }
+
+        /// <summary>
+        /// What: a patched method later deleted from the source keeps its patch active, so the run
+        /// reports it as a Stale row instead of leaving ActivePatchTotal unexplained.
+        /// </summary>
+        [Test]
+        public async Task Run_PatchedMethodRemovedInLaterEdit_EmitsStaleOutcome()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string patchedSource = onDisk.Replace(
+                "        public int ExistingFail(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingFail(int value)\n        {\n            return value + 41;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(patchedSource, Is.Not.EqualTo(onDisk));
+            string patchedPath = WriteEditedSource("StaleOutcomeFirstPass.cs", patchedSource);
+
+            HotReloadOrchestratorResult firstRun = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                patchedPath,
+                CancellationToken.None);
+            Assert.That(
+                firstRun.ActivePatchTotal,
+                Is.GreaterThan(0),
+                "The first run must leave ExistingFail patched for the second run to go stale.");
+
+            string removedSource = onDisk.Replace(
+                "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ExistingFail(int value)\n        {\n            return value;\n        }\n\n",
+                string.Empty,
+                StringComparison.Ordinal).Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public int ExistingValue()\n        {\n            return 2;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(removedSource, Is.Not.EqualTo(onDisk));
+            string removedPath = WriteEditedSource("StaleOutcomeSecondPass.cs", removedSource);
+
+            HotReloadOrchestratorResult secondRun = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                removedPath,
+                CancellationToken.None);
+
+            HotReloadMethodOutcome staleOutcome = null;
+            foreach (HotReloadMethodOutcome outcome in secondRun.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Stale)
+                {
+                    staleOutcome = outcome;
+                }
+            }
+
+            Assert.That(
+                staleOutcome,
+                Is.Not.Null,
+                "The deleted-but-still-patched method must be reported.\n"
+                + FormatOutcomes(secondRun.Methods));
+            Assert.That(
+                staleOutcome.Method,
+                Does.Contain(nameof(HotReloadAddedMemberHost.ExistingFail)));
+            Assert.That(
+                staleOutcome.Reason,
+                Is.EqualTo(HotReloadConstants.StalePatchRemovedFromSourceReason));
+            Assert.That(
+                secondRun.Methods.Count,
+                Is.EqualTo(secondRun.ActivePatchTotal),
+                "Every active patch must have a row now that stale patches are listed.\n"
+                + FormatOutcomes(secondRun.Methods));
+
+            // Restoring the compiled baseline makes the deleted method unchanged again, so the
+            // stale patch is reverted with the rest. This is the third way out of a stale patch,
+            // alongside 'uloop compile' and '--revert-all'.
+            HotReloadOrchestratorResult restoreRun = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                WriteEditedSource("StaleOutcomeRestorePass.cs", onDisk),
+                CancellationToken.None);
+            Assert.That(
+                restoreRun.ActivePatchTotal,
+                Is.EqualTo(0),
+                "Restoring the source must clear the stale patch.\n"
+                + FormatOutcomes(restoreRun.Methods));
+        }
+
+        private static string FormatOutcomes(IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            List<string> lines = new List<string>();
+            for (int index = 0; index < outcomes.Count; index++)
+            {
+                lines.Add(outcomes[index].Kind + " " + outcomes[index].Method);
+            }
+
+            return string.Join("\n", lines);
         }
 
         /// <summary>

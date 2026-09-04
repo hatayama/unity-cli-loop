@@ -48,6 +48,12 @@ const (
 	errorPhaseUnityRPC        = "unity_rpc"
 	ErrorPhaseCompileWaiting  = "compile_waiting"
 	ErrorPhaseExecution       = "execution"
+
+	commandRunTests = "run-tests"
+
+	// Why this wording: --skip-compile only skips the CLI-side compile, so agents read a
+	// disconnect here as an IPC fault instead of the domain reload that discarded their patches.
+	runTestsDisconnectHotReloadNextAction = "If scripts were edited since the last compile, Unity imported them when the test run released its assembly lock and the domain reload discarded every active hot-reload patch; re-run 'uloop hot-reload' after the reload, or run 'uloop compile' first (--skip-compile only skips the CLI-side compile)."
 )
 
 type CLIError struct {
@@ -196,6 +202,17 @@ func cliProtocolMismatchIsNewer(data cliUpdateRequiredErrorData) bool {
 }
 
 func disconnectedAfterAcceptError(err error, context ErrorContext) CLIError {
+	nextActions := []string{
+		"Check Unity Console logs because Unity had already accepted the request.",
+		"Retry after Unity finishes compiling, reloading scripts, or restarting the bridge.",
+	}
+	// Why only run-tests: the Test Runner holds the assembly lock for the whole run, so
+	// scripts imported meanwhile reload the domain the moment the lock is released. No
+	// other command turns a pending script edit into a mid-request domain reload.
+	if context.Command == commandRunTests {
+		nextActions = append(nextActions, runTestsDisconnectHotReloadNextAction)
+	}
+
 	return CLIError{
 		ErrorCode:   errorCodeUnityDisconnectedAfterAccept,
 		Phase:       ErrorPhaseResponseWaiting,
@@ -204,10 +221,7 @@ func disconnectedAfterAcceptError(err error, context ErrorContext) CLIError {
 		SafeToRetry: isSafeRetryCommand(context.Command),
 		ProjectRoot: context.ProjectRoot,
 		Command:     context.Command,
-		NextActions: []string{
-			"Check Unity Console logs because Unity had already accepted the request.",
-			"Retry after Unity finishes compiling, reloading scripts, or restarting the bridge.",
-		},
+		NextActions: nextActions,
 		Details: map[string]any{
 			"Cause": err.Error(),
 		},

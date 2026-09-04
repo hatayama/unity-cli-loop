@@ -5,7 +5,6 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Xml;
-using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -45,7 +44,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string xmlContent = GenerateNUnitXml(testResult);
             File.WriteAllText(filePath, xmlContent, Encoding.UTF8);
             OutputFileRetention.DeleteOldestBeyondLimit(testResultsDirectory, "*.xml");
-            AssetDatabase.Refresh();
+            // Why no AssetDatabase.Refresh: the XML lands outside Assets, so nothing here needs
+            // importing, and a Refresh queued during a run reloads the domain as soon as the Test
+            // Runner unlocks assemblies, discarding hot-reload patches and cutting the IPC session.
             return filePath;
         }
 

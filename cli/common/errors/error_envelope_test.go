@@ -598,3 +598,30 @@ func TestSafeRetryCommand(t *testing.T) {
 		t.Fatal("execute-dynamic-code should not be safe to retry")
 	}
 }
+
+// Verifies run-tests explains that a domain reload during the run discards hot-reload patches.
+func TestDisconnectedAfterAcceptAddsRunTestsHotReloadNextAction(t *testing.T) {
+	envelope := disconnectedAfterAcceptError(
+		errors.New("EOF"),
+		ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "run-tests"},
+	)
+
+	if len(envelope.NextActions) != 3 {
+		t.Fatalf("run-tests should add one next action: %#v", envelope.NextActions)
+	}
+	if envelope.NextActions[2] != runTestsDisconnectHotReloadNextAction {
+		t.Fatalf("next action mismatch: %#v", envelope.NextActions)
+	}
+}
+
+// Verifies commands other than run-tests keep the command-independent next actions unchanged.
+func TestDisconnectedAfterAcceptKeepsNextActionsForOtherCommands(t *testing.T) {
+	envelope := disconnectedAfterAcceptError(
+		errors.New("EOF"),
+		ErrorContext{ProjectRoot: "/tmp/MyProject", Command: "compile"},
+	)
+
+	if len(envelope.NextActions) != 2 {
+		t.Fatalf("compile should keep the fixed next actions: %#v", envelope.NextActions)
+	}
+}

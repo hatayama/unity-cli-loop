@@ -21,8 +21,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> gatedKeys = new HashSet<string>(
                 gatedReplacementMethodKeys ?? Array.Empty<string>(),
                 StringComparer.Ordinal);
-            TransformWorkerEntryDto[] entries =
-                workerOutput.entries ?? Array.Empty<TransformWorkerEntryDto>();
+            IReadOnlyDictionary<string, TransformWorkerEntryDto> replacementsByWireKey =
+                HotReloadReplacedCompiledMethodEntries.IndexByReplacedWireKey(workerOutput.entries);
 
             foreach (TransformWorkerRemovedMethodSignatureDto signature in workerOutput.removedMethodSignatures)
             {
@@ -43,10 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                TransformWorkerEntryDto replacement = FindReplacingCompiledMethodEntry(
-                    wireKey,
-                    entries);
-                if (replacement == null)
+                if (!replacementsByWireKey.TryGetValue(wireKey, out TransformWorkerEntryDto replacement))
                 {
                     continue;
                 }
@@ -63,28 +60,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     replacement.genericArity);
                 HotReloadSupersededSignatureRegistry.Record(oldKey, newDisplayName);
             }
-        }
-
-        private static TransformWorkerEntryDto FindReplacingCompiledMethodEntry(
-            string removedWireKey,
-            TransformWorkerEntryDto[] entries)
-        {
-            for (int index = 0; index < entries.Length; index++)
-            {
-                TransformWorkerEntryDto entry = entries[index];
-                if (entry == null || !entry.replacesCompiledMethod)
-                {
-                    continue;
-                }
-
-                string entryWireKey = HotReloadWireMethodKeys.BuildMethodKey(entry);
-                if (entryWireKey == removedWireKey)
-                {
-                    return entry;
-                }
-            }
-
-            return null;
         }
     }
 }

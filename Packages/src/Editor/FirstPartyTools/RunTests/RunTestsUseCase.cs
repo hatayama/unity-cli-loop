@@ -15,6 +15,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class RunTestsUseCase
     {
+        // Marks a failure raised before the test run started, where no domain reload could have
+        // discarded a hot-reload patch.
+        private const int NoHotReloadChangesObserved = 0;
+
         private readonly TestFilterCreationService _filterService;
         private readonly TestExecutionService _executionService;
         private readonly TestExecutionStateValidationService _validationService;
@@ -74,7 +78,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!IsSupportedTestMode(parameters.TestMode))
             {
-                return CreateFailureResponse("Unsupported test mode: " + parameters.TestMode);
+                return CreateFailureResponse(
+                    "Unsupported test mode: " + parameters.TestMode,
+                    NoHotReloadChangesObserved);
             }
 
             ct.ThrowIfCancellationRequested();
@@ -86,13 +92,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             (bool isTimeoutValid, string timeoutError) = RunTestsExecutionTimeout.Validate(parameters.TimeoutSeconds);
             if (!isTimeoutValid)
             {
-                return CreateFailureResponse(timeoutError);
+                return CreateFailureResponse(timeoutError, NoHotReloadChangesObserved);
             }
 
             ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.UnsavedChanges);
             if (!validation.IsValid)
             {
-                return CreateFailureResponse(validation.ErrorMessage);
+                return CreateFailureResponse(validation.ErrorMessage, NoHotReloadChangesObserved);
             }
 
             // 1. Test filter creation
@@ -102,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 (TestExecutionFilter createdFilter, string filterError) = _filterService.TryCreateFilter(parameters.FilterType, parameters.FilterValue);
                 if (filterError != null)
                 {
-                    return CreateFailureResponse(filterError);
+                    return CreateFailureResponse(filterError, NoHotReloadChangesObserved);
                 }
                 filter = createdFilter;
             }
@@ -149,12 +155,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateFailureResponse(
                     RunTestsExecutionTimeout.CreateTimeoutMessage(
                         parameters.TimeoutSeconds,
-                        canceledException.StopResult.DegradationNote));
+                        canceledException.StopResult.DegradationNote),
+                    activeHotReloadChangeCountAtStart);
             }
             catch (OperationCanceledException) when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
             {
                 return CreateFailureResponse(
-                    RunTestsExecutionTimeout.CreateTimeoutMessage(parameters.TimeoutSeconds));
+                    RunTestsExecutionTimeout.CreateTimeoutMessage(parameters.TimeoutSeconds),
+                    activeHotReloadChangeCountAtStart);
             }
 
             // 3. Response creation.
@@ -270,9 +278,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return Enum.IsDefined(typeof(UnityCliLoopTestMode), testMode);
         }
 
-        private static RunTestsResponse CreateFailureResponse(string message)
+        // Why the count is a parameter: only failures raised after the run started can have cost
+        // an active patch, so paths that fail before it pass NoHotReloadChangesObserved and stay
+        // warning-free instead of blaming a reload that never happened.
+        private static RunTestsResponse CreateFailureResponse(
+            string message,
+            int activeHotReloadChangeCountAtStart)
         {
-            return new RunTestsResponse(
+            RunTestsResponse response = new RunTestsResponse(
                 success: false,
                 message: message,
                 completedAt: DateTime.UtcNow.ToString("o"),
@@ -285,6 +298,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasFailures: false,
                 noTestsFound: false,
                 noTestsFoundExplanation: string.Empty);
+            response.Warning = RunTestsHotReloadDiscardWarningBuilder.Build(activeHotReloadChangeCountAtStart);
+            return response;
         }
 
         private static string[] ClearActivePausePointsDefault()

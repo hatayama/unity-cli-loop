@@ -843,6 +843,87 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: a run that times out after starting still reports the hot-reload discard Warning,
+        /// so a failed run explains the patches it may have cost.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenRunTimesOutWithLiveHotReloadChanges_AssignsExactPolicyFormWarning()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                ThrowsExecutionTimeout = true
+            };
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(ValidationResult.Success());
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                getActiveHotReloadChangeCount: () => 2);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(
+                response.Warning,
+                Is.EqualTo(
+                    "2 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards active patches - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."));
+        }
+
+        /// <summary>
+        /// What: a run that times out with no live hot-reload changes leaves Warning empty.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenRunTimesOutWithoutLiveHotReloadChanges_LeavesWarningEmpty()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                ThrowsExecutionTimeout = true
+            };
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(ValidationResult.Success());
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                getActiveHotReloadChangeCount: () => 0);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Warning, Is.Null.Or.Empty);
+        }
+
+        /// <summary>
+        /// What: a pre-run validation failure never carries the discard Warning, because no test
+        /// run started and therefore no domain reload could have discarded a patch.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenValidationFails_LeavesWarningEmpty()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(
+                    ValidationResult.Failure("EditMode tests cannot run during play mode"));
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                getActiveHotReloadChangeCount: () => 2);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Warning, Is.Null.Or.Empty);
+        }
+
         [Test]
         public async Task ExecuteAsync_WithUnsupportedFilterType_ShouldNotClearPausePoints()
         {
@@ -1306,10 +1387,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 return Task.FromResult(NextResult);
             }
 
+            // Lets a test reach the CancelAfter failure branch without waiting out a real timeout.
+            public bool ThrowsExecutionTimeout { get; set; }
+
             public override Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
             {
                 ct.ThrowIfCancellationRequested();
                 WasCalled = true;
+                if (ThrowsExecutionTimeout)
+                {
+                    throw new OperationCanceledException();
+                }
+
                 return Task.FromResult(NextResult);
             }
 
