@@ -48,6 +48,7 @@ internal static class AddedCallSiteGuard
                     {
                         skipped.Add(new WorkerSkipped
                         {
+                            SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                             Method = WorkerMethodKeys.FormatMethodLabel(queued.MethodSymbol),
                             Reason = skipReason,
                             CalledAddedMethodKey = calledAddedMethodKey,

@@ -112,6 +112,7 @@ internal static class OrdinaryMethodQueue
         {
             skipped.Add(new WorkerSkipped
             {
+                SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
                 Reason = decision.SkipReason
             });
@@ -232,6 +233,7 @@ internal static class OrdinaryMethodQueue
 
         skipped.Add(new WorkerSkipped
         {
+            SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
             Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
             Reason = AddedMethodSkipReasons.InterfaceMember
         });
@@ -272,6 +274,7 @@ internal static class OrdinaryMethodQueue
         {
             unchangedMethods.Add(new WorkerUnchangedMethod
             {
+                SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                 TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
                 MethodName = methodSymbol.Name,
                 ParameterTypeFullNames = parameterTypeFullNames,
@@ -450,6 +453,7 @@ internal static class OrdinaryMethodQueue
 
             skipped.Add(new WorkerSkipped
             {
+                SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
                 Reason = AddedMethodSkipReasons.NewTypeOutOfScope
             });

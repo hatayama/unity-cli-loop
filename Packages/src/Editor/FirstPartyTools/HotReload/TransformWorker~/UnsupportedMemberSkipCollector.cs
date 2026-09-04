@@ -30,6 +30,7 @@ internal static class UnsupportedMemberSkipCollector
     // When a verified snapshot declares an equivalent property/indexer, skip rows are omitted
     // (unchanged accessors must not appear as Skipped noise).
     internal static void AppendExplicitAccessorSkips(
+        string sourceProjectRelativePath,
         TypeDeclarationSyntax typeDeclaration,
         string typeMetadataNameFromSyntax,
         SemanticModel semanticModel,
@@ -40,6 +41,7 @@ internal static class UnsupportedMemberSkipCollector
         Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap,
         AddedMethodCatalog addedMethodCatalog)
     {
+        int firstAppendedIndex = skipped.Count;
         foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
         {
             if (member is PropertyDeclarationSyntax propertyDeclaration)
@@ -95,6 +97,8 @@ internal static class UnsupportedMemberSkipCollector
                     addedMethodCatalog);
             }
         }
+
+        StampSourceProjectRelativePath(skipped, firstAppendedIndex, sourceProjectRelativePath);
     }
 
     internal static void AppendExplicitAccessorSkipsForProperty(
@@ -234,6 +238,7 @@ internal static class UnsupportedMemberSkipCollector
     // explicit event accessors as Skipped. Unchanged members matching a verified snapshot
     // are omitted. Field-like events and finalizers are not listed.
     internal static void AppendUnsupportedMemberKindSkips(
+        string sourceProjectRelativePath,
         TypeDeclarationSyntax typeDeclaration,
         string typeMetadataNameFromSyntax,
         SemanticModel semanticModel,
@@ -245,6 +250,7 @@ internal static class UnsupportedMemberSkipCollector
         Dictionary<string, MemberDeclarationSyntax> plainCurrentOperatorMap,
         Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap)
     {
+        int firstAppendedIndex = skipped.Count;
         AppendConstructorSkips(
             typeDeclaration,
             typeMetadataNameFromSyntax,
@@ -266,6 +272,21 @@ internal static class UnsupportedMemberSkipCollector
             skipped,
             snapshotEventMap,
             plainCurrentEventMap);
+        StampSourceProjectRelativePath(skipped, firstAppendedIndex, sourceProjectRelativePath);
+    }
+
+    // Why stamp the appended range (not each producer): every row below belongs to the one type
+    // this call was made for, so the rows a call appends all came from that type's file. The
+    // group-wide rows of other files sit before firstAppendedIndex and are left alone.
+    private static void StampSourceProjectRelativePath(
+        List<WorkerSkipped> skipped,
+        int firstAppendedIndex,
+        string sourceProjectRelativePath)
+    {
+        for (int index = firstAppendedIndex; index < skipped.Count; index++)
+        {
+            skipped[index].SourceProjectRelativePath = sourceProjectRelativePath;
+        }
     }
 
     internal static void AppendConstructorSkips(

@@ -39,6 +39,7 @@ internal static class PropertyGetterEmitter
             if (typeState.TypeIsAbsentFromCompiledAssembly)
             {
                 PropertyGetterClassifier.SkipPropertyGetterOnUncompiledType(
+                    typeState.SourceUnit.Input.ProjectRelativePath,
                     propertyDeclaration,
                     semanticModel,
                     skipped);
@@ -130,6 +131,7 @@ internal static class PropertyGetterEmitter
         }
 
         if (PropertyGetterClassifier.TryRecordUnchangedPropertyGetter(
+            sourceProjectRelativePath,
             hasBaseline,
             snapshotPropertyMap,
             plainCurrentPropertyMap,
@@ -146,6 +148,7 @@ internal static class PropertyGetterEmitter
         // Why skip newly added properties: Harmony looks up get_<Name> on the compiled type
         // and fails with "No method 'get_X' ... was found" when the member does not exist.
         if (PropertyGetterClassifier.TrySkipAddedProperty(
+            sourceProjectRelativePath,
             hasBaseline,
             snapshotPropertyMap,
             plainCurrentPropertyMap,
@@ -162,6 +165,7 @@ internal static class PropertyGetterEmitter
         {
             skipped.Add(new WorkerSkipped
             {
+                SourceProjectRelativePath = sourceProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
                 Reason = "Explicit interface implementations are skipped in v1."
             });
@@ -174,6 +178,7 @@ internal static class PropertyGetterEmitter
             ?? (SyntaxNode)getAccessor.Body
             ?? getAccessor.ExpressionBody;
         (bool skipGetter, MethodTransformDecision decision) = PropertyGetterClassifier.TrySkipPropertyGetterByDecision(
+            sourceProjectRelativePath,
             typeDeclaration,
             typeSymbol,
             getterSymbol,
@@ -271,6 +276,7 @@ internal static class PropertyGetterEmitter
 
         entries.Add(new WorkerEntry
         {
+            SourceProjectRelativePath = sourceProjectRelativePath,
             TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
             MethodName = getterSymbol.Name,
             ParameterTypeFullNames = parameterTypeFullNames,

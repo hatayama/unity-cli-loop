@@ -2607,11 +2607,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a run carrying more than one source is a run-level failure, so the client
-        /// reports it as a failed result instead of a success with no per-file rows.
+        /// What: a run whose sources repeat one projectRelativePath is a run-level failure, so
+        /// the client reports it as a failed result instead of a success with ambiguous rows.
         /// </summary>
         [Test]
-        public async Task BootstrapAndRun_MoreThanOneSource_FailsWithRunLevelError()
+        public async Task BootstrapAndRun_TwoSourcesOfTheSameFile_FailsWithRunLevelError()
         {
             string fixturePath = ResolveE2EFixturePath();
             string fixtureProjectRelativePath = ResolveE2EFixtureProjectRelativePath();
@@ -2623,7 +2623,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 secondProjectRelativePath: fixtureProjectRelativePath);
 
             Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorMessage, Does.Contain("exactly one source"));
+            Assert.That(result.ErrorMessage, Does.Contain("repeat a projectRelativePath"));
         }
 
         /// <summary>

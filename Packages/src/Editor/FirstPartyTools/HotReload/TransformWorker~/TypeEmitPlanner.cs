@@ -56,6 +56,7 @@ internal static class TypeEmitPlanner
                 Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap) =
                 baseline.GetAccessorBaselineMaps();
             UnsupportedMemberSkipCollector.AppendExplicitAccessorSkips(
+                sourceUnit.Input.ProjectRelativePath,
                 typeDeclaration,
                 typeMetadataNameFromSyntax,
                 semanticModel,
@@ -73,6 +74,7 @@ internal static class TypeEmitPlanner
                 Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap) =
                 baseline.GetUnsupportedMemberBaselineMaps();
             UnsupportedMemberSkipCollector.AppendUnsupportedMemberKindSkips(
+                sourceUnit.Input.ProjectRelativePath,
                 typeDeclaration,
                 typeMetadataNameFromSyntax,
                 semanticModel,
