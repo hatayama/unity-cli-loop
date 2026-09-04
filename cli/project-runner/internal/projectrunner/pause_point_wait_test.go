@@ -2744,6 +2744,16 @@ func TestParsePausePointQueryOptionsComposeFileLineID(t *testing.T) {
 	if statusOptions.id != "/source/Assets/Scripts/Marker.cs:7" {
 		t.Fatalf("status id = %q", statusOptions.id)
 	}
+
+	_, clearID, clearErr := extractPausePointClearFileLineFlags(pausePointClearCommandName, []string{
+		"--file", `Assets\Scripts\Marker.cs`, "--line", "0042",
+	})
+	if clearErr != nil {
+		t.Fatalf("clear file:line parse failed: %v", clearErr)
+	}
+	if clearID != "Assets/Scripts/Marker.cs:42" {
+		t.Fatalf("clear id = %q", clearID)
+	}
 }
 
 // Verifies file and line must be supplied together for both pause-point query commands.
@@ -2764,6 +2774,17 @@ func TestParsePausePointQueryOptionsRequireCompleteFileLinePair(t *testing.T) {
 	_, statusLineErr := parsePausePointStatusOptions([]string{"--line", "42"})
 	if statusLineErr == nil || statusLineErr.Error() != "--line requires --file." {
 		t.Fatalf("status line-only error = %v", statusLineErr)
+	}
+
+	_, _, clearFileErr := extractPausePointClearFileLineFlags(
+		pausePointClearCommandName, []string{"--file", "Assets/Scripts/Marker.cs"})
+	if clearFileErr == nil || clearFileErr.Error() != "--file requires --line." {
+		t.Fatalf("clear file-only error = %v", clearFileErr)
+	}
+	_, _, clearLineErr := extractPausePointClearFileLineFlags(
+		pausePointClearCommandName, []string{"--line", "42"})
+	if clearLineErr == nil || clearLineErr.Error() != "--line requires --file." {
+		t.Fatalf("clear line-only error = %v", clearLineErr)
 	}
 }
 
@@ -2797,6 +2818,11 @@ func TestParsePausePointQueryOptionsRejectCombinedIDAndFileLineTarget(t *testing
 			_, statusErr := parsePausePointStatusOptions(test.args)
 			if statusErr == nil || statusErr.Error() != "--id cannot be combined with --file or --line." {
 				t.Fatalf("status combined-target error = %v", statusErr)
+			}
+
+			_, _, clearErr := extractPausePointClearFileLineFlags(pausePointClearCommandName, test.args)
+			if clearErr == nil || clearErr.Error() != "--id cannot be combined with --file or --line." {
+				t.Fatalf("clear combined-target error = %v", clearErr)
 			}
 		})
 	}
@@ -2837,6 +2863,11 @@ func TestParsePausePointQueryOptionsRejectInvalidLine(t *testing.T) {
 			_, statusErr := parsePausePointStatusOptions(args)
 			if statusErr == nil || statusErr.Error() != test.wantError {
 				t.Fatalf("status line error = %v", statusErr)
+			}
+
+			_, _, clearErr := extractPausePointClearFileLineFlags(pausePointClearCommandName, args)
+			if clearErr == nil || clearErr.Error() != test.wantError {
+				t.Fatalf("clear line error = %v", clearErr)
 			}
 		})
 	}

@@ -2,6 +2,7 @@ package projectrunner
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/hatayama/unity-cli-loop/common/tooldocs"
@@ -255,4 +256,48 @@ func TestPausePointAwaitAndStatusCLIOnlyOptionsHaveDescriptions(t *testing.T) {
 			t.Errorf("pause-point-status --%s has an empty description", option.FlagName)
 		}
 	}
+	for _, option := range tooldocs.PausePointClearCLIOnlyOptions() {
+		if option.Description == "" {
+			t.Errorf("clear-pause-point --%s has an empty description", option.FlagName)
+		}
+	}
+}
+
+// pausePointClearAdvertisedFlagNames is the clear-pause-point CLI-only advertised flag set.
+// Test-local literals so deleting a table row fails even when the extractor still accepts the flag.
+var pausePointClearAdvertisedFlagNames = []string{
+	"file",
+	"line",
+}
+
+// Verifies every CLI-only flag that clear-pause-point's --help advertises is consumed by the
+// clear-pause-point file:line extractor. Schema parsing never sees --file/--line.
+func TestPausePointClearHelpOptionsAreAcceptedByTheClearExtractor(t *testing.T) {
+	for _, option := range tooldocs.PausePointClearCLIOnlyOptions() {
+		optionName := "--" + option.FlagName
+		args, ok := runnerNativeCommandSampleArgs[optionName]
+		if !ok {
+			t.Fatalf("no sample argv for %s: add one to runnerNativeCommandSampleArgs", optionName)
+		}
+
+		remaining, queryID, err := extractPausePointClearFileLineFlags(pausePointClearCommandName, args)
+		if err != nil {
+			t.Errorf("clear-pause-point extractor rejected advertised option %s: %v", optionName, err)
+			continue
+		}
+		if queryID == "" {
+			t.Errorf("clear-pause-point extractor did not compose an id from %s", optionName)
+		}
+		for _, leftover := range remaining {
+			if leftover == "--file" || leftover == "--line" ||
+				strings.HasPrefix(leftover, "--file=") || strings.HasPrefix(leftover, "--line=") {
+				t.Errorf("clear-pause-point extractor left advertised option in remaining: %v", remaining)
+			}
+		}
+	}
+}
+
+// Verifies the clear-pause-point option table's flag names equal the advertised set.
+func TestPausePointClearCLIOnlyOptionsMatchFixedFlagSet(t *testing.T) {
+	assertPausePointCLIOnlyFlagNames(t, tooldocs.PausePointClearCLIOnlyOptions(), pausePointClearAdvertisedFlagNames)
 }

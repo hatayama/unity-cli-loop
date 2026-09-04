@@ -169,6 +169,21 @@ func TestNewListCatalogIncludesEnablePausePointAwaitOptions(t *testing.T) {
 	findListOption(t, enablePausePoint, "--"+tooldocs.PausePointResumePlayFlagName)
 }
 
+// Tests that list output includes clear-pause-point's CLI-only --file/--line flags, which are
+// not part of the Unity-side ClearPausePointSchema.
+func TestNewListCatalogIncludesClearPausePointFileLineOptions(t *testing.T) {
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), pausePointClearCommandName)
+	if !ok {
+		t.Fatal("clear-pause-point was not found in default tools")
+	}
+
+	catalog := newListCatalog(clicore.ToolsCache{Tools: []clicore.ToolDefinition{tool}})
+	clearPausePoint := findListTool(t, catalog, pausePointClearCommandName)
+
+	findListOption(t, clearPausePoint, "--"+tooldocs.PausePointFileFlagName)
+	findListOption(t, clearPausePoint, "--"+tooldocs.PausePointLineFlagName)
+}
+
 // Tests that list replaces Unity's generated placeholder descriptions with the embedded catalog's
 // real text. list formats the raw get-tool-details response, so it does not inherit the fallback the
 // project-cache loader applies for `--help`.
