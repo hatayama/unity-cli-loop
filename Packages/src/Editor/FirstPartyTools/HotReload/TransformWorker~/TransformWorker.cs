@@ -134,27 +134,19 @@ public static class TransformWorkerProgram
     private static WorkerOutput TransformFile(WorkerInput input)
     {
         WorkerSourceInput source = input.Sources[0];
-        WorkerOutput invalidPath = TryCreateInvalidPathOutput(source);
-        if (invalidPath != null)
-        {
-            return invalidPath;
-        }
-
-        (WorkerOutput readFailure, string sourceText, string sourceContentSha256) = TryReadSourceText(source);
-        if (readFailure != null)
-        {
-            return readFailure;
-        }
-
-        List<string> parseErrors = new List<string>();
         CSharpParseOptions parseOptions = new CSharpParseOptions(
             languageVersion: LanguageVersion.Latest,
             preprocessorSymbols: input.Defines);
-        (SyntaxTree syntaxTree, CompilationUnitSyntax plainRoot) = WorkerSourceAnnotator.ParseAndAnnotateSource(
-            sourceText,
-            parseOptions,
-            source.SourcePath,
-            parseErrors);
+        WorkerSourceUnit unit = WorkerSourceLoader.Load(source, parseOptions);
+        if (unit.SyntaxTree == null)
+        {
+            return CreateSourceFailureOutput(source, unit.ParseErrors.ToArray());
+        }
+
+        List<string> parseErrors = unit.ParseErrors;
+        string sourceContentSha256 = unit.SourceContentSha256;
+        SyntaxTree syntaxTree = unit.SyntaxTree;
+        CompilationUnitSyntax plainRoot = unit.PlainRoot;
 
         (List<MetadataReference> references, MetadataReference targetTypesReference) =
             CollectMetadataReferences(input, parseErrors);
@@ -292,25 +284,9 @@ public static class TransformWorkerProgram
             sourceContentSha256);
     }
 
-    private static WorkerOutput TryCreateInvalidPathOutput(WorkerSourceInput source)
-    {
-        // Why ParseErrors (not Debug.Assert): ProjectRelativePath crosses a process boundary via
-        // JSON, and the worker is built without a DEBUG define so Conditional Asserts are stripped.
-        if (string.IsNullOrEmpty(source.ProjectRelativePath)
-            || source.ProjectRelativePath.IndexOf('\\') >= 0
-            || source.ProjectRelativePath.IndexOf('"') >= 0)
-        {
-            return CreateSourceFailureOutput(
-                source,
-                "Invalid projectRelativePath: must be a non-empty forward-slash path without quotes.");
-        }
-
-        return null;
-    }
-
-    // A failure the run can attribute to one source: the row set is empty and the message
-    // travels on that source's per-file parse errors.
-    private static WorkerOutput CreateSourceFailureOutput(WorkerSourceInput source, string parseError)
+    // A failure the run can attribute to one source: the row set is empty and the messages
+    // travel on that source's per-file parse errors.
+    private static WorkerOutput CreateSourceFailureOutput(WorkerSourceInput source, string[] parseErrors)
     {
         return new WorkerOutput
         {
@@ -323,7 +299,7 @@ public static class TransformWorkerProgram
                 {
                     ProjectRelativePath = source.ProjectRelativePath,
                     SourceContentSha256 = string.Empty,
-                    ParseErrors = new[] { parseError },
+                    ParseErrors = parseErrors,
                     DeclarationDriftWarnings = Array.Empty<string>(),
                     RemovedMembers = Array.Empty<WorkerRemovedMember>(),
                     RemovedMethodSignatures = Array.Empty<WorkerRemovedMethodSignature>(),
@@ -332,29 +308,6 @@ public static class TransformWorkerProgram
                 }
             }
         };
-    }
-
-    private static (WorkerOutput Failure, string SourceText, string SourceContentSha256) TryReadSourceText(
-        WorkerSourceInput source)
-    {
-        try
-        {
-            byte[] sourceBytes = File.ReadAllBytes(source.SourcePath);
-            string sourceContentSha256 = ComputeSourceContentSha256(sourceBytes);
-            using MemoryStream memoryStream = new MemoryStream(sourceBytes, writable: false);
-            using StreamReader reader = new StreamReader(
-                memoryStream,
-                Encoding.UTF8,
-                detectEncodingFromByteOrderMarks: true);
-            return (null, reader.ReadToEnd(), sourceContentSha256);
-        }
-        catch (Exception exception)
-        {
-            return (
-                CreateSourceFailureOutput(source, "Failed to read sourcePath: " + exception.Message),
-                null,
-                null);
-        }
     }
 
     private static (List<MetadataReference> References, MetadataReference TargetTypesReference)
@@ -493,20 +446,6 @@ public static class TransformWorkerProgram
         {
             unchangedMethod.SourceProjectRelativePath = projectRelativePath;
         }
-    }
-
-    // Keep in sync with HotReloadAppliedSourceLedger.ComputeContentHash (lowercase hex SHA-256).
-    private static string ComputeSourceContentSha256(byte[] bytes)
-    {
-        using SHA256 sha256 = SHA256.Create();
-        byte[] hash = sha256.ComputeHash(bytes);
-        StringBuilder builder = new StringBuilder(hash.Length * 2);
-        for (int index = 0; index < hash.Length; index++)
-        {
-            builder.Append(hash[index].ToString("x2"));
-        }
-
-        return builder.ToString();
     }
 
     internal static IEnumerable<TypeDeclarationSyntax> EnumerateTypeDeclarations(CompilationUnitSyntax root)
