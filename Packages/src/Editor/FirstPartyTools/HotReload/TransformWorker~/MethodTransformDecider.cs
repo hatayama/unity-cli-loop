@@ -24,7 +24,8 @@ internal static class MethodTransformDecider
         MethodDeclarationSyntax methodDeclaration,
         IMethodSymbol methodSymbol,
         SyntaxNode bodyNode,
-        SemanticModel semanticModel)
+        SemanticModel semanticModel,
+        INamedTypeSymbol compiledType)
     {
         string hardSkip = EvaluateHardSkipReason(
             typeDeclaration,
@@ -47,7 +48,10 @@ internal static class MethodTransformDecider
                 "Methods that call base. members are skipped; C# cannot express base calls outside the type.");
         }
 
-        string eventUseReason = EvaluateEventUseSkipReason(bodyNode, semanticModel);
+        string eventUseReason = EventAccessorRules.EvaluateEventUseSkipReason(
+            bodyNode,
+            semanticModel,
+            compiledType);
         if (eventUseReason != null)
         {
             return MethodTransformDecision.Skip(eventUseReason);
@@ -58,18 +62,17 @@ internal static class MethodTransformDecider
             FindClosureBodies(bodyNode));
         bool asyncIteratorInaccessible = IsAsyncOrIterator(methodDeclaration, bodyNode)
             && InaccessibleAccessScanner.SubtreeHasInaccessibleMemberAccess(semanticModel, new[] { bodyNode });
+        // Why delegation is forced: a transplanted shim body still has to compile as C#, and C#
+        // rejects raising or reading an event outside its declaring type whatever its visibility.
+        bool eventAccessorsRequired = EventAccessorRules.BodyRequiresEventAccessors(bodyNode, semanticModel);
 
-        if (!closureInaccessible && !asyncIteratorInaccessible)
+        if (!closureInaccessible && !asyncIteratorInaccessible && !eventAccessorsRequired)
         {
             return MethodTransformDecision.Transplant();
         }
 
         // Condition (a): only the v1 private-access skip reasons are eligible for accessor rewrite.
-        string v1Reason = closureInaccessible
-            ? "Lambda, local-function, or query-expression bodies that access private/internal members "
-                + "are skipped in v1 (closure methods JIT-compile normally and fail accessibility checks)."
-            : "Async or iterator methods whose bodies access private/internal members are skipped in v1 "
-                + "(state-machine MoveNext JIT-compiles normally and fails accessibility checks).";
+        string v1Reason = BuildAccessorRescueReason(closureInaccessible, asyncIteratorInaccessible);
 
         if (!AccessorEligibility.TryBuildPlan(
                 semanticModel,
@@ -80,17 +83,37 @@ internal static class MethodTransformDecider
                 out string accessorRejectReason))
         {
             return MethodTransformDecision.Skip(
-                v1Reason + " Accessor rewrite unavailable: " + accessorRejectReason);
+                v1Reason == null
+                    ? EventAccessorRules.AccessorRewriteUnavailableReasonPrefix + accessorRejectReason
+                    : v1Reason + " Accessor rewrite unavailable: " + accessorRejectReason);
         }
 
         // Safety net: detection said "needs accessors" but eligibility found nothing to rewrite
         // (e.g. local-function-only async body). Transplant is correct — the body is unchanged.
-        if (feasibilityPlan.Entries.Count == 0)
+        if (feasibilityPlan.Entries.Count == 0 && !eventAccessorsRequired)
         {
             return MethodTransformDecision.Transplant();
         }
 
         return MethodTransformDecision.Delegation();
+    }
+
+    // Null when the body needs accessors only for its event uses: there is no v1 skip to rescue.
+    private static string BuildAccessorRescueReason(bool closureInaccessible, bool asyncIteratorInaccessible)
+    {
+        if (closureInaccessible)
+        {
+            return "Lambda, local-function, or query-expression bodies that access private/internal members "
+                + "are skipped in v1 (closure methods JIT-compile normally and fail accessibility checks).";
+        }
+
+        if (asyncIteratorInaccessible)
+        {
+            return "Async or iterator methods whose bodies access private/internal members are skipped in v1 "
+                + "(state-machine MoveNext JIT-compiles normally and fails accessibility checks).";
+        }
+
+        return null;
     }
 
     internal static string EvaluateHardSkipReason(
@@ -127,51 +150,6 @@ internal static class MethodTransformDecider
         if (methodDeclaration != null && methodDeclaration.ExplicitInterfaceSpecifier != null)
         {
             return "Explicit interface implementations are skipped in v1.";
-        }
-
-        return null;
-    }
-
-    // Why skip event uses beyond +=/-=: outside the declaring type C# only allows those
-    // assignments, so a shim cannot compile Raise/Invoke/read. nameof(ScoreChanged) and
-    // similar non-runtime references are also skipped — Skip is an honest report and safer
-    // than a compile failure.
-    internal static string EvaluateEventUseSkipReason(SyntaxNode bodyNode, SemanticModel semanticModel)
-    {
-        foreach (SyntaxNode node in bodyNode.DescendantNodesAndSelf())
-        {
-            if (node is not IdentifierNameSyntax && node is not MemberAccessExpressionSyntax)
-            {
-                continue;
-            }
-
-            IEventSymbol eventSymbol = semanticModel.GetSymbolInfo(node).Symbol as IEventSymbol;
-            if (eventSymbol == null)
-            {
-                continue;
-            }
-
-            // this.E / instance.E resolve the same event on the IdentifierName and the outer
-            // MemberAccess; judge usage on the outer expression only.
-            SyntaxNode effective = node;
-            if (node.Parent is MemberAccessExpressionSyntax parentAccess && parentAccess.Name == node)
-            {
-                effective = parentAccess;
-            }
-
-            // += / -= on the left-hand side are the only event operations C# allows outside the
-            // declaring type.
-            if (effective.Parent is AssignmentExpressionSyntax assignment
-                && (assignment.IsKind(SyntaxKind.AddAssignmentExpression)
-                    || assignment.IsKind(SyntaxKind.SubtractAssignmentExpression))
-                && assignment.Left == effective)
-            {
-                continue;
-            }
-
-            return "Methods that raise, invoke, or read a field-like event are skipped; "
-                + "C# only allows += / -= on an event outside its declaring type, so the "
-                + "shim cannot compile this body. Use uloop compile.";
         }
 
         return null;

@@ -303,7 +303,8 @@ internal static class OrdinaryMethodQueue
                 methodDeclaration,
                 methodSymbol,
                 methodBodyNode,
-                semanticModel);
+                semanticModel,
+                typeState.CompiledType);
         if (isAddedMethod && decision.SkipReason == null)
         {
             decision = MethodTransformDecider.DecideAddedMethodAccessors(

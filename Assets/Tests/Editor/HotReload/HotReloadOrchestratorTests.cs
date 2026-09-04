@@ -1817,15 +1817,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a file declaring a field-like event hot-reloads its subscriber and handler methods
-        /// (no CS0229 from the publicized backing field) — the edited subscriber body (net two
-        /// subscriptions via += / -=) must actually apply (HandledCount == 10, not the original
-        /// body's 5) and EnableCounting must be Patched — while the raising method (edited to a
-        /// double Invoke so it is not treated as unchanged) is Skipped instead of killing the
-        /// whole file.
+        /// What: a file declaring a field-like event hot-reloads every method in it, raiser
+        /// included. The count is exact rather than "increased" so a Patched Kind alone cannot
+        /// satisfy it: the edited subscriber nets two subscriptions, the edited handler adds 5,
+        /// and the edited raiser invokes twice, so all three patches give 20. A raiser left on
+        /// the compiled single-Invoke body would give 10.
         /// </summary>
         [Test]
-        public async Task Run_FieldLikeEventFile_PatchesHandlerAndSkipsRaiser()
+        public async Task Run_FieldLikeEventFile_PatchesHandlerAndRaiser()
         {
             string fixturePath = ResolveEventFixturePath();
             string editedPath = WriteEditedSource(
@@ -1841,25 +1840,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
             AssertHasPatched(result, nameof(HotReloadEventFixture.HandleScoreChanged));
             AssertHasPatched(result, nameof(HotReloadEventFixture.EnableCounting));
-
-            bool raiserSkipped = false;
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
-                    && outcome.Method.Contains(nameof(HotReloadEventFixture.RaiseScore))
-                    && outcome.Reason.Contains("event"))
-                {
-                    raiserSkipped = true;
-                }
-            }
-
-            Assert.That(raiserSkipped, Is.True,
-                "RaiseScore must be Skipped with the event-use reason.\n" + FormatOutcomes(result));
+            AssertHasPatched(result, nameof(HotReloadEventFixture.RaiseScore));
 
             HotReloadEventFixture fixture = new HotReloadEventFixture();
             fixture.EnableCounting();
             fixture.RaiseScore();
-            Assert.That(fixture.HandledCount, Is.EqualTo(10));
+            Assert.That(
+                fixture.HandledCount,
+                Is.EqualTo(20),
+                "20 means every patch ran: 2 net subscriptions x 5 per handled x 2 invokes. "
+                + "10 means the raiser stayed on the compiled single-Invoke body.\n"
+                + FormatOutcomes(result));
+        }
+
+        /// <summary>
+        /// What: a field-like event raised from inside a lambda patches too. The closure body
+        /// already needs the accessor-rewrite path, so this pins that the event rewrite composes
+        /// with it. 20 means all three patches ran (2 subscriptions x 5 per handled x 2 invokes);
+        /// 2 means none of them did.
+        /// </summary>
+        [Test]
+        public async Task Run_FieldLikeEventRaisedInLambda_PatchesRaiser()
+        {
+            string fixturePath = ResolveEventLambdaFixturePath();
+            string editedPath = WriteEditedSource(
+                "EventLambdaFixtureEdit.cs",
+                BuildEventLambdaFixtureSource());
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadEventLambdaFixture.RaiseScoreFromLambda));
+
+            HotReloadEventLambdaFixture fixture = new HotReloadEventLambdaFixture();
+            fixture.EnableCounting();
+            fixture.RaiseScoreFromLambda();
+            Assert.That(
+                fixture.HandledCount,
+                Is.EqualTo(20),
+                "20 means every patch ran; 2 means the compiled bodies did.\n" + FormatOutcomes(result));
         }
 
         /// <summary>
@@ -6876,6 +6898,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadEventFixtures.cs");
             Assert.That(File.Exists(path), Is.True, "Event fixture source missing: " + path);
             return Path.GetFullPath(path);
+        }
+
+        private static string ResolveEventLambdaFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadEventLambdaFixture.cs");
+            Assert.That(File.Exists(path), Is.True, "Event lambda fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string BuildEventLambdaFixtureSource()
+        {
+            return @"using System;
+using System.Runtime.CompilerServices;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+{
+    public class HotReloadEventLambdaFixture
+    {
+        public event Action ScoreChanged;
+
+        public int HandledCount;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void EnableCounting()
+        {
+            ScoreChanged += HandleScoreChanged;
+            ScoreChanged += HandleScoreChanged;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void HandleScoreChanged()
+        {
+            HandledCount = HandledCount + 5;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void RaiseScoreFromLambda()
+        {
+            Action raise = () =>
+            {
+                ScoreChanged?.Invoke();
+                ScoreChanged?.Invoke();
+            };
+            raise();
+        }
+    }
+}
+";
         }
 
         private static string BuildEventFixtureSource(string handleScoreChangedMethod)

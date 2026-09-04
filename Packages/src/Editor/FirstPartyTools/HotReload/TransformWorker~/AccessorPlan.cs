@@ -86,6 +86,21 @@ internal sealed class AccessorPlan
         return entry;
     }
 
+    public AccessorEntry GetOrAddEventBackingField(IEventSymbol eventSymbol)
+    {
+        string key = "EV:" + BuildMemberKey(eventSymbol);
+        if (_byKey.TryGetValue(key, out AccessorEntry existing))
+        {
+            return existing;
+        }
+
+        string fieldName = AllocateName("__EV_" + SanitizeIdentifier(eventSymbol.Name));
+        AccessorEntry entry = AccessorEntry.ForEventBackingField(eventSymbol, fieldName, key);
+        _byKey[key] = entry;
+        _entries.Add(entry);
+        return entry;
+    }
+
     private string AllocateName(string preferred)
     {
         if (!_entries.Any(entry => entry.DelegateFieldName == preferred))

@@ -32,6 +32,8 @@ internal sealed class AccessorEntry
 
     public IPropertySymbol PropertySymbol { get; private set; }
 
+    public IEventSymbol EventSymbol { get; private set; }
+
     public static AccessorEntry ForField(
         IFieldSymbol fieldSymbol,
         string delegateFieldName,
@@ -88,6 +90,25 @@ internal sealed class AccessorEntry
         };
     }
 
+    /// <summary>
+    /// What: a FieldRef onto the compiler-generated backing field of a field-like event. The
+    /// backing field shares the event's name and stays private after publicizing, so the shim
+    /// reaches it by name through Harmony rather than by referencing the member.
+    /// </summary>
+    public static AccessorEntry ForEventBackingField(
+        IEventSymbol eventSymbol,
+        string delegateFieldName,
+        string registryKey)
+    {
+        return new AccessorEntry
+        {
+            Kind = AccessorKind.EventBackingFieldRef,
+            RegistryKey = registryKey,
+            DelegateFieldName = delegateFieldName,
+            EventSymbol = eventSymbol
+        };
+    }
+
     public bool TryGetVisibilityFailure(out string reason)
     {
         foreach (ITypeSymbol typeSymbol in EnumerateSignatureTypes())
@@ -131,6 +152,10 @@ internal sealed class AccessorEntry
                 yield return PropertySymbol.ContainingType;
                 yield return PropertySymbol.Type;
                 yield break;
+            case AccessorKind.EventBackingFieldRef:
+                yield return EventSymbol.ContainingType;
+                yield return EventSymbol.Type;
+                yield break;
         }
     }
 
@@ -162,6 +187,11 @@ internal sealed class AccessorEntry
             AccessorKind.PropertySetter => BuildMethodDelegateBindStatement(
                 PropertySymbol.SetMethod.Name,
                 PropertySymbol.SetMethod),
+            AccessorKind.EventBackingFieldRef => BuildBackingFieldRefBindStatement(
+                EventSymbol.ContainingType,
+                EventSymbol.Type,
+                EventSymbol.Name,
+                EventSymbol.IsStatic),
             _ => throw new InvalidOperationException("Unknown accessor kind.")
         };
 
@@ -173,21 +203,21 @@ internal sealed class AccessorEntry
         switch (Kind)
         {
             case AccessorKind.FieldRef:
-                if (FieldSymbol.IsStatic)
-                {
-                    return "global::HarmonyLib.AccessTools.FieldRef<"
-                        + TypeDisplay(FieldSymbol.Type) + ">";
-                }
-
-                return "global::HarmonyLib.AccessTools.FieldRef<"
-                    + TypeDisplay(FieldSymbol.ContainingType) + ", "
-                    + TypeDisplay(FieldSymbol.Type) + ">";
+                return BuildFieldRefTypeDisplayString(
+                    FieldSymbol.ContainingType,
+                    FieldSymbol.Type,
+                    FieldSymbol.IsStatic);
             case AccessorKind.MethodDelegate:
                 return BuildFuncOrActionType(MethodSymbol);
             case AccessorKind.PropertyGetter:
                 return BuildFuncOrActionType(PropertySymbol.GetMethod);
             case AccessorKind.PropertySetter:
                 return BuildFuncOrActionType(PropertySymbol.SetMethod);
+            case AccessorKind.EventBackingFieldRef:
+                return BuildFieldRefTypeDisplayString(
+                    EventSymbol.ContainingType,
+                    EventSymbol.Type,
+                    EventSymbol.IsStatic);
             default:
                 throw new InvalidOperationException("Unknown accessor kind.");
         }
@@ -217,21 +247,48 @@ internal sealed class AccessorEntry
 
     private string BuildFieldRefBindStatement()
     {
-        if (FieldSymbol.IsStatic)
+        return BuildBackingFieldRefBindStatement(
+            FieldSymbol.ContainingType,
+            FieldSymbol.Type,
+            FieldSymbol.Name,
+            FieldSymbol.IsStatic);
+    }
+
+    private static string BuildFieldRefTypeDisplayString(
+        INamedTypeSymbol containingType,
+        ITypeSymbol fieldType,
+        bool isStatic)
+    {
+        if (isStatic)
+        {
+            return "global::HarmonyLib.AccessTools.FieldRef<" + TypeDisplay(fieldType) + ">";
+        }
+
+        return "global::HarmonyLib.AccessTools.FieldRef<"
+            + TypeDisplay(containingType) + ", " + TypeDisplay(fieldType) + ">";
+    }
+
+    private string BuildBackingFieldRefBindStatement(
+        INamedTypeSymbol containingType,
+        ITypeSymbol fieldType,
+        string fieldName,
+        bool isStatic)
+    {
+        if (isStatic)
         {
             // Why FieldInfo: the Type+name StaticFieldRefAccess overloads return ref F,
             // not a FieldRef`1 that __BindAccessors can store.
             return DelegateFieldName + " = global::HarmonyLib.AccessTools.StaticFieldRefAccess<"
-                + TypeDisplay(FieldSymbol.Type)
+                + TypeDisplay(fieldType)
                 + ">(global::HarmonyLib.AccessTools.Field(typeof("
-                + TypeDisplay(FieldSymbol.ContainingType) + "), \""
-                + EscapeStringLiteral(FieldSymbol.Name) + "\"));";
+                + TypeDisplay(containingType) + "), \""
+                + EscapeStringLiteral(fieldName) + "\"));";
         }
 
         return DelegateFieldName + " = global::HarmonyLib.AccessTools.FieldRefAccess<"
-            + TypeDisplay(FieldSymbol.ContainingType) + ", "
-            + TypeDisplay(FieldSymbol.Type) + ">(\""
-            + EscapeStringLiteral(FieldSymbol.Name) + "\");";
+            + TypeDisplay(containingType) + ", "
+            + TypeDisplay(fieldType) + ">(\""
+            + EscapeStringLiteral(fieldName) + "\");";
     }
 
     private string BuildMethodDelegateBindStatement(string metadataName, IMethodSymbol methodSymbol)
