@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,23 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(files.Count > 0, "files must not be empty.");
 
             string correlationId = VibeLogger.GenerateCorrelationId();
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
-            List<string> warnings = new List<string>();
-            List<string> suppressedPausePointIds = new List<string>();
-            List<string> retargetedPausePointIds = new List<string>();
-            List<string> inlineRiskMethodLabels = new List<string>();
-            List<string> addedFields = new List<string>();
-            List<string> addedConsts = new List<string>();
-            List<string> siblingDerivedWarnings = new List<string>();
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>();
-            int patchedTotal = 0;
-            int unchangedTotal = 0;
-            int revertedUnchangedTotal = 0;
-            // Why after the file loop (not inside ProcessFileAsync): duplicate paths in one
-            // run must still apply twice; recording mid-run would short-circuit the second copy.
-            Dictionary<string, (string Hash, bool IsFullyApplied)> appliedSourceHashByPath =
-                new Dictionary<string, (string Hash, bool IsFullyApplied)>(StringComparer.Ordinal);
+            HotReloadRunAccumulator run = new HotReloadRunAccumulator();
 
             for (int index = 0; index < files.Count; index++)
             {
@@ -72,90 +55,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     filePath,
                     workerSourcePath,
                     correlationId,
-                    siblingDerivedWarnings,
-                    oneShotCallerNoteCandidates,
+                    run.SiblingDerivedWarnings,
+                    run.OneShotCallerNoteCandidates,
                     ct).ConfigureAwait(false);
 
-                outcomes.AddRange(fileResult.Outcomes);
-                warnings.AddRange(fileResult.Warnings);
-                HotReloadOutcomeAggregation.AppendDistinct(suppressedPausePointIds, fileResult.SuppressedPausePointIds);
-                HotReloadOutcomeAggregation.AppendDistinct(retargetedPausePointIds, fileResult.RetargetedPausePointIds);
-                HotReloadOutcomeAggregation.AppendDistinct(inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
-                patchedTotal += fileResult.PatchedCount;
-                unchangedTotal += fileResult.UnchangedMethodCount;
-                revertedUnchangedTotal += fileResult.RevertedUnchangedCount;
-                addedFields.AddRange(fileResult.AddedFieldNames);
-                addedConsts.AddRange(fileResult.AddedConstNames);
-                HotReloadAppliedSourceLifecycle.StageAppliedSourceHash(
-                    appliedSourceHashByPath,
-                    HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath),
-                    fileResult.SourceContentSha256,
-                    fileResult.Outcomes);
+                run.Add(HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath), fileResult);
             }
 
-            foreach (KeyValuePair<string, (string Hash, bool IsFullyApplied)> pair in appliedSourceHashByPath)
-            {
-                HotReloadAppliedSourceLedger.Record(pair.Key, pair.Value.Hash, pair.Value.IsFullyApplied);
-            }
+            run.RecordAppliedSourceHashes();
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                outcomes,
-                oneShotCallerNoteCandidates,
-                (ignoredAssemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
-
-            if (inlineRiskMethodLabels.Count > 0)
-            {
-                warnings.Add(
-                    HotReloadOutcomeAggregation.FormatInlineRiskAggregatedWarning(
-                        inlineRiskMethodLabels.Count,
-                        patchedTotal,
-                        inlineRiskMethodLabels));
-            }
+            run.ApplyOneShotCallerNotes(projectRoot);
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            addedFields.Sort(StringComparer.Ordinal);
-            addedConsts.Sort(StringComparer.Ordinal);
-            if (addedFields.Count > 0)
-            {
-                // Why from this list: AddedFields and the lifetime warning must name the same
-                // applied fields. Worker-side classified sets include unused and unavailable
-                // declarations, and retry overwrites names without replacing first-pass warnings.
-                warnings.Add(
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        HotReloadConstants.AddedFieldsLifetimeWarningFormat,
-                        string.Join(", ", addedFields)));
-            }
-
-            (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount, int staleCount) =
-                HotReloadOutcomeAggregation.CountMethodOutcomeKinds(outcomes);
-            HotReloadOrchestratorLog.LogHotReloadApplySummary(
-                patchedCount,
-                failedCount,
-                skippedCount,
-                alreadyActiveCount,
-                addedCount,
-                staleCount,
-                failedCount == 0,
-                correlationId);
-            HotReloadOutcomeAggregation.AppendSiblingDerivedWarnings(warnings, siblingDerivedWarnings);
-            HotReloadAutoRefreshHoldSyncResult autoRefreshHold =
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
-            return new HotReloadOrchestratorResult(
-                outcomes,
-                warnings,
-                patchedTotal,
-                HotReloadPatcher.ActiveChangeCount,
-                suppressedPausePointIds,
-                unchangedTotal,
-                retargetedPausePointIds,
-                addedFields.ToArray(),
-                addedConsts.ToArray(),
-                revertedUnchangedTotal,
-                autoRefreshHold);
+            return run.BuildResult(correlationId);
         }
 
         private static async Task<HotReloadFileProcessResult> ProcessFileAsync(
@@ -244,7 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             TransformWorkerOutputDto workerOutput = workerResult.Output;
             string[] addedFieldNames = workerOutput.addedFieldNames;
-            AppendWorkerNotices(
+            HotReloadWorkerNoticeAppender.AppendWorkerNotices(
                 workerOutput,
                 snapshotSource,
                 projectRelativePath,
@@ -277,7 +191,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 correlationId,
                 ct).ConfigureAwait(false);
-            AppendRetrySiblingConstDriftWarnings(siblingDerivedWarnings, gateResult.Isolation);
+            HotReloadWorkerNoticeAppender.AppendRetrySiblingConstDriftWarnings(siblingDerivedWarnings, gateResult.Isolation);
             // Why after the gate: a gated replacement is not applied, so listing it under
             // "Removed members stay present... edited bodies no longer call them" is false.
             string removedMembersWarning = HotReloadRemovedMembersWarning.FormatRemovedMembersWarning(
@@ -441,102 +355,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return false;
-        }
-
-        // Why after the worker: const-only / empty files have no patch candidates, so the
-        // missing-baseline warning was pure noise (FB E). Emit only when the worker saw at
-        // least one method or accessor row.
-        private static void AppendWorkerNotices(
-            TransformWorkerOutputDto workerOutput,
-            string snapshotSource,
-            string projectRelativePath,
-            string assemblyName,
-            string assemblyResolvePath,
-            List<HotReloadMethodOutcome> outcomes,
-            List<string> warnings,
-            List<string> siblingDerivedWarnings)
-        {
-            Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
-            if (snapshotSource == null
-                && CountPatchCandidateRows(workerOutput) >= 1)
-            {
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
-                        Path.GetFileName(projectRelativePath),
-                        assemblyName));
-            }
-
-            if (workerOutput.baselineDisabledByDuplicateKeys)
-            {
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.BaselineDisabledByDuplicateKeysWarningFormat,
-                        Path.GetFileName(projectRelativePath),
-                        assemblyName));
-            }
-
-            if (workerOutput.parseErrors != null)
-            {
-                foreach (string parseError in workerOutput.parseErrors)
-                {
-                    warnings.Add(parseError);
-                }
-            }
-
-            if (workerOutput.skipped != null)
-            {
-                foreach (TransformWorkerSkippedDto skipped in workerOutput.skipped)
-                {
-                    outcomes.Add(
-                        HotReloadMethodOutcome.Skipped(
-                            skipped.method ?? "(unknown)",
-                            skipped.reason ?? string.Empty,
-                            assemblyResolvePath));
-                }
-            }
-
-            if (workerOutput.declarationDriftWarnings != null)
-            {
-                // Surfaced before the empty-entries early return so const drift still reaches
-                // the response when every method in the file is skipped or unchanged.
-                foreach (string driftWarning in workerOutput.declarationDriftWarnings)
-                {
-                    warnings.Add(driftWarning);
-                }
-            }
-
-            if (workerOutput.siblingConstDriftWarnings != null)
-            {
-                foreach (string siblingWarning in workerOutput.siblingConstDriftWarnings)
-                {
-                    siblingDerivedWarnings.Add(siblingWarning);
-                }
-            }
-        }
-
-        private static void AppendRetrySiblingConstDriftWarnings(
-            List<string> siblingDerivedWarnings,
-            HotReloadShimIsolation.HotReloadShimIsolationResult isolation)
-        {
-            if (isolation == null || isolation.SiblingConstDriftWarnings == null)
-            {
-                return;
-            }
-
-            foreach (string siblingWarning in isolation.SiblingConstDriftWarnings)
-            {
-                siblingDerivedWarnings.Add(siblingWarning);
-            }
-        }
-
-        private static int CountPatchCandidateRows(TransformWorkerOutputDto workerOutput)
-        {
-            int entryCount = workerOutput.entries != null ? workerOutput.entries.Length : 0;
-            int skippedCount = workerOutput.skipped != null ? workerOutput.skipped.Length : 0;
-            int unchangedCount =
-                workerOutput.unchangedMethods != null ? workerOutput.unchangedMethods.Length : 0;
-            return entryCount + skippedCount + unchangedCount;
         }
 
         // Why a list hook: one contentPathOverride cannot feed two edited copies, and
