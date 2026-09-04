@@ -29,10 +29,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadOrchestratorTests
     {
+        [SetUp]
+        public void SetUp()
+        {
+            HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+        }
+
         [TearDown]
         public void TearDown()
         {
             HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
             VibeLogger.ClearMemoryLogs();
         }
 
@@ -182,6 +190,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 BuildFixtureSource(
                     computeWithPrivateMethod:
                     "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
@@ -3287,6 +3297,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string onDisk = File.ReadAllText(fixturePath);
             string edited = WithUnusedAddedPing(onDisk);
             Assert.That(edited, Is.Not.EqualTo(onDisk));
+            Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
 
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
@@ -3315,6 +3326,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string fixturePath = ResolveAddedMethodApplyFixturePath();
             string onDisk = File.ReadAllText(fixturePath);
+            Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
             HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
                 new[] { fixturePath },
                 WriteEditedSource("EmptyEntriesHold1.cs", WithUnusedAddedPing(onDisk)),

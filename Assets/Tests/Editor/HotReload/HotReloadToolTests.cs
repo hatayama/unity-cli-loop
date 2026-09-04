@@ -26,11 +26,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void SetUp()
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
+            HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
         }
 
         [TearDown]
         public void TearDown()
         {
+            HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
             _ledgerSessionScope.Restore();
         }
 
@@ -821,6 +825,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// What: revert-all with an empty ledger reports ClearedCount 0 and AutoRefreshHeld false.
+        /// </summary>
         [Test]
         public async Task ExecuteAsync_RevertAllWithNoActivePatches_ReportsClearedCountZero()
         {
