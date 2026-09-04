@@ -39,7 +39,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Success = false,
                 Message = preflight.ErrorMessage,
                 Action = parameters.Action.ToString(),
-                RejectedByActivePausePointId = preflight.RejectedByActivePausePointId
+                RejectedByActivePausePointId = preflight.RejectedByActivePausePointId,
+                RejectedBeforeExecution = true
             };
         }
 

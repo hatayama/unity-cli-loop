@@ -13,6 +13,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class MouseInputSimulationResponseFactory
     {
+        /// <summary>
+        /// Creates the failure response for a rejected PlayMode preflight. Separate from the other
+        /// failure shapes so only a genuine pre-execution refusal can claim RejectedBeforeExecution:
+        /// the CLI aborts a pause-point wait on that flag.
+        /// </summary>
+        internal static SimulateMouseInputResponse PreflightRejectedResult(
+            UnityCliLoopMouseInputAction action,
+            PlayModeToolPreflightResult preflight)
+        {
+            Debug.Assert(!preflight.IsValid, "PreflightRejectedResult must only be called for a rejected preflight");
+            return new SimulateMouseInputResponse
+            {
+                Success = false,
+                Message = preflight.ErrorMessage,
+                Action = action.ToString(),
+                RejectedByActivePausePointId = preflight.RejectedByActivePausePointId,
+                RejectedBeforeExecution = true
+            };
+        }
+
         // Echoes the full conversion so callers can verify the Y-flip math against a
         // screenshot instead of trusting a hidden Screen.height-based flip.
         internal static SimulateMouseInputResponse SuccessButtonResult(

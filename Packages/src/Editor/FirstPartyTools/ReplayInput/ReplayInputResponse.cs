@@ -24,5 +24,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// awaits.
         /// </summary>
         public string? RejectedByActivePausePointId { get; set; }
+
+        /// <summary>
+        /// True when this command was refused before it did anything: the PlayMode preflight
+        /// rejected it. Why a separate flag from RejectedByActivePausePointId: a refusal is not
+        /// always owned by a pause point (PlayMode simply not running is the common case), and the
+        /// CLI's --trigger wait has to abort on "the trigger performed no action" without matching
+        /// message text. Mid-flight failures leave this false.
+        /// </summary>
+        public bool RejectedBeforeExecution { get; set; }
     }
 }
