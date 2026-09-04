@@ -1,4 +1,5 @@
-using UnityEngine;
+using System;
+using System.Diagnostics;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -36,7 +37,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static int FloorScaled(int sourceSize, float scale)
         {
-            return Mathf.FloorToInt(sourceSize * scale);
+            // Float and double products both cross integer boundaries: 1280*0.9f
+            // floors to 1151 in double, 1286*0.125972f rounds to 162 in float.
+            // (decimal)float keeps the caller's 7 significant digits so 1152 and 160 both come out.
+            return (int)Math.Floor(sourceSize * (decimal)scale);
         }
     }
 }

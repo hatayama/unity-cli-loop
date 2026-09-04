@@ -91,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: scale 0.9 of 1280×720 floors in float so 0.9f does not lose a pixel to double rounding.
+        /// What: scale 0.9 of 1280×720 floors to 1152×648 instead of the 1150 that double rounding produces.
         /// </summary>
         [Test]
         public void Resolve_WhenScaleIsNineTenthsOf1280x720_Returns1152x648()
@@ -100,6 +100,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(size.width, Is.EqualTo(1152));
             Assert.That(size.height, Is.EqualTo(648));
+        }
+
+        /// <summary>
+        /// What: scale 0.125972 of 1286×723 floors to 160×90, not the 162 that single-precision rounding produces.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenFloatProductRoundsUpAcrossInteger_FloorsToEven160x90()
+        {
+            (int width, int height) size = VideoFrameSizePolicy.Resolve(1286, 723, 0.125972f);
+
+            Assert.That(size.width, Is.EqualTo(160));
+            Assert.That(size.height, Is.EqualTo(90));
         }
 
         /// <summary>
