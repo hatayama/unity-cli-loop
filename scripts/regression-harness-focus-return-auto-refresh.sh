@@ -17,8 +17,13 @@ set -e
 #   - the harness scene must be clean in git
 
 PROJECT_PATH=""
-if [ "$1" = "--project-path" ] && [ -n "$2" ]; then
+if [ "$#" -eq 0 ]; then
+    :
+elif [ "$#" -eq 2 ] && [ "$1" = "--project-path" ] && [ -n "$2" ]; then
     PROJECT_PATH="$2"
+else
+    printf '%s\n' "Usage: $0 [--project-path <path>]" >&2
+    exit 2
 fi
 
 SCENE_REL="Assets/RegressionHarness/FocusReturnAutoRefresh/FocusReturnAutoRefresh.unity"
@@ -44,6 +49,11 @@ log() {
     printf "\033[36m[focus-return-auto-refresh]\033[0m %s\n" "$1"
 }
 
+cleanup_temps() {
+    rm -f "$CODE_FILE" "$RESULT_FILE"
+}
+trap cleanup_temps EXIT
+
 cleanup() {
     # Close the harness scene before restoring the file. A focused Editor that
     # still has MarkerExternal loaded will raise Unity's native reload dialog
@@ -59,7 +69,6 @@ EOF
     run_uloop compile > /dev/null 2>&1 || true
     rm -f "$CODE_FILE" "$RESULT_FILE"
 }
-trap cleanup EXIT
 
 if ! command -v jq >/dev/null 2>&1; then
     log "FAIL: jq is required."
@@ -69,6 +78,11 @@ fi
 SCENE_DIRTY="$(git -C "$PROJECT_ROOT" status --porcelain -- "$SCENE_REL")"
 if [ -n "$SCENE_DIRTY" ]; then
     log "FAIL: $SCENE_REL has uncommitted changes. Commit or restore it before running."
+    exit 1
+fi
+
+if [ -e "$PROJECT_ROOT/$PROBE_REL" ]; then
+    log "FAIL: $PROBE_REL already exists. Remove the leftover probe from a previous run, then rerun."
     exit 1
 fi
 
@@ -93,6 +107,22 @@ UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/RegressionHarne
 return "opened";
 EOF
 run_uloop execute-dynamic-code --code-file "$CODE_FILE" > /dev/null
+
+cat > "$CODE_FILE" <<'EOF'
+return UnityEditor.EditorApplication.isFocused.ToString();
+EOF
+if ! run_uloop execute-dynamic-code --code-file "$CODE_FILE" > "$RESULT_FILE"; then
+    log "FAIL: could not recheck EditorApplication.isFocused before writing external changes."
+    cat "$RESULT_FILE"
+    exit 1
+fi
+IS_FOCUSED="$(jq -r '.Result // empty' "$RESULT_FILE")"
+if [ "$IS_FOCUSED" = "True" ]; then
+    log "FAIL: Unity regained focus before the external edits. Click another application so that the Editor loses focus, then rerun."
+    exit 1
+fi
+
+trap cleanup EXIT
 
 log "Writing external .cs and scene changes while unfocused..."
 printf '%s\n' 'public class FocusReturnProbe { }' > "$PROJECT_ROOT/$PROBE_REL"
