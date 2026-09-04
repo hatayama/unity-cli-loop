@@ -2293,7 +2293,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string projectRelativePath,
             string snapshotSource = null,
             string[] additionalAssemblySourcePaths = null,
-            string[] changedSiblingSourcePaths = null)
+            string[] changedSiblingSourcePaths = null,
+            string secondSourcePath = null,
+            string secondProjectRelativePath = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -2335,17 +2337,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 assemblySourcePaths = merged.ToArray();
             }
 
+            List<TransformWorkerSourceDto> sources = new List<TransformWorkerSourceDto>
+            {
+                new TransformWorkerSourceDto
+                {
+                    sourcePath = sourcePath,
+                    projectRelativePath = projectRelativePath,
+                    snapshotSource = snapshotSource
+                }
+            };
+            if (secondSourcePath != null)
+            {
+                sources.Add(new TransformWorkerSourceDto
+                {
+                    sourcePath = secondSourcePath,
+                    projectRelativePath = secondProjectRelativePath
+                });
+            }
+
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
-                sources = new[]
-                {
-                    new TransformWorkerSourceDto
-                    {
-                        sourcePath = sourcePath,
-                        projectRelativePath = projectRelativePath,
-                        snapshotSource = snapshotSource
-                    }
-                },
+                sources = sources.ToArray(),
                 defines = compilationAssembly.defines ?? System.Array.Empty<string>(),
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = targetDllPath,
@@ -2592,6 +2604,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(nested.files[0].removedMembers[0].kind, Is.EqualTo("method"));
             Assert.That(nested.files[0].removedMembers[0].name, Is.EqualTo("Gone"));
             Assert.That(nested.entries[0].calledAddedMethodKeys, Is.EqualTo(new[] { "T::Added()" }));
+        }
+
+        /// <summary>
+        /// What: a run carrying more than one source is a run-level failure, so the client
+        /// reports it as a failed result instead of a success with no per-file rows.
+        /// </summary>
+        [Test]
+        public async Task BootstrapAndRun_MoreThanOneSource_FailsWithRunLevelError()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string fixtureProjectRelativePath = ResolveE2EFixtureProjectRelativePath();
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                fixturePath,
+                fixtureProjectRelativePath,
+                secondSourcePath: fixturePath,
+                secondProjectRelativePath: fixtureProjectRelativePath);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("exactly one source"));
         }
 
         /// <summary>

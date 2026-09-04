@@ -90,6 +90,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 CoalesceOutput(output);
+
+                // Why fail here: run-level parseErrors describe a failure that belongs to no
+                // single source, so there is no per-file row to carry it. Turning it into a
+                // client failure at the process boundary is what makes the per-file row count
+                // an invariant for every caller downstream.
+                if (output.parseErrors.Length > 0)
+                {
+                    return TransformWorkerClientResult.Failure(string.Join("\n", output.parseErrors));
+                }
+
+                Debug.Assert(
+                    output.files.Length == input.sources.Length,
+                    "A successful worker run must return one per-file output per source.");
                 return TransformWorkerClientResult.SuccessResult(output);
             }
             finally

@@ -40,9 +40,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 assemblyName,
                 warnings);
-            // Run-level errors first: they describe the whole worker run, so they must not read
-            // as a consequence of this file's own parse errors.
-            AppendAll(warnings, workerOutput.parseErrors);
             AppendAll(warnings, fileOutput.parseErrors);
             AppendSkippedOutcomes(workerOutput.skipped, assemblyResolvePath, outcomes);
             // Surfaced before the empty-entries early return so const drift still reaches
