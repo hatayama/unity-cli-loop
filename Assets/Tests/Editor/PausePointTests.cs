@@ -420,6 +420,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: an id-only marker without method-entry instrumentation still recommends
+        /// adjusting --hit-when when skipped hits expire the window.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenUninstrumentedHitWhenSkippedHitsExpire_RecommendsHitWhenAdjustment()
+        {
+            UloopPausePointHitWhenParseResult parseResult = UloopPausePointHitWhenCondition.Parse("speed > 5");
+            UloopPausePointRegistry.Enable(
+                "jump",
+                1,
+                UloopPausePointCaptureMode.Trace,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                "speed > 5",
+                parseResult.Condition);
+            UloopPausePointRegistry.RecordHitWhenSkip("jump");
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.HitWhenSkippedCount, Is.EqualTo(1));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("--hit-when"));
+        }
+
+        /// <summary>
         /// What: after a recorded hit, capture-window expiry keeps an after-hit recovery action
         /// instead of claiming the armed line was never reached.
         /// </summary>

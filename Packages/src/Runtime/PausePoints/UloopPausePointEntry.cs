@@ -368,10 +368,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return Math.Max(0, remainingMilliseconds);
         }
 
-        // Why not a single timeout hint: a recorded hit already proves the line ran, and
-        // method-entry evidence tells whether a longer window can help. Repeating timeout
-        // advice after a hit, a branch-not-taken miss, or a --hit-when miss sends the agent
-        // down a retry that cannot succeed.
+        // Why not a single timeout hint: a recorded hit already proves the line ran, skipped
+        // --hit-when hits prove the line ran without matching, and method-entry evidence tells
+        // whether a longer window can help. Repeating timeout advice after those cases sends
+        // the agent down a retry that cannot succeed. --hit-when skips are recorded even on
+        // id-only markers, so that branch must not require method-entry instrumentation.
         private string CreateExpiredRecommendedNextAction(int methodEntryCount, int hitWhenSkippedCount)
         {
             const string defaultAction =
@@ -381,19 +382,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 return "The marker was hit before its --timeout-seconds window closed, so this is not a missed code path. Read the recorded hit with pause-point-status --id <marker-id> (HitCount, CapturedVariables, CapturedVariableHistory survive expiry); re-enable the marker if you need to capture another hit.";
             }
 
-            if (!HasMethodEntryInstrumentation)
-            {
-                return defaultAction;
-            }
-
-            if (methodEntryCount > 0 && hitWhenSkippedCount == 0)
-            {
-                return "The armed method ran but the armed line was never reached, so a longer --timeout-seconds alone will not help. Check the condition that guards the armed line (the trigger may have fired while it was false), then re-enable the marker and trigger the code path again once the precondition holds; --mode continuous keeps the marker armed across repeated attempts. Clearing the expired marker first is not required.";
-            }
-
             if (hitWhenSkippedCount > 0)
             {
                 return $"The armed line executed {hitWhenSkippedCount} time(s) but no hit matched --hit-when. Re-enable the marker, then adjust the --hit-when condition or the trigger input so a hit matches; clearing the expired marker first is not required.";
+            }
+
+            if (HasMethodEntryInstrumentation && methodEntryCount > 0)
+            {
+                return "The armed method ran but the armed line was never reached, so a longer --timeout-seconds alone will not help. Check the condition that guards the armed line (the trigger may have fired while it was false), then re-enable the marker and trigger the code path again once the precondition holds; --mode continuous keeps the marker armed across repeated attempts. Clearing the expired marker first is not required.";
             }
 
             return defaultAction;
