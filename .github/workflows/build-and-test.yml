@@ -106,6 +106,10 @@ jobs:
         working-directory: cli/release-automation
         run: go run ./cmd/check-skill-size --root "$GITHUB_WORKSPACE"
 
+      - name: Check asmdef reference policy
+        working-directory: cli/release-automation
+        run: go run ./cmd/check-asmdef-policy --root "$GITHUB_WORKSPACE"
+
       - name: Test shared-inputs stamp script
         run: scripts/test-stamp-release-inputs.sh
 

@@ -1,5 +1,52 @@
 # Changelog
 
+## [3.3.0](https://github.com/hatayama/unity-cli-loop/compare/v3.2.1...v3.3.0) (2026-09-04)
+
+
+### Features
+
+* compile response now explains indeterminate results and hints at asmdef reference gaps ([#2534](https://github.com/hatayama/unity-cli-loop/issues/2534)) ([4e35b65](https://github.com/hatayama/unity-cli-loop/commit/4e35b6522f1a92c7ec6931fb1d76223f5c5dc874))
+* enable-pause-point can capture values right after the line runs with --snapshot-timing post-line ([#2543](https://github.com/hatayama/unity-cli-loop/issues/2543)) ([54aab03](https://github.com/hatayama/unity-cli-loop/commit/54aab031ccbc1fb980f77a10edad499f018c05d2))
+* hot-reload --status lists live added fields and explains superseded signatures ([#2548](https://github.com/hatayama/unity-cli-loop/issues/2548)) ([6079be8](https://github.com/hatayama/unity-cli-loop/commit/6079be8f6c1b1cf25ea64d983870e29705e2e769))
+* **hot-reload:** patch methods that raise field-like events and explain the initializer-less added field ([#2589](https://github.com/hatayama/unity-cli-loop/issues/2589)) ([05d1fbf](https://github.com/hatayama/unity-cli-loop/commit/05d1fbf285a7d19e82e87262429da07fc1c7e9d8))
+* pause-point warnings are returned as separate entries and repeated hot-reload line-shift warnings are summarized ([#2546](https://github.com/hatayama/unity-cli-loop/issues/2546)) ([6f98150](https://github.com/hatayama/unity-cli-loop/commit/6f98150f6487f04e914a4b160f3ce4cf3f605ba6))
+* **pause-point:** report parameters that cannot be captured ([#2572](https://github.com/hatayama/unity-cli-loop/issues/2572)) ([b0b1fd3](https://github.com/hatayama/unity-cli-loop/commit/b0b1fd3f405ef3ab172a5ea9116cb5889b3fb8bb))
+* run-tests can filter by test class name ([#2536](https://github.com/hatayama/unity-cli-loop/issues/2536)) ([de91193](https://github.com/hatayama/unity-cli-loop/commit/de911932f26894f34bc9a26f1b6cc79e5c4a1a89))
+* run-tests can keep the project's Enter Play Mode settings and survive the Domain Reload with --respect-enter-play-mode-settings ([#2529](https://github.com/hatayama/unity-cli-loop/issues/2529)) ([bec8e63](https://github.com/hatayama/unity-cli-loop/commit/bec8e63d7c41288178c8be56af8c2156f9eb1af7))
+* run-tests proposes a ready-to-write test asmdef when no test assembly exists ([#2544](https://github.com/hatayama/unity-cli-loop/issues/2544)) ([8bda155](https://github.com/hatayama/unity-cli-loop/commit/8bda155681190eaa8e077ef3fe098aadd601dbd0))
+
+
+### Bug Fixes
+
+* build .uloop/outputs paths with the native separator on Windows ([#2591](https://github.com/hatayama/unity-cli-loop/issues/2591)) ([7524a5d](https://github.com/hatayama/unity-cli-loop/commit/7524a5dda1b1a5c3b83ac54d380f67c10b2fa53b))
+* clear-pause-point no longer claims it resumed Play Mode after an EditMode hit ([#2535](https://github.com/hatayama/unity-cli-loop/issues/2535)) ([25440c7](https://github.com/hatayama/unity-cli-loop/commit/25440c755f08009201f9386c5c3dd77f56eb11de))
+* **compile:** stop holding Auto Refresh while the Editor is unfocused ([#2581](https://github.com/hatayama/unity-cli-loop/issues/2581)) ([a94df3c](https://github.com/hatayama/unity-cli-loop/commit/a94df3c4139af456ba4f178288ef3eb28e455991))
+* **execute-dynamic-code:** drop the unfocused throttle hint while Play Mode is paused ([#2564](https://github.com/hatayama/unity-cli-loop/issues/2564)) ([6ee809d](https://github.com/hatayama/unity-cli-loop/commit/6ee809d41065db363254b0234c92054effa84890))
+* **execute-dynamic-code:** explain that --code takes top-level statements when no Execute method is found ([#2567](https://github.com/hatayama/unity-cli-loop/issues/2567)) ([c10f9bc](https://github.com/hatayama/unity-cli-loop/commit/c10f9bcef62c0bcf2e02e3a39d7472ddf20f9f92))
+* **get-logs:** report Debug.Assert failures as Error instead of Log ([#2558](https://github.com/hatayama/unity-cli-loop/issues/2558)) ([5920896](https://github.com/hatayama/unity-cli-loop/commit/59208960c59def1c77caef6da90583562b3ba71c))
+* Hot reload names an unresolved added-field type instead of blaming shim visibility ([#2549](https://github.com/hatayama/unity-cli-loop/issues/2549)) ([af4cbc1](https://github.com/hatayama/unity-cli-loop/commit/af4cbc175ad63816d81296bd9a8d013eccf20db3))
+* hot-reload reports added consts separately and skips only the edited event accessor ([#2545](https://github.com/hatayama/unity-cli-loop/issues/2545)) ([b94fd7d](https://github.com/hatayama/unity-cli-loop/commit/b94fd7d53b452c21c5cd68c222e9954a8d005b75))
+* **hot-reload:** count patches reverted by an all-unchanged run ([#2578](https://github.com/hatayama/unity-cli-loop/issues/2578)) ([02e444c](https://github.com/hatayama/unity-cli-loop/commit/02e444c5eecd8db21b4284afb97c8c83cff1042c))
+* **hot-reload:** hold Auto Refresh while patches are active so focus return does not stop Play Mode ([#2586](https://github.com/hatayama/unity-cli-loop/issues/2586)) ([6cf5b44](https://github.com/hatayama/unity-cli-loop/commit/6cf5b449543a8984d3daa110ba202a52ece1f3cf))
+* **hot-reload:** list Skipped methods in Warnings instead of only pointing at Methods ([#2571](https://github.com/hatayama/unity-cli-loop/issues/2571)) ([5eaa983](https://github.com/hatayama/unity-cli-loop/commit/5eaa983bd41158eb4112b768a7d19bd57a5578f1))
+* **hot-reload:** name the same-file added method as the hot-reloadable alternative to an added property ([#2563](https://github.com/hatayama/unity-cli-loop/issues/2563)) ([46ed398](https://github.com/hatayama/unity-cli-loop/commit/46ed39899b09a95f0df2c119f82ae1f624d2fd20))
+* **hot-reload:** report remaining active patches when no changed files are found ([#2577](https://github.com/hatayama/unity-cli-loop/issues/2577)) ([02b6259](https://github.com/hatayama/unity-cli-loop/commit/02b6259fe59ca2028c02583570162df42ec63279))
+* **hot-reload:** report stale patches and stop silent patch loss on run-tests ([#2588](https://github.com/hatayama/unity-cli-loop/issues/2588)) ([76b5af7](https://github.com/hatayama/unity-cli-loop/commit/76b5af777ac1891f906806907d44aaceecfb02a8))
+* **pause-point:** abort on synchronous trigger rejection and key expired guidance on MethodEntryCount ([#2587](https://github.com/hatayama/unity-cli-loop/issues/2587)) ([37a454a](https://github.com/hatayama/unity-cli-loop/commit/37a454a7617d2b2c2f2cc2a1fd08691c6fedee83))
+* **pause-point:** accept --file/--line on clear-pause-point ([#2585](https://github.com/hatayama/unity-cli-loop/issues/2585)) ([e32591c](https://github.com/hatayama/unity-cli-loop/commit/e32591cfad069704c8f1d63dd74baf16fddbe0eb))
+* **pause-point:** capture post-line values after a same-line if body instead of before its branch ([#2566](https://github.com/hatayama/unity-cli-loop/issues/2566)) ([b815160](https://github.com/hatayama/unity-cli-loop/commit/b815160c2aca897686940e93b8f09509966cd878))
+* **pause-point:** carry every warning in Warnings and point Message at it ([#2573](https://github.com/hatayama/unity-cli-loop/issues/2573)) ([c8e1fe6](https://github.com/hatayama/unity-cli-loop/commit/c8e1fe633a09c86d02ac579930a8719437efff08))
+* **pause-point:** say that --await returned on the first trace hit ([#2562](https://github.com/hatayama/unity-cli-loop/issues/2562)) ([1508bcf](https://github.com/hatayama/unity-cli-loop/commit/1508bcfa2ad4f5a122bb68a6e35ee99db6629e93))
+* **pause-point:** stop advertising --trigger with a leading uloop in the arming hint ([#2557](https://github.com/hatayama/unity-cli-loop/issues/2557)) ([46a7f0f](https://github.com/hatayama/unity-cli-loop/commit/46a7f0f4848da0b01930d11c3106fefcc3dbcf12))
+* **pause-point:** stop claiming a physics message method was never invoked when the patch may have been bypassed ([#2580](https://github.com/hatayama/unity-cli-loop/issues/2580)) ([4b69bd7](https://github.com/hatayama/unity-cli-loop/commit/4b69bd72116670cae39fa23b5bd5597c9fefd7f6))
+* **pause-point:** stop recommending a longer timeout when the armed line was never reached ([#2579](https://github.com/hatayama/unity-cli-loop/issues/2579)) ([c65bbec](https://github.com/hatayama/unity-cli-loop/commit/c65bbec1928cc2fe820f41ce48123229ac7224ff))
+* **pause-point:** stop resuming Play for a marker that already hit ([#2553](https://github.com/hatayama/unity-cli-loop/issues/2553)) ([7952379](https://github.com/hatayama/unity-cli-loop/commit/7952379887063087d1672af7327ed93a63dd1bbd))
+* **pause-point:** warn before clear-pause-point resumes Play Mode ([#2570](https://github.com/hatayama/unity-cli-loop/issues/2570)) ([ba28ed9](https://github.com/hatayama/unity-cli-loop/commit/ba28ed9ebc30438d8deda88ef36bcc805c3651e1))
+* Screenshots taken while Play Mode is paused now warn that UGUI may show the previous frame ([#2531](https://github.com/hatayama/unity-cli-loop/issues/2531)) ([63612cb](https://github.com/hatayama/unity-cli-loop/commit/63612cb9ea1ce89fbc59173b27a2df18bdbc82d0))
+* simulate-keyboard press-edge diagnostics no longer report a missing gameplay update on Fixed/Manual input projects ([#2532](https://github.com/hatayama/unity-cli-loop/issues/2532)) ([5f0cb1d](https://github.com/hatayama/unity-cli-loop/commit/5f0cb1d4d744a21f2a3bd8ab819bc74224379844))
+* **simulate-keyboard:** say whether the press reached the game when a pause point interrupts it ([#2576](https://github.com/hatayama/unity-cli-loop/issues/2576)) ([4ad6da9](https://github.com/hatayama/unity-cli-loop/commit/4ad6da9eb69ebffb5d4e0a00f959c050434ff66e))
+* simulate-mouse-input reports whether an interrupted press reached the game instead of "may have registered" ([#2530](https://github.com/hatayama/unity-cli-loop/issues/2530)) ([3f06b4e](https://github.com/hatayama/unity-cli-loop/commit/3f06b4e665286a3722004125ad912ccc3aa35a78))
+
 ## [3.2.1](https://github.com/hatayama/unity-cli-loop/compare/v3.2.0...v3.2.1) (2026-09-02)
 
 
