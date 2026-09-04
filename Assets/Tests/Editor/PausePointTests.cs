@@ -419,6 +419,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(snapshot.RecommendedNextAction, Does.Contain("--hit-when"));
         }
 
+        /// <summary>
+        /// What: after a recorded hit, capture-window expiry keeps an after-hit recovery action
+        /// instead of claiming the armed line was never reached.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenCaptureWindowExpiresAfterHit_ReportsAfterHitRecoveryAction()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1);
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+            UloopPausePointRegistry.Hit("jump");
+            _nowUtc = _nowUtc.AddSeconds(5);
+            UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point capture window expired after 1 hit(s); capture history is preserved."));
+            Assert.That(
+                snapshot.RecommendedNextAction,
+                Does.Contain("The marker was hit before its --timeout-seconds window closed"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("never reached"));
+        }
+
         [Test]
         public void GetStatus_WhenExpiredIdContainsShellSyntax_ReturnsShellNeutralRecoveryAction()
         {

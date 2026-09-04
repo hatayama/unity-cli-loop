@@ -368,13 +368,19 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return Math.Max(0, remainingMilliseconds);
         }
 
-        // Why not a single timeout hint: method-entry evidence already tells whether a longer
-        // window can help, and repeating that advice after a branch-not-taken or --hit-when miss
-        // sends the agent down a retry that cannot succeed.
+        // Why not a single timeout hint: a recorded hit already proves the line ran, and
+        // method-entry evidence tells whether a longer window can help. Repeating timeout
+        // advice after a hit, a branch-not-taken miss, or a --hit-when miss sends the agent
+        // down a retry that cannot succeed.
         private string CreateExpiredRecommendedNextAction(int methodEntryCount, int hitWhenSkippedCount)
         {
             const string defaultAction =
                 "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
+            if (HitCount > 0)
+            {
+                return "The marker was hit before its --timeout-seconds window closed, so this is not a missed code path. Read the recorded hit with pause-point-status --id <marker-id> (HitCount, CapturedVariables, CapturedVariableHistory survive expiry); re-enable the marker if you need to capture another hit.";
+            }
+
             if (!HasMethodEntryInstrumentation)
             {
                 return defaultAction;
