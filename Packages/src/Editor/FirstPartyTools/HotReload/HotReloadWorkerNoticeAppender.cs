@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // least one method or accessor row.
         internal static void AppendWorkerNotices(
             TransformWorkerOutputDto workerOutput,
+            TransformWorkerFileOutputDto fileOutput,
             string snapshotSource,
             string projectRelativePath,
             string assemblyName,
@@ -26,17 +27,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> siblingDerivedWarnings)
         {
             Debug.Assert(workerOutput != null, "workerOutput must not be null.");
+            Debug.Assert(fileOutput != null, "fileOutput must not be null.");
             Debug.Assert(outcomes != null, "outcomes must not be null.");
             Debug.Assert(warnings != null, "warnings must not be null.");
             Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
             AssertEntryRowsCameFromTheEditedFile(workerOutput, projectRelativePath);
 
-            AppendBaselineNotices(workerOutput, snapshotSource, projectRelativePath, assemblyName, warnings);
-            AppendAll(warnings, workerOutput.parseErrors);
+            AppendBaselineNotices(
+                workerOutput,
+                fileOutput,
+                snapshotSource,
+                projectRelativePath,
+                assemblyName,
+                warnings);
+            AppendAll(warnings, fileOutput.parseErrors);
             AppendSkippedOutcomes(workerOutput.skipped, assemblyResolvePath, outcomes);
             // Surfaced before the empty-entries early return so const drift still reaches
             // the response when every method in the file is skipped or unchanged.
-            AppendAll(warnings, workerOutput.declarationDriftWarnings);
+            AppendAll(warnings, fileOutput.declarationDriftWarnings);
             AppendAll(siblingDerivedWarnings, workerOutput.siblingConstDriftWarnings);
         }
 
@@ -74,6 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void AppendBaselineNotices(
             TransformWorkerOutputDto workerOutput,
+            TransformWorkerFileOutputDto fileOutput,
             string snapshotSource,
             string projectRelativePath,
             string assemblyName,
@@ -88,7 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         assemblyName));
             }
 
-            if (workerOutput.baselineDisabledByDuplicateKeys)
+            if (fileOutput.baselineDisabledByDuplicateKeys)
             {
                 warnings.Add(
                     string.Format(

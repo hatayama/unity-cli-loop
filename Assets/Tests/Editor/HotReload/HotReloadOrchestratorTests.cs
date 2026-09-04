@@ -2627,8 +2627,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerOutputDto workerOutput = new TransformWorkerOutputDto
             {
                 entries = entries,
-                addedFieldNames = addedFieldNames,
-                sourceContentSha256 = "preflight-match-failure"
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto
+                    {
+                        projectRelativePath = projectRelativePath,
+                        addedFieldNames = addedFieldNames,
+                        sourceContentSha256 = "preflight-match-failure"
+                    }
+                }
             };
 
             HotReloadFileProcessResult fileResult =
@@ -2887,8 +2894,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerOutputDto workerOutput = new TransformWorkerOutputDto
             {
                 entries = entries,
-                addedFieldNames = Array.Empty<string>(),
-                sourceContentSha256 = "direct-apply-preflight"
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto
+                    {
+                        projectRelativePath = projectRelativePath,
+                        addedFieldNames = Array.Empty<string>(),
+                        sourceContentSha256 = "direct-apply-preflight"
+                    }
+                }
             };
             return HotReloadEntryApplier.ApplyEntriesAndBuildResult(
                 CreateApplyContext(
@@ -2942,8 +2956,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 compilationAssembly,
                 targetDllPath,
                 compilationAssembly.defines ?? Array.Empty<string>(),
-                new TransformWorkerInputDto { projectRelativePath = projectRelativePath },
+                new TransformWorkerInputDto
+                {
+                    sources = new[]
+                    {
+                        new TransformWorkerSourceDto { projectRelativePath = projectRelativePath }
+                    }
+                },
                 workerOutput,
+                workerOutput.files[0],
                 new HashSet<string>(),
                 new HashSet<string>());
         }

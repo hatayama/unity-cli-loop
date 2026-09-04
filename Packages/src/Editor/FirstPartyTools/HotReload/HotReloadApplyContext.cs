@@ -27,6 +27,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] defines,
             TransformWorkerInputDto workerInput,
             TransformWorkerOutputDto workerOutput,
+            TransformWorkerFileOutputDto fileOutput,
             HashSet<string> snapshotLabels,
             HashSet<string> snapshotAddedLabels)
         {
@@ -39,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(defines != null, "defines must not be null.");
             Debug.Assert(workerInput != null, "workerInput must not be null.");
             Debug.Assert(workerOutput != null, "workerOutput must not be null.");
+            Debug.Assert(fileOutput != null, "fileOutput must not be null.");
             Debug.Assert(snapshotLabels != null, "snapshotLabels must not be null.");
             Debug.Assert(snapshotAddedLabels != null, "snapshotAddedLabels must not be null.");
 
@@ -52,6 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Defines = defines;
             WorkerInput = workerInput;
             WorkerOutput = workerOutput;
+            FileOutput = fileOutput;
             SnapshotLabels = snapshotLabels;
             SnapshotAddedLabels = snapshotAddedLabels;
         }
@@ -75,6 +78,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal TransformWorkerInputDto WorkerInput { get; }
 
         internal TransformWorkerOutputDto WorkerOutput { get; }
+
+        // The row set of ProjectRelativePath inside WorkerOutput.
+        internal TransformWorkerFileOutputDto FileOutput { get; }
 
         // Patch labels already active for this file when its apply started. Snapshotted because
         // a multi-file run mutates the ledgers between files.

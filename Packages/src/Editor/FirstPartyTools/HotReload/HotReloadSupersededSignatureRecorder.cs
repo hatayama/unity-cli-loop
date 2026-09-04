@@ -11,9 +11,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public static void RecordFromWorkerOutput(
             TransformWorkerOutputDto workerOutput,
+            TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures,
             IReadOnlyCollection<string> gatedReplacementMethodKeys)
         {
-            if (workerOutput?.removedMethodSignatures == null)
+            if (workerOutput == null || removedMethodSignatures == null)
             {
                 return;
             }
@@ -24,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyDictionary<string, TransformWorkerEntryDto> replacementsByWireKey =
                 HotReloadReplacedCompiledMethodEntries.IndexByReplacedWireKey(workerOutput.entries);
 
-            foreach (TransformWorkerRemovedMethodSignatureDto signature in workerOutput.removedMethodSignatures)
+            foreach (TransformWorkerRemovedMethodSignatureDto signature in removedMethodSignatures)
             {
                 if (signature == null || string.IsNullOrEmpty(signature.methodName))
                 {

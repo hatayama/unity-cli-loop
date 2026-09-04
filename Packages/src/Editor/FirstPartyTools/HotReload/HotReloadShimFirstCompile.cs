@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(context != null, "context must not be null.");
             Debug.Assert(sinks != null, "sinks must not be null.");
-            string[] addedConstNames = context.WorkerOutput.addedConstNames;
+            string[] addedConstNames = context.FileOutput.addedConstNames;
             if (gateResult.UsedWorkerRetry)
             {
                 addedFieldNames = gateResult.Isolation.AddedFieldNames;
@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             unchangedMethodCount,
                             sinks.RetargetedPausePointIds,
                             addedFieldNames: null,
-                            sourceContentSha256: context.WorkerOutput.sourceContentSha256,
+                            sourceContentSha256: context.FileOutput.sourceContentSha256,
                             revertedUnchangedCount: revertedUnchangedCount),
                         null,
                         null,
@@ -86,7 +86,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // side has stale rows to drop; starting a shim generation would need bytes that
                 // do not exist.
                 HotReloadAddedMemberRegistry.BeginFileGeneration(context.ProjectRelativePath);
-                HotReloadEntryApplier.CommitAddedFieldsForFile(context.ProjectRelativePath, context.WorkerOutput.addedFieldNames);
+                HotReloadEntryApplier.CommitAddedFieldsForFile(
+                    context.ProjectRelativePath,
+                    context.FileOutput.addedFieldNames);
                 // Why after the clear: a still-declared added method can be worker-skipped
                 // (virtual/generic), leaving entries empty while the registry drop is real.
                 HotReloadAppliedSourceLifecycle.AppendDeactivatedPatchesWarning(
@@ -102,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         sinks.Warnings,
                         0,
                         unchangedMethodCount: unchangedMethodCount,
-                        sourceContentSha256: context.WorkerOutput.sourceContentSha256,
+                        sourceContentSha256: context.FileOutput.sourceContentSha256,
                         revertedUnchangedCount: revertedUnchangedCount),
                     null,
                     null,
@@ -134,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         sinks.Warnings,
                         0,
                         unchangedMethodCount: unchangedMethodCount,
-                        sourceContentSha256: context.WorkerOutput.sourceContentSha256,
+                        sourceContentSha256: context.FileOutput.sourceContentSha256,
                         revertedUnchangedCount: revertedUnchangedCount),
                     null,
                     null,
@@ -155,7 +157,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         unchangedMethodCount,
                         sinks.RetargetedPausePointIds,
                         addedFieldNames: null,
-                        sourceContentSha256: context.WorkerOutput.sourceContentSha256,
+                        sourceContentSha256: context.FileOutput.sourceContentSha256,
                         revertedUnchangedCount: revertedUnchangedCount),
                     null,
                     null,
@@ -208,7 +210,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerOutput.shimSource,
                 shimReferences,
                 defines,
-                workerInput.projectRelativePath,
+                workerInput.sources[0].projectRelativePath,
                 ct).ConfigureAwait(false);
 
             TransformWorkerEntryDto[] entriesToPatch = workerOutput.entries;

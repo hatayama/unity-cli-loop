@@ -78,8 +78,8 @@ internal static class WorkerUsingCollector
         return false;
     }
 
-    // Why skip SourcePath: the edited file's usings already come from the in-memory tree.
-    // Reading the on-disk copy would pick up the pre-edit source.
+    // Why skip the run's own sources: their usings already come from the in-memory trees.
+    // Reading the on-disk copies would pick up the pre-edit sources.
     internal static List<UsingDirectiveSyntax> CollectAssemblyGlobalUsings(
         WorkerInput input,
         CSharpParseOptions parseOptions)
@@ -88,7 +88,7 @@ internal static class WorkerUsingCollector
         foreach (string assemblySourcePath in input.AssemblySourcePaths)
         {
             if (string.IsNullOrEmpty(assemblySourcePath)
-                || PathsReferToSameSourceFile(assemblySourcePath, input.SourcePath)
+                || IsEditedSource(input, assemblySourcePath)
                 || !File.Exists(assemblySourcePath))
             {
                 continue;
@@ -106,6 +106,19 @@ internal static class WorkerUsingCollector
         }
 
         return collected;
+    }
+
+    private static bool IsEditedSource(WorkerInput input, string assemblySourcePath)
+    {
+        foreach (WorkerSourceInput source in input.Sources)
+        {
+            if (PathsReferToSameSourceFile(assemblySourcePath, source.SourcePath))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     internal static void AppendGlobalUsingsFromParsedText(

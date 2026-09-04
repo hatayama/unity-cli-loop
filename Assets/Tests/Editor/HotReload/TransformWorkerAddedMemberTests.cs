@@ -59,9 +59,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerEntryDto existing = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue));
             Assert.That(existing, Is.Null, "Unedited ExistingValue must not be an entry when snapshot matches.");
 
-            Assert.That(result.Output.removedMembers, Is.Not.Null);
+            Assert.That(result.Output.files[0].removedMembers, Is.Not.Null);
             bool foundRemoved = false;
-            foreach (TransformWorkerRemovedMemberDto removed in result.Output.removedMembers)
+            foreach (TransformWorkerRemovedMemberDto removed in result.Output.files[0].removedMembers)
             {
                 if (removed.kind == HotReloadConstants.RemovedMemberKindMethod
                     && removed.name == nameof(HotReloadAddedMemberHost.ExistingFail))
@@ -383,7 +383,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(added, Is.Not.Null, "Added Update must still be an entry.");
             Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("Update").And.Contain("uloop compile"));
         }
 
@@ -404,10 +404,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(addedResult.Success, Is.True, addedResult.ErrorMessage);
             Assert.That(
-                addedResult.Output.declarationDriftWarnings,
+                addedResult.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Handled method addition must not fire outside-body drift.\n"
-                + string.Join("\n", addedResult.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", addedResult.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
 
             string removedOnly = onDisk.Replace(
                 "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
@@ -420,10 +420,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(removedResult.Success, Is.True, removedResult.ErrorMessage);
             Assert.That(
-                removedResult.Output.declarationDriftWarnings,
+                removedResult.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Handled method removal must not fire outside-body drift.\n"
-                + string.Join("\n", removedResult.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", removedResult.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
 
             string fieldAndAdded = addedOnly.Replace(
                 "public int PublicSeed = 3;",
@@ -435,7 +435,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(fieldResult.Success, Is.True, fieldResult.ErrorMessage);
             Assert.That(
-                fieldResult.Output.declarationDriftWarnings,
+                fieldResult.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("Edits outside method bodies"),
                 "Field initializer drift must still fire after handled method additions are stripped.");
         }
@@ -455,10 +455,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Handled return-type change must not fire outside-body drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -476,10 +476,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: null);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "No-snapshot return-type change must not fire outside-body drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -501,7 +501,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("Edits outside method bodies"),
                 "Field initializer drift must still fire after a handled return-type change is stripped.");
         }
@@ -525,7 +525,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("Edits outside method bodies"),
                 "Attribute drift must still fire after a handled return-type change.");
         }
@@ -992,10 +992,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(result, "HotReloadBrandNewType.Fresh", "New types are out of scope");
             Assert.That(FindEntry(result, "Fresh"), Is.Null);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Skipped new-type declarations must not fire fields/initializers drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -1021,10 +1021,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(result, "IHotReloadBrandNewInterface.Fresh", "New types are out of scope");
             Assert.That(FindEntry(result, "Fresh"), Is.Null);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Skipped new-interface declarations must not fire fields/initializers drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -1111,10 +1111,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(result, "Extra", "Interface members are not patchable");
             Assert.That(FindEntry(result, "Extra"), Is.Null);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Added compiled-interface members must surface as Skipped, not drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -1268,10 +1268,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, "AddedVirtual", "vtable slot");
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Skipped added declarations must not fire fields/initializers drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -1292,8 +1292,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: null);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.removedMembers, Is.Not.Null);
-            Assert.That(result.Output.removedMembers, Is.Empty);
+            Assert.That(result.Output.files[0].removedMembers, Is.Not.Null);
+            Assert.That(result.Output.files[0].removedMembers, Is.Empty);
         }
 
         /// <summary>
@@ -1324,7 +1324,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasRemovedMemberName(result, nameof(HotReloadAddedMemberHost.ExistingValue));
             Assert.That(
                 HasRemovedSignature(
-                    result.Output,
+                    result.Output.files[0],
                     typeof(HotReloadAddedMemberHost).FullName,
                     nameof(HotReloadAddedMemberHost.ExistingValue)),
                 Is.True);
@@ -1351,8 +1351,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue), "vtable slot");
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue)), Is.Null);
-            Assert.That(result.Output.removedMembers, Is.Empty);
-            Assert.That(result.Output.removedMethodSignatures, Is.Empty);
+            Assert.That(result.Output.files[0].removedMembers, Is.Empty);
+            Assert.That(result.Output.files[0].removedMethodSignatures, Is.Empty);
         }
 
         /// <summary>
@@ -1403,7 +1403,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasRemovedMemberName(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
             Assert.That(
                 HasRemovedSignature(
-                    result.Output,
+                    result.Output.files[0],
                     typeof(HotReloadAddedMemberHost).FullName,
                     nameof(HotReloadAddedMemberHost.ExistingCaller),
                     "System.Int32"),
@@ -1430,8 +1430,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasRemovedMemberName(result, nameof(HotReloadAddedMemberPartialHost.PartialRemoved));
-            Assert.That(result.Output.removedMethodSignatures, Is.Not.Null);
-            Assert.That(result.Output.removedMethodSignatures, Is.Empty);
+            Assert.That(result.Output.files[0].removedMethodSignatures, Is.Not.Null);
+            Assert.That(result.Output.files[0].removedMethodSignatures, Is.Empty);
         }
 
         /// <summary>
@@ -1513,8 +1513,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static void AssertHasRemovedMemberName(TransformWorkerClientResult result, string name)
         {
-            Assert.That(result.Output.removedMembers, Is.Not.Null);
-            foreach (TransformWorkerRemovedMemberDto removed in result.Output.removedMembers)
+            Assert.That(result.Output.files[0].removedMembers, Is.Not.Null);
+            foreach (TransformWorkerRemovedMemberDto removed in result.Output.files[0].removedMembers)
             {
                 if (removed.kind == HotReloadConstants.RemovedMemberKindMethod && removed.name == name)
                 {
@@ -1526,17 +1526,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private static bool HasRemovedSignature(
-            TransformWorkerOutputDto output,
+            TransformWorkerFileOutputDto fileOutput,
             string typeMetadataName,
             string methodName,
             params string[] parameterTypeFullNames)
         {
-            if (output.removedMethodSignatures == null)
+            if (fileOutput.removedMethodSignatures == null)
             {
                 return false;
             }
 
-            foreach (TransformWorkerRemovedMethodSignatureDto signature in output.removedMethodSignatures)
+            foreach (TransformWorkerRemovedMethodSignatureDto signature in fileOutput.removedMethodSignatures)
             {
                 if (signature.typeMetadataName != typeMetadataName || signature.methodName != methodName)
                 {
@@ -1720,12 +1720,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
-                sourcePath = sourcePath,
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = sourcePath,
+                        projectRelativePath = projectRelativePath,
+                        snapshotSource = snapshotSource
+                    }
+                },
                 defines = compilationAssembly.defines ?? Array.Empty<string>(),
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = targetDllPath,
-                snapshotSource = snapshotSource,
-                projectRelativePath = projectRelativePath,
                 assemblySourcePaths = assemblySourcePaths,
                 excludedMethodKeys = excludedMethodKeys ?? Array.Empty<string>(),
                 excludedAddedMethodKeys = excludedAddedMethodKeys ?? Array.Empty<string>()

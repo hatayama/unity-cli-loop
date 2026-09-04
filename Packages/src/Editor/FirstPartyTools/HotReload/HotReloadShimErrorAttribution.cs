@@ -11,20 +11,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>
         /// Maps each shim compile error to the entry whose original-source [sourceStartLine,
         /// sourceEndLine] contains its #line-mapped location in the same user file. Returns null
-        /// if any error is unattributable (wrong/empty file, scaffold path, or outside every
+        /// if any error is unattributable (unknown/empty file, scaffold path, or outside every
         /// entry range) — method isolation cannot fix those.
         /// </summary>
         internal static ShimCompileErrorAttribution AttributeErrorsToEntries(
             TransformWorkerEntryDto[] entries,
-            IReadOnlyList<HotReloadShimCompileError> errors,
-            string projectRelativePath)
+            IReadOnlyList<HotReloadShimCompileError> errors)
         {
             Dictionary<TransformWorkerEntryDto, List<string>> errorMessagesByEntry =
                 new Dictionary<TransformWorkerEntryDto, List<string>>();
             foreach (HotReloadShimCompileError error in errors)
             {
-                TransformWorkerEntryDto matchedEntry =
-                    FindEntryForError(entries, error, projectRelativePath);
+                TransformWorkerEntryDto matchedEntry = FindEntryForError(entries, error);
                 if (matchedEntry == null)
                 {
                     return null;
@@ -47,18 +45,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static TransformWorkerEntryDto FindEntryForError(
             TransformWorkerEntryDto[] entries,
-            HotReloadShimCompileError error,
-            string projectRelativePath)
+            HotReloadShimCompileError error)
         {
-            if (string.IsNullOrEmpty(error.File) || string.IsNullOrEmpty(projectRelativePath))
-            {
-                return null;
-            }
-
-            // Why suffix-tolerant compare (not ordinal equality): the three shim-compile backends
-            // report file as #line literal, absolute path, or temp scaffold path depending on the
-            // fallback stage — HotReloadSourcePathNormalizer already encodes that contract.
-            if (!HotReloadSourcePathNormalizer.PathsReferToSameFile(error.File, projectRelativePath))
+            if (string.IsNullOrEmpty(error.File))
             {
                 return null;
             }
@@ -70,8 +59,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int matchCount = 0;
             foreach (TransformWorkerEntryDto entry in entries)
             {
+                // Why per entry (not once per error): one shim assembly can host several edited
+                // files, so the error's file decides which file's entries may match at all.
+                // Why suffix-tolerant compare (not ordinal equality): the three shim-compile
+                // backends report file as #line literal, absolute path, or temp scaffold path
+                // depending on the fallback stage — HotReloadSourcePathNormalizer encodes that.
+                bool sameFile = !string.IsNullOrEmpty(entry.sourceProjectRelativePath)
+                    && HotReloadSourcePathNormalizer.PathsReferToSameFile(
+                        error.File,
+                        entry.sourceProjectRelativePath);
                 bool hasKnownRange = entry.sourceStartLine > 0 && entry.sourceEndLine > 0;
-                if (hasKnownRange && error.Line >= entry.sourceStartLine && error.Line <= entry.sourceEndLine)
+                if (sameFile && hasKnownRange && error.Line >= entry.sourceStartLine && error.Line <= entry.sourceEndLine)
                 {
                     matchedEntry = entry;
                     matchCount++;
