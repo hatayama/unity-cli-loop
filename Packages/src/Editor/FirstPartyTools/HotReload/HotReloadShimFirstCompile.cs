@@ -26,28 +26,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadShimCompileResult CompileResult,
             string[] AddedFieldNames,
             string[] AddedConstNames)> ResolveEntriesToPatchAsync(
+            HotReloadApplyContext context,
+            HotReloadFileSinks sinks,
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
-            TransformWorkerInputDto workerInput,
-            TransformWorkerOutputDto workerOutput,
-            UnityCompilationAssembly compilationAssembly,
-            string targetDllPath,
-            string[] defines,
-            string assemblyResolvePath,
-            string projectRelativePath,
-            string correlationId,
             string[] addedFieldNames,
-            HashSet<string> snapshotLabels,
-            HashSet<string> snapshotAddedLabels,
-            List<HotReloadMethodOutcome> outcomes,
-            List<string> warnings,
-            List<string> suppressedPausePointIds,
-            List<string> retargetedPausePointIds,
             int unchangedMethodCount,
-            List<string> siblingDerivedWarnings,
             int revertedUnchangedCount,
             CancellationToken ct)
         {
-            string[] addedConstNames = workerOutput.addedConstNames;
+            Debug.Assert(context != null, "context must not be null.");
+            Debug.Assert(sinks != null, "sinks must not be null.");
+            string[] addedConstNames = context.WorkerOutput.addedConstNames;
             if (gateResult.UsedWorkerRetry)
             {
                 addedFieldNames = gateResult.Isolation.AddedFieldNames;
@@ -56,15 +45,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     return (
                         new HotReloadFileProcessResult(
-                            outcomes,
-                            warnings,
+                            sinks.Outcomes,
+                            sinks.Warnings,
                             0,
-                            suppressedPausePointIds,
+                            sinks.SuppressedPausePointIds,
                             new List<string>(),
                             unchangedMethodCount,
-                            retargetedPausePointIds,
+                            sinks.RetargetedPausePointIds,
                             addedFieldNames: null,
-                            sourceContentSha256: workerOutput.sourceContentSha256,
+                            sourceContentSha256: context.WorkerOutput.sourceContentSha256,
                             revertedUnchangedCount: revertedUnchangedCount),
                         null,
                         null,
@@ -80,9 +69,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     addedConstNames);
             }
 
-            if (string.IsNullOrEmpty(workerOutput.shimSource)
-                || workerOutput.entries == null
-                || workerOutput.entries.Length == 0)
+            if (string.IsNullOrEmpty(context.WorkerOutput.shimSource)
+                || context.WorkerOutput.entries == null
+                || context.WorkerOutput.entries.Length == 0)
             {
                 // Why only on this success path: deleting an added method and restoring callers
                 // yields empty entries, so the post-shim-compile BeginFileGeneration never runs.
@@ -90,26 +79,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // clearing — same as leaving existing Harmony patches in place when apply does
                 // not succeed.
                 IReadOnlyList<string> addedLabelsAtClear =
-                    HotReloadAddedMemberRegistry.ListActiveMethodKeys(projectRelativePath);
-                HotReloadOrchestratorLog.LogHotReloadEmptyEntriesClear(addedLabelsAtClear, correlationId);
-                HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
-                HotReloadEntryApplier.CommitAddedFieldsForFile(projectRelativePath, workerOutput.addedFieldNames);
+                    HotReloadAddedMemberRegistry.ListActiveMethodKeys(context.ProjectRelativePath);
+                HotReloadOrchestratorLog.LogHotReloadEmptyEntriesClear(addedLabelsAtClear, context.CorrelationId);
+                HotReloadAddedMemberRegistry.BeginFileGeneration(context.ProjectRelativePath);
+                HotReloadEntryApplier.CommitAddedFieldsForFile(context.ProjectRelativePath, context.WorkerOutput.addedFieldNames);
                 // Why after the clear: a still-declared added method can be worker-skipped
                 // (virtual/generic), leaving entries empty while the registry drop is real.
                 HotReloadAppliedSourceLifecycle.AppendDeactivatedPatchesWarning(
-                    warnings,
-                    snapshotLabels,
-                    snapshotAddedLabels,
-                    projectRelativePath,
-                    workerOutput,
-                    outcomes);
+                    sinks.Warnings,
+                    context.SnapshotLabels,
+                    context.SnapshotAddedLabels,
+                    context.ProjectRelativePath,
+                    context.WorkerOutput,
+                    sinks.Outcomes);
                 return (
                     new HotReloadFileProcessResult(
-                        outcomes,
-                        warnings,
+                        sinks.Outcomes,
+                        sinks.Warnings,
                         0,
                         unchangedMethodCount: unchangedMethodCount,
-                        sourceContentSha256: workerOutput.sourceContentSha256,
+                        sourceContentSha256: context.WorkerOutput.sourceContentSha256,
                         revertedUnchangedCount: revertedUnchangedCount),
                     null,
                     null,
@@ -118,14 +107,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             ShimFirstCompileResult firstCompile = await CompileShimFirstPassAsync(
-                workerInput,
-                workerOutput,
-                compilationAssembly,
-                targetDllPath,
-                defines,
-                assemblyResolvePath,
-                correlationId,
-                siblingDerivedWarnings,
+                context.WorkerInput,
+                context.WorkerOutput,
+                context.CompilationAssembly,
+                context.TargetDllPath,
+                context.Defines,
+                context.AssemblyResolvePath,
+                context.CorrelationId,
+                sinks.SiblingDerivedWarnings,
                 ct).ConfigureAwait(false);
             if (firstCompile.AddedFieldNames != null)
             {
@@ -134,14 +123,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (firstCompile.FileFailed)
             {
-                outcomes.AddRange(firstCompile.Outcomes);
+                sinks.Outcomes.AddRange(firstCompile.Outcomes);
                 return (
                     new HotReloadFileProcessResult(
-                        outcomes,
-                        warnings,
+                        sinks.Outcomes,
+                        sinks.Warnings,
                         0,
                         unchangedMethodCount: unchangedMethodCount,
-                        sourceContentSha256: workerOutput.sourceContentSha256,
+                        sourceContentSha256: context.WorkerOutput.sourceContentSha256,
                         revertedUnchangedCount: revertedUnchangedCount),
                     null,
                     null,
@@ -149,20 +138,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     addedConstNames);
             }
 
-            outcomes.AddRange(firstCompile.Outcomes);
+            sinks.Outcomes.AddRange(firstCompile.Outcomes);
             if (firstCompile.EntriesToPatch.Length == 0)
             {
                 return (
                     new HotReloadFileProcessResult(
-                        outcomes,
-                        warnings,
+                        sinks.Outcomes,
+                        sinks.Warnings,
                         0,
-                        suppressedPausePointIds,
+                        sinks.SuppressedPausePointIds,
                         new List<string>(),
                         unchangedMethodCount,
-                        retargetedPausePointIds,
+                        sinks.RetargetedPausePointIds,
                         addedFieldNames: null,
-                        sourceContentSha256: workerOutput.sourceContentSha256,
+                        sourceContentSha256: context.WorkerOutput.sourceContentSha256,
                         revertedUnchangedCount: revertedUnchangedCount),
                     null,
                     null,
