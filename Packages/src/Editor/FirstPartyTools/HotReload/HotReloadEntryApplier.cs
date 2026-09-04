@@ -53,12 +53,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     revertedUnchangedCount: revertedUnchangedCount);
             }
 
-            HotReloadShimRegistry.BeginFileGeneration(
+            HotReloadFileGenerations.BeginFileGeneration(
                 context.ProjectRelativePath,
                 compileResult.AssemblyBytes,
                 compileResult.PdbBytes,
                 compileResult.Assembly);
-            HotReloadAddedMemberRegistry.BeginFileGeneration(context.ProjectRelativePath);
             CommitAddedFieldsForFile(context.ProjectRelativePath, addedFieldNames);
             // Why bind again: phase 1 already bound to detect failures; phase 2 keeps the
             // historical apply order so a successful preflight still runs Bind before Patch.

@@ -148,7 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
             HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
             IReadOnlyList<string> addedKeys =
-                HotReloadAddedMemberRegistry.ListActiveMethodKeys(projectRelativePath);
+                HotReloadFileGenerations.ListActiveAddedMethodKeys(projectRelativePath);
             for (int index = 0; index < addedKeys.Count; index++)
             {
                 labels.Add(addedKeys[index]);
