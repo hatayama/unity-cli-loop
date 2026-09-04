@@ -20,5 +20,6 @@ internal enum AccessorKind
     FieldRef,
     MethodDelegate,
     PropertyGetter,
-    PropertySetter
+    PropertySetter,
+    EventBackingFieldRef
 }

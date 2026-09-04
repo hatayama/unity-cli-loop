@@ -145,6 +145,8 @@ internal static class TypeEmitPlanner
             return (shimTypeCounter, globalShimMethodCounter);
         }
 
+        typeState.CompiledType = compiledType;
+
         AddedFieldClassifier.ClassifyAddedFields(
             typeState,
             semanticModel,

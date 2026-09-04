@@ -50,6 +50,7 @@ internal static class PropertyGetterEmitter
                     propertyDeclaration,
                     typeState.TypeDeclaration,
                     typeState.TypeSymbol,
+                    typeState.CompiledType,
                     typeState.TypeMetadataNameFromSyntax,
                     semanticModel,
                     root,
@@ -81,6 +82,7 @@ internal static class PropertyGetterEmitter
             PropertyDeclarationSyntax propertyDeclaration,
             TypeDeclarationSyntax typeDeclaration,
             INamedTypeSymbol typeSymbol,
+            INamedTypeSymbol compiledType,
             string typeMetadataNameFromSyntax,
             SemanticModel semanticModel,
             CompilationUnitSyntax root,
@@ -175,6 +177,7 @@ internal static class PropertyGetterEmitter
             getterSymbol,
             getterBodyNode,
             semanticModel,
+            compiledType,
             addedMethodCatalog,
             addedFieldCatalog,
             skipped);
