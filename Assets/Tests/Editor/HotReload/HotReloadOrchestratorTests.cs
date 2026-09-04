@@ -1858,7 +1858,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// exercises the StaticFieldRefAccess binding rather than only the generated shim text:
         /// a wrong backing-field name or FieldInfo would fail the bind and leave the compiled
         /// body in place. 20 means every patch ran (2 net subscriptions x 5 per handled x 2
-        /// invokes); 2 means the compiled bodies did.
+        /// invokes); 1 means the compiled bodies did.
         /// </summary>
         [Test]
         public async Task Run_StaticFieldLikeEventFile_PatchesRaiserAndRunsThroughStaticAccessor()
@@ -1884,7 +1884,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 HotReloadStaticEventFixture.HandledCount,
                 Is.EqualTo(20),
-                "20 means the static accessor bound and every patch ran; 2 means the compiled "
+                "20 means the static accessor bound and every patch ran; 1 means the compiled "
                 + "bodies did.\n" + FormatOutcomes(result));
         }
 
@@ -1892,7 +1892,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// What: a field-like event raised from inside a lambda patches too. The closure body
         /// already needs the accessor-rewrite path, so this pins that the event rewrite composes
         /// with it. 20 means all three patches ran (2 subscriptions x 5 per handled x 2 invokes);
-        /// 2 means none of them did.
+        /// 1 means none of them did.
         /// </summary>
         [Test]
         public async Task Run_FieldLikeEventRaisedInLambda_PatchesRaiser()
@@ -1916,7 +1916,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 fixture.HandledCount,
                 Is.EqualTo(20),
-                "20 means every patch ran; 2 means the compiled bodies did.\n" + FormatOutcomes(result));
+                "20 means every patch ran; 1 means the compiled bodies did.\n" + FormatOutcomes(result));
         }
 
         /// <summary>
