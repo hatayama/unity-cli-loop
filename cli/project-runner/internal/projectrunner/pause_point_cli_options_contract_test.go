@@ -242,10 +242,10 @@ func assertPausePointCLIOnlyFlagNames(
 	}
 }
 
-// Verifies every await-pause-point and pause-point-status help table row has a description. A
+// Verifies every await, status, and clear CLI-only help table row has a description. A
 // names-only listing is how --help used to render these commands, so an empty Description would
 // recreate that gap even after the renderer learned to print a second column.
-func TestPausePointAwaitAndStatusCLIOnlyOptionsHaveDescriptions(t *testing.T) {
+func TestPausePointAwaitStatusAndClearCLIOnlyOptionsHaveDescriptions(t *testing.T) {
 	for _, option := range tooldocs.PausePointAwaitCLIOnlyOptions() {
 		if option.Description == "" {
 			t.Errorf("await-pause-point --%s has an empty description", option.FlagName)
