@@ -26,9 +26,12 @@ internal static class AddedFieldSkipReasons
         + "Run 'uloop compile' to add them.";
 
     public const string InitializerNotLiteralOrExternalStatic =
-        "Added field initializer is not a literal or externally visible static member; "
-        + "the shim lambda cannot use instance, host-type, or same-file added members. "
-        + "Run 'uloop compile'.";
+        "Added field initializer is not a literal or an externally visible static member "
+        + "(object creation and instance, host-type, or same-file added members cannot run in "
+        + "the shim lambda). Drop the initializer and assign the field lazily inside the patched "
+        + "method with 'if (_field == null) { _field = ...; }' - an added field without an "
+        + "initializer applies without compiling ('??=' is not rewritable). "
+        + "Or run 'uloop compile'.";
 
     public const string FieldTypeNotExternallyVisible =
         "Added field type is not visible to the shim assembly. Run 'uloop compile'.";
