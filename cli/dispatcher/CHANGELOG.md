@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.3.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.2.2...dispatcher-v3.3.0) (2026-09-04)
+
+
+### Features
+
+* Bring the Unity Editor to the front faster on macOS ([#2569](https://github.com/hatayama/unity-cli-loop/issues/2569)) ([8dc9f74](https://github.com/hatayama/unity-cli-loop/commit/8dc9f74e9203f2e61ae3eeb2e5f7980851a7c16e))
+* enable-pause-point can capture values right after the line runs with --snapshot-timing post-line ([#2543](https://github.com/hatayama/unity-cli-loop/issues/2543)) ([54aab03](https://github.com/hatayama/unity-cli-loop/commit/54aab031ccbc1fb980f77a10edad499f018c05d2))
+* run-tests can filter by test class name ([#2536](https://github.com/hatayama/unity-cli-loop/issues/2536)) ([de91193](https://github.com/hatayama/unity-cli-loop/commit/de911932f26894f34bc9a26f1b6cc79e5c4a1a89))
+* run-tests can keep the project's Enter Play Mode settings and survive the Domain Reload with --respect-enter-play-mode-settings ([#2529](https://github.com/hatayama/unity-cli-loop/issues/2529)) ([bec8e63](https://github.com/hatayama/unity-cli-loop/commit/bec8e63d7c41288178c8be56af8c2156f9eb1af7))
+* Unity comes to the front faster on Windows ([#2568](https://github.com/hatayama/unity-cli-loop/issues/2568)) ([499c72e](https://github.com/hatayama/unity-cli-loop/commit/499c72ef21ff09ac1e8eba2b4d838e2b5fee0074))
+
+
+### Bug Fixes
+
+* First-run runner download now explains GitHub API rate limits and how to recover ([#2533](https://github.com/hatayama/unity-cli-loop/issues/2533)) ([fe3e1f3](https://github.com/hatayama/unity-cli-loop/commit/fe3e1f3d2fc180722480059018cc26068c567a8f))
+* **hot-reload:** report stale patches and stop silent patch loss on run-tests ([#2588](https://github.com/hatayama/unity-cli-loop/issues/2588)) ([76b5af7](https://github.com/hatayama/unity-cli-loop/commit/76b5af777ac1891f906806907d44aaceecfb02a8))
+* **pause-point:** accept --file/--line on clear-pause-point ([#2585](https://github.com/hatayama/unity-cli-loop/issues/2585)) ([e32591c](https://github.com/hatayama/unity-cli-loop/commit/e32591cfad069704c8f1d63dd74baf16fddbe0eb))
+
 ## [3.2.2](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.2.1...dispatcher-v3.2.2) (2026-09-02)
 
 
