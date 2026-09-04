@@ -204,7 +204,7 @@ const (
 	// against a compiled map that no longer matches the editor after a hot reload. Kept as a
 	// single constant so the two hints stay in sync instead of drifting copies of the same
 	// diagnosis.
-	pausePointNonFiringPatternsHint = "If the target line never hit despite the trigger firing, check the non-firing patterns: " +
+	pausePointNonFiringPatternsHint = "If the target line never hit, check the non-firing patterns: " +
 		"(0) the awaited game event never occurred while the marker was armed — check the game state with execute-dynamic-code before suspecting dispatch; " +
 		"(1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; " +
 		"(2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; " +
