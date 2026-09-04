@@ -115,7 +115,7 @@ func runDispatcherPinFreshnessCheck(
 	if sharedversion.IsLessThan(pinnedVersion, newestVersion) {
 		writeDispatcherPinFreshnessLine(stderr, fmt.Sprintf(
 			"%s: pin records %s but the newest stable dispatcher release is %s. "+
-				"Merge the automated pin-stamp pull request, or run stamp-dispatcher-pin --tag %s.",
+				"Re-run the dispatcher-publish post-publish job, or run stamp-dispatcher-pin --tag %s.",
 			dispatcherPinFreshnessCommandName, pinnedTag, newestTag, newestTag))
 		return 1
 	}

@@ -393,8 +393,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
-      actions: write
     steps:
       - name: Checkout approved event commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -443,20 +441,32 @@ jobs:
 
       # Fresh installs follow the package pin, so a published stable dispatcher
       # only reaches new users once the pin records it. Pre-releases are never
-      # stamped on main.
-      - name: Open dispatcher pin stamp pull request
+      # stamped on main. The stamp is pushed to main directly: its content is
+      # fully machine-verified against the release attestations, and the human
+      # gate for the release itself is the cli-release environment approval.
+      # GITHUB_TOKEN cannot bypass the main branch ruleset, so the push uses a
+      # GitHub App token whose App is a ruleset bypass actor
+      # (docs/dispatcher-pin-release-order.md).
+      - name: Mint dispatcher pin push token
+        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'
+        id: dispatcher-pin-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.DISPATCHER_PIN_APP_ID }}
+          private-key: ${{ secrets.DISPATCHER_PIN_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Push dispatcher pin stamp to main
         if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'
         working-directory: cli/release-automation
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ steps.dispatcher-pin-token.outputs.token }}
           RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
         run: |
           set -eu
-          # The checkout kept no credentials, so give git the workflow token
+          # The checkout kept no credentials, so give git the App token
           # without ever printing it.
           gh auth setup-git
-          go run ./cmd/open-dispatcher-pin-pr \
-            --repo "${GITHUB_REPOSITORY}" \
+          go run ./cmd/push-dispatcher-pin \
             --tag "${RELEASE_TAG}" \
             --base-branch main

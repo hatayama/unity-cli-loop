@@ -240,7 +240,48 @@ test_winget_pull_request_follows_homebrew_update_for_stable_releases() {
   assert_winget_pull_request_contains '          --tag "${RELEASE_TAG}"'
   assert_winget_pull_request_contains "          --fork-repo hatayama/winget-pkgs"
   assert_before "      - name: Update Homebrew formula" "      - name: Open winget-pkgs pull request"
-  assert_before "      - name: Open winget-pkgs pull request" "      - name: Open dispatcher pin stamp pull request"
+  assert_before "      - name: Open winget-pkgs pull request" "      - name: Mint dispatcher pin push token"
+}
+
+pin_push_section() {
+  awk '
+    /^      - name: Push dispatcher pin stamp to main$/ { printing = 1 }
+    printing && /^      - name:/ && !/Push dispatcher pin stamp to main/ { exit }
+    printing { print }
+  ' "$WORKFLOW"
+}
+
+assert_pin_push_contains() {
+  expected=$1
+  if ! pin_push_section | grep -F -- "$expected" >/dev/null 2>&1; then
+    echo "Expected the pin push step to contain: $expected" >&2
+    exit 1
+  fi
+}
+
+# The stamp is pushed straight to main over a GitHub App token that bypasses the
+# branch ruleset, so the step must never fall back to GITHUB_TOKEN, must only run
+# for published stable releases, and must not carry pull request permissions.
+test_dispatcher_pin_is_pushed_to_main_with_the_app_token() {
+  assert_contains "      - name: Mint dispatcher pin push token"
+  assert_contains "        uses: actions/create-github-app-token@"
+  assert_contains '          app-id: ${{ vars.DISPATCHER_PIN_APP_ID }}'
+  assert_contains '          private-key: ${{ secrets.DISPATCHER_PIN_APP_PRIVATE_KEY }}'
+  assert_contains "          permission-contents: write"
+  assert_post_publish_before "      - name: Mint dispatcher pin push token" "      - name: Push dispatcher pin stamp to main"
+  assert_pin_push_contains "        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'"
+  assert_pin_push_contains '          GH_TOKEN: ${{ steps.dispatcher-pin-token.outputs.token }}'
+  assert_pin_push_contains "          go run ./cmd/push-dispatcher-pin"
+  assert_pin_push_contains "            --base-branch main"
+  if pin_push_section | grep -F 'secrets.GITHUB_TOKEN' >/dev/null 2>&1; then
+    echo "The pin push step must not use GITHUB_TOKEN; it cannot bypass the main ruleset." >&2
+    exit 1
+  fi
+  assert_not_contains "open-dispatcher-pin-pr"
+  if post_publish_section | grep -E "^      (pull-requests|actions): write" >/dev/null 2>&1; then
+    echo "Post-publish no longer opens pull requests or dispatches workflows and must not hold those permissions." >&2
+    exit 1
+  fi
 }
 
 test_build_and_publish_jobs_have_separate_trust_boundaries
@@ -256,3 +297,4 @@ test_dispatcher_publish_rechecks_the_tag_before_publishing
 test_dispatcher_build_preserves_release_checks
 test_dispatcher_release_target_and_prerelease_state_remain_verified
 test_winget_pull_request_follows_homebrew_update_for_stable_releases
+test_dispatcher_pin_is_pushed_to_main_with_the_app_token
