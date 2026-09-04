@@ -243,12 +243,29 @@ test_winget_pull_request_follows_homebrew_update_for_stable_releases() {
   assert_before "      - name: Open winget-pkgs pull request" "      - name: Mint dispatcher pin push token"
 }
 
-pin_push_section() {
-  awk '
-    /^      - name: Push dispatcher pin stamp to main$/ { printing = 1 }
-    printing && /^      - name:/ && !/Push dispatcher pin stamp to main/ { exit }
+step_section() {
+  step_name=$1
+  awk -v step="      - name: $step_name" '
+    $0 == step { printing = 1; print; next }
+    printing && /^      - name:/ { exit }
     printing { print }
   ' "$WORKFLOW"
+}
+
+pin_token_section() {
+  step_section "Mint dispatcher pin push token"
+}
+
+pin_push_section() {
+  step_section "Push dispatcher pin stamp to main"
+}
+
+assert_pin_token_contains() {
+  expected=$1
+  if ! pin_token_section | grep -F -- "$expected" >/dev/null 2>&1; then
+    echo "Expected the pin token step to contain: $expected" >&2
+    exit 1
+  fi
 }
 
 assert_pin_push_contains() {
@@ -260,16 +277,24 @@ assert_pin_push_contains() {
 }
 
 # The stamp is pushed straight to main over a GitHub App token that bypasses the
-# branch ruleset, so the step must never fall back to GITHUB_TOKEN, must only run
-# for published stable releases, and must not carry pull request permissions.
+# branch ruleset, so the token must be minted and used only for published stable
+# releases, must carry Contents write and nothing else, and the push step must
+# never fall back to GITHUB_TOKEN or hold pull request permissions.
 test_dispatcher_pin_is_pushed_to_main_with_the_app_token() {
+  stable_release_guard="        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'"
   assert_contains "      - name: Mint dispatcher pin push token"
-  assert_contains "        uses: actions/create-github-app-token@"
-  assert_contains '          app-id: ${{ vars.DISPATCHER_PIN_APP_ID }}'
-  assert_contains '          private-key: ${{ secrets.DISPATCHER_PIN_APP_PRIVATE_KEY }}'
-  assert_contains "          permission-contents: write"
+  assert_pin_token_contains "$stable_release_guard"
+  assert_pin_token_contains "        id: dispatcher-pin-token"
+  assert_pin_token_contains "        uses: actions/create-github-app-token@"
+  assert_pin_token_contains '          app-id: ${{ vars.DISPATCHER_PIN_APP_ID }}'
+  assert_pin_token_contains '          private-key: ${{ secrets.DISPATCHER_PIN_APP_PRIVATE_KEY }}'
+  assert_pin_token_contains "          permission-contents: write"
+  if pin_token_section | grep -E "^          permission-" | grep -v "permission-contents: write" >/dev/null 2>&1; then
+    echo "The pin token must request Contents write and no other App permission." >&2
+    exit 1
+  fi
   assert_post_publish_before "      - name: Mint dispatcher pin push token" "      - name: Push dispatcher pin stamp to main"
-  assert_pin_push_contains "        if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'"
+  assert_pin_push_contains "$stable_release_guard"
   assert_pin_push_contains '          GH_TOKEN: ${{ steps.dispatcher-pin-token.outputs.token }}'
   assert_pin_push_contains "          go run ./cmd/push-dispatcher-pin"
   assert_pin_push_contains "            --base-branch main"

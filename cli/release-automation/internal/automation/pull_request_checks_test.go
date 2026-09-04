@@ -9,7 +9,7 @@ import (
 )
 
 func TestDispatchPullRequestCheckWorkflowsUsesTheGivenHeadRef(t *testing.T) {
-	// Verifies each required workflow is dispatched on the head ref passed in, not on a release-please branch name.
+	// Verifies each required workflow is dispatched on exactly the head ref passed in and the log names the pull request.
 	commands := []string{}
 	deps := releasePRCheckDeps{
 		now:   func() time.Time { return time.Unix(0, 0).UTC() },
