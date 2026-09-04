@@ -49,9 +49,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
                 pressWasApplied: false);
 
             Assert.That(response.Success, Is.True);
-            Assert.That(
-                response.Message,
-                Does.Contain("safe to retry after resume"));
+            Assert.That(response.Message, Does.Contain("queued input edge was discarded"));
+            Assert.That(response.Message, Does.Contain("never observed a press"));
+            Assert.That(response.Message, Does.Contain("safe to retry after resume"));
             Assert.That(response.Action, Is.EqualTo(UnityCliLoopKeyboardAction.Press.ToString()));
             Assert.That(response.KeyName, Is.EqualTo("Space"));
             Assert.That(response.InterruptedByPausePoint, Is.True);
@@ -126,6 +126,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
                 pressWasApplied: false);
 
             Assert.That(response.PressDeliveredToGame, Is.False);
+            Assert.That(response.Message, Does.Contain("queued input edge was discarded"));
+            Assert.That(response.Message, Does.Contain("never observed a press"));
             Assert.That(response.Message, Does.Contain("safe to retry after resume"));
         }
 
