@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => new[] { (AssetPath: ScenePath, IsDirty: false) },
                 _ => (true, ChangedTime, 20),
                 () => Array.Empty<string>(),
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -57,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     saveDirtyOpenScenesWasCalled = true;
                     return Array.Empty<string>();
                 },
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     saveDirtyOpenScenesWasCalled = true;
                     return Array.Empty<string>();
                 },
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     saveDirtyOpenScenesWasCalled = true;
                     return Array.Empty<string>();
                 },
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -147,7 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => new[] { (AssetPath: ScenePath, IsDirty: false) },
                 _ => (true, ChangedTime, 20),
                 () => new[] { DirtyScenePath },
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -178,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     saveDirtyOpenScenesWasCalled = true;
                     return Array.Empty<string>();
                 },
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -193,275 +193,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public void FocusReturnService_WhenHoldSucceeds_EmitsHoldArmedVibeLog()
+        public void ResolveExternalSceneChanges_WhenMultipleCleanScenesChanged_PassesOnlyChangedPathsToReload()
         {
-            // Verifies successful Disallow arms held and emits the observability vibe event once.
-            bool autoRefreshHeld = false;
-            List<string> vibeOperations = new List<string>();
-            ExternalAssetFocusReturnService service = new ExternalAssetFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => false,
-                () => { },
-                () => { },
-                () => { },
-                logWarning: null,
-                logVibeInfo: (operation, message, context) => vibeOperations.Add(operation),
-                logVibeWarning: null);
-
-            service.HoldAutoRefreshIfNeeded();
-            service.HoldAutoRefreshIfNeeded();
-
-            Assert.That(autoRefreshHeld, Is.True);
-            Assert.That(vibeOperations, Is.EqualTo(new[] { "external_scene_hold_armed" }));
-        }
-
-        [Test]
-        public void FocusReturnService_WhenDisallowThrows_EmitsHoldFailedVibeLog()
-        {
-            // Verifies Disallow failures leave SessionState unheld and emit hold_failed vibe warning.
-            bool autoRefreshHeld = false;
-            List<string> vibeOperations = new List<string>();
-            ExternalAssetFocusReturnService service = new ExternalAssetFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => false,
-                () => throw new InvalidOperationException("kCodeReload"),
-                () => { },
-                () => { },
-                logWarning: _ => { },
-                logVibeInfo: null,
-                logVibeWarning: (operation, message, context) => vibeOperations.Add(operation));
-
-            service.HoldAutoRefreshIfNeeded();
-
-            Assert.That(autoRefreshHeld, Is.False);
-            Assert.That(vibeOperations, Is.EqualTo(new[] { "external_scene_hold_failed" }));
-        }
-
-        [Test]
-        public void FocusReturnService_WhenFocusIsLost_HoldsAutoRefreshOnce()
-        {
-            // Verifies focus loss suspends Unity Auto Refresh only once per unfocused interval.
-            bool autoRefreshHeld = false;
-            int disallowCallCount = 0;
-            int allowCallCount = 0;
-            ExternalAssetFocusReturnService service = CreateFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => false,
-                () => disallowCallCount++,
-                () => allowCallCount++,
-                () => { });
-
-            service.HandleFocusChanged(false);
-            service.HandleFocusChanged(false);
-
-            Assert.That(autoRefreshHeld, Is.True);
-            Assert.That(disallowCallCount, Is.EqualTo(1));
-            Assert.That(allowCallCount, Is.EqualTo(0));
-        }
-
-        [Test]
-        public void FocusReturnService_WhenHoldIfCurrentlyUnfocusedTwice_HoldsAutoRefreshOnce()
-        {
-            // Verifies Initialize-style unfocused Hold is idempotent (disallow once).
-            bool autoRefreshHeld = false;
-            int disallowCallCount = 0;
-            ExternalAssetFocusReturnService service = CreateFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => false,
-                () => disallowCallCount++,
-                () => { },
-                () => { });
-
-            service.HoldIfCurrentlyUnfocused();
-            service.HoldIfCurrentlyUnfocused();
-
-            Assert.That(autoRefreshHeld, Is.True);
-            Assert.That(disallowCallCount, Is.EqualTo(1));
-        }
-
-        [Test]
-        public void FocusReturnService_WhenDisallowThrows_DoesNotSetHeldFlag()
-        {
-            // Verifies kCodeReload Disallow failures leave SessionState unheld for later reconcile.
-            bool autoRefreshHeld = false;
-            List<string> warnings = new List<string>();
-            ExternalAssetFocusReturnService service = CreateFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => false,
-                () => throw new InvalidOperationException("kCodeReload"),
-                () => { },
-                () => { },
-                warning => warnings.Add(warning));
-
-            service.HoldAutoRefreshIfNeeded();
-
-            Assert.That(autoRefreshHeld, Is.False);
-            Assert.That(warnings.Count, Is.EqualTo(1));
-            Assert.That(warnings[0], Does.Contain("DisallowAutoRefresh"));
-            Assert.That(warnings[0], Does.Contain("InvalidOperationException"));
-        }
-
-        [Test]
-        public void FocusReturnService_WhenDisallowStopsFailing_ReconcileHoldsAutoRefresh()
-        {
-            // Verifies update reconcile arms Hold after transient Disallow failures without delayCall chains.
-            bool autoRefreshHeld = false;
-            bool disallowShouldThrow = true;
-            int disallowCallCount = 0;
-            ExternalAssetFocusReturnService service = CreateFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => false,
-                () =>
+            // Verifies the compile preflight reload delegate receives only the externally changed Scene paths.
+            const string ChangedSceneA = "Assets/Scenes/ChangedA.unity";
+            const string ChangedSceneB = "Assets/Scenes/ChangedB.unity";
+            const string UnchangedScene = "Assets/Scenes/Unchanged.unity";
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots =
+                new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
+            snapshots[ChangedSceneA] = (true, SavedTime, 10);
+            snapshots[ChangedSceneB] = (true, SavedTime, 10);
+            snapshots[UnchangedScene] = (true, SavedTime, 10);
+            string[] reloadedPaths = null;
+            ExternalSceneChangeResolver resolver = new ExternalSceneChangeResolver(
+                snapshots,
+                () => new[]
                 {
-                    disallowCallCount++;
-                    if (disallowShouldThrow)
-                    {
-                        throw new InvalidOperationException("kCodeReload");
-                    }
+                    (AssetPath: ChangedSceneA, IsDirty: false),
+                    (AssetPath: ChangedSceneB, IsDirty: false),
+                    (AssetPath: UnchangedScene, IsDirty: false)
                 },
-                () => { },
-                () => { },
-                _ => { });
+                assetPath => assetPath == UnchangedScene
+                    ? (true, SavedTime, 10)
+                    : (true, ChangedTime, 20),
+                () => Array.Empty<string>(),
+                paths =>
+                {
+                    reloadedPaths = paths;
+                    return true;
+                });
 
-            service.ReconcileAutoRefreshHoldWithFocus();
-            Assert.That(autoRefreshHeld, Is.False);
+            (bool CanProceed, string Message, string[] ScenePaths) result = resolver.ResolveExternalSceneChanges(
+                reloadExternalSceneChanges: true);
 
-            disallowShouldThrow = false;
-            service.ReconcileAutoRefreshHoldWithFocus();
-
-            Assert.That(autoRefreshHeld, Is.True);
-            Assert.That(disallowCallCount, Is.EqualTo(2));
-        }
-
-        [Test]
-        public void FocusReturnService_WhenFocusedAndHeld_ReconcileReleasesAfterPreflight()
-        {
-            // Verifies focused reconcile resolves external changes then releases a surviving Hold.
-            bool autoRefreshHeld = true;
-            List<string> events = new List<string>();
-            ExternalAssetFocusReturnService service = CreateFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => true,
-                () => events.Add("disallow"),
-                () => events.Add("allow"),
-                () => events.Add("preflight"));
-
-            service.ReconcileAutoRefreshHoldWithFocus();
-
-            Assert.That(autoRefreshHeld, Is.False);
-            Assert.That(events, Is.EqualTo(new[] { "preflight", "allow" }));
-        }
-
-        [Test]
-        public void FocusReturnService_WhenAllowThrows_KeepsHeldFlag()
-        {
-            // Verifies failed Allow leaves SessionState held so reconcile can retry without counter desync.
-            bool autoRefreshHeld = true;
-            List<string> warnings = new List<string>();
-            ExternalAssetFocusReturnService service = CreateFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => true,
-                () => { },
-                () => throw new InvalidOperationException("kCodeReload"),
-                () => { },
-                warning => warnings.Add(warning));
-
-            service.HandleFocusChanged(true);
-
-            Assert.That(autoRefreshHeld, Is.True);
-            Assert.That(warnings.Count, Is.EqualTo(1));
-            Assert.That(warnings[0], Does.Contain("AllowAutoRefresh"));
-        }
-
-        [Test]
-        public void FocusReturnService_WhenFocusReturns_RunsPreflightBeforeReleasingAutoRefresh()
-        {
-            // Verifies focus return resolves editor state before Unity Auto Refresh resumes.
-            bool autoRefreshHeld = true;
-            List<string> events = new List<string>();
-            ExternalAssetFocusReturnService service = CreateFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => true,
-                () => events.Add("disallow"),
-                () => events.Add("allow"),
-                () => events.Add("preflight"));
-
-            service.HandleFocusChanged(true);
-
-            Assert.That(autoRefreshHeld, Is.False);
-            Assert.That(events, Is.EqualTo(new[] { "preflight", "allow" }));
-        }
-
-        [Test]
-        public void FocusReturnService_WhenStartupFindsHeldAutoRefreshAndEditorIsFocused_RunsPreflightBeforeReleasingIt()
-        {
-            // Verifies focused startup recovery resolves editor state before releasing a reload-surviving hold.
-            bool autoRefreshHeld = true;
-            List<string> events = new List<string>();
-            ExternalAssetFocusReturnService service = CreateFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => true,
-                () => events.Add("disallow"),
-                () => events.Add("allow"),
-                () => events.Add("preflight"));
-
-            bool restoredHeldAutoRefresh = service.RestoreAutoRefreshIfHeld();
-
-            Assert.That(restoredHeldAutoRefresh, Is.True);
-            Assert.That(autoRefreshHeld, Is.False);
-            Assert.That(events, Is.EqualTo(new[] { "preflight", "allow" }));
-        }
-
-        [Test]
-        public void FocusReturnService_WhenStartupFindsHeldAutoRefreshAndEditorIsUnfocused_KeepsAutoRefreshHeld()
-        {
-            // Verifies unfocused startup recovery keeps Auto Refresh suspended until focus returns.
-            bool autoRefreshHeld = true;
-            int allowCallCount = 0;
-            int preflightCallCount = 0;
-            ExternalAssetFocusReturnService service = CreateFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => false,
-                () => { },
-                () => allowCallCount++,
-                () => preflightCallCount++);
-
-            bool restoredHeldAutoRefresh = service.RestoreAutoRefreshIfHeld();
-
-            Assert.That(restoredHeldAutoRefresh, Is.False);
-            Assert.That(autoRefreshHeld, Is.True);
-            Assert.That(allowCallCount, Is.EqualTo(0));
-            Assert.That(preflightCallCount, Is.EqualTo(0));
-        }
-
-        [Test]
-        public void FocusReturnService_WhenPreflightThrows_StillReleasesAutoRefresh()
-        {
-            // Verifies Auto Refresh is released even when focus-return preflight fails fast.
-            bool autoRefreshHeld = true;
-            int allowCallCount = 0;
-            ExternalAssetFocusReturnService service = CreateFocusReturnService(
-                () => autoRefreshHeld,
-                isHeld => autoRefreshHeld = isHeld,
-                () => true,
-                () => { },
-                () => allowCallCount++,
-                () => throw new InvalidOperationException("preflight failed"));
-
-            Assert.Throws<InvalidOperationException>(() => service.HandleFocusChanged(true));
-            Assert.That(autoRefreshHeld, Is.False);
-            Assert.That(allowCallCount, Is.EqualTo(1));
+            Assert.That(result.CanProceed, Is.True);
+            Assert.That(reloadedPaths, Is.EqualTo(new[] { ChangedSceneA, ChangedSceneB }));
         }
 
         [Test]
@@ -616,25 +382,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
             snapshots[ScenePath] = (true, SavedTime, 10);
             return snapshots;
-        }
-
-        private static ExternalAssetFocusReturnService CreateFocusReturnService(
-            Func<bool> getAutoRefreshHeld,
-            Action<bool> setAutoRefreshHeld,
-            Func<bool> isEditorFocused,
-            Action disallowAutoRefresh,
-            Action allowAutoRefresh,
-            Action resolveFocusReturnChanges,
-            Action<string> logWarning = null)
-        {
-            return new ExternalAssetFocusReturnService(
-                getAutoRefreshHeld,
-                setAutoRefreshHeld,
-                isEditorFocused,
-                disallowAutoRefresh,
-                allowAutoRefresh,
-                resolveFocusReturnChanges,
-                logWarning);
         }
     }
 }

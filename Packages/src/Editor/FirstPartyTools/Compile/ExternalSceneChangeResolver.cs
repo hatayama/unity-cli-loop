@@ -14,14 +14,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<(string AssetPath, bool IsDirty)[]> _getOpenScenes;
         private readonly Func<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> _readFileFingerprint;
         private readonly Func<string[]> _saveDirtyOpenScenesBeforeReload;
-        private readonly Func<bool> _reloadOpenSceneSetup;
+        private readonly Func<string[], bool> _reloadOpenSceneSetup;
 
         public ExternalSceneChangeResolver(
             Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots,
             Func<(string AssetPath, bool IsDirty)[]> getOpenScenes,
             Func<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> readFileFingerprint,
             Func<string[]> saveDirtyOpenScenesBeforeReload,
-            Func<bool> reloadOpenSceneSetup)
+            Func<string[], bool> reloadOpenSceneSetup)
         {
             Debug.Assert(snapshots != null, "snapshots must not be null");
             Debug.Assert(getOpenScenes != null, "getOpenScenes must not be null");
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            if (shouldReloadSceneSetup && !_reloadOpenSceneSetup())
+            if (shouldReloadSceneSetup && !_reloadOpenSceneSetup(changedScenePaths.ToArray()))
             {
                 return (false, CreateReloadFailureMessage(changedScenePaths.ToArray()), changedScenePaths.ToArray());
             }
