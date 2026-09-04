@@ -18,41 +18,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why preflight before BeginFileGeneration: a match/bind/CheckPatchable failure
         // must not replace the file's shim or added-member generation.
         internal static HotReloadFileProcessResult ApplyEntriesAndBuildResult(
-            string assemblyName,
-            string assemblyResolvePath,
-            string projectRelativePath,
+            HotReloadApplyContext context,
+            HotReloadFileSinks sinks,
             HotReloadShimCompileResult compileResult,
             TransformWorkerEntryDto[] entriesToPatch,
             string[] addedFieldNames,
             string[] addedConstNames,
-            TransformWorkerOutputDto workerOutput,
-            HashSet<string> snapshotLabels,
-            HashSet<string> snapshotAddedLabels,
-            List<HotReloadMethodOutcome> outcomes,
-            List<string> warnings,
-            List<string> suppressedPausePointIds,
-            List<string> retargetedPausePointIds,
             int unchangedMethodCount,
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates = null,
-            int revertedUnchangedCount = 0)
+            int revertedUnchangedCount)
         {
+            Debug.Assert(context != null, "context must not be null.");
+            Debug.Assert(sinks != null, "sinks must not be null.");
             HotReloadEntryResolution.Result resolution = HotReloadEntryResolution.ResolveEntries(
-                assemblyName,
-                assemblyResolvePath,
+                context.AssemblyName,
+                context.AssemblyResolvePath,
                 compileResult.Assembly,
                 entriesToPatch);
             if (!resolution.AllResolved)
             {
-                outcomes.AddRange(resolution.FailureOutcomes);
+                sinks.Outcomes.AddRange(resolution.FailureOutcomes);
                 return FinishFileResult(
-                    outcomes,
-                    warnings,
-                    snapshotLabels,
-                    snapshotAddedLabels,
-                    projectRelativePath,
-                    workerOutput,
-                    suppressedPausePointIds,
-                    retargetedPausePointIds,
+                    sinks.Outcomes,
+                    sinks.Warnings,
+                    context.SnapshotLabels,
+                    context.SnapshotAddedLabels,
+                    context.ProjectRelativePath,
+                    context.WorkerOutput,
+                    sinks.SuppressedPausePointIds,
+                    sinks.RetargetedPausePointIds,
                     unchangedMethodCount,
                     patchedCount: 0,
                     addedFieldNames: null,
@@ -61,12 +54,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadShimRegistry.BeginFileGeneration(
-                projectRelativePath,
+                context.ProjectRelativePath,
                 compileResult.AssemblyBytes,
                 compileResult.PdbBytes,
                 compileResult.Assembly);
-            HotReloadAddedMemberRegistry.BeginFileGeneration(projectRelativePath);
-            CommitAddedFieldsForFile(projectRelativePath, addedFieldNames);
+            HotReloadAddedMemberRegistry.BeginFileGeneration(context.ProjectRelativePath);
+            CommitAddedFieldsForFile(context.ProjectRelativePath, addedFieldNames);
             // Why bind again: phase 1 already bound to detect failures; phase 2 keeps the
             // historical apply order so a successful preflight still runs Bind before Patch.
             BindShimAccessors(compileResult.Assembly);
@@ -74,25 +67,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int patchedCount = ApplyResolvedEntries(
                 resolution.ResolvedEntries,
                 entriesToPatch,
-                assemblyResolvePath,
-                projectRelativePath,
-                outcomes,
-                warnings,
+                context.AssemblyResolvePath,
+                context.ProjectRelativePath,
+                sinks.Outcomes,
+                sinks.Warnings,
                 inlineRiskMethodLabels,
-                suppressedPausePointIds,
-                retargetedPausePointIds,
-                assemblyName,
-                oneShotCallerNoteCandidates);
+                sinks.SuppressedPausePointIds,
+                sinks.RetargetedPausePointIds,
+                context.AssemblyName,
+                sinks.OneShotCallerNoteCandidates);
 
             return FinishFileResult(
-                outcomes,
-                warnings,
-                snapshotLabels,
-                snapshotAddedLabels,
-                projectRelativePath,
-                workerOutput,
-                suppressedPausePointIds,
-                retargetedPausePointIds,
+                sinks.Outcomes,
+                sinks.Warnings,
+                context.SnapshotLabels,
+                context.SnapshotAddedLabels,
+                context.ProjectRelativePath,
+                context.WorkerOutput,
+                sinks.SuppressedPausePointIds,
+                sinks.RetargetedPausePointIds,
                 unchangedMethodCount,
                 patchedCount,
                 addedFieldNames,

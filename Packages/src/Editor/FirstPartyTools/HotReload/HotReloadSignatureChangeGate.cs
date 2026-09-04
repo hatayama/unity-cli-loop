@@ -3,11 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-using UnityEditor.Compilation;
-
 using UnityEngine;
-
-using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -21,21 +17,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// trigger means the scanner is not called.
         /// </summary>
         internal static async Task<SignatureChangeGateResult> TryApplySignatureChangeGateAsync(
-            string projectRoot,
-            string assemblyName,
-            TransformWorkerInputDto workerInput,
-            TransformWorkerOutputDto workerOutput,
-            UnityCompilationAssembly compilationAssembly,
-            string targetDllPath,
-            string[] defines,
-            string assemblyResolvePath,
-            string projectRelativePath,
-            string correlationId,
+            HotReloadApplyContext context,
             CancellationToken ct)
         {
-            TransformWorkerEntryDto[] entries = workerOutput.entries ?? Array.Empty<TransformWorkerEntryDto>();
+            Debug.Assert(context != null, "context must not be null.");
+            TransformWorkerEntryDto[] entries = context.WorkerOutput.entries ?? Array.Empty<TransformWorkerEntryDto>();
             TransformWorkerRemovedMethodSignatureDto[] removedSignatures =
-                workerOutput.removedMethodSignatures
+                context.WorkerOutput.removedMethodSignatures
                 ?? Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
             List<TransformWorkerEntryDto> replacementEntries = CollectReplacementEntries(entries);
             if (replacementEntries.Count == 0 && removedSignatures.Length == 0)
@@ -44,11 +32,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadCallSiteScanner.CompiledMethodIdentity[] targets = CollectScanTargets(
-                assemblyName,
+                context.AssemblyName,
                 replacementEntries,
                 removedSignatures);
             List<HotReloadCallSiteScanner.CallSiteHit> hits =
-                HotReloadCallSiteScanner.FindCallSites(projectRoot, targets).Hits;
+                HotReloadCallSiteScanner.FindCallSites(context.ProjectRoot, targets).Hits;
             HashSet<string> coveredKeys = HotReloadSignatureChangeCoverage.CollectCoveredMethodKeys(entries, targets);
             Dictionary<string, List<string>> uncoveredCallersByTarget =
                 HotReloadSignatureChangeCoverage.CollectUncoveredCallersByTarget(hits, coveredKeys);
@@ -70,31 +58,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadShimIsolation.IsolationExclusions exclusions = HotReloadShimIsolation.BuildIsolationExclusions(gatedReplacements, entries);
             HashSet<string> editedFileMethodKeys = HotReloadSignatureChangeCoverage.CollectEditedFileMethodKeys(
                 entries,
-                workerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>());
+                context.WorkerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>());
             List<HotReloadMethodOutcome> skippedOutcomes = BuildGatedReplacementSkipOutcomes(
                 gatedReplacements,
                 uncoveredCallersByTarget,
                 editedFileMethodKeys,
-                assemblyResolvePath,
-                projectRelativePath);
+                context.AssemblyResolvePath,
+                context.ProjectRelativePath);
             skippedOutcomes.AddRange(
                 HotReloadShimIsolation.BuildSkippedCallerOutcomes(
                     exclusions.CallerEntries,
-                    assemblyResolvePath,
+                    context.AssemblyResolvePath,
                     HotReloadConstants.SignatureChangedGatedCallerSkipReason));
 
             HotReloadShimIsolation.IsolationRetryRunResult retry = await HotReloadShimIsolation.RunIsolationRetryAsync(
-                workerInput,
+                context.WorkerInput,
                 exclusions,
                 new List<HotReloadMethodOutcome>(),
                 new List<HotReloadMethodOutcome>(),
-                compilationAssembly,
-                targetDllPath,
-                defines,
-                workerOutput.skipped,
-                assemblyResolvePath,
+                context.CompilationAssembly,
+                context.TargetDllPath,
+                context.Defines,
+                context.WorkerOutput.skipped,
+                context.AssemblyResolvePath,
                 HotReloadConstants.VibeLogIsolationTriggerSignatureChangeGate,
-                correlationId,
+                context.CorrelationId,
                 ct).ConfigureAwait(false);
             List<string> gatedReplacementMethodKeys =
                 CollectGatedReplacementMethodKeys(gatedReplacements);

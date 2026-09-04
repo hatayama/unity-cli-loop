@@ -2633,9 +2633,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadFileProcessResult fileResult =
                 HotReloadEntryApplier.ApplyEntriesAndBuildResult(
-                    typeof(HotReloadE2EFixture).Assembly.GetName().Name,
-                    projectRelativePath,
-                    projectRelativePath,
+                    CreateApplyContext(
+                        typeof(HotReloadE2EFixture).Assembly.GetName().Name,
+                        projectRelativePath,
+                        workerOutput),
+                    new HotReloadFileSinks(new List<string>(), null),
                     HotReloadShimCompileResult.SuccessResult(
                         typeof(HotReloadEntryApplier).Assembly,
                         new byte[] { 1 },
@@ -2643,14 +2645,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     entries,
                     addedFieldNames,
                     Array.Empty<string>(),
-                    workerOutput,
-                    new HashSet<string>(),
-                    new HashSet<string>(),
-                    new List<HotReloadMethodOutcome>(),
-                    new List<string>(),
-                    new List<string>(),
-                    new List<string>(),
-                    unchangedMethodCount: 0);
+                    unchangedMethodCount: 0,
+                    revertedUnchangedCount: 0);
 
             HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
                 fileResult.Outcomes,
@@ -2895,9 +2891,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 sourceContentSha256 = "direct-apply-preflight"
             };
             return HotReloadEntryApplier.ApplyEntriesAndBuildResult(
-                typeof(HotReloadCoreFixture).Assembly.GetName().Name,
-                projectRelativePath,
-                projectRelativePath,
+                CreateApplyContext(
+                    typeof(HotReloadCoreFixture).Assembly.GetName().Name,
+                    projectRelativePath,
+                    workerOutput),
+                new HotReloadFileSinks(new List<string>(), null),
                 HotReloadShimCompileResult.SuccessResult(
                     typeof(HotReloadOrchestratorTests).Assembly,
                     new byte[] { 1 },
@@ -2905,14 +2903,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 entries,
                 Array.Empty<string>(),
                 Array.Empty<string>(),
+                unchangedMethodCount: 0,
+                revertedUnchangedCount: 0);
+        }
+
+        /// <summary>
+        /// What: builds the apply-pipeline context these direct-apply tests need. The applier
+        /// reads only the assembly name, the file path and the worker output; the remaining
+        /// fields exist to satisfy the context's own preconditions.
+        /// </summary>
+        private static HotReloadApplyContext CreateApplyContext(
+            string assemblyName,
+            string projectRelativePath,
+            TransformWorkerOutputDto workerOutput)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string targetDllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                assemblyName + ".dll");
+            UnityEditor.Compilation.Assembly compilationAssembly = null;
+            foreach (UnityEditor.Compilation.Assembly assembly in CompilationPipeline.GetAssemblies())
+            {
+                if (assembly.name == assemblyName)
+                {
+                    compilationAssembly = assembly;
+                    break;
+                }
+            }
+
+            Assert.That(compilationAssembly, Is.Not.Null, "Compilation assembly missing: " + assemblyName);
+            return new HotReloadApplyContext(
+                projectRoot,
+                assemblyName,
+                projectRelativePath,
+                projectRelativePath,
+                "direct-apply",
+                compilationAssembly,
+                targetDllPath,
+                compilationAssembly.defines ?? Array.Empty<string>(),
+                new TransformWorkerInputDto { projectRelativePath = projectRelativePath },
                 workerOutput,
                 new HashSet<string>(),
-                new HashSet<string>(),
-                new List<HotReloadMethodOutcome>(),
-                new List<string>(),
-                new List<string>(),
-                new List<string>(),
-                unchangedMethodCount: 0);
+                new HashSet<string>());
         }
 
         private static HotReloadOrchestratorResult ToOrchestratorResult(

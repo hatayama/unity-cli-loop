@@ -81,10 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken ct)
         {
             Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
-            List<string> warnings = new List<string>();
-            List<string> suppressedPausePointIds = new List<string>();
-            List<string> retargetedPausePointIds = new List<string>();
+            HotReloadFileSinks sinks = new HotReloadFileSinks(siblingDerivedWarnings, oneShotCallerNoteCandidates);
 
             // CompilationPipeline / Application.dataPath require the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -97,8 +94,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string projectRoot) = HotReloadPatchTargetSupport.ResolvePatchTarget(
                 assemblyResolvePath,
                 workerSourcePath,
-                outcomes,
-                warnings,
+                sinks.Outcomes,
+                sinks.Warnings,
                 correlationId);
             if (earlyResolve != null)
             {
@@ -131,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath);
             if (!string.IsNullOrEmpty(siblingScan.ScanLimitWarning))
             {
-                siblingDerivedWarnings.Add(siblingScan.ScanLimitWarning);
+                sinks.SiblingDerivedWarnings.Add(siblingScan.ScanLimitWarning);
             }
 
             TransformWorkerInputDto workerInput = new TransformWorkerInputDto
@@ -151,9 +148,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOrchestratorLog.LogHotReloadWorkerResult(workerResult, correlationId);
             if (!workerResult.Success)
             {
-                outcomes.Add(
+                sinks.Outcomes.Add(
                     HotReloadMethodOutcome.Failed("(file)", workerResult.ErrorMessage, assemblyResolvePath));
-                return new HotReloadFileProcessResult(outcomes, warnings, 0);
+                return new HotReloadFileProcessResult(sinks.Outcomes, sinks.Warnings, 0);
             }
 
             TransformWorkerOutputDto workerOutput = workerResult.Output;
@@ -164,9 +161,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 assemblyName,
                 assemblyResolvePath,
-                outcomes,
-                warnings,
-                siblingDerivedWarnings);
+                sinks.Outcomes,
+                sinks.Warnings,
+                sinks.SiblingDerivedWarnings);
 
             TransformWorkerUnchangedMethodDto[] unchangedMethods =
                 workerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>();
@@ -179,19 +176,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 assemblyName,
                 unchangedMethods);
 
-            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = await HotReloadSignatureChangeGate.TryApplySignatureChangeGateAsync(
+            HotReloadApplyContext context = new HotReloadApplyContext(
                 projectRoot,
                 assemblyName,
-                workerInput,
-                workerOutput,
-                compilationAssembly,
-                targetDllPath,
-                defines,
                 assemblyResolvePath,
                 projectRelativePath,
                 correlationId,
+                compilationAssembly,
+                targetDllPath,
+                defines,
+                workerInput,
+                workerOutput,
+                snapshotLabels,
+                snapshotAddedLabels);
+
+            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = await HotReloadSignatureChangeGate.TryApplySignatureChangeGateAsync(
+                context,
                 ct).ConfigureAwait(false);
-            HotReloadWorkerNoticeAppender.AppendRetrySiblingConstDriftWarnings(siblingDerivedWarnings, gateResult.Isolation);
+            HotReloadWorkerNoticeAppender.AppendRetrySiblingConstDriftWarnings(sinks.SiblingDerivedWarnings, gateResult.Isolation);
             // Why after the gate: a gated replacement is not applied, so listing it under
             // "Removed members stay present... edited bodies no longer call them" is false.
             string removedMembersWarning = HotReloadRemovedMembersWarning.FormatRemovedMembersWarning(
@@ -200,11 +202,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 gateResult.GatedReplacementMethodKeys);
             if (removedMembersWarning != null)
             {
-                warnings.Add(removedMembersWarning);
+                sinks.Warnings.Add(removedMembersWarning);
             }
 
             HotReloadStalePatchOutcomes.Append(
-                outcomes,
+                sinks.Outcomes,
                 workerOutput,
                 gateResult.GatedReplacementMethodKeys,
                 projectRelativePath,
@@ -214,46 +216,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 // Why not apply first-pass entries: a gate retry null means the replacement was
                 // not isolated. Falling through would apply the unguarded return-type change.
-                outcomes.Add(
+                sinks.Outcomes.Add(
                     HotReloadMethodOutcome.Failed(
                         "(signature-change-gate)",
                         gateResult.FailureMessage,
                         assemblyResolvePath));
                 return new HotReloadFileProcessResult(
-                    outcomes,
-                    warnings,
+                    sinks.Outcomes,
+                    sinks.Warnings,
                     0,
                     unchangedMethodCount: unchangedMethodCount,
                     sourceContentSha256: workerOutput.sourceContentSha256,
                     revertedUnchangedCount: revertedUnchangedCount);
             }
 
-            outcomes.AddRange(gateResult.SkippedOutcomes);
-            warnings.AddRange(gateResult.Warnings);
+            sinks.Outcomes.AddRange(gateResult.SkippedOutcomes);
+            sinks.Warnings.AddRange(gateResult.Warnings);
 
             (HotReloadFileProcessResult earlyEntries,
                 TransformWorkerEntryDto[] entriesToPatch,
                 HotReloadShimCompileResult compileResult,
                 string[] resolvedAddedFieldNames,
                 string[] resolvedAddedConstNames) = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                context,
+                sinks,
                 gateResult,
-                workerInput,
-                workerOutput,
-                compilationAssembly,
-                targetDllPath,
-                defines,
-                assemblyResolvePath,
-                projectRelativePath,
-                correlationId,
                 addedFieldNames,
-                snapshotLabels,
-                snapshotAddedLabels,
-                outcomes,
-                warnings,
-                suppressedPausePointIds,
-                retargetedPausePointIds,
                 unchangedMethodCount,
-                siblingDerivedWarnings,
                 revertedUnchangedCount,
                 ct).ConfigureAwait(false);
             if (earlyEntries != null)
@@ -274,7 +263,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     gateResult.ScanTargetKeys);
                 if (lostReplacementKeys.Count > 0)
                 {
-                    outcomes.Add(
+                    sinks.Outcomes.Add(
                         HotReloadMethodOutcome.Failed(
                             "(signature-change-gate)",
                             string.Format(
@@ -282,8 +271,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                                 string.Join(", ", lostReplacementKeys)),
                             assemblyResolvePath));
                     return new HotReloadFileProcessResult(
-                        outcomes,
-                        warnings,
+                        sinks.Outcomes,
+                        sinks.Warnings,
                         0,
                         unchangedMethodCount: unchangedMethodCount,
                         sourceContentSha256: workerOutput.sourceContentSha256,
@@ -291,7 +280,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 HotReloadSignatureChangeCoverage.AppendSignatureChangeCallersRepatchedWarnings(
-                    warnings,
+                    sinks.Warnings,
                     entriesToPatch,
                     gateResult.Hits,
                     snapshotLabels);
@@ -300,22 +289,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
             HotReloadFileProcessResult applied = HotReloadEntryApplier.ApplyEntriesAndBuildResult(
-                assemblyName,
-                assemblyResolvePath,
-                projectRelativePath,
+                context,
+                sinks,
                 compileResult,
                 entriesToPatch,
                 addedFieldNames,
                 resolvedAddedConstNames,
-                workerOutput,
-                snapshotLabels,
-                snapshotAddedLabels,
-                outcomes,
-                warnings,
-                suppressedPausePointIds,
-                retargetedPausePointIds,
                 unchangedMethodCount,
-                oneShotCallerNoteCandidates,
                 revertedUnchangedCount);
             // Why after apply: earlier returns (gate fail, shim compile, coverage loss)
             // never applied the replacement, so leftover Active rows must not claim they
