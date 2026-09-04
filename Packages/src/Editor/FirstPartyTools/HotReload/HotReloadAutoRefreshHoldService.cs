@@ -157,10 +157,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private HotReloadAutoRefreshHoldSyncResult RefreshIfPreflightAllows()
         {
-            (bool canProceed, _, _) = _resolveBeforeRefresh();
+            (bool canProceed, string message, string[] scenePaths) = _resolveBeforeRefresh();
             _refreshDeferred = false;
             if (!canProceed)
             {
+                // Why log here: FlushDeferredRefresh from EnteredEditMode discards SyncResult,
+                // so apply/status/revert-all are not the only callers that must leave a trace.
+                _logVibeWarning(
+                    HotReloadAutoRefreshHoldConstants.VibeSceneRefreshBlocked,
+                    HotReloadAutoRefreshHoldConstants.SceneRefreshBlockedWarning,
+                    new { Message = message, ScenePaths = scenePaths });
                 return new HotReloadAutoRefreshHoldSyncResult(
                     false,
                     false,

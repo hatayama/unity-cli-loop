@@ -22,6 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal const string VibeReleaseDeferred = "hot_reload_auto_refresh_hold_release_deferred";
         internal const string VibeFailed = "hot_reload_auto_refresh_hold_failed";
         internal const string VibeReleaseFailed = "hot_reload_auto_refresh_hold_release_failed";
+        internal const string VibeSceneRefreshBlocked =
+            "hot_reload_auto_refresh_hold_scene_refresh_blocked";
 
         // Why 0.5s: matches the retired focus-loss hold; domain-reload throws need a later retry
         // without walking AssetDatabase every Editor update tick.

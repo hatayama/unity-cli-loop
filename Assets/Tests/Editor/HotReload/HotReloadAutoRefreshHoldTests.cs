@@ -278,6 +278,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.SceneRefreshWarning,
                 Is.EqualTo(HotReloadAutoRefreshHoldConstants.SceneRefreshBlockedWarning));
+            Assert.That(
+                environment.LoggedOperations,
+                Has.Exactly(1).EqualTo(HotReloadAutoRefreshHoldConstants.VibeSceneRefreshBlocked));
         }
 
         /// <summary>
