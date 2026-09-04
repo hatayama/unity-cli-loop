@@ -45,13 +45,17 @@ internal static class WorkerGroupPipeline
             syntaxTrees.Add(unit.SyntaxTree);
         }
 
-        // Why the first loaded unit's parse errors: reference resolution is assembly-wide, and a
-        // group with no loadable source has nowhere to report it — such a run emits no rows anyway.
-        List<string> referenceParseErrors = loadedUnits.Count > 0
-            ? loadedUnits[0].ParseErrors
-            : new List<string>();
+        // Why every loaded unit reports it: a missing reference is a problem of the whole assembly,
+        // not of one source, so each file's own result has to state it — reporting it on one unit
+        // would make the failure move as the input order changes. A run with no loadable source
+        // drops it, because such a run reports no per-file findings at all.
+        List<string> referenceParseErrors = new List<string>();
         (List<MetadataReference> references, MetadataReference targetTypesReference) =
             CollectMetadataReferences(input, referenceParseErrors);
+        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        {
+            loadedUnit.ParseErrors.AddRange(referenceParseErrors);
+        }
 
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: "UloopHotReloadTransformWorkerCompilation",
