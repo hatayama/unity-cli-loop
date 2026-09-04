@@ -1,5 +1,4 @@
 using System;
-using System.Reflection;
 
 using UnityEditor;
 using UnityEngine;
@@ -64,25 +63,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ReconcileNow();
         }
 
-        /// <summary>
-        /// Reports whether EditorApplication.update already has this type's reconcile handler.
-        /// </summary>
-        internal static bool IsReconcileRegistered()
-        {
-            FieldInfo[] fields = typeof(EditorApplication).GetFields(
-                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            for (int index = 0; index < fields.Length; index++)
-            {
-                if (SourceContainsHoldHandler(fields[index].GetValue(null)))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static void ReconcileOnUpdate()
+        // Why internal: EditMode tests match this handler by nameof after walking update.
+        internal static void ReconcileOnUpdate()
         {
             double now = EditorApplication.timeSinceStartup;
             if (now < _nextReconcileTime)
@@ -99,77 +81,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Sync(HotReloadPatcher.ActiveChangeCount);
         }
 
-        private static bool SourceContainsHoldHandler(object source)
-        {
-            if (source == null)
-            {
-                return false;
-            }
-
-            Delegate current = source as Delegate;
-            if (current != null)
-            {
-                return InvocationListContainsHoldHandler(current);
-            }
-
-            return EventTrackerContainsHoldHandler(source);
-        }
-
-        private static bool InvocationListContainsHoldHandler(Delegate current)
-        {
-            Delegate[] listeners = current.GetInvocationList();
-            for (int index = 0; index < listeners.Length; index++)
-            {
-                if (IsReconcileHandler(listeners[index]))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private static bool EventTrackerContainsHoldHandler(object source)
-        {
-            string typeName = source.GetType().Name;
-            if (typeName.IndexOf("EventWithPerformanceTracker", StringComparison.Ordinal) < 0)
-            {
-                return false;
-            }
-
-            MethodInfo getEnumerator = source.GetType().GetMethod(
-                "GetEnumerator",
-                BindingFlags.Instance | BindingFlags.Public);
-            if (getEnumerator == null || getEnumerator.GetParameters().Length != 0)
-            {
-                return false;
-            }
-
-            object enumerator = getEnumerator.Invoke(source, null);
-            if (enumerator == null)
-            {
-                return false;
-            }
-
-            MethodInfo moveNext = enumerator.GetType().GetMethod("MoveNext");
-            PropertyInfo currentProperty = enumerator.GetType().GetProperty("Current");
-            if (moveNext == null || currentProperty == null)
-            {
-                return false;
-            }
-
-            while ((bool)moveNext.Invoke(enumerator, null))
-            {
-                Delegate listener = currentProperty.GetValue(enumerator) as Delegate;
-                if (IsReconcileHandler(listener))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)
         {
             if (state != PlayModeStateChange.EnteredEditMode)
@@ -178,13 +89,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             FlushDeferredRefresh();
-        }
-
-        private static bool IsReconcileHandler(Delegate listener)
-        {
-            return listener != null
-                && listener.Method.DeclaringType == typeof(HotReloadAutoRefreshHold)
-                && listener.Method.Name == nameof(ReconcileOnUpdate);
         }
 
         private static HotReloadAutoRefreshHoldService ResolveService()

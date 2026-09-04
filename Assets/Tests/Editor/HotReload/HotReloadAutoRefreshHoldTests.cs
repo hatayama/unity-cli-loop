@@ -387,13 +387,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void Initialize_RegistersReconcileOnEditorApplicationUpdate()
         {
             Assert.That(
-                HotReloadAutoRefreshHold.IsReconcileRegistered(),
-                Is.True,
-                "HotReloadAutoRefreshHold.Initialize must subscribe ReconcileOnUpdate.");
-            Assert.That(
                 EditorUpdateContainsHoldReconcile(),
                 Is.True,
-                "EditorApplication.update must include a HotReloadAutoRefreshHold delegate.");
+                "EditorApplication.update must include HotReloadAutoRefreshHold.ReconcileOnUpdate.");
         }
 
         // Why scan fields: EditorApplication.update is an event, so tests cannot call
@@ -426,8 +422,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Delegate[] listeners = current.GetInvocationList();
             for (int index = 0; index < listeners.Length; index++)
             {
-                if (listeners[index].Method.DeclaringType == typeof(HotReloadAutoRefreshHold)
-                    && listeners[index].Method.Name == "ReconcileOnUpdate")
+                if (IsReconcileHandler(listeners[index]))
                 {
                     return true;
                 }
@@ -473,15 +468,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             while ((bool)moveNext.Invoke(enumerator, null))
             {
                 Delegate listener = currentProperty.GetValue(enumerator) as Delegate;
-                if (listener != null
-                    && listener.Method.DeclaringType == typeof(HotReloadAutoRefreshHold)
-                    && listener.Method.Name == "ReconcileOnUpdate")
+                if (IsReconcileHandler(listener))
                 {
                     return true;
                 }
             }
 
             return false;
+        }
+
+        private static bool IsReconcileHandler(Delegate listener)
+        {
+            return listener != null
+                && listener.Method.DeclaringType == typeof(HotReloadAutoRefreshHold)
+                && listener.Method.Name == nameof(HotReloadAutoRefreshHold.ReconcileOnUpdate);
         }
     }
 }
