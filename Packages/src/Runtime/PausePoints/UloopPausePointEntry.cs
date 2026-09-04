@@ -397,9 +397,13 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 return $"Pause point expired before it was hit. The armed method ran {methodEntryCount} time(s) but the armed line was never reached (branch not taken).";
             }
 
+            // Reaching here means the marker is instrumented and methodEntryCount is 0: both the
+            // uninstrumented case and every positive entry count returned above. Cached dispatch is
+            // therefore only one of two explanations, and the far more common one is that the
+            // awaited event never happened - so that is stated first.
             if (PatchDispatchMayBypass)
             {
-                return "Pause point expired before it was hit. No entry through the armed patch was recorded. This marker sits in (or is called from) a Unity physics message method, and Unity's cached message dispatch may have bypassed the patch even though the method body ran; MethodEntryCount 0 does not prove the method was never invoked. Destroy and recreate the target GameObject after enabling, or embed UloopPausePoint.Pause(\"id\") in the method body and arm it with enable-pause-point --id.";
+                return "Pause point expired before it was hit and the armed method was never entered. The awaited game event (collision, input, trigger) may simply not have happened during the wait; check the game state with execute-dynamic-code first. Only if the body provably ran, suspect Unity's cached message dispatch bypassing the patch.";
             }
 
             return "Pause point expired before it was hit. The armed method was never invoked.";
@@ -429,6 +433,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             if (HasMethodEntryInstrumentation && methodEntryCount > 0)
             {
                 return "The armed method ran but the armed line was never reached, so a longer --timeout-seconds alone will not help. Check the condition that guards the armed line (the trigger may have fired while it was false), then re-enable the marker and trigger the code path again once the precondition holds; --mode continuous keeps the marker armed across repeated attempts. Clearing the expired marker first is not required.";
+            }
+
+            // Why before the plain cached-dispatch branch: a measured entry count of 0 makes "the
+            // event never happened" the leading explanation, while an uninstrumented marker's 0 is
+            // unmeasured and carries no such evidence.
+            if (PatchDispatchMayBypass && HasMethodEntryInstrumentation && methodEntryCount == 0)
+            {
+                return "Check the game state with execute-dynamic-code to confirm the awaited event happened, then re-arm the marker and trigger it again. If you can show the method body ran while MethodEntryCount stayed 0, destroy and recreate the target GameObject after enabling, or switch to UloopPausePoint.Pause(\"id\") with --id.";
             }
 
             if (PatchDispatchMayBypass)
