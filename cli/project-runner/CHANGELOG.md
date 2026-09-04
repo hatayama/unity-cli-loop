@@ -1,5 +1,28 @@
 # Changelog
 
+## [3.2.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.1.2...uloop-project-runner-v3.2.0) (2026-09-04)
+
+
+### Features
+
+* Bring the Unity Editor to the front faster on macOS ([#2569](https://github.com/hatayama/unity-cli-loop/issues/2569)) ([8dc9f74](https://github.com/hatayama/unity-cli-loop/commit/8dc9f74e9203f2e61ae3eeb2e5f7980851a7c16e))
+* enable-pause-point can capture values right after the line runs with --snapshot-timing post-line ([#2543](https://github.com/hatayama/unity-cli-loop/issues/2543)) ([54aab03](https://github.com/hatayama/unity-cli-loop/commit/54aab031ccbc1fb980f77a10edad499f018c05d2))
+* pause-point warnings are returned as separate entries and repeated hot-reload line-shift warnings are summarized ([#2546](https://github.com/hatayama/unity-cli-loop/issues/2546)) ([6f98150](https://github.com/hatayama/unity-cli-loop/commit/6f98150f6487f04e914a4b160f3ce4cf3f605ba6))
+* **pause-point:** report parameters that cannot be captured ([#2572](https://github.com/hatayama/unity-cli-loop/issues/2572)) ([b0b1fd3](https://github.com/hatayama/unity-cli-loop/commit/b0b1fd3f405ef3ab172a5ea9116cb5889b3fb8bb))
+* run-tests can filter by test class name ([#2536](https://github.com/hatayama/unity-cli-loop/issues/2536)) ([de91193](https://github.com/hatayama/unity-cli-loop/commit/de911932f26894f34bc9a26f1b6cc79e5c4a1a89))
+* run-tests can keep the project's Enter Play Mode settings and survive the Domain Reload with --respect-enter-play-mode-settings ([#2529](https://github.com/hatayama/unity-cli-loop/issues/2529)) ([bec8e63](https://github.com/hatayama/unity-cli-loop/commit/bec8e63d7c41288178c8be56af8c2156f9eb1af7))
+* Unity comes to the front faster on Windows ([#2568](https://github.com/hatayama/unity-cli-loop/issues/2568)) ([499c72e](https://github.com/hatayama/unity-cli-loop/commit/499c72ef21ff09ac1e8eba2b4d838e2b5fee0074))
+
+
+### Bug Fixes
+
+* **hot-reload:** report stale patches and stop silent patch loss on run-tests ([#2588](https://github.com/hatayama/unity-cli-loop/issues/2588)) ([76b5af7](https://github.com/hatayama/unity-cli-loop/commit/76b5af777ac1891f906806907d44aaceecfb02a8))
+* **pause-point:** abort on synchronous trigger rejection and key expired guidance on MethodEntryCount ([#2587](https://github.com/hatayama/unity-cli-loop/issues/2587)) ([37a454a](https://github.com/hatayama/unity-cli-loop/commit/37a454a7617d2b2c2f2cc2a1fd08691c6fedee83))
+* **pause-point:** accept --file/--line on clear-pause-point ([#2585](https://github.com/hatayama/unity-cli-loop/issues/2585)) ([e32591c](https://github.com/hatayama/unity-cli-loop/commit/e32591cfad069704c8f1d63dd74baf16fddbe0eb))
+* **pause-point:** carry every warning in Warnings and point Message at it ([#2573](https://github.com/hatayama/unity-cli-loop/issues/2573)) ([c8e1fe6](https://github.com/hatayama/unity-cli-loop/commit/c8e1fe633a09c86d02ac579930a8719437efff08))
+* **pause-point:** say that --await returned on the first trace hit ([#2562](https://github.com/hatayama/unity-cli-loop/issues/2562)) ([1508bcf](https://github.com/hatayama/unity-cli-loop/commit/1508bcfa2ad4f5a122bb68a6e35ee99db6629e93))
+* **pause-point:** stop resuming Play for a marker that already hit ([#2553](https://github.com/hatayama/unity-cli-loop/issues/2553)) ([7952379](https://github.com/hatayama/unity-cli-loop/commit/7952379887063087d1672af7327ed93a63dd1bbd))
+
 ## [3.1.2](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.1.1...uloop-project-runner-v3.1.2) (2026-09-02)
 
 
