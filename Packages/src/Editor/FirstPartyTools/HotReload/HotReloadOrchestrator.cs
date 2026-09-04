@@ -22,13 +22,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <paramref name="contentPathOverride"/> is test-only: when set, the worker reads that
         /// path while assembly resolution still uses <paramref name="files"/> (so edited copies
         /// can live under <c>Library/UloopHotReload/TestSources/</c> without provoking AssetDatabase).
-        /// <paramref name="contentPathOverrides"/> is the per-file form of that hook.
+        /// <paramref name="contentPathOverrideByFile"/> is the per-file form of that hook, keyed by
+        /// the entry in <paramref name="files"/>; it wins over the single override.
         /// </summary>
         public static async Task<HotReloadOrchestratorResult> RunAsync(
             IReadOnlyList<string> files,
             string contentPathOverride,
             CancellationToken ct,
-            IReadOnlyList<string> contentPathOverrides = null)
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile = null)
         {
             Debug.Assert(files != null, "files must not be null.");
             Debug.Assert(files.Count > 0, "files must not be empty.");
@@ -43,8 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string workerSourcePath = ResolveWorkerSourcePath(
                     filePath,
                     contentPathOverride,
-                    contentPathOverrides,
-                    index);
+                    contentPathOverrideByFile);
 
                 // Why ConfigureAwait(false): UnityCliLoopTool forbids capturing Unity's
                 // SynchronizationContext across awaits — while Play Mode is paused that context
@@ -357,19 +357,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        // Why a list hook: one contentPathOverride cannot feed two edited copies, and
-        // AddRange+Sort across files is otherwise untestable.
+        // Why keyed by path (not by index): one contentPathOverride cannot feed two edited
+        // copies, and a positional list would silently misalign once files are grouped or
+        // reordered before the worker runs.
         private static string ResolveWorkerSourcePath(
             string filePath,
             string contentPathOverride,
-            IReadOnlyList<string> contentPathOverrides,
-            int index)
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile)
         {
-            if (contentPathOverrides != null
-                && index < contentPathOverrides.Count
-                && !string.IsNullOrEmpty(contentPathOverrides[index]))
+            if (contentPathOverrideByFile != null
+                && contentPathOverrideByFile.TryGetValue(filePath, out string perFileOverride)
+                && !string.IsNullOrEmpty(perFileOverride))
             {
-                return contentPathOverrides[index];
+                return perFileOverride;
             }
 
             if (string.IsNullOrEmpty(contentPathOverride))
