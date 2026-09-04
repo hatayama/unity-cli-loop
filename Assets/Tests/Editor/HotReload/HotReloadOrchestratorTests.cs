@@ -3544,10 +3544,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { e2ePath, applyPath },
                 contentPathOverride: null,
                 CancellationToken.None,
-                new[]
+                new Dictionary<string, string>
                 {
-                    WriteEditedSource("AddedFieldSortE2E.cs", e2eEdited),
-                    WriteEditedSource("AddedFieldSortApply.cs", applyEdited)
+                    [e2ePath] = WriteEditedSource("AddedFieldSortE2E.cs", e2eEdited),
+                    [applyPath] = WriteEditedSource("AddedFieldSortApply.cs", applyEdited)
                 });
 
             AssertNoFileLevelFailure(result);
