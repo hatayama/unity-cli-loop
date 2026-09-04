@@ -393,6 +393,157 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: an instrumented physics-dispatch marker that expires with no patch entries
+        /// reports a bypass warning instead of claiming the method was never invoked.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenPhysicsDispatchMayBypassAndMethodNeverEntered_ReportsBypassNotNeverInvoked()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1, patchDispatchMayBypass: true);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Does.Contain("may have bypassed the patch"));
+            Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
+        }
+
+        /// <summary>
+        /// What: a source-location enable on a physics message method expires with the
+        /// cached-dispatch wording rather than "was never invoked".
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenSourceLocationPhysicsMarkerExpiresWithoutHit_ReportsBypassNotNeverInvoked()
+        {
+            PausePointUseCase useCase = new PausePointUseCase();
+            PausePointResponse response = useCase.Enable(new EnablePausePointSchema
+            {
+                File = PhysicsFixtureFilePath,
+                Line = PhysicsFixtureLine,
+                TimeoutSeconds = 1,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+            Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(response.Id);
+
+            Assert.That(snapshot.Message, Does.Contain("may have bypassed the patch"));
+            Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
+        }
+
+        /// <summary>
+        /// What: re-enabling the same physics file:line after expiry, without clearing,
+        /// still expires with the cached-dispatch wording (reuse must keep the physics warning).
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenExpiredPhysicsMarkerIsReEnabledWithoutClear_ReportsBypassNotNeverInvoked()
+        {
+            PausePointUseCase useCase = new PausePointUseCase();
+            EnablePausePointSchema schema = new EnablePausePointSchema
+            {
+                File = PhysicsFixtureFilePath,
+                Line = PhysicsFixtureLine,
+                TimeoutSeconds = 1,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            };
+
+            PausePointResponse firstEnable = useCase.Enable(schema);
+            Assert.That(firstEnable.Success, Is.True, firstEnable.ErrorCode + " / " + firstEnable.Message);
+            _nowUtc = _nowUtc.AddSeconds(2);
+            UloopPausePointSnapshot firstExpiry = UloopPausePointRegistry.GetStatus(firstEnable.Id);
+            Assert.That(firstExpiry.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+
+            PausePointResponse secondEnable = useCase.Enable(schema);
+            Assert.That(secondEnable.Success, Is.True, secondEnable.ErrorCode + " / " + secondEnable.Message);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(secondEnable.Id);
+
+            Assert.That(snapshot.Message, Does.Contain("may have bypassed the patch"));
+            Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
+        }
+
+        /// <summary>
+        /// What: method-entry evidence outranks a physics-bypass flag, so expiry keeps the
+        /// branch-not-taken wording instead of the cached-dispatch case.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenPhysicsBypassAndMethodEntered_ReportsBranchNotTakenNotBypass()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1, patchDispatchMayBypass: true);
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Does.Contain("branch not taken"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("a longer --timeout-seconds alone will not help"));
+            Assert.That(snapshot.Message, Does.Not.Contain("cached"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("cached"));
+        }
+
+        /// <summary>
+        /// What: a skipped --hit-when match outranks a physics-bypass flag, so expiry keeps
+        /// the hit-when wording instead of the cached-dispatch case.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenPhysicsBypassAndHitWhenSkipped_ReportsHitWhenNotBypass()
+        {
+            UloopPausePointHitWhenParseResult parseResult = UloopPausePointHitWhenCondition.Parse("speed > 5");
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable(
+                "jump",
+                1,
+                UloopPausePointCaptureMode.Trace,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                "speed > 5",
+                parseResult.Condition,
+                patchDispatchMayBypass: true);
+            UloopPausePointRegistry.RecordHitWhenSkip("jump");
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Does.Contain("--hit-when"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("--hit-when"));
+            Assert.That(snapshot.Message, Does.Not.Contain("cached"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("cached"));
+        }
+
+        /// <summary>
+        /// What: a non-physics source-location marker expires with "never invoked", proving
+        /// the source-location path does not set PatchDispatchMayBypass unconditionally.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenSourceLocationNonPhysicsMarkerExpiresWithoutHit_ReportsNeverInvoked()
+        {
+            PausePointUseCase useCase = new PausePointUseCase();
+            PausePointResponse response = useCase.Enable(new EnablePausePointSchema
+            {
+                File = FixtureFilePath,
+                Line = FixtureLine,
+                TimeoutSeconds = 1,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+            Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(response.Id);
+
+            Assert.That(
+                snapshot.Message,
+                Is.EqualTo("Pause point expired before it was hit. The armed method was never invoked."));
+        }
+
+        /// <summary>
         /// What: an instrumented marker that skips hits by hit-when reports skipped-hit expiry
         /// evidence and a --hit-when recovery action.
         /// </summary>
@@ -490,7 +641,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 1,
                 true,
                 string.Empty,
-                null);
+                null,
+                false);
             entry.IncrementMethodEntryCount();
             bool expired = entry.ExpireIfNeeded(enabledAtUtc.AddSeconds(2));
             entry.IncrementHitWhenSkippedCount();

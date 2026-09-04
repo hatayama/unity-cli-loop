@@ -33,7 +33,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int generation,
             bool hasMethodEntryInstrumentation,
             string hitWhen,
-            UloopPausePointHitWhenCondition hitWhenCondition)
+            UloopPausePointHitWhenCondition hitWhenCondition,
+            bool patchDispatchMayBypass)
         {
             Id = id;
             TimeoutSeconds = timeoutSeconds;
@@ -47,6 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             HasMethodEntryInstrumentation = hasMethodEntryInstrumentation;
             HitWhen = hitWhen ?? string.Empty;
             HitWhenCondition = hitWhenCondition;
+            PatchDispatchMayBypass = patchDispatchMayBypass;
             Status = UloopPausePointStatus.Enabled;
             IsEnabled = true;
             Message = "Pause point enabled.";
@@ -67,6 +69,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public DateTime ExpiresAtUtc { get; private set; }
         public int Generation { get; }
         public bool HasMethodEntryInstrumentation { get; }
+        // Why keep this on the entry: Unity's cached physics-message dispatch can run the
+        // original body without the armed patch, so MethodEntryCount 0 is not proof the
+        // method never ran. Expire wording must see the same flag Enable recorded.
+        public bool PatchDispatchMayBypass { get; }
         public string Status { get; private set; }
         public bool IsEnabled { get; private set; }
         public int HitCount { get; private set; }
@@ -151,15 +157,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int hitWhenSkippedCount = HitWhenSkippedCount;
             _expiredMethodEntryCount = methodEntryCount;
             _expiredHitWhenSkippedCount = hitWhenSkippedCount;
-            Message = HitCount == 0 && HasMethodEntryInstrumentation
-                ? hitWhenSkippedCount > 0
-                    ? $"Pause point expired before any hit matched --hit-when. The method entered {methodEntryCount} time(s); {hitWhenSkippedCount} hit(s) were skipped by the condition."
-                    : methodEntryCount == 0
-                        ? "Pause point expired before it was hit. The armed method was never invoked."
-                        : $"Pause point expired before it was hit. The armed method ran {methodEntryCount} time(s) but the armed line was never reached (branch not taken)."
-                : HitCount == 0
-                    ? "Pause point expired before it was hit."
-                : $"Pause point capture window expired after {HitCount} hit(s); capture history is preserved.";
+            Message = CreateExpiredMessage(methodEntryCount, hitWhenSkippedCount);
             return true;
         }
 
@@ -374,11 +372,46 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return Math.Max(0, remainingMilliseconds);
         }
 
+        // Why not nest these in ExpireIfNeeded: adding the physics-dispatch case on top of
+        // the existing hit-when / never-invoked / branch-not-taken split would deepen the
+        // ternary chain past the complexity budget.
+        private string CreateExpiredMessage(int methodEntryCount, int hitWhenSkippedCount)
+        {
+            if (HitCount > 0)
+            {
+                return $"Pause point capture window expired after {HitCount} hit(s); capture history is preserved.";
+            }
+
+            if (!HasMethodEntryInstrumentation)
+            {
+                return "Pause point expired before it was hit.";
+            }
+
+            if (hitWhenSkippedCount > 0)
+            {
+                return $"Pause point expired before any hit matched --hit-when. The method entered {methodEntryCount} time(s); {hitWhenSkippedCount} hit(s) were skipped by the condition.";
+            }
+
+            if (methodEntryCount > 0)
+            {
+                return $"Pause point expired before it was hit. The armed method ran {methodEntryCount} time(s) but the armed line was never reached (branch not taken).";
+            }
+
+            if (PatchDispatchMayBypass)
+            {
+                return "Pause point expired before it was hit. No entry through the armed patch was recorded. This marker sits in (or is called from) a Unity physics message method, and Unity's cached message dispatch may have bypassed the patch even though the method body ran; MethodEntryCount 0 does not prove the method was never invoked. Destroy and recreate the target GameObject after enabling, or embed UloopPausePoint.Pause(\"id\") in the method body and arm it with enable-pause-point --id.";
+            }
+
+            return "Pause point expired before it was hit. The armed method was never invoked.";
+        }
+
         // Why not a single timeout hint: a recorded hit already proves the line ran, skipped
         // --hit-when hits prove the line ran without matching, and method-entry evidence tells
         // whether a longer window can help. Repeating timeout advice after those cases sends
         // the agent down a retry that cannot succeed. --hit-when skips are recorded even on
         // id-only markers, so that branch must not require method-entry instrumentation.
+        // Physics dispatch is last among the zero-hit cases because MethodEntryCount 0 is
+        // inconclusive when Unity may have skipped the patch.
         private string CreateExpiredRecommendedNextAction(int methodEntryCount, int hitWhenSkippedCount)
         {
             const string defaultAction =
@@ -396,6 +429,11 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             if (HasMethodEntryInstrumentation && methodEntryCount > 0)
             {
                 return "The armed method ran but the armed line was never reached, so a longer --timeout-seconds alone will not help. Check the condition that guards the armed line (the trigger may have fired while it was false), then re-enable the marker and trigger the code path again once the precondition holds; --mode continuous keeps the marker armed across repeated attempts. Clearing the expired marker first is not required.";
+            }
+
+            if (PatchDispatchMayBypass)
+            {
+                return "Confirm whether the method body actually ran (a log inside it, or a pause point on a plain method it calls). If it did, the patch was bypassed by cached physics dispatch: destroy and recreate the GameObject after enabling, or switch to UloopPausePoint.Pause(\"id\") with --id. Only raise --timeout-seconds if the body never ran.";
             }
 
             return defaultAction;
