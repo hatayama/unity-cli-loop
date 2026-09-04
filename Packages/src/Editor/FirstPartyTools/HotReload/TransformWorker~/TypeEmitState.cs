@@ -17,6 +17,10 @@ using Microsoft.CodeAnalysis.Text;
 
 internal sealed class TypeEmitState
 {
+    // The edited file this type was declared in. Emit reads its SemanticModel, root and
+    // baseline from here so a group run never binds a type against another file's tree.
+    public WorkerSourceUnit SourceUnit { get; set; }
+
     public TypeDeclarationSyntax TypeDeclaration { get; set; }
 
     public INamedTypeSymbol TypeSymbol { get; set; }

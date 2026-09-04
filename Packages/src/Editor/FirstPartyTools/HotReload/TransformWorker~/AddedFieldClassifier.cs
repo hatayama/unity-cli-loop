@@ -90,6 +90,7 @@ internal static class AddedFieldClassifier
 
         AddedFieldBinding binding = new AddedFieldBinding
         {
+            SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
             FieldKey = fieldKey,
             SyntaxKey = syntaxKey,
             FieldName = fieldSymbol.Name,

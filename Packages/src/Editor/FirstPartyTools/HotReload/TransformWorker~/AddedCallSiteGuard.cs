@@ -19,7 +19,6 @@ internal static class AddedCallSiteGuard
 {
     internal static void SkipBodiesThatCannotUseAddedMethods(
         List<TypeEmitState> typeEmitStates,
-        SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
         List<WorkerSkipped> skipped)
@@ -30,6 +29,9 @@ internal static class AddedCallSiteGuard
             progressed = false;
             foreach (TypeEmitState typeState in typeEmitStates)
             {
+                // Why per state (not one model for the run): the states of a group run come from
+                // several trees, and a SemanticModel only answers for the tree it was built from.
+                SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
                 List<QueuedShimMethod> remaining = new List<QueuedShimMethod>();
                 foreach (QueuedShimMethod queued in typeState.QueuedMethods)
                 {
@@ -46,6 +48,7 @@ internal static class AddedCallSiteGuard
                     {
                         skipped.Add(new WorkerSkipped
                         {
+                            SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                             Method = WorkerMethodKeys.FormatMethodLabel(queued.MethodSymbol),
                             Reason = skipReason,
                             CalledAddedMethodKey = calledAddedMethodKey,

@@ -1,5 +1,6 @@
-// Hot-reload transform worker: parse + semantic analysis of one edited C# file, emit static
-// shim method sources (no Prefix wrappers) plus a per-method manifest / skip list.
+// Hot-reload transform worker: parse + semantic analysis of the edited C# files of one
+// compilation assembly, emit static shim method sources (no Prefix wrappers) plus a per-method
+// manifest / skip list.
 // Runs out-of-process on the Unity-bundled .NET host against the Unity-bundled Roslyn.
 // Generated shims mirror user method signatures verbatim; repo style rules apply to
 // hand-written code only.
@@ -81,28 +82,49 @@ public static class TransformWorkerProgram
     private static int RunTransform(string inputJsonPath, string outputJsonPath)
     {
         WorkerInput input = ReadInput(inputJsonPath);
-        WorkerOutput unsupportedSourceCount = TryCreateUnsupportedSourceCountOutput(input);
-        WorkerOutput output = unsupportedSourceCount ?? TransformFile(input);
+        WorkerOutput invalidSources = TryCreateInvalidSourcesOutput(input);
+        WorkerOutput output = invalidSources ?? WorkerGroupPipeline.Transform(input);
         WriteOutput(outputJsonPath, output);
         return 0;
     }
 
-    // Why a run-level failure output (not a throw): the source count crosses a process boundary
-    // via JSON, so it is untrusted input rather than a broken internal contract.
-    private static WorkerOutput TryCreateUnsupportedSourceCountOutput(WorkerInput input)
+    // Why a run-level failure output (not a throw): the sources array crosses a process boundary
+    // via JSON, so it is untrusted input rather than a broken internal contract. Both failures
+    // below belong to no single source, which is what the run-level ParseErrors channel is for.
+    private static WorkerOutput TryCreateInvalidSourcesOutput(WorkerInput input)
     {
-        if (input.Sources.Length == 1)
+        if (input.Sources.Length == 0)
         {
-            return null;
+            return CreateRunFailureOutput("sources must contain at least one edited source.");
         }
 
+        HashSet<string> projectRelativePaths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (WorkerSourceInput source in input.Sources)
+        {
+            if (source == null)
+            {
+                return CreateRunFailureOutput("sources must not contain a null entry.");
+            }
+
+            if (!projectRelativePaths.Add(source.ProjectRelativePath ?? string.Empty))
+            {
+                return CreateRunFailureOutput(
+                    "sources must not repeat a projectRelativePath within one run.");
+            }
+        }
+
+        return null;
+    }
+
+    private static WorkerOutput CreateRunFailureOutput(string parseError)
+    {
         return new WorkerOutput
         {
             ShimSource = string.Empty,
             Entries = Array.Empty<WorkerEntry>(),
             Skipped = Array.Empty<WorkerSkipped>(),
             Files = Array.Empty<WorkerFileOutput>(),
-            ParseErrors = new[] { "This worker build accepts exactly one source." }
+            ParseErrors = new[] { parseError }
         };
     }
 
@@ -129,384 +151,6 @@ public static class TransformWorkerProgram
     {
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(output, JsonOptions);
         File.WriteAllBytes(outputJsonPath, bytes);
-    }
-
-    private static WorkerOutput TransformFile(WorkerInput input)
-    {
-        WorkerSourceInput source = input.Sources[0];
-        WorkerOutput invalidPath = TryCreateInvalidPathOutput(source);
-        if (invalidPath != null)
-        {
-            return invalidPath;
-        }
-
-        (WorkerOutput readFailure, string sourceText, string sourceContentSha256) = TryReadSourceText(source);
-        if (readFailure != null)
-        {
-            return readFailure;
-        }
-
-        List<string> parseErrors = new List<string>();
-        CSharpParseOptions parseOptions = new CSharpParseOptions(
-            languageVersion: LanguageVersion.Latest,
-            preprocessorSymbols: input.Defines);
-        (SyntaxTree syntaxTree, CompilationUnitSyntax plainRoot) = WorkerSourceAnnotator.ParseAndAnnotateSource(
-            sourceText,
-            parseOptions,
-            source.SourcePath,
-            parseErrors);
-
-        (List<MetadataReference> references, MetadataReference targetTypesReference) =
-            CollectMetadataReferences(input, parseErrors);
-
-        CSharpCompilation compilation = CSharpCompilation.Create(
-            assemblyName: "UloopHotReloadTransformWorkerCompilation",
-            syntaxTrees: new[] { syntaxTree },
-            references: references,
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-
-        SemanticModel semanticModel = compilation.GetSemanticModel(syntaxTree, ignoreAccessibility: true);
-        CompilationUnitSyntax root = syntaxTree.GetCompilationUnitRoot();
-
-        IAssemblySymbol targetTypesAssemblySymbol = ResolveTargetTypesAssemblySymbol(
-            compilation,
-            targetTypesReference);
-        List<string> declarationDriftWarnings = ConstDriftCollector.CollectConstDriftWarnings(
-            root,
-            semanticModel,
-            targetTypesAssemblySymbol);
-        List<string> siblingConstDriftWarnings = SiblingConstDriftCollector.CollectConstDriftWarnings(
-            input.ChangedSiblingSourcePaths,
-            parseOptions,
-            references,
-            targetTypesAssemblySymbol);
-        // Why here: a compiled property/event can disappear or change kind with no
-        // touched body, so the generic outside-body warning would bury the name.
-        CompiledMemberKindChangeWarnings.SyntaxKeys kindChangeSyntaxKeys =
-            CompiledMemberKindChangeWarnings.AppendCompiledPropertyOrEventKindChangeWarnings(
-                root,
-                semanticModel,
-                targetTypesAssemblySymbol,
-                declarationDriftWarnings);
-
-        BaselineSnapshotState baseline =
-            BaselineSnapshotBuilder.BuildBaselineSnapshotState(source.SnapshotSource, parseOptions, plainRoot);
-
-        List<WorkerEntry> entries = new List<WorkerEntry>();
-        List<WorkerSkipped> skipped = new List<WorkerSkipped>();
-        List<WorkerUnchangedMethod> unchangedMethods = new List<WorkerUnchangedMethod>();
-        List<WorkerRemovedMember> removedMembers = new List<WorkerRemovedMember>();
-        List<WorkerRemovedMethodSignature> removedMethodSignatures = new List<WorkerRemovedMethodSignature>();
-        List<ShimTypeBuilder> shimTypes = new List<ShimTypeBuilder>();
-        int globalShimMethodCounter = 0;
-        int shimTypeCounter = 0;
-        List<UsingDirectiveSyntax> assemblyGlobalUsings =
-            WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions);
-        AddedMethodCatalog addedMethodCatalog = new AddedMethodCatalog();
-        AddedFieldCatalog addedFieldCatalog = new AddedFieldCatalog();
-        (List<TypeEmitState> typeEmitStates, int nextShimTypeCounter, int nextGlobalShimMethodCounter) =
-            TypeEmitPlanner.QueueAllTypeEmitStates(
-                root,
-                semanticModel,
-                targetTypesAssemblySymbol,
-                input,
-                baseline,
-                assemblyGlobalUsings,
-                shimTypes,
-                addedMethodCatalog,
-                addedFieldCatalog,
-                skipped,
-                unchangedMethods,
-                declarationDriftWarnings,
-                removedMembers,
-                removedMethodSignatures,
-                shimTypeCounter,
-                globalShimMethodCounter);
-        shimTypeCounter = nextShimTypeCounter;
-        globalShimMethodCounter = nextGlobalShimMethodCounter;
-
-        RemovedMemberCollector.CollectRemovedMembersIfBaseline(
-            baseline,
-            plainRoot,
-            typeEmitStates,
-            semanticModel,
-            targetTypesAssemblySymbol,
-            addedMethodCatalog,
-            addedFieldCatalog,
-            removedMembers,
-            removedMethodSignatures);
-
-        AddedCallSiteGuard.SkipBodiesThatCannotUseAddedMethods(
-            typeEmitStates,
-            semanticModel,
-            addedMethodCatalog,
-            addedFieldCatalog,
-            skipped);
-
-        ShimMethodEmitter.EmitQueuedMethodsAndPropertyGetters(
-            typeEmitStates,
-            semanticModel,
-            addedMethodCatalog,
-            addedFieldCatalog,
-            root,
-            input,
-            baseline,
-            entries,
-            skipped,
-            unchangedMethods,
-            shimTypes,
-            assemblyGlobalUsings,
-            shimTypeCounter,
-            globalShimMethodCounter);
-
-        if (baseline.HasBaseline && baseline.SnapshotRoot != null)
-        {
-            // Why after property emit: added-property syntax keys are registered when a skip
-            // row is written. Running the drift check first would miss those keys and keep
-            // the false outside-body warning for added properties that already have a row.
-            OutsideMethodBodyDriftChecker.AppendOutsideMethodBodyDriftWarningIfNeeded(
-                baseline.SnapshotRoot,
-                plainRoot,
-                Path.GetFileName(source.SourcePath),
-                declarationDriftWarnings,
-                addedMethodCatalog,
-                addedFieldCatalog,
-                kindChangeSyntaxKeys.PropertySyntaxKeys,
-                kindChangeSyntaxKeys.EventSyntaxKeys);
-        }
-
-        return BuildWorkerOutput(
-            root,
-            source.ProjectRelativePath,
-            shimTypes,
-            entries,
-            skipped,
-            declarationDriftWarnings,
-            siblingConstDriftWarnings,
-            parseErrors,
-            unchangedMethods,
-            baseline,
-            removedMembers,
-            removedMethodSignatures,
-            addedFieldCatalog,
-            sourceContentSha256);
-    }
-
-    private static WorkerOutput TryCreateInvalidPathOutput(WorkerSourceInput source)
-    {
-        // Why ParseErrors (not Debug.Assert): ProjectRelativePath crosses a process boundary via
-        // JSON, and the worker is built without a DEBUG define so Conditional Asserts are stripped.
-        if (string.IsNullOrEmpty(source.ProjectRelativePath)
-            || source.ProjectRelativePath.IndexOf('\\') >= 0
-            || source.ProjectRelativePath.IndexOf('"') >= 0)
-        {
-            return CreateSourceFailureOutput(
-                source,
-                "Invalid projectRelativePath: must be a non-empty forward-slash path without quotes.");
-        }
-
-        return null;
-    }
-
-    // A failure the run can attribute to one source: the row set is empty and the message
-    // travels on that source's per-file parse errors.
-    private static WorkerOutput CreateSourceFailureOutput(WorkerSourceInput source, string parseError)
-    {
-        return new WorkerOutput
-        {
-            ShimSource = string.Empty,
-            Entries = Array.Empty<WorkerEntry>(),
-            Skipped = Array.Empty<WorkerSkipped>(),
-            Files = new[]
-            {
-                new WorkerFileOutput
-                {
-                    ProjectRelativePath = source.ProjectRelativePath,
-                    SourceContentSha256 = string.Empty,
-                    ParseErrors = new[] { parseError },
-                    DeclarationDriftWarnings = Array.Empty<string>(),
-                    RemovedMembers = Array.Empty<WorkerRemovedMember>(),
-                    RemovedMethodSignatures = Array.Empty<WorkerRemovedMethodSignature>(),
-                    AddedFieldNames = Array.Empty<string>(),
-                    AddedConstNames = Array.Empty<string>()
-                }
-            }
-        };
-    }
-
-    private static (WorkerOutput Failure, string SourceText, string SourceContentSha256) TryReadSourceText(
-        WorkerSourceInput source)
-    {
-        try
-        {
-            byte[] sourceBytes = File.ReadAllBytes(source.SourcePath);
-            string sourceContentSha256 = ComputeSourceContentSha256(sourceBytes);
-            using MemoryStream memoryStream = new MemoryStream(sourceBytes, writable: false);
-            using StreamReader reader = new StreamReader(
-                memoryStream,
-                Encoding.UTF8,
-                detectEncodingFromByteOrderMarks: true);
-            return (null, reader.ReadToEnd(), sourceContentSha256);
-        }
-        catch (Exception exception)
-        {
-            return (
-                CreateSourceFailureOutput(source, "Failed to read sourcePath: " + exception.Message),
-                null,
-                null);
-        }
-    }
-
-    private static (List<MetadataReference> References, MetadataReference TargetTypesReference)
-        CollectMetadataReferences(WorkerInput input, List<string> parseErrors)
-    {
-        string targetTypesFullPath =
-            !string.IsNullOrEmpty(input.TargetTypesAssemblyPath) && File.Exists(input.TargetTypesAssemblyPath)
-                ? Path.GetFullPath(input.TargetTypesAssemblyPath)
-                : null;
-        MetadataReference targetTypesReference = null;
-
-        List<MetadataReference> references = new List<MetadataReference>();
-        foreach (string referencePath in input.ReferencePaths)
-        {
-            if (File.Exists(referencePath))
-            {
-                MetadataReference reference = MetadataReference.CreateFromFile(referencePath);
-                references.Add(reference);
-                if (targetTypesFullPath != null
-                    && string.Equals(
-                        Path.GetFullPath(referencePath),
-                        targetTypesFullPath,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    targetTypesReference = reference;
-                }
-            }
-            else
-            {
-                parseErrors.Add("Reference not found: " + referencePath);
-            }
-        }
-
-        if (targetTypesFullPath != null && targetTypesReference == null)
-        {
-            targetTypesReference = MetadataReference.CreateFromFile(input.TargetTypesAssemblyPath);
-            references.Add(targetTypesReference);
-        }
-
-        return (references, targetTypesReference);
-    }
-
-    private static IAssemblySymbol ResolveTargetTypesAssemblySymbol(
-        CSharpCompilation compilation,
-        MetadataReference targetTypesReference)
-    {
-        // The drift comparison must see private and internal consts in the compiled target
-        // assembly, which the default MetadataImportOptions (Public) hides. Widening the main
-        // compilation would also widen what every classification query can bind to, so the
-        // wider import is confined to a throwaway compilation used only for this lookup.
-        if (targetTypesReference == null)
-        {
-            return null;
-        }
-
-        CSharpCompilation driftCompilation = compilation.WithOptions(
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-                .WithMetadataImportOptions(MetadataImportOptions.All));
-        return driftCompilation.GetAssemblyOrModuleSymbol(targetTypesReference) as IAssemblySymbol;
-    }
-
-    private static WorkerOutput BuildWorkerOutput(
-        CompilationUnitSyntax root,
-        string projectRelativePath,
-        List<ShimTypeBuilder> shimTypes,
-        List<WorkerEntry> entries,
-        List<WorkerSkipped> skipped,
-        List<string> declarationDriftWarnings,
-        List<string> siblingConstDriftWarnings,
-        List<string> parseErrors,
-        List<WorkerUnchangedMethod> unchangedMethods,
-        BaselineSnapshotState baseline,
-        List<WorkerRemovedMember> removedMembers,
-        List<WorkerRemovedMethodSignature> removedMethodSignatures,
-        AddedFieldCatalog addedFieldCatalog,
-        string sourceContentSha256)
-    {
-        bool hasAccessorDelegates = false;
-        foreach (ShimTypeBuilder shimType in shimTypes)
-        {
-            if (shimType.AccessorPlan.Entries.Count > 0)
-            {
-                hasAccessorDelegates = true;
-                break;
-            }
-        }
-
-        // Why stamp here instead of at each row's producer: six separate producers emit these
-        // rows, and stamping at the single output point cannot leave one of them behind.
-        StampSourceProjectRelativePath(entries, skipped, unchangedMethods, projectRelativePath);
-
-        string shimSource = ShimSourceEmitter.Emit(root, shimTypes, projectRelativePath);
-        WorkerFileOutput fileOutput = new WorkerFileOutput
-        {
-            ProjectRelativePath = projectRelativePath,
-            SourceContentSha256 = sourceContentSha256,
-            ParseErrors = parseErrors.ToArray(),
-            DeclarationDriftWarnings = declarationDriftWarnings.ToArray(),
-            BaselineDisabledByDuplicateKeys = baseline.BaselineDisabledByDuplicateKeys,
-            RemovedMembers = removedMembers.ToArray(),
-            RemovedMethodSignatures = removedMethodSignatures.ToArray(),
-            AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(),
-            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames()
-        };
-        return new WorkerOutput
-        {
-            ShimSource = shimSource,
-            Entries = entries.ToArray(),
-            Skipped = skipped.ToArray(),
-            Files = new[] { fileOutput },
-            SiblingConstDriftWarnings = siblingConstDriftWarnings.ToArray(),
-            UnchangedMethods = unchangedMethods.ToArray(),
-            HasAccessorDelegates = hasAccessorDelegates,
-            HasAddedFieldRewrites = addedFieldCatalog.HasStoreRewrites
-        };
-    }
-
-    // Records which edited file every worker row came from, right before the rows leave the worker.
-    private static void StampSourceProjectRelativePath(
-        List<WorkerEntry> entries,
-        List<WorkerSkipped> skipped,
-        List<WorkerUnchangedMethod> unchangedMethods,
-        string projectRelativePath)
-    {
-        foreach (WorkerEntry entry in entries)
-        {
-            entry.SourceProjectRelativePath = projectRelativePath;
-        }
-
-        foreach (WorkerSkipped skippedRow in skipped)
-        {
-            skippedRow.SourceProjectRelativePath = projectRelativePath;
-        }
-
-        foreach (WorkerUnchangedMethod unchangedMethod in unchangedMethods)
-        {
-            unchangedMethod.SourceProjectRelativePath = projectRelativePath;
-        }
-    }
-
-    // Keep in sync with HotReloadAppliedSourceLedger.ComputeContentHash (lowercase hex SHA-256).
-    private static string ComputeSourceContentSha256(byte[] bytes)
-    {
-        using SHA256 sha256 = SHA256.Create();
-        byte[] hash = sha256.ComputeHash(bytes);
-        StringBuilder builder = new StringBuilder(hash.Length * 2);
-        for (int index = 0; index < hash.Length; index++)
-        {
-            builder.Append(hash[index].ToString("x2"));
-        }
-
-        return builder.ToString();
     }
 
     internal static IEnumerable<TypeDeclarationSyntax> EnumerateTypeDeclarations(CompilationUnitSyntax root)

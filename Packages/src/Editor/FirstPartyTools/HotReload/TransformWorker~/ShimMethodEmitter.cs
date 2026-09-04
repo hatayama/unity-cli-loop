@@ -19,12 +19,9 @@ internal static class ShimMethodEmitter
 {
     internal static (int ShimTypeCounter, int GlobalShimMethodCounter) EmitQueuedMethodsAndPropertyGetters(
         List<TypeEmitState> typeEmitStates,
-        SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
-        CompilationUnitSyntax root,
         WorkerInput input,
-        BaselineSnapshotState baseline,
         List<WorkerEntry> entries,
         List<WorkerSkipped> skipped,
         List<WorkerUnchangedMethod> unchangedMethods,
@@ -37,18 +34,14 @@ internal static class ShimMethodEmitter
         {
             EmitQueuedMethods(
                 typeState,
-                semanticModel,
                 addedMethodCatalog,
                 addedFieldCatalog,
                 entries);
             (shimTypeCounter, globalShimMethodCounter) = PropertyGetterEmitter.EmitPropertyGettersForType(
                 typeState,
-                semanticModel,
                 addedMethodCatalog,
                 addedFieldCatalog,
-                root,
                 input,
-                baseline,
                 entries,
                 skipped,
                 unchangedMethods,
@@ -63,11 +56,11 @@ internal static class ShimMethodEmitter
 
     internal static void EmitQueuedMethods(
         TypeEmitState typeState,
-        SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
         List<WorkerEntry> entries)
     {
+        SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
         foreach (QueuedShimMethod queued in typeState.QueuedMethods)
         {
             AccessorPlan rewritePlan = queued.Decision.UsesDelegation
@@ -93,6 +86,7 @@ internal static class ShimMethodEmitter
 
             entries.Add(new WorkerEntry
             {
+                SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                 TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
                 MethodName = queued.MethodSymbol.Name,
                 ParameterTypeFullNames = queued.ParameterTypeFullNames,
