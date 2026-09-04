@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
+
+# cubic.yaml — versioned configuration for the cubic AI reviewer.
+# Settings here take precedence over the cubic dashboard UI settings, and any
+# field left unset falls through to the UI value. Keep this file minimal so the
+# dashboard stays usable for everything it does not need to pin.
+# Reference: https://docs.cubic.dev/configure/cubic-yaml
+
+version: 1
+
+reviews:
+  ignore:
+    # Generated skill copies. `uloop skills install --claude --agents` rewrites
+    # these wholesale from the sources under Packages/src/Editor, so a finding
+    # here can never be actioned in place — it belongs on the source file, which
+    # is part of the same pull request and reviewed on its own.
+    # Scoped to the generated subtree on purpose: a hand-written file such as
+    # .claude/settings.json (hooks, permissions) must stay reviewable.
+    files:
+      - '.agents/skills/**'
+      - '.claude/skills/**'
+
+  custom_instructions: |-
+    ## Generated skill copies
+
+    Everything under `.agents/skills/` and `.claude/skills/` is a generated
+    copy of a skill source under `Packages/src/Editor/`, produced by
+    `uloop skills install`.
+    The copies are committed on purpose and are always regenerated, never
+    edited by hand. Never report a change to those paths as a direct edit of a
+    generated file, and never ask for the change to be relocated to the source:
+    the source is edited first and the copies are regenerated in the same
+    commit, so both sides appear in the diff together. Review the source file.
+
+    The same holds for `cli/common/tools/default-tools.json`, which is
+    generated from the skill parameter tables by `scripts/sync-tool-docs.sh`.
+
+    ## The bar for a comment
+
+    State the concrete failure — the input, state, or sequence that makes the
+    code wrong — and then the fix. A finding that cannot name what breaks is
+    not worth a round trip.
+
+    Do not open a thread whose only subject is comment wording, indentation,
+    whitespace, trailing spaces, or documentation phrasing. Prose is worth a
+    comment only when it is factually wrong about how the code behaves: a
+    documented contract that the implementation does not honor, a stated output
+    format that the code does not produce, or guidance that contradicts another
+    document. Report that as the behavioral mismatch it is, not as a wording
+    preference.
