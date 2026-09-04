@@ -183,8 +183,13 @@ reported per-accessor as `Skipped`, so an edited accessor never disappears from 
 response silently; with a verified baseline, accessors unchanged from it produce no row.
 
 Subscribing to or unsubscribing from a field-like event (`+=`/`-=`) inside an edited
-body works. Methods that raise the event are reported as `Skipped` (see the table
-below) — raising is only expressible inside the declaring type, which a shim is not.
+body works, and so does raising or reading one (`E?.Invoke(x)`, `E(x)`,
+`if (E != null)`, `E = null`): the shim reads the event's backing field through a
+Harmony accessor, which puts that method on the delegation path. Four shapes have no
+backing field to reach and stay `Skipped` (see the table below): an event with custom
+`add`/`remove` accessors, an `abstract`/`extern`/interface event, an event whose
+delegate type is not visible outside the assembly, and an event added in this edit.
+`nameof(E)` also stays `Skipped`.
 
 ## Skipped — reported per method and in `Warnings`, never flips `Success`
 
@@ -200,7 +205,8 @@ below) — raising is only expressible inside the declaring type, which a shim i
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 | Property setter, init, or indexer accessor with an explicit body | Accessor patching covers getters only; `uloop compile` applies setter/init/indexer edits |
 | Constructor (instance or static), operator, conversion operator, or explicit event accessor (add/remove) | Out of scope for v1; `uloop compile` applies these edits |
-| Method raises, invokes, or reads a field-like event (anything beyond `+=`/`-=`) | C# only allows `+=`/`-=` on an event outside its declaring type, so the raising body cannot compile from the shim assembly |
+| Method raises or reads a field-like event that has no reachable backing field | Custom `add`/`remove` accessors, an `abstract`/`extern`/interface event, a delegate type that is not visible outside the assembly, or an event added in this edit leave nothing for the shim's Harmony accessor to bind |
+| Method names a field-like event inside `nameof` | The shim is a different type and cannot keep the bare event name |
 
 ## Failed — flips `Success` to `false`
 
