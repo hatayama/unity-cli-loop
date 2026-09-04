@@ -58,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (pressWasApplied)
             {
                 return
-                    $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' press was delivered to the game before the pause: the Input System processed the press edge in a gameplay update, so game code polling that frame observed it and the game state may already have changed. Do not retry the press; re-check the affected state (and pause-point-status) before deciding the next step.";
+                    $"Keyboard input stopped because Unity paused during Pause Point inspection. Key '{keyName}' press was applied to the Input System in a gameplay update before the pause, so the game may already have consumed it; PressEdgeObserved says whether a gameplay update saw the press edge. Do not retry the press; re-check the affected state (and pause-point-status) before deciding the next step.";
             }
 
             return

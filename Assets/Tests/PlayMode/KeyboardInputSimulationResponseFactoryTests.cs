@@ -109,7 +109,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
 
             Assert.That(response.PressDeliveredToGame, Is.True);
             Assert.That(response.PressEdgeObserved, Is.False);
-            Assert.That(response.Message, Does.Contain("press was delivered to the game"));
+            Assert.That(response.Message, Does.Contain("press was applied to the Input System"));
+            Assert.That(response.Message, Does.Contain("PressEdgeObserved says whether"));
+            Assert.That(response.Message, Does.Not.Contain("game code polling that frame observed it"));
             Assert.That(response.Message, Does.Not.Contain("discarded"));
         }
 
