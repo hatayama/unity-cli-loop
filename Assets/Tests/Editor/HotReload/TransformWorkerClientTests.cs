@@ -696,7 +696,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string expectedPath = ResolveE2EFixtureProjectRelativePath();
 
             // Why two runs: a baseline-less run is the only one that produces skipped rows, and a
-            // run with a one-method-edit snapshot is the only one that produces unchanged rows.
+            // run against a partly matching snapshot is the only one that produces unchanged rows.
+            // The snapshot below need not isolate a single method — any edit that leaves some
+            // methods matching gives this test both entries and unchanged rows.
             TransformWorkerClientResult withoutSnapshot = await RunWorkerOnE2EFixtureAsync();
             Assert.That(withoutSnapshot.Success, Is.True, withoutSnapshot.ErrorMessage);
             Assert.That(withoutSnapshot.Output.entries, Is.Not.Empty);
