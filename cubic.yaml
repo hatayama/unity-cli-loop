@@ -32,8 +32,12 @@ reviews:
     the source is edited first and the copies are regenerated in the same
     commit, so both sides appear in the diff together. Review the source file.
 
-    The same holds for `cli/common/tools/default-tools.json`, which is
-    generated from the skill parameter tables by `scripts/sync-tool-docs.sh`.
+    `cli/common/tools/default-tools.json` is a narrower case. Only the
+    description strings in it are generated from the skill parameter tables by
+    `scripts/sync-tool-docs.sh`; treat those as belonging to the skill source.
+    Everything else in that catalog — option names, JSON types, defaults,
+    required flags, enum values — is hand-authored, so review it normally and
+    do report a defect there.
 
     ## The bar for a comment
 
