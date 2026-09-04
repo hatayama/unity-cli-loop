@@ -127,7 +127,7 @@ func prefixPausePointMessageWithTriggerFailure(
 // pausePointTriggerFailedNextActions replaces the generic enable/id-mismatch guidance, which does
 // not apply here: the marker was confirmed armed and it is the trigger that never ran. What has to
 // change depends on where the rejection came from — the --trigger value for a CLI-side rejection,
-// the Editor state for a Unity-side refusal — so the first and third steps branch on it.
+// the Editor state for a Unity-side refusal — so all three steps branch on it.
 //
 // Why re-running the same command comes first: this response answers the command the caller just
 // ran, so "fix the --trigger value in that command and run it again" asks them to change one value
@@ -141,9 +141,7 @@ func prefixPausePointMessageWithTriggerFailure(
 func pausePointTriggerFailedNextActions(id string, triggerResult *pausePointTriggerResult) []string {
 	return []string{
 		pausePointTriggerRejectionFirstAction(triggerResult),
-		fmt.Sprintf(
-			"The marker is still armed, so you can also wait on it directly: "+
-				"uloop await-pause-point --id %q --trigger \"<corrected trigger command>\"", id),
+		pausePointTriggerRejectionAwaitAction(id, triggerResult),
 		pausePointTriggerRejectionRecoveryAction(triggerResult),
 	}
 }
@@ -158,6 +156,21 @@ func pausePointTriggerRejectionFirstAction(triggerResult *pausePointTriggerResul
 			"HitCount and --timeout-seconds countdown, and re-patching an already patched id is a no-op."
 	}
 	return "The trigger command itself was valid; Unity refused to run it because of the state named in the trigger message."
+}
+
+// pausePointTriggerRejectionAwaitAction spells out the await form the caller can fall back on, with
+// the placeholder that matches where the rejection came from. Asking for a "corrected" trigger
+// command after Unity refused a well-formed one would name a correction that does not exist: the
+// command stays as it was and only the Editor state has to change.
+func pausePointTriggerRejectionAwaitAction(id string, triggerResult *pausePointTriggerResult) string {
+	if pausePointTriggerRejectedBeforeExecution(triggerResult) {
+		return fmt.Sprintf(
+			"The marker is still armed, so you can also wait on it directly: "+
+				"uloop await-pause-point --id %q --trigger \"<corrected trigger command>\"", id)
+	}
+	return fmt.Sprintf(
+		"The marker is still armed, so once the precondition holds you can wait on it directly: "+
+			"uloop await-pause-point --id %q --trigger \"<the same trigger command>\"", id)
 }
 
 // pausePointTriggerRejectionRecoveryAction picks the recovery step that matches where the rejection

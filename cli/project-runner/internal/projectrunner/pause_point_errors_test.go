@@ -649,7 +649,7 @@ func TestPausePointTimeoutError_TriggerRejected_WinsOverNewHitBaseline(t *testin
 	}
 }
 
-// Verifies a CLI-side rejection keeps both steps that name the --trigger value as what has to
+// Verifies a CLI-side rejection keeps every step that names the --trigger value as what has to
 // change: that is the only cause this shape of rejection can have.
 func TestPausePointTriggerFailedNextActionsForCliRejection(t *testing.T) {
 	result := &pausePointTriggerResult{
@@ -665,13 +665,17 @@ func TestPausePointTriggerFailedNextActionsForCliRejection(t *testing.T) {
 	if !strings.HasPrefix(actions[0], "Fix the --trigger value in the command you just ran") {
 		t.Fatalf("expected the trigger-value fix as the first step, got %q", actions[0])
 	}
+	if !strings.Contains(actions[1], `--trigger "<corrected trigger command>"`) {
+		t.Fatalf("expected the await step to ask for a corrected trigger command, got %q", actions[1])
+	}
 	if !strings.Contains(actions[2], "INVALID_ARGUMENT") {
 		t.Fatalf("expected the argument-syntax recovery step, got %q", actions[2])
 	}
 }
 
-// Verifies a Unity-side pre-execution rejection replaces the argument-syntax recovery step with the
-// precondition step: nothing about the trigger's arguments was wrong.
+// Verifies a Unity-side pre-execution rejection replaces every step that would blame the trigger's
+// arguments -- the await form included -- with precondition wording: nothing about the trigger's
+// arguments was wrong.
 func TestPausePointTriggerFailedNextActionsForUnityRejection(t *testing.T) {
 	result := &pausePointTriggerResult{
 		Completed: true,
@@ -689,6 +693,15 @@ func TestPausePointTriggerFailedNextActionsForUnityRejection(t *testing.T) {
 	}
 	if !strings.HasPrefix(actions[0], "The trigger command itself was valid;") {
 		t.Fatalf("expected the first step to clear the trigger value, got %q", actions[0])
+	}
+	if strings.Contains(actions[1], "corrected trigger command") {
+		t.Fatalf("a Unity-side rejection has no correction to make to the trigger command, got %q", actions[1])
+	}
+	if !strings.Contains(actions[1], `--trigger "<the same trigger command>"`) {
+		t.Fatalf("expected the await step to reuse the same trigger command, got %q", actions[1])
+	}
+	if !strings.Contains(actions[1], "once the precondition holds") {
+		t.Fatalf("expected the await step to name the precondition, got %q", actions[1])
 	}
 	if strings.Contains(actions[2], "INVALID_ARGUMENT") {
 		t.Fatalf("the argument-syntax recovery step must not be used for a Unity-side rejection, got %q", actions[2])
