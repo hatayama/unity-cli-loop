@@ -390,8 +390,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return failedScenePaths.ToArray();
         }
 
-        private static bool ReloadOpenSceneSetup()
+        private static bool ReloadOpenSceneSetup(string[] changedScenePaths)
         {
+            // Reload before import leaves the loaded scene tied to the stale import, so the next
+            // AssetDatabase.Refresh raises Unity's "modified externally" dialog. Importing first
+            // is the order the focus-return path already gets from the native refresh.
+            Debug.Assert(changedScenePaths != null, "changedScenePaths must not be null");
+
+            for (int i = 0; i < changedScenePaths.Length; i++)
+            {
+                AssetDatabase.ImportAsset(changedScenePaths[i], ImportAssetOptions.ForceSynchronousImport);
+            }
+
             SceneSetup[] sceneSetup = EditorSceneManager.GetSceneManagerSetup();
             if (sceneSetup == null || sceneSetup.Length == 0)
             {

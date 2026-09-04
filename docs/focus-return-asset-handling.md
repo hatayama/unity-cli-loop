@@ -64,6 +64,9 @@ Auto Refresh for every Editor.
   There, a dirty Scene that changed externally is reported and never overwritten; clean changed
   Scenes are reloaded, and dirty Scenes are saved first only when a reload of the whole Scene
   setup is required. `--stop-on-external-scene-changes` turns the reload into a hard stop.
+  The compile preflight imports those changed Scene assets synchronously before reloading them.
+  Reloading first leaves the loaded Scene tied to the stale import, so the following
+  `AssetDatabase.Refresh` raises Unity's "modified externally" dialog.
 - `uloop run-tests` and `uloop control-play-mode` save unsaved Scene and Prefab Stage changes
   before starting by default; that is an explicit, documented step in those tools, not part of
   focus return.

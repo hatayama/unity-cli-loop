@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => new[] { (AssetPath: ScenePath, IsDirty: false) },
                 _ => (true, ChangedTime, 20),
                 () => Array.Empty<string>(),
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -57,7 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     saveDirtyOpenScenesWasCalled = true;
                     return Array.Empty<string>();
                 },
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     saveDirtyOpenScenesWasCalled = true;
                     return Array.Empty<string>();
                 },
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     saveDirtyOpenScenesWasCalled = true;
                     return Array.Empty<string>();
                 },
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -147,7 +147,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 () => new[] { (AssetPath: ScenePath, IsDirty: false) },
                 _ => (true, ChangedTime, 20),
                 () => new[] { DirtyScenePath },
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -178,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     saveDirtyOpenScenesWasCalled = true;
                     return Array.Empty<string>();
                 },
-                () =>
+                _ =>
                 {
                     reloadWasCalled = true;
                     return true;
@@ -190,6 +190,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result.CanProceed, Is.True);
             Assert.That(saveDirtyOpenScenesWasCalled, Is.False);
             Assert.That(reloadWasCalled, Is.False);
+        }
+
+        [Test]
+        public void ResolveExternalSceneChanges_WhenMultipleCleanScenesChanged_PassesOnlyChangedPathsToReload()
+        {
+            // Verifies the compile preflight reload delegate receives only the externally changed Scene paths.
+            const string ChangedSceneA = "Assets/Scenes/ChangedA.unity";
+            const string ChangedSceneB = "Assets/Scenes/ChangedB.unity";
+            const string UnchangedScene = "Assets/Scenes/Unchanged.unity";
+            Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> snapshots =
+                new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
+            snapshots[ChangedSceneA] = (true, SavedTime, 10);
+            snapshots[ChangedSceneB] = (true, SavedTime, 10);
+            snapshots[UnchangedScene] = (true, SavedTime, 10);
+            string[] reloadedPaths = null;
+            ExternalSceneChangeResolver resolver = new ExternalSceneChangeResolver(
+                snapshots,
+                () => new[]
+                {
+                    (AssetPath: ChangedSceneA, IsDirty: false),
+                    (AssetPath: ChangedSceneB, IsDirty: false),
+                    (AssetPath: UnchangedScene, IsDirty: false)
+                },
+                assetPath => assetPath == UnchangedScene
+                    ? (true, SavedTime, 10)
+                    : (true, ChangedTime, 20),
+                () => Array.Empty<string>(),
+                paths =>
+                {
+                    reloadedPaths = paths;
+                    return true;
+                });
+
+            (bool CanProceed, string Message, string[] ScenePaths) result = resolver.ResolveExternalSceneChanges(
+                reloadExternalSceneChanges: true);
+
+            Assert.That(result.CanProceed, Is.True);
+            Assert.That(reloadedPaths, Is.EqualTo(new[] { ChangedSceneA, ChangedSceneB }));
         }
 
         [Test]
