@@ -768,8 +768,8 @@ func TestPausePointWaitErrorDoesNotPrefixTriggerFailedMessage(t *testing.T) {
 	if strings.Contains(waitErr.Message, "The --trigger command failed") {
 		t.Fatalf("the trigger-failed message must not be prefixed again: %q", waitErr.Message)
 	}
-	if !strings.HasPrefix(waitErr.Message, "The trigger was rejected before it ran (argument parsing or an unknown command name)") {
-		t.Fatalf("expected the rejection reason quoted in the message: %q", waitErr.Message)
+	if !strings.HasPrefix(waitErr.Message, `The trigger was rejected before it ran (Invalid value for --action: "Hold")`) {
+		t.Fatalf("expected the rejection's own reason quoted in the message: %q", waitErr.Message)
 	}
 }
 
@@ -783,5 +783,56 @@ func TestPausePointNonFiringPatternsHintLeadsWithEventNeverOccurred(t *testing.T
 	oneIndex := strings.Index(pausePointNonFiringPatternsHint, "(1)")
 	if zeroIndex < 0 || oneIndex < 0 || zeroIndex > oneIndex {
 		t.Fatalf("pattern (0) must come before pattern (1): %q", pausePointNonFiringPatternsHint)
+	}
+}
+
+// Verifies a trigger whose dispatch died mid-flight (a dropped connection, an unreachable Editor)
+// is quoted by its own error text, not reported as an argument or command-name problem it never had.
+func TestPausePointWaitErrorQuotesDispatchFailureInsteadOfAssertingArgumentParsing(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Error: `{"Success":false,"Error":{"ErrorCode":"UNITY_NOT_REACHABLE",` +
+			`"Message":"Unity Editor is not reachable."}}`,
+	}
+
+	waitErr := pausePointWaitError(
+		"/project",
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 10},
+		pausePointStatusResponse{Id: "jump", Status: pausePointStatusExpired},
+		pausePointWaitStateExpired,
+		false,
+		false,
+		result)
+
+	if strings.Contains(waitErr.Message, "argument parsing") {
+		t.Fatalf("a dispatch failure must not be reported as an argument problem: %q", waitErr.Message)
+	}
+	if !strings.HasPrefix(waitErr.Message, "The --trigger command failed (Unity Editor is not reachable). ") {
+		t.Fatalf("expected the dispatch failure's own message quoted: %q", waitErr.Message)
+	}
+}
+
+// Verifies a dispatch failure that produced no error envelope still quotes the raw stderr text it
+// did produce, rather than falling back to a cause it cannot know.
+func TestPausePointWaitErrorQuotesRawDispatchFailureText(t *testing.T) {
+	result := &pausePointTriggerResult{
+		Completed: true,
+		Error:     "trigger command \"simulate-keyboard\" exited with code 2 and produced no parseable output.",
+	}
+
+	waitErr := pausePointWaitError(
+		"/project",
+		waitForPausePointOptions{id: "jump", timeoutSeconds: 10},
+		pausePointStatusResponse{Id: "jump", Status: pausePointStatusEnabled},
+		pausePointWaitStateTimeout,
+		false,
+		false,
+		result)
+
+	if strings.Contains(waitErr.Message, "argument parsing") {
+		t.Fatalf("a dispatch failure must not be reported as an argument problem: %q", waitErr.Message)
+	}
+	if !strings.Contains(waitErr.Message, "exited with code 2 and produced no parseable output") {
+		t.Fatalf("expected the raw dispatch failure text quoted: %q", waitErr.Message)
 	}
 }

@@ -125,7 +125,9 @@ func prefixPausePointMessageWithTriggerFailure(
 }
 
 // pausePointTriggerFailedNextActions replaces the generic enable/id-mismatch guidance, which does
-// not apply here: the marker was confirmed armed and only the --trigger value is wrong.
+// not apply here: the marker was confirmed armed and it is the trigger that never ran. What has to
+// change depends on where the rejection came from — the --trigger value for a CLI-side rejection,
+// the Editor state for a Unity-side refusal — so the first and third steps branch on it.
 //
 // Why re-running the same command comes first: this response answers the command the caller just
 // ran, so "fix the --trigger value in that command and run it again" asks them to change one value

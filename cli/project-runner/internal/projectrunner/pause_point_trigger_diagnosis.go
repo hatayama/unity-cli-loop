@@ -42,17 +42,44 @@ func pausePointTriggerRejectedByUnityBeforeExecution(
 	return response.RejectedByActivePausePointId != awaitedPausePointID
 }
 
-// pausePointTriggerRejectionReason returns the triggered command's own reason for the rejection,
+// pausePointTriggerRejectionReason returns the triggered command's own reason for the failure,
 // shaped to read inside a parenthesis: a trailing sentence period is dropped so the enclosing
-// sentence does not end in "..)." Why a fallback: a stderr-envelope rejection carries no Unity
-// response to quote, and its cause is always one of the two shapes
-// pausePointTriggerRejectedBeforeExecution matches.
+// sentence does not end in "..)."
+//
+// Why the dispatch error is consulted before any fixed text: Error carries whatever the dispatch
+// wrote to stderr, which is every failure shape and not only the two permanent rejections — a
+// dropped connection and an unreachable Editor land here too. Naming argument parsing for one of
+// those would be exactly the invented cause this diagnosis exists to remove, so the fixed text is
+// the last resort, used only when the failure produced no text at all.
 func pausePointTriggerRejectionReason(result *pausePointTriggerResult) string {
 	response, ok := decodePausePointTriggerResponse(result)
 	if ok && response.Message != "" {
-		return strings.TrimSuffix(strings.TrimSpace(response.Message), ".")
+		return trimPausePointReasonForParenthesis(response.Message)
+	}
+	if result != nil && strings.TrimSpace(result.Error) != "" {
+		return trimPausePointReasonForParenthesis(pausePointTriggerDispatchErrorReason(result.Error))
 	}
 	return "argument parsing or an unknown command name"
+}
+
+// pausePointTriggerDispatchErrorReason reads the human-readable reason out of a dispatch failure's
+// stderr: the error envelope's Message when it is one, and the raw text otherwise, because a
+// dispatch that never produced an envelope still wrote the only explanation there is.
+func pausePointTriggerDispatchErrorReason(dispatchError string) string {
+	trimmed := strings.TrimSpace(dispatchError)
+	envelope := struct {
+		Error struct {
+			Message string `json:"Message"`
+		} `json:"Error"`
+	}{}
+	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && envelope.Error.Message != "" {
+		return envelope.Error.Message
+	}
+	return trimmed
+}
+
+func trimPausePointReasonForParenthesis(reason string) string {
+	return strings.TrimSuffix(strings.TrimSpace(reason), ".")
 }
 
 // pausePointTriggerRefusalWarning warns about the case where the marker was hit before the trigger
