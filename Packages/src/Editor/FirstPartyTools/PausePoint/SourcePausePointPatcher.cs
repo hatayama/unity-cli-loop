@@ -119,7 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RememberRequest(id, normalizedFile, requestedLine, resolution.SnapshotTiming);
                 LogicalOwnerById[id] = logicalOwner;
                 UloopPausePointRegistry.SetMethodEntryInstrumented(id);
-                return SourcePausePointPatchResult.SuccessResult();
+                return SuccessWithPatchWarning(method);
             }
 
             SourcePausePointPatchInjection injection = new(
@@ -176,7 +176,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 RememberRequest(id, normalizedFile, requestedLine, shim.SnapshotTiming);
                 UloopPausePointRegistry.SetMethodEntryInstrumented(id);
-                return SourcePausePointPatchResult.SuccessResult();
+                return SuccessWithPatchWarning(method);
             }
 
             bool isStatic = !shim.InstanceFromFirstArgument && method.IsStatic;
@@ -349,9 +349,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            (IReadOnlyList<string> warnings, bool hasPhysicsCallbackWarning) = BuildPatchWarning(method);
             UloopPausePointRegistry.SetMethodEntryInstrumented(id);
-            return SourcePausePointPatchResult.SuccessResult(warnings, method.DeclaringType, hasPhysicsCallbackWarning);
+            return SuccessWithPatchWarning(method);
         }
 
         // What: removes Harmony instrumentation and patcher ledgers for one id without touching
@@ -506,6 +505,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return false;
+        }
+
+        // Why re-evaluate on reuse: a re-enable of the same file:line without clear keeps the
+        // Harmony patch, but Enable still creates a new registry entry. The physics-bypass flag
+        // lives on that entry, so SuccessResult() without BuildPatchWarning would drop it.
+        private static SourcePausePointPatchResult SuccessWithPatchWarning(MethodBase method)
+        {
+            (IReadOnlyList<string> warnings, bool hasPhysicsCallbackWarning) = BuildPatchWarning(method);
+            return SourcePausePointPatchResult.SuccessResult(warnings, method.DeclaringType, hasPhysicsCallbackWarning);
         }
 
         private static (IReadOnlyList<string> Warnings, bool HasPhysicsCallbackWarning) BuildPatchWarning(MethodBase method)
