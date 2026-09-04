@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCompilationAssembly compilationAssembly,
             string targetDllPath,
             string[] defines,
-            string assemblyResolvePath,
+            HotReloadGroupFilePaths groupFilePaths,
             string correlationId,
             CancellationToken ct)
         {
@@ -55,13 +55,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             List<HotReloadMethodOutcome> failedMethodOutcomes =
-                BuildFailedMethodOutcomes(attribution, assemblyResolvePath, workerOutput.skipped);
+                BuildFailedMethodOutcomes(attribution, groupFilePaths, workerOutput.skipped);
             IsolationExclusions exclusions = BuildIsolationExclusions(
                 attribution.FailedEntries,
                 workerOutput.entries);
             List<HotReloadMethodOutcome> skippedCallerOutcomes = BuildSkippedCallerOutcomes(
                 exclusions.CallerEntries,
-                assemblyResolvePath,
+                groupFilePaths,
                 HotReloadConstants.IsolatedAddedMethodCallerSkipReason);
 
             IsolationRetryRunResult retry = await RunIsolationRetryAsync(
@@ -73,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 targetDllPath,
                 defines,
                 workerOutput.skipped,
-                assemblyResolvePath,
+                groupFilePaths,
                 HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
                 correlationId,
                 ct).ConfigureAwait(false);
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string targetDllPath,
             string[] defines,
             TransformWorkerSkippedDto[] firstPassSkipped,
-            string assemblyResolvePath,
+            HotReloadGroupFilePaths groupFilePaths,
             string trigger,
             string correlationId,
             CancellationToken ct)
@@ -140,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodOutcome> retryOnlySkipped = CollectRetryOnlySkippedOutcomes(
                 firstPassSkipped,
                 retryOutput.skipped,
-                assemblyResolvePath,
+                groupFilePaths,
                 trigger,
                 exclusions.ExcludedAddedMethodKeys);
             skippedCallerOutcomes.AddRange(retryOnlySkipped);
@@ -219,7 +219,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static List<HotReloadMethodOutcome> CollectRetryOnlySkippedOutcomes(
             TransformWorkerSkippedDto[] firstPassSkipped,
             TransformWorkerSkippedDto[] retrySkipped,
-            string assemblyResolvePath,
+            HotReloadGroupFilePaths groupFilePaths,
             string trigger,
             IReadOnlyCollection<string> excludedAddedMethodKeys)
         {
@@ -256,7 +256,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadMethodOutcome.Skipped(
                         retryRow.method ?? "(unknown)",
                         retryRow.reason ?? string.Empty,
-                        assemblyResolvePath));
+                        groupFilePaths.ResolveAssemblyResolvePath(retryRow.sourceProjectRelativePath)));
             }
 
             return retryOnly;
@@ -330,7 +330,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static List<HotReloadMethodOutcome> BuildFailedMethodOutcomes(
             HotReloadShimErrorAttribution.ShimCompileErrorAttribution attribution,
-            string assemblyResolvePath,
+            HotReloadGroupFilePaths groupFilePaths,
             TransformWorkerSkippedDto[] skipped)
         {
             List<HotReloadMethodOutcome> failedMethodOutcomes = new List<HotReloadMethodOutcome>();
@@ -350,7 +350,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             composedMessage,
                             entryErrorMessages,
                             skipped),
-                        assemblyResolvePath));
+                        groupFilePaths.ResolveAssemblyResolvePath(failedEntry.sourceProjectRelativePath)));
             }
 
             return failedMethodOutcomes;
@@ -461,7 +461,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static List<HotReloadMethodOutcome> BuildSkippedCallerOutcomes(
             IReadOnlyList<TransformWorkerEntryDto> callerEntries,
-            string assemblyResolvePath,
+            HotReloadGroupFilePaths groupFilePaths,
             string skipReason)
         {
             List<HotReloadMethodOutcome> skippedCallerOutcomes = new List<HotReloadMethodOutcome>();
@@ -476,7 +476,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadMethodOutcome.Skipped(
                         methodLabel,
                         skipReason,
-                        assemblyResolvePath));
+                        groupFilePaths.ResolveAssemblyResolvePath(caller.sourceProjectRelativePath)));
             }
 
             return skippedCallerOutcomes;

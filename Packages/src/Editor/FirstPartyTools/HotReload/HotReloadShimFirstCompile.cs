@@ -119,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.TargetDllPath,
                 context.Defines,
                 context.AssemblyResolvePath,
+                context.GroupFilePaths,
                 context.CorrelationId,
                 sinks.SiblingDerivedWarnings,
                 ct).ConfigureAwait(false);
@@ -179,6 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string targetDllPath,
             string[] defines,
             string assemblyResolvePath,
+            HotReloadGroupFilePaths groupFilePaths,
             string correlationId,
             List<string> siblingDerivedWarnings,
             CancellationToken ct)
@@ -235,7 +237,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compilationAssembly,
                 targetDllPath,
                 defines,
-                assemblyResolvePath,
+                groupFilePaths,
                 correlationId,
                 ct).ConfigureAwait(false);
             if (isolation == null)
@@ -282,7 +284,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AppendAtomicFileSkipOutcomes(
                 isolationOutcomes,
                 isolation.RetryEntries,
-                assemblyResolvePath);
+                groupFilePaths);
             return ShimFirstCompileResult.Failed(isolationOutcomes);
         }
 
@@ -291,11 +293,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static void AppendAtomicFileSkipOutcomes(
             List<HotReloadMethodOutcome> outcomes,
             TransformWorkerEntryDto[] retryEntries,
-            string filePath)
+            HotReloadGroupFilePaths groupFilePaths)
         {
             Debug.Assert(outcomes != null, "outcomes must not be null.");
             Debug.Assert(retryEntries != null, "retryEntries must not be null.");
-            Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be empty.");
+            Debug.Assert(groupFilePaths != null, "groupFilePaths must not be null.");
 
             foreach (TransformWorkerEntryDto entry in retryEntries)
             {
@@ -308,7 +310,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadMethodOutcome.Skipped(
                         methodLabel,
                         HotReloadConstants.AtomicFileSkipReason,
-                        filePath));
+                        groupFilePaths.ResolveAssemblyResolvePath(entry.sourceProjectRelativePath)));
             }
         }
 

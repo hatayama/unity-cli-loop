@@ -63,12 +63,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 gatedReplacements,
                 uncoveredCallersByTarget,
                 editedFileMethodKeys,
-                context.AssemblyResolvePath,
-                context.ProjectRelativePath);
+                context.GroupFilePaths);
             skippedOutcomes.AddRange(
                 HotReloadShimIsolation.BuildSkippedCallerOutcomes(
                     exclusions.CallerEntries,
-                    context.AssemblyResolvePath,
+                    context.GroupFilePaths,
                     HotReloadConstants.SignatureChangedGatedCallerSkipReason));
 
             HotReloadShimIsolation.IsolationRetryRunResult retry = await HotReloadShimIsolation.RunIsolationRetryAsync(
@@ -80,7 +79,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.TargetDllPath,
                 context.Defines,
                 context.WorkerOutput.skipped,
-                context.AssemblyResolvePath,
+                context.GroupFilePaths,
                 HotReloadConstants.VibeLogIsolationTriggerSignatureChangeGate,
                 context.CorrelationId,
                 ct).ConfigureAwait(false);
@@ -237,8 +236,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<TransformWorkerEntryDto> gatedReplacements,
             Dictionary<string, List<string>> uncoveredCallersByTarget,
             HashSet<string> editedFileMethodKeys,
-            string assemblyResolvePath,
-            string projectRelativePath)
+            HotReloadGroupFilePaths groupFilePaths)
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto entry in gatedReplacements)
@@ -248,7 +246,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string reason;
                 // Why live registry, not a run-start snapshot: BeginFileGeneration runs after
                 // this gate, so the previous apply's added members are still listed here.
-                if (HotReloadAddedMemberRegistry.IsActiveMember(projectRelativePath, methodLabel))
+                // Why the entry's own file: a group run gates the replacements of several files,
+                // and a member is active per file.
+                if (HotReloadAddedMemberRegistry.IsActiveMember(entry.sourceProjectRelativePath, methodLabel))
                 {
                     reason = string.Format(
                         HotReloadConstants.SignatureChangedGateSkipReasonAlreadyActiveFormat,
@@ -273,7 +273,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadMethodOutcome.Skipped(
                         methodLabel,
                         reason,
-                        assemblyResolvePath));
+                        groupFilePaths.ResolveAssemblyResolvePath(entry.sourceProjectRelativePath)));
             }
 
             return outcomes;

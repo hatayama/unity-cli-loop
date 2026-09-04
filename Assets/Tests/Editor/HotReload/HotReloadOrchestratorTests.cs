@@ -4787,6 +4787,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 new TransformWorkerSkippedDto
                 {
+                    sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Mid()",
                     methodKey = "Host::Mid()",
                     reason = HotReloadConstants.UnavailableAddedCallSkipReason,
@@ -4794,6 +4795,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 new TransformWorkerSkippedDto
                 {
+                    sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Outer()",
                     methodKey = "Host::Outer()",
                     reason = HotReloadConstants.UnavailableAddedCallSkipReason,
@@ -4804,7 +4806,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
-                "test.dll",
+                HotReloadGroupFilePaths.ForSingleFile("Assets/Scripts/Host.cs", "test.dll"),
                 HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
                 new[] { "Host::Broken()" });
 
@@ -4824,6 +4826,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 new TransformWorkerSkippedDto
                 {
+                    sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Mid()",
                     methodKey = "Host::Mid()",
                     reason = HotReloadConstants.UnavailableAddedCallSkipReason,
@@ -4831,6 +4834,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 new TransformWorkerSkippedDto
                 {
+                    sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Outer()",
                     methodKey = "Host::Outer()",
                     reason = HotReloadConstants.UnavailableAddedCallSkipReason,
@@ -4841,7 +4845,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
-                "test.dll",
+                HotReloadGroupFilePaths.ForSingleFile("Assets/Scripts/Host.cs", "test.dll"),
                 HotReloadConstants.VibeLogIsolationTriggerSignatureChangeGate,
                 new[] { "Host::Broken()" });
 
@@ -4861,6 +4865,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 new TransformWorkerSkippedDto
                 {
+                    sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Caller()",
                     methodKey = "Host::Caller()",
                     reason = HotReloadConstants.UnavailableAddedCallSkipReason,
@@ -4871,7 +4876,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
-                "test.dll",
+                HotReloadGroupFilePaths.ForSingleFile("Assets/Scripts/Host.cs", "test.dll"),
                 HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
                 new[] { "Host::Broken()" });
 

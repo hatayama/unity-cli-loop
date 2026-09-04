@@ -57,6 +57,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             FileOutput = fileOutput;
             SnapshotLabels = snapshotLabels;
             SnapshotAddedLabels = snapshotAddedLabels;
+            GroupFilePaths = HotReloadGroupFilePaths.ForSingleFile(projectRelativePath, assemblyResolvePath);
         }
 
         internal string ProjectRoot { get; }
@@ -87,5 +88,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal HashSet<string> SnapshotLabels { get; }
 
         internal HashSet<string> SnapshotAddedLabels { get; }
+
+        // Resolves the file identity a worker row carries into the path its outcomes report.
+        internal HotReloadGroupFilePaths GroupFilePaths { get; }
     }
 }
