@@ -155,15 +155,15 @@ func runUpdateWingetManifestWithDeps(
 		return 0
 	}
 
-	versionPath := wingetPackageManifestPath() + "/" + version
-	versionExists, err := wingetUpstreamPathExists(ctx, deps, token, versionPath)
+	skipReason, err := wingetUpstreamSkipReason(ctx, deps, token, version)
 	if err != nil {
 		return writeWingetManifestUpdateError(stderr, err)
 	}
-	if versionExists {
-		writeWingetManifestUpdateLine(stdout, fmt.Sprintf("winget manifest for %s already exists upstream; skipping.", version))
+	if skipReason != "" {
+		writeWingetManifestUpdateLine(stdout, skipReason)
 		return 0
 	}
+	versionPath := wingetPackageManifestPath() + "/" + version
 	metadata, err := downloadWingetReleaseMetadata(ctx, deps, config.repository, config.tag)
 	if err != nil {
 		return writeWingetManifestUpdateError(stderr, err)
@@ -177,10 +177,6 @@ func runUpdateWingetManifestWithDeps(
 		return writeWingetManifestUpdateError(stderr, err)
 	}
 
-	packageExists, err := wingetUpstreamPathExists(ctx, deps, token, wingetPackageManifestPath())
-	if err != nil {
-		return writeWingetManifestUpdateError(stderr, err)
-	}
 	manifests, err := renderWingetManifests(data)
 	if err != nil {
 		return writeWingetManifestUpdateError(stderr, err)
@@ -200,7 +196,7 @@ func runUpdateWingetManifestWithDeps(
 		return 0
 	}
 
-	title := wingetPullRequestTitle(packageExists, version)
+	title := wingetPullRequestTitle(version)
 	body := "Automated submission from https://github.com/" + config.repository + "/releases/tag/" + config.tag
 	pullRequestURL, err := openWingetPullRequest(ctx, deps, token, forkOwner, branch, title, body)
 	if err != nil {
@@ -350,12 +346,36 @@ func publishWingetManifestBranch(
 	return nil
 }
 
-func wingetPullRequestTitle(packageExists bool, version string) string {
-	prefix := "New package:"
-	if packageExists {
-		prefix = "New version:"
+// wingetUpstreamSkipReason reports why a release must not be submitted, or "" when it should be.
+// The initial New-Package submission is manual: it needs the CLA, moderator review,
+// and possibly manifest fixes, and automated resubmission on every release stacks
+// duplicate New-Package pull requests while the first one is still in moderation.
+func wingetUpstreamSkipReason(
+	ctx context.Context,
+	deps wingetManifestUpdateDeps,
+	token string,
+	version string,
+) (string, error) {
+	packageExists, err := wingetUpstreamPathExists(ctx, deps, token, wingetPackageManifestPath())
+	if err != nil {
+		return "", err
 	}
-	return fmt.Sprintf("%s %s version %s", prefix, wingetPackageIdentifier, version)
+	if !packageExists {
+		return fmt.Sprintf("%s is not in winget-pkgs yet; the initial submission is manual. Skipping.", wingetPackageIdentifier), nil
+	}
+	versionExists, err := wingetUpstreamPathExists(ctx, deps, token, wingetPackageManifestPath()+"/"+version)
+	if err != nil {
+		return "", err
+	}
+	if versionExists {
+		return fmt.Sprintf("winget manifest for %s already exists upstream; skipping.", version), nil
+	}
+	return "", nil
+}
+
+// Automation only ever submits version updates; see wingetUpstreamSkipReason.
+func wingetPullRequestTitle(version string) string {
+	return fmt.Sprintf("New version: %s version %s", wingetPackageIdentifier, version)
 }
 
 func wingetPackageManifestPath() string {

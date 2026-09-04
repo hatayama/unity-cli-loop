@@ -230,18 +230,25 @@ func TestUpdateWingetManifestSkipsExistingVersion(t *testing.T) {
 	assertWingetPublishSetupNotCalled(t, scenario)
 }
 
-// TestUpdateWingetManifestUsesNewPackageTitle verifies a missing upstream package uses the initial-submission PR title.
-func TestUpdateWingetManifestUsesNewPackageTitle(t *testing.T) {
+// TestUpdateWingetManifestSkipsUntilPackageExistsUpstream verifies a package missing upstream skips every fork write and PR creation because the initial submission is manual.
+func TestUpdateWingetManifestSkipsUntilPackageExistsUpstream(t *testing.T) {
 	scenario := newWingetTestScenario()
 	scenario.packageExists = false
-	_, code := runWingetTestScenario(t, scenario)
+	stdout, code := runWingetTestScenario(t, scenario)
 
 	if code != 0 {
 		t.Fatalf("exit code = %d", code)
 	}
-	if scenario.pullRequestTitle != "New package: hatayama.uloop version 3.1.0" {
-		t.Fatalf("PR title = %q", scenario.pullRequestTitle)
+	if !strings.Contains(stdout, "hatayama.uloop is not in winget-pkgs yet; the initial submission is manual. Skipping.") {
+		t.Fatalf("unexpected stdout: %s", stdout)
 	}
+	if scenario.putCalls != 0 || scenario.pullRequestCreateCalls != 0 {
+		t.Fatalf("PUT calls = %d, PR creation calls = %d", scenario.putCalls, scenario.pullRequestCreateCalls)
+	}
+	if scenario.releaseDownloadCalls != 0 || scenario.releaseViewCalls != 0 {
+		t.Fatalf("release download calls = %d, release view calls = %d", scenario.releaseDownloadCalls, scenario.releaseViewCalls)
+	}
+	assertWingetPublishSetupNotCalled(t, scenario)
 }
 
 // TestUpdateWingetManifestUsesNewVersionTitle verifies an existing upstream package uses the update PR title.
