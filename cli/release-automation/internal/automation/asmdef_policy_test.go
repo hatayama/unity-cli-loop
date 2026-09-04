@@ -210,6 +210,7 @@ func TestEvaluateAsmdefPolicyReportsForbiddenReferences(t *testing.T) {
 		{name: "tool contracts to domain", from: asmdefLayerToolContracts, to: asmdefLayerDomain, rule: asmdefRuleLayerDirection},
 		{name: "presentation to infrastructure", from: asmdefLayerPresentation, to: asmdefLayerInfrastructure, rule: asmdefRuleLayerDirection},
 		{name: "runtime to layer", from: "UnityCLILoop.Runtime", to: asmdefLayerDomain, rule: asmdefRuleRuntimeIsolation},
+		{name: "tool-owned runtime to application", from: asmdefToolPrefix + "A.Runtime", to: asmdefLayerApplication, rule: asmdefRuleRuntimeIsolation},
 		{name: "internal bridge to layer", from: asmdefInternalBridgeName, to: asmdefLayerDomain, rule: asmdefRuleLayerDirection},
 		{name: "umbrella to infrastructure", from: asmdefToolsUmbrellaName, to: asmdefLayerInfrastructure, rule: asmdefRuleUmbrellaScope},
 	}
@@ -261,6 +262,7 @@ func TestEvaluateAsmdefPolicyAcceptsAllowedReferences(t *testing.T) {
 		{name: "tool to application", from: toolName("A"), to: asmdefLayerApplication},
 		{name: "tool to common", from: toolName("A"), to: commonName("X")},
 		{name: "tool to runtime", from: toolName("A"), to: "UnityCLILoop.PausePoints.Runtime"},
+		{name: "tool to its own runtime assembly", from: toolName("A"), to: asmdefToolPrefix + "A.Runtime"},
 		{name: "tool to internal bridge", from: toolName("A"), to: asmdefInternalBridgeName},
 		{name: "sub-assembly to parent tool", from: toolName("RunTests.TestFramework"), to: toolName("RunTests")},
 	}
@@ -282,10 +284,14 @@ func TestEvaluateAsmdefPolicyAcceptsAllowedReferences(t *testing.T) {
 
 // evaluateAsmdefPolicy fails on an assembly whose name matches no category,
 // so a new assembly must follow the naming convention before it is accepted.
+// A FirstPartyTools assembly without the .Editor or .Runtime suffix is one
+// such name.
 func TestEvaluateAsmdefPolicyRejectsUnknownAssembly(t *testing.T) {
-	_, err := evaluateAsmdefPolicy([]AsmdefAssembly{{Name: "UnityCLILoop.Mystery", Path: "mystery.asmdef"}})
-	if err == nil || !strings.Contains(err.Error(), "UnityCLILoop.Mystery") {
-		t.Fatalf("expected an unknown-category error, got %v", err)
+	for _, name := range []string{"UnityCLILoop.Mystery", asmdefToolPrefix + "A"} {
+		_, err := evaluateAsmdefPolicy([]AsmdefAssembly{{Name: name, Path: "mystery.asmdef"}})
+		if err == nil || !strings.Contains(err.Error(), name) {
+			t.Fatalf("expected an unknown-category error for %s, got %v", name, err)
+		}
 	}
 }
 

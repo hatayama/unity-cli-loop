@@ -68,18 +68,22 @@ var asmdefLayerAllowedCategories = map[string][]asmdefCategory{
 	asmdefLayerCompositionRoot: {asmdefCategoryToolsUmbrella, asmdefCategoryRuntime, asmdefCategoryInternalBridge},
 }
 
+// classifyAsmdef derives the category from the assembly name. Runtime is
+// tested before the FirstPartyTools prefixes so that a tool-owned runtime
+// assembly (FirstPartyTools.<Tool>.Runtime) is held to the Runtime rules rather
+// than being granted a tool's wider permissions.
 func classifyAsmdef(name string) asmdefCategory {
 	switch {
 	case name == asmdefInternalBridgeName:
 		return asmdefCategoryInternalBridge
 	case name == asmdefToolsUmbrellaName:
 		return asmdefCategoryToolsUmbrella
-	case strings.HasPrefix(name, asmdefToolCommonPrefix):
-		return asmdefCategoryToolCommon
-	case strings.HasPrefix(name, asmdefToolPrefix):
-		return asmdefCategoryTool
 	case strings.HasSuffix(name, asmdefRuntimeSuffix):
 		return asmdefCategoryRuntime
+	case strings.HasPrefix(name, asmdefToolCommonPrefix) && strings.HasSuffix(name, asmdefToolSuffix):
+		return asmdefCategoryToolCommon
+	case strings.HasPrefix(name, asmdefToolPrefix) && strings.HasSuffix(name, asmdefToolSuffix):
+		return asmdefCategoryTool
 	}
 	if _, isLayer := asmdefLayerAllowedTargets[name]; isLayer {
 		return asmdefCategoryLayer
@@ -119,45 +123,70 @@ func evaluateAsmdefPolicy(assemblies []AsmdefAssembly) ([]AsmdefPolicyFinding, e
 	return findings, nil
 }
 
+// asmdefCategoryPermit lists what one non-layer category may reference: named
+// layer assemblies and whole categories.
+type asmdefCategoryPermit struct {
+	targets    []string
+	categories []asmdefCategory
+}
+
+// asmdefCategoryPermits is the permit table for the non-layer categories.
+// Layers are handled by asmdefLayerAllowedTargets / asmdefLayerAllowedCategories
+// because their permissions differ per assembly, not per category.
+var asmdefCategoryPermits = map[asmdefCategory]asmdefCategoryPermit{
+	asmdefCategoryInternalBridge: {},
+	asmdefCategoryRuntime:        {categories: []asmdefCategory{asmdefCategoryRuntime}},
+	asmdefCategoryToolsUmbrella: {
+		targets:    []string{asmdefLayerToolContracts, asmdefLayerDomain},
+		categories: []asmdefCategory{asmdefCategoryTool, asmdefCategoryToolCommon},
+	},
+	asmdefCategoryToolCommon: {
+		targets:    []string{asmdefLayerToolContracts, asmdefLayerDomain},
+		categories: []asmdefCategory{asmdefCategoryToolCommon, asmdefCategoryRuntime, asmdefCategoryInternalBridge},
+	},
+	asmdefCategoryTool: {
+		targets:    []string{asmdefLayerToolContracts, asmdefLayerDomain, asmdefLayerApplication},
+		categories: []asmdefCategory{asmdefCategoryToolCommon, asmdefCategoryRuntime, asmdefCategoryInternalBridge},
+	},
+}
+
+// asmdefCategoryRules names the rule a non-layer category violates when it
+// references something outside its permit. Tool is absent because its rule
+// depends on the target (see asmdefToolReferenceViolation).
+var asmdefCategoryRules = map[asmdefCategory]string{
+	asmdefCategoryInternalBridge: asmdefRuleLayerDirection,
+	asmdefCategoryRuntime:        asmdefRuleRuntimeIsolation,
+	asmdefCategoryToolsUmbrella:  asmdefRuleUmbrellaScope,
+	asmdefCategoryToolCommon:     asmdefRuleCommonLayering,
+}
+
 // asmdefReferenceViolation returns the violated rule identifier, or "" when the
 // reference is allowed.
 func asmdefReferenceViolation(from string, to string) string {
+	fromCategory := classifyAsmdef(from)
 	toCategory := classifyAsmdef(to)
-	switch classifyAsmdef(from) {
-	case asmdefCategoryLayer:
+	if fromCategory == asmdefCategoryLayer {
 		if asmdefLayerMayReference(from, to, toCategory) {
 			return ""
 		}
 		return asmdefRuleLayerDirection
-	case asmdefCategoryInternalBridge:
-		return asmdefRuleLayerDirection
-	case asmdefCategoryRuntime:
-		if toCategory == asmdefCategoryRuntime {
-			return ""
-		}
-		return asmdefRuleRuntimeIsolation
-	case asmdefCategoryToolsUmbrella:
-		if toCategory == asmdefCategoryTool || toCategory == asmdefCategoryToolCommon || to == asmdefLayerToolContracts || to == asmdefLayerDomain {
-			return ""
-		}
-		return asmdefRuleUmbrellaScope
-	case asmdefCategoryToolCommon:
-		if to == asmdefLayerToolContracts || to == asmdefLayerDomain || toCategory == asmdefCategoryToolCommon || toCategory == asmdefCategoryRuntime || toCategory == asmdefCategoryInternalBridge {
-			return ""
-		}
-		return asmdefRuleCommonLayering
-	default:
+	}
+	if asmdefPermitAllows(asmdefCategoryPermits[fromCategory], to, toCategory) {
+		return ""
+	}
+	if fromCategory == asmdefCategoryTool {
 		return asmdefToolReferenceViolation(from, to, toCategory)
 	}
+	return asmdefCategoryRules[fromCategory]
 }
 
-func asmdefLayerMayReference(from string, to string, toCategory asmdefCategory) bool {
-	for _, allowed := range asmdefLayerAllowedTargets[from] {
+func asmdefPermitAllows(permit asmdefCategoryPermit, to string, toCategory asmdefCategory) bool {
+	for _, allowed := range permit.targets {
 		if allowed == to {
 			return true
 		}
 	}
-	for _, allowed := range asmdefLayerAllowedCategories[from] {
+	for _, allowed := range permit.categories {
 		if allowed == toCategory {
 			return true
 		}
@@ -165,25 +194,24 @@ func asmdefLayerMayReference(from string, to string, toCategory asmdefCategory) 
 	return false
 }
 
-// asmdefToolReferenceViolation applies the Tool rules: a tool may use the
-// contracts, Domain, Application, shared tool utilities, runtime assemblies,
-// the internal bridge, and its own parent tool. Another tool is a
-// tool-isolation violation; any other layer is a layer-direction violation.
+func asmdefLayerMayReference(from string, to string, toCategory asmdefCategory) bool {
+	return asmdefPermitAllows(asmdefCategoryPermit{
+		targets:    asmdefLayerAllowedTargets[from],
+		categories: asmdefLayerAllowedCategories[from],
+	}, to, toCategory)
+}
+
+// asmdefToolReferenceViolation names the rule for a tool reference outside the
+// Tool permit: another tool is a tool-isolation violation unless it is the
+// tool's own parent; any other target is a layer-direction violation.
 func asmdefToolReferenceViolation(from string, to string, toCategory asmdefCategory) string {
-	if to == asmdefLayerToolContracts || to == asmdefLayerDomain || to == asmdefLayerApplication {
-		return ""
-	}
-	switch toCategory {
-	case asmdefCategoryToolCommon, asmdefCategoryRuntime, asmdefCategoryInternalBridge:
-		return ""
-	case asmdefCategoryTool:
-		if asmdefIsParentTool(from, to) {
-			return ""
-		}
-		return asmdefRuleToolIsolation
-	default:
+	if toCategory != asmdefCategoryTool {
 		return asmdefRuleLayerDirection
 	}
+	if asmdefIsParentTool(from, to) {
+		return ""
+	}
+	return asmdefRuleToolIsolation
 }
 
 // asmdefIsParentTool reports whether to is an ancestor tool of from, e.g.
