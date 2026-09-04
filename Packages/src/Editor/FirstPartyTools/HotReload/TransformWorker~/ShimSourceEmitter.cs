@@ -17,24 +17,26 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class ShimSourceEmitter
 {
-    public static string Emit(
-        CompilationUnitSyntax originalRoot,
-        List<ShimTypeBuilder> shimTypes,
-        string projectRelativePath)
+    public static string Emit(List<ShimTypeBuilder> shimTypes)
     {
         if (shimTypes.Count == 0)
         {
             return string.Empty;
         }
 
-        // projectRelativePath shape is validated at TransformFile's input boundary (ParseErrors).
+        // Each source's projectRelativePath shape is validated at the input boundary (ParseErrors).
 
         // Emit each shim type in the original type's namespace (and with that type's usings) so
         // unqualified sibling-type references in transplanted bodies still resolve. Manifest
         // shimTypeName stays the short name; orchestrator resolves by Type.Name.
         CompilationUnitSyntax unit = SyntaxFactory.CompilationUnit();
+        Dictionary<string, string> projectRelativePathsByShimTypeName = new Dictionary<string, string>();
+        // Why dedupe by normalized text: the shim types of a group can come from several files
+        // whose global-namespace usings overlap, and compilation-unit usings are one flat list.
+        HashSet<string> emittedCompilationUnitUsings = new HashSet<string>();
         foreach (ShimTypeBuilder shimType in shimTypes)
         {
+            projectRelativePathsByShimTypeName[shimType.ShimTypeName] = shimType.SourceProjectRelativePath;
             ClassDeclarationSyntax classDeclaration = SyntaxFactory.ClassDeclaration(shimType.ShimTypeName)
                 .WithModifiers(
                     SyntaxFactory.TokenList(
@@ -46,6 +48,11 @@ internal static class ShimSourceEmitter
             {
                 foreach (UsingDirectiveSyntax usingDirective in shimType.Usings)
                 {
+                    if (!emittedCompilationUnitUsings.Add(usingDirective.ToFullString().Trim()))
+                    {
+                        continue;
+                    }
+
                     unit = unit.AddUsings(usingDirective);
                 }
 
@@ -65,7 +72,7 @@ internal static class ShimSourceEmitter
         // Why after NormalizeWhitespace: formatting would otherwise shift #line relative to
         // statements; annotations survive formatting so we inject directives on the final tree.
         unit = unit.NormalizeWhitespace();
-        unit = InjectLineDirectives(unit, projectRelativePath);
+        unit = InjectLineDirectives(unit, projectRelativePathsByShimTypeName);
 
         StringBuilder builder = new StringBuilder();
         builder.AppendLine(
@@ -76,10 +83,20 @@ internal static class ShimSourceEmitter
 
     private static CompilationUnitSyntax InjectLineDirectives(
         CompilationUnitSyntax unit,
-        string projectRelativePath)
+        Dictionary<string, string> projectRelativePathsByShimTypeName)
     {
         List<SyntaxNode> annotatedNodes = unit.GetAnnotatedNodes(TransformWorkerProgram.UloopLineAnnotationKind)
             .ToList();
+        // Why resolve the document before replacing: ReplaceNodes hands back rewritten nodes that
+        // are detached from the unit, so the enclosing shim class is only reachable up front.
+        Dictionary<SyntaxNode, string> projectRelativePathsByNode = new Dictionary<SyntaxNode, string>();
+        foreach (SyntaxNode annotatedNode in annotatedNodes)
+        {
+            projectRelativePathsByNode[annotatedNode] = ResolveProjectRelativePath(
+                annotatedNode,
+                projectRelativePathsByShimTypeName);
+        }
+
         if (annotatedNodes.Count > 0)
         {
             unit = unit.ReplaceNodes(
@@ -93,7 +110,7 @@ internal static class ShimSourceEmitter
                     // Why after comments/regions: those trivia consume mapped lines if they sit
                     // under the directive, so a later statement inherits the earlier line number.
                     string directiveText =
-                        "\n#line " + annotation.Data + " \"" + projectRelativePath + "\"\n";
+                        "\n#line " + annotation.Data + " \"" + projectRelativePathsByNode[original] + "\"\n";
                     return LineDirectiveTriviaInjector.Attach(rewritten, directiveText);
                 });
         }
@@ -119,5 +136,21 @@ internal static class ShimSourceEmitter
                 return rewritten.WithTrailingTrivia(
                     rewritten.GetTrailingTrivia().AddRange(defaultDirective));
             });
+    }
+
+    // The edited file a shim body came from, taken from the shim class that hosts it.
+    private static string ResolveProjectRelativePath(
+        SyntaxNode annotatedNode,
+        Dictionary<string, string> projectRelativePathsByShimTypeName)
+    {
+        ClassDeclarationSyntax shimClass = annotatedNode.Ancestors()
+            .OfType<ClassDeclarationSyntax>()
+            .LastOrDefault();
+        Debug.Assert(shimClass != null, "An annotated shim node must live inside a shim class.");
+        string shimTypeName = shimClass.Identifier.ValueText;
+        Debug.Assert(
+            projectRelativePathsByShimTypeName.ContainsKey(shimTypeName),
+            "Every emitted shim class must come from a known shim type.");
+        return projectRelativePathsByShimTypeName[shimTypeName];
     }
 }

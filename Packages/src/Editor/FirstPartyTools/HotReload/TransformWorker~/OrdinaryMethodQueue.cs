@@ -425,7 +425,8 @@ internal static class OrdinaryMethodQueue
         typeState.CurrentShimType = new ShimTypeBuilder(
             shimTypeName,
             namespaceName,
-            WorkerUsingCollector.CollectUsingsForType(root, typeState.TypeDeclaration, assemblyGlobalUsings));
+            WorkerUsingCollector.CollectUsingsForType(root, typeState.TypeDeclaration, assemblyGlobalUsings),
+            typeState.SourceUnit.Input.ProjectRelativePath);
         shimTypes.Add(typeState.CurrentShimType);
         return (typeState.CurrentShimType, shimTypeCounter);
     }

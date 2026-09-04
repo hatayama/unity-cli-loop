@@ -264,7 +264,6 @@ public static class TransformWorkerProgram
         }
 
         return BuildWorkerOutput(
-            root,
             source.ProjectRelativePath,
             shimTypes,
             entries,
@@ -366,7 +365,6 @@ public static class TransformWorkerProgram
     }
 
     private static WorkerOutput BuildWorkerOutput(
-        CompilationUnitSyntax root,
         string projectRelativePath,
         List<ShimTypeBuilder> shimTypes,
         List<WorkerEntry> entries,
@@ -395,7 +393,7 @@ public static class TransformWorkerProgram
         // rows, and stamping at the single output point cannot leave one of them behind.
         StampSourceProjectRelativePath(entries, skipped, unchangedMethods, projectRelativePath);
 
-        string shimSource = ShimSourceEmitter.Emit(root, shimTypes, projectRelativePath);
+        string shimSource = ShimSourceEmitter.Emit(shimTypes);
         WorkerFileOutput fileOutput = new WorkerFileOutput
         {
             ProjectRelativePath = projectRelativePath,

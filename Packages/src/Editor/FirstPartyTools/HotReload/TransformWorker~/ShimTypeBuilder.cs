@@ -22,15 +22,21 @@ internal sealed class ShimTypeBuilder
     public ShimTypeBuilder(
         string shimTypeName,
         string namespaceName,
-        List<UsingDirectiveSyntax> usings)
+        List<UsingDirectiveSyntax> usings,
+        string sourceProjectRelativePath)
     {
         ShimTypeName = shimTypeName;
         NamespaceName = namespaceName ?? string.Empty;
         Usings = usings ?? new List<UsingDirectiveSyntax>();
+        SourceProjectRelativePath = sourceProjectRelativePath;
         AccessorPlan = new AccessorPlan();
     }
 
     public string ShimTypeName { get; }
+
+    // The edited file whose methods this shim type hosts. Emit names it in the #line directives
+    // so a shim compile error maps back to the file the body was written in.
+    public string SourceProjectRelativePath { get; }
 
     public string NamespaceName { get; }
 

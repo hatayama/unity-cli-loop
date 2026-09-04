@@ -54,6 +54,7 @@ internal static class PropertyGetterEmitter
                     typeState.TypeMetadataNameFromSyntax,
                     semanticModel,
                     root,
+                    typeState.SourceUnit.Input.ProjectRelativePath,
                     input,
                     baseline.HasBaseline,
                     baseline.SnapshotPropertyMap,
@@ -86,6 +87,7 @@ internal static class PropertyGetterEmitter
             string typeMetadataNameFromSyntax,
             SemanticModel semanticModel,
             CompilationUnitSyntax root,
+            string sourceProjectRelativePath,
             WorkerInput input,
             bool hasBaseline,
             Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
@@ -197,6 +199,7 @@ internal static class PropertyGetterEmitter
             parameterTypeFullNames,
             semanticModel,
             root,
+            sourceProjectRelativePath,
             entries,
             shimTypes,
             shimTypeCounter,
@@ -219,6 +222,7 @@ internal static class PropertyGetterEmitter
             string[] parameterTypeFullNames,
             SemanticModel semanticModel,
             CompilationUnitSyntax root,
+            string sourceProjectRelativePath,
             List<WorkerEntry> entries,
             List<ShimTypeBuilder> shimTypes,
             int shimTypeCounter,
@@ -239,7 +243,8 @@ internal static class PropertyGetterEmitter
             currentShimType = new ShimTypeBuilder(
                 shimTypeName,
                 namespaceName,
-                WorkerUsingCollector.CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings));
+                WorkerUsingCollector.CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings),
+                sourceProjectRelativePath);
             shimTypes.Add(currentShimType);
         }
 
