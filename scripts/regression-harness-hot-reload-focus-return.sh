@@ -198,6 +198,12 @@ fi
 SCRIPT_COMPILATION="$(jq -r '.Result // empty' "$RESULT_FILE")"
 if [ "$SCRIPT_COMPILATION" != "$STOP_PLAYING_AND_RECOMPILE" ]; then
     SAVED_SCRIPT_COMPILATION="$SCRIPT_COMPILATION"
+    # Why before the write: a failed SetInt or later abort must restore prefs.
+    # Earlier preflight exits still use the temp-only EXIT trap.
+    trap cleanup EXIT
+    trap 'cleanup; exit 130' INT
+    trap 'cleanup; exit 143' TERM
+    trap 'cleanup; exit 129' HUP
     log "Setting ScriptCompilationDuringPlay from $SCRIPT_COMPILATION to $STOP_PLAYING_AND_RECOMPILE (will restore)."
     cat > "$CODE_FILE" <<EOF
 UnityEditor.EditorPrefs.SetInt("ScriptCompilationDuringPlay", $STOP_PLAYING_AND_RECOMPILE);
@@ -258,6 +264,20 @@ IS_PLAYING="$(jq -r '.IsPlaying | tostring' "$RESULT_FILE")"
 if [ "$IS_PLAYING" != "true" ] && [ "$IS_PLAYING" != "True" ]; then
     log "FAIL: Play Mode did not start. IsPlaying=$IS_PLAYING"
     cat "$RESULT_FILE"
+    exit 1
+fi
+
+cat > "$CODE_FILE" <<'EOF'
+return UnityEditor.EditorApplication.isFocused.ToString();
+EOF
+if ! run_uloop execute-dynamic-code --code-file "$CODE_FILE" > "$RESULT_FILE"; then
+    log "FAIL: could not recheck EditorApplication.isFocused before editing the harness source."
+    cat "$RESULT_FILE"
+    exit 1
+fi
+IS_FOCUSED="$(jq -r '.Result // empty' "$RESULT_FILE")"
+if [ "$IS_FOCUSED" = "True" ]; then
+    log "FAIL: Unity regained focus before the source edit. Click another application so that the Editor loses focus, then rerun."
     exit 1
 fi
 
@@ -337,7 +357,8 @@ EOF
     sleep 1
 done
 if [ "$FOCUSED" != "True" ]; then
-    log "WARN: Editor is reachable but isFocused is still false after focus-window; continuing to the Play Mode check."
+    log "FAIL: Editor is reachable but isFocused is still false after focus-window."
+    exit 1
 fi
 
 log "Waiting 5 seconds for native Auto Refresh / compile..."
