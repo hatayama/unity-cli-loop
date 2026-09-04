@@ -107,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // after the worker. The worker itself does not.
             HashSet<string> snapshotLabels = HotReloadAppliedSourceLifecycle.CollectActiveLabelsForFile(projectRelativePath);
             HashSet<string> snapshotAddedLabels = new HashSet<string>(
-                HotReloadAddedMemberRegistry.ListActiveMethodKeys(projectRelativePath),
+                HotReloadFileGenerations.ListActiveAddedMethodKeys(projectRelativePath),
                 StringComparer.Ordinal);
 
             string[] defines = compilationAssembly.defines ?? Array.Empty<string>();

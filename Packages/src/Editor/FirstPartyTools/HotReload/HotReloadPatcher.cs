@@ -236,8 +236,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<MethodBase> revertedMethods = new List<MethodBase>(ShimByMethod.Keys);
             ShimByMethod.Clear();
             FilePathByMethod.Clear();
-            HotReloadShimRegistry.Clear();
-            HotReloadAddedMemberRegistry.Clear();
+            HotReloadFileGenerations.ClearAll();
             HotReloadAddedFieldStore.Clear();
             HotReloadAddedFieldRegistry.ClearAll();
             TransplantLocalsByMethod.Clear();

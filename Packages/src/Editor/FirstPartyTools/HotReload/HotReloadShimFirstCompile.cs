@@ -79,8 +79,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // clearing — same as leaving existing Harmony patches in place when apply does
                 // not succeed.
                 IReadOnlyList<string> addedLabelsAtClear =
-                    HotReloadAddedMemberRegistry.ListActiveMethodKeys(context.ProjectRelativePath);
+                    HotReloadFileGenerations.ListActiveAddedMethodKeys(context.ProjectRelativePath);
                 HotReloadOrchestratorLog.LogHotReloadEmptyEntriesClear(addedLabelsAtClear, context.CorrelationId);
+                // Why not HotReloadFileGenerations.BeginFileGeneration: there is no shim assembly
+                // on this path — entries are empty, so nothing was compiled. Only the added-member
+                // side has stale rows to drop; starting a shim generation would need bytes that
+                // do not exist.
                 HotReloadAddedMemberRegistry.BeginFileGeneration(context.ProjectRelativePath);
                 HotReloadEntryApplier.CommitAddedFieldsForFile(context.ProjectRelativePath, context.WorkerOutput.addedFieldNames);
                 // Why after the clear: a still-declared added method can be worker-skipped
