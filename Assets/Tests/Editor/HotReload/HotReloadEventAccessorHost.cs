@@ -21,7 +21,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         internal event HotReloadHiddenScoreDelegate HiddenScored;
 
+        // Custom accessors mean no compiler-generated backing field, so a test can edit this
+        // declaration into a field-like event and check that the raiser is still skipped.
+        public event HotReloadScoreDelegate CustomScored
+        {
+            add { _customScored = _customScored + value; }
+            remove { _customScored = _customScored - value; }
+        }
+
+        private HotReloadScoreDelegate _customScored;
+
         public int Total;
+
+        // Lets a test raise an event through a conditional receiver ('Other?.Scored').
+        public HotReloadEventAccessorHost Other;
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public void RaiseScored(int amount)
@@ -43,6 +56,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         [MethodImpl(MethodImplOptions.NoInlining)]
         public void RaiseHiddenScored(int amount)
+        {
+            Total = amount;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void RaiseCustomScored(int amount)
+        {
+            Total = amount;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void RaiseOtherScored(int amount)
         {
             Total = amount;
         }

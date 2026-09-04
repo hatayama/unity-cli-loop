@@ -41,6 +41,11 @@ internal static class EventAccessorRules
         "Methods that name a field-like event inside nameof are skipped; the shim is a different "
         + "type and cannot keep the bare event name. Use uloop compile.";
 
+    internal const string ConditionalReceiverReason =
+        "Methods that raise or read a field-like event through a conditional receiver "
+        + "('a?.E') are skipped; the shim cannot name the conditional receiver as the accessor "
+        + "call's argument. Use uloop compile.";
+
     internal const string AccessorRewriteUnavailableReasonPrefix =
         "Methods that raise or read a field-like event are skipped when the body cannot be "
         + "rewritten into accessor delegates. Accessor rewrite unavailable: ";
@@ -64,6 +69,13 @@ internal static class EventAccessorRules
             if (NameofRules.IsInsideNameofArgument(use.Node))
             {
                 return NameofReason;
+            }
+
+            // 'a?.E' binds the event on a receiver the shim has no name for, so the accessor
+            // call cannot be built and the raw event access would reach the shim source.
+            if (use.Node is MemberBindingExpressionSyntax)
+            {
+                return ConditionalReceiverReason;
             }
 
             string reason = EvaluateEventSkipReason(use.EventSymbol, compiledType);
@@ -129,7 +141,7 @@ internal static class EventAccessorRules
             return DelegateTypeNotVisibleReason;
         }
 
-        if (!CompiledEventExists(eventSymbol, compiledType))
+        if (!CompiledBackingFieldExists(eventSymbol, compiledType))
         {
             return AddedInThisEditReason;
         }
@@ -150,7 +162,11 @@ internal static class EventAccessorRules
         return false;
     }
 
-    private static bool CompiledEventExists(IEventSymbol eventSymbol, INamedTypeSymbol compiledType)
+    // Harmony looks the backing field up by the event's own name, so the compiled event must
+    // still be field-like and carry the same delegate type. The field itself is not visible:
+    // metadata symbols expose only accessible members, and the backing field stays private.
+    // A compiler-generated add accessor is the metadata evidence that the field exists.
+    private static bool CompiledBackingFieldExists(IEventSymbol eventSymbol, INamedTypeSymbol compiledType)
     {
         // Raising is only legal inside the declaring type, so the event always belongs to the
         // type currently being emitted; anything else is treated as not proven present.
@@ -159,9 +175,37 @@ internal static class EventAccessorRules
             return false;
         }
 
+        string eventTypeDisplay = eventSymbol.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         foreach (ISymbol member in compiledType.GetMembers(eventSymbol.Name))
         {
-            if (member is IEventSymbol compiledEvent && compiledEvent.IsStatic == eventSymbol.IsStatic)
+            if (member is not IEventSymbol compiledEvent
+                || compiledEvent.IsStatic != eventSymbol.IsStatic
+                || compiledEvent.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    != eventTypeDisplay)
+            {
+                continue;
+            }
+
+            if (HasCompilerGeneratedAccessor(compiledEvent))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasCompilerGeneratedAccessor(IEventSymbol compiledEvent)
+    {
+        if (compiledEvent.AddMethod == null)
+        {
+            return false;
+        }
+
+        foreach (AttributeData attribute in compiledEvent.AddMethod.GetAttributes())
+        {
+            if (attribute.AttributeClass != null
+                && attribute.AttributeClass.Name == "CompilerGeneratedAttribute")
             {
                 return true;
             }
@@ -191,6 +235,10 @@ internal static class EventAccessorRules
             if (node.Parent is MemberAccessExpressionSyntax parentAccess && parentAccess.Name == node)
             {
                 effective = parentAccess;
+            }
+            else if (node.Parent is MemberBindingExpressionSyntax parentBinding && parentBinding.Name == node)
+            {
+                effective = parentBinding;
             }
 
             bool isSubscription = effective.Parent is AssignmentExpressionSyntax assignment

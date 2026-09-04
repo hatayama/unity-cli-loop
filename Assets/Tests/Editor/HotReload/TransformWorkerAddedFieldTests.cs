@@ -647,7 +647,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(
                 result,
                 nameof(HotReloadAddedMemberHost.ExistingCaller),
-                "Drop the initializer and assign the field lazily inside the patched method");
+                "Drop the initializer and assign the field inside the patched method");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
         }
 

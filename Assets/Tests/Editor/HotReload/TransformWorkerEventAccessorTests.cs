@@ -38,6 +38,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string ClearScoredOriginal =
             "        public void ClearScored()\n        {\n            Total = 0;\n        }";
 
+        private const string CustomScoredDeclarationOriginal =
+            "        public event HotReloadScoreDelegate CustomScored\n        {\n"
+            + "            add { _customScored = _customScored + value; }\n"
+            + "            remove { _customScored = _customScored - value; }\n        }";
+
+        private const string RaiseCustomScoredOriginal =
+            "        public void RaiseCustomScored(int amount)\n        {\n            Total = amount;\n        }";
+
+        private const string RaiseOtherScoredOriginal =
+            "        public void RaiseOtherScored(int amount)\n        {\n            Total = amount;\n        }";
+
         private const string RaiseHiddenScoredOriginal =
             "        public void RaiseHiddenScored(int amount)\n        {\n            Total = amount;\n        }";
 
@@ -192,6 +203,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(slice, Does.Contain(InstanceParameterName + ".Scored -= "));
             Assert.That(slice, Does.Contain(EventAccessorFieldName + "("));
             Assert.That(slice, Does.Not.Contain(EventAccessorFieldName + "(" + InstanceParameterName + ") +="));
+        }
+
+        /// <summary>
+        /// What: turning an event with custom accessors into a field-like one does not make its
+        /// backing field exist in the compiled assembly, so the raiser is still skipped.
+        /// </summary>
+        [Test]
+        public async Task Skip_EventTurnedFieldLikeInThisEdit_ReportsMissingCompiledBackingField()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = ReplaceMember(
+                onDisk,
+                CustomScoredDeclarationOriginal,
+                "        public event HotReloadScoreDelegate CustomScored;");
+            edited = ReplaceMember(
+                edited,
+                RaiseCustomScoredOriginal,
+                "        public void RaiseCustomScored(int amount)\n        {\n"
+                + "            CustomScored?.Invoke(amount);\n        }");
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("EventCustomTurnedFieldLike.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindEntry(result, nameof(HotReloadEventAccessorHost.RaiseCustomScored)),
+                Is.Null,
+                "shimSource=" + result.Output.shimSource);
+            AssertHasSkip(
+                result,
+                nameof(HotReloadEventAccessorHost.RaiseCustomScored),
+                "the compiled assembly has no backing field yet");
+        }
+
+        /// <summary>
+        /// What: raising an event through a conditional receiver is skipped, because the shim
+        /// cannot name the conditional receiver as the accessor call's argument.
+        /// </summary>
+        [Test]
+        public async Task Skip_EventRaisedThroughConditionalReceiver_ReportsConditionalReceiverReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "EventConditionalReceiver.cs",
+                RaiseOtherScoredOriginal,
+                "        public void RaiseOtherScored(int amount)\n        {\n"
+                + "            Other?.Scored?.Invoke(amount);\n        }");
+
+            Assert.That(
+                FindEntry(result, nameof(HotReloadEventAccessorHost.RaiseOtherScored)),
+                Is.Null,
+                "shimSource=" + result.Output.shimSource);
+            AssertHasSkip(
+                result,
+                nameof(HotReloadEventAccessorHost.RaiseOtherScored),
+                "conditional receiver");
         }
 
         /// <summary>
@@ -415,25 +482,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string[] BuildAbsoluteReferencePaths(string[] allReferences, string targetDllPath)
         {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             List<string> paths = new List<string>();
-            bool hasTarget = false;
-            foreach (string reference in allReferences ?? Array.Empty<string>())
+            if (allReferences != null)
             {
-                string full = Path.IsPathRooted(reference)
-                    ? Path.GetFullPath(reference)
-                    : Path.GetFullPath(Path.Combine(projectRoot, reference));
-                if (string.Equals(full, Path.GetFullPath(targetDllPath), StringComparison.Ordinal))
+                foreach (string reference in allReferences)
+                {
+                    // A stale path from CompilationPipeline becomes a "Reference not found"
+                    // parse error in the worker, so drop references that no longer exist.
+                    if (string.IsNullOrEmpty(reference) || !File.Exists(reference))
+                    {
+                        continue;
+                    }
+
+                    paths.Add(Path.GetFullPath(reference));
+                }
+            }
+
+            string fullTarget = Path.GetFullPath(targetDllPath);
+            bool hasTarget = false;
+            foreach (string path in paths)
+            {
+                if (string.Equals(path, fullTarget, StringComparison.OrdinalIgnoreCase))
                 {
                     hasTarget = true;
+                    break;
                 }
-
-                paths.Add(full);
             }
 
             if (!hasTarget)
             {
-                paths.Add(Path.GetFullPath(targetDllPath));
+                paths.Add(fullTarget);
             }
 
             return paths.ToArray();
