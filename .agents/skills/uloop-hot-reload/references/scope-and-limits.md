@@ -31,9 +31,13 @@ An added field's values live in a side table that follows each instance's lifeti
 (statics live per domain). Its initializer does not run at construction time; it runs
 on the field's first access from edited code — once per instance, or once per domain
 for statics. Initializer expressions are limited to literals and externally visible
-static calls (`= 5`, `= Math.Abs(x)`); anything touching the host type or instance
-state skips the field's readers and writers with a per-method reason. Added `const`
-values are folded into edited bodies as literals, like `nameof`. Pause-point
+static calls (`= 5`, `= Math.Abs(x)`); object creation (`= new List<int>()`) and
+anything touching the host type or instance state skips the field's readers and
+writers with a per-method reason. To apply such a field without compiling, declare it
+without an initializer and assign it lazily inside the patched method with
+`if (_field == null) { _field = new List<int>(); }`; `??=` is not rewritable and keeps
+the method `Skipped`. Added `const` values are folded into edited bodies as literals,
+like `nameof`. Pause-point
 `CapturedVariables` never includes added fields; `enable-pause-point` warns when the
 resolved type has any — read them from a patched method body or
 `uloop execute-dynamic-code` instead.
