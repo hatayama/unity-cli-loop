@@ -18,9 +18,10 @@ func commandErrorWithStderr(err error, stderr string) error {
 	return fmt.Errorf("%w: %s", err, trimmedStderr)
 }
 
-// focusCommandError converts a focus script failure into an actionable error.
-// Why: a timeout kills the script before it can write anything to stderr, so without this
-// mapping the caller only sees a bare "exit status 1" with no hint about the stalled Editor.
+// focusCommandError converts a focus helper failure into an actionable error.
+// A timeout kills an external command or abandons a Win32 wait before it can
+// produce a useful error, so without this mapping the caller only sees a bare
+// failure with no hint about the stalled Editor.
 func focusCommandError(contextErr error, runErr error, stderr string) error {
 	if runErr == nil {
 		return nil
