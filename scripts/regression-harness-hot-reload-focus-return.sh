@@ -353,7 +353,16 @@ IS_PLAYING="$(jq -r '.IsPlaying | tostring' "$RESULT_FILE")"
 log "control-play-mode Status after focus return:"
 cat "$RESULT_FILE"
 if [ "$IS_PLAYING" != "true" ] && [ "$IS_PLAYING" != "True" ]; then
-    log "FAIL: Play Mode stopped after focus return (IsPlaying: ${IS_PLAYING}). Auto Refresh imported the edited script."
+    ACTIVE_AFTER_FOCUS="unavailable"
+    if run_uloop hot-reload --status > "$RESULT_FILE"; then
+        log "hot-reload --status after Play stopped:"
+        cat "$RESULT_FILE"
+        ACTIVE_AFTER_FOCUS="$(jq -r '.ActivePatchTotal // 0' "$RESULT_FILE")"
+    else
+        log "WARN: hot-reload --status failed after Play stopped; ledger count unavailable."
+        cat "$RESULT_FILE" || true
+    fi
+    log "FAIL: Play Mode stopped after focus return (IsPlaying: ${IS_PLAYING}, ActivePatchTotal: ${ACTIVE_AFTER_FOCUS}). Auto Refresh imported the edited script."
     exit 1
 fi
 
@@ -369,8 +378,13 @@ if [ "$ACTIVE_AFTER_FOCUS" != "$ACTIVE_BEFORE" ]; then
     cat "$RESULT_FILE"
     exit 1
 fi
-if [ "$HELD_AFTER_APPLY" != "true" ] && [ "$HELD_AFTER_FOCUS" != "true" ]; then
-    log "FAIL: AutoRefreshHeld was not true after apply (${HELD_AFTER_APPLY}) or status (${HELD_AFTER_FOCUS})."
+if [ "$HELD_AFTER_APPLY" != "true" ]; then
+    log "FAIL: AutoRefreshHeld was not true immediately after apply (${HELD_AFTER_APPLY})."
+    cat "$RESULT_FILE"
+    exit 1
+fi
+if [ "$HELD_AFTER_FOCUS" != "true" ]; then
+    log "FAIL: AutoRefreshHeld was not true after focus return (${HELD_AFTER_FOCUS})."
     cat "$RESULT_FILE"
     exit 1
 fi
