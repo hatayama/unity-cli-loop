@@ -86,6 +86,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + $"is reverted or compiled for real: {ids}");
             }
 
+            // Why snapshot here: hold warnings are not compile-resolution extras, so they
+            // must not hide the single-compile suffix the way pause-point extras do.
+            int warningCountBeforeHold = warnings.Count;
+            HotReloadAutoRefreshHoldResponseEnricher.AppendDeferredWarning(
+                warnings,
+                result.AutoRefreshHoldReleaseDeferred);
+            HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
+                warnings,
+                result.AutoRefreshHoldSceneRefreshWarning);
+            string message = BuildApplyMessage(
+                result,
+                hasFailure,
+                warnings.Count,
+                appendCompileResolution: orchestratorWarningCount >= 2
+                    && orchestratorWarningCount == warningCountBeforeHold);
             return new HotReloadResponse
             {
                 Success = !hasFailure,
@@ -98,12 +113,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ClearedCount = result.RevertedUnchangedTotal,
                 AddedFields = result.AddedFields,
                 AddedConsts = result.AddedConsts,
-                Message = BuildApplyMessage(
-                    result,
-                    hasFailure,
-                    warnings.Count,
-                    appendCompileResolution: orchestratorWarningCount >= 2
-                        && orchestratorWarningCount == warnings.Count),
+                AutoRefreshHeld = result.AutoRefreshHeld,
+                Message = HotReloadAutoRefreshHoldResponseEnricher.AppendNewlyArmedMessage(
+                    message,
+                    result.AutoRefreshHoldNewlyArmed),
                 RecommendedNextAction = HotReloadRecommendedNextAction.Resolve(
                     hasFailure,
                     result.PatchedTotal,

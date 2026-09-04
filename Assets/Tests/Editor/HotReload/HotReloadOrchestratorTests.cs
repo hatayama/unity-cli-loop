@@ -29,10 +29,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadOrchestratorTests
     {
+        [SetUp]
+        public void SetUp()
+        {
+            HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+        }
+
         [TearDown]
         public void TearDown()
         {
             HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
             VibeLogger.ClearMemoryLogs();
         }
 
@@ -168,6 +176,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(10 + 5 + 100));
+        }
+
+        /// <summary>
+        /// What: a Patched-only apply arms the Auto Refresh hold so focus return cannot recompile.
+        /// </summary>
+        [Test]
+        public async Task Run_PatchedOnly_SetsAutoRefreshHeld()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "PatchedOnlyAutoRefreshHeld.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            Assert.That(result.ActivePatchTotal, Is.GreaterThanOrEqualTo(1));
+            Assert.That(result.AutoRefreshHeld, Is.True);
         }
 
         /// <summary>
@@ -3251,6 +3285,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadAddedMethodApplyFixture host = new HotReloadAddedMethodApplyFixture();
             Assert.That(host.ExistingCaller(3), Is.EqualTo(4));
+        }
+
+        /// <summary>
+        /// What: an added-only run (Kind Added, no Patched) still arms AutoRefreshHeld.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedOnly_SetsAutoRefreshHeld()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithUnusedAddedPing(onDisk);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedOnlyAutoRefreshHeld.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedPing");
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                Assert.That(
+                    result.Methods[index].Kind,
+                    Is.EqualTo(HotReloadMethodOutcomeKind.Added),
+                    "Added-only run must not include Patched outcomes.\n" + FormatOutcomes(result));
+            }
+
+            Assert.That(result.ActivePatchTotal, Is.GreaterThanOrEqualTo(1));
+            Assert.That(result.AutoRefreshHeld, Is.True);
+        }
+
+        /// <summary>
+        /// What: deleting the last added member through the empty-entries path releases the hold.
+        /// </summary>
+        [Test]
+        public async Task Run_EmptyEntriesClearsLastAddedMember_ClearsAutoRefreshHeld()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("EmptyEntriesHold1.cs", WithUnusedAddedPing(onDisk)),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+            Assert.That(first.AutoRefreshHeld, Is.True);
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("EmptyEntriesHold2.cs", onDisk),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(second);
+            Assert.That(second.ActivePatchTotal, Is.EqualTo(0));
+            Assert.That(second.AutoRefreshHeld, Is.False);
         }
 
         /// <summary>
@@ -6420,6 +6511,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CallerGenericArity = 0,
                 TargetMethodKey = targetMethodKey
             };
+        }
+
+        private static string WithUnusedAddedPing(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
         }
 
         private static string WithWorkingAddedPing(string onDisk)

@@ -90,6 +90,8 @@ Full rules and the `Skipped`/`Failed` condition tables: `references/scope-and-li
 Treat hot reload as the exploration phase and `uloop compile` as the landing phase:
 keep edits inside the edited files, collect structural changes, and compile once —
 every compile drops all patches and pause points and resets the PlayMode session.
+While patches are active, `AutoRefreshHeld` is true so returning focus does not
+recompile; `uloop compile` or `--revert-all` releases the hold.
 One-shot methods (`Awake`, `Start`, initialization helpers) patch successfully but show
 no effect on the call that already ran; the response marks them with `LifecycleNote`.
 For values you expect to tune while playing, expose a static property getter instead of

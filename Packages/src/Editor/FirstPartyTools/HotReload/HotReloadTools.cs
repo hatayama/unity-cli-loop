@@ -94,6 +94,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public int DroppedByPlayModeEntryCount { get; set; }
 
+        /// <summary>
+        /// True while Auto Refresh is held because at least one hot-reload patch is active.
+        /// </summary>
+        public bool AutoRefreshHeld { get; set; }
+
         // Why omit empty: success and validation-only payloads must not grow a next-action
         // field that PausePoint-style responses leave blank on the wire.
         public bool ShouldSerializeRecommendedNextAction()

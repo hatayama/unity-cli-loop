@@ -41,7 +41,7 @@ become saved, and `run-tests --unsaved-changes fail` had nothing left to detect.
 now gated on an actual external change, which is the only case the dialog-avoidance rationale
 covers.
 
-## Why there is no Auto Refresh hold
+## Why focus-return preflight does not hold Auto Refresh
 
 Through 3.2.1 the package called `AssetDatabase.DisallowAutoRefresh` on focus loss and released
 it only after the preflight ran. That hold is what caused issue #2575: Unity evaluates its own
@@ -52,11 +52,20 @@ an explicit `uloop compile`.
 A/B checks on Unity 2022.3.62f3 and 6000.3.15f1 showed the same Editor order every time:
 native refresh (import) → C# `EditorApplication.focusChanged(true)` (preflight) → Unity's
 scene-change check (the tick that would raise the dialog). With that order the preflight
-alone prevents the native dialog; the hold did not contribute.
+alone prevents the native dialog; a focus-loss hold did not contribute.
 
-Do not reintroduce a hold unless a Unity version is found where the native dialog appears
-before the preflight runs. Even then, prefer a version-specific workaround over holding
-Auto Refresh for every Editor.
+Do not reintroduce a hold for the focus-return preflight unless a Unity version is found
+where the native dialog appears before the preflight runs. Even then, prefer a
+version-specific workaround over holding Auto Refresh for every Editor.
+
+A different hold exists for live hot-reload patches. `HotReloadAutoRefreshHold` calls
+`DisallowAutoRefresh` only while `HotReloadPatcher.ActiveChangeCount > 0`, so a
+`uloop focus-window` cannot import edited `.cs` files and stop Play Mode. The hold is
+released when the ledger returns to 0 (revert-all, a run that clears the last patch,
+compile, or domain reload). Release then calls `AssetDatabase.Refresh` when the Editor is
+focused and not playing; during Play the refresh is deferred to the next focus return or
+`uloop compile`. Explicit `AssetDatabase.Refresh` from `uloop compile` still runs while
+the hold is active.
 
 ## Related but separate paths
 
