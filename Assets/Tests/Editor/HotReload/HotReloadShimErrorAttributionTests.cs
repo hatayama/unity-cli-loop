@@ -68,5 +68,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(attribution, Is.Null);
         }
+
+        /// <summary>
+        /// What: two entries of the same file whose source ranges both contain the error line
+        /// make the error ambiguous, so the whole attribution is rejected instead of pinning it
+        /// on the first match.
+        /// </summary>
+        [Test]
+        public void AttributeErrorsToEntries_TwoEntriesOfSameFileContainErrorLine_ReturnsNull()
+        {
+            TransformWorkerEntryDto outerEntry = new TransformWorkerEntryDto
+            {
+                sourceProjectRelativePath = "Assets/Scripts/First.cs",
+                sourceStartLine = 10,
+                sourceEndLine = 30
+            };
+            TransformWorkerEntryDto innerEntry = new TransformWorkerEntryDto
+            {
+                sourceProjectRelativePath = "Assets/Scripts/First.cs",
+                sourceStartLine = 14,
+                sourceEndLine = 20
+            };
+            HotReloadShimCompileError error =
+                new HotReloadShimCompileError("Assets/Scripts/First.cs", 15, "CS0103: name not found");
+
+            HotReloadShimErrorAttribution.ShimCompileErrorAttribution attribution =
+                HotReloadShimErrorAttribution.AttributeErrorsToEntries(
+                    new[] { outerEntry, innerEntry },
+                    new List<HotReloadShimCompileError> { error });
+
+            Assert.That(attribution, Is.Null);
+        }
     }
 }
