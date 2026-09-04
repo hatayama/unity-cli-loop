@@ -403,8 +403,8 @@ public static class TransformWorkerProgram
             BaselineDisabledByDuplicateKeys = baseline.BaselineDisabledByDuplicateKeys,
             RemovedMembers = removedMembers.ToArray(),
             RemovedMethodSignatures = removedMethodSignatures.ToArray(),
-            AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(),
-            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames()
+            AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(projectRelativePath),
+            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath)
         };
         return new WorkerOutput
         {
