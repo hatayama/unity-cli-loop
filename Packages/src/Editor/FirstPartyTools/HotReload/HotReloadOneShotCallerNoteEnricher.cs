@@ -120,7 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 foreach (Candidate candidate in pair.Value)
                 {
-                    string targetKey = HotReloadWireMethodKeys.BuildMethodKeyParts(
+                    string targetKey = HotReloadMethodKeys.BuildMethodKeyParts(
                         candidate.Identity.TypeMetadataName,
                         candidate.Identity.MethodName,
                         candidate.Identity.ParameterTypeFullNames,

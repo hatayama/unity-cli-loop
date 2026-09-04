@@ -254,7 +254,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (entriesToPatch.Length == 1)
                 {
                     TransformWorkerEntryDto soleEntry = entriesToPatch[0];
-                    failureMethodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                    failureMethodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                         soleEntry.typeMetadataName,
                         soleEntry.methodName,
                         soleEntry.parameterTypeFullNames ?? Array.Empty<string>(),
@@ -304,7 +304,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (TransformWorkerEntryDto entry in retryEntries)
             {
-                string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                string methodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                     entry.typeMetadataName,
                     entry.methodName,
                     entry.parameterTypeFullNames ?? Array.Empty<string>(),

@@ -30,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string wireKey = HotReloadWireMethodKeys.BuildMethodKey(entry);
+                string wireKey = HotReloadMethodKeys.BuildMethodKey(entry);
                 if (entriesByWireKey.ContainsKey(wireKey))
                 {
                     continue;

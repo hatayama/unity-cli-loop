@@ -17,8 +17,7 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class WorkerMethodKeys
 {
-    // Keep in sync with HotReloadWireMethodKeys.BuildMethodKey (Unity package side)
-    // and HotReloadCallSiteScanner.CreateHit.
+    // Keep in sync with HotReloadMethodKeys.BuildMethodKeyParts (Unity package side).
     // Why arity suffix: Caller(int) and Caller<T>(int) must not share a wire key.
     // Arity 0 keeps the bare name so existing non-generic keys stay stable.
     internal static string BuildMethodKey(
@@ -49,24 +48,36 @@ internal static class WorkerMethodKeys
             methodSymbol.Arity);
     }
 
-    // Keep in sync with HotReloadPatcher.FormatMethodKeyParts.
-    // Why FormatMethodKeyParts shape: Methods[].Method must use one label for every Kind.
-    // Roslyn FullyQualifiedFormat (global::, type arguments) was the Skipped-only outlier.
     internal static string FormatMethodLabel(IMethodSymbol methodSymbol)
     {
-        string typeMetadataName =
-            CecilTypeNames.ToMetadataName(methodSymbol.ContainingType).Replace('/', '+');
         string[] parameterTypeFullNames = methodSymbol.Parameters
             .Select(CecilTypeNames.ToParameterTypeFullName)
             .ToArray();
+        return FormatMethodLabelParts(
+            CecilTypeNames.ToMetadataName(methodSymbol.ContainingType),
+            methodSymbol.Name,
+            parameterTypeFullNames,
+            methodSymbol.Arity);
+    }
+
+    // Keep in sync with HotReloadMethodKeys.FormatMethodLabelParts (Unity package side).
+    // Why one label shape: Methods[].Method must use one label for every Kind.
+    // Roslyn FullyQualifiedFormat (global::, type arguments) was the Skipped-only outlier.
+    // Cecil nested separators ('/') are normalized to reflection ('+').
+    internal static string FormatMethodLabelParts(
+        string typeMetadataName,
+        string methodName,
+        string[] parameterTypeFullNames,
+        int genericArity)
+    {
         StringBuilder builder = new StringBuilder();
-        builder.Append(typeMetadataName);
+        builder.Append(typeMetadataName.Replace('/', '+'));
         builder.Append('.');
-        builder.Append(methodSymbol.Name);
-        if (methodSymbol.Arity > 0)
+        builder.Append(methodName);
+        if (genericArity > 0)
         {
             builder.Append('`');
-            builder.Append(methodSymbol.Arity.ToString(CultureInfo.InvariantCulture));
+            builder.Append(genericArity.ToString(CultureInfo.InvariantCulture));
         }
 
         builder.Append('(');

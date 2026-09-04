@@ -333,7 +333,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodOutcome> failedMethodOutcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto failedEntry in attribution.FailedEntries)
             {
-                string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                string methodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                     failedEntry.typeMetadataName,
                     failedEntry.methodName,
                     failedEntry.parameterTypeFullNames ?? Array.Empty<string>(),
@@ -363,7 +363,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<TransformWorkerEntryDto> excludedCallerEntries = new List<TransformWorkerEntryDto>();
             foreach (TransformWorkerEntryDto failedEntry in failedEntries)
             {
-                string methodKey = HotReloadWireMethodKeys.BuildMethodKey(failedEntry);
+                string methodKey = HotReloadMethodKeys.BuildMethodKey(failedEntry);
                 if (failedEntry.patchKind == HotReloadConstants.PatchKindAddedMethod)
                 {
                     // Why a separate set: dropping a healthy added shim via excludedMethodKeys
@@ -380,7 +380,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> failedEntryKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerEntryDto failedEntry in failedEntries)
             {
-                failedEntryKeys.Add(HotReloadWireMethodKeys.BuildMethodKey(failedEntry));
+                failedEntryKeys.Add(HotReloadMethodKeys.BuildMethodKey(failedEntry));
             }
 
             List<TransformWorkerEntryDto> callers = CollectCallerEntriesOfAddedMethods(
@@ -390,7 +390,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (TransformWorkerEntryDto entry in callers)
             {
                 excludedCallerEntries.Add(entry);
-                string callerKey = HotReloadWireMethodKeys.BuildMethodKey(entry);
+                string callerKey = HotReloadMethodKeys.BuildMethodKey(entry);
                 if (entry.patchKind == HotReloadConstants.PatchKindAddedMethod)
                 {
                     excludedAddedMethodKeys.Add(callerKey);
@@ -429,7 +429,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string callerKey = HotReloadWireMethodKeys.BuildMethodKey(entry);
+                string callerKey = HotReloadMethodKeys.BuildMethodKey(entry);
                 if (alreadyExcludedEntryKeys.Contains(callerKey))
                 {
                     continue;
@@ -464,7 +464,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<HotReloadMethodOutcome> skippedCallerOutcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto caller in callerEntries)
             {
-                string methodLabel = HotReloadPatcher.FormatMethodKeyParts(
+                string methodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                     caller.typeMetadataName,
                     caller.methodName,
                     caller.parameterTypeFullNames ?? Array.Empty<string>(),

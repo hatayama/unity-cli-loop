@@ -176,7 +176,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] parameterTypeFullNames,
             int genericArity)
         {
-            string methodKey = HotReloadWireMethodKeys.BuildMethodKeyParts(
+            string methodKey = HotReloadMethodKeys.BuildMethodKeyParts(
                 typeMetadataName,
                 methodName,
                 parameterTypeFullNames,
@@ -202,7 +202,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<TransformWorkerEntryDto> gated = new List<TransformWorkerEntryDto>();
             foreach (TransformWorkerEntryDto entry in replacementEntries)
             {
-                string methodKey = HotReloadWireMethodKeys.BuildMethodKey(entry);
+                string methodKey = HotReloadMethodKeys.BuildMethodKey(entry);
                 if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> callers)
                     && callers.Count > 0)
                 {
@@ -220,7 +220,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerEntryDto entry in gatedReplacements)
             {
-                string methodKey = HotReloadWireMethodKeys.BuildMethodKey(entry);
+                string methodKey = HotReloadMethodKeys.BuildMethodKey(entry);
                 if (!seen.Add(methodKey))
                 {
                     continue;
@@ -232,13 +232,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return keys;
         }
 
-        // Why FormatMethodKeyParts, not BuildMethodKey: registry MethodKey uses the display
+        // Why FormatMethodLabelParts, not BuildMethodKey: registry MethodKey uses the display
         // label ('+' nested separators, '.' before the name). The wire key keeps '/' and '::'
         // and never matches Describe().
         internal static string FormatGatedReplacementRegistryKey(TransformWorkerEntryDto entry)
         {
             Debug.Assert(entry != null, "entry must not be null.");
-            return HotReloadPatcher.FormatMethodKeyParts(
+            return HotReloadMethodKeys.FormatMethodLabelParts(
                 entry.typeMetadataName,
                 entry.methodName,
                 entry.parameterTypeFullNames ?? Array.Empty<string>(),
@@ -256,7 +256,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (TransformWorkerEntryDto entry in gatedReplacements)
             {
                 string methodLabel = FormatGatedReplacementRegistryKey(entry);
-                string methodKey = HotReloadWireMethodKeys.BuildMethodKey(entry);
+                string methodKey = HotReloadMethodKeys.BuildMethodKey(entry);
                 string reason;
                 // Why live registry, not a run-start snapshot: BeginFileGeneration runs after
                 // this gate, so the previous apply's added members are still listed here.

@@ -326,7 +326,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
-    /// Nested interface host so skip labels can pin FormatMethodKeyParts for nested + generic
+    /// Nested interface host so skip labels can pin FormatMethodLabelParts for nested + generic
     /// + multi-parameter methods.
     /// </summary>
     public class HotReloadMethodLabelNestedHost

@@ -1983,7 +1983,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo computeMethod = typeof(HotReloadE2EFixture).GetMethod(
                 nameof(HotReloadE2EFixture.ComputeWithPrivate));
             Assert.That(computeMethod, Is.Not.Null);
-            string methodKey = HotReloadPatcher.FormatMethodKey(computeMethod);
+            string methodKey = HotReloadMethodKeys.FormatMethodLabel(computeMethod);
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));
 
             HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
@@ -2417,7 +2417,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: when the only edited method fails shim compile, isolation is skipped
         /// (FailedEntries.Count == entries.Length) and Failed.Method uses that method's
-        /// FormatMethodKeyParts label (not "(shim-compile)"), while Reason still carries the
+        /// FormatMethodLabelParts label (not "(shim-compile)"), while Reason still carries the
         /// original-file "(line N)" from #line-mapped diagnostics.
         /// </summary>
         [Test]
@@ -2448,7 +2448,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             int expectedOriginalLine = FindLineNumberContaining(editedSource, "MissingHelperAddedByEdit");
             Assert.That(expectedOriginalLine, Is.GreaterThan(0));
-            string expectedMethodLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedMethodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadE2EFixture).FullName,
                 nameof(HotReloadE2EFixture.CallsMissingHelper),
                 new[] { typeof(int).FullName },
@@ -2589,7 +2589,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             const string projectRelativePath = "Assets/Tests/Editor/HotReload/PreflightMatchFailure.cs";
             const string missingMethodName = "DoesNotExistInCompiledAssembly";
             string typeName = typeof(HotReloadE2EFixture).FullName;
-            string expectedFailedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedFailedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeName,
                 missingMethodName,
                 new[] { typeof(int).FullName },
@@ -2679,17 +2679,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             const string projectRelativePath = "Assets/Tests/Editor/HotReload/PreflightMatchFailureMid.cs";
             const string missingMethodName = "DoesNotExistInCompiledAssembly";
             string typeName = typeof(HotReloadCoreFixture).FullName;
-            string expectedPriorLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedPriorLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeName,
                 nameof(HotReloadCoreFixture.ReplaceableCompute),
                 new[] { typeof(int).FullName },
                 genericArity: 0);
-            string expectedFailedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedFailedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeName,
                 missingMethodName,
                 new[] { typeof(int).FullName },
                 genericArity: 0);
-            string expectedTrailingLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedTrailingLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeName,
                 nameof(HotReloadCoreFixture.StaticPing),
                 Array.Empty<string>(),
@@ -4199,7 +4199,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(HotReloadSignatureChangeSameFileFixture.Target),
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(oldTarget, Is.Not.Null);
-            string oldKey = HotReloadPatcher.FormatMethodKey(oldTarget);
+            string oldKey = HotReloadMethodKeys.FormatMethodLabel(oldTarget);
             bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
                 oldKey,
                 out string replacement);
@@ -4237,7 +4237,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(HotReloadSignatureChangeExternalHost.ToDelete),
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(deleted, Is.Not.Null);
-            string deletedKey = HotReloadPatcher.FormatMethodKey(deleted);
+            string deletedKey = HotReloadMethodKeys.FormatMethodLabel(deleted);
             bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
                 deletedKey,
                 out string _);
@@ -4289,8 +4289,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 modifiers: null);
             Assert.That(intTarget, Is.Not.Null);
             Assert.That(longTarget, Is.Not.Null);
-            string intKey = HotReloadPatcher.FormatMethodKey(intTarget);
-            string longKey = HotReloadPatcher.FormatMethodKey(longTarget);
+            string intKey = HotReloadMethodKeys.FormatMethodLabel(intTarget);
+            string longKey = HotReloadMethodKeys.FormatMethodLabel(longTarget);
             bool intRecorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
                 intKey,
                 out string intReplacement);
@@ -4340,7 +4340,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("SignatureChangeAlreadyActive2.cs", later),
                 CancellationToken.None);
             AssertNoFileLevelFailure(second);
-            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadSignatureChangeAlreadyActiveFixture).FullName,
                 nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target),
                 new[] { "System.Int32" },
@@ -4392,7 +4392,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("SignatureChangeGatedDeactivate2.cs", later),
                 CancellationToken.None);
 
-            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadSignatureChangeAlreadyActiveFixture).FullName,
                 nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target),
                 new[] { "System.Int32" },
@@ -4404,7 +4404,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a gated replacement's wire key keeps Cecil '/' and '::', so it cannot match
-        /// a registry MethodKey until FormatMethodKeyParts normalizes it.
+        /// a registry MethodKey until FormatMethodLabelParts normalizes it.
         /// </summary>
         [Test]
         public void FormatGatedReplacementRegistryKey_NestedType_DiffersFromWireKey()
@@ -4536,7 +4536,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(HotReloadSignatureChangeExternalHost.Target),
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(gatedTarget, Is.Not.Null);
-            string gatedKey = HotReloadPatcher.FormatMethodKey(gatedTarget);
+            string gatedKey = HotReloadMethodKeys.FormatMethodLabel(gatedTarget);
             bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
                 gatedKey,
                 out string _);
@@ -4971,7 +4971,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string expectedOldSignature =
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeUnchangedCallerFixture::Target(System.Int32)";
-            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadSignatureChangeUnchangedCallerFixture).FullName,
                 nameof(HotReloadSignatureChangeUnchangedCallerFixture.StoreTarget),
                 new[] { "System.Int32" },
@@ -5100,12 +5100,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ", ",
                 new[]
                 {
-                    HotReloadPatcher.FormatMethodKeyParts(
+                    HotReloadMethodKeys.FormatMethodLabelParts(
                         typeof(HotReloadSignatureChangeTwoCallerFixture).FullName,
                         nameof(HotReloadSignatureChangeTwoCallerFixture.CallerAlpha),
                         new[] { "System.Int32" },
                         0),
-                    HotReloadPatcher.FormatMethodKeyParts(
+                    HotReloadMethodKeys.FormatMethodLabelParts(
                         typeof(HotReloadSignatureChangeTwoCallerFixture).FullName,
                         nameof(HotReloadSignatureChangeTwoCallerFixture.CallerBeta),
                         new[] { "System.Int32" },
@@ -5236,7 +5236,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 nameof(HotReloadSignatureChangeGenericCallerFixture.Target),
                 "The return type of");
-            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeGenericCallerFixture",
                 "Caller",
@@ -5279,7 +5279,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(patched);
-            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeGenericCallerFixture",
                 "Caller",
@@ -5492,7 +5492,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasAdded(
                 result,
                 nameof(HotReloadSignatureChangeMultiReplacementHost.TargetCovered));
-            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeMultiReplacementHost",
                 "CoveredCaller",
@@ -5528,7 +5528,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
-            string expectedAddedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedAddedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeExternalHost",
                 "ToDelete",
@@ -6791,7 +6791,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string AddedPingMethodLabel()
         {
-            return HotReloadPatcher.FormatMethodKeyParts(
+            return HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadAddedMethodApplyFixture).FullName,
                 "AddedPing",
                 new[] { "System.Int32" },
@@ -6800,7 +6800,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string AddedPongMethodLabel()
         {
-            return HotReloadPatcher.FormatMethodKeyParts(
+            return HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadAddedMethodApplyFixture).FullName,
                 "AddedPong",
                 new[] { "System.Int32" },

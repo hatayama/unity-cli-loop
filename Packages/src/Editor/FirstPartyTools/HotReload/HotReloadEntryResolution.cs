@@ -180,7 +180,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return (null, HotReloadMethodOutcome.Failed(methodLabel, matchResult.ErrorMessage, filePath));
             }
 
-            methodLabel = HotReloadPatcher.FormatMethodKey(matchResult.Method);
+            methodLabel = HotReloadMethodKeys.FormatMethodLabel(matchResult.Method);
             (MethodInfo shimMethod, string shimError) = FindShimMethod(shimAssembly, entry);
             if (shimMethod == null)
             {
@@ -259,7 +259,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string FormatEntryLabel(TransformWorkerEntryDto entry)
         {
-            return HotReloadPatcher.FormatMethodKeyParts(
+            return HotReloadMethodKeys.FormatMethodLabelParts(
                 entry.typeMetadataName,
                 entry.methodName,
                 entry.parameterTypeFullNames ?? Array.Empty<string>(),

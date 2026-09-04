@@ -33,7 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 string[] parameterTypeFullNames =
                     signature.parameterTypeFullNames ?? Array.Empty<string>();
-                string wireKey = HotReloadWireMethodKeys.BuildMethodKeyParts(
+                string wireKey = HotReloadMethodKeys.BuildMethodKeyParts(
                     signature.typeMetadataName,
                     signature.methodName,
                     parameterTypeFullNames,
@@ -48,12 +48,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string oldKey = HotReloadPatcher.FormatMethodKeyParts(
+                string oldKey = HotReloadMethodKeys.FormatMethodLabelParts(
                     signature.typeMetadataName,
                     signature.methodName,
                     parameterTypeFullNames,
                     signature.genericArity);
-                string newDisplayName = HotReloadPatcher.FormatMethodKeyParts(
+                string newDisplayName = HotReloadMethodKeys.FormatMethodLabelParts(
                     replacement.typeMetadataName,
                     replacement.methodName,
                     replacement.parameterTypeFullNames ?? Array.Empty<string>(),
