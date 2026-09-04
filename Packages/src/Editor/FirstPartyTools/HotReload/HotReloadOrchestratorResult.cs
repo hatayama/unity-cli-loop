@@ -55,7 +55,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
-    /// Per-method outcome: Patched, Skipped, Failed, Added, or AlreadyActive.
+    /// Per-method outcome: Patched, Skipped, Failed, Added, AlreadyActive, or Stale.
     /// </summary>
     internal sealed class HotReloadMethodOutcome
     {
@@ -140,6 +140,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string.Empty);
         }
 
+        // A patch that outlived the method it replaced: the edited source no longer declares it,
+        // so no run can revert it and only 'uloop compile' or '--revert-all' clears it.
+        public static HotReloadMethodOutcome Stale(string method, string filePath)
+        {
+            return new HotReloadMethodOutcome(
+                HotReloadMethodOutcomeKind.Stale,
+                method,
+                HotReloadConstants.StalePatchRemovedFromSourceReason,
+                filePath,
+                string.Empty);
+        }
+
         public HotReloadMethodOutcome WithLifecycleNote(string lifecycleNote)
         {
             return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, lifecycleNote);
@@ -152,6 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         Skipped = 1,
         Failed = 2,
         Added = 3,
-        AlreadyActive = 4
+        AlreadyActive = 4,
+        Stale = 5
     }
 }

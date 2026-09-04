@@ -130,7 +130,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         string.Join(", ", addedFields)));
             }
 
-            (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount) =
+            (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount, int staleCount) =
                 HotReloadOutcomeAggregation.CountMethodOutcomeKinds(outcomes);
             HotReloadOrchestratorLog.LogHotReloadApplySummary(
                 patchedCount,
@@ -138,6 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 skippedCount,
                 alreadyActiveCount,
                 addedCount,
+                staleCount,
                 failedCount == 0,
                 correlationId);
             HotReloadOutcomeAggregation.AppendSiblingDerivedWarnings(warnings, siblingDerivedWarnings);
@@ -287,6 +288,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 warnings.Add(removedMembersWarning);
             }
+
+            HotReloadStalePatchOutcomes.Append(
+                outcomes,
+                workerOutput.removedMethodSignatures,
+                gateResult.GatedReplacementMethodKeys,
+                projectRelativePath,
+                assemblyResolvePath);
 
             if (gateResult.FileFailed)
             {

@@ -543,6 +543,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }));
         }
 
+        /// <summary>
+        /// What: a Stale row reaches the public response with its ledger invocation count and is
+        /// summarized in Message, so an agent can tell why ActivePatchTotal exceeds the run.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithStaleOutcome_ReportsInvocationCountAndMessageSummary()
+        {
+            const string staleMethodKey = "Type.RemovedMethod()";
+            HotReloadInvocationRegistry.Clear();
+            HotReloadInvocationRegistry.Increment(staleMethodKey);
+            HotReloadInvocationRegistry.Increment(staleMethodKey);
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.EditedMethod()", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Stale(staleMethodKey, "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 2);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            HotReloadMethodResult staleRow = null;
+            for (int index = 0; index < response.Methods.Count; index++)
+            {
+                if (response.Methods[index].Kind == "Stale")
+                {
+                    staleRow = response.Methods[index];
+                }
+            }
+
+            Assert.That(staleRow, Is.Not.Null);
+            Assert.That(staleRow.InvocationCount, Is.EqualTo(2L));
+            Assert.That(staleRow.Reason, Is.EqualTo(HotReloadConstants.StalePatchRemovedFromSourceReason));
+            Assert.That(response.Message, Does.Contain("Stale=1"));
+        }
+
         [Test]
         public void BuildApplyResponse_WithFailedOutcome_SetsSuccessFalse()
         {

@@ -36,7 +36,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         Method = outcome.Method,
                         Reason = outcome.Reason ?? string.Empty,
                         FilePath = outcome.FilePath ?? string.Empty,
-                        InvocationCount = outcome.Kind == HotReloadMethodOutcomeKind.AlreadyActive
+                        // Why these two kinds: both describe a patch that was already installed
+                        // before this run, so the ledger counter is the only invocation figure
+                        // that means anything for them.
+                        InvocationCount = ReadsInvocationCountFromLedger(outcome.Kind)
                             ? HotReloadInvocationRegistry.GetCount(outcome.Method)
                             : 0L,
                         LifecycleNote = outcome.LifecycleNote ?? string.Empty
@@ -195,6 +198,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return AppendWarningCount(message, warningCount, appendCompileResolution);
         }
 
+        private static bool ReadsInvocationCountFromLedger(HotReloadMethodOutcomeKind kind)
+        {
+            return kind == HotReloadMethodOutcomeKind.AlreadyActive
+                || kind == HotReloadMethodOutcomeKind.Stale;
+        }
+
         private static string BuildApplyOutcomeMessage(
             HotReloadOrchestratorResult result,
             bool hasFailure)
@@ -220,7 +229,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (result.PatchedTotal == 0 && addedCount == 0)
             {
-                return HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage;
+                return AppendStaleSummary(
+                    HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage,
+                    result);
             }
 
             string message = "Hot reload applied. PatchedTotal=" + result.PatchedTotal
@@ -230,7 +241,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 message += " Added: " + addedCount + ".";
             }
 
-            return message;
+            return AppendStaleSummary(message, result);
+        }
+
+        // Why in the summary: ActivePatchTotal counts stale patches, so without this the totals
+        // look inconsistent with the listed outcomes.
+        private static string AppendStaleSummary(string message, HotReloadOrchestratorResult result)
+        {
+            int staleCount = CountStaleOutcomes(result);
+            if (staleCount == 0)
+            {
+                return message;
+            }
+
+            return message + " Stale=" + staleCount + ".";
+        }
+
+        private static int CountStaleOutcomes(HotReloadOrchestratorResult result)
+        {
+            int staleCount = 0;
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                if (result.Methods[index].Kind == HotReloadMethodOutcomeKind.Stale)
+                {
+                    staleCount++;
+                }
+            }
+
+            return staleCount;
         }
 
         private static string AppendUnchangedAndLifecycleNotes(

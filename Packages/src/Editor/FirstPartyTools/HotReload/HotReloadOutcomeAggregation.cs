@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal static (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount)
+        internal static (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount, int staleCount)
             CountMethodOutcomeKinds(IReadOnlyList<HotReloadMethodOutcome> outcomes)
         {
             int patchedCount = 0;
@@ -69,6 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int skippedCount = 0;
             int alreadyActiveCount = 0;
             int addedCount = 0;
+            int staleCount = 0;
             for (int index = 0; index < outcomes.Count; index++)
             {
                 HotReloadMethodOutcomeKind kind = outcomes[index].Kind;
@@ -92,9 +93,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     addedCount++;
                 }
+                else if (kind == HotReloadMethodOutcomeKind.Stale)
+                {
+                    staleCount++;
+                }
             }
 
-            return (patchedCount, failedCount, skippedCount, alreadyActiveCount, addedCount);
+            return (patchedCount, failedCount, skippedCount, alreadyActiveCount, addedCount, staleCount);
         }
     }
 }

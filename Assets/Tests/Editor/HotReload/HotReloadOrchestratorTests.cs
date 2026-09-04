@@ -5661,6 +5661,85 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a patched method later deleted from the source keeps its patch active, so the run
+        /// reports it as a Stale row instead of leaving ActivePatchTotal unexplained.
+        /// </summary>
+        [Test]
+        public async Task Run_PatchedMethodRemovedInLaterEdit_EmitsStaleOutcome()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string patchedSource = onDisk.Replace(
+                "        public int ExistingFail(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingFail(int value)\n        {\n            return value + 41;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(patchedSource, Is.Not.EqualTo(onDisk));
+            string patchedPath = WriteEditedSource("StaleOutcomeFirstPass.cs", patchedSource);
+
+            HotReloadOrchestratorResult firstRun = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                patchedPath,
+                CancellationToken.None);
+            Assert.That(
+                firstRun.ActivePatchTotal,
+                Is.GreaterThan(0),
+                "The first run must leave ExistingFail patched for the second run to go stale.");
+
+            string removedSource = onDisk.Replace(
+                "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ExistingFail(int value)\n        {\n            return value;\n        }\n\n",
+                string.Empty,
+                StringComparison.Ordinal).Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public int ExistingValue()\n        {\n            return 2;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(removedSource, Is.Not.EqualTo(onDisk));
+            string removedPath = WriteEditedSource("StaleOutcomeSecondPass.cs", removedSource);
+
+            HotReloadOrchestratorResult secondRun = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                removedPath,
+                CancellationToken.None);
+
+            HotReloadMethodOutcome staleOutcome = null;
+            foreach (HotReloadMethodOutcome outcome in secondRun.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Stale)
+                {
+                    staleOutcome = outcome;
+                }
+            }
+
+            Assert.That(
+                staleOutcome,
+                Is.Not.Null,
+                "The deleted-but-still-patched method must be reported.\n"
+                + FormatOutcomes(secondRun.Methods));
+            Assert.That(
+                staleOutcome.Method,
+                Does.Contain(nameof(HotReloadAddedMemberHost.ExistingFail)));
+            Assert.That(
+                staleOutcome.Reason,
+                Is.EqualTo(HotReloadConstants.StalePatchRemovedFromSourceReason));
+            Assert.That(
+                secondRun.Methods.Count,
+                Is.EqualTo(secondRun.ActivePatchTotal),
+                "Every active patch must have a row now that stale patches are listed.\n"
+                + FormatOutcomes(secondRun.Methods));
+        }
+
+        private static string FormatOutcomes(IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            List<string> lines = new List<string>();
+            for (int index = 0; index < outcomes.Count; index++)
+            {
+                lines.Add(outcomes[index].Kind + " " + outcomes[index].Method);
+            }
+
+            return string.Join("\n", lines);
+        }
+
+        /// <summary>
         /// What: deleting a compiled method surfaces the aggregated removed-members warning.
         /// </summary>
         [Test]
