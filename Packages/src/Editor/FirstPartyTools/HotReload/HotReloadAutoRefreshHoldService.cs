@@ -16,9 +16,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<bool> _isPlaying;
         private readonly Action _disallowAutoRefresh;
         private readonly Action _allowAutoRefresh;
+        private readonly Func<(bool CanProceed, string Message, string[] ScenePaths)> _resolveBeforeRefresh;
         private readonly Action _refresh;
         private readonly Action<string, string, object> _logVibeInfo;
         private readonly Action<string, string, object> _logVibeWarning;
+        private bool _refreshDeferred;
 
         internal HotReloadAutoRefreshHoldService(
             Func<bool> getHeld,
@@ -27,6 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<bool> isPlaying,
             Action disallowAutoRefresh,
             Action allowAutoRefresh,
+            Func<(bool CanProceed, string Message, string[] ScenePaths)> resolveBeforeRefresh,
             Action refresh,
             Action<string, string, object> logVibeInfo = null,
             Action<string, string, object> logVibeWarning = null)
@@ -37,6 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(isPlaying != null, "isPlaying must not be null");
             Debug.Assert(disallowAutoRefresh != null, "disallowAutoRefresh must not be null");
             Debug.Assert(allowAutoRefresh != null, "allowAutoRefresh must not be null");
+            Debug.Assert(resolveBeforeRefresh != null, "resolveBeforeRefresh must not be null");
             Debug.Assert(refresh != null, "refresh must not be null");
 
             _getHeld = getHeld ?? throw new ArgumentNullException(nameof(getHeld));
@@ -46,6 +50,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _disallowAutoRefresh = disallowAutoRefresh
                 ?? throw new ArgumentNullException(nameof(disallowAutoRefresh));
             _allowAutoRefresh = allowAutoRefresh ?? throw new ArgumentNullException(nameof(allowAutoRefresh));
+            _resolveBeforeRefresh = resolveBeforeRefresh
+                ?? throw new ArgumentNullException(nameof(resolveBeforeRefresh));
             _refresh = refresh ?? throw new ArgumentNullException(nameof(refresh));
             // Why inject: pure C# unit tests stay free of VibeLogger; production wires VibeLogger.
             _logVibeInfo = logVibeInfo ?? ((operation, message, context) => { });
@@ -82,6 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why only after success: a failed Disallow must not leave SessionState claiming a hold.
             _setHeld(true);
+            _refreshDeferred = false;
             _logVibeInfo(
                 HotReloadAutoRefreshHoldConstants.VibeArmed,
                 "Auto Refresh hold armed while hot-reload patches are active",
@@ -109,11 +116,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return RefreshAfterRelease();
         }
 
+        /// <summary>
+        /// Runs a deferred Refresh after Play ends if the Editor is focused.
+        /// </summary>
+        internal HotReloadAutoRefreshHoldSyncResult FlushDeferredRefresh()
+        {
+            if (!_refreshDeferred)
+            {
+                return HotReloadAutoRefreshHoldSyncResult.Unchanged(_getHeld());
+            }
+
+            if (_isPlaying() || !_isEditorFocused())
+            {
+                return HotReloadAutoRefreshHoldSyncResult.Unchanged(_getHeld());
+            }
+
+            return RefreshIfPreflightAllows();
+        }
+
         private HotReloadAutoRefreshHoldSyncResult RefreshAfterRelease()
         {
             if (_isPlaying())
             {
                 // Why not Refresh during Play: an explicit import recompiles and stops Play Mode.
+                _refreshDeferred = true;
                 _logVibeInfo(
                     HotReloadAutoRefreshHoldConstants.VibeReleaseDeferred,
                     "Auto Refresh hold released; Refresh deferred until focus return or compile",
@@ -124,6 +150,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (!_isEditorFocused())
             {
                 return HotReloadAutoRefreshHoldSyncResult.Unchanged(false);
+            }
+
+            return RefreshIfPreflightAllows();
+        }
+
+        private HotReloadAutoRefreshHoldSyncResult RefreshIfPreflightAllows()
+        {
+            (bool canProceed, _, _) = _resolveBeforeRefresh();
+            _refreshDeferred = false;
+            if (!canProceed)
+            {
+                return new HotReloadAutoRefreshHoldSyncResult(
+                    false,
+                    false,
+                    false,
+                    HotReloadAutoRefreshHoldConstants.SceneRefreshBlockedWarning);
             }
 
             _refresh();

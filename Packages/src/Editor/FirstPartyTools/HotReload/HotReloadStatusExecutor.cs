@@ -20,6 +20,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAutoRefreshHoldResponseEnricher.AppendDeferredWarning(
                 warnings,
                 hold.ReleaseDeferred);
+            HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
+                warnings,
+                hold.SceneRefreshWarning);
             return new HotReloadResponse
             {
                 Success = true,

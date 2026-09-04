@@ -8,12 +8,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool Held { get; }
         public bool NewlyArmed { get; }
         public bool ReleaseDeferred { get; }
+        public string SceneRefreshWarning { get; }
 
-        internal HotReloadAutoRefreshHoldSyncResult(bool held, bool newlyArmed, bool releaseDeferred)
+        internal HotReloadAutoRefreshHoldSyncResult(
+            bool held,
+            bool newlyArmed,
+            bool releaseDeferred,
+            string sceneRefreshWarning = null)
         {
             Held = held;
             NewlyArmed = newlyArmed;
             ReleaseDeferred = releaseDeferred;
+            SceneRefreshWarning = sceneRefreshWarning;
         }
 
         internal static HotReloadAutoRefreshHoldSyncResult Unchanged(bool held)

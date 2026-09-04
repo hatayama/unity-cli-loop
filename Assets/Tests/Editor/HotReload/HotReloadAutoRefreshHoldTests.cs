@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
+
 using NUnit.Framework;
+
+using UnityEditor;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
@@ -16,9 +20,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             internal bool Held;
             internal bool IsFocused = true;
             internal bool IsPlaying;
+            internal bool PreflightCanProceed = true;
             internal int DisallowCallCount;
             internal int AllowCallCount;
             internal int RefreshCallCount;
+            internal int PreflightCallCount;
             internal Exception DisallowException;
             internal Exception AllowException;
             internal readonly List<string> LoggedOperations = new List<string>();
@@ -45,6 +51,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         {
                             throw AllowException;
                         }
+                    },
+                    () =>
+                    {
+                        PreflightCallCount++;
+                        return (PreflightCanProceed, string.Empty, Array.Empty<string>());
                     },
                     () => RefreshCallCount++,
                     (operation, message, context) => LoggedOperations.Add(operation),
@@ -105,8 +116,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(environment.AllowCallCount, Is.EqualTo(1));
             Assert.That(environment.Held, Is.False);
             Assert.That(environment.RefreshCallCount, Is.EqualTo(1));
+            Assert.That(environment.PreflightCallCount, Is.EqualTo(1));
             Assert.That(result.Held, Is.False);
             Assert.That(result.ReleaseDeferred, Is.False);
+            Assert.That(result.SceneRefreshWarning, Is.Null);
         }
 
         /// <summary>
@@ -240,6 +253,235 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(environment.Held, Is.False);
             Assert.That(result.Held, Is.False);
             Assert.That(environment.LoggedOperations, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a blocked scene preflight skips Refresh and returns the fixed warning.
+        /// </summary>
+        [Test]
+        public void Sync_PreflightCannotProceed_SkipsRefreshAndReturnsWarning()
+        {
+            FakeEnvironment environment = new FakeEnvironment
+            {
+                IsFocused = true,
+                IsPlaying = false,
+                PreflightCanProceed = false
+            };
+            HotReloadAutoRefreshHoldService service = environment.CreateService();
+            service.Sync(1);
+
+            HotReloadAutoRefreshHoldSyncResult result = service.Sync(0);
+
+            Assert.That(environment.AllowCallCount, Is.EqualTo(1));
+            Assert.That(environment.RefreshCallCount, Is.EqualTo(0));
+            Assert.That(environment.Held, Is.False);
+            Assert.That(
+                result.SceneRefreshWarning,
+                Is.EqualTo(HotReloadAutoRefreshHoldConstants.SceneRefreshBlockedWarning));
+        }
+
+        /// <summary>
+        /// What: a passing scene preflight calls Refresh once after release.
+        /// </summary>
+        [Test]
+        public void Sync_PreflightCanProceed_RefreshesOnce()
+        {
+            FakeEnvironment environment = new FakeEnvironment { IsFocused = true, IsPlaying = false };
+            HotReloadAutoRefreshHoldService service = environment.CreateService();
+            service.Sync(1);
+
+            HotReloadAutoRefreshHoldSyncResult result = service.Sync(0);
+
+            Assert.That(environment.PreflightCallCount, Is.EqualTo(1));
+            Assert.That(environment.RefreshCallCount, Is.EqualTo(1));
+            Assert.That(result.SceneRefreshWarning, Is.Null);
+        }
+
+        /// <summary>
+        /// What: a Play-deferred release Flushes one Refresh when not playing and focused, then no-ops.
+        /// </summary>
+        [Test]
+        public void FlushDeferredRefresh_AfterPlayRelease_RefreshesOnceThenNoOp()
+        {
+            FakeEnvironment environment = new FakeEnvironment { IsPlaying = true, IsFocused = true };
+            HotReloadAutoRefreshHoldService service = environment.CreateService();
+            service.Sync(1);
+            HotReloadAutoRefreshHoldSyncResult deferred = service.Sync(0);
+            Assert.That(deferred.ReleaseDeferred, Is.True);
+            Assert.That(environment.RefreshCallCount, Is.EqualTo(0));
+
+            environment.IsPlaying = false;
+            HotReloadAutoRefreshHoldSyncResult flushed = service.FlushDeferredRefresh();
+
+            Assert.That(environment.RefreshCallCount, Is.EqualTo(1));
+            Assert.That(flushed.SceneRefreshWarning, Is.Null);
+
+            service.FlushDeferredRefresh();
+            Assert.That(environment.RefreshCallCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a stale held flag with an empty ledger lets ReconcileForTesting Allow once and clear the flag.
+        /// </summary>
+        [Test]
+        public void ReconcileForTesting_StaleFlagWithEmptyLedger_AllowsOnceAndClearsFlag()
+        {
+            FakeEnvironment environment = new FakeEnvironment { Held = true };
+            HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHoldService previous = HotReloadAutoRefreshHold.OverrideServiceForTesting;
+            try
+            {
+                HotReloadAutoRefreshHold.OverrideServiceForTesting = environment.CreateService();
+
+                HotReloadAutoRefreshHold.ReconcileForTesting();
+
+                Assert.That(environment.AllowCallCount, Is.EqualTo(1));
+                Assert.That(environment.Held, Is.False);
+            }
+            finally
+            {
+                HotReloadAutoRefreshHold.OverrideServiceForTesting = previous;
+                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            }
+        }
+
+        /// <summary>
+        /// What: a throwing Allow during ReconcileForTesting leaves the flag held and the next reconcile releases.
+        /// </summary>
+        [Test]
+        public void ReconcileForTesting_AllowThrowsOnce_SucceedsOnNextReconcile()
+        {
+            FakeEnvironment environment = new FakeEnvironment
+            {
+                Held = true,
+                AllowException = new InvalidOperationException("reload")
+            };
+            HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHoldService previous = HotReloadAutoRefreshHold.OverrideServiceForTesting;
+            try
+            {
+                HotReloadAutoRefreshHold.OverrideServiceForTesting = environment.CreateService();
+
+                HotReloadAutoRefreshHold.ReconcileForTesting();
+
+                Assert.That(environment.AllowCallCount, Is.EqualTo(1));
+                Assert.That(environment.Held, Is.True);
+
+                environment.AllowException = null;
+                HotReloadAutoRefreshHold.ReconcileForTesting();
+
+                Assert.That(environment.AllowCallCount, Is.EqualTo(2));
+                Assert.That(environment.Held, Is.False);
+            }
+            finally
+            {
+                HotReloadAutoRefreshHold.OverrideServiceForTesting = previous;
+                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            }
+        }
+
+        /// <summary>
+        /// What: InitializeOnLoad already subscribed HotReloadAutoRefreshHold onto EditorApplication.update.
+        /// </summary>
+        [Test]
+        public void Initialize_RegistersReconcileOnEditorApplicationUpdate()
+        {
+            Assert.That(
+                HotReloadAutoRefreshHold.IsReconcileRegistered(),
+                Is.True,
+                "HotReloadAutoRefreshHold.Initialize must subscribe ReconcileOnUpdate.");
+            Assert.That(
+                EditorUpdateContainsHoldReconcile(),
+                Is.True,
+                "EditorApplication.update must include a HotReloadAutoRefreshHold delegate.");
+        }
+
+        // Why scan fields: EditorApplication.update is an event, so tests cannot call
+        // GetInvocationList on the public accessor. The backing store is either a
+        // Delegate or EventWithPerformanceTracker.
+        private static bool EditorUpdateContainsHoldReconcile()
+        {
+            FieldInfo[] fields = typeof(EditorApplication).GetFields(
+                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            for (int index = 0; index < fields.Length; index++)
+            {
+                object value = fields[index].GetValue(null);
+                Delegate current = value as Delegate;
+                if (current != null && InvocationListContainsHold(current))
+                {
+                    return true;
+                }
+
+                if (EventTrackerContainsHold(value))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool InvocationListContainsHold(Delegate current)
+        {
+            Delegate[] listeners = current.GetInvocationList();
+            for (int index = 0; index < listeners.Length; index++)
+            {
+                if (listeners[index].Method.DeclaringType == typeof(HotReloadAutoRefreshHold)
+                    && listeners[index].Method.Name == "ReconcileOnUpdate")
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool EventTrackerContainsHold(object source)
+        {
+            if (source == null)
+            {
+                return false;
+            }
+
+            string typeName = source.GetType().Name;
+            if (typeName.IndexOf("EventWithPerformanceTracker", StringComparison.Ordinal) < 0)
+            {
+                return false;
+            }
+
+            MethodInfo getEnumerator = source.GetType().GetMethod(
+                "GetEnumerator",
+                BindingFlags.Instance | BindingFlags.Public);
+            if (getEnumerator == null || getEnumerator.GetParameters().Length != 0)
+            {
+                return false;
+            }
+
+            object enumerator = getEnumerator.Invoke(source, null);
+            if (enumerator == null)
+            {
+                return false;
+            }
+
+            MethodInfo moveNext = enumerator.GetType().GetMethod("MoveNext");
+            PropertyInfo currentProperty = enumerator.GetType().GetProperty("Current");
+            if (moveNext == null || currentProperty == null)
+            {
+                return false;
+            }
+
+            while ((bool)moveNext.Invoke(enumerator, null))
+            {
+                Delegate listener = currentProperty.GetValue(enumerator) as Delegate;
+                if (listener != null
+                    && listener.Method.DeclaringType == typeof(HotReloadAutoRefreshHold)
+                    && listener.Method.Name == "ReconcileOnUpdate")
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

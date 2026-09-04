@@ -1,3 +1,5 @@
+using System;
+
 using NUnit.Framework;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
@@ -24,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 () => false,
                 () => { },
                 () => { },
+                () => (true, string.Empty, Array.Empty<string>()),
                 () => { });
         }
 

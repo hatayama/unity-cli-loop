@@ -30,5 +30,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             warnings.Add(HotReloadAutoRefreshHoldConstants.ReleaseDeferredWarning);
         }
+
+        internal static void AppendSceneRefreshWarning(List<string> warnings, string sceneRefreshWarning)
+        {
+            Debug.Assert(warnings != null, "warnings must not be null");
+            if (string.IsNullOrEmpty(sceneRefreshWarning))
+            {
+                return;
+            }
+
+            warnings.Add(sceneRefreshWarning);
+        }
     }
 }

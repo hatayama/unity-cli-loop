@@ -89,6 +89,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAutoRefreshHoldResponseEnricher.AppendDeferredWarning(
                 warnings,
                 result.AutoRefreshHoldReleaseDeferred);
+            HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
+                warnings,
+                result.AutoRefreshHoldSceneRefreshWarning);
             string message = BuildApplyMessage(
                 result,
                 hasFailure,

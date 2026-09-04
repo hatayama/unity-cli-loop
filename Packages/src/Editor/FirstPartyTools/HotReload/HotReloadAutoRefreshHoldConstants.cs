@@ -14,6 +14,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal const string ReleaseDeferredWarning =
             "Auto Refresh hold released; pending script edits import on the next focus return or 'uloop compile'.";
 
+        internal const string SceneRefreshBlockedWarning =
+            "Auto Refresh hold released, but the open scene has unsaved changes and was modified on disk; resolve it, then run 'uloop compile'.";
+
         internal const string VibeArmed = "hot_reload_auto_refresh_hold_armed";
         internal const string VibeReleased = "hot_reload_auto_refresh_hold_released";
         internal const string VibeReleaseDeferred = "hot_reload_auto_refresh_hold_release_deferred";

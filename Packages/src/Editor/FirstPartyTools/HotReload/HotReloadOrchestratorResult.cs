@@ -21,6 +21,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool AutoRefreshHeld { get; }
         public bool AutoRefreshHoldNewlyArmed { get; }
         public bool AutoRefreshHoldReleaseDeferred { get; }
+        public string AutoRefreshHoldSceneRefreshWarning { get; }
 
         public HotReloadOrchestratorResult(
             IReadOnlyList<HotReloadMethodOutcome> methods,
@@ -48,6 +49,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AutoRefreshHeld = autoRefreshHold != null && autoRefreshHold.Held;
             AutoRefreshHoldNewlyArmed = autoRefreshHold != null && autoRefreshHold.NewlyArmed;
             AutoRefreshHoldReleaseDeferred = autoRefreshHold != null && autoRefreshHold.ReleaseDeferred;
+            AutoRefreshHoldSceneRefreshWarning =
+                autoRefreshHold != null ? autoRefreshHold.SceneRefreshWarning : null;
         }
     }
 
