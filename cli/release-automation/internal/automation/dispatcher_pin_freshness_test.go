@@ -62,7 +62,7 @@ func TestRunDispatcherPinFreshnessCheckFailsWhenPinLagsBehindNewestStableRelease
 		t.Fatalf("expected exit code 1, got %d\nstdout: %s", result.exitCode, result.stdout)
 	}
 	expected := "check-dispatcher-pin-freshness: pin records dispatcher-v3.0.1 but the newest stable " +
-		"dispatcher release is dispatcher-v3.1.0. Merge the automated pin-stamp pull request, " +
+		"dispatcher release is dispatcher-v3.1.0. Re-run the dispatcher-publish post-publish job, " +
 		"or run stamp-dispatcher-pin --tag dispatcher-v3.1.0."
 	if strings.TrimSpace(result.stderr) != expected {
 		t.Fatalf("expected stderr %q, got %q", expected, result.stderr)

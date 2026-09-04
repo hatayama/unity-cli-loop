@@ -8,35 +8,12 @@ import (
 	"time"
 )
 
-// DispatchPullRequestChecksForHead starts every required check workflow on an
-// explicit head ref. Why this exists: a pull request opened with GITHUB_TOKEN
-// never triggers pull_request workflows, so its required checks only appear
-// when automation dispatches them. description labels the log lines with the
-// pull request the dispatch belongs to.
-func DispatchPullRequestChecksForHead(
-	ctx context.Context,
-	stdout io.Writer,
-	repository string,
-	headRefName string,
-	description string,
-) error {
-	if repository == "" {
-		return fmt.Errorf("repository is required to dispatch pull request checks")
-	}
-	if headRefName == "" {
-		return fmt.Errorf("head ref is required to dispatch pull request checks")
-	}
-	workflows, err := releasePRCheckWorkflowsFromEnvironment()
-	if err != nil {
-		return err
-	}
-	_, err = dispatchPullRequestCheckWorkflows(ctx, stdout, repository, headRefName, description, workflows, defaultReleasePRCheckDeps())
-	return err
-}
-
 // dispatchPullRequestCheckWorkflows dispatches the workflows and reports the
 // instant the first dispatch was issued, which callers use to ignore workflow
-// runs that predate their own dispatch.
+// runs that predate their own dispatch. Why this exists: a pull request opened
+// with GITHUB_TOKEN never triggers pull_request workflows, so its required
+// checks only appear when automation dispatches them. description labels the
+// log lines with the pull request the dispatch belongs to.
 func dispatchPullRequestCheckWorkflows(
 	ctx context.Context,
 	stdout io.Writer,

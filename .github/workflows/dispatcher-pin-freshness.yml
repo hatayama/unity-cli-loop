@@ -4,10 +4,10 @@ name: Dispatcher Pin Freshness
 # release than the newest published stable one, so a skipped pin stamp is
 # visible on main instead of silently sending fresh installs to a stale release.
 #
-# Not on pull_request: while the automated pin-stamp pull request is open, the
-# pin on every other branch legitimately lags, and failing there would turn all
-# open pull requests red for a state only main can fix. The schedule covers the
-# case where a release is published and nothing is pushed to main afterwards.
+# Not on pull_request: until the automated pin stamp lands on main, the pin on
+# every other branch legitimately lags, and failing there would turn all open
+# pull requests red for a state only main can fix. The schedule covers the case
+# where a release is published and the stamp push did not land afterwards.
 on:
   push:
     branches: [main]
