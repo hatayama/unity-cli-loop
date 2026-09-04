@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Resolve_WhenPathIsEmpty_ReturnsDefaultMp4Name()
         {
-            DateTime now = new DateTime(2026, 9, 1, 15, 4, 5, DateTimeKind.Utc);
+            DateTime now = new DateTime(2026, 9, 1, 15, 4, 5, 123, DateTimeKind.Utc);
 
             string resolved = RecordVideoOutputPathResolver.Resolve("", "/project", now, false);
 
@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "/project",
                 UnityCliLoopConstants.OUTPUT_ROOT_DIR,
                 UnityCliLoopConstants.VIDEOS_DIR,
-                "gameview_20260901_150405.mp4");
+                "gameview_20260901_150405_123.mp4");
             Assert.That(resolved, Is.EqualTo(expected));
         }
 
@@ -49,12 +49,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Resolve_WhenLinuxAndPathIsEmpty_ReturnsDefaultWebmName()
         {
-            DateTime now = new DateTime(2026, 9, 1, 15, 4, 5, DateTimeKind.Utc);
+            DateTime now = new DateTime(2026, 9, 1, 15, 4, 5, 123, DateTimeKind.Utc);
 
             string resolved = RecordVideoOutputPathResolver.Resolve("", "/project", now, true);
 
             Assert.That(resolved, Does.EndWith(".webm"));
-            Assert.That(resolved, Does.Contain("gameview_20260901_150405.webm"));
+            Assert.That(resolved, Does.Contain("gameview_20260901_150405_123.webm"));
         }
     }
 }

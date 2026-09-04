@@ -34,7 +34,7 @@ uloop record-video --action Stop
 | `--max-duration-seconds` | integer | `60` | Auto-stop safety limit in seconds. Valid range 1–600. Used by `Start` only. |
 | `--resolution-scale` | number | `1.0` | Resolution scale (0.1 to 1.0) applied to the Game View size before encoding. `0.5` cuts file size and encoding cost to about a quarter. Used by `Start` only. |
 | `--quality` | enum | `Medium` | Encoder bitrate preset: `Low`, `Medium`, or `High`. Used by `Start` only. |
-| `--output-path` | string | empty | Output file path. Empty uses `.uloop/outputs/Videos/gameview_<yyyyMMdd_HHmmss>.mp4` (`.webm` on Linux). Extension must be `.mp4` (H.264) or `.webm` (VP8). Linux rejects `.mp4`. Used by `Start` only. |
+| `--output-path` | string | empty | Output file path. Empty uses `.uloop/outputs/Videos/gameview_<yyyyMMdd_HHmmss_fff>.mp4` (`.webm` on Linux). Extension must be `.mp4` (H.264) or `.webm` (VP8). Linux rejects `.mp4`. Used by `Start` only. |
 
 ### Actions
 

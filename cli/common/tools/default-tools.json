@@ -790,7 +790,7 @@
           },
           "OutputPath": {
             "type": "string",
-            "description": "Output file path. Empty uses .uloop/outputs/Videos/gameview_<yyyyMMdd_HHmmss>.mp4 (.webm on Linux). Extension must be .mp4 (H.264) or .webm (VP8). Linux rejects .mp4. Used by Start only."
+            "description": "Output file path. Empty uses .uloop/outputs/Videos/gameview_<yyyyMMdd_HHmmss_fff>.mp4 (.webm on Linux). Extension must be .mp4 (H.264) or .webm (VP8). Linux rejects .mp4. Used by Start only."
           },
           "ResolutionScale": {
             "type": "number",

@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private const string Mp4Extension = "mp4";
         private const string WebmExtension = "webm";
         private const string DefaultFileNamePrefix = "gameview_";
-        private const string TimestampFormat = "yyyyMMdd_HHmmss";
+        private const string TimestampFormat = "yyyyMMdd_HHmmss_fff";
 
         internal static string Resolve(
             string requestedPath,
