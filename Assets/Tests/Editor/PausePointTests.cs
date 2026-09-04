@@ -354,7 +354,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies expiration explains that an invoked method did not reach its armed line.
+        /// Verifies expiration explains that an invoked method did not reach its armed line
+        /// and does not recommend lengthening --timeout-seconds.
         /// </summary>
         [Test]
         public void GetStatus_WhenEnteredMethodDoesNotHit_ReportsBranchNotTaken()
@@ -368,10 +369,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit. The armed method ran 2 time(s) but the armed line was never reached (branch not taken)."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("a longer --timeout-seconds alone will not help"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("Re-enable the marker with a longer"));
         }
 
         /// <summary>
-        /// Verifies an instrumented method that never runs reports the method-entry diagnostic.
+        /// Verifies an instrumented method that never runs reports the method-entry diagnostic
+        /// and still recommends a longer --timeout-seconds.
         /// </summary>
         [Test]
         public void GetStatus_WhenInstrumentedMethodNeverRuns_ReportsNeverInvoked()
@@ -383,10 +387,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit. The armed method was never invoked."));
+            Assert.That(
+                snapshot.RecommendedNextAction,
+                Is.EqualTo("Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required."));
         }
 
         /// <summary>
-        /// What: an instrumented marker that skips hits by hit-when reports skipped-hit expiry evidence.
+        /// What: an instrumented marker that skips hits by hit-when reports skipped-hit expiry
+        /// evidence and a --hit-when recovery action.
         /// </summary>
         [Test]
         public void GetStatus_WhenHitWhenSkippedHitsExpire_ReportsConditionalExpiryMessage()
@@ -408,6 +416,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before any hit matched --hit-when. The method entered 0 time(s); 1 hit(s) were skipped by the condition."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("--hit-when"));
+        }
+
+        /// <summary>
+        /// What: an id-only marker without method-entry instrumentation still recommends
+        /// adjusting --hit-when when skipped hits expire the window.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenUninstrumentedHitWhenSkippedHitsExpire_RecommendsHitWhenAdjustment()
+        {
+            UloopPausePointHitWhenParseResult parseResult = UloopPausePointHitWhenCondition.Parse("speed > 5");
+            UloopPausePointRegistry.Enable(
+                "jump",
+                1,
+                UloopPausePointCaptureMode.Trace,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                "speed > 5",
+                parseResult.Condition);
+            UloopPausePointRegistry.RecordHitWhenSkip("jump");
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.HitWhenSkippedCount, Is.EqualTo(1));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("--hit-when"));
+        }
+
+        /// <summary>
+        /// What: after a recorded hit, capture-window expiry keeps an after-hit recovery action
+        /// instead of claiming the armed line was never reached.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenCaptureWindowExpiresAfterHit_ReportsAfterHitRecoveryAction()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1);
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+            UloopPausePointRegistry.Hit("jump");
+            _nowUtc = _nowUtc.AddSeconds(5);
+            UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point capture window expired after 1 hit(s); capture history is preserved."));
+            Assert.That(
+                snapshot.RecommendedNextAction,
+                Does.Contain("The marker was hit before its --timeout-seconds window closed"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("never reached"));
+        }
+
+        /// <summary>
+        /// What: RecommendedNextAction uses the expire-time counters even if an in-flight
+        /// increment lands after Message is composed.
+        /// </summary>
+        [Test]
+        public void ToSnapshot_WhenSkipCountIncrementsAfterExpire_KeepsExpireTimeRecommendedNextAction()
+        {
+            DateTime enabledAtUtc = new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc);
+            UloopPausePointEntry entry = new(
+                "jump",
+                1,
+                UloopPausePointCaptureMode.SingleShot,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                enabledAtUtc,
+                1,
+                true,
+                string.Empty,
+                null);
+            entry.IncrementMethodEntryCount();
+            bool expired = entry.ExpireIfNeeded(enabledAtUtc.AddSeconds(2));
+            entry.IncrementHitWhenSkippedCount();
+
+            UloopPausePointSnapshot snapshot = entry.ToSnapshot(enabledAtUtc.AddSeconds(2), _pauseController);
+
+            Assert.That(expired, Is.True);
+            Assert.That(snapshot.Message, Does.Contain("branch not taken"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("a longer --timeout-seconds alone will not help"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("--hit-when"));
         }
 
         [Test]
