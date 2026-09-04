@@ -18,6 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         internal const string SkillsDirName = "skills";
         internal const string ManagedSkillsDirName = "unity-cli-loop";
         internal const string SkillFileName = "SKILL.md";
+        private const string MarkdownFileExtension = ".md";
 
         internal readonly struct SkillSourceInfo
         {
@@ -298,19 +299,26 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return Path.Combine(skillsRoot, skillName);
         }
 
+        // At the skill directory root only markdown files are compared, because other tools may
+        // place their own metadata files there and those must not make an up-to-date skill report
+        // as Outdated. Files inside subdirectories (references, scripts, and so on) are shipped
+        // by the skill itself, so they are compared regardless of extension.
         private static bool IsSkillDirectoryOutdated(
             Dictionary<string, byte[]> sourceFiles,
             string installedSkillDirectory)
         {
-            Dictionary<string, byte[]> installedFiles = CollectInstalledSkillFiles(installedSkillDirectory);
-            if (sourceFiles.Count != installedFiles.Count)
+            Dictionary<string, byte[]> comparableSourceFiles = SelectComparableSkillFiles(sourceFiles);
+            Dictionary<string, byte[]> comparableInstalledFiles = CollectSkillFiles(
+                installedSkillDirectory,
+                IsComparableSkillFile);
+            if (comparableSourceFiles.Count != comparableInstalledFiles.Count)
             {
                 return true;
             }
 
-            foreach (KeyValuePair<string, byte[]> sourceFile in sourceFiles)
+            foreach (KeyValuePair<string, byte[]> sourceFile in comparableSourceFiles)
             {
-                if (!installedFiles.TryGetValue(sourceFile.Key, out byte[] installedContent))
+                if (!comparableInstalledFiles.TryGetValue(sourceFile.Key, out byte[] installedContent))
                 {
                     return true;
                 }
@@ -324,8 +332,56 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return false;
         }
 
+        private static Dictionary<string, byte[]> SelectComparableSkillFiles(Dictionary<string, byte[]> skillFiles)
+        {
+            Debug.Assert(skillFiles != null, "skillFiles must not be null");
+
+            Dictionary<string, byte[]> comparableFiles = new(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, byte[]> skillFile in skillFiles)
+            {
+                if (!IsComparableSkillFile(skillFile.Key))
+                {
+                    continue;
+                }
+
+                comparableFiles[skillFile.Key] = skillFile.Value;
+            }
+
+            return comparableFiles;
+        }
+
+        private static bool IsComparableSkillFile(string relativePath)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(relativePath), "relativePath must not be null or empty");
+
+            bool isInSubdirectory = relativePath.IndexOf(Path.DirectorySeparatorChar) >= 0
+                || relativePath.IndexOf(Path.AltDirectorySeparatorChar) >= 0;
+            if (isInSubdirectory)
+            {
+                return true;
+            }
+
+            return string.Equals(
+                Path.GetExtension(relativePath),
+                MarkdownFileExtension,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
         private static Dictionary<string, byte[]> CollectInstalledSkillFiles(string skillDirectory)
         {
+            return CollectSkillFiles(skillDirectory, _ => true);
+        }
+
+        // Files rejected by the filter are skipped before they are read, so a large or
+        // unreadable file placed next to the skill by another tool never slows down or breaks
+        // the freshness check.
+        private static Dictionary<string, byte[]> CollectSkillFiles(
+            string skillDirectory,
+            Func<string, bool> relativePathFilter)
+        {
+            Debug.Assert(!string.IsNullOrEmpty(skillDirectory), "skillDirectory must not be null or empty");
+            Debug.Assert(relativePathFilter != null, "relativePathFilter must not be null");
+
             Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
             foreach (string filePath in Directory.EnumerateFiles(skillDirectory, "*", SearchOption.AllDirectories))
             {
@@ -336,6 +392,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 }
 
                 string relativePath = Path.GetRelativePath(skillDirectory, filePath);
+                if (!relativePathFilter(relativePath))
+                {
+                    continue;
+                }
+
                 files[relativePath] = SkillFileContentNormalizer.NormalizeSkillFileContent(
                     relativePath,
                     File.ReadAllBytes(filePath));

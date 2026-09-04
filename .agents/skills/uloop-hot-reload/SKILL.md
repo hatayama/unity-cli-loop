@@ -1,7 +1,7 @@
 ---
 name: uloop-hot-reload
 toolName: hot-reload
-description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible only to edited code in the same file); it can also change signatures when the same reload covers the old signature's compiled callers. New types, or members other files must reference, require 'uloop compile'."
+description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible only to edited code in the same file); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New types, or members other files must reference, require 'uloop compile'."
 ---
 
 # uloop hot-reload
@@ -70,9 +70,12 @@ and a patched body that matches the baseline again is unpatched on that run.
   file, and vanish on any compile or domain reload (an Editor-session illusion). New
   types, cross-file references, reflection, serialization, and Unity message discovery
   need `uloop compile`.
-- Signature changes (return type, rename, parameters) follow the added-member rules; a
-  gate skips a return-type change unless the same reload — or an earlier one — has
-  patched every live compiled caller of the old signature.
+- Signature changes (return type, rename, parameters) follow the added-member rules. A
+  return-type change is gated: it is `Skipped` unless the same reload — or an earlier one —
+  has patched every live compiled caller of the old signature. A rename or parameter-list
+  change is not gated: it follows the delete rules — the old signature is reported removed,
+  and a `Warnings` entry names each compiled call site left on the old behavior until
+  `uloop compile`.
 - Constructors, operators, setter/init/indexer accessors, and event accessors are
   `Skipped`; finalizers and interface members are silently not applied. `const` and
   other outside-body edits never change runtime behavior (drift is warned where
@@ -87,6 +90,8 @@ Full rules and the `Skipped`/`Failed` condition tables: `references/scope-and-li
 Treat hot reload as the exploration phase and `uloop compile` as the landing phase:
 keep edits inside the edited files, collect structural changes, and compile once —
 every compile drops all patches and pause points and resets the PlayMode session.
+While patches are active, `AutoRefreshHeld` is true so returning focus does not
+recompile; `uloop compile` or `--revert-all` releases the hold.
 One-shot methods (`Awake`, `Start`, initialization helpers) patch successfully but show
 no effect on the call that already ran; the response marks them with `LifecycleNote`.
 For values you expect to tune while playing, expose a static property getter instead of

@@ -120,6 +120,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public int UnfilteredTestCount { get; set; }
 
+        /// <summary>
+        /// Ready-to-write test .asmdef when an unfiltered run found no tests and the project has
+        /// no test assembly for the TestMode. Null otherwise; omitted from JSON.
+        /// </summary>
+        public RunTestsTestAsmdefProposal ProposedTestAsmdef { get; set; }
+
+        public bool ShouldSerializeProposedTestAsmdef()
+        {
+            return ProposedTestAsmdef != null;
+        }
+
         // Why omit empty: a clean run with no live patches must not grow a Warning field.
         public bool ShouldSerializeWarning()
         {

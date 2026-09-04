@@ -22,6 +22,12 @@ type pausePointResumePlayResult struct {
 	Resumed   bool   `json:"Resumed"`
 	Error     string `json:"Error,omitempty"`
 
+	// Skipped explains a deliberate no-resume that is not a failure, so the wait still reports the
+	// hit as a success. Why not Error: Error means the resume was attempted or refused and the wait
+	// treats it as broken (it skips --trigger), while this case is a correct outcome the caller
+	// still has to know about, because Unity stays paused by the hit that was already recorded.
+	Skipped string `json:"Skipped,omitempty"`
+
 	// Repaused reports that the wait put PlayMode back into pause after resuming it, which happens
 	// when the wait is abandoned because the --trigger command was rejected before it ran. Reported
 	// rather than kept internal: a caller that asked for a resume must be able to see that the

@@ -16,6 +16,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // Capture can evaluate conditions off the main thread, so its counter and first error use
         // interlocked operations instead of coupling the patched method to Unity main-thread state.
         private int _hitWhenSkippedCount;
+        // Frozen at ExpireIfNeeded so Message and RecommendedNextAction share one measurement.
+        // In-flight increments can still raise the live counters after that compose.
+        private int _expiredMethodEntryCount;
+        private int _expiredHitWhenSkippedCount;
         private string _hitWhenErrorNote = string.Empty;
 
         public UloopPausePointEntry(
@@ -29,7 +33,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             int generation,
             bool hasMethodEntryInstrumentation,
             string hitWhen,
-            UloopPausePointHitWhenCondition hitWhenCondition)
+            UloopPausePointHitWhenCondition hitWhenCondition,
+            bool patchDispatchMayBypass)
         {
             Id = id;
             TimeoutSeconds = timeoutSeconds;
@@ -43,12 +48,14 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             HasMethodEntryInstrumentation = hasMethodEntryInstrumentation;
             HitWhen = hitWhen ?? string.Empty;
             HitWhenCondition = hitWhenCondition;
+            PatchDispatchMayBypass = patchDispatchMayBypass;
             Status = UloopPausePointStatus.Enabled;
             IsEnabled = true;
             Message = "Pause point enabled.";
             CapturedVariables = Array.Empty<UloopCapturedVariable>();
             CallerFrames = Array.Empty<UloopPausePointCallerFrame>();
             TruncatedVariableNames = Array.Empty<string>();
+            NotCapturableVariables = Array.Empty<string>();
             _capturedVariableHistory = new Queue<UloopPausePointCapturedHistoryFrame>(maxHistory);
         }
 
@@ -62,6 +69,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public DateTime ExpiresAtUtc { get; private set; }
         public int Generation { get; }
         public bool HasMethodEntryInstrumentation { get; }
+        // Why keep this on the entry: Unity's cached physics-message dispatch can run the
+        // original body without the armed patch, so MethodEntryCount 0 is not proof the
+        // method never ran. Expire wording must see the same flag Enable recorded.
+        public bool PatchDispatchMayBypass { get; }
         public string Status { get; private set; }
         public bool IsEnabled { get; private set; }
         public int HitCount { get; private set; }
@@ -92,6 +103,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // 0 / null-or-empty means unresolved (not yet written by enable or retarget).
         public int ResolvedLine { get; set; }
         public string ResolvedLineText { get; set; }
+        // Parameters the resolved method has that capture cannot box, each with the reason.
+        // Written by enable and by hot-reload retarget alongside ResolvedLine, and emptied
+        // whenever the resolution behind it is discarded.
+        public IReadOnlyList<string> NotCapturableVariables { get; set; }
 
         public void IncrementMethodEntryCount()
         {
@@ -140,15 +155,9 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             // already passed that gate can still reach the snapshot after this message is composed.
             int methodEntryCount = MethodEntryCount;
             int hitWhenSkippedCount = HitWhenSkippedCount;
-            Message = HitCount == 0 && HasMethodEntryInstrumentation
-                ? hitWhenSkippedCount > 0
-                    ? $"Pause point expired before any hit matched --hit-when. The method entered {methodEntryCount} time(s); {hitWhenSkippedCount} hit(s) were skipped by the condition."
-                    : methodEntryCount == 0
-                        ? "Pause point expired before it was hit. The armed method was never invoked."
-                        : $"Pause point expired before it was hit. The armed method ran {methodEntryCount} time(s) but the armed line was never reached (branch not taken)."
-                : HitCount == 0
-                    ? "Pause point expired before it was hit."
-                : $"Pause point capture window expired after {HitCount} hit(s); capture history is preserved.";
+            _expiredMethodEntryCount = methodEntryCount;
+            _expiredHitWhenSkippedCount = hitWhenSkippedCount;
+            Message = CreateExpiredMessage(methodEntryCount, hitWhenSkippedCount);
             return true;
         }
 
@@ -300,10 +309,12 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                     UloopPausePointEditorStateCapturedAt.Current);
             long elapsedMilliseconds = Math.Max(0, (long)(nowUtc - EnabledAtUtc).TotalMilliseconds);
             long remainingMilliseconds = CalculateRemainingMilliseconds(nowUtc);
-            string recommendedNextAction = expired ? CreateExpiredRecommendedNextAction() : string.Empty;
+            int hitWhenSkippedCount = HitWhenSkippedCount;
+            string recommendedNextAction = expired
+                ? CreateExpiredRecommendedNextAction(_expiredMethodEntryCount, _expiredHitWhenSkippedCount)
+                : string.Empty;
             string firstHitAtUtc = HitCount > 0 ? FormatUtc(FirstHitAtUtc) : string.Empty;
             string lastHitAtUtc = HitCount > 0 ? FormatUtc(HitAtUtc) : string.Empty;
-            int hitWhenSkippedCount = HitWhenSkippedCount;
 
             return new UloopPausePointSnapshot(
                 Id,
@@ -336,6 +347,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 CapturedVariablesTruncated,
                 TruncatedVariableNames,
                 TruncatedVariableCount,
+                NotCapturableVariables,
                 ClearedReason,
                 StatusBeforeClear,
                 LateHitDiscardedAfterClear,
@@ -360,9 +372,83 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return Math.Max(0, remainingMilliseconds);
         }
 
-        private string CreateExpiredRecommendedNextAction()
+        // Why not nest these in ExpireIfNeeded: adding the physics-dispatch case on top of
+        // the existing hit-when / never-invoked / branch-not-taken split would deepen the
+        // ternary chain past the complexity budget.
+        private string CreateExpiredMessage(int methodEntryCount, int hitWhenSkippedCount)
         {
-            return "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
+            if (HitCount > 0)
+            {
+                return $"Pause point capture window expired after {HitCount} hit(s); capture history is preserved.";
+            }
+
+            if (!HasMethodEntryInstrumentation)
+            {
+                return "Pause point expired before it was hit.";
+            }
+
+            if (hitWhenSkippedCount > 0)
+            {
+                return $"Pause point expired before any hit matched --hit-when. The method entered {methodEntryCount} time(s); {hitWhenSkippedCount} hit(s) were skipped by the condition.";
+            }
+
+            if (methodEntryCount > 0)
+            {
+                return $"Pause point expired before it was hit. The armed method ran {methodEntryCount} time(s) but the armed line was never reached (branch not taken).";
+            }
+
+            // Reaching here means the marker is instrumented and methodEntryCount is 0: both the
+            // uninstrumented case and every positive entry count returned above. Cached dispatch is
+            // therefore only one of two explanations, and the far more common one is that the
+            // awaited event never happened - so that is stated first.
+            if (PatchDispatchMayBypass)
+            {
+                return "Pause point expired before it was hit and the armed patch recorded no method entry. The awaited game event (collision, input, trigger) may simply not have happened during the wait; check the game state with execute-dynamic-code first. Only if the body provably ran, suspect Unity's cached message dispatch bypassing the patch.";
+            }
+
+            return "Pause point expired before it was hit. The armed method was never invoked.";
+        }
+
+        // Why not a single timeout hint: a recorded hit already proves the line ran, skipped
+        // --hit-when hits prove the line ran without matching, and method-entry evidence tells
+        // whether a longer window can help. Repeating timeout advice after those cases sends
+        // the agent down a retry that cannot succeed. --hit-when skips are recorded even on
+        // id-only markers, so that branch must not require method-entry instrumentation.
+        // Physics dispatch is last among the zero-hit cases because MethodEntryCount 0 is
+        // inconclusive when Unity may have skipped the patch.
+        private string CreateExpiredRecommendedNextAction(int methodEntryCount, int hitWhenSkippedCount)
+        {
+            const string defaultAction =
+                "Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required.";
+            if (HitCount > 0)
+            {
+                return "The marker was hit before its --timeout-seconds window closed, so this is not a missed code path. Read the recorded hit with pause-point-status --id <marker-id> (HitCount, CapturedVariables, CapturedVariableHistory survive expiry); re-enable the marker if you need to capture another hit.";
+            }
+
+            if (hitWhenSkippedCount > 0)
+            {
+                return $"The armed line executed {hitWhenSkippedCount} time(s) but no hit matched --hit-when. Re-enable the marker, then adjust the --hit-when condition or the trigger input so a hit matches; clearing the expired marker first is not required.";
+            }
+
+            if (HasMethodEntryInstrumentation && methodEntryCount > 0)
+            {
+                return "The armed method ran but the armed line was never reached, so a longer --timeout-seconds alone will not help. Check the condition that guards the armed line (the trigger may have fired while it was false), then re-enable the marker and trigger the code path again once the precondition holds; --mode continuous keeps the marker armed across repeated attempts. Clearing the expired marker first is not required.";
+            }
+
+            // Why before the plain cached-dispatch branch: a measured entry count of 0 makes "the
+            // event never happened" the leading explanation, while an uninstrumented marker's 0 is
+            // unmeasured and carries no such evidence.
+            if (PatchDispatchMayBypass && HasMethodEntryInstrumentation && methodEntryCount == 0)
+            {
+                return "Check the game state with execute-dynamic-code to confirm the awaited event happened, then re-arm the marker and trigger it again. If you can show the method body ran while MethodEntryCount stayed 0, destroy and recreate the target GameObject after enabling, or switch to UloopPausePoint.Pause(\"id\") with --id.";
+            }
+
+            if (PatchDispatchMayBypass)
+            {
+                return "Confirm whether the method body actually ran (a log inside it, or a pause point on a plain method it calls). If it did, the patch was bypassed by cached physics dispatch: destroy and recreate the GameObject after enabling, or switch to UloopPausePoint.Pause(\"id\") with --id. Only raise --timeout-seconds if the body never ran.";
+            }
+
+            return defaultAction;
         }
 
         private static string FormatUtc(DateTime value)

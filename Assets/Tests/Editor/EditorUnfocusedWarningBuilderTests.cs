@@ -98,7 +98,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string hint = EditorUnfocusedWarningBuilder.BuildPlayModeProgressHint(
                 isPlaying: true,
-                isEditorFocused: false);
+                isEditorFocused: false,
+                isPaused: false);
 
             Assert.That(
                 hint,
@@ -114,7 +115,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string hint = EditorUnfocusedWarningBuilder.BuildPlayModeProgressHint(
                 isPlaying: false,
-                isEditorFocused: false);
+                isEditorFocused: false,
+                isPaused: false);
 
             Assert.That(hint, Is.EqualTo(string.Empty));
         }
@@ -127,7 +129,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string hint = EditorUnfocusedWarningBuilder.BuildPlayModeProgressHint(
                 isPlaying: true,
-                isEditorFocused: true);
+                isEditorFocused: true,
+                isPaused: false);
+
+            Assert.That(hint, Is.EqualTo(string.Empty));
+        }
+
+        /// <summary>
+        /// What: paused Play Mode does not emit a progress-throttling hint while the Editor is unfocused.
+        /// </summary>
+        [Test]
+        public void BuildPlayModeProgressHint_WhenPausedAndEditorIsUnfocused_ReturnsEmpty()
+        {
+            string hint = EditorUnfocusedWarningBuilder.BuildPlayModeProgressHint(
+                isPlaying: true,
+                isEditorFocused: false,
+                isPaused: true);
 
             Assert.That(hint, Is.EqualTo(string.Empty));
         }

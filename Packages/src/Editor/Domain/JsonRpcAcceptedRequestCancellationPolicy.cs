@@ -9,8 +9,14 @@ namespace io.github.hatayama.UnityCliLoop.Domain
     {
         public static bool ShouldCancelOnClientDisconnect(
             string methodName,
-            bool? compileWaitsForDomainReload)
+            bool? compileWaitsForDomainReload,
+            bool runTestsRespectsEnterPlayModeSettings)
         {
+            if (methodName == UnityCliLoopConstants.TOOL_NAME_RUN_TESTS && runTestsRespectsEnterPlayModeSettings)
+            {
+                return false;
+            }
+
             if (methodName != UnityCliLoopConstants.TOOL_NAME_COMPILE)
             {
                 return true;

@@ -11,37 +11,15 @@ using io.github.hatayama.UnityCliLoop.ToolContracts;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Tracks open Scene file snapshots so compile can resolve external disk changes before asset refresh.
+    /// Tracks open Scene file snapshots so compile and focus return can resolve external disk changes without Unity's native reload dialog.
     /// </summary>
     internal static class ExternalSceneChangeTracker
     {
-        private const string AutoRefreshHeldSessionStateKey =
-            "io.github.hatayama.UnityCliLoop.ExternalSceneChangeTracker.AutoRefreshHeld";
         private const string SceneSnapshotsSessionStateKey =
             "io.github.hatayama.UnityCliLoop.ExternalSceneChangeTracker.SceneSnapshots";
         private static readonly Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> SceneSnapshots =
             new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
-        private static readonly ExternalAssetFocusReturnService FocusReturnService =
-            new ExternalAssetFocusReturnService(
-                IsAutoRefreshHeld,
-                SetAutoRefreshHeld,
-                () => EditorApplication.isFocused,
-                AssetDatabase.DisallowAutoRefresh,
-                AssetDatabase.AllowAutoRefresh,
-                ResolveForFocusReturn,
-                logWarning: null,
-                logVibeInfo: (operation, message, context) =>
-                {
-                    VibeLogger.LogInfo(operation, message, context, includeStackTrace: false);
-                },
-                logVibeWarning: (operation, message, context) =>
-                {
-                    VibeLogger.LogWarning(operation, message, context);
-                });
-        // Why throttle: reconcile must not call Disallow/Allow every frame when already aligned.
-        private const double AutoRefreshReconcileIntervalSeconds = 0.5d;
         private static bool _initialized;
-        private static double _nextAutoRefreshReconcileTime;
 
         public static void Initialize()
         {
@@ -55,8 +33,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            bool restoredSceneSnapshots = !string.IsNullOrEmpty(SessionState.GetString(SceneSnapshotsSessionStateKey, ""));
             RestoreSnapshotsFromSessionState();
-            bool restoredHeldAutoRefresh = FocusReturnService.RestoreAutoRefreshIfHeld();
 
             _initialized = true;
             EditorSceneManager.sceneOpened -= HandleSceneOpened;
@@ -68,30 +46,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ExternalPrefabStageChangeTracker.RegisterEventHandlers();
             EditorApplication.focusChanged -= HandleFocusChanged;
             EditorApplication.focusChanged += HandleFocusChanged;
-            EditorApplication.update -= ReconcileAutoRefreshHoldOnUpdate;
-            EditorApplication.update += ReconcileAutoRefreshHoldOnUpdate;
-            // Why record before Hold: fingerprints must exist for focus-return resolve after startup Hold.
-            if (!restoredHeldAutoRefresh && !IsAutoRefreshHeld())
+            // Keep restored fingerprints only across a domain reload that happened while unfocused.
+            // The next focus-return preflight compares against those fingerprints so it can detect
+            // external changes that occurred before the reload. First launch still records a baseline
+            // even when the Editor starts unfocused.
+            if (EditorApplication.isFocused || !restoredSceneSnapshots)
             {
                 RecordOpenSceneSnapshots();
                 ExternalPrefabStageChangeTracker.RecordCurrent();
             }
-
-            // Why immediate Hold: background launch never fires focusChanged(false), so Auto Refresh
-            // would stay enabled until the first focus and show a native external-change dialog.
-            FocusReturnService.HoldIfCurrentlyUnfocused();
-        }
-
-        private static void ReconcileAutoRefreshHoldOnUpdate()
-        {
-            double now = EditorApplication.timeSinceStartup;
-            if (now < _nextAutoRefreshReconcileTime)
-            {
-                return;
-            }
-
-            _nextAutoRefreshReconcileTime = now + AutoRefreshReconcileIntervalSeconds;
-            FocusReturnService.ReconcileAutoRefreshHoldWithFocus();
         }
 
         public static (bool CanProceed, string Message, string[] ScenePaths) ResolveForCompile(
@@ -107,12 +70,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void HandleFocusChanged(bool isFocused)
         {
-            VibeLogger.LogInfo(
-                "external_scene_focus_changed",
-                "Editor focus changed",
-                new { isFocused, held = IsAutoRefreshHeld() },
-                includeStackTrace: false);
-            FocusReturnService.HandleFocusChanged(isFocused);
+            VibeLogger.LogInfo("external_scene_focus_changed", "Editor focus changed", new { isFocused }, includeStackTrace: false);
+            if (!isFocused)
+            {
+                return;
+            }
+            ResolveForFocusReturn();
         }
 
         private static void HandleSceneOpened(Scene scene, OpenSceneMode mode)
@@ -152,8 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     phase = "start",
                     scenes = openScenesBefore,
-                    fingerprintDiffs = fingerprintDiffsBefore,
-                    held = IsAutoRefreshHeld()
+                    fingerprintDiffs = fingerprintDiffsBefore
                 },
                 includeStackTrace: false);
 
@@ -186,8 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         dirtySceneSaveFailures,
                         missingSceneSaveFailures,
                         dirtyPrefabSaveFailures,
-                        missingPrefabSaveFailures,
-                        held = IsAutoRefreshHeld()
+                        missingPrefabSaveFailures
                     },
                     includeStackTrace: false);
                 return;
@@ -205,8 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     scenes = openScenesAfter,
                     fingerprintDiffs = BuildFingerprintDiffContexts(openScenesAfter, SceneSnapshots, ReadAssetFileFingerprint),
                     dirtySceneSaveFailures,
-                    missingSceneSaveFailures,
-                    held = IsAutoRefreshHeld()
+                    missingSceneSaveFailures
                 },
                 includeStackTrace: false);
         }
@@ -430,8 +390,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return failedScenePaths.ToArray();
         }
 
-        private static bool ReloadOpenSceneSetup()
+        private static bool ReloadOpenSceneSetup(string[] changedScenePaths)
         {
+            // Reload before import leaves the loaded scene tied to the stale import, so the next
+            // AssetDatabase.Refresh raises Unity's "modified externally" dialog. Importing first
+            // is the order the focus-return path already gets from the native refresh.
+            Debug.Assert(changedScenePaths != null, "changedScenePaths must not be null");
+
+            for (int i = 0; i < changedScenePaths.Length; i++)
+            {
+                AssetDatabase.ImportAsset(changedScenePaths[i], ImportAssetOptions.ForceSynchronousImport);
+            }
+
             SceneSetup[] sceneSetup = EditorSceneManager.GetSceneManagerSetup();
             if (sceneSetup == null || sceneSetup.Length == 0)
             {
@@ -451,16 +421,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ReadAssetFileFingerprint,
                 SaveDirtyOpenScenesBeforeReload,
                 ReloadOpenSceneSetup);
-        }
-
-        private static bool IsAutoRefreshHeld()
-        {
-            return SessionState.GetBool(AutoRefreshHeldSessionStateKey, false);
-        }
-
-        private static void SetAutoRefreshHeld(bool isHeld)
-        {
-            SessionState.SetBool(AutoRefreshHeldSessionStateKey, isHeld);
         }
 
         private static void RestoreSnapshotsFromSessionState()

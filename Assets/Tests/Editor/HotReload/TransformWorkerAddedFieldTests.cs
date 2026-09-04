@@ -252,8 +252,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(slice, Does.Not.Contain("HotReloadAddedFieldStore"));
             Assert.That(slice, Does.Not.Contain("AddedConst"));
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+            Assert.That(result.Output.addedFieldNames, Is.Empty);
             Assert.That(
-                result.Output.addedFieldNames,
+                result.Output.addedConstNames,
                 Is.EqualTo(new[] { typeof(HotReloadAddedMemberHost).FullName + ".AddedConst" }));
         }
 
@@ -525,7 +526,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "literal or externally visible static");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "Drop the initializer");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
         }
 
@@ -549,7 +550,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "literal or externally visible static");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "Drop the initializer");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
         }
 
@@ -581,6 +582,104 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(slice, Does.Contain("static () =>"));
             Assert.That(slice, Does.Contain("Abs"));
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
+        }
+
+        /// <summary>
+        /// What: an added reference-type field declared without an initializer and assigned
+        /// lazily inside the patched body applies; this is the documented workaround the
+        /// initializer skip reason points at.
+        /// </summary>
+        [Test]
+        public async Task Rewrite_LazyInitializedAddedField_PatchesAndListsAddedField()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public System.Collections.Generic.Dictionary<string, int> AddedLazyMap;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            if (AddedLazyMap == null)\n            {\n"
+                + "                AddedLazyMap = new System.Collections.Generic.Dictionary<string, int>();\n"
+                + "            }\n\n"
+                + "            return AddedLazyMap.Count + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldLazyInit.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Not.Null,
+                "Lazy initialization inside the body must not skip the method. Skipped="
+                + FormatSkipped(result.Output.skipped));
+            Assert.That(
+                result.Output.addedFieldNames,
+                Is.EqualTo(new[] { typeof(HotReloadAddedMemberHost).FullName + ".AddedLazyMap" }));
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
+        }
+
+        /// <summary>
+        /// What: an object-creation initializer on an added field skips, and the reason names
+        /// the lazy-assignment workaround rather than only telling the caller to compile.
+        /// </summary>
+        [Test]
+        public async Task Skip_ObjectCreationInitializer_ReasonNamesLazyAssignmentWorkaround()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public System.Collections.Generic.Dictionary<string, int> AddedEagerMap"
+                + " = new System.Collections.Generic.Dictionary<string, int>();");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return AddedEagerMap.Count + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldObjectCreationInit.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(
+                result,
+                nameof(HotReloadAddedMemberHost.ExistingCaller),
+                "Drop the initializer and assign the field inside the patched method");
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+        }
+
+        /// <summary>
+        /// What: '??=' on an added field stays skipped because the compound assignment is not
+        /// rewritable. The reason is the unavailable-added-field text, not the initializer one,
+        /// so the initializer reason must keep steering callers to the 'if (x == null)' form.
+        /// </summary>
+        [Test]
+        public async Task Skip_CoalesceAssignmentOnAddedField_UsesUnavailableAddedFieldReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public System.Collections.Generic.Dictionary<string, int> AddedCoalesceMap;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            AddedCoalesceMap ??= new System.Collections.Generic.Dictionary<string, int>();\n"
+                + "            return AddedCoalesceMap.Count + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldCoalesceAssignment.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(
+                result,
+                nameof(HotReloadAddedMemberHost.ExistingCaller),
+                "Uses an added field that hot reload cannot emit.");
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
         }
 
         /// <summary>
@@ -757,6 +856,90 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "struct");
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
+        }
+
+        /// <summary>
+        /// What: an added field whose type cannot be resolved (missing using or typo) is skipped with a reason that names the type and points at the declaration, not at shim visibility.
+        /// </summary>
+        [Test]
+        public async Task Skip_UnresolvedAddedFieldType_ReportsTypeNameAndUsingHint()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public NoSuchAddedFieldType Added;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Added == null ? value : value + 1;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldUnresolvedType.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "NoSuchAddedFieldType");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "missing using directive");
+
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null
+                    && skipped.method.Contains(nameof(HotReloadAddedMemberHost.ExistingCaller)))
+                {
+                    Assert.That(
+                        skipped.reason,
+                        Does.Not.Contain("not visible to the shim assembly"));
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: an added field whose generic argument cannot be resolved is skipped with a
+        /// reason that names the inner type, not shim visibility.
+        /// </summary>
+        [Test]
+        public async Task Skip_UnresolvedAddedFieldTypeInGenericList_ReportsInnerTypeNameAndUsingHint()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public System.Collections.Generic.List<NoSuchAddedFieldType> Added;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Added == null ? value : value + 1;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldUnresolvedTypeInList.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "NoSuchAddedFieldType");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "missing using directive");
+        }
+
+        /// <summary>
+        /// What: an added field whose array element type cannot be resolved is skipped with a
+        /// reason that names the element type, not shim visibility.
+        /// </summary>
+        [Test]
+        public async Task Skip_UnresolvedAddedFieldTypeInArray_ReportsTypeNameAndUsingHint()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public NoSuchAddedFieldType[] Added;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Added == null ? value : value + 1;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("AddedFieldUnresolvedTypeInArray.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "NoSuchAddedFieldType");
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "missing using directive");
         }
 
         /// <summary>

@@ -354,7 +354,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// Verifies expiration explains that an invoked method did not reach its armed line.
+        /// Verifies expiration explains that an invoked method did not reach its armed line
+        /// and does not recommend lengthening --timeout-seconds.
         /// </summary>
         [Test]
         public void GetStatus_WhenEnteredMethodDoesNotHit_ReportsBranchNotTaken()
@@ -368,10 +369,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit. The armed method ran 2 time(s) but the armed line was never reached (branch not taken)."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("a longer --timeout-seconds alone will not help"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("Re-enable the marker with a longer"));
         }
 
         /// <summary>
-        /// Verifies an instrumented method that never runs reports the method-entry diagnostic.
+        /// Verifies an instrumented method that never runs reports the method-entry diagnostic
+        /// and still recommends a longer --timeout-seconds.
         /// </summary>
         [Test]
         public void GetStatus_WhenInstrumentedMethodNeverRuns_ReportsNeverInvoked()
@@ -383,10 +387,207 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before it was hit. The armed method was never invoked."));
+            Assert.That(
+                snapshot.RecommendedNextAction,
+                Is.EqualTo("Re-enable the marker with a longer --timeout-seconds and trigger the code path again; clearing the expired marker first is not required."));
         }
 
         /// <summary>
-        /// What: an instrumented marker that skips hits by hit-when reports skipped-hit expiry evidence.
+        /// What: an instrumented physics-dispatch marker that expires with no patch entries
+        /// reports a bypass warning instead of claiming the method was never invoked.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenPhysicsDispatchMayBypassAndNoMethodEntryRecorded_ReportsBypassNotNeverInvoked()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1, patchDispatchMayBypass: true);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Does.Contain("the armed patch recorded no method entry"));
+            Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
+        }
+
+        /// <summary>
+        /// What: with the method never entered, expiry leads with the awaited event possibly not
+        /// having happened and keeps the cached-dispatch explanation behind that, so a missing
+        /// collision is not read as a patching bug.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenPhysicsDispatchMayBypassAndMethodNeverEntered_LeadsWithTheEventNotHavingHappened()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1, patchDispatchMayBypass: true);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Does.Contain("execute-dynamic-code"));
+            Assert.That(
+                snapshot.Message.IndexOf("execute-dynamic-code", System.StringComparison.Ordinal),
+                Is.LessThan(snapshot.Message.IndexOf("cached message dispatch", System.StringComparison.Ordinal)),
+                "the game-state check must come before the cached-dispatch explanation");
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("execute-dynamic-code"));
+            Assert.That(
+                snapshot.RecommendedNextAction.IndexOf("execute-dynamic-code", System.StringComparison.Ordinal),
+                Is.LessThan(snapshot.RecommendedNextAction.IndexOf("destroy and recreate", System.StringComparison.Ordinal)),
+                "the game-state check must come before the GameObject-recreation workaround");
+        }
+
+        /// <summary>
+        /// What: without method-entry instrumentation a zero entry count is unmeasured, not
+        /// evidence, so expiry keeps the plain cached-dispatch guidance.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenPhysicsDispatchMayBypassAndNotInstrumented_KeepsCachedDispatchGuidance()
+        {
+            UloopPausePointRegistry.Enable("jump", 1, patchDispatchMayBypass: true);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("cached physics dispatch"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("execute-dynamic-code"));
+        }
+
+        /// <summary>
+        /// What: a source-location enable on a physics message method expires with the
+        /// cached-dispatch wording rather than "was never invoked".
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenSourceLocationPhysicsMarkerExpiresWithoutHit_ReportsBypassNotNeverInvoked()
+        {
+            PausePointUseCase useCase = new PausePointUseCase();
+            PausePointResponse response = useCase.Enable(new EnablePausePointSchema
+            {
+                File = PhysicsFixtureFilePath,
+                Line = PhysicsFixtureLine,
+                TimeoutSeconds = 1,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+            Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(response.Id);
+
+            Assert.That(snapshot.Message, Does.Contain("cached message dispatch bypassing the patch"));
+            Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
+        }
+
+        /// <summary>
+        /// What: re-enabling the same physics file:line after expiry, without clearing,
+        /// still expires with the cached-dispatch wording (reuse must keep the physics warning).
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenExpiredPhysicsMarkerIsReEnabledWithoutClear_ReportsBypassNotNeverInvoked()
+        {
+            PausePointUseCase useCase = new PausePointUseCase();
+            EnablePausePointSchema schema = new EnablePausePointSchema
+            {
+                File = PhysicsFixtureFilePath,
+                Line = PhysicsFixtureLine,
+                TimeoutSeconds = 1,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            };
+
+            PausePointResponse firstEnable = useCase.Enable(schema);
+            Assert.That(firstEnable.Success, Is.True, firstEnable.ErrorCode + " / " + firstEnable.Message);
+            _nowUtc = _nowUtc.AddSeconds(2);
+            UloopPausePointSnapshot firstExpiry = UloopPausePointRegistry.GetStatus(firstEnable.Id);
+            Assert.That(firstExpiry.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+
+            PausePointResponse secondEnable = useCase.Enable(schema);
+            Assert.That(secondEnable.Success, Is.True, secondEnable.ErrorCode + " / " + secondEnable.Message);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(secondEnable.Id);
+
+            Assert.That(snapshot.Message, Does.Contain("cached message dispatch bypassing the patch"));
+            Assert.That(snapshot.Message, Does.Not.Contain("The armed method was never invoked."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("destroy and recreate"));
+        }
+
+        /// <summary>
+        /// What: method-entry evidence outranks a physics-bypass flag, so expiry keeps the
+        /// branch-not-taken wording instead of the cached-dispatch case.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenPhysicsBypassAndMethodEntered_ReportsBranchNotTakenNotBypass()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1, patchDispatchMayBypass: true);
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Does.Contain("branch not taken"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("a longer --timeout-seconds alone will not help"));
+            Assert.That(snapshot.Message, Does.Not.Contain("cached"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("cached"));
+        }
+
+        /// <summary>
+        /// What: a skipped --hit-when match outranks a physics-bypass flag, so expiry keeps
+        /// the hit-when wording instead of the cached-dispatch case.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenPhysicsBypassAndHitWhenSkipped_ReportsHitWhenNotBypass()
+        {
+            UloopPausePointHitWhenParseResult parseResult = UloopPausePointHitWhenCondition.Parse("speed > 5");
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable(
+                "jump",
+                1,
+                UloopPausePointCaptureMode.Trace,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                "speed > 5",
+                parseResult.Condition,
+                patchDispatchMayBypass: true);
+            UloopPausePointRegistry.RecordHitWhenSkip("jump");
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Message, Does.Contain("--hit-when"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("--hit-when"));
+            Assert.That(snapshot.Message, Does.Not.Contain("cached"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("cached"));
+        }
+
+        /// <summary>
+        /// What: a non-physics source-location marker expires with "never invoked", proving
+        /// the source-location path does not set PatchDispatchMayBypass unconditionally.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenSourceLocationNonPhysicsMarkerExpiresWithoutHit_ReportsNeverInvoked()
+        {
+            PausePointUseCase useCase = new PausePointUseCase();
+            PausePointResponse response = useCase.Enable(new EnablePausePointSchema
+            {
+                File = FixtureFilePath,
+                Line = FixtureLine,
+                TimeoutSeconds = 1,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+            Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus(response.Id);
+
+            Assert.That(
+                snapshot.Message,
+                Is.EqualTo("Pause point expired before it was hit. The armed method was never invoked."));
+        }
+
+        /// <summary>
+        /// What: an instrumented marker that skips hits by hit-when reports skipped-hit expiry
+        /// evidence and a --hit-when recovery action.
         /// </summary>
         [Test]
         public void GetStatus_WhenHitWhenSkippedHitsExpire_ReportsConditionalExpiryMessage()
@@ -408,6 +609,92 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
 
             Assert.That(snapshot.Message, Is.EqualTo("Pause point expired before any hit matched --hit-when. The method entered 0 time(s); 1 hit(s) were skipped by the condition."));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("--hit-when"));
+        }
+
+        /// <summary>
+        /// What: an id-only marker without method-entry instrumentation still recommends
+        /// adjusting --hit-when when skipped hits expire the window.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenUninstrumentedHitWhenSkippedHitsExpire_RecommendsHitWhenAdjustment()
+        {
+            UloopPausePointHitWhenParseResult parseResult = UloopPausePointHitWhenCondition.Parse("speed > 5");
+            UloopPausePointRegistry.Enable(
+                "jump",
+                1,
+                UloopPausePointCaptureMode.Trace,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                "speed > 5",
+                parseResult.Condition);
+            UloopPausePointRegistry.RecordHitWhenSkip("jump");
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.HitWhenSkippedCount, Is.EqualTo(1));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("--hit-when"));
+        }
+
+        /// <summary>
+        /// What: after a recorded hit, capture-window expiry keeps an after-hit recovery action
+        /// instead of claiming the armed line was never reached.
+        /// </summary>
+        [Test]
+        public void GetStatus_WhenCaptureWindowExpiresAfterHit_ReportsAfterHitRecoveryAction()
+        {
+            UloopPausePointRegistry.SetMethodEntryInstrumented("jump");
+            UloopPausePointRegistry.Enable("jump", 1);
+            UloopPausePointRegistry.RecordMethodEntry("jump");
+            UloopPausePointRegistry.Hit("jump");
+            _nowUtc = _nowUtc.AddSeconds(5);
+            UloopPausePointRegistry.ResumeEditorPauseForClientDisconnect();
+            UloopPausePointRegistry.ApplyPendingClientDisconnectResume();
+            _nowUtc = _nowUtc.AddSeconds(2);
+
+            UloopPausePointSnapshot snapshot = UloopPausePointRegistry.GetStatus("jump");
+
+            Assert.That(snapshot.Status, Is.EqualTo(UloopPausePointStatus.Expired));
+            Assert.That(snapshot.Message, Is.EqualTo("Pause point capture window expired after 1 hit(s); capture history is preserved."));
+            Assert.That(
+                snapshot.RecommendedNextAction,
+                Does.Contain("The marker was hit before its --timeout-seconds window closed"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("never reached"));
+        }
+
+        /// <summary>
+        /// What: RecommendedNextAction uses the expire-time counters even if an in-flight
+        /// increment lands after Message is composed.
+        /// </summary>
+        [Test]
+        public void ToSnapshot_WhenSkipCountIncrementsAfterExpire_KeepsExpireTimeRecommendedNextAction()
+        {
+            DateTime enabledAtUtc = new DateTime(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc);
+            UloopPausePointEntry entry = new(
+                "jump",
+                1,
+                UloopPausePointCaptureMode.SingleShot,
+                20,
+                UloopPausePointRegistry.DefaultMaxPreviewElements,
+                UloopPausePointRegistry.DefaultMaxCallerFrames,
+                enabledAtUtc,
+                1,
+                true,
+                string.Empty,
+                null,
+                false);
+            entry.IncrementMethodEntryCount();
+            bool expired = entry.ExpireIfNeeded(enabledAtUtc.AddSeconds(2));
+            entry.IncrementHitWhenSkippedCount();
+
+            UloopPausePointSnapshot snapshot = entry.ToSnapshot(enabledAtUtc.AddSeconds(2), _pauseController);
+
+            Assert.That(expired, Is.True);
+            Assert.That(snapshot.Message, Does.Contain("branch not taken"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Contain("a longer --timeout-seconds alone will not help"));
+            Assert.That(snapshot.RecommendedNextAction, Does.Not.Contain("--hit-when"));
         }
 
         [Test]
@@ -645,7 +932,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies the still-open window is reconciled before deciding: a hit opened the
             // window, then the Editor was unpaused externally before the update tick observed it.
-            // Clear must not claim it resumed Play Mode (Resume is a no-op on an unpaused Editor)
+            // Clear must not claim it released the pause (Resume is a no-op on an unpaused Editor)
             // and must close the stale window so it stops freezing expiry. ClearAll shares the same
             // ResumeEditorPauseIfOwnedByPausePoint path, so this covers both entry points.
             UloopPausePointRegistry.Enable("jump", 30);
@@ -1020,9 +1307,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task Clear_WhenResumingPausePointOwnedPause_SetsResumedPlayModeWarning()
+        public async Task Clear_WhenReleasingPausePointOwnedPause_SetsReleasedPauseWarning()
         {
-            // Verifies the clear-pause-point tool warns when the clear resumed a pause-point-owned pause.
+            // Verifies the clear-pause-point tool warns when the clear released a pause-point-owned pause.
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
 
@@ -1030,7 +1317,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject parameters = new() { ["id"] = "jump" };
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
-            Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearResumedPlayModeWarning));
+            Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearReleasedOwnedPauseWarning));
+            Assert.That(
+                response.Warnings,
+                Is.EqualTo(new[] { SourcePausePointConstants.ClearReleasedOwnedPauseWarning }));
         }
 
         [Test]
@@ -1044,11 +1334,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject parameters = new() { ["id"] = "jump" };
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
-            Assert.That(response.Warning, Is.Empty);
+            Assert.That(response.Warning, Is.Null);
+            Assert.That(response.Warnings, Is.Null);
         }
 
         /// <summary>
-        /// What: clearing a non-owner marker does not emit the "this clear resumed Play Mode" warning.
+        /// What: clearing a non-owner marker does not emit the "this clear released the Editor pause" warning.
         /// </summary>
         [Test]
         public async Task Clear_WhenDifferentMarkerOwnsThePause_SetsNoWarning()
@@ -1061,7 +1352,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject parameters = new() { ["id"] = "other" };
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
-            Assert.That(response.Warning, Is.Empty);
+            Assert.That(response.Warning, Is.Null);
+            Assert.That(response.Warnings, Is.Null);
             Assert.That(_pauseController.IsPaused, Is.True);
         }
 
@@ -1097,9 +1389,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
-        public async Task ClearAll_WhenResumingPausePointOwnedPause_SetsResumedPlayModeWarning()
+        public async Task ClearAll_WhenReleasingPausePointOwnedPause_SetsReleasedPauseWarning()
         {
-            // Verifies clear-pause-point --all warns when the bulk clear resumed a pause-point-owned pause.
+            // Verifies clear-pause-point --all warns when the bulk clear released a pause-point-owned pause.
             UloopPausePointRegistry.Enable("jump", 30);
             UloopPausePoint.Pause("jump");
 
@@ -1107,7 +1399,78 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             JObject parameters = new() { ["all"] = true };
             PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
 
-            Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearResumedPlayModeWarning));
+            Assert.That(response.Warning, Is.EqualTo(SourcePausePointConstants.ClearReleasedOwnedPauseWarning));
+            Assert.That(
+                response.Warnings,
+                Is.EqualTo(new[] { SourcePausePointConstants.ClearReleasedOwnedPauseWarning }));
+        }
+
+        /// <summary>
+        /// Verifies clear-pause-point --id tells the caller how to recover the paused state it just resumed.
+        /// </summary>
+        [Test]
+        public async Task Clear_WhenReleasingPausePointOwnedPause_SetsResumedPlayModeRecommendedNextAction()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "jump" };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(SourcePausePointConstants.ClearReleasedPauseRecommendedNextAction));
+        }
+
+        /// <summary>
+        /// Verifies clear-pause-point --id recommends nothing and keeps the pause when the pause was manual.
+        /// </summary>
+        [Test]
+        public async Task Clear_WhenManualPausePreserved_SetsNoRecommendedNextAction()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            _pauseController.PauseExternally();
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["id"] = "jump" };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.RecommendedNextAction, Is.Empty);
+            Assert.That(_pauseController.IsPaused, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies clear-pause-point --all tells the caller how to recover the paused state it just resumed.
+        /// </summary>
+        [Test]
+        public async Task ClearAll_WhenReleasingPausePointOwnedPause_SetsResumedPlayModeRecommendedNextAction()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+            UloopPausePoint.Pause("jump");
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["all"] = true };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(
+                response.RecommendedNextAction,
+                Is.EqualTo(SourcePausePointConstants.ClearReleasedPauseRecommendedNextAction));
+        }
+
+        /// <summary>
+        /// Verifies clear-pause-point --all recommends nothing when no pause-point-owned pause was released.
+        /// </summary>
+        [Test]
+        public async Task ClearAll_WhenNoPauseReleased_SetsNoRecommendedNextAction()
+        {
+            UloopPausePointRegistry.Enable("jump", 30);
+
+            ClearPausePointTool tool = new();
+            JObject parameters = new() { ["all"] = true };
+            PausePointResponse response = (PausePointResponse)await tool.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.RecommendedNextAction, Is.Empty);
         }
 
         [Test]
@@ -1126,7 +1489,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.RecommendedNextAction,
                 Is.EqualTo(
-                    "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time."));
+                    "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \"jump\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\"."));
         }
 
         [Test]
@@ -1862,7 +2225,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             PausePointResponse response = await EnablePausePointAsync("dash");
 
-            Assert.That(response.Warning, Is.Empty);
+            Assert.That(response.Warning, Is.Null);
         }
 
         // NOTE: Enabling by File/Line is rejected in Debug-only when
@@ -2140,12 +2503,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 resolution.IsDeclaringTypeValueType,
                 resolution.InstructionIndex,
                 resolution.IlOffset,
+                resolution.SnapshotTiming,
                 resolution.ResolvedLine,
                 resolution.ResolvedEndLine,
                 resolution.CompiledMethodStartLine,
                 resolution.CompiledMethodEndLine,
                 resolution.Locals,
-                resolution.Parameters);
+                resolution.Parameters,
+                resolution.NotCapturableVariables);
         }
 
         private static async Task<PausePointResponse> EnablePausePointAsync(string id)

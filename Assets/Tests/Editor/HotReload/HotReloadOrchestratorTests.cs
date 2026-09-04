@@ -29,10 +29,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadOrchestratorTests
     {
+        [SetUp]
+        public void SetUp()
+        {
+            HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+        }
+
         [TearDown]
         public void TearDown()
         {
             HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
             VibeLogger.ClearMemoryLogs();
         }
 
@@ -168,6 +176,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadE2EFixture fixture = new HotReloadE2EFixture();
             Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(10 + 5 + 100));
+        }
+
+        /// <summary>
+        /// What: a Patched-only apply arms the Auto Refresh hold so focus return cannot recompile.
+        /// </summary>
+        [Test]
+        public async Task Run_PatchedOnly_SetsAutoRefreshHeld()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "PatchedOnlyAutoRefreshHeld.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            Assert.That(result.ActivePatchTotal, Is.GreaterThanOrEqualTo(1));
+            Assert.That(result.AutoRefreshHeld, Is.True);
         }
 
         /// <summary>
@@ -1783,15 +1817,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a file declaring a field-like event hot-reloads its subscriber and handler methods
-        /// (no CS0229 from the publicized backing field) — the edited subscriber body (net two
-        /// subscriptions via += / -=) must actually apply (HandledCount == 10, not the original
-        /// body's 5) and EnableCounting must be Patched — while the raising method (edited to a
-        /// double Invoke so it is not treated as unchanged) is Skipped instead of killing the
-        /// whole file.
+        /// What: a file declaring a field-like event hot-reloads every method in it, raiser
+        /// included. The count is exact rather than "increased" so a Patched Kind alone cannot
+        /// satisfy it: the edited subscriber nets two subscriptions, the edited handler adds 5,
+        /// and the edited raiser invokes twice, so all three patches give 20. A raiser left on
+        /// the compiled single-Invoke body would give 10.
         /// </summary>
         [Test]
-        public async Task Run_FieldLikeEventFile_PatchesHandlerAndSkipsRaiser()
+        public async Task Run_FieldLikeEventFile_PatchesHandlerAndRaiser()
         {
             string fixturePath = ResolveEventFixturePath();
             string editedPath = WriteEditedSource(
@@ -1807,25 +1840,83 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertNoFileLevelFailure(result);
             AssertHasPatched(result, nameof(HotReloadEventFixture.HandleScoreChanged));
             AssertHasPatched(result, nameof(HotReloadEventFixture.EnableCounting));
-
-            bool raiserSkipped = false;
-            foreach (HotReloadMethodOutcome outcome in result.Methods)
-            {
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Skipped
-                    && outcome.Method.Contains(nameof(HotReloadEventFixture.RaiseScore))
-                    && outcome.Reason.Contains("event"))
-                {
-                    raiserSkipped = true;
-                }
-            }
-
-            Assert.That(raiserSkipped, Is.True,
-                "RaiseScore must be Skipped with the event-use reason.\n" + FormatOutcomes(result));
+            AssertHasPatched(result, nameof(HotReloadEventFixture.RaiseScore));
 
             HotReloadEventFixture fixture = new HotReloadEventFixture();
             fixture.EnableCounting();
             fixture.RaiseScore();
-            Assert.That(fixture.HandledCount, Is.EqualTo(10));
+            Assert.That(
+                fixture.HandledCount,
+                Is.EqualTo(20),
+                "20 means every patch ran: 2 net subscriptions x 5 per handled x 2 invokes. "
+                + "10 means the raiser stayed on the compiled single-Invoke body.\n"
+                + FormatOutcomes(result));
+        }
+
+        /// <summary>
+        /// What: a static field-like event raised from a patched method actually runs, which
+        /// exercises the StaticFieldRefAccess binding rather than only the generated shim text:
+        /// a wrong backing-field name or FieldInfo would fail the bind and leave the compiled
+        /// body in place. 20 means every patch ran (2 net subscriptions x 5 per handled x 2
+        /// invokes); 1 means the compiled bodies did.
+        /// </summary>
+        [Test]
+        public async Task Run_StaticFieldLikeEventFile_PatchesRaiserAndRunsThroughStaticAccessor()
+        {
+            string fixturePath = ResolveStaticEventFixturePath();
+            string editedPath = WriteEditedSource(
+                "StaticEventFixtureEdit.cs",
+                BuildStaticEventFixtureSource());
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadStaticEventFixture.RaiseScore));
+            AssertHasPatched(result, nameof(HotReloadStaticEventFixture.EnableCounting));
+
+            HotReloadStaticEventFixture fixture = new HotReloadStaticEventFixture();
+            fixture.ResetCounting();
+            fixture.EnableCounting();
+            fixture.RaiseScore();
+            Assert.That(
+                HotReloadStaticEventFixture.HandledCount,
+                Is.EqualTo(20),
+                "20 means the static accessor bound and every patch ran; 1 means the compiled "
+                + "bodies did.\n" + FormatOutcomes(result));
+        }
+
+        /// <summary>
+        /// What: a field-like event raised from inside a lambda patches too. The closure body
+        /// already needs the accessor-rewrite path, so this pins that the event rewrite composes
+        /// with it. 20 means all three patches ran (2 subscriptions x 5 per handled x 2 invokes);
+        /// 1 means none of them did.
+        /// </summary>
+        [Test]
+        public async Task Run_FieldLikeEventRaisedInLambda_PatchesRaiser()
+        {
+            string fixturePath = ResolveEventLambdaFixturePath();
+            string editedPath = WriteEditedSource(
+                "EventLambdaFixtureEdit.cs",
+                BuildEventLambdaFixtureSource());
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadEventLambdaFixture.RaiseScoreFromLambda));
+
+            HotReloadEventLambdaFixture fixture = new HotReloadEventLambdaFixture();
+            fixture.EnableCounting();
+            fixture.RaiseScoreFromLambda();
+            Assert.That(
+                fixture.HandledCount,
+                Is.EqualTo(20),
+                "20 means every patch ran; 1 means the compiled bodies did.\n" + FormatOutcomes(result));
         }
 
         /// <summary>
@@ -2540,7 +2631,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 sourceContentSha256 = "preflight-match-failure"
             };
 
-            HotReloadOrchestrator.HotReloadFileProcessResult fileResult =
+            HotReloadFileProcessResult fileResult =
                 HotReloadEntryApplier.ApplyEntriesAndBuildResult(
                     typeof(HotReloadE2EFixture).Assembly.GetName().Name,
                     projectRelativePath,
@@ -2551,6 +2642,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         Array.Empty<byte>()),
                     entries,
                     addedFieldNames,
+                    Array.Empty<string>(),
                     workerOutput,
                     new HashSet<string>(),
                     new HashSet<string>(),
@@ -2627,7 +2719,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     nameof(HotReloadHandwrittenShims.StaticPing__shim0))
             };
 
-            HotReloadOrchestrator.HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
+            HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
                 projectRelativePath,
                 entries);
             HotReloadOrchestratorResult result = ToOrchestratorResult(fileResult);
@@ -2689,7 +2781,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             try
             {
-                HotReloadOrchestrator.HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
+                HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
                     projectRelativePath,
                     entries);
                 HotReloadOrchestratorResult result = ToOrchestratorResult(fileResult);
@@ -2735,7 +2827,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             try
             {
-                HotReloadOrchestrator.HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
+                HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
                     projectRelativePath,
                     entries);
                 HotReloadOrchestratorResult result = ToOrchestratorResult(fileResult);
@@ -2792,7 +2884,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
         }
 
-        private static HotReloadOrchestrator.HotReloadFileProcessResult ApplyEntriesDirect(
+        private static HotReloadFileProcessResult ApplyEntriesDirect(
             string projectRelativePath,
             TransformWorkerEntryDto[] entries)
         {
@@ -2812,6 +2904,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Array.Empty<byte>()),
                 entries,
                 Array.Empty<string>(),
+                Array.Empty<string>(),
                 workerOutput,
                 new HashSet<string>(),
                 new HashSet<string>(),
@@ -2823,7 +2916,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private static HotReloadOrchestratorResult ToOrchestratorResult(
-            HotReloadOrchestrator.HotReloadFileProcessResult fileResult)
+            HotReloadFileProcessResult fileResult)
         {
             return new HotReloadOrchestratorResult(
                 fileResult.Outcomes,
@@ -3252,6 +3345,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added-only run (Kind Added, no Patched) still arms AutoRefreshHeld.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedOnly_SetsAutoRefreshHeld()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = WithUnusedAddedPing(onDisk);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("AddedOnlyAutoRefreshHeld.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasAdded(result, "AddedPing");
+            for (int index = 0; index < result.Methods.Count; index++)
+            {
+                Assert.That(
+                    result.Methods[index].Kind,
+                    Is.EqualTo(HotReloadMethodOutcomeKind.Added),
+                    "Added-only run must not include Patched outcomes.\n" + FormatOutcomes(result));
+            }
+
+            Assert.That(result.ActivePatchTotal, Is.GreaterThanOrEqualTo(1));
+            Assert.That(result.AutoRefreshHeld, Is.True);
+        }
+
+        /// <summary>
+        /// What: deleting the last added member through the empty-entries path releases the hold.
+        /// </summary>
+        [Test]
+        public async Task Run_EmptyEntriesClearsLastAddedMember_ClearsAutoRefreshHeld()
+        {
+            string fixturePath = ResolveAddedMethodApplyFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.False);
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("EmptyEntriesHold1.cs", WithUnusedAddedPing(onDisk)),
+                CancellationToken.None);
+            AssertHasAdded(first, "AddedPing");
+            Assert.That(first.AutoRefreshHeld, Is.True);
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("EmptyEntriesHold2.cs", onDisk),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(second);
+            Assert.That(second.ActivePatchTotal, Is.EqualTo(0));
+            Assert.That(second.AutoRefreshHeld, Is.False);
+        }
+
+        /// <summary>
         /// What: adding a field and reading/writing it from edited bodies stores values per
         /// instance, and a second identical apply reports AlreadyActive while keeping the values.
         /// </summary>
@@ -3517,6 +3667,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result.AddedFields,
                 Is.EqualTo(new[] { typeof(HotReloadAddedFieldApplyFixture).FullName + ".UsedScratch" }));
             AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
+        }
+
+        /// <summary>
+        /// What: an added const lands in AddedConsts only — not AddedFields and not the
+        /// added-field lifetime warning — because const folds into the edited body.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedConstWithAddedField_ListsConstSeparatelyWithoutLifetimeWarning()
+        {
+            string applyPath = ResolveAddedFieldApplyFixturePath();
+            string applyOnDisk = File.ReadAllText(applyPath);
+            string applyEdited = WithAddedFieldAndConstAccesses(applyOnDisk);
+            Assert.That(applyEdited, Is.Not.EqualTo(applyOnDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { applyPath },
+                WriteEditedSource("AddedFieldAndConst.cs", applyEdited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadAddedFieldApplyFixture.ReadAdded));
+            string typeName = typeof(HotReloadAddedFieldApplyFixture).FullName;
+            Assert.That(result.AddedFields, Is.EqualTo(new[] { typeName + ".AddedCount" }));
+            Assert.That(result.AddedConsts, Is.EqualTo(new[] { typeName + ".AddedTuning" }));
+            AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
+            string lifetimePrefix = HotReloadConstants.AddedFieldsLifetimeWarningFormat.Substring(
+                0,
+                HotReloadConstants.AddedFieldsLifetimeWarningFormat.IndexOf("{0}", StringComparison.Ordinal));
+            foreach (string warning in result.Warnings)
+            {
+                if (warning != null && warning.StartsWith(lifetimePrefix, StringComparison.Ordinal))
+                {
+                    Assert.That(warning, Does.Not.Contain("AddedTuning"));
+                }
+            }
         }
 
         /// <summary>
@@ -3925,6 +4110,200 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a return-type change is a replacement, not a deletion, so the superseded old
+        /// signature must not be reported as a stale patch even though the worker lists it as a
+        /// removed method signature.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_SameFileCallers_ReportsNoStaleOutcome()
+        {
+            string fixturePath = ResolveSignatureChangeSameFileFixturePath();
+            string edited = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSameFileNoStale.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Stale),
+                    "A replaced signature is still declared in the source.\n"
+                    + FormatOutcomes(result.Methods));
+            }
+        }
+
+        /// <summary>
+        /// What: changing the return type of a method that an earlier run already patched is still
+        /// a replacement, so the old signature's surviving patch must not be reported as stale.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_AfterEarlierBodyPatch_ReportsNoStaleOutcome()
+        {
+            string fixturePath = ResolveSignatureChangeSameFileFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string bodyOnlyEdit = onDisk.Replace(
+                "        public int Target(int value)\n        {\n            return value;\n        }",
+                "        public int Target(int value)\n        {\n            return value + 7;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(bodyOnlyEdit, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult firstRun = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSameFileBodyFirst.cs", bodyOnlyEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(firstRun);
+            AssertHasPatched(firstRun, nameof(HotReloadSignatureChangeSameFileFixture.Target));
+
+            HotReloadOrchestratorResult secondRun = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSameFileReturnSecond.cs", WithSameFileReturnTypeChange(onDisk)),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(secondRun);
+            foreach (HotReloadMethodOutcome outcome in secondRun.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Stale),
+                    "A replaced signature is still declared in the source.\n"
+                    + FormatOutcomes(secondRun.Methods));
+            }
+
+            // The first run's patch on the old signature survives alongside the replacement and
+            // the patched caller, so three changes are active behind two rows. That gap is the
+            // superseded-signature case, which --status explains through
+            // HotReloadSupersededSignatureRegistry; it is not a stale patch.
+            Assert.That(secondRun.ActivePatchTotal, Is.EqualTo(3));
+            Assert.That(secondRun.Methods.Count, Is.EqualTo(2), FormatOutcomes(secondRun.Methods));
+        }
+
+        /// <summary>
+        /// What: applying a same-file return-type change records the old compiled signature
+        /// as superseded using the Active --status Method key.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_SameFileCallers_RecordsSupersededOldSignature()
+        {
+            string fixturePath = ResolveSignatureChangeSameFileFixturePath();
+            string edited = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSupersededRecord.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            MethodInfo oldTarget = typeof(HotReloadSignatureChangeSameFileFixture).GetMethod(
+                nameof(HotReloadSignatureChangeSameFileFixture.Target),
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(oldTarget, Is.Not.Null);
+            string oldKey = HotReloadPatcher.FormatMethodKey(oldTarget);
+            bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                oldKey,
+                out string replacement);
+
+            Assert.That(recorded, Is.True);
+            Assert.That(replacement, Is.EqualTo(oldKey));
+        }
+
+        /// <summary>
+        /// What: deleting a compiled method while another method patches does not record
+        /// the deleted signature as superseded.
+        /// </summary>
+        [Test]
+        public async Task Run_DeletedMethod_OtherMethodPatched_DoesNotRecordSupersededSignature()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk.Replace(
+                "        public int Unrelated(int value)\n        {\n            return value;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ToDelete(int value)\n        {\n            return value;\n        }",
+                "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            Assert.That(edited, Does.Not.Contain("ToDelete"));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeDeletedNoSupersede.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
+            MethodInfo deleted = typeof(HotReloadSignatureChangeExternalHost).GetMethod(
+                nameof(HotReloadSignatureChangeExternalHost.ToDelete),
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(deleted, Is.Not.Null);
+            string deletedKey = HotReloadPatcher.FormatMethodKey(deleted);
+            bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                deletedKey,
+                out string _);
+
+            Assert.That(recorded, Is.False);
+        }
+
+        /// <summary>
+        /// What: a return-type change on one Target overload records only that overload's
+        /// compiled key and display name, not a same-named sibling.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_OneOverload_RecordsOnlyThatSignature()
+        {
+            string fixturePath = ResolveSignatureChangeOverloadFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Target(long value)\n        {\n            return (int)value;\n        }",
+                    "        public int Target(long value)\n        {\n            return (int)value + 1;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeOverloadSupersede.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            MethodInfo intTarget = typeof(HotReloadSignatureChangeOverloadFixture).GetMethod(
+                nameof(HotReloadSignatureChangeOverloadFixture.Target),
+                BindingFlags.Instance | BindingFlags.Public,
+                binder: null,
+                types: new[] { typeof(int) },
+                modifiers: null);
+            MethodInfo longTarget = typeof(HotReloadSignatureChangeOverloadFixture).GetMethod(
+                nameof(HotReloadSignatureChangeOverloadFixture.Target),
+                BindingFlags.Instance | BindingFlags.Public,
+                binder: null,
+                types: new[] { typeof(long) },
+                modifiers: null);
+            Assert.That(intTarget, Is.Not.Null);
+            Assert.That(longTarget, Is.Not.Null);
+            string intKey = HotReloadPatcher.FormatMethodKey(intTarget);
+            string longKey = HotReloadPatcher.FormatMethodKey(longTarget);
+            bool intRecorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                intKey,
+                out string intReplacement);
+            bool longRecorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                longKey,
+                out string _);
+
+            Assert.That(intRecorded, Is.True);
+            Assert.That(intReplacement, Is.EqualTo(intKey));
+            Assert.That(longRecorded, Is.False);
+        }
+
+        /// <summary>
         /// What: after a same-file return-type change applies, a later run that skips the
         /// covering caller still reports the replacement as already-active instead of a fresh
         /// gate skip.
@@ -4122,6 +4501,102 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(host.Unrelated(3), Is.EqualTo(4));
             Assert.That(host.Target(3), Is.EqualTo(3));
             Assert.That(host.SameFileCaller(3), Is.EqualTo(3));
+        }
+
+        /// <summary>
+        /// What: a gated return-type change does not record the skipped replacement as superseded.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_GatedReplacement_DoesNotRecordSupersededSignature()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public long Target(int value)\n        {\n            return value + 1L;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                    "        public int Unrelated(int value)\n        {\n            return value + 1;\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeGatedNoSupersede.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            MethodInfo gatedTarget = typeof(HotReloadSignatureChangeExternalHost).GetMethod(
+                nameof(HotReloadSignatureChangeExternalHost.Target),
+                BindingFlags.Instance | BindingFlags.Public);
+            Assert.That(gatedTarget, Is.Not.Null);
+            string gatedKey = HotReloadPatcher.FormatMethodKey(gatedTarget);
+            bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                gatedKey,
+                out string _);
+
+            Assert.That(recorded, Is.False);
+        }
+
+        /// <summary>
+        /// What: a signature-change gate retry that applies a surviving method reports only
+        /// that method's folded const in AddedConsts, not a const used only by the gated
+        /// replacement. First-pass names would still list the gated const.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_GateRetrySurvivorConst_ListsOnlySurvivorAddedConst()
+        {
+            string fixturePath = ResolveSignatureChangeExternalHostPath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string edited = onDisk
+                .Replace(
+                    "        public int Target(int value)\n        {\n            return value;\n        }",
+                    "        public const int GatedTuning = 3;\n"
+                    + "        public const int SurvivorTuning = 7;\n\n"
+                    + "        public long Target(int value)\n        {\n            return value + 1L + GatedTuning;\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "            return Target(value);\n        }",
+                    "            return (int)Target(value);\n        }",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "        public int Unrelated(int value)\n        {\n            return value;\n        }",
+                    "        public int Unrelated(int value)\n        {\n            return value + SurvivorTuning;\n        }",
+                    StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeGateRetrySurvivorConst.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasSkipped(
+                result,
+                nameof(HotReloadSignatureChangeExternalHost.Target),
+                string.Format(
+                    HotReloadConstants.SignatureChangedGateSkipReasonFormat,
+                    "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                    + ".HotReloadSignatureChangeExternalHost.Target(System.Int32)"));
+            AssertHasSkipped(
+                result,
+                nameof(HotReloadSignatureChangeExternalHost.SameFileCaller),
+                HotReloadConstants.SignatureChangedGatedCallerSkipReason);
+            AssertHasPatched(result, nameof(HotReloadSignatureChangeExternalHost.Unrelated));
+
+            string typeName = typeof(HotReloadSignatureChangeExternalHost).FullName;
+            Assert.That(result.AddedConsts, Is.EqualTo(new[] { typeName + ".SurvivorTuning" }));
+            Assert.That(result.AddedFields, Is.Empty);
+            AssertAddedFieldsLifetimeWarningMatchesAddedFields(result);
+
+            HotReloadSignatureChangeExternalHost host = new HotReloadSignatureChangeExternalHost();
+            Assert.That(host.Unrelated(3), Is.EqualTo(10));
         }
 
         /// <summary>
@@ -5314,6 +5789,98 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a patched method later deleted from the source keeps its patch active, so the run
+        /// reports it as a Stale row instead of leaving ActivePatchTotal unexplained.
+        /// </summary>
+        [Test]
+        public async Task Run_PatchedMethodRemovedInLaterEdit_EmitsStaleOutcome()
+        {
+            string hostPath = ResolveAddedMemberHostPath();
+            string onDisk = File.ReadAllText(hostPath);
+            string patchedSource = onDisk.Replace(
+                "        public int ExistingFail(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingFail(int value)\n        {\n            return value + 41;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(patchedSource, Is.Not.EqualTo(onDisk));
+            string patchedPath = WriteEditedSource("StaleOutcomeFirstPass.cs", patchedSource);
+
+            HotReloadOrchestratorResult firstRun = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                patchedPath,
+                CancellationToken.None);
+            Assert.That(
+                firstRun.ActivePatchTotal,
+                Is.GreaterThan(0),
+                "The first run must leave ExistingFail patched for the second run to go stale.");
+
+            string removedSource = onDisk.Replace(
+                "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ExistingFail(int value)\n        {\n            return value;\n        }\n\n",
+                string.Empty,
+                StringComparison.Ordinal).Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public int ExistingValue()\n        {\n            return 2;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(removedSource, Is.Not.EqualTo(onDisk));
+            string removedPath = WriteEditedSource("StaleOutcomeSecondPass.cs", removedSource);
+
+            HotReloadOrchestratorResult secondRun = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                removedPath,
+                CancellationToken.None);
+
+            HotReloadMethodOutcome staleOutcome = null;
+            foreach (HotReloadMethodOutcome outcome in secondRun.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Stale)
+                {
+                    staleOutcome = outcome;
+                }
+            }
+
+            Assert.That(
+                staleOutcome,
+                Is.Not.Null,
+                "The deleted-but-still-patched method must be reported.\n"
+                + FormatOutcomes(secondRun.Methods));
+            Assert.That(
+                staleOutcome.Method,
+                Does.Contain(nameof(HotReloadAddedMemberHost.ExistingFail)));
+            Assert.That(
+                staleOutcome.Reason,
+                Is.EqualTo(HotReloadConstants.StalePatchRemovedFromSourceReason));
+            Assert.That(
+                secondRun.Methods.Count,
+                Is.EqualTo(secondRun.ActivePatchTotal),
+                "Every active patch must have a row now that stale patches are listed.\n"
+                + FormatOutcomes(secondRun.Methods));
+
+            // Restoring the compiled baseline makes the deleted method unchanged again, so the
+            // stale patch is reverted with the rest. This is the third way out of a stale patch,
+            // alongside 'uloop compile' and '--revert-all'.
+            HotReloadOrchestratorResult restoreRun = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                WriteEditedSource("StaleOutcomeRestorePass.cs", onDisk),
+                CancellationToken.None);
+            Assert.That(
+                restoreRun.ActivePatchTotal,
+                Is.EqualTo(0),
+                "Restoring the source must clear the stale patch.\n"
+                + FormatOutcomes(restoreRun.Methods));
+        }
+
+        private static string FormatOutcomes(IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        {
+            List<string> lines = new List<string>();
+            for (int index = 0; index < outcomes.Count; index++)
+            {
+                lines.Add(outcomes[index].Kind + " " + outcomes[index].Method);
+            }
+
+            return string.Join("\n", lines);
+        }
+
+        /// <summary>
         /// What: deleting a compiled method surfaces the aggregated removed-members warning.
         /// </summary>
         [Test]
@@ -5996,6 +6563,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return Path.GetFullPath(path);
         }
 
+        private static string ResolveSignatureChangeOverloadFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath,
+                "Tests",
+                "Editor",
+                "HotReload",
+                "HotReloadSignatureChangeOverloadFixture.cs");
+            Assert.That(
+                File.Exists(path),
+                Is.True,
+                "Signature-change overload fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
         private static string ResolveSignatureChangeTwoCallerFixturePath()
         {
             string path = Path.Combine(
@@ -6149,6 +6731,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CallerGenericArity = 0,
                 TargetMethodKey = targetMethodKey
             };
+        }
+
+        private static string WithUnusedAddedPing(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }",
+                "        public int ExistingCaller(int value)\n        {\n            return value;\n        }\n\n"
+                + "        public int AddedPing(int value)\n        {\n            return value + 1;\n        }",
+                StringComparison.Ordinal);
         }
 
         private static string WithWorkingAddedPing(string onDisk)
@@ -6410,6 +7001,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 StringComparison.Ordinal);
         }
 
+        private static string WithAddedFieldAndConstAccesses(string onDisk)
+        {
+            return onDisk.Replace(
+                "        public int ReadAdded()\n        {\n            return 0;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n        }",
+                "        public int AddedCount;\n"
+                + "        public const int AddedTuning = 4;\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int ReadAdded()\n        {\n            return AddedCount + AddedTuning;\n        }\n\n"
+                + "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public void WriteAdded(int value)\n        {\n            AddedCount = value;\n        }",
+                StringComparison.Ordinal);
+        }
+
         private static string WithAddedFieldAccessesCallingMissingHelper(string onDisk)
         {
             return onDisk.Replace(
@@ -6490,6 +7096,107 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadEventFixtures.cs");
             Assert.That(File.Exists(path), Is.True, "Event fixture source missing: " + path);
             return Path.GetFullPath(path);
+        }
+
+        private static string ResolveStaticEventFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadStaticEventFixture.cs");
+            Assert.That(File.Exists(path), Is.True, "Static event fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string BuildStaticEventFixtureSource()
+        {
+            return @"using System;
+using System.Runtime.CompilerServices;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+{
+    public class HotReloadStaticEventFixture
+    {
+        public static event Action ScoreChanged;
+
+        public static int HandledCount;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void EnableCounting()
+        {
+            ScoreChanged += HandleScoreChanged;
+            ScoreChanged += HandleScoreChanged;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void HandleScoreChanged()
+        {
+            HandledCount = HandledCount + 5;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void RaiseScore()
+        {
+            ScoreChanged?.Invoke();
+            ScoreChanged?.Invoke();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void ResetCounting()
+        {
+            ScoreChanged = null;
+            HandledCount = 0;
+        }
+    }
+}
+";
+        }
+
+        private static string ResolveEventLambdaFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadEventLambdaFixture.cs");
+            Assert.That(File.Exists(path), Is.True, "Event lambda fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string BuildEventLambdaFixtureSource()
+        {
+            return @"using System;
+using System.Runtime.CompilerServices;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+{
+    public class HotReloadEventLambdaFixture
+    {
+        public event Action ScoreChanged;
+
+        public int HandledCount;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void EnableCounting()
+        {
+            ScoreChanged += HandleScoreChanged;
+            ScoreChanged += HandleScoreChanged;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void HandleScoreChanged()
+        {
+            HandledCount = HandledCount + 5;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void RaiseScoreFromLambda()
+        {
+            Action raise = () =>
+            {
+                ScoreChanged?.Invoke();
+                ScoreChanged?.Invoke();
+            };
+            raise();
+        }
+    }
+}
+";
         }
 
         private static string BuildEventFixtureSource(string handleScoreChangedMethod)

@@ -342,10 +342,13 @@ internal static class UnsupportedMemberSkipCollector
             .OfType<EventDeclarationSyntax>())
         {
             string eventKey = WorkerSyntaxIndex.BuildSyntaxEventKey(typeMetadataNameFromSyntax, eventDeclaration);
-            if (snapshotEventMap != null
+            EventDeclarationSyntax snapshotEvent = null;
+            EventDeclarationSyntax plainEvent = null;
+            bool hasSnapshotPeer = snapshotEventMap != null
                 && plainCurrentEventMap != null
-                && snapshotEventMap.TryGetValue(eventKey, out EventDeclarationSyntax snapshotEvent)
-                && plainCurrentEventMap.TryGetValue(eventKey, out EventDeclarationSyntax plainEvent)
+                && snapshotEventMap.TryGetValue(eventKey, out snapshotEvent)
+                && plainCurrentEventMap.TryGetValue(eventKey, out plainEvent);
+            if (hasSnapshotPeer
                 && SyntaxFactory.AreEquivalent(snapshotEvent, plainEvent, topLevel: false))
             {
                 continue;
@@ -357,13 +360,74 @@ internal static class UnsupportedMemberSkipCollector
                 continue;
             }
 
-            AppendEventAccessorSkipIfExplicit(skipped, eventDeclaration, SyntaxKind.AddAccessorDeclaration, eventSymbol.AddMethod);
-            AppendEventAccessorSkipIfExplicit(
+            EventDeclarationSyntax currentEvent = hasSnapshotPeer ? plainEvent : eventDeclaration;
+            EventDeclarationSyntax snapshotForCompare = hasSnapshotPeer ? snapshotEvent : null;
+            AppendEventAccessorSkipForKind(
                 skipped,
                 eventDeclaration,
+                snapshotForCompare,
+                currentEvent,
+                SyntaxKind.AddAccessorDeclaration,
+                eventSymbol.AddMethod);
+            AppendEventAccessorSkipForKind(
+                skipped,
+                eventDeclaration,
+                snapshotForCompare,
+                currentEvent,
                 SyntaxKind.RemoveAccessorDeclaration,
                 eventSymbol.RemoveMethod);
         }
+    }
+
+    // Why per accessor: an add-only edit used to skip remove as well because the
+    // collector compared the whole event declaration.
+    private static void AppendEventAccessorSkipForKind(
+        List<WorkerSkipped> skipped,
+        EventDeclarationSyntax eventDeclaration,
+        EventDeclarationSyntax snapshotEvent,
+        EventDeclarationSyntax currentEvent,
+        SyntaxKind accessorKind,
+        IMethodSymbol accessorMethod)
+    {
+        if (snapshotEvent != null
+            && EventAccessorUnchanged(snapshotEvent, currentEvent, accessorKind))
+        {
+            return;
+        }
+
+        AppendEventAccessorSkipIfExplicit(skipped, eventDeclaration, accessorKind, accessorMethod);
+    }
+
+    private static bool EventAccessorUnchanged(
+        EventDeclarationSyntax snapshotEvent,
+        EventDeclarationSyntax currentEvent,
+        SyntaxKind accessorKind)
+    {
+        AccessorDeclarationSyntax snapshotAccessor = FindEventAccessor(snapshotEvent, accessorKind);
+        AccessorDeclarationSyntax currentAccessor = FindEventAccessor(currentEvent, accessorKind);
+        return snapshotAccessor != null
+            && currentAccessor != null
+            && SyntaxFactory.AreEquivalent(snapshotAccessor, currentAccessor, topLevel: false);
+    }
+
+    private static AccessorDeclarationSyntax FindEventAccessor(
+        EventDeclarationSyntax eventDeclaration,
+        SyntaxKind accessorKind)
+    {
+        if (eventDeclaration == null || eventDeclaration.AccessorList == null)
+        {
+            return null;
+        }
+
+        foreach (AccessorDeclarationSyntax accessor in eventDeclaration.AccessorList.Accessors)
+        {
+            if (accessor.Kind() == accessorKind)
+            {
+                return accessor;
+            }
+        }
+
+        return null;
     }
 
     internal static void AppendEventAccessorSkipIfExplicit(

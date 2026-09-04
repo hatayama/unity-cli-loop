@@ -9,9 +9,9 @@ import (
 
 // Verifies command stderr is included in the returned error message.
 func TestCommandErrorWithStderrAppendsTrimmedStderr(t *testing.T) {
-	err := commandErrorWithStderr(errors.New("exit status 1"), "  PowerShell throw text\r\n")
+	err := commandErrorWithStderr(errors.New("exit status 1"), "  focus helper throw text\r\n")
 
-	if err == nil || !strings.Contains(err.Error(), "PowerShell throw text") {
+	if err == nil || !strings.Contains(err.Error(), "focus helper throw text") {
 		t.Fatalf("expected stderr in error, got %v", err)
 	}
 }
@@ -27,7 +27,7 @@ func TestCommandErrorWithStderrKeepsOriginalErrorWithoutStderr(t *testing.T) {
 	}
 }
 
-// Verifies a timed-out focus script is reported as a busy-Editor timeout instead of a bare exit status.
+// Verifies a timed-out focus helper is reported as a busy-Editor timeout instead of a bare exit status.
 func TestFocusCommandErrorReportsTimeoutWhenContextDeadlineExceeded(t *testing.T) {
 	err := focusCommandError(context.DeadlineExceeded, errors.New("exit status 1"), "")
 
@@ -36,7 +36,7 @@ func TestFocusCommandErrorReportsTimeoutWhenContextDeadlineExceeded(t *testing.T
 	}
 }
 
-// Verifies a focus script throw keeps the stderr text without the timeout explanation.
+// Verifies a focus helper failure keeps the stderr text without the timeout explanation.
 func TestFocusCommandErrorKeepsStderrForScriptFailures(t *testing.T) {
 	err := focusCommandError(nil, errors.New("exit status 1"), "Windows refused to bring the Unity window\r\n")
 

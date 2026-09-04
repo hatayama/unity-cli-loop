@@ -104,8 +104,8 @@ All three components release through release-please; `dispatcherVersion` and com
 changelogs are stamped by release PRs — never bump them by hand (sole exception: the
 documented version-series realignment; see `docs/version-series-realignment.md`). Changes to shared release
 inputs outside the package roots (non-test `cli/common/**` sources, `scripts/install.sh`,
-`scripts/install.ps1`) need matching trigger changes and a `scripts/stamp-release-inputs.sh`
-run in the same PR; CI (`check-release-triggers`) fails otherwise. Rules and rationale:
+`scripts/install.ps1`, and structural changes to the embedded tool catalog `cli/common/tools/default-tools.json`) need matching trigger changes and a `scripts/stamp-release-inputs.sh`
+run in the same PR; description-only catalog regenerations are exempt. CI (`check-release-triggers`) fails otherwise. Rules and rationale:
 `docs/shared-release-inputs.md`.
 
 ## Broken CLI Releases
@@ -123,6 +123,9 @@ Before changing scripts, skill files, generated-file synchronization, path handl
 parsing, read `docs/windows-compatibility.md` (encoding, line endings, path separators,
 PowerShell validation). Add a regression test whenever a fix depends on encoding, line endings,
 or separator normalization — a passing macOS test alone is not enough for these cases.
+On Windows, an abrupt dispatcher exit or `UNITY_NOT_REACHABLE` can be Microsoft Defender
+quarantining `uloop.exe` rather than an IPC problem; the verification and recovery
+procedure is in `docs/windows-compatibility.md`.
 
 ## Package Manager Distribution
 
@@ -197,4 +200,10 @@ tests (especially anything touching async execution, cancellation, threads, or d
 runtime paths), read `docs/unity-editmode-test-guardrails.md` and follow its rules. If a new
 test makes `uloop run-tests` stall, remove or disable it instead of retrying the suite. If
 Unity freezes or stops responding to `uloop`, restart the Editor with `uloop launch -r`.
-CI runs the full EditMode suite only on a schedule or a manual `workflow_dispatch` of `unity-editmode-tests.yml` — pull-request CI never runs it, so full-suite EditMode verification before a merge has to happen locally with `uloop run-tests`.
+CI runs the full EditMode suite on a schedule (and on a manual `workflow_dispatch` of
+`unity-editmode-tests.yml`); that scheduled run is the full-suite gate. Pull-request CI and local
+pre-commit verification do not run the full suite — it takes far too long. Before a commit or
+pull request, run only the tests that cover the code you changed, scoped with
+`--filter-type class` / `--filter-value <TestClass>` (`regex` for a few classes, `assembly` for
+one test assembly). Run the full unfiltered suite locally only when the change touches shared
+test infrastructure or a reviewer explicitly asks for it.

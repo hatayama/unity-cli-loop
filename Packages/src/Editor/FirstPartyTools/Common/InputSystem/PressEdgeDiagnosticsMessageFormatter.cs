@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public static string BuildSuffix(
             string? consumedByUpdateType,
-            bool anyDynamicUpdateObserved,
+            bool anyGameplayUpdateObserved,
             bool keyAlreadyPressedBeforeQueue)
         {
             if (keyAlreadyPressedBeforeQueue)
@@ -23,9 +23,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (consumedByUpdateType == null)
             {
-                return anyDynamicUpdateObserved
-                    ? " (the key-down event was not consumed by any recorded Input System update, even though Dynamic updates ran during the wait)"
-                    : " (no Dynamic update ran during the wait, so gameplay Update polling never had a chance to observe it)";
+                return anyGameplayUpdateObserved
+                    ? " (the key-down event was not consumed by any recorded Input System update, even though gameplay input updates ran during the wait)"
+                    : " (no gameplay input update (Dynamic, Fixed, or Manual) ran during the wait, so gameplay polling never had a chance to observe it)";
             }
 
             if (consumedByUpdateType == "Editor")

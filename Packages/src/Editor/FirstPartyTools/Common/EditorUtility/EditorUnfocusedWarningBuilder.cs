@@ -28,11 +28,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Builds the Play Mode progress hint when the Editor is unfocused during Play Mode.
+        /// Builds the Play Mode progress hint when the Editor is unfocused during active Play Mode.
         /// </summary>
-        public static string BuildPlayModeProgressHint(bool isPlaying, bool isEditorFocused)
+        public static string BuildPlayModeProgressHint(bool isPlaying, bool isEditorFocused, bool isPaused)
         {
-            if (!isPlaying || isEditorFocused)
+            if (!isPlaying || isEditorFocused || isPaused)
             {
                 return string.Empty;
             }

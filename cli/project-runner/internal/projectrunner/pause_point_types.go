@@ -55,6 +55,10 @@ type pausePointStatusResponse struct {
 	CapturedVariablesTruncated bool                         `json:"CapturedVariablesTruncated"`
 	TruncatedVariableNames     []string                     `json:"TruncatedVariableNames"`
 	TruncatedVariableCount     int                          `json:"TruncatedVariableCount"`
+	// NotCapturableVariables names the resolved method's parameters that capture cannot box
+	// (ref/out/in, pointer, ref struct), each with the reason. Unity omits the field when every
+	// parameter can be captured, so omitempty keeps the shared contract shape unchanged.
+	NotCapturableVariables []string `json:"NotCapturableVariables,omitempty"`
 
 	// CapturedVariablesTruncatedNote is set by the CLI, not Unity, when
 	// --captured-variable-names dropped every truncated variable so the remaining
@@ -77,11 +81,15 @@ type pausePointStatusResponse struct {
 	LineBasis                   string `json:"LineBasis,omitempty"`
 	SuppressedByHotReloadReason string `json:"SuppressedByHotReloadReason,omitempty"`
 
-	// Warning is set by Unity on enable/clear tool responses when this shared type decodes those
-	// envelopes. The status bridge sets it to SuppressedByHotReloadReason when suppressed.
-	// On enable-pause-point --await hits, that enable response text is exposed as EnableTimeWarning
-	// on the wait payload, not as hit-time Warning.
+	// Warning is always the space-joined form of Warnings, never a channel of its own: a caller
+	// that reads only one of the two must never see fewer topics than the other carries. Unity
+	// sets both on enable/clear/status envelopes; the CLI folds its own hit-time diagnosis and the
+	// enable-time patch warnings into the same pair (applyPausePointWarnings).
 	Warning string `json:"Warning,omitempty"`
+
+	// Warnings is the single aggregate. omitempty keeps both fields off responses that warned
+	// about nothing.
+	Warnings []string `json:"Warnings,omitempty"`
 
 	// ResolvedLine / ResolvedLineText are merged as a pair on the --await hit path and the
 	// --await Expired path: when status carries a non-zero ResolvedLine (retarget-updated),

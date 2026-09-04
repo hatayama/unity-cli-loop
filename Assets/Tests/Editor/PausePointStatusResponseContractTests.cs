@@ -115,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 CapturedVariablesTruncated = true,
                 TruncatedVariableNames = new[] { "extraField" },
                 TruncatedVariableCount = 1,
+                NotCapturableVariables = new[] { "accumulator (ref/out/in parameter cannot be boxed)" },
                 ClearedReason = "",
                 StatusBeforeClear = "",
                 LateHitDiscardedAfterClear = false,
@@ -151,6 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(response.SuppressedByHotReload, Is.True);
                 Assert.That(response.SuppressedByHotReloadReason, Is.EqualTo(reason));
                 Assert.That(response.Warning, Is.EqualTo(reason));
+                Assert.That(response.Warnings, Is.EqualTo(new[] { reason }));
                 Assert.That(response.RetargetedToHotReloadPatch, Is.False);
             }
             finally

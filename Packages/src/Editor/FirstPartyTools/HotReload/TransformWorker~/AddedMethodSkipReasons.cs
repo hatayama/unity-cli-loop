@@ -23,7 +23,9 @@ internal static class AddedMethodSkipReasons
 
     public const string AddedProperty =
         "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
-        + "Use a 'const' or a plain added field for the value, or run 'uloop compile'.";
+        + "For a computed value, add a same-file method instead (e.g. 'private T GetX()'), which applies "
+        + "through hot reload; for a constant, use a 'const' or a plain added field; otherwise run "
+        + "'uloop compile'.";
 
     public const string Generic =
         "Added generic methods are skipped; hot reload cannot emit a typed shim for them. "

@@ -113,6 +113,7 @@ yarn-error.log*
 
 # Native Go CLI build and release outputs
 /dist/
+*.syso
 
 # Environment configuration files
 .env

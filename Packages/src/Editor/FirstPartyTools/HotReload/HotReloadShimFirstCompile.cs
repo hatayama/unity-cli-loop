@@ -21,10 +21,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why a helper: the gate-retry / empty-entries / first-pass compile fork is one
         // entries-to-patch stage and kept ProcessFileAsync over CA1502.
         internal static async Task<(
-            HotReloadOrchestrator.HotReloadFileProcessResult EarlyResult,
+            HotReloadFileProcessResult EarlyResult,
             TransformWorkerEntryDto[] EntriesToPatch,
             HotReloadShimCompileResult CompileResult,
-            string[] AddedFieldNames)> ResolveEntriesToPatchAsync(
+            string[] AddedFieldNames,
+            string[] AddedConstNames)> ResolveEntriesToPatchAsync(
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
             TransformWorkerInputDto workerInput,
             TransformWorkerOutputDto workerOutput,
@@ -43,15 +44,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> retargetedPausePointIds,
             int unchangedMethodCount,
             List<string> siblingDerivedWarnings,
+            int revertedUnchangedCount,
             CancellationToken ct)
         {
+            string[] addedConstNames = workerOutput.addedConstNames;
             if (gateResult.UsedWorkerRetry)
             {
                 addedFieldNames = gateResult.Isolation.AddedFieldNames;
+                addedConstNames = gateResult.Isolation.AddedConstNames;
                 if (gateResult.Isolation.RetryEntries.Length == 0)
                 {
                     return (
-                        new HotReloadOrchestrator.HotReloadFileProcessResult(
+                        new HotReloadFileProcessResult(
                             outcomes,
                             warnings,
                             0,
@@ -60,13 +64,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                             unchangedMethodCount,
                             retargetedPausePointIds,
                             addedFieldNames: null,
-                            sourceContentSha256: workerOutput.sourceContentSha256),
+                            sourceContentSha256: workerOutput.sourceContentSha256,
+                            revertedUnchangedCount: revertedUnchangedCount),
                         null,
                         null,
-                        addedFieldNames);
+                        addedFieldNames,
+                        addedConstNames);
                 }
 
-                return (null, gateResult.Isolation.RetryEntries, gateResult.Isolation.RetryCompileResult, addedFieldNames);
+                return (
+                    null,
+                    gateResult.Isolation.RetryEntries,
+                    gateResult.Isolation.RetryCompileResult,
+                    addedFieldNames,
+                    addedConstNames);
             }
 
             if (string.IsNullOrEmpty(workerOutput.shimSource)
@@ -93,15 +104,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     workerOutput,
                     outcomes);
                 return (
-                    new HotReloadOrchestrator.HotReloadFileProcessResult(
+                    new HotReloadFileProcessResult(
                         outcomes,
                         warnings,
                         0,
                         unchangedMethodCount: unchangedMethodCount,
-                        sourceContentSha256: workerOutput.sourceContentSha256),
+                        sourceContentSha256: workerOutput.sourceContentSha256,
+                        revertedUnchangedCount: revertedUnchangedCount),
                     null,
                     null,
-                    addedFieldNames);
+                    addedFieldNames,
+                    addedConstNames);
             }
 
             ShimFirstCompileResult firstCompile = await CompileShimFirstPassAsync(
@@ -123,22 +136,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 outcomes.AddRange(firstCompile.Outcomes);
                 return (
-                    new HotReloadOrchestrator.HotReloadFileProcessResult(
+                    new HotReloadFileProcessResult(
                         outcomes,
                         warnings,
                         0,
                         unchangedMethodCount: unchangedMethodCount,
-                        sourceContentSha256: workerOutput.sourceContentSha256),
+                        sourceContentSha256: workerOutput.sourceContentSha256,
+                        revertedUnchangedCount: revertedUnchangedCount),
                     null,
                     null,
-                    addedFieldNames);
+                    addedFieldNames,
+                    addedConstNames);
             }
 
             outcomes.AddRange(firstCompile.Outcomes);
             if (firstCompile.EntriesToPatch.Length == 0)
             {
                 return (
-                    new HotReloadOrchestrator.HotReloadFileProcessResult(
+                    new HotReloadFileProcessResult(
                         outcomes,
                         warnings,
                         0,
@@ -147,13 +162,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         unchangedMethodCount,
                         retargetedPausePointIds,
                         addedFieldNames: null,
-                        sourceContentSha256: workerOutput.sourceContentSha256),
+                        sourceContentSha256: workerOutput.sourceContentSha256,
+                        revertedUnchangedCount: revertedUnchangedCount),
                     null,
                     null,
-                    addedFieldNames);
+                    addedFieldNames,
+                    addedConstNames);
             }
 
-            return (null, firstCompile.EntriesToPatch, firstCompile.CompileResult, addedFieldNames);
+            return (null, firstCompile.EntriesToPatch, firstCompile.CompileResult, addedFieldNames, addedConstNames);
         }
 
         /// <summary>

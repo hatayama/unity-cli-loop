@@ -42,6 +42,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return (current & expected) == expected;
         }
 
+        // A press edge is visible to gameplay polling only when the Input System processed it
+        // in one of the player-loop update types; the Editor tick never surfaces
+        // wasPressedThisFrame to gameplay Update, and None means no update ran at all. Press-edge
+        // observation and its miss diagnostics must agree on this set, otherwise a Fixed or Manual
+        // project reads "no gameplay update ran" while its gameplay updates did run.
+        public static bool IsGameplayUpdate(InputUpdateType updateType)
+        {
+            return updateType == InputUpdateType.Dynamic
+                || updateType == InputUpdateType.Fixed
+                || updateType == InputUpdateType.Manual;
+        }
+
         public static bool RequiresExplicitUpdate()
         {
             InputSettings? settings = InputSystem.settings;

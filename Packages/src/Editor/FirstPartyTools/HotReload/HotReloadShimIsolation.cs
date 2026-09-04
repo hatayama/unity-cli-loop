@@ -159,7 +159,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         Array.Empty<TransformWorkerEntryDto>(),
                         null,
                         retryOutput.addedFieldNames,
-                        retryOutput.siblingConstDriftWarnings));
+                        retryOutput.siblingConstDriftWarnings,
+                        retryOutput.addedConstNames));
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -202,7 +203,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     retryOutput.entries,
                     retryCompileResult,
                     retryOutput.addedFieldNames,
-                    retryOutput.siblingConstDriftWarnings));
+                    retryOutput.siblingConstDriftWarnings,
+                    retryOutput.addedConstNames));
         }
 
         /// <summary>
@@ -528,6 +530,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public TransformWorkerEntryDto[] RetryEntries { get; }
             public HotReloadShimCompileResult RetryCompileResult { get; }
             public string[] AddedFieldNames { get; }
+            public string[] AddedConstNames { get; }
             public string[] SiblingConstDriftWarnings { get; }
 
             public HotReloadShimIsolationResult(
@@ -536,7 +539,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 TransformWorkerEntryDto[] retryEntries,
                 HotReloadShimCompileResult retryCompileResult,
                 string[] addedFieldNames = null,
-                string[] siblingConstDriftWarnings = null)
+                string[] siblingConstDriftWarnings = null,
+                string[] addedConstNames = null)
             {
                 Debug.Assert(skippedCallerOutcomes != null, "skippedCallerOutcomes must not be null.");
                 FailedMethodOutcomes = failedMethodOutcomes;
@@ -545,6 +549,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RetryCompileResult = retryCompileResult;
                 AddedFieldNames = addedFieldNames ?? Array.Empty<string>();
                 SiblingConstDriftWarnings = siblingConstDriftWarnings ?? Array.Empty<string>();
+                AddedConstNames = addedConstNames ?? Array.Empty<string>();
             }
         }
     }

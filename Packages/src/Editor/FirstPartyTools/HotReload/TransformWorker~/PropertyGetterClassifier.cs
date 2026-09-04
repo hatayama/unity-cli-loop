@@ -91,6 +91,7 @@ internal static class PropertyGetterClassifier
         IMethodSymbol getterSymbol,
         SyntaxNode getterBodyNode,
         SemanticModel semanticModel,
+        INamedTypeSymbol compiledType,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
         List<WorkerSkipped> skipped)
@@ -101,7 +102,8 @@ internal static class PropertyGetterClassifier
             methodDeclaration: null,
             getterSymbol,
             getterBodyNode,
-            semanticModel);
+            semanticModel,
+            compiledType);
         if (decision.SkipReason != null)
         {
             skipped.Add(new WorkerSkipped

@@ -44,6 +44,10 @@ var cliOnlyParameterTableOptions = map[string]map[string]bool{
 	"run-tests": {
 		tooldocs.RunTestsSkipCompileFlagName: true,
 	},
+	"clear-pause-point": {
+		tooldocs.PausePointFileFlagName: true,
+		tooldocs.PausePointLineFlagName: true,
+	},
 }
 
 // descriptionKey identifies one description in the catalog. Property is empty for the tool's own

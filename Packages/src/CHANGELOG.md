@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.2.1](https://github.com/hatayama/unity-cli-loop/compare/v3.2.0...v3.2.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* Skill instructions now match what the tools actually guarantee ([#2498](https://github.com/hatayama/unity-cli-loop/issues/2498)) ([e839eef](https://github.com/hatayama/unity-cli-loop/commit/e839eefe29900eb370d8522fb2979c9e0db36127))
+
+## [3.2.0](https://github.com/hatayama/unity-cli-loop/compare/v3.1.0...v3.2.0) (2026-09-02)
+
+
+### Features
+
+* **editor:** stand down CLI install actions for winget-managed uloop ([d46ce20](https://github.com/hatayama/unity-cli-loop/commit/d46ce2017497b538bbd6ff23f0c555051ed6ed90))
+
+
+### Bug Fixes
+
+* Skills no longer show as Outdated when other tools add extra files at the skill root ([#2490](https://github.com/hatayama/unity-cli-loop/issues/2490)) ([c78b099](https://github.com/hatayama/unity-cli-loop/commit/c78b0993191f020dcd045d8be0602cbb1ad2953d))
+
 ## [3.1.0](https://github.com/hatayama/unity-cli-loop/compare/v3.0.0...v3.1.0) (2026-08-31)
 
 

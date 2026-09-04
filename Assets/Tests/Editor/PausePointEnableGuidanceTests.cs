@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -23,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private const int FixtureClosingBraceLine = 13;
 
         private const string ExpectedArmingNextActionForJump =
-            "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time.";
+            "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"jump\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \"jump\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
 
         private const string ExpectedRearmDiscardWarningGeneration1 =
             "Generation 1 of this pause point had already hit; this re-arm discarded its CapturedVariables and CapturedVariableHistory. Read results with pause-point-status before re-arming when you need them.";
@@ -63,6 +64,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 "jump");
 
             Assert.That(action, Is.EqualTo(ExpectedArmingNextActionForJump));
+        }
+
+        /// <summary>
+        /// What: arming guidance describes the trigger as a subcommand without a leading uloop command.
+        /// </summary>
+        [Test]
+        public void ResolveSuccessEnableRecommendedNextAction_WhenExistingIsEmpty_ExplainsTriggerSubcommandFormat()
+        {
+            // Keep the deprecated placeholder split so repository searches for its contiguous spelling
+            // report only real regressions in user-facing guidance.
+            const string deprecatedPlaceholder = "<uloop " + "command>";
+            string action = PausePointEnableWarnings.ResolveSuccessEnableRecommendedNextAction(
+                string.Empty,
+                "jump");
+
+            Assert.That(action, Does.Not.Contain(deprecatedPlaceholder));
+            Assert.That(action, Does.Contain("without"));
+        }
+
+        /// <summary>
+        /// What: arming guidance offers a blocking wait that needs no --trigger, so a marker driven
+        /// by physics or a multi-step action is not presented as requiring a trigger command.
+        /// </summary>
+        [Test]
+        public void ResolveSuccessEnableRecommendedNextAction_WhenExistingIsEmpty_OffersAwaitWithoutATrigger()
+        {
+            string action = PausePointEnableWarnings.ResolveSuccessEnableRecommendedNextAction(
+                string.Empty,
+                "jump");
+
+            Assert.That(action, Does.Contain("uloop await-pause-point --id \"jump\" --timeout-seconds"));
+            Assert.That(
+                action.IndexOf("await-pause-point", StringComparison.Ordinal),
+                Is.LessThan(action.IndexOf("--trigger", StringComparison.Ordinal)),
+                "the trigger-free wait must be offered before the trigger form");
         }
 
         /// <summary>
@@ -128,7 +164,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 + FixtureFilePath
                 + ":"
                 + FixtureStatementLine
-                + "\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time.";
+                + "\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \""
+                + FixtureFilePath
+                + ":"
+                + FixtureStatementLine
+                + "\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
             Assert.That(response.RecommendedNextAction, Is.EqualTo(expected));
             string json = JsonConvert.SerializeObject(
                 response,
@@ -192,7 +232,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             });
 
             Assert.That(response.Success, Is.True, response.ErrorCode + " / " + response.Message);
-            Assert.That(response.Warning, Is.EqualTo(PausePointEnableWarnings.CreateEnableWarning()));
+            // Normalized to empty because an omitted warning is now null, while the builder returns
+            // empty when it has nothing to say: both mean "no discard warning was added".
+            Assert.That(
+                response.Warning ?? string.Empty,
+                Is.EqualTo(PausePointEnableWarnings.CreateEnableWarning()));
         }
 
         /// <summary>
@@ -302,6 +346,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     SourcePausePointConstants.SmallMethodInliningRiskWarning),
                 ExpectedClosingBraceWarningForFixture);
             Assert.That(response.Warning, Is.EqualTo(expectedWarning));
+        }
+
+        /// <summary>
+        /// What: enabling a physics-callback method puts the dispatch warning and the mid-solver
+        /// warning in separate Warnings entries, while Warning stays their space-joined form.
+        /// </summary>
+        [Test]
+        public void Enable_WhenPhysicsCallbackMethod_SplitsDispatchAndMidSolverWarnings()
+        {
+            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = "Assets/Tests/Editor/PausePointToolsPhysicsFixture.cs",
+                Line = 11,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+
+            Assert.That(
+                response.Success,
+                Is.True,
+                response.ErrorCode + " / " + response.Message);
+            Assert.That(
+                response.Warnings,
+                Does.Contain(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning));
+            Assert.That(
+                response.Warnings,
+                Does.Contain(SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning));
+            int dispatchIndex = IndexOfWarning(
+                response.Warnings,
+                SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning);
+            int midSolverIndex = IndexOfWarning(
+                response.Warnings,
+                SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning);
+            Assert.That(dispatchIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(midSolverIndex, Is.EqualTo(dispatchIndex + 1));
+            Assert.That(
+                response.Warning,
+                Is.EqualTo(string.Join(" ", response.Warnings)));
+            Assert.That(
+                response.Warning,
+                Does.Contain(SourcePausePointConstants.PhysicalCallbackMayMissExistingInstanceWarning));
+            Assert.That(
+                response.Warning,
+                Does.Contain(SourcePausePointConstants.PhysicalCallbackMidSolverValuesWarning));
+        }
+
+        private static int IndexOfWarning(IReadOnlyList<string> warnings, string expected)
+        {
+            for (int index = 0; index < warnings.Count; index++)
+            {
+                if (warnings[index] == expected)
+                {
+                    return index;
+                }
+            }
+
+            return -1;
         }
 
         private sealed class FakePausePointPauseController : IUloopPausePointPauseController

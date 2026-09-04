@@ -32,7 +32,7 @@ LogTypeや検索対象の文字列で絞り込む事ができます。また、s
 
 ### 3. run-tests - TestRunnerの実行 (PlayMode, EditMode対応)
 Unity Test Runnerを実行し、テスト結果を取得します。FilterTypeとFilterValueで条件を設定できます。
-- FilterType: all（全テスト）、exact（個別テストメソッド名）、regex（クラス名や名前空間）、assembly（アセンブリ名）
+- FilterType: all（全テスト）、exact（個別テストメソッド名）、regex（テストのフルネームに対する正規表現）、assembly（アセンブリ名）、class（テストクラス名。名前空間付きでも可）
 - FilterValue: フィルタータイプに応じた値（クラス名、名前空間など）
 - UnsavedChanges: テスト前の未保存 Scene / Prefab Stage 変更の扱い。`save`（デフォルト）は保存、`fail` は残っていれば停止、`discard` はディスク状態へ戻す（Untitled シーンは破棄できず失敗）。
 テスト結果をxmlで出力する事が可能です。出力pathを返すので、それをAIに読み取ってもらう事ができます。
@@ -43,8 +43,9 @@ Unity Test Runnerを実行し、テスト結果を取得します。FilterType�
 → 失敗したテストを確認、実装を修正してテストをパス
 ```
 > [!WARNING]
-> PlayModeテスト実行の際、Domain Reloadは強制的にOFFにされます。(テスト終了後に元の設定に戻ります)
-> この際、Static変数がリセットされない事に注意して下さい。
+> PlayModeテスト実行の際、`--respect-enter-play-mode-settings` を指定しない限りDomain Reloadは強制的にOFFにされます。(テスト終了後に元の設定に戻ります)
+> Domain Reloadが強制OFFの間はStatic変数がリセットされない事に注意して下さい。`--respect-enter-play-mode-settings` を付けた場合はプロジェクト設定に従ってリセットされるかどうかが決まります。
+> Domain Reloadを強制OFFにせずプロジェクトのEnter Play Mode設定を維持したい場合は `--respect-enter-play-mode-settings` を指定してください。
 
 ### 4. hot-reload - メソッド本体の変更を再コンパイルなしで即時適用
 編集した `.cs` ファイルのメソッド本体を、再コンパイルもDomain Reloadも挟まずに実行中のEditor（EditMode / PlayMode）へ直接反映します。属性やソースマーカーは不要で、private / internalメンバーへのアクセス、staticメソッド、asyncメソッド、イテレータも動作します。PlayModeを止めずにゲームロジックを修正して、その場で挙動を確かめられます。

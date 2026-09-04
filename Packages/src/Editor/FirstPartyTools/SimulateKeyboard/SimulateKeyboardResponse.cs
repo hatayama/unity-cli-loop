@@ -30,6 +30,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string? RejectedByActivePausePointId { get; set; }
 
+        /// <summary>
+        /// True when this command was refused before it did anything: the PlayMode preflight
+        /// rejected it. Why a separate flag from RejectedByActivePausePointId: a refusal is not
+        /// always owned by a pause point (PlayMode simply not running is the common case), and the
+        /// CLI's --trigger wait has to abort on "the trigger performed no action" without matching
+        /// message text. Mid-flight failures leave this false.
+        /// </summary>
+        public bool RejectedBeforeExecution { get; set; }
+
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string? PausePointId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
@@ -38,6 +47,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public List<UnityCliLoopPausePointHit>? PausePointHits { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public bool? PressEdgeObserved { get; set; }
+
+        /// <summary>
+        /// Set only on pause-point-interrupted Press/KeyDown. True when the Input System applied
+        /// the press in a gameplay update before the pause (the game may already have consumed it);
+        /// false when the queued edge was discarded before any gameplay update. Null for KeyUp and
+        /// uninterrupted responses. Distinct from PressEdgeObserved, which reports whether a
+        /// gameplay update saw the wasPressedThisFrame edge.
+        /// </summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public bool? PressDeliveredToGame { get; set; }
 
         /// <summary>
         /// Extra observation frames spent holding the key after the normal duration window
@@ -58,10 +77,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string? PressEdgeConsumedByUpdateType { get; set; }
 
         /// <summary>
-        /// Whether any Dynamic update ran while waiting for the press edge to be observed.
+        /// Whether any gameplay input update (Dynamic, Fixed, or Manual) ran while waiting for
+        /// the press edge to be observed. Editor updates do not count.
         /// </summary>
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public bool? PressEdgeAnyDynamicUpdateObserved { get; set; }
+        public bool? PressEdgeAnyGameplayUpdateObserved { get; set; }
 
         /// <summary>
         /// Whether the key was already pressed before this action was queued, meaning no press

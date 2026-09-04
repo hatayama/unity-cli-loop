@@ -17,14 +17,15 @@ trigger updates in the same PR:
 - Installer scripts (`scripts/install.sh`, `scripts/install.ps1`) must be accompanied by a
   change under `cli/dispatcher/`, because installers ship as dispatcher release assets.
 - The embedded tool catalog (`cli/common/tools/default-tools.json`) is the one
-  non-Go shared input: it is compiled into both binaries, so catalog changes —
-  including regenerations driven by skill parameter-table edits — need the
-  same accompanying trigger changes and stamp refresh.
+  non-Go shared input: structural changes count; description-only regenerations
+  do not, because the CLI reloads descriptions from SKILL.md at run time and
+  the embedded text is only a help-text fallback: outside a project, or inside
+  one when SKILL.md has no entry for the item.
 
 Run `scripts/stamp-release-inputs.sh` to refresh
 `cli/project-runner/shared-inputs-stamp.json` and
 `cli/dispatcher/shared-inputs-stamp.json`, and commit the stamp updates with
-the change. Pull request CI runs `check-release-triggers` (authoritative rules:
+the change. The stamp script hashes the catalog shape through `go run`. Pull request CI runs `check-release-triggers` (authoritative rules:
 `releaseTriggerRules` in
 `cli/release-automation/internal/automation/release_trigger_guard.go`) and
 fails when shared release inputs changed without the matching triggers.

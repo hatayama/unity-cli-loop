@@ -548,6 +548,34 @@ func TestUpdateRefusesHomebrewManagedExecutable(t *testing.T) {
 	}
 }
 
+func TestUpdateRefusesWingetManagedExecutable(t *testing.T) {
+	// Verifies winget-managed installs refuse self-update and point users at winget upgrade.
+	previousResolver := resolveUpdateExecutablePathFunc
+	previousRunner := updateRunCommand
+	defer func() {
+		resolveUpdateExecutablePathFunc = previousResolver
+		updateRunCommand = previousRunner
+	}()
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return `C:\Program Files\WinGet\Links\uloop.exe`, nil
+	}
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		t.Fatal("updateRunCommand must not run for winget-managed installs")
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{clicore.UpdateCommandName}, &stdout, &stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "winget upgrade --id hatayama.uloop") {
+		t.Fatalf("expected winget upgrade guidance in stderr, got: %s", stderr.String())
+	}
+}
+
 func TestUpdateRefusesCurrentTargetForHomebrewManagedExecutable(t *testing.T) {
 	// Verifies the Homebrew guard keeps brew guidance ahead of current-target resolution.
 	previousExecutablePath := resolveUpdateExecutablePathFunc

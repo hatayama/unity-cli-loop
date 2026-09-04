@@ -63,6 +63,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // --status Kind for rows sourced from HotReloadAddedMemberRegistry (no compiled MethodBase).
         public const string AddedMemberStatusKind = "Added";
 
+        // --status Kind for rows sourced from HotReloadAddedFieldRegistry (live added fields).
+        public const string AddedFieldKind = "AddedField";
+
         // Isolation retry drops callers of a failed added shim so retry does not CS0103; they
         // are not Failed (the compile error was in the added body) and must not stay silent.
         public const string IsolatedAddedMethodCallerSkipReason =
@@ -115,6 +118,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string RemovedMembersWarningFormat =
             "Removed members stay present in the compiled assembly until 'uloop compile'; "
             + "edited bodies no longer call them: {0}.";
+
+        // Reason on a Stale row: the source no longer declares the method, but the patch is still
+        // installed, so compiled callers keep running the patched body.
+        public const string StalePatchRemovedFromSourceReason =
+            "The method was removed from the edited source, but its patch stays active until "
+            + "'uloop compile', '--revert-all', or a later reload whose source restores the method "
+            + "to the compiled baseline; compiled callers still run the patched body.";
 
         public const string AddedFieldsLifetimeWarningFormat =
             "Added field values live outside the compiled assembly and last only until the next 'uloop compile' or domain reload: {0}.";
@@ -227,12 +237,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ActivePatchNeverInvokedReason =
             "Not invoked since this patch was applied. Calls that already finished before the patch (for example one-time initialization) do not re-run automatically; the patched body takes effect the next time this method is called. If this method only runs during initialization, trigger that path again — re-create the object that runs it, or run 'uloop compile' and enter Play Mode again.";
 
+        // Format: replacement display name for an Active row whose compiled signature was
+        // replaced in a later edit. Supersedes ActivePatchNeverInvokedReason when both apply.
+        public const string ActivePatchSupersededReasonFormat =
+            "Superseded by a new declaration of {0}: the edited source now declares a different signature. This compiled signature stays patched so existing callers keep working; it is not the entry point for new calls.";
+
         // Format: count of Active rows whose InvocationCount is 0.
         public const string NeverInvokedActiveAggregatedMessageFormat =
             "{0} change(s) have not been invoked since their patch was applied; see Methods[].Reason.";
 
         public const string MultiWarningSingleCompileResolutionMessage =
             "A single 'uloop compile' clears all of them at once.";
+
+        // Format: continuing file count, then comma-separated project-relative paths (ordinal).
+        public const string ContinuingLineShiftWarningFormat =
+            "Continuing from earlier runs: {0} file(s) still differ in line count from the last compiled source ({1}). 'enable-pause-point --line' targeting caveats from the earlier warning still apply; pass --method together with --line to pin the target.";
 
         // Format: project-relative path of the source that matched a non-baseline ledger entry.
         public const string UnchangedSourceNonBaselineWarningFormat =
@@ -247,7 +266,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "active with their InvocationCount preserved. Edit and reload again to apply new changes.";
 
         public const string NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage =
-            "Hot reload finished with no methods patched. See Methods for Skipped and AlreadyActive reasons.";
+            "Hot reload finished with no methods patched. See Warnings for Skipped reasons and Methods for AlreadyActive reasons.";
+
+        // Format: leftover patches peeled because source matched compiled IL again.
+        public const string StalePatchesRevertedMessageFormat =
+            "{0} stale patch(es) were reverted so those methods run the compiled IL again.";
+
+        // Format: skipped method identity, then the reason it could not be patched.
+        public const string SkippedMethodWarningFormat = "Skipped {0}: {1}";
 
         public const string VibeLogFileStart = "hot_reload_file_start";
         public const string VibeLogWorkerResult = "hot_reload_worker_result";
@@ -304,5 +330,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // truncates so the cap is never silent.
         public const string SiblingConstDriftScanLimitedWarningFormat =
             "sibling const-drift scan limited to first {0} changed files ({1} total)";
+
+        // Format: remaining ledger count. Appended to every validation-failure Message
+        // when ActiveChangeCount is greater than 0 so callers do not treat 0 as clean.
+        public const string ValidationFailureActiveChangesSuffixFormat =
+            " {0} hot-reload change(s) are still active.";
+
+        public const string ValidationFailureInspectOrRevertNextAction =
+            "Run 'uloop hot-reload --status' to inspect the active changes, or 'uloop hot-reload --revert-all' to drop them.";
     }
 }

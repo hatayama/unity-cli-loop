@@ -175,12 +175,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string PreLineSnapshotTimingNote =
             "pre-line: variables are captured before ResolvedLine executes";
 
-        // Surfaced only when a clear actually resumed Play Mode, so the caller understands the
-        // clear had a side effect on run state. A manual pause (control-play-mode --action Pause
-        // or the Editor pause button) is left untouched by clear and never triggers this.
-        public const string ClearResumedPlayModeWarning =
-            "This clear resumed Play Mode because the pause was owned by a pause-point hit. "
+        public const string PostLineSnapshotTimingNote =
+            "post-line: variables are captured after ResolvedLine finishes, before control leaves it";
+
+        public const string PreLineSnapshotTimingValue = "pre-line";
+
+        public const string PostLineSnapshotTimingValue = "post-line";
+
+        // Reasons a parameter is left out of CapturedVariables. Capture boxes every value into
+        // the snapshot, and these three shapes cannot be boxed at all, so naming the shape tells
+        // the caller why a name they expected is absent and which workaround applies.
+        public const string NotCapturableByRefParameterReason = "ref/out/in parameter cannot be boxed";
+        public const string NotCapturablePointerReason = "pointer cannot be boxed";
+        public const string NotCapturableRefStructReason = "ref struct cannot be boxed";
+
+        // Named at enable time so the caller learns the parameter is missing before running the
+        // code path, instead of reading CapturedVariables afterwards and suspecting a capture bug.
+        public const string NotCapturableParametersWarningFormat =
+            "Parameters not captured because they cannot be boxed: {0}. Copy the value it refers to"
+            + " into a plain local (dereference a pointer, ToArray() a span), or use"
+            + " --snapshot-timing post-line on the line that consumes it.";
+
+        // Why a resolve failure rather than a silent pre-line fallback: a statement that
+        // always throws has no "after", and capturing before it would report values the
+        // caller explicitly asked not to see.
+        public const string PostLineAlwaysThrowsMessageFormat =
+            "Line {0} of {1} always throws, so there is no point after it to capture. Use --snapshot-timing pre-line or choose another line.";
+
+        // Surfaced only when a clear actually released EditorApplication.isPaused, so the caller
+        // understands the clear had a side effect on run state. Worded around the Editor pause
+        // rather than Play Mode because a hit can also pause in EditMode (a marker reached through
+        // execute-dynamic-code), where "resumed Play Mode" would describe a state that never
+        // existed. A manual pause (control-play-mode --action Pause or the Editor pause button)
+        // is left untouched by clear and never triggers this.
+        public const string ClearReleasedOwnedPauseWarning =
+            "This clear released the Editor pause because it was owned by a pause-point hit. "
             + "A manual pause set outside the pause-point workflow would have been left untouched.";
+
+        // Paired with ClearReleasedOwnedPauseWarning, which only explains what happened. Callers
+        // that arranged a scenario while paused lose it the moment the clear releases the pause,
+        // so the recovery path (re-pause, re-arrange) and the ordering that avoids the loss next
+        // time (arm the replacement marker before clearing the current one) have to be stated as
+        // the next action, not left for the caller to infer from the warning. Worded around the
+        // Editor pause for the same reason as that warning: a marker reached through
+        // execute-dynamic-code pauses in EditMode, where naming Play Mode would be false.
+        public const string ClearReleasedPauseRecommendedNextAction =
+            "The Editor pause was released. If you needed the paused state, pause again "
+            + "(control-play-mode --action Pause while in Play Mode), re-arrange it, and next "
+            + "time arm the new marker before clearing this one.";
 
         // Release code optimization strips most sequence points and hoists/elides locals, so the
         // Resolver's PDB-driven lookup cannot reliably find a patch location; rejecting up front
@@ -388,7 +430,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // so agents arm a marker and then stall instead of running the path or using --await.
         // Format: marker id.
         public const string EnableSuccessArmingRecommendedNextActionFormat =
-            "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"{0}\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time.";
+            "Run the code path so the marker can hit, then read the outcome with: uloop pause-point-status --id \"{0}\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \"{0}\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
 
         // Why warn: Registry.Enable replaces the entry and drops CapturedVariables,
         // CapturedVariableHistory, and hit snapshots. The raw capture holder is kept on purpose.

@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Threading.Tasks;
 using System.Threading;
 using UnityEngine;
@@ -16,6 +15,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class RunTestsUseCase
     {
+        // Marks a failure raised before the test run started, where no domain reload could have
+        // discarded a hot-reload patch.
+        private const int NoHotReloadChangesObserved = 0;
+
         private readonly TestFilterCreationService _filterService;
         private readonly TestExecutionService _executionService;
         private readonly TestExecutionStateValidationService _validationService;
@@ -23,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly Func<string[]> _clearActivePausePoints;
         private readonly Func<CancellationToken, Task> _waitForTestRunnerCleanupAsync;
         private readonly Func<int> _getActiveHotReloadChangeCount;
+        private readonly Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> _proposeTestAsmdef;
         private const int TestRunnerCleanupFallbackDelayMilliseconds = 3000;
 
         public RunTestsUseCase()
@@ -40,7 +44,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<string[]> clearActivePausePoints = null,
             Func<CancellationToken, Task> waitForTestRunnerCleanupAsync = null,
             Func<string, bool, UnityCliLoopTestMode, TestFilterType, string> appendNoTestsDiagnostics = null,
-            Func<int> getActiveHotReloadChangeCount = null)
+            Func<int> getActiveHotReloadChangeCount = null,
+            Func<UnityCliLoopTestMode, RunTestsTestAsmdefProposal> proposeTestAsmdef = null)
         {
             Debug.Assert(filterService != null, "filterService must not be null");
             Debug.Assert(executionService != null, "executionService must not be null");
@@ -55,6 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _clearActivePausePoints = clearActivePausePoints ?? ClearActivePausePointsDefault;
             _waitForTestRunnerCleanupAsync = waitForTestRunnerCleanupAsync ?? WaitForTestRunnerCleanupAsync;
             _getActiveHotReloadChangeCount = getActiveHotReloadChangeCount ?? ReadActiveHotReloadChangeCount;
+            _proposeTestAsmdef = proposeTestAsmdef ?? RunTestsTestAsmdefProposalBuilder.Propose;
         }
 
         /// <summary>
@@ -72,7 +78,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (!IsSupportedTestMode(parameters.TestMode))
             {
-                return CreateFailureResponse("Unsupported test mode: " + parameters.TestMode);
+                return CreateFailureResponse(
+                    "Unsupported test mode: " + parameters.TestMode,
+                    NoHotReloadChangesObserved);
             }
 
             ct.ThrowIfCancellationRequested();
@@ -84,13 +92,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             (bool isTimeoutValid, string timeoutError) = RunTestsExecutionTimeout.Validate(parameters.TimeoutSeconds);
             if (!isTimeoutValid)
             {
-                return CreateFailureResponse(timeoutError);
+                return CreateFailureResponse(timeoutError, NoHotReloadChangesObserved);
             }
 
             ValidationResult validation = _validationService.Validate(parameters.TestMode, parameters.UnsavedChanges);
             if (!validation.IsValid)
             {
-                return CreateFailureResponse(validation.ErrorMessage);
+                return CreateFailureResponse(validation.ErrorMessage, NoHotReloadChangesObserved);
             }
 
             // 1. Test filter creation
@@ -100,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 (TestExecutionFilter createdFilter, string filterError) = _filterService.TryCreateFilter(parameters.FilterType, parameters.FilterValue);
                 if (filterError != null)
                 {
-                    return CreateFailureResponse(filterError);
+                    return CreateFailureResponse(filterError, NoHotReloadChangesObserved);
                 }
                 filter = createdFilter;
             }
@@ -122,7 +130,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (parameters.TestMode == UnityCliLoopTestMode.PlayMode)
                 {
-                    result = await _executionService.ExecutePlayModeTestAsync(filter, executionCt).ConfigureAwait(false);
+                    result = await _executionService.ExecutePlayModeTestAsync(
+                        filter,
+                        executionCt,
+                        CreatePlayModeRunOptions(parameters)).ConfigureAwait(false);
                 }
                 else
                 {
@@ -144,47 +155,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateFailureResponse(
                     RunTestsExecutionTimeout.CreateTimeoutMessage(
                         parameters.TimeoutSeconds,
-                        canceledException.StopResult.DegradationNote));
+                        canceledException.StopResult.DegradationNote),
+                    activeHotReloadChangeCountAtStart);
             }
             catch (OperationCanceledException) when (RunTestsExecutionTimeout.IsTimeoutCancellation(ct))
             {
                 return CreateFailureResponse(
-                    RunTestsExecutionTimeout.CreateTimeoutMessage(parameters.TimeoutSeconds));
+                    RunTestsExecutionTimeout.CreateTimeoutMessage(parameters.TimeoutSeconds),
+                    activeHotReloadChangeCountAtStart);
             }
 
             // 3. Response creation.
-            RunTestsResponse response = new(
-                success: result.success,
-                message: result.message,
-                completedAt: result.completedAt,
-                testCount: result.testCount,
-                passedCount: result.passedCount,
-                failedCount: result.failedCount,
-                skippedCount: result.skippedCount,
-                xmlPath: result.xmlPath,
-                status: result.status,
-                hasFailures: result.hasFailures,
-                noTestsFound: result.noTestsFound,
-                noTestsFoundExplanation: result.noTestsFoundExplanation);
+            RunTestsResponse response = RunTestsResponseFactory.FromResult(result);
             if (clearedPausePointIds != null && clearedPausePointIds.Length > 0)
             {
                 response.ClearedPausePointIds = clearedPausePointIds;
             }
 
-            CopyTestDetails(result, response);
-
             response.Warning = RunTestsHotReloadDiscardWarningBuilder.Build(activeHotReloadChangeCountAtStart);
-
-            if (result.failedCount > RunTestsConstants.FailedTestDetailsLimit)
-            {
-                response.Message = response.Message
-                    + " "
-                    + string.Format(
-                        CultureInfo.InvariantCulture,
-                        RunTestsConstants.FailedTestDetailsTruncatedMessageFormat,
-                        RunTestsConstants.FailedTestDetailsLimit,
-                        result.failedCount);
-            }
 
             // Why switch here: cleanup waits with ConfigureAwait(false), so this resume is
             // off-thread. No-tests diagnostics call AssetDatabase.FindAssets, and the
@@ -198,22 +186,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     parameters.TestMode,
                     parameters.FilterType));
             AppendPredefinedAssemblyTestNoticeIfNeeded(response, parameters);
+            AttachTestAsmdefProposalIfNeeded(response, parameters);
             await ApplyUnfilteredFilterEchoIfNeededAsync(response, parameters, ct)
                 .ConfigureAwait(false);
             return response;
-        }
-
-        private void CopyTestDetails(SerializableTestResult result, RunTestsResponse response)
-        {
-            if (result.failedTests != null && result.failedTests.Length > 0)
-            {
-                response.FailedTests = result.failedTests;
-            }
-
-            if (result.skippedTests != null && result.skippedTests.Length > 0)
-            {
-                response.SkippedTests = result.skippedTests;
-            }
         }
 
         private void AppendPredefinedAssemblyTestNoticeIfNeeded(
@@ -236,6 +212,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 findings);
         }
 
+        // Why after the predefined-assembly notice: that notice names the stranded test methods,
+        // and this one tells the caller where to put them.
+        private void AttachTestAsmdefProposalIfNeeded(RunTestsResponse response, RunTestsSchema parameters)
+        {
+            Debug.Assert(response != null, "response must not be null");
+            Debug.Assert(parameters != null, "parameters must not be null");
+
+            if (!RunTestsNoTestsDiagnosticService.ShouldAppendDiagnostics(
+                    response.NoTestsFound,
+                    parameters.FilterType))
+            {
+                return;
+            }
+
+            RunTestsTestAsmdefProposal proposal = RunTestsNoTestsDiagnosticService.InspectAsmdefsOrFallback<RunTestsTestAsmdefProposal>(
+                null,
+                () => _proposeTestAsmdef(parameters.TestMode));
+            if (proposal == null)
+            {
+                return;
+            }
+
+            response.ProposedTestAsmdef = proposal;
+            response.Message = RunTestsTestAsmdefProposal.AppendNotice(response.Message, proposal);
+        }
+
         private async Task ApplyUnfilteredFilterEchoIfNeededAsync(
             RunTestsResponse response,
             RunTestsSchema parameters,
@@ -256,14 +258,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unfiltered);
         }
 
+        private static RunTestsPlayModeRunOptions CreatePlayModeRunOptions(RunTestsSchema parameters)
+        {
+            Debug.Assert(parameters != null, "parameters must not be null");
+
+            if (!parameters.RespectEnterPlayModeSettings)
+            {
+                return RunTestsPlayModeRunOptions.WithoutRespect();
+            }
+
+            return new RunTestsPlayModeRunOptions(
+                true,
+                parameters.RequestId,
+                DateTime.UtcNow.AddSeconds(parameters.TimeoutSeconds + 120));
+        }
+
         private static bool IsSupportedTestMode(UnityCliLoopTestMode testMode)
         {
             return Enum.IsDefined(typeof(UnityCliLoopTestMode), testMode);
         }
 
-        private static RunTestsResponse CreateFailureResponse(string message)
+        // Why the count is a parameter: only failures raised after the run started can have cost
+        // an active patch, so paths that fail before it pass NoHotReloadChangesObserved and stay
+        // warning-free instead of blaming a reload that never happened.
+        private static RunTestsResponse CreateFailureResponse(
+            string message,
+            int activeHotReloadChangeCountAtStart)
         {
-            return new RunTestsResponse(
+            RunTestsResponse response = new RunTestsResponse(
                 success: false,
                 message: message,
                 completedAt: DateTime.UtcNow.ToString("o"),
@@ -276,6 +298,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hasFailures: false,
                 noTestsFound: false,
                 noTestsFoundExplanation: string.Empty);
+            response.Warning = RunTestsHotReloadDiscardWarningBuilder.Build(activeHotReloadChangeCountAtStart);
+            return response;
         }
 
         private static string[] ClearActivePausePointsDefault()

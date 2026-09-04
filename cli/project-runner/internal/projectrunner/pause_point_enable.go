@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"slices"
 	"strings"
 	"time"
 
@@ -317,9 +316,7 @@ func runEnablePausePointAndAwait(
 			writeDebugTiming(stderr, pausePointEnableCommandName, time.Since(startedAt), outcome)
 			return 1
 		}
-		if enableResponse.Success {
-			enableResponse.Warning = joinPausePointWarnings(enableResponse.Warning, pausePointAutoDebugSwitchWarning)
-		}
+		applyPausePointRecoverySwitchWarning(&enableResponse)
 	}
 
 	if !enableResponse.Success {
@@ -351,6 +348,7 @@ func runEnablePausePointAndAwait(
 		waitOptions,
 		enablePausePointPropagatedFields{
 			Warning:          enableResponse.Warning,
+			Warnings:         enableResponse.Warnings,
 			ResolvedLine:     enableResponse.ResolvedLine,
 			ResolvedLineText: enableResponse.ResolvedLineText,
 			ResolvedMethod:   enableResponse.ResolvedMethod,
@@ -395,20 +393,21 @@ func runPausePointWaitAfterEnable(
 		response = mergeEnablePausePointResolvedFields(response, enableFields)
 		response = filterPausePointCapturedVariableHistory(response)
 		response = applyPausePointHitStatusNote(response)
+		response = applyPausePointTraceAwaitReturnedNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 		response = applyPausePointCapturedVariablePreviewNote(response)
 
 		logs, logsErr := fetchMatchingLogs(ctx, connection, options.id, options.matchingLogsMaxCount)
-		// Why not join enableFields.Warning into Warning: that text is an enable-time patch
-		// diagnostic (for example "may not hit on pre-existing GameObjects") and contradicts a
-		// successful hit when folded into the hit-time Warning. It is exposed separately.
+		// Why prefixed rather than a separate field: enable-time patch text (for example "may not
+		// hit on pre-existing GameObjects") contradicts a successful hit when read as hit-time
+		// diagnosis, but a warning channel of its own is one an agent reading Warnings never sees.
+		// The prefix keeps both readings correct inside the single aggregate.
 		payload := buildPausePointHitPayload(pausePointHitPayloadInputs{
 			response:            response,
 			logs:                logs,
 			logsErr:             logsErr,
-			unityWarning:        response.Warning,
-			enableTimeWarning:   enableFields.Warning,
+			enableTimeWarnings:  pausePointEnableTimeWarningEntries(enableFields),
 			triggerResult:       triggerResult,
 			awaitedPausePointID: options.id,
 			expectations:        expectations,
@@ -468,18 +467,4 @@ func runPausePointWaitAfterEnable(
 	}
 	clierrors.WriteErrorEnvelope(stderr, waitErr)
 	return 1
-}
-
-// joinPausePointWarnings concatenates hit-time warnings for one response, dropping empty ones and
-// repeats. Inputs are status-poll text (usually empty), matching-logs diagnosis, and trigger-refusal
-// text — enable-time patch diagnostics are not joined here; they use EnableTimeWarning.
-func joinPausePointWarnings(warnings ...string) string {
-	unique := make([]string, 0, len(warnings))
-	for _, warning := range warnings {
-		if warning == "" || slices.Contains(unique, warning) {
-			continue
-		}
-		unique = append(unique, warning)
-	}
-	return strings.Join(unique, " ")
 }

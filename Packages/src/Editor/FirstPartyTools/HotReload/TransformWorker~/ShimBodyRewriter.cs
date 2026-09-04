@@ -309,6 +309,19 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return HarmonyAccessors.RewritePropertyAssignment(node, propertySymbol);
         }
 
+        if (leftSymbol is IEventSymbol eventSymbol
+            && EventAccessorRules.IsBackingFieldWrite(node))
+        {
+            AccessorEntry eventEntry = _accessorPlan.GetOrAddEventBackingField(eventSymbol);
+            ExpressionSyntax eventTarget = EventAccessorShimRewrite.CreateEventWriteTarget(
+                eventEntry,
+                VisitReceiver(ExtractReceiver(node.Left)));
+            return node
+                .WithLeft(eventTarget)
+                .WithRight((ExpressionSyntax)Visit(node.Right))
+                .WithTriviaFrom(node);
+        }
+
         if (leftSymbol is IFieldSymbol fieldSymbol
             && !fieldSymbol.IsConst
             && AccessibilityRules.IsInaccessibleFromExternalAssembly(fieldSymbol))

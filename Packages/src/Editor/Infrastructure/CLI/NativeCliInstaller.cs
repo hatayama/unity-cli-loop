@@ -181,9 +181,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
             return NativeCliInstallPathResolver.IsPackageOwnedCurrentUserInstallPath(cliExecutablePath, platform);
         }
 
-        public bool IsHomebrewManagedInstallPath(string cliExecutablePath)
+        public ManagedCliKind ResolveManagedCliKind(string cliExecutablePath)
         {
-            return NativeCliInstallPathResolver.IsHomebrewManagedInstallPath(cliExecutablePath);
+            return NativeCliInstallPathResolver.ResolveManagedCliKind(cliExecutablePath);
         }
 
         public bool HasPackageOwnedCurrentUserInstall(RuntimePlatform platform)

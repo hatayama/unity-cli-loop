@@ -280,6 +280,31 @@ func TestBuildToolParamsUnknownOptionSuggestsDynamicCodeFileFromSharedLaterToken
 	})
 }
 
+// Verifies clear-pause-point suggests its CLI-only file option when a supplied flag is a close typo.
+func TestBuildToolParamsUnknownOptionSuggestsClearPausePointFile(t *testing.T) {
+	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), pausePointClearCommandName)
+	if !ok {
+		t.Fatal("clear-pause-point was not found in default tools")
+	}
+
+	_, _, err := buildToolParams([]string{"--fil"}, tool)
+	requireNextActions(t, err, []string{
+		"Did you mean: uloop clear-pause-point --file",
+		"Run `uloop clear-pause-point --help` to inspect supported options.",
+	})
+}
+
+// Verifies clear-pause-point --file without --line is rejected before schema parsing.
+func TestExtractPausePointClearFileLineFlagsRequiresLine(t *testing.T) {
+	_, _, err := extractPausePointClearFileLineFlags(
+		pausePointClearCommandName,
+		[]string{"--file", "Assets/Scripts/Marker.cs"},
+	)
+	if err == nil || err.Error() != "--file requires --line." {
+		t.Fatalf("clear file-only error = %v", err)
+	}
+}
+
 // Verifies run-tests suggests test-mode when a supplied flag shares a later kebab token.
 func TestBuildToolParamsUnknownOptionSuggestsTestModeFromSharedLaterToken(t *testing.T) {
 	tool, ok := clicore.FindTool(clicore.LoadDefaultTools(), "run-tests")

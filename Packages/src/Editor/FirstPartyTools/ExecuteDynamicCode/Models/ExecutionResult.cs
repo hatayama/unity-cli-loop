@@ -28,6 +28,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <summary>Logs</summary>
         public List<string> Logs { get; set; } = new();
 
+        /// <summary>Suggested recovery steps for the caller.</summary>
+        public List<string> NextActions { get; set; } = new();
+
         /// <summary>
         /// Values explicitly saved by a dynamic-code snippet before execution completed or failed.
         /// </summary>

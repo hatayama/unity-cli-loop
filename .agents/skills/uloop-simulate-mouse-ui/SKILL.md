@@ -12,7 +12,7 @@ Simulate mouse interaction on Unity PlayMode UI.
 
 1. Ensure Unity is in PlayMode (use `uloop control-play-mode --action Play` if not)
 2. Get UI element info: `uloop screenshot --capture-mode rendering --annotate-elements --elements-only`
-3. Use the `AnnotatedElements` array to find the target element by `Label`, `Name`, or `Path` (A=frontmost, B=next, ...). Use `Interaction` to distinguish click targets from drag/drop/text targets, then use `SimX`/`SimY` directly as `--x`/`--y` coordinates.
+3. Use the `AnnotatedElements` array to find the target element by `Path` or `Name` (labels are ordered by `SortingOrder`/`SiblingIndex`, which can differ from the real draw order, so do not choose a target by `A`, `B`, ... alone). Use `Interaction` to distinguish click targets from drag/drop/text targets, then use `SimX`/`SimY` directly as `--x`/`--y` coordinates.
 4. Execute the needed `uloop simulate-mouse-ui` commands
 5. Inspect the result with the lightest useful evidence: runtime state, logs, or a screenshot
 6. When this UI input verifies a state transition, use Pause Point inspection from the section below as the standard frame proof

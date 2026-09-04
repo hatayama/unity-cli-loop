@@ -21,6 +21,7 @@ Returns JSON with:
 - `InjectedUnityPositionX` / `InjectedUnityPositionY`: Coordinates injected into `Mouse.current.position` (or used for dry-run ScreenPointToRay)
 - `CoordinateConversionFormula`: Conversion formula used by the tool
 - `InterruptedByPausePoint` / `PausePointId` / `PausePointHitCount` / `PausePointHits`: Pause-point interruption info (all nullable except the boolean). `PausePointHits` lists every marker hit during this input in hit order; `PausePointId` only names the latest one. See the Pause Point Inspection section in SKILL.md
+- `PressDeliveredToGame` (boolean, nullable): Set only when a `Click` / `LongPress` was interrupted by a pause point. `true`: the Input System processed the press edge in a gameplay update before the pause, so game code polling that frame observed it and the world state may already have changed (for example a block was mined). Do not retry; re-check the affected state and `pause-point-status`. `false`: the queued edge was discarded before any gameplay update, the game never observed a press, and a retry after resume is safe. `null` for other actions and uninterrupted responses
 
 Verify visual outcome with a follow-up screenshot.
 

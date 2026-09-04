@@ -898,12 +898,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 method.DeclaringType.IsValueType,
                 instructionIndex,
                 0,
+                SourcePausePointSnapshotTiming.PreLine,
                 1,
                 1,
                 compiledMethodStartLine,
                 compiledMethodEndLine,
                 Array.Empty<SourcePausePointLocalVariable>(),
-                Array.Empty<SourcePausePointParameter>());
+                Array.Empty<SourcePausePointParameter>(),
+                Array.Empty<string>());
         }
 
         private static string BuildEditedComputePlusHundred(string onDisk)

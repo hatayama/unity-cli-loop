@@ -26,11 +26,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void SetUp()
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
+            HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
         }
 
         [TearDown]
         public void TearDown()
         {
+            HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
             _ledgerSessionScope.Restore();
         }
 
@@ -82,6 +86,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 HotReloadTool.DetectChangedFilesForTesting = previousDetector;
+            }
+        }
+
+        /// <summary>
+        /// What: a no-changed-files validation failure reports remaining active patches
+        /// and points at --status / --revert-all when the ledger is not empty.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_NoChangedFiles_WhenActivePatchExists_ReportsActiveCountAndRecovery()
+        {
+            HotReloadPatcher.RevertAll();
+            Func<HotReloadChangedFileAggregationResult> previousDetector =
+                HotReloadTool.DetectChangedFilesForTesting;
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                HotReloadTool.DetectChangedFilesForTesting = CreateNoChangedFilesDetector();
+
+                HotReloadTool tool = new HotReloadTool();
+                UnityCliLoopToolResponse baseResponse =
+                    await tool.ExecuteAsync(new JObject(), CancellationToken.None);
+                HotReloadResponse response = baseResponse as HotReloadResponse;
+
+                Assert.That(response, Is.Not.Null);
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.NoChangedFiles));
+                Assert.That(response.ActivePatchTotal, Is.EqualTo(1));
+                Assert.That(
+                    response.Message,
+                    Does.EndWith("1 hot-reload change(s) are still active."));
+                Assert.That(
+                    response.NextActions[response.NextActions.Length - 1],
+                    Is.EqualTo(
+                        "Run 'uloop hot-reload --status' to inspect the active changes, or 'uloop hot-reload --revert-all' to drop them."));
+            }
+            finally
+            {
+                HotReloadTool.DetectChangedFilesForTesting = previousDetector;
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
+        /// What: a no-changed-files validation failure keeps the original Message and
+        /// NextActions when no hot-reload changes are active.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_NoChangedFiles_WhenNoActivePatches_KeepsOriginalMessageAndNextActions()
+        {
+            HotReloadPatcher.RevertAll();
+            Func<HotReloadChangedFileAggregationResult> previousDetector =
+                HotReloadTool.DetectChangedFilesForTesting;
+            try
+            {
+                HotReloadTool.DetectChangedFilesForTesting = CreateNoChangedFilesDetector();
+
+                HotReloadTool tool = new HotReloadTool();
+                UnityCliLoopToolResponse baseResponse =
+                    await tool.ExecuteAsync(new JObject(), CancellationToken.None);
+                HotReloadResponse response = baseResponse as HotReloadResponse;
+
+                Assert.That(response, Is.Not.Null);
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.NoChangedFiles));
+                Assert.That(response.ActivePatchTotal, Is.EqualTo(0));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo(
+                        "No .cs files changed since the last compile were found; pass explicit paths with --files."));
+                Assert.That(
+                    response.NextActions,
+                    Is.EqualTo(
+                        new[]
+                        {
+                            "Save the edited .cs files to disk, then run 'uloop hot-reload' again.",
+                            "Pass project-relative .cs paths with --files."
+                        }));
+            }
+            finally
+            {
+                HotReloadTool.DetectChangedFilesForTesting = previousDetector;
+                HotReloadPatcher.RevertAll();
             }
         }
 
@@ -149,6 +238,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     response.Message,
                     Is.EqualTo(
                         "1 change(s) currently active. 1 change(s) have not been invoked since their patch was applied; see Methods[].Reason."));
+                Assert.That(response.AutoRefreshHeld, Is.True);
             }
             finally
             {
@@ -232,6 +322,136 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
+        /// What: Revert of one method drops that method's superseded mapping so a later
+        /// patch of the same key does not keep a stale Reason.
+        /// </summary>
+        [Test]
+        public void Revert_RemovesSupersededMappingForThatMethod()
+        {
+            HotReloadPatcher.RevertAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                IReadOnlyList<HotReloadActivePatchInfo> patches =
+                    HotReloadPatcher.DescribeActivePatches();
+                Assert.That(patches.Count, Is.EqualTo(1));
+                string methodKey = patches[0].MethodKey;
+                HotReloadSupersededSignatureRegistry.Record(methodKey, "Host.Replacement()");
+
+                MethodInfo original = typeof(HotReloadCoreFixture).GetMethod(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public);
+                Assert.That(original, Is.Not.Null);
+                Assert.That(HotReloadPatcher.Revert(original), Is.True);
+
+                bool found = HotReloadSupersededSignatureRegistry.TryGetReplacement(
+                    methodKey,
+                    out string _);
+                Assert.That(found, Is.False);
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
+        /// What: --status Active rows prefer the superseded Reason over the never-invoked
+        /// Reason when the old compiled signature is recorded.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_SupersededActiveRow_SetsSupersededReason()
+        {
+            const string replacementDisplayName = "Host.Replacement(System.String)";
+            HotReloadPatcher.RevertAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                IReadOnlyList<HotReloadActivePatchInfo> patches =
+                    HotReloadPatcher.DescribeActivePatches();
+                Assert.That(patches.Count, Is.EqualTo(1));
+                HotReloadSupersededSignatureRegistry.Record(
+                    patches[0].MethodKey,
+                    replacementDisplayName);
+
+                HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+                HotReloadMethodResult activeRow = FindStatusRow(
+                    response,
+                    "Active",
+                    nameof(HotReloadCoreFixture.ReplaceableCompute));
+
+                Assert.That(activeRow.InvocationCount, Is.EqualTo(0L));
+                Assert.That(
+                    activeRow.Reason,
+                    Is.EqualTo(
+                        string.Format(
+                            HotReloadConstants.ActivePatchSupersededReasonFormat,
+                            replacementDisplayName)));
+                Assert.That(
+                    activeRow.Reason,
+                    Is.Not.EqualTo(HotReloadConstants.ActivePatchNeverInvokedReason));
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
+        /// <summary>
+        /// What: --status lists live added-field ledger rows as Kind AddedField and reports
+        /// AddedFieldTotal without counting those rows in ActivePatchTotal.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_RegisteredAddedFields_ListsAddedFieldRowsOutsideActivePatchTotal()
+        {
+            const string filePath = "Assets/Tests/Editor/HotReload/StatusAddedField.cs";
+            const string methodKey = "Host.NewHelper(System.Int32)";
+            HotReloadPatcher.RevertAll();
+            HotReloadAddedFieldRegistry.ClearAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                RegisterAddedMemberForStatus(filePath, methodKey);
+                HotReloadAddedFieldRegistry.ReplaceForFile(
+                    filePath,
+                    new[] { "Ns.Host.alpha", "Ns.Host.beta" });
+
+                HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+                HotReloadMethodResult alphaRow = FindStatusRow(
+                    response,
+                    HotReloadConstants.AddedFieldKind,
+                    "Ns.Host.alpha");
+                HotReloadMethodResult betaRow = FindStatusRow(
+                    response,
+                    HotReloadConstants.AddedFieldKind,
+                    "Ns.Host.beta");
+
+                Assert.That(response.ActivePatchTotal, Is.EqualTo(2));
+                Assert.That(response.AddedFieldTotal, Is.EqualTo(2));
+                Assert.That(response.Methods.Count, Is.EqualTo(4));
+                Assert.That(alphaRow.Method, Is.EqualTo("Ns.Host.alpha"));
+                Assert.That(alphaRow.FilePath, Is.EqualTo(filePath));
+                Assert.That(alphaRow.Reason, Is.EqualTo(string.Empty));
+                Assert.That(betaRow.Method, Is.EqualTo("Ns.Host.beta"));
+                Assert.That(betaRow.FilePath, Is.EqualTo(filePath));
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+                HotReloadAddedFieldRegistry.ClearAll();
             }
         }
 
@@ -321,6 +541,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "Run 'uloop hot-reload --status' with no other flags to inspect active patches.",
                         "To apply or revert patches, drop --status and pass --files or --revert-all."
                     }));
+        }
+
+        /// <summary>
+        /// What: a failed run still summarizes its stale patches, so a failure does not hide the
+        /// patches that stayed active behind deleted methods.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithFailureAndStaleOutcome_KeepsStaleSummaryInMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Failed("Type.Broken()", "shim compile failed", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Stale("Type.RemovedMethod()", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Stale=1"));
+        }
+
+        /// <summary>
+        /// What: a Stale row reaches the public response with its ledger invocation count and is
+        /// summarized in Message, so an agent can tell why ActivePatchTotal exceeds the run.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithStaleOutcome_ReportsInvocationCountAndMessageSummary()
+        {
+            const string staleMethodKey = "Type.RemovedMethod()";
+            HotReloadInvocationRegistry.Clear();
+            HotReloadInvocationRegistry.Increment(staleMethodKey);
+            HotReloadInvocationRegistry.Increment(staleMethodKey);
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.EditedMethod()", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Stale(staleMethodKey, "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 2);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            HotReloadMethodResult staleRow = null;
+            for (int index = 0; index < response.Methods.Count; index++)
+            {
+                if (response.Methods[index].Kind == "Stale")
+                {
+                    staleRow = response.Methods[index];
+                }
+            }
+
+            Assert.That(staleRow, Is.Not.Null);
+            Assert.That(staleRow.InvocationCount, Is.EqualTo(2L));
+            Assert.That(staleRow.Reason, Is.EqualTo(HotReloadConstants.StalePatchRemovedFromSourceReason));
+            Assert.That(response.Message, Does.Contain("Stale=1"));
         }
 
         [Test]
@@ -605,6 +886,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// What: revert-all with an empty ledger reports ClearedCount 0 and AutoRefreshHeld false.
+        /// </summary>
         [Test]
         public async Task ExecuteAsync_RevertAllWithNoActivePatches_ReportsClearedCountZero()
         {
@@ -623,7 +907,165 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(response, Is.Not.Null);
             Assert.That(response.Success, Is.True);
             Assert.That(response.ClearedCount, Is.EqualTo(0));
+            Assert.That(response.AutoRefreshHeld, Is.False);
             Assert.That(response.Message, Is.EqualTo("No active hot-reload changes to revert."));
+        }
+
+        /// <summary>
+        /// What: --revert-all after an armed hold reports AutoRefreshHeld false.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_RevertAll_ClearsAutoRefreshHeld()
+        {
+            HotReloadPatcher.RevertAll();
+            try
+            {
+                ApplyCoreFixtureTransplant(
+                    nameof(HotReloadCoreFixture.ReplaceableCompute),
+                    BindingFlags.Instance | BindingFlags.Public,
+                    nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.True);
+
+                HotReloadTool tool = new HotReloadTool();
+                UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(
+                    new JObject { ["RevertAll"] = true },
+                    CancellationToken.None);
+                HotReloadResponse response = baseResponse as HotReloadResponse;
+
+                Assert.That(response, Is.Not.Null);
+                Assert.That(response.Success, Is.True);
+                Assert.That(response.ActivePatchTotal, Is.EqualTo(0));
+                Assert.That(response.AutoRefreshHeld, Is.False);
+            }
+            finally
+            {
+                HotReloadPatcher.RevertAll();
+                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            }
+        }
+
+        /// <summary>
+        /// What: a newly armed apply response appends the fixed Auto Refresh hold sentence.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenHoldNewlyArmed_AppendsFixedHoldSentence()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(true, true, false));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.AutoRefreshHeld, Is.True);
+            Assert.That(
+                response.Message,
+                Does.EndWith(HotReloadAutoRefreshHoldConstants.NewlyArmedMessageSuffix));
+        }
+
+        /// <summary>
+        /// What: a deferred release adds the fixed Warning and reports AutoRefreshHeld false.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenReleaseDeferred_AddsFixedWarning()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0,
+                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(false, false, true));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.AutoRefreshHeld, Is.False);
+            Assert.That(
+                response.Warnings,
+                Does.Contain(HotReloadAutoRefreshHoldConstants.ReleaseDeferredWarning));
+        }
+
+        /// <summary>
+        /// What: two compile-resolvable warnings plus a deferred hold warning still append
+        /// the single-compile resolution sentence.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_TwoCompileWarningsPlusDeferredHold_KeepsSingleCompileSentence()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string> { "compile warning one", "compile warning two" },
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(false, false, true));
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Warnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "compile warning one",
+                        "compile warning two",
+                        HotReloadAutoRefreshHoldConstants.ReleaseDeferredWarning
+                    }));
+            Assert.That(
+                response.Message,
+                Does.Contain(HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
+        }
+
+        /// <summary>
+        /// What: --status Sync warnings for a deferred release and a blocked scene Refresh
+        /// appear on the response.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_PropagatesHoldSyncWarnings()
+        {
+            HotReloadAutoRefreshHoldService previous = HotReloadAutoRefreshHold.OverrideServiceForTesting;
+            try
+            {
+                HotReloadPatcher.RevertAll();
+                bool held = true;
+                bool isPlaying = true;
+                bool preflightCanProceed = true;
+                HotReloadAutoRefreshHold.OverrideServiceForTesting = new HotReloadAutoRefreshHoldService(
+                    () => held,
+                    value => held = value,
+                    () => true,
+                    () => isPlaying,
+                    () => { },
+                    () => { },
+                    () => (preflightCanProceed, string.Empty, Array.Empty<string>()),
+                    () => { });
+
+                HotReloadResponse deferred = await ExecuteStatusAsync(CancellationToken.None);
+                Assert.That(
+                    deferred.Warnings,
+                    Does.Contain(HotReloadAutoRefreshHoldConstants.ReleaseDeferredWarning));
+
+                held = true;
+                isPlaying = false;
+                preflightCanProceed = false;
+                HotReloadResponse blocked = await ExecuteStatusAsync(CancellationToken.None);
+                Assert.That(
+                    blocked.Warnings,
+                    Does.Contain(HotReloadAutoRefreshHoldConstants.SceneRefreshBlockedWarning));
+            }
+            finally
+            {
+                HotReloadAutoRefreshHold.OverrideServiceForTesting = previous;
+                HotReloadPatcher.RevertAll();
+                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            }
         }
 
         /// <summary>
@@ -666,6 +1108,79 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 response.Message,
                 Is.EqualTo("All 8 methods are unchanged since the last compile; nothing to patch."));
             Assert.That(response.UnchangedTotal, Is.EqualTo(8));
+        }
+
+        /// <summary>
+        /// What: an all-unchanged run that peeled leftover patches reports ClearedCount and
+        /// the stale-patch sentence so testers do not read "nothing to patch" as a no-op.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AllUnchangedWithRevertedPatches_SetsClearedCountAndStalePatchMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0,
+                unchangedTotal: 5,
+                revertedUnchangedTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.ClearedCount, Is.EqualTo(1));
+            Assert.That(response.Message, Does.Contain("1 stale patch(es) were reverted"));
+        }
+
+        /// <summary>
+        /// What: an all-unchanged run with no leftover patches keeps ClearedCount 0 and the
+        /// historical nothing-to-patch message.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AllUnchangedWithoutRevertedPatches_KeepsHistoricalMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0,
+                unchangedTotal: 5,
+                revertedUnchangedTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.ClearedCount, Is.EqualTo(0));
+            Assert.That(
+                response.Message,
+                Is.EqualTo("All 5 methods are unchanged since the last compile; nothing to patch."));
+        }
+
+        /// <summary>
+        /// What: a patched run that also peeled unchanged leftovers appends the stale-patch
+        /// sentence after the untouched-methods note.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithUnchangedAndRevertedPatches_AppendsStalePatchNote()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                unchangedTotal: 7,
+                revertedUnchangedTotal: 2);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.ClearedCount, Is.EqualTo(2));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    + "7 unchanged methods were left untouched. "
+                    + "2 stale patch(es) were reverted so those methods run the compiled IL again."));
         }
 
         /// <summary>
@@ -783,7 +1298,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a skipped-only run uses the no-patch message that also names AlreadyActive.
+        /// What: a skipped-only run uses the no-patch message that also names AlreadyActive, and
+        /// carries the skipped method in Warnings.
         /// </summary>
         [Test]
         public void BuildApplyResponse_SkippedOnly_KeepsExistingSkippedMessage()
@@ -799,9 +1315,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
+            Assert.That(response.Warnings, Is.EqualTo(new[] { "Skipped T.M: reason" }));
             Assert.That(
                 response.Message,
-                Is.EqualTo(HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage));
+                Is.EqualTo(
+                    HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage
+                    + " 1 warning(s). See Warnings."));
         }
 
         /// <summary>
@@ -890,7 +1409,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 skippedOnly.Message,
                 Is.EqualTo(
                     HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage
-                    + " 1 warning(s). See Warnings."));
+                    + " 2 warning(s). See Warnings. "
+                    + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
 
             HotReloadResponse applied = HotReloadTool.BuildApplyResponse(
                 new HotReloadOrchestratorResult(
@@ -922,7 +1442,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 appliedWithSkipped.Message,
                 Is.EqualTo(
                     "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
-                    + "See Methods for Skipped reasons. 2 warning(s). See Warnings. "
+                    + "3 warning(s). See Warnings. "
                     + HotReloadConstants.MultiWarningSingleCompileResolutionMessage));
         }
 
@@ -1046,10 +1566,78 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an applied run with Skipped outcomes and no warnings still points at Methods.
+        /// What: BuildApplyResponse copies the live added-field ledger count onto AddedFieldTotal.
         /// </summary>
         [Test]
-        public void BuildApplyResponse_AppliedWithSkipped_AppendsSkippedNoteWithoutWarningSuffix()
+        public void BuildApplyResponse_CopiesAddedFieldTotalFromLiveRegistry()
+        {
+            HotReloadAddedFieldRegistry.ClearAll();
+            try
+            {
+                HotReloadAddedFieldRegistry.ReplaceForFile(
+                    "Assets/Tests/Editor/HotReload/ApplyAddedFieldTotal.cs",
+                    new[] { "Ns.Host.score" });
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                    new HotReloadOrchestratorResult(
+                        new List<HotReloadMethodOutcome>
+                        {
+                            HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                        },
+                        new List<string>(),
+                        patchedTotal: 1,
+                        activePatchTotal: 1));
+
+                Assert.That(response.AddedFieldTotal, Is.EqualTo(1));
+                Assert.That(response.ActivePatchTotal, Is.EqualTo(1));
+            }
+            finally
+            {
+                HotReloadAddedFieldRegistry.ClearAll();
+            }
+        }
+
+        /// <summary>
+        /// What: BuildApplyResponse copies orchestrator AddedConsts onto the public response
+        /// and uses an empty array when the result has none.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_CopiesAddedConstsOrEmptyArray()
+        {
+            string[] addedConsts =
+            {
+                "Ns.Host.AddedTuning"
+            };
+            HotReloadResponse withConsts = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1,
+                    addedConsts: addedConsts));
+            Assert.That(withConsts.AddedConsts, Is.EqualTo(addedConsts));
+
+            HotReloadResponse withoutConsts = HotReloadTool.BuildApplyResponse(
+                new HotReloadOrchestratorResult(
+                    new List<HotReloadMethodOutcome>
+                    {
+                        HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                    },
+                    new List<string>(),
+                    patchedTotal: 1,
+                    activePatchTotal: 1));
+            Assert.That(withoutConsts.AddedConsts, Is.Not.Null);
+            Assert.That(withoutConsts.AddedConsts, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: an applied run with a Skipped outcome and no other warnings lists the skipped
+        /// method in Warnings and lets the warning-count suffix point the reader there.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AppliedWithSkipped_ListsSkippedInWarnings()
         {
             HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
                 new List<HotReloadMethodOutcome>
@@ -1063,11 +1651,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
+            Assert.That(response.Warnings, Is.EqualTo(new[] { "Skipped T.Skip: reason" }));
             Assert.That(
                 response.Message,
                 Is.EqualTo(
                     "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
-                    + "See Methods for Skipped reasons."));
+                    + "1 warning(s). See Warnings."));
+        }
+
+        /// <summary>
+        /// What: an applied run without any Skipped outcome adds no Skipped-derived warning.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AppliedWithoutSkipped_AddsNoSkippedWarning()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Warnings, Is.Empty);
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Hot reload applied. PatchedTotal=1, ActivePatchTotal=1."));
+        }
+
+        /// <summary>
+        /// What: every Skipped outcome gets its own Warnings line, in Methods order.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_MultipleSkipped_ListsEverySkippedMethod()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Skipped("T.First", "first reason", "file.cs"),
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Skipped("T.Second", "second reason", "file.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(
+                response.Warnings,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Skipped T.First: first reason",
+                        "Skipped T.Second: second reason"
+                    }));
         }
 
         /// <summary>
@@ -1209,9 +1850,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
+            Assert.That(response.Warnings, Is.EqualTo(new[] { "Skipped T.Skip: reason" }));
             Assert.That(
                 response.Message,
-                Is.EqualTo(HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage));
+                Is.EqualTo(
+                    HotReloadConstants.NoMethodsPatchedSeeSkippedOrAlreadyActiveMessage
+                    + " 1 warning(s). See Warnings."));
+        }
+
+        private static Func<HotReloadChangedFileAggregationResult> CreateNoChangedFilesDetector()
+        {
+            return () => new HotReloadChangedFileAggregationResult(
+                hasBaseline: true,
+                changedProjectRelativePaths: new List<string>(),
+                scanLimitWarnings: new List<string>());
         }
 
         // Applies a handwritten transplant to a HotReloadCoreFixture method without invoking it.

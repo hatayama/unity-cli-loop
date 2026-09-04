@@ -21,6 +21,10 @@ internal sealed class TypeEmitState
 
     public INamedTypeSymbol TypeSymbol { get; set; }
 
+    // The matching type in the compiled assembly, or null when the type is not compiled yet.
+    // Event rewrites need it to tell an event added in this edit from one with a backing field.
+    public INamedTypeSymbol CompiledType { get; set; }
+
     public string TypeMetadataNameFromSyntax { get; set; }
 
     public ShimTypeBuilder CurrentShimType { get; set; }

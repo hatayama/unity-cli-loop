@@ -200,6 +200,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.PlayMode
             Assert.IsTrue(
                 lastResponse.PressEdgeObserved!.Value,
                 "The press reached isPressed through gameplay updates, so the edge must have been observed.");
+            Assert.IsTrue(
+                lastResponse.PressDeliveredToGame.HasValue && lastResponse.PressDeliveredToGame.Value,
+                "The press reached isPressed before the pause, so the executor must report delivery.");
             Assert.IsFalse(keyboard[Key.Space].isPressed, "Pause-point interruption should release the injected key state.");
             Assert.IsFalse(SimulateKeyboardOverlayState.IsActive, "Pause-point interruption should clear keyboard overlay state.");
         }

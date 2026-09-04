@@ -95,7 +95,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             // Why on-disk content: matches the verified snapshot so ComputeWithPrivate is
             // unchanged and RevertUnchangedPatches peels the leftover patch.
-            await HotReloadFromEditedSourceAsync(onDisk, "E2E_d_Unchanged.cs", requirePatched: false);
+            HotReloadOrchestratorResult converge = await HotReloadFromEditedSourceAsync(
+                onDisk,
+                "E2E_d_Unchanged.cs",
+                requirePatched: false);
+            Assert.That(HotReloadTool.BuildApplyResponse(converge).ClearedCount, Is.EqualTo(1));
 
             UloopPausePointSnapshot afterConverge = UloopPausePointRegistry.GetStatus(enable.Id);
             Assert.That(afterConverge.SuppressedByHotReload, Is.False);
@@ -179,7 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return edited;
         }
 
-        private static async Task HotReloadFromEditedSourceAsync(
+        private static async Task<HotReloadOrchestratorResult> HotReloadFromEditedSourceAsync(
             string editedSource,
             string fileName,
             bool requirePatched = true)
@@ -206,6 +210,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.True,
                     FormatHotReloadOutcomes(result));
             }
+
+            return result;
         }
 
         private static string ResolveFixtureAbsolutePath()

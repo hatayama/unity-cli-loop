@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -106,6 +106,9 @@ jobs:
         working-directory: cli/release-automation
         run: go run ./cmd/check-skill-size --root "$GITHUB_WORKSPACE"
 
+      - name: Test shared-inputs stamp script
+        run: scripts/test-stamp-release-inputs.sh
+
       # The stamp script derives its manifest from git ls-files, so a stamp generated before a new
       # input file was git-added is silently stale; check-release-triggers only checks that the
       # stamp files were touched, not that their values are current. Regenerate and diff instead.
@@ -130,7 +133,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -156,6 +159,18 @@ jobs:
         shell: bash
         run: sh scripts/test-install-release-filter.sh
 
+      - name: Test shared-inputs stamp script in Git Bash
+        shell: bash
+        run: sh scripts/test-stamp-release-inputs.sh
+
+      - name: Build native Go CLI on Windows
+        shell: bash
+        run: sh scripts/build-go-cli.sh
+
+      - name: Verify Windows VERSIONINFO resources
+        shell: powershell
+        run: .\scripts\check-windows-version-info.ps1
+
       - name: Parse PowerShell installer in Windows PowerShell
         shell: powershell
         run: |
@@ -170,6 +185,7 @@ jobs:
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 Assets/Tests/Demo/scripts/verify-replay-via-cli.ps1))
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-powershell51-native-argument-escaping.ps1))
           $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/test-install-pin-resolution.ps1))
+          $null = [scriptblock]::Create((Get-Content -Raw -Encoding UTF8 scripts/check-windows-version-info.ps1))
 
       - name: Test release installer smoke helper
         shell: powershell
@@ -189,7 +205,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 

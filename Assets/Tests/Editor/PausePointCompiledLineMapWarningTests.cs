@@ -714,7 +714,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     + ResolveFailureFile
                     + ":"
                     + requestedLine
-                    + "\". To arm, trigger, and collect in one call, add --await --resume-play --trigger \"<uloop command>\" next time.";
+                    + "\". To block until it hits without a trigger command (e.g. waiting for physics or a multi-step action): uloop await-pause-point --id \""
+                    + ResolveFailureFile
+                    + ":"
+                    + requestedLine
+                    + "\" --timeout-seconds <n>. To arm, trigger, and collect in one call: uloop enable-pause-point --await --resume-play --trigger \"<uloop subcommand without the leading 'uloop', e.g. simulate-keyboard --action Press --key Space>\".";
                 Assert.That(response.RecommendedNextAction, Is.EqualTo(expectedArming));
                 AssertLineBasis(response, "LastCompiledSource");
             }
@@ -1769,7 +1773,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
                 Assert.That(withoutPatches.Success, Is.False);
                 Assert.That(withoutPatches.ErrorCode, Is.EqualTo(SourcePausePointConstants.ErrorCodeResolveFailed));
-                Assert.That(withoutPatches.Warning, Is.EqualTo(string.Empty));
+                Assert.That(withoutPatches.Warning, Is.Null);
                 Assert.That(
                     withoutPatches.RecommendedNextAction,
                     Is.EqualTo(SourcePausePointConstants.ResolveFailedRecommendedNextAction));

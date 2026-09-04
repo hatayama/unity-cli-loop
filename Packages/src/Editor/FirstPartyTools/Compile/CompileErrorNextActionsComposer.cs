@@ -26,24 +26,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string[] messages = new string[errors.Length];
+            CompileErrorOrigin[] origins = new CompileErrorOrigin[errors.Length];
             for (int index = 0; index < errors.Length; index++)
             {
                 messages[index] = errors[index].message;
+                origins[index] = new CompileErrorOrigin(errors[index].message, errors[index].file);
             }
 
             string[] additions = CompileErrorNextActionsBuilder.Build(
                 messages,
                 CompileMissingReferenceAssemblyLookup.CreateLazyFinder());
-            if (additions.Length == 0)
-            {
-                return;
-            }
-
-            response.NextActions = Append(response.NextActions, additions);
+            string[] assemblyDefinitionHints = CompileAssemblyDefinitionReferenceHintBuilder.Build(
+                origins,
+                CompilationPipeline.GetAssemblyDefinitionFilePathFromScriptPath);
+            response.NextActions = Append(Append(response.NextActions, additions), assemblyDefinitionHints);
         }
 
         private static string[] Append(string[] existing, string[] additions)
         {
+            // Why: a null NextActions must stay null when nothing matched, so the JSON shape is unchanged.
+            if (additions == null || additions.Length == 0)
+            {
+                return existing;
+            }
+
             if (existing == null || existing.Length == 0)
             {
                 return additions;

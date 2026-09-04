@@ -16,6 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool IsDeclaringTypeValueType { get; }
         public int InstructionIndex { get; }
         public int IlOffset { get; }
+        public SourcePausePointSnapshotTiming SnapshotTiming { get; }
         public int ResolvedLine { get; }
         // Sequence-point EndLine is internal transport for joining ResolvedLineText.
         // It is not a CLI response field.
@@ -26,6 +27,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int CompiledMethodEndLine { get; }
         public IReadOnlyList<SourcePausePointLocalVariable> Locals { get; }
         public IReadOnlyList<SourcePausePointParameter> Parameters { get; }
+        // Parameters left out of Parameters because their type cannot be boxed, each with the
+        // reason. Reported so a missing name is explained instead of looking like a capture bug.
+        public IReadOnlyList<string> NotCapturableVariables { get; }
 
         public SourcePausePointResolution(
             string assemblyName,
@@ -36,12 +40,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool isDeclaringTypeValueType,
             int instructionIndex,
             int ilOffset,
+            SourcePausePointSnapshotTiming snapshotTiming,
             int resolvedLine,
             int resolvedEndLine,
             int compiledMethodStartLine,
             int compiledMethodEndLine,
             IReadOnlyList<SourcePausePointLocalVariable> locals,
-            IReadOnlyList<SourcePausePointParameter> parameters)
+            IReadOnlyList<SourcePausePointParameter> parameters,
+            IReadOnlyList<string> notCapturableVariables)
         {
             AssemblyName = assemblyName;
             Mvid = mvid;
@@ -51,12 +57,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IsDeclaringTypeValueType = isDeclaringTypeValueType;
             InstructionIndex = instructionIndex;
             IlOffset = ilOffset;
+            SnapshotTiming = snapshotTiming;
             ResolvedLine = resolvedLine;
             ResolvedEndLine = resolvedEndLine;
             CompiledMethodStartLine = compiledMethodStartLine;
             CompiledMethodEndLine = compiledMethodEndLine;
             Locals = locals;
             Parameters = parameters;
+            NotCapturableVariables = notCapturableVariables;
         }
     }
 }

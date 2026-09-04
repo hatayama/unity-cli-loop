@@ -188,6 +188,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public bool CapturedVariablesTruncated { get; set; }
         public IReadOnlyList<string> TruncatedVariableNames { get; set; } = Array.Empty<string>();
         public int TruncatedVariableCount { get; set; }
+        // Parameters of the resolved method that capture cannot box, each with the reason.
+        // Null when there are none so the status contract omits the field (matches Go omitempty).
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> NotCapturableVariables { get; set; }
         public string ClearedReason { get; set; } = string.Empty;
         public string StatusBeforeClear { get; set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; set; }
@@ -199,6 +203,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         // Null when unset so the status contract omits Warning (matches Go omitempty).
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string Warning { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> Warnings { get; set; }
         // Why DefaultValue/Null ignore: match Go omitempty so unresolved markers omit the fields
         // from the status contract shape (0 / empty must not appear in the shared JSON fixture).
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
@@ -207,6 +213,13 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string ResolvedLineText { get; set; }
 
+        // Why null for empty: the status contract omits the field entirely when every parameter of
+        // the resolved method can be captured, so a reader never sees an empty list to interpret.
+        private static IReadOnlyList<string> NormalizeNotCapturableVariables(IReadOnlyList<string> values)
+        {
+            return values == null || values.Count == 0 ? null : values;
+        }
+
         internal static PausePointStatusResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
             if (snapshot == null)
@@ -214,6 +227,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 throw new ArgumentNullException(nameof(snapshot));
             }
 
+            IReadOnlyList<string> warnings = BuildStatusWarnings(snapshot);
             return new PausePointStatusResponse
             {
                 Id = snapshot.Id,
@@ -257,19 +271,34 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 CapturedVariablesTruncated = snapshot.CapturedVariablesTruncated,
                 TruncatedVariableNames = snapshot.TruncatedVariableNames,
                 TruncatedVariableCount = snapshot.TruncatedVariableCount,
+                NotCapturableVariables = NormalizeNotCapturableVariables(snapshot.NotCapturableVariables),
                 ClearedReason = snapshot.ClearedReason,
                 StatusBeforeClear = snapshot.StatusBeforeClear,
                 LateHitDiscardedAfterClear = snapshot.LateHitDiscardedAfterClear,
                 SuppressedByHotReload = snapshot.SuppressedByHotReload,
                 RetargetedToHotReloadPatch = snapshot.RetargetedToHotReloadPatch,
                 SuppressedByHotReloadReason = snapshot.SuppressedByHotReloadReason,
-                // Why reason as Warning: agents already read Warning; suppressed=false clears both.
-                Warning = snapshot.SuppressedByHotReload ? snapshot.SuppressedByHotReloadReason : null,
+                // Warning is only ever the joined form of Warnings: a caller reading one of the
+                // two must never see fewer topics than the other carries.
+                Warning = warnings == null ? null : string.Join(" ", warnings),
+                Warnings = warnings,
                 ResolvedLine = snapshot.ResolvedLine,
                 ResolvedLineText = string.IsNullOrEmpty(snapshot.ResolvedLineText)
                     ? null
                     : snapshot.ResolvedLineText
             };
+        }
+
+        // Why a list and not a string: Warnings is the single aggregate, and Warning is derived
+        // from it. Null (rather than an empty list) so both fields stay omitted when nothing warned.
+        private static IReadOnlyList<string> BuildStatusWarnings(UloopPausePointSnapshot snapshot)
+        {
+            if (!snapshot.SuppressedByHotReload || string.IsNullOrEmpty(snapshot.SuppressedByHotReloadReason))
+            {
+                return null;
+            }
+
+            return new[] { snapshot.SuppressedByHotReloadReason };
         }
 
         // Why duplicate: this bridge must not reference the Editor-only PausePoint assembly.

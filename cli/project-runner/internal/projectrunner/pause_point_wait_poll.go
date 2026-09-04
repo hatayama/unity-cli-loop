@@ -47,18 +47,28 @@ func waitForPausePoint(
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
 ) (pausePointStatusResponse, pausePointWaitState, *pausePointTriggerResult, *pausePointResumePlayResult, bool, error) {
-	triggerHandle, skippedTriggerResult, resumeResult, baselineSequence, hasBaseline, baselineDecided := startPausePointWaitSideEffects(ctx, connection, options)
+	sideEffects := startPausePointWaitSideEffects(ctx, connection, options)
 
+	if sideEffects.immediateHit != nil {
+		// Returned without polling at all: the arm confirmation is the hit this wait reports, and a
+		// re-query could observe the marker cleared or expired in the meantime (or fail transiently
+		// and poll on to a timeout), turning "the recorded hit, as-is" into some other outcome.
+		return *sideEffects.immediateHit, pausePointWaitStateHit, sideEffects.skippedTriggerResult,
+			sideEffects.resumeResult, sideEffects.hasBaseline, nil
+	}
+
+	resumeResult := sideEffects.resumeResult
 	response, state, polledTriggerResult, hasBaseline, err := waitForPausePointStatus(
-		ctx, connection, options, triggerHandle, baselineSequence, hasBaseline, baselineDecided)
+		ctx, connection, options, sideEffects.triggerHandle,
+		sideEffects.baselineSequence, sideEffects.hasBaseline, sideEffects.baselineDecided)
 
 	if state == pausePointWaitStateTriggerFailed && resumeResult != nil && resumeResult.Resumed {
 		repaused := repausePlayModeAfterAbandonedWait(ctx, connection, *resumeResult)
 		resumeResult = &repaused
 	}
 
-	if skippedTriggerResult != nil {
-		return response, state, skippedTriggerResult, resumeResult, hasBaseline, err
+	if sideEffects.skippedTriggerResult != nil {
+		return response, state, sideEffects.skippedTriggerResult, resumeResult, hasBaseline, err
 	}
 	// The trigger goroutine's buffered channel yields exactly one value, so a result already
 	// received by the poll loop must be reused here instead of joining again — a second receive
@@ -66,10 +76,27 @@ func waitForPausePoint(
 	if polledTriggerResult != nil {
 		return response, state, polledTriggerResult, resumeResult, hasBaseline, err
 	}
-	if triggerHandle != nil {
-		return response, state, triggerHandle.join(), resumeResult, hasBaseline, err
+	if sideEffects.triggerHandle != nil {
+		return response, state, sideEffects.triggerHandle.join(), resumeResult, hasBaseline, err
 	}
 	return response, state, nil, resumeResult, hasBaseline, err
+}
+
+// pausePointWaitSideEffects is what the pre-wait --resume-play / --trigger stage produced. Why a
+// type: the stage has seven outputs and one of them (immediateHit) changes what the caller does next,
+// which a positional tuple made impossible to read at the call site.
+type pausePointWaitSideEffects struct {
+	triggerHandle        *pausePointTriggerHandle
+	skippedTriggerResult *pausePointTriggerResult
+	resumeResult         *pausePointResumePlayResult
+	baselineSequence     int
+	hasBaseline          bool
+	baselineDecided      bool
+
+	// immediateHit is the arm-confirmation response when it already settles the wait: an
+	// already-hit marker that awaits no later hit. It is the wait's answer, so the poll loop must
+	// not run at all — see waitForPausePoint.
+	immediateHit *pausePointStatusResponse
 }
 
 // startPausePointWaitSideEffects performs the pre-wait --resume-play / --trigger work, returning
@@ -81,9 +108,9 @@ func startPausePointWaitSideEffects(
 	ctx context.Context,
 	connection unityipc.Connection,
 	options waitForPausePointOptions,
-) (*pausePointTriggerHandle, *pausePointTriggerResult, *pausePointResumePlayResult, int, bool, bool) {
+) pausePointWaitSideEffects {
 	if options.triggerCommand == "" && !options.resumePlay {
-		return nil, nil, nil, -1, false, false
+		return pausePointWaitSideEffects{baselineSequence: -1}
 	}
 
 	armResponse, armed, armQueryErr := queryPausePointArmStatus(ctx, connection, options.id)
@@ -112,32 +139,79 @@ func startPausePointWaitSideEffects(
 		// Why baselineDecided=false: a transient arm-query failure is also reported as not armed.
 		// Leaving baseline undecided lets the first successful poll establish it, so a stale
 		// continuous Hit cannot slip through as an immediate wait success.
-		return nil, skippedTriggerResult, resumeResult, -1, false, false
+		return pausePointWaitSideEffects{
+			skippedTriggerResult: skippedTriggerResult,
+			resumeResult:         resumeResult,
+			baselineSequence:     -1,
+		}
 	}
 
 	baselineSequence, hasBaseline, baselineDecided := decidePausePointNewHitBaseline(armResponse, options.markerJustEnabled)
+	sideEffects := pausePointWaitSideEffects{
+		baselineSequence: baselineSequence,
+		hasBaseline:      hasBaseline,
+		baselineDecided:  baselineDecided,
+	}
 
-	var resumeResult *pausePointResumePlayResult
+	if pausePointWaitSucceedsOnExistingHit(armResponse, hasBaseline) {
+		// This response already settles the wait, so resuming Play (or firing the trigger into the
+		// running game) would restart the game and then report the old hit as if the wait had just
+		// observed it — the response would claim a pause the Editor is no longer holding.
+		sideEffects.resumeResult, sideEffects.skippedTriggerResult = pausePointSideEffectsSkippedForExistingHit(options)
+		sideEffects.immediateHit = &armResponse
+		return sideEffects
+	}
+
 	if options.resumePlay {
 		result := resumePlayModeForPausePoint(ctx, connection)
-		resumeResult = &result
+		sideEffects.resumeResult = &result
 		if result.Error != "" {
-			if options.triggerCommand == "" {
-				return nil, nil, resumeResult, baselineSequence, hasBaseline, baselineDecided
+			if options.triggerCommand != "" {
+				sideEffects.skippedTriggerResult = &pausePointTriggerResult{
+					Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
+					Error:   "trigger was not dispatched: --resume-play failed to resume play mode",
+				}
 			}
-			return nil, &pausePointTriggerResult{
-				Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
-				Error:   "trigger was not dispatched: --resume-play failed to resume play mode",
-			}, resumeResult, baselineSequence, hasBaseline, baselineDecided
+			return sideEffects
 		}
 	}
 
 	if options.triggerCommand == "" {
-		return nil, nil, resumeResult, baselineSequence, hasBaseline, baselineDecided
+		return sideEffects
 	}
 
-	handle := startPausePointTrigger(ctx, connection, options.startPath, options.triggerCommand, options.triggerArgs)
-	return handle, nil, resumeResult, baselineSequence, hasBaseline, baselineDecided
+	sideEffects.triggerHandle = startPausePointTrigger(
+		ctx, connection, options.startPath, options.triggerCommand, options.triggerArgs)
+	return sideEffects
+}
+
+// pausePointWaitSucceedsOnExistingHit reports that the arm-confirmation response is already the
+// wait's answer, so no pre-wait side effect may run: the marker is hit and no new-hit baseline makes
+// the wait look past that hit. hasBaseline is the value decidePausePointNewHitBaseline just
+// returned, which covers enable --await too — a marker enabled by this very command gets no
+// baseline, so a hit its arm query already observes is likewise returned without polling.
+func pausePointWaitSucceedsOnExistingHit(response pausePointStatusResponse, hasBaseline bool) bool {
+	return response.Status == pausePointStatusHit && !hasBaseline
+}
+
+// pausePointSideEffectsSkippedForExistingHit builds the reported outcomes for the flags that were
+// passed but deliberately not performed. Both are reported rather than omitted for the same reason as
+// on the not-armed path: a silently missing result is indistinguishable from one that never reported.
+func pausePointSideEffectsSkippedForExistingHit(
+	options waitForPausePointOptions,
+) (*pausePointResumePlayResult, *pausePointTriggerResult) {
+	var resumeResult *pausePointResumePlayResult
+	if options.resumePlay {
+		resumeResult = &pausePointResumePlayResult{Skipped: pausePointResumeSkippedForExistingHitMessage}
+	}
+	var triggerResult *pausePointTriggerResult
+	if options.triggerCommand != "" {
+		triggerResult = &pausePointTriggerResult{
+			Command: pausePointTriggerCommandString(options.triggerCommand, options.triggerArgs),
+			Error:   pausePointTriggerSkippedForExistingHitError,
+		}
+	}
+	return resumeResult, triggerResult
 }
 
 // queryPausePointArmStatus reports whether the marker is enabled or already hit. A query failure is
@@ -159,6 +233,13 @@ func queryPausePointArmStatus(
 const (
 	pausePointResumeNotArmedAtWaitStartError  = "resume was not dispatched: the marker could not be confirmed armed at wait start"
 	pausePointTriggerNotArmedAtWaitStartError = "trigger was not dispatched: the marker could not be confirmed armed at wait start"
+
+	pausePointResumeSkippedForExistingHitMessage = "resume was skipped: the marker had already hit " +
+		"before this wait started, so the recorded hit is returned as-is and Play Mode is left as it is; " +
+		"clear or re-enable the marker and wait again to capture a new hit"
+	pausePointTriggerSkippedForExistingHitError = "trigger was not dispatched: the marker had already " +
+		"hit before this wait started, so the recorded hit is returned as-is; clear or re-enable the " +
+		"marker and wait again to capture a new hit"
 )
 
 func pausePointUnarmedAtWaitStartSuffix(response pausePointStatusResponse, queryErr error) string {
@@ -222,7 +303,8 @@ func waitForPausePointStatus(
 			// buffered value, and the caller reuses the result received here instead of joining.
 			state.triggerResult = result
 			triggerDone = nil
-			if pausePointTriggerRejectedBeforeExecution(result) {
+			if pausePointTriggerRejectedBeforeExecution(result) ||
+				pausePointTriggerRejectedByUnityBeforeExecution(result, options.id) {
 				abortResponse, abortState := abortPausePointWaitAfterTriggerRejection(
 					ctx, connection, options.id, state.lastResponse, state.baselineSequence, state.hasBaseline)
 				return abortResponse, abortState, state.triggerResult, state.hasBaseline, nil

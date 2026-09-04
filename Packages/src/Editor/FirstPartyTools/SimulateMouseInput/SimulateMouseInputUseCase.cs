@@ -59,13 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PlayModeToolPreflightResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
-                return new SimulateMouseInputResponse
-                {
-                    Success = false,
-                    Message = preflight.ErrorMessage,
-                    Action = parameters.Action.ToString(),
-                    RejectedByActivePausePointId = preflight.RejectedByActivePausePointId
-                };
+                return MouseInputSimulationResponseFactory.PreflightRejectedResult(parameters.Action, preflight);
             }
 
             if (!System.Enum.IsDefined(typeof(UnityCliLoopMouseInputAction), parameters.Action))

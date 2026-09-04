@@ -78,9 +78,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Drives ToolContracts assembly injection at both the first compile and isolation retry.
         public bool hasAddedFieldRewrites;
 
-        // Source-level names ("Ns.Type.field") of fields this reload added via RegisterStore /
-        // RegisterConst. Null/omitted deserializes as empty after client coalesce.
+        // Source-level names ("Ns.Type.field") of fields this reload added via store rewrite.
+        // Null/omitted deserializes as empty after client coalesce.
         public string[] addedFieldNames;
+
+        // Source-level names of added consts folded into edited bodies as literals.
+        // Null/omitted deserializes as empty after client coalesce.
+        public string[] addedConstNames;
 
         // Compiled identities of methods that left the edited file (or whose return type changed).
         // Null/omitted deserializes as empty after client coalesce.

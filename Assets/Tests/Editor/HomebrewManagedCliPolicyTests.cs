@@ -130,21 +130,5 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(result, Is.False);
         }
 
-        /// <summary>
-        /// Verifies brew guidance is shown for every Homebrew path that does not yield a usable CLI.
-        /// </summary>
-        [TestCase(true, false, true)]
-        [TestCase(true, true, false)]
-        [TestCase(false, false, false)]
-        [TestCase(false, true, false)]
-        public void ShouldShowUpgradeGuidance_ReturnsExpectedValue(
-            bool isHomebrewManagedPath,
-            bool isCliUsable,
-            bool expected)
-        {
-            bool result = HomebrewManagedCliPolicy.ShouldShowUpgradeGuidance(isHomebrewManagedPath, isCliUsable);
-
-            Assert.That(result, Is.EqualTo(expected));
-        }
     }
 }

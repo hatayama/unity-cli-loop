@@ -156,11 +156,11 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         }
 
         /// <summary>
-        /// Reports whether the detected CLI executable is owned by Homebrew.
+        /// Resolves the package manager that owns the detected CLI executable.
         /// </summary>
-        internal static bool IsHomebrewManagedInstallPath(string executablePath)
+        internal static ManagedCliKind ResolveManagedCliKind(string executablePath)
         {
-            return HomebrewManagedCliPolicy.IsHomebrewManagedPath(executablePath, Directory.Exists);
+            return ManagedCliPolicy.Resolve(executablePath, Directory.Exists);
         }
 
         internal static bool IsPackageOwnedInstallPath(

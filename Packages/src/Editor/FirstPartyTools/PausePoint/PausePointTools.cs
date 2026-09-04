@@ -36,6 +36,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int MaxCallerFrames { get; set; } = UloopPausePointRegistry.DefaultMaxCallerFrames;
 
         public string Method { get; set; } = string.Empty;
+
+        public string SnapshotTiming { get; set; } = SourcePausePointConstants.PreLineSnapshotTimingValue;
     }
 
     /// <summary>
@@ -73,6 +75,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int MaxCallerFrames { get; set; }
         public IReadOnlyList<PausePointCapturedHistoryFrame> CapturedVariableHistory { get; set; } =
             Array.Empty<PausePointCapturedHistoryFrame>();
+        // Parameters of the armed method that capture cannot box, each with the reason.
+        // Null when there are none so the response omits the field (matches Go omitempty).
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> NotCapturableVariables { get; set; }
         public int HistoryDroppedCount { get; set; }
         public bool Expired { get; set; }
         public string EnabledAtUtc { get; set; } = string.Empty;
@@ -88,7 +94,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string Message { get; set; } = string.Empty;
         public string RecommendedNextAction { get; set; } = string.Empty;
         public string ErrorCode { get; set; } = string.Empty;
-        public string Warning { get; set; } = string.Empty;
+        // Warnings is the single aggregate and Warning only ever its joined form; both are omitted
+        // together so a caller never reads an empty Warning beside a missing Warnings.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string Warning { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> Warnings { get; set; }
         public string ClearedReason { get; set; } = string.Empty;
         public string StatusBeforeClear { get; set; } = string.Empty;
         public bool LateHitDiscardedAfterClear { get; set; }
@@ -97,6 +108,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string LineBasis { get; set; } = string.Empty;
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string SuppressedByHotReloadReason { get; set; }
+
+        // Why null for empty: the response omits the field entirely when every parameter of the
+        // armed method can be captured, so a reader never sees an empty list to interpret.
+        internal static IReadOnlyList<string> NormalizeNotCapturableVariables(IReadOnlyList<string> values)
+        {
+            return values == null || values.Count == 0 ? null : values;
+        }
 
         public bool ShouldSerializeLineBasis()
         {
@@ -130,6 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     .Select(PausePointCapturedHistoryFrame.FromSnapshot)
                     .ToList(),
                 HistoryDroppedCount = snapshot.HistoryDroppedCount,
+                NotCapturableVariables = NormalizeNotCapturableVariables(snapshot.NotCapturableVariables),
                 Expired = snapshot.Expired,
                 EnabledAtUtc = snapshot.EnabledAtUtc,
                 ElapsedSinceEnabledMilliseconds = snapshot.ElapsedSinceEnabledMilliseconds,
@@ -162,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(result));
             }
 
-            return new PausePointResponse
+            PausePointResponse response = new()
             {
                 Status = UloopPausePointStatus.Cleared,
                 ClearedCount = result.ClearedCount,
@@ -170,10 +189,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Message = result.ClearedCount == 0
                     ? "No active pause points to clear."
                     : "Pause points cleared.",
-                Warning = result.ResumedFromPause
-                    ? SourcePausePointConstants.ClearResumedPlayModeWarning
+                RecommendedNextAction = result.ResumedFromPause
+                    ? SourcePausePointConstants.ClearReleasedPauseRecommendedNextAction
                     : string.Empty
             };
+            // Why routed through the shared list: it is the one place that keeps Warning the joined
+            // form of Warnings and points Message at the aggregate.
+            List<string> warnings = new();
+            PausePointEnableWarningList.AddIfNotEmpty(
+                warnings,
+                result.ResumedFromPause
+                    ? SourcePausePointConstants.ClearReleasedOwnedPauseWarning
+                    : string.Empty);
+            PausePointEnableWarningList.Assign(response, warnings);
+            return response;
         }
 
         private static string ResolveExpiredRecommendedNextAction(string status, string recommendedNextAction)

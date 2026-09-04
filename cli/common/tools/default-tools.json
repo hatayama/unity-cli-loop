@@ -87,18 +87,19 @@
           },
           "FilterType": {
             "type": "string",
-            "description": "Filter type: all, exact, regex, assembly",
+            "description": "Filter type: all, exact, regex, assembly, class",
             "enum": [
               "all",
               "exact",
               "regex",
-              "assembly"
+              "assembly",
+              "class"
             ],
             "default": "all"
           },
           "FilterValue": {
             "type": "string",
-            "description": "Filter value (test name, pattern, or assembly)"
+            "description": "Filter value (test name, pattern, assembly, or class name)"
           },
           "UnsavedChanges": {
             "type": "string",
@@ -114,6 +115,11 @@
             "type": "integer",
             "description": "Maximum seconds to wait for RunFinished before canceling the await (max 1500). Increase for long suites; on timeout the Test Runner may still be running until stop handling lands",
             "default": 600
+          },
+          "RespectEnterPlayModeSettings": {
+            "type": "boolean",
+            "description": "PlayMode only: keep the project's Enter Play Mode settings instead of forcing Domain Reload off. A Domain Reload during the run is survived; the result is recovered after the reload. Use for projects whose libraries require a Domain Reload on Play entry.",
+            "default": false
           }
         }
       }
@@ -278,7 +284,7 @@
           },
           "AnnotateElements": {
             "type": "boolean",
-            "description": "Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). The response includes an AnnotatedElements array with element metadata sorted by z-order. Only works when the resolved capture mode is rendering (auto during Play Mode resolves to rendering) in PlayMode.",
+            "description": "Annotate interactive UI elements with index labels and interaction hints (A / CLICK, B / DRAG, ...). The response includes an AnnotatedElements array with element metadata sorted by SortingOrder then SiblingIndex (an approximation of z-order, not the guaranteed draw order). Only works when the resolved capture mode is rendering (auto during Play Mode resolves to rendering) in PlayMode.",
             "default": false
           },
           "ElementsOnly": {
@@ -401,24 +407,33 @@
           },
           "MaxPreviewElements": {
             "type": "integer",
-            "description": "Maximum number of elements to include in a captured collection's preview (1-1000). The value set at enable time also caps the previews in every later pause-point-status response for that marker; status has no flag to change it.",
+            "description": "Maximum elements in a captured collection's preview (1-1000). Also caps previews in later pause-point-status responses; status cannot change it.",
             "default": 10
           },
           "MaxCallerFrames": {
             "type": "integer",
-            "description": "Maximum number of caller stack frames to record on each hit (0-8). 0 disables capture (CallerFrames stays an empty array). The value set at enable time also caps every later pause-point-status response for that marker; status has no flag to change it.",
+            "description": "Maximum caller stack frames recorded per hit (0-8). 0 disables capture. Also caps later pause-point-status responses; status cannot change it.",
             "default": 2
           },
           "Method": {
             "type": "string",
             "description": "Optional method simple name or Type.Method. When set, --line resolves only inside matching methods"
+          },
+          "SnapshotTiming": {
+            "type": "string",
+            "description": "pre-line captures before the resolved line runs; post-line captures after that line's statement finished, without arming the next line",
+            "enum": [
+              "pre-line",
+              "post-line"
+            ],
+            "default": "pre-line"
           }
         }
       }
     },
     {
       "name": "clear-pause-point",
-      "description": "Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is the number of markers this call transitioned to Cleared: 0 or 1 for `--id`, and the number transitioned for `--all`. Auto-disarmed and expired markers still count as 1; the record stays readable via `pause-point-status` (`StatusBeforeClear` keeps the prior state).",
+      "description": "Clear one or all named UloopPausePoint.Pause markers. The response field `ClearedCount` is the number of markers this call transitioned to Cleared: 0 or 1 for `--id`, and the number transitioned for `--all`. Auto-disarmed and expired markers still count as 1; the record stays readable via `pause-point-status` (`StatusBeforeClear` keeps the prior state). Clearing the marker that owns the current pause releases the Editor pause and lets the game consume any state you arranged while paused: arm the next marker first, then clear the old id, or re-arm it with `--await --resume-play` instead of clearing.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -725,7 +740,7 @@
     },
     {
       "name": "hot-reload",
-      "description": "Hot reload applies method-body edits and can add new methods and fields (added members are visible only to edited code in the same file); it can also change signatures when the same reload covers the old signature's compiled callers. New types, or members other files must reference, require 'uloop compile'.",
+      "description": "Hot reload applies method-body edits and can add new methods and fields (added members are visible only to edited code in the same file); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New types, or members other files must reference, require 'uloop compile'.",
       "inputSchema": {
         "type": "object",
         "properties": {

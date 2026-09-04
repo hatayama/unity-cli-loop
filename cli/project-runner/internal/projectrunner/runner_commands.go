@@ -108,7 +108,7 @@ func runDynamicProjectToolWithCompileNote(
 		return runTool(ctx, connection, command, params, stdout, stderr)
 	}
 
-	result := runPlainTool(ctx, connection, command, params, stderr)
+	result := runToolExecution(ctx, connection, command, params, stderr)
 	if len(result.result) == 0 {
 		return result.exitCode
 	}
@@ -137,6 +137,14 @@ func prepareDynamicToolParams(
 		})
 		return nil, "", false
 	}
+	commandArgs, pausePointClearID, err := extractPausePointClearFileLineFlags(command, commandArgs)
+	if err != nil {
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     command,
+		})
+		return nil, "", false
+	}
 
 	params, nestedProjectPath, err := buildToolParams(commandArgs, tool)
 	if err != nil {
@@ -147,6 +155,13 @@ func prepareDynamicToolParams(
 		return nil, "", false
 	}
 	if err := applyDynamicCodeFileParam(params, dynamicCodeFilePath); err != nil {
+		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
+			ProjectRoot: connection.ProjectRoot,
+			Command:     command,
+		})
+		return nil, "", false
+	}
+	if err := applyPausePointClearFileLineID(params, pausePointClearID); err != nil {
 		clierrors.WriteClassifiedError(stderr, err, clierrors.ErrorContext{
 			ProjectRoot: connection.ProjectRoot,
 			Command:     command,

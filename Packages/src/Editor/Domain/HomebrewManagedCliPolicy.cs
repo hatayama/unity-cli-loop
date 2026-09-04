@@ -45,19 +45,6 @@ namespace io.github.hatayama.UnityCliLoop.Domain
         }
 
         /// <summary>
-        /// Reports whether the guidance that points at a brew command must be shown.
-        /// </summary>
-        /// <remarks>
-        /// Why not gate the stand-down on this too: a Homebrew path whose binary answers no version
-        /// probe is still owned by brew, so installing over it would split ownership. Such a path
-        /// stands down like any other and is explained by this guidance instead.
-        /// </remarks>
-        public static bool ShouldShowUpgradeGuidance(bool isHomebrewManagedPath, bool isCliUsable)
-        {
-            return isHomebrewManagedPath && !isCliUsable;
-        }
-
-        /// <summary>
         /// Builds the Cellar formula directory that a prefix/bin executable would be linked from.
         /// </summary>
         /// <remarks>

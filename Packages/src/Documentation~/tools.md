@@ -32,7 +32,7 @@ This allows you to retrieve logs while keeping the context small.
 
 ### 3. run-tests - Execute TestRunner (PlayMode, EditMode supported)
 Executes Unity Test Runner and retrieves test results. You can set conditions with FilterType and FilterValue.
-- FilterType: all (all tests), exact (individual test method name), regex (class name or namespace), assembly (assembly name)
+- FilterType: all (all tests), exact (individual test method name), regex (regex over full test names), assembly (assembly name), class (test class name, bare or namespace-qualified)
 - FilterValue: Value according to filter type (class name, namespace, etc.)
 - UnsavedChanges: How to handle unsaved loaded Scene and Prefab Stage changes before tests. `save` (default) writes them, `fail` stops if any remain, `discard` reloads disk state (Untitled scenes fail).
 Test results can be output as xml. The output path is returned so AI can read it.
@@ -43,8 +43,9 @@ This is also a strategy to avoid consuming context.
 → Check failed tests, fix implementation to pass tests
 ```
 > [!WARNING]
-> During PlayMode test execution, Domain Reload is forcibly turned OFF. (Settings are restored after test completion)
-> Note that static variables will not be reset during this period.
+> During PlayMode test execution, Domain Reload is forcibly turned OFF unless `--respect-enter-play-mode-settings` is specified. (Settings are restored after test completion)
+> Note that static variables will not be reset while Domain Reload is forced OFF. With `--respect-enter-play-mode-settings`, the project setting decides whether they are reset.
+> Pass `--respect-enter-play-mode-settings` to keep the project's Enter Play Mode settings instead of forcing Domain Reload off.
 
 ### 4. hot-reload - Apply Method-Body Changes Instantly Without Recompiling
 Applies the method bodies of edited `.cs` files directly to the running Editor (EditMode / PlayMode) without a recompile or a Domain Reload in between. No attributes or source markers are required, and access to private / internal members, static methods, async methods, and iterators all work. You can fix game logic without leaving PlayMode and see the new behavior on the spot.

@@ -1556,7 +1556,7 @@ func TestPausePointTimeoutErrorIncludesDiagnosisHint(t *testing.T) {
 				"If the marker targets a Unity message method such as OnCollisionEnter2D/OnTriggerEnter2D, check whether `enable-pause-point`'s response carried a Warning about cached message dispatch: Unity can resolve a GameObject's message dispatch before the marker patch is installed, so a GameObject that already existed at enable time may never reach the marker even though the method body runs. Recreating the GameObject after enabling, or embedding UloopPausePoint.Pause(\"id\") directly in the method body, avoids this. " +
 				"If the target line is inside a very small method, Mono's JIT may have inlined it into callers and the pause point never fires; move the pause point into the calling method. " +
 				"If PlayMode kept progressing on its own while you were arranging state (timers, gravity, spawners), the scenario may have already been consumed before this marker could fire; next time, run `control-play-mode --action Pause` before setup and resume with `control-play-mode --action Play` only after `enable-pause-point` succeeds. " +
-				"If the target line never hit despite the trigger firing, check the non-firing patterns: (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; (3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. (4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable. For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too. Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file.",
+				"If the target line never hit, check the non-firing patterns: (0) the awaited game event never occurred while the marker was armed — check the game state with execute-dynamic-code before suspecting dispatch; (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; (3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. (4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable. For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too. Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file.",
 		},
 	}
 
@@ -1605,7 +1605,7 @@ func TestPausePointExpiredErrorIncludesDiagnosisHint(t *testing.T) {
 				HitCount:    0,
 			},
 			wantHint: "The enable-pause-point --timeout-seconds window (measured from enable, not from this wait) ran out before the marker was hit. " +
-				"If the target line never hit despite the trigger firing, check the non-firing patterns: (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; (3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. (4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable. For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too. Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file. Once the cause is addressed, re-enable the marker (raise --timeout-seconds only if the window itself was too short) and trigger the code path again.",
+				"If the target line never hit, check the non-firing patterns: (0) the awaited game event never occurred while the marker was armed — check the game state with execute-dynamic-code before suspecting dispatch; (1) the method is a physics/message callback or is called from one on a GameObject that existed before enable — recreate the GameObject or embed UloopPausePoint.Pause; (2) the method was already bound into a delegate/event before enable — the pre-bound invocation path bypasses the patch; (3) the method ran but exited on an earlier branch (for example a guard rejected the action because game state had already moved on) — arm a second marker on the early-return line to see which path ran. (4) the file has active hot-reload patches and the marker resolved against the last compiled source, so the armed line may sit in a different method than the editor shows — check ResolvedMethod, or run 'uloop compile' and re-enable. For patterns (1) and (2), hot-reloading a temporary log line into the method (`uloop hot-reload`) and re-triggering gives a one-way check: the log appearing proves the body ran even though the marker missed. The log staying absent proves nothing — the same cached dispatch can bypass the hot-reload patch too. Note: arming that temporary hot reload itself creates the pattern (4) condition for any later --line in the same file. Once the cause is addressed, re-enable the marker (raise --timeout-seconds only if the window itself was too short) and trigger the code path again.",
 		},
 	}
 
@@ -2255,7 +2255,7 @@ func TestRunWaitForPausePointCommandIncludesStatusNoteOnTraceHit(t *testing.T) {
 		t.Fatalf("expected success, got %d with stderr %s", code, stderr.String())
 	}
 
-	assertStdoutHasPausePointTraceStatusNote(t, stdout.Bytes())
+	assertStdoutHasPausePointTraceAwaitStatusNote(t, stdout.Bytes())
 }
 
 // Verifies await-pause-point stdout includes the frame-boundary StatusNote on a
@@ -2325,6 +2325,12 @@ func assertStdoutHasPausePointTraceStatusNote(t *testing.T, stdout []byte) {
 	t.Helper()
 	assertStdoutHasPausePointStatusNote(t, stdout,
 		"Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running.")
+}
+
+func assertStdoutHasPausePointTraceAwaitStatusNote(t *testing.T, stdout []byte) {
+	t.Helper()
+	assertStdoutHasPausePointStatusNote(t, stdout,
+		"Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running. The wait returned on the first hit; to count hits over a period, enable without --await and read pause-point-status after the trigger.")
 }
 
 func assertStdoutHasPausePointStatusNote(t *testing.T, stdout []byte, wantNote string) {
@@ -2738,6 +2744,16 @@ func TestParsePausePointQueryOptionsComposeFileLineID(t *testing.T) {
 	if statusOptions.id != "/source/Assets/Scripts/Marker.cs:7" {
 		t.Fatalf("status id = %q", statusOptions.id)
 	}
+
+	_, clearID, clearErr := extractPausePointClearFileLineFlags(pausePointClearCommandName, []string{
+		"--file", `Assets\Scripts\Marker.cs`, "--line", "0042",
+	})
+	if clearErr != nil {
+		t.Fatalf("clear file:line parse failed: %v", clearErr)
+	}
+	if clearID != "Assets/Scripts/Marker.cs:42" {
+		t.Fatalf("clear id = %q", clearID)
+	}
 }
 
 // Verifies file and line must be supplied together for both pause-point query commands.
@@ -2758,6 +2774,17 @@ func TestParsePausePointQueryOptionsRequireCompleteFileLinePair(t *testing.T) {
 	_, statusLineErr := parsePausePointStatusOptions([]string{"--line", "42"})
 	if statusLineErr == nil || statusLineErr.Error() != "--line requires --file." {
 		t.Fatalf("status line-only error = %v", statusLineErr)
+	}
+
+	_, _, clearFileErr := extractPausePointClearFileLineFlags(
+		pausePointClearCommandName, []string{"--file", "Assets/Scripts/Marker.cs"})
+	if clearFileErr == nil || clearFileErr.Error() != "--file requires --line." {
+		t.Fatalf("clear file-only error = %v", clearFileErr)
+	}
+	_, _, clearLineErr := extractPausePointClearFileLineFlags(
+		pausePointClearCommandName, []string{"--line", "42"})
+	if clearLineErr == nil || clearLineErr.Error() != "--line requires --file." {
+		t.Fatalf("clear line-only error = %v", clearLineErr)
 	}
 }
 
@@ -2791,6 +2818,11 @@ func TestParsePausePointQueryOptionsRejectCombinedIDAndFileLineTarget(t *testing
 			_, statusErr := parsePausePointStatusOptions(test.args)
 			if statusErr == nil || statusErr.Error() != "--id cannot be combined with --file or --line." {
 				t.Fatalf("status combined-target error = %v", statusErr)
+			}
+
+			_, _, clearErr := extractPausePointClearFileLineFlags(pausePointClearCommandName, test.args)
+			if clearErr == nil || clearErr.Error() != "--id cannot be combined with --file or --line." {
+				t.Fatalf("clear combined-target error = %v", clearErr)
 			}
 		})
 	}
@@ -2831,6 +2863,11 @@ func TestParsePausePointQueryOptionsRejectInvalidLine(t *testing.T) {
 			_, statusErr := parsePausePointStatusOptions(args)
 			if statusErr == nil || statusErr.Error() != test.wantError {
 				t.Fatalf("status line error = %v", statusErr)
+			}
+
+			_, _, clearErr := extractPausePointClearFileLineFlags(pausePointClearCommandName, args)
+			if clearErr == nil || clearErr.Error() != test.wantError {
+				t.Fatalf("clear line error = %v", clearErr)
 			}
 		})
 	}

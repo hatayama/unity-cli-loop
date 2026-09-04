@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -14,7 +16,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public UnityCliLoopTestMode TestMode { get; set; } = UnityCliLoopTestMode.EditMode;
 
         /// <summary>
-        /// Type of test filter - all(0), exact(1), regex(2), assembly(3)
+        /// Type of test filter - all(0), exact(1), regex(2), assembly(3), class(4)
         /// </summary>
         public TestFilterType FilterType { get; set; } = TestFilterType.all;
 
@@ -23,6 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// • exact: Individual test method name (e.g.: io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests.GetAllLogs_WithMaskAllOff_StillReturnsAllLogs)
         /// • regex: Class name or namespace (e.g.: io.github.hatayama.UnityCliLoop.ConsoleLogRetrieverTests, io.github.hatayama.UnityCliLoop)
         /// • assembly: Assembly name (e.g.: UnityCliLoop.Tests.Editor)
+        /// • class: Test class name, bare or namespace-qualified (e.g.: ConsoleLogRetrieverTests)
         /// </summary>
         public string FilterValue { get; set; } = "";
 
@@ -36,5 +39,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Kept below the CLI absolute response timeout so hung runs free the single-flight slot first.
         /// </summary>
         public int TimeoutSeconds { get; set; } = RunTestsExecutionTimeout.DefaultTimeoutSeconds;
+
+        /// <summary>
+        /// When true and TestMode is PlayMode, keeps the project's Enter Play Mode settings instead of forcing Domain Reload off; a Domain Reload during the run is survived by storing the result in SessionState for CLI polling. Ignored for EditMode.
+        /// </summary>
+        public bool RespectEnterPlayModeSettings { get; set; } = false;
+
+        /// <summary>
+        /// Internal request identifier used for delayed result recovery across domain reload.
+        /// </summary>
+        [Browsable(false)]
+        public string RequestId { get; set; } = "";
     }
 } 

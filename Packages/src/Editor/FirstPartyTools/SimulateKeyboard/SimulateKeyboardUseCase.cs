@@ -59,13 +59,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 : PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
-                return new SimulateKeyboardResponse
-                {
-                    Success = false,
-                    Message = preflight.ErrorMessage,
-                    Action = parameters.Action.ToString(),
-                    RejectedByActivePausePointId = preflight.RejectedByActivePausePointId
-                };
+                return KeyboardInputSimulationResponseFactory.PreflightRejectedResult(parameters.Action, preflight);
             }
 
             if (parameters.Action == UnityCliLoopKeyboardAction.ReleaseAll)

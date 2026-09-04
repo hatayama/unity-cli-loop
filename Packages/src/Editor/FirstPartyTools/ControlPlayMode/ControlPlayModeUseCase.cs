@@ -314,7 +314,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     action == PlayModeAction.Status
                         ? EditorUnfocusedWarningBuilder.BuildPlayModeProgressHint(
                             _editorStateService.IsPlaying,
-                            _editorFocusStateProvider.IsFocused)
+                            _editorFocusStateProvider.IsFocused,
+                            _editorStateService.IsPaused)
                         : string.Empty)
             };
             PlayModeStopReasonResponseFiller.CopyConfirmedIfNeeded(response, action, wasAlreadyStopped);

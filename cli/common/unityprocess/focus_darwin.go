@@ -6,8 +6,12 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
-	"strconv"
-	"strings"
+)
+
+const (
+	lsappinfoCommand = "lsappinfo"
+	openCommand      = "open"
+	osascriptCommand = "osascript"
 )
 
 func FocusUnityProcess(ctx context.Context, pid int) error {
@@ -28,22 +32,79 @@ func FocusUnityProcessWithRestore(ctx context.Context, pid int) (RestoreFocusFun
 }
 
 func readFrontmostProcessIDMac(ctx context.Context) int {
-	commandContext, cancel := withCommandTimeout(ctx, FocusCommandTimeout)
-	defer cancel()
-	output, err := exec.CommandContext(commandContext, "osascript", "-e", `tell application "System Events" to get unix id of first process whose frontmost is true`).Output()
+	output, err := runFocusCommand(ctx, lsappinfoCommand, "front")
 	if err != nil {
 		return 0
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(output)))
+	asn := parseLsappinfoFrontASN(string(output))
+	if asn == "" {
+		return 0
+	}
+	pidOutput, err := runFocusCommand(ctx, lsappinfoCommand, "info", "-only", "pid", asn)
 	if err != nil {
 		return 0
 	}
-	return pid
+	return parseLsappinfoPID(string(pidOutput))
+}
+
+func bundlePathForPIDMac(ctx context.Context, pid int) string {
+	output, err := runFocusCommand(ctx, lsappinfoCommand, "find", fmt.Sprintf("pid=%d", pid))
+	if err != nil {
+		return ""
+	}
+	asn := parseLsappinfoFindASN(string(output))
+	if asn == "" {
+		return ""
+	}
+	pathOutput, err := runFocusCommand(ctx, lsappinfoCommand, "info", "-only", "LSBundlePath", asn)
+	if err != nil {
+		return ""
+	}
+	return parseLsappinfoBundlePath(string(pathOutput))
+}
+
+func countProcessesWithBundlePathMac(ctx context.Context, bundlePath string) int {
+	// 0 means the count could not be determined: list failed, or no matching process.
+	// open -a is only safe when this returns exactly 1.
+	output, err := runFocusCommand(ctx, lsappinfoCommand, "list")
+	if err != nil {
+		return 0
+	}
+	return countLsappinfoBundlePath(string(output), bundlePath)
 }
 
 func setFrontmostProcessMac(ctx context.Context, pid int) error {
+	bundlePath := bundlePathForPIDMac(ctx, pid)
+	matchingCount := 0
+	if bundlePath != "" {
+		matchingCount = countProcessesWithBundlePathMac(ctx, bundlePath)
+	}
+	if shouldActivateViaOsascriptMac(bundlePath, matchingCount) {
+		return setFrontmostProcessViaOsascriptMac(ctx, pid)
+	}
+	return activateAppViaOpenMac(ctx, bundlePath)
+}
+
+// setFrontmostProcessViaOsascriptMac activates a process by PID.
+// open -a can only name a bundle path, so it cannot choose one instance when
+// the same Unity version has two projects open.
+func setFrontmostProcessViaOsascriptMac(ctx context.Context, pid int) error {
+	script := fmt.Sprintf(`tell application "System Events" to set frontmost of (first process whose unix id is %d) to true`, pid)
+	return runFocusCommandNoOutput(ctx, osascriptCommand, "-e", script)
+}
+
+func activateAppViaOpenMac(ctx context.Context, bundlePath string) error {
+	return runFocusCommandNoOutput(ctx, openCommand, "-a", bundlePath)
+}
+
+func runFocusCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
 	commandContext, cancel := withCommandTimeout(ctx, FocusCommandTimeout)
 	defer cancel()
-	script := fmt.Sprintf(`tell application "System Events" to set frontmost of (first process whose unix id is %d) to true`, pid)
-	return exec.CommandContext(commandContext, "osascript", "-e", script).Run()
+	return exec.CommandContext(commandContext, name, args...).Output()
+}
+
+func runFocusCommandNoOutput(ctx context.Context, name string, args ...string) error {
+	commandContext, cancel := withCommandTimeout(ctx, FocusCommandTimeout)
+	defer cancel()
+	return exec.CommandContext(commandContext, name, args...).Run()
 }

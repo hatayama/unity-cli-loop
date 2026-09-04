@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal static readonly Dictionary<string, MethodBase> LogicalOwnerById = new();
         // Why store file:line separately: auto-retarget must re-resolve with the original enable
         // request, and parsing the id string would couple us to id formatting.
-        internal static readonly Dictionary<string, (string NormalizedFile, int Line)> RequestById = new();
+        internal static readonly Dictionary<string, SourcePausePointEnableRequest> RequestById = new();
         internal static readonly List<SourcePausePointHotReloadRetarget.RetargetLineDriftWarning> PendingRetargetLineDriftWarnings =
             new List<SourcePausePointHotReloadRetarget.RetargetLineDriftWarning>();
         internal static readonly List<string> PendingExpiredNotRetargetedIds = new List<string>();
@@ -107,16 +107,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why conditional no-op: ShouldInject can leave a prior injection inert (e.g. stale
             // OriginalBody under an active shim). Re-enable must replace mismatched ledger state
             // instead of reporting success while the call site never fires.
+            bool moveDisplacedMetadata = MovesDisplacedMetadata(resolution.SnapshotTiming);
             if (TryReuseExistingPatch(
                     id,
                     SourcePausePointPatchInjectionTargetKind.OriginalBody,
                     method,
-                    donorShim: null))
+                    donorShim: null,
+                    resolution.InstructionIndex,
+                    moveDisplacedMetadata))
             {
-                RememberRequest(id, normalizedFile, requestedLine);
+                RememberRequest(id, normalizedFile, requestedLine, resolution.SnapshotTiming);
                 LogicalOwnerById[id] = logicalOwner;
                 UloopPausePointRegistry.SetMethodEntryInstrumented(id);
-                return SourcePausePointPatchResult.SuccessResult();
+                return SuccessWithPatchWarning(method);
             }
 
             SourcePausePointPatchInjection injection = new(
@@ -126,9 +129,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resolution.IsDeclaringTypeValueType,
                 resolution.Parameters,
                 resolution.Locals,
-                SourcePausePointPatchInjectionTargetKind.OriginalBody);
+                SourcePausePointPatchInjectionTargetKind.OriginalBody,
+                donorShim: null,
+                instanceFromFirstArgument: false,
+                moveDisplacedMetadata);
 
-            return CommitPatch(id, method, logicalOwner, injection, normalizedFile, requestedLine);
+            return CommitPatch(
+                id, method, logicalOwner, injection, normalizedFile, requestedLine, resolution.SnapshotTiming);
         }
 
         /// <summary>
@@ -163,11 +170,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     ? SourcePausePointPatchInjectionTargetKind.TransplantChainJoin
                     : SourcePausePointPatchInjectionTargetKind.ShimDirect;
 
-            if (TryReuseExistingPatch(id, targetKind, method, shim.DonorShim))
+            int injectionIndex = InstructionIndexForInjection(targetKind, method, shim.InstructionIndex);
+            bool moveDisplacedMetadata = MovesDisplacedMetadata(shim.SnapshotTiming);
+            if (TryReuseExistingPatch(id, targetKind, method, shim.DonorShim, injectionIndex, moveDisplacedMetadata))
             {
-                RememberRequest(id, normalizedFile, requestedLine);
+                RememberRequest(id, normalizedFile, requestedLine, shim.SnapshotTiming);
                 UloopPausePointRegistry.SetMethodEntryInstrumented(id);
-                return SourcePausePointPatchResult.SuccessResult();
+                return SuccessWithPatchWarning(method);
             }
 
             bool isStatic = !shim.InstanceFromFirstArgument && method.IsStatic;
@@ -179,16 +188,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             SourcePausePointPatchInjection injection = new(
                 id,
-                InstructionIndexForInjection(targetKind, method, shim.InstructionIndex),
+                injectionIndex,
                 isStatic,
                 isDeclaringTypeValueType,
                 shim.Parameters,
                 shim.Locals,
                 targetKind,
                 shim.DonorShim,
-                shim.InstanceFromFirstArgument);
+                shim.InstanceFromFirstArgument,
+                moveDisplacedMetadata);
 
-            return CommitPatch(id, method, shim.LogicalOwner, injection, normalizedFile, requestedLine);
+            return CommitPatch(
+                id, method, shim.LogicalOwner, injection, normalizedFile, requestedLine, shim.SnapshotTiming);
         }
 
         // Why add preamble only for TransplantChainJoin: the recorded index is from the shim's
@@ -214,11 +225,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return instructionIndex + getPreambleLength(method);
         }
 
+        // Why compare the injection site too: the same file:line id re-enabled with the other
+        // snapshot timing lands on a different instruction, and the existing transpiled body
+        // cannot be edited in place. Reusing it would keep capturing at the old timing while
+        // the remembered request claims the new one.
         private static bool TryReuseExistingPatch(
             string id,
             SourcePausePointPatchInjectionTargetKind targetKind,
             MethodBase physicalTarget,
-            MethodBase donorShim)
+            MethodBase donorShim,
+            int instructionIndex,
+            bool moveDisplacedMetadata)
         {
             if (!MethodById.TryGetValue(id, out MethodBase existingPhysical)
                 || !InjectionsByMethod.TryGetValue(existingPhysical, out List<SourcePausePointPatchInjection> injections))
@@ -236,7 +253,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool sameTarget = existingPhysical.Equals(physicalTarget);
             bool sameDonor = targetKind != SourcePausePointPatchInjectionTargetKind.TransplantChainJoin
                 || (existing.DonorShim != null && donorShim != null && existing.DonorShim.Equals(donorShim));
-            if (sameKind && sameTarget && sameDonor)
+            bool sameSite = existing.InstructionIndex == instructionIndex
+                && existing.MoveDisplacedMetadata == moveDisplacedMetadata;
+            if (sameKind && sameTarget && sameDonor && sameSite)
             {
                 return true;
             }
@@ -260,9 +279,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        private static void RememberRequest(string id, string normalizedFile, int requestedLine)
+        private static void RememberRequest(
+            string id,
+            string normalizedFile,
+            int requestedLine,
+            SourcePausePointSnapshotTiming snapshotTiming)
         {
-            RequestById[id] = (normalizedFile, requestedLine);
+            RequestById[id] = new SourcePausePointEnableRequest(normalizedFile, requestedLine, snapshotTiming);
+        }
+
+        private static bool MovesDisplacedMetadata(SourcePausePointSnapshotTiming snapshotTiming)
+        {
+            return snapshotTiming == SourcePausePointSnapshotTiming.PreLine;
         }
 
         private static SourcePausePointPatchResult CommitPatch(
@@ -271,7 +299,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodBase logicalOwner,
             SourcePausePointPatchInjection injection,
             string normalizedFile,
-            int requestedLine)
+            int requestedLine,
+            SourcePausePointSnapshotTiming snapshotTiming)
         {
             bool methodAlreadyPatched = InjectionsByMethod.TryGetValue(method, out List<SourcePausePointPatchInjection> injections);
             if (!methodAlreadyPatched)
@@ -283,7 +312,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             injections.Add(injection);
             MethodById[id] = method;
             LogicalOwnerById[id] = logicalOwner;
-            RememberRequest(id, normalizedFile, requestedLine);
+            RememberRequest(id, normalizedFile, requestedLine, snapshotTiming);
 
             // The ledger above is written before Harmony actually rebuilds the method. If
             // Unpatch/Patch throws (e.g. a byref-like `this` produces invalid IL at JIT time), a
@@ -320,9 +349,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            (string warning, bool hasPhysicsCallbackWarning) = BuildPatchWarning(method);
             UloopPausePointRegistry.SetMethodEntryInstrumented(id);
-            return SourcePausePointPatchResult.SuccessResult(warning, method.DeclaringType, hasPhysicsCallbackWarning);
+            return SuccessWithPatchWarning(method);
         }
 
         // What: removes Harmony instrumentation and patcher ledgers for one id without touching
@@ -479,7 +507,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static (string Warning, bool HasPhysicsCallbackWarning) BuildPatchWarning(MethodBase method)
+        // Why re-evaluate on reuse: a re-enable of the same file:line without clear keeps the
+        // Harmony patch, but Enable still creates a new registry entry. The physics-bypass flag
+        // lives on that entry, so SuccessResult() without BuildPatchWarning would drop it.
+        private static SourcePausePointPatchResult SuccessWithPatchWarning(MethodBase method)
+        {
+            (IReadOnlyList<string> warnings, bool hasPhysicsCallbackWarning) = BuildPatchWarning(method);
+            return SourcePausePointPatchResult.SuccessResult(warnings, method.DeclaringType, hasPhysicsCallbackWarning);
+        }
+
+        private static (IReadOnlyList<string> Warnings, bool HasPhysicsCallbackWarning) BuildPatchWarning(MethodBase method)
         {
             List<string> warnings = new();
             bool hasPhysicsCallbackWarning = false;
@@ -511,7 +548,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings.Add(SourcePausePointConstants.SmallMethodInliningRiskWarning);
             }
 
-            return (string.Join(" ", warnings), hasPhysicsCallbackWarning);
+            return (warnings, hasPhysicsCallbackWarning);
         }
 
         // Heuristic, not a guarantee: [AggressiveInlining] is only a hint the JIT may ignore, and

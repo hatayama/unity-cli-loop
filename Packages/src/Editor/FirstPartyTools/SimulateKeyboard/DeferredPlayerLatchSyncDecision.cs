@@ -13,13 +13,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Decides whether this Input System update should sync stale player latches and
         /// then drop the callback. Why Editor is kept: pause only runs Editor updates, so
         /// consuming the one-shot there would skip the first player update after resume.
-        /// Why not HasFlag: Default includes Editor and would look like a player update.
+        /// Why shared predicate: the latch sync and the press-edge visibility check must agree
+        /// on which update types are player updates, so both read InputUpdateTypeResolver.
         /// </summary>
         internal static DeferredLatchSyncTickDecision Decide(InputUpdateType currentUpdateType)
         {
-            bool isPlayerUpdate = currentUpdateType == InputUpdateType.Dynamic
-                || currentUpdateType == InputUpdateType.Fixed
-                || currentUpdateType == InputUpdateType.Manual;
+            bool isPlayerUpdate = InputUpdateTypeResolver.IsGameplayUpdate(currentUpdateType);
             return new DeferredLatchSyncTickDecision(isPlayerUpdate, isPlayerUpdate);
         }
     }

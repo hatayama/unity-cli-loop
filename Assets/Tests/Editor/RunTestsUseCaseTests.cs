@@ -127,6 +127,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(validationService.WasCalled, Is.False);
         }
 
+        /// <summary>
+        /// Verifies PlayMode respect options and request id are forwarded to the execution stub.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayModeRespectsEnterPlayModeSettings_ForwardsOptionsToStub()
+        {
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait
+            );
+            RunTestsSchema parameters = new()
+            {
+                TestMode = UnityCliLoopTestMode.PlayMode,
+                RespectEnterPlayModeSettings = true,
+                RequestId = "run_tests_x"
+            };
+
+            await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(executionService.PlayModeWasCalled, Is.True);
+            Assert.That(executionService.LastRespectEnterPlayModeSettings, Is.True);
+            Assert.That(executionService.LastRequestId, Is.EqualTo("run_tests_x"));
+        }
+
+        /// <summary>
+        /// Verifies EditMode ignores respect settings and does not call the PlayMode stub.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenEditModeRespectsEnterPlayModeSettings_DoesNotCallPlayModeStub()
+        {
+            StubTestExecutionService executionService = new();
+            StubTestExecutionStateValidationService validationService = new(ValidationResult.Success());
+            RunTestsUseCase useCase = new(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait
+            );
+            RunTestsSchema parameters = new()
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                RespectEnterPlayModeSettings = true,
+                RequestId = "run_tests_x"
+            };
+
+            await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(executionService.PlayModeWasCalled, Is.False);
+            Assert.That(executionService.WasCalled, Is.True);
+            Assert.That(executionService.LastRequestId, Is.Null);
+        }
+
         [Test]
         public async Task ExecuteAsync_WithDefaultRequest_ShouldUseSaveUnsavedChangesMode()
         {
@@ -787,6 +843,87 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: a run that times out after starting still reports the hot-reload discard Warning,
+        /// so a failed run explains the patches it may have cost.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenRunTimesOutWithLiveHotReloadChanges_AssignsExactPolicyFormWarning()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                ThrowsExecutionTimeout = true
+            };
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(ValidationResult.Success());
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                getActiveHotReloadChangeCount: () => 2);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(
+                response.Warning,
+                Is.EqualTo(
+                    "2 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards active patches - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."));
+        }
+
+        /// <summary>
+        /// What: a run that times out with no live hot-reload changes leaves Warning empty.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenRunTimesOutWithoutLiveHotReloadChanges_LeavesWarningEmpty()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                ThrowsExecutionTimeout = true
+            };
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(ValidationResult.Success());
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                getActiveHotReloadChangeCount: () => 0);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Warning, Is.Null.Or.Empty);
+        }
+
+        /// <summary>
+        /// What: a pre-run validation failure never carries the discard Warning, because no test
+        /// run started and therefore no domain reload could have discarded a patch.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenValidationFails_LeavesWarningEmpty()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService();
+            StubTestExecutionStateValidationService validationService =
+                new StubTestExecutionStateValidationService(
+                    ValidationResult.Failure("EditMode tests cannot run during play mode"));
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                validationService,
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                getActiveHotReloadChangeCount: () => 2);
+            RunTestsSchema parameters = new RunTestsSchema();
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Warning, Is.Null.Or.Empty);
+        }
+
         [Test]
         public async Task ExecuteAsync_WithUnsupportedFilterType_ShouldNotClearPausePoints()
         {
@@ -946,6 +1083,104 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.ShouldSerializeUnfilteredTestNames(), Is.EqualTo(false));
             Assert.That(response.ShouldSerializeUnfilteredTestCount(), Is.EqualTo(false));
             Assert.That(response.UnfilteredTestNames, Is.Null);
+        }
+
+        /// <summary>
+        /// What: filter-all NoTestsFound attaches the proposed test .asmdef to the response and names it in Message.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilterAllNoTestsFoundWithoutTestAsmdef_AttachesProposedTestAsmdef()
+        {
+            RunTestsTestAsmdefProposal proposal = new RunTestsTestAsmdefProposal("Assets/Tests/Editor/Game.Tests.Editor.asmdef", "{}");
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult()
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics,
+                proposeTestAsmdef: _ => proposal);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.ProposedTestAsmdef, Is.SameAs(proposal));
+            Assert.That(response.ShouldSerializeProposedTestAsmdef(), Is.True);
+            Assert.That(response.Message, Does.StartWith(RunTestsResponse.NoTestsFoundMessage + ". "));
+            Assert.That(response.Message, Does.Contain("Assets/Tests/Editor/Game.Tests.Editor.asmdef"));
+        }
+
+        /// <summary>
+        /// What: an unfiltered NoTestsFound run whose project already has a test assembly leaves the response untouched.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilterAllNoTestsFoundWithTestAsmdef_LeavesResponseWithoutProposal()
+        {
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult()
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                appendNoTestsDiagnostics: PassThroughNoTestsDiagnostics,
+                proposeTestAsmdef: _ => null);
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.all
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(response.ProposedTestAsmdef, Is.Null);
+            Assert.That(response.ShouldSerializeProposedTestAsmdef(), Is.False);
+            Assert.That(response.Message, Is.EqualTo(RunTestsResponse.NoTestsFoundMessage));
+        }
+
+        /// <summary>
+        /// What: a filtered NoTestsFound run never asks for a test .asmdef proposal, because the filter is the likelier cause.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenFilteredNoTestsFound_DoesNotProposeTestAsmdef()
+        {
+            bool proposalRequested = false;
+            StubTestExecutionService executionService = new StubTestExecutionService
+            {
+                NextResult = CreateNoTestsFoundResult(),
+                UnfilteredTestListResult = RunTestsUnfilteredTestListResult.Success(new[] { "Example.Tests.Alpha" })
+            };
+            RunTestsUseCase useCase = new RunTestsUseCase(
+                new TestFilterCreationService(),
+                executionService,
+                new StubTestExecutionStateValidationService(ValidationResult.Success()),
+                waitForTestRunnerCleanupAsync: NoCleanupWait,
+                proposeTestAsmdef: _ =>
+                {
+                    proposalRequested = true;
+                    return null;
+                });
+            RunTestsSchema parameters = new RunTestsSchema
+            {
+                TestMode = UnityCliLoopTestMode.EditMode,
+                FilterType = TestFilterType.exact,
+                FilterValue = "Missing.Test"
+            };
+
+            RunTestsResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
+
+            Assert.That(proposalRequested, Is.False);
+            Assert.That(response.ProposedTestAsmdef, Is.Null);
+            Assert.That(response.ShouldSerializeProposedTestAsmdef(), Is.False);
         }
 
         /// <summary>
@@ -1119,6 +1354,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             public bool TestFrameworkAvailable { get; set; } = true;
             public bool WasCalled { get; private set; }
+            public bool PlayModeWasCalled { get; private set; }
+            public bool LastRespectEnterPlayModeSettings { get; private set; }
+            public string LastRequestId { get; private set; }
             // Default stub result satisfies RunTestsResponse preconditions (non-null status
             // and noTestsFoundExplanation); individual tests override NextResult when they
             // need a specific execution status.
@@ -1136,17 +1374,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public RunTestsPredefinedAssemblyTestFindings PredefinedAssemblyTestFindings { get; set; } =
                 RunTestsPredefinedAssemblyTestFindings.None();
 
-            public override Task<SerializableTestResult> ExecutePlayModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
+            public override Task<SerializableTestResult> ExecutePlayModeTestAsync(
+                TestExecutionFilter filter,
+                CancellationToken ct,
+                RunTestsPlayModeRunOptions options)
             {
                 ct.ThrowIfCancellationRequested();
                 WasCalled = true;
+                PlayModeWasCalled = true;
+                LastRespectEnterPlayModeSettings = options.RespectEnterPlayModeSettings;
+                LastRequestId = options.RequestId;
                 return Task.FromResult(NextResult);
             }
+
+            // Lets a test reach the CancelAfter failure branch without waiting out a real timeout.
+            public bool ThrowsExecutionTimeout { get; set; }
 
             public override Task<SerializableTestResult> ExecuteEditModeTestAsync(TestExecutionFilter filter, CancellationToken ct)
             {
                 ct.ThrowIfCancellationRequested();
                 WasCalled = true;
+                if (ThrowsExecutionTimeout)
+                {
+                    throw new OperationCanceledException();
+                }
+
                 return Task.FromResult(NextResult);
             }
 

@@ -18,20 +18,10 @@ run_module_checks() {
 
   (
     cd "$module_dir"
-    module_root=$(pwd)
-    packages=$(go list -f '{{.Dir}}' ./... | grep -v '/node_modules/' | awk -v root="$module_root" '
-      $0 == root {
-        print "."
-        next
-      }
-      index($0, root "/") == 1 {
-        print "./" substr($0, length(root) + 2)
-      }
-    ')
     golangci-lint fmt --config "$ROOT_DIR/cli/.golangci.yml" --diff
-    go vet $packages
-    golangci-lint run --config "$ROOT_DIR/cli/.golangci.yml" $packages
-    go test $packages
+    go vet ./...
+    golangci-lint run --config "$ROOT_DIR/cli/.golangci.yml" ./...
+    go test ./...
   )
 }
 

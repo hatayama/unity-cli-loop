@@ -817,12 +817,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 method.DeclaringType.IsValueType,
                 0,
                 0,
+                SourcePausePointSnapshotTiming.PreLine,
                 1,
                 1,
                 compiledMethodStartLine,
                 compiledMethodEndLine,
                 Array.Empty<SourcePausePointLocalVariable>(),
-                Array.Empty<SourcePausePointParameter>());
+                Array.Empty<SourcePausePointParameter>(),
+                Array.Empty<string>());
         }
 
         private abstract class AbstractMethodFixture

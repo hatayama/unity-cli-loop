@@ -94,6 +94,16 @@ internal sealed class HarmonyAccessorShimRewrite
                 .WithTriviaFrom(triviaSource);
         }
 
+        // Every field-like event read goes through the backing field, even a public one: C#
+        // rejects reading an event outside its declaring type regardless of accessibility.
+        if (symbol is IEventSymbol eventSymbol)
+        {
+            AccessorEntry eventEntry = _rewriter._accessorPlan.GetOrAddEventBackingField(eventSymbol);
+            return EventAccessorShimRewrite
+                .CreateEventRead(eventEntry, _rewriter.VisitReceiver(receiverSyntax))
+                .WithTriviaFrom(triviaSource);
+        }
+
         if (symbol is IPropertySymbol propertySymbol
             && !propertySymbol.IsIndexer
             && !propertySymbol.IsStatic

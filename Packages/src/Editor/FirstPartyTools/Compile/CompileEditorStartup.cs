@@ -1,3 +1,5 @@
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     // Keeps compile startup wiring inside the compile assembly so the composition
@@ -7,6 +9,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void Initialize()
         {
             CompileApiUpdaterConsentPatcher.Install();
+            ExternalSceneChangeCoordination.ResolveBeforeRefresh =
+                reloadExternalSceneChanges =>
+                    ExternalSceneChangeTracker.ResolveForCompile(reloadExternalSceneChanges);
         }
     }
 }

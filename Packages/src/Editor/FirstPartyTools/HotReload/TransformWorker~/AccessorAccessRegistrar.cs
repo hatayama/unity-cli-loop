@@ -285,10 +285,23 @@ internal static class AccessorAccessRegistrar
                 out rejectReason);
         }
 
-        if (leftSymbol is IEventSymbol)
+        if (leftSymbol is IEventSymbol eventSymbol)
         {
-            rejectReason = "inaccessible event add/remove is out of scope for accessor rewrite.";
-            return false;
+            if (EventAccessorRules.IsSubscriptionAssignment(assignment))
+            {
+                // += / -= stay on the publicized add/remove accessors, which keep the
+                // compiler's Interlocked.CompareExchange loop. Nothing to register.
+                return false;
+            }
+
+            if (!EventAccessorRules.IsBackingFieldWrite(assignment))
+            {
+                rejectReason = "compound assignment to an event has no accessor rewrite shape.";
+                return false;
+            }
+
+            plan.GetOrAddEventBackingField(eventSymbol);
+            return true;
         }
 
         return false;
@@ -405,10 +418,10 @@ internal static class AccessorAccessRegistrar
             return TryRegisterPropertyRead(propertySymbol, plan, out rejectReason);
         }
 
-        if (symbol is IEventSymbol)
+        if (symbol is IEventSymbol eventSymbol)
         {
-            rejectReason = "inaccessible event add/remove is out of scope for accessor rewrite.";
-            return false;
+            plan.GetOrAddEventBackingField(eventSymbol);
+            return true;
         }
 
         if (symbol is IMethodSymbol methodSymbol

@@ -35,6 +35,10 @@ const (
 	// pausePointTraceStatusNote explains that a trace-mode Hit did not pause Play Mode.
 	pausePointTraceStatusNote = "Trace mode does not pause Play Mode; Status 'Hit' records that the marker fired while the game kept running."
 
+	// pausePointTraceAwaitReturnedNote prevents callers from reading the first observed trace
+	// hit as a count collected over the entire trigger period.
+	pausePointTraceAwaitReturnedNote = "The wait returned on the first hit; to count hits over a period, enable without --await and read pause-point-status after the trigger."
+
 	// Why: a non-trace Hit pauses at the next frame boundary, so live reads after the
 	// pause are already post-frame; agents otherwise treat them as at-line evidence.
 	pausePointHitFrameBoundaryStatusNote = "Unity pauses at the next frame boundary; the rest of the hit frame already ran. Read at-line values from CapturedVariables; live reads via execute-dynamic-code reflect post-frame state."
@@ -151,6 +155,17 @@ func applyPausePointHitStatusNote(response pausePointStatusResponse) pausePointS
 	return response
 }
 
+// applyPausePointTraceAwaitReturnedNote adds guidance that belongs only to wait
+// responses; pause-point-status reports the accumulated trace count instead.
+func applyPausePointTraceAwaitReturnedNote(response pausePointStatusResponse) pausePointStatusResponse {
+	if response.Status != pausePointStatusHit || response.Mode != pausePointModeTrace {
+		return response
+	}
+
+	response.StatusNote += " " + pausePointTraceAwaitReturnedNote
+	return response
+}
+
 // applyPausePointHitWhenNote reports conditional skips without replacing the
 // mode-specific StatusNote that only belongs to captured Hits.
 func applyPausePointHitWhenNote(response pausePointStatusResponse) pausePointStatusResponse {
@@ -244,6 +259,11 @@ func runPausePointStatusCommand(
 	response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 	response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 	response = applyPausePointCapturedVariablePreviewNote(response)
+	// Why here and not on the Unity side: pause-point-status returns Unity's status envelope as
+	// it stands, and StatusNote does not exist until the notes above are applied. The enable and
+	// clear tool responses get the same suffix from Unity instead, so neither path double-appends.
+	response = applyPausePointWarnings(response)
+	response = applyPausePointMessagePointers(response)
 
 	// Expectation verdicts never change the exit code: whether the query succeeded and whether the
 	// captured state matched are separate questions, as on await-pause-point.
@@ -293,6 +313,7 @@ func runWaitForPausePoint(
 		response.ResumePlayResult = resumeResult
 		response = filterPausePointCapturedVariableHistory(response)
 		response = applyPausePointHitStatusNote(response)
+		response = applyPausePointTraceAwaitReturnedNote(response)
 		response = filterPausePointCapturedVariablesByName(response, options.capturedVariableNames)
 		response = applyPausePointCapturedVariablesMode(response, options.capturedVariablesMode)
 		response = applyPausePointCapturedVariablePreviewNote(response)
@@ -302,7 +323,6 @@ func runWaitForPausePoint(
 			response:            response,
 			logs:                logs,
 			logsErr:             logsErr,
-			unityWarning:        response.Warning,
 			triggerResult:       triggerResult,
 			awaitedPausePointID: options.id,
 			expectations:        expectations,

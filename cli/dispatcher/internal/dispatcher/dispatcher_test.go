@@ -23,6 +23,7 @@ import (
 
 	"github.com/hatayama/unity-cli-loop/common/clicontract"
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/nativepath"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
@@ -419,6 +420,9 @@ func TestEnforceDispatcherFreshnessRequiresManualUpdateWhenSelfUpdateDisabled(t 
 	if !bytes.Contains(stderr.Bytes(), []byte(clierrors.ErrorCodeCLIUpdateRequired)) {
 		t.Fatalf("freshness output mismatch: %s", stderr.String())
 	}
+	if !strings.Contains(stderr.String(), "Run `uloop update` and retry the command.") {
+		t.Fatalf("expected self-update NextActions guidance in stderr, got: %s", stderr.String())
+	}
 }
 
 func TestEnforceDispatcherFreshnessRequiresBrewUpgradeWhenHomebrewManagedAndUpdateRequired(t *testing.T) {
@@ -452,6 +456,67 @@ func TestEnforceDispatcherFreshnessRequiresBrewUpgradeWhenHomebrewManagedAndUpda
 	}
 	if !bytes.Contains(stderr.Bytes(), []byte(clierrors.ErrorCodeCLIUpdateRequired)) {
 		t.Fatalf("freshness output mismatch: %s", stderr.String())
+	}
+}
+
+func TestEnforceDispatcherFreshnessRequiresWingetUpgradeWhenWingetManagedAndUpdateRequired(t *testing.T) {
+	// Verifies winget-managed installs return their reason and package-manager retry action for required updates.
+	previousResolver := resolveUpdateExecutablePathFunc
+	defer func() {
+		resolveUpdateExecutablePathFunc = previousResolver
+	}()
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return `C:\Program Files\WinGet\Links\uloop.exe`, nil
+	}
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(context.Context) (bool, error) {
+		t.Fatal("runUpdate must not run for winget-managed required freshness")
+		return false, nil
+	}
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshnessWithDeps(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: "999.0.0"},
+		&stderr,
+		deps)
+
+	if !handled || code != 1 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "This uloop install is managed by winget. Run `winget upgrade --id hatayama.uloop` to update.") {
+		t.Fatalf("expected winget-managed reason in stderr, got: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Run `winget upgrade --id hatayama.uloop` and retry the command.") {
+		t.Fatalf("expected winget NextActions guidance in stderr, got: %s", stderr.String())
+	}
+}
+
+func TestEnforceDispatcherFreshnessSkipsOptionalUpdateWhenWingetManaged(t *testing.T) {
+	// Verifies winget-managed installs skip optional auto-update without running the installer.
+	t.Setenv(nativepath.CacheDirEnvName, t.TempDir())
+	previousResolver := resolveUpdateExecutablePathFunc
+	defer func() {
+		resolveUpdateExecutablePathFunc = previousResolver
+	}()
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return `C:\Program Files\WinGet\Links\uloop.exe`, nil
+	}
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(context.Context) (bool, error) {
+		t.Fatal("runUpdate must not run for winget-managed optional freshness")
+		return false, nil
+	}
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshnessWithDeps(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
+		&stderr,
+		deps)
+
+	if handled || code != 0 || stderr.Len() != 0 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
 	}
 }
 
@@ -778,9 +843,10 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 		selfUpdateDisabled bool
 		hasSiblingRealCLI  bool
 		updateDue          bool
-		homebrewManaged    bool
+		managedInstall     update.ManagedInstall
 		expectedAction     dispatcherFreshnessAction
 		expectedReason     string
+		expectedNextAction string
 	}{
 		{
 			name:           "no minimum",
@@ -795,15 +861,27 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			updateDue:          true,
 			expectedAction:     dispatcherFreshnessManualUpdateRequired,
 			expectedReason:     dispatcherFreshnessReasonSelfUpdateDisabled,
+			expectedNextAction: "Run `uloop update` and retry the command.",
 		},
 		{
-			name:            "required update homebrew managed",
-			minimumVersion:  "999.0.0",
-			currentVersion:  dispatcherVersion,
-			homebrewManaged: true,
-			updateDue:       true,
-			expectedAction:  dispatcherFreshnessManualUpdateRequired,
-			expectedReason:  dispatcherFreshnessReasonHomebrewManaged,
+			name:               "required update homebrew managed",
+			minimumVersion:     "999.0.0",
+			currentVersion:     dispatcherVersion,
+			managedInstall:     update.DetectManagedInstall("/opt/homebrew/Cellar/uloop/3.1.0/bin/uloop"),
+			updateDue:          true,
+			expectedAction:     dispatcherFreshnessManualUpdateRequired,
+			expectedReason:     "This uloop install is managed by Homebrew. Run `brew upgrade uloop` to update.",
+			expectedNextAction: "Run `brew upgrade uloop` and retry the command.",
+		},
+		{
+			name:               "required update winget managed",
+			minimumVersion:     "999.0.0",
+			currentVersion:     dispatcherVersion,
+			managedInstall:     update.DetectManagedInstall(`C:\Program Files\WinGet\Links\uloop.exe`),
+			updateDue:          true,
+			expectedAction:     dispatcherFreshnessManualUpdateRequired,
+			expectedReason:     "This uloop install is managed by winget. Run `winget upgrade --id hatayama.uloop` to update.",
+			expectedNextAction: "Run `winget upgrade --id hatayama.uloop` and retry the command.",
 		},
 		{
 			name:           "required update runs immediately",
@@ -820,12 +898,12 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			expectedAction:    dispatcherFreshnessNoop,
 		},
 		{
-			name:            "optional homebrew skip",
-			minimumVersion:  dispatcherVersion,
-			currentVersion:  dispatcherVersion,
-			homebrewManaged: true,
-			updateDue:       true,
-			expectedAction:  dispatcherFreshnessNoop,
+			name:           "optional homebrew skip",
+			minimumVersion: dispatcherVersion,
+			currentVersion: dispatcherVersion,
+			managedInstall: update.DetectManagedInstall("/opt/homebrew/Cellar/uloop/3.1.0/bin/uloop"),
+			updateDue:      true,
+			expectedAction: dispatcherFreshnessNoop,
 		},
 		{
 			name:           "optional due",
@@ -850,7 +928,7 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 				SelfUpdateDisabled: tt.selfUpdateDisabled,
 				HasSiblingRealCLI:  tt.hasSiblingRealCLI,
 				UpdateDue:          tt.updateDue,
-				HomebrewManaged:    tt.homebrewManaged,
+				ManagedInstall:     tt.managedInstall,
 			})
 
 			if plan.Action != tt.expectedAction {
@@ -861,6 +939,9 @@ func TestDecideDispatcherFreshnessPlansUpdatePaths(t *testing.T) {
 			}
 			if plan.Reason != tt.expectedReason {
 				t.Fatalf("reason mismatch: %q", plan.Reason)
+			}
+			if plan.NextAction != tt.expectedNextAction {
+				t.Fatalf("next action mismatch: %q", plan.NextAction)
 			}
 		})
 	}
@@ -1574,5 +1655,78 @@ func assertStringSliceEqual(t *testing.T, actual []string, expected []string) {
 		if actual[index] != expectedValue {
 			t.Fatalf("value mismatch at %d: actual=%#v expected=%#v", index, actual, expected)
 		}
+	}
+}
+
+// Verifies a rate-limited runner download tells the user about GH_TOKEN and the quota reset time.
+func TestDispatcherRealCLIResolutionErrorExplainsRateLimit(t *testing.T) {
+	resetAt := time.Date(2026, 9, 2, 1, 30, 0, 0, time.UTC)
+	cause := fmt.Errorf("release tag commit SHA lookup failed: %w", githubapi.RateLimitError{ResetAt: resetAt})
+
+	cliErr := dispatcherRealCLIResolutionError("/project", dispatcherPin{ProjectRunnerVersion: "3.0.0"}, cause)
+
+	if len(cliErr.NextActions) != 3 || !strings.Contains(cliErr.NextActions[0], "GH_TOKEN") {
+		t.Fatalf("unexpected next actions: %v", cliErr.NextActions)
+	}
+	if !strings.Contains(cliErr.NextActions[1], "retry after") {
+		t.Fatalf("expected reset-time retry hint, got: %v", cliErr.NextActions)
+	}
+	if cliErr.Details["GitHubRateLimitResetAt"] != "2026-09-02T01:30:00Z" {
+		t.Fatalf("unexpected reset detail: %v", cliErr.Details["GitHubRateLimitResetAt"])
+	}
+}
+
+// Verifies an authenticated rate limit does not ask for a token and still reports the reset time.
+func TestDispatcherRealCLIResolutionErrorAuthenticatedRateLimitSkipsTokenHint(t *testing.T) {
+	resetAt := time.Date(2026, 9, 2, 1, 30, 0, 0, time.UTC)
+	cause := fmt.Errorf("lookup failed: %w", githubapi.RateLimitError{ResetAt: resetAt, Authenticated: true})
+
+	cliErr := dispatcherRealCLIResolutionError("/project", dispatcherPin{ProjectRunnerVersion: "3.0.0"}, cause)
+
+	if len(cliErr.NextActions) != 2 || strings.Contains(cliErr.NextActions[0], "GH_TOKEN") {
+		t.Fatalf("unexpected next actions: %v", cliErr.NextActions)
+	}
+	if !strings.Contains(cliErr.NextActions[0], "Retry after") {
+		t.Fatalf("expected reset-time retry hint, got: %v", cliErr.NextActions)
+	}
+	if cliErr.Details["GitHubRateLimitResetAt"] != "2026-09-02T01:30:00Z" {
+		t.Fatalf("unexpected reset detail: %v", cliErr.Details["GitHubRateLimitResetAt"])
+	}
+}
+
+// Verifies a non-rate-limit download failure keeps the generic network guidance.
+func TestDispatcherRealCLIResolutionErrorKeepsGenericGuidance(t *testing.T) {
+	cliErr := dispatcherRealCLIResolutionError("/project", dispatcherPin{}, errors.New("connection refused"))
+
+	if len(cliErr.NextActions) != 2 || !strings.Contains(cliErr.NextActions[0], "network access") {
+		t.Fatalf("unexpected next actions: %v", cliErr.NextActions)
+	}
+	if _, present := cliErr.Details["GitHubRateLimitResetAt"]; present {
+		t.Fatalf("reset detail must be absent for non-rate-limit causes")
+	}
+}
+
+// Verifies a rate-limited optional self-update adds the token hint after the skip warning.
+func TestEnforceDispatcherFreshnessRateLimitedOptionalUpdateSuggestsToken(t *testing.T) {
+	cacheRoot := t.TempDir()
+	t.Setenv(nativepath.CacheDirEnvName, cacheRoot)
+
+	deps := defaultDispatcherRunDeps()
+	deps.runUpdate = func(context.Context) (bool, error) {
+		return false, fmt.Errorf("list releases: %w", githubapi.RateLimitError{})
+	}
+
+	var stderr bytes.Buffer
+	handled, code := enforceDispatcherFreshnessWithDeps(
+		context.Background(),
+		dispatcherPin{MinimumDispatcherVersion: dispatcherVersion},
+		&stderr,
+		deps)
+
+	if handled || code != 0 {
+		t.Fatalf("freshness result mismatch: handled=%t code=%d", handled, code)
+	}
+	if !strings.Contains(stderr.String(), "rate limit exhausted") || !strings.Contains(stderr.String(), "GH_TOKEN") {
+		t.Fatalf("expected rate-limit warning with token hint, got: %s", stderr.String())
 	}
 }

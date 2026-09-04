@@ -247,6 +247,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransplantPreambleLengthByMethod.Clear();
             HotReloadInvocationRegistry.Clear();
             HotReloadAppliedSourceLedger.ClearAll();
+            HotReloadSupersededSignatureRegistry.ClearAll();
             _pendingShimMethod = null;
             _pendingOriginalMethod = null;
             HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
@@ -277,7 +278,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadShimRegistry.RemoveMethod(method);
             TransplantLocalsByMethod.Remove(method);
             TransplantPreambleLengthByMethod.Remove(method);
-            HotReloadInvocationRegistry.Remove(FormatMethodKey(method));
+            string methodKey = FormatMethodKey(method);
+            HotReloadInvocationRegistry.Remove(methodKey);
+            // Why here, not only RevertAll: RevertUnchangedPatches uses this path, and a
+            // later apply of the same compiled key must not inherit a stale superseded Reason.
+            HotReloadSupersededSignatureRegistry.Remove(methodKey);
             HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
             HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
             return true;

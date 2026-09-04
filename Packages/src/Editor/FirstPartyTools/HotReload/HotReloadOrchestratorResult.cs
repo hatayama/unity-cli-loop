@@ -15,7 +15,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public IReadOnlyList<string> SuppressedPausePointIds { get; }
         public IReadOnlyList<string> RetargetedPausePointIds { get; }
         public int UnchangedTotal { get; }
+        public int RevertedUnchangedTotal { get; }
         public string[] AddedFields { get; }
+        public string[] AddedConsts { get; }
+        public bool AutoRefreshHeld { get; }
+        public bool AutoRefreshHoldNewlyArmed { get; }
+        public bool AutoRefreshHoldReleaseDeferred { get; }
+        public string AutoRefreshHoldSceneRefreshWarning { get; }
 
         public HotReloadOrchestratorResult(
             IReadOnlyList<HotReloadMethodOutcome> methods,
@@ -25,7 +31,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> suppressedPausePointIds = null,
             int unchangedTotal = 0,
             IReadOnlyList<string> retargetedPausePointIds = null,
-            string[] addedFields = null)
+            string[] addedFields = null,
+            string[] addedConsts = null,
+            int revertedUnchangedTotal = 0,
+            HotReloadAutoRefreshHoldSyncResult autoRefreshHold = null)
         {
             Methods = methods;
             Warnings = warnings;
@@ -35,11 +44,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnchangedTotal = unchangedTotal;
             RetargetedPausePointIds = retargetedPausePointIds ?? Array.Empty<string>();
             AddedFields = addedFields ?? Array.Empty<string>();
+            AddedConsts = addedConsts ?? Array.Empty<string>();
+            RevertedUnchangedTotal = revertedUnchangedTotal;
+            AutoRefreshHeld = autoRefreshHold != null && autoRefreshHold.Held;
+            AutoRefreshHoldNewlyArmed = autoRefreshHold != null && autoRefreshHold.NewlyArmed;
+            AutoRefreshHoldReleaseDeferred = autoRefreshHold != null && autoRefreshHold.ReleaseDeferred;
+            AutoRefreshHoldSceneRefreshWarning =
+                autoRefreshHold != null ? autoRefreshHold.SceneRefreshWarning : null;
         }
     }
 
     /// <summary>
-    /// Per-method outcome: Patched, Skipped, Failed, Added, or AlreadyActive.
+    /// Per-method outcome: Patched, Skipped, Failed, Added, AlreadyActive, or Stale.
     /// </summary>
     internal sealed class HotReloadMethodOutcome
     {
@@ -124,6 +140,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string.Empty);
         }
 
+        // A patch that outlived the method it replaced: the edited source no longer declares it,
+        // so compiled callers keep running the patched body until 'uloop compile', '--revert-all',
+        // or a later reload whose source restores the method to the compiled baseline reverts it.
+        // A reload that declares the method with a different body only replaces the patch.
+        public static HotReloadMethodOutcome Stale(string method, string filePath)
+        {
+            return new HotReloadMethodOutcome(
+                HotReloadMethodOutcomeKind.Stale,
+                method,
+                HotReloadConstants.StalePatchRemovedFromSourceReason,
+                filePath,
+                string.Empty);
+        }
+
         public HotReloadMethodOutcome WithLifecycleNote(string lifecycleNote)
         {
             return new HotReloadMethodOutcome(Kind, Method, Reason, FilePath, lifecycleNote);
@@ -136,6 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         Skipped = 1,
         Failed = 2,
         Added = 3,
-        AlreadyActive = 4
+        AlreadyActive = 4,
+        Stale = 5
     }
 }

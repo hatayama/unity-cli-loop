@@ -110,6 +110,7 @@ func listOptionsForTool(tool clicore.ToolDefinition) []listOption {
 	options = appendDynamicCodeFileListOption(tool, options)
 	options = appendRunTestsSkipCompileListOption(tool, options)
 	options = appendPausePointEnableAwaitListOptions(tool, options)
+	options = appendPausePointClearListOptions(tool, options)
 	sort.Slice(options, func(i int, j int) bool {
 		return options[i].Name < options[j].Name
 	})
@@ -181,6 +182,28 @@ func appendPausePointEnableAwaitListOptions(tool clicore.ToolDefinition, options
 	}
 
 	for _, option := range tooldocs.PausePointEnableCLIOnlyOptions() {
+		optionName := "--" + option.FlagName
+		if hasListOption(options, optionName) {
+			continue
+		}
+		options = append(options, listOption{
+			Name:        optionName,
+			Type:        option.Type,
+			Description: option.Description,
+			Values:      option.Values,
+		})
+	}
+	return options
+}
+
+// appendPausePointClearListOptions documents clear-pause-point's CLI-only --file/--line flags.
+// They are not part of ClearPausePointSchema, so the schema-driven loop above never emits them.
+func appendPausePointClearListOptions(tool clicore.ToolDefinition, options []listOption) []listOption {
+	if tool.Name != pausePointClearCommandName {
+		return options
+	}
+
+	for _, option := range tooldocs.PausePointClearCLIOnlyOptions() {
 		optionName := "--" + option.FlagName
 		if hasListOption(options, optionName) {
 			continue

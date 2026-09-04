@@ -147,6 +147,8 @@ trap 'cleanup; exit 129' HUP
 disallow_auto_refresh() {
     # Why: sed writes under Assets/; without this hold Unity may import + domain-reload mid-run
     # and erase the hot-reload patches (or race the Mvid guard) before get-logs can assert.
+    # The package hold (HotReloadAutoRefreshHold) only arms after a successful hot-reload, so
+    # this local pair still covers the sed window. The two counters nest and stay balanced.
     run_uloop execute-dynamic-code --code "
 using UnityEditor;
 AssetDatabase.DisallowAutoRefresh();

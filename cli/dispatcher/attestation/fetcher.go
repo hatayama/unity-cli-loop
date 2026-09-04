@@ -10,6 +10,8 @@ import (
 	"os"
 	"path"
 	"time"
+
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 )
 
 // DefaultHTTPClient is the http.Client used for bundle and tag-ref fetches.
@@ -117,7 +119,7 @@ func fetchGitRef(ctx context.Context, apiURL string) (string, string, error) {
 	}
 	req.Header.Set("Accept", acceptHeaderGitHubJSON)
 	req.Header.Set("X-GitHub-Api-Version", apiVersionHeaderValue)
-	setAuthorizationIfAvailable(req)
+	authenticated := setAuthorizationIfAvailable(req)
 	resp, err := DefaultHTTPClient.Do(req)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: %v", ErrTagRefFetch, err)
@@ -126,7 +128,7 @@ func fetchGitRef(ctx context.Context, apiURL string) (string, string, error) {
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", fmt.Errorf("%w: status %s from %s", ErrTagRefFetch, resp.Status, apiURL)
+		return "", "", tagRefStatusError(resp, apiURL, authenticated)
 	}
 	var payload TagRefResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -135,14 +137,27 @@ func fetchGitRef(ctx context.Context, apiURL string) (string, string, error) {
 	return payload.Object.SHA, payload.Object.Type, nil
 }
 
-func setAuthorizationIfAvailable(req *http.Request) {
+// tagRefStatusError keeps the rate-limit case recoverable through errors.As
+// so the dispatcher can tell the user about GH_TOKEN instead of a bare 403.
+func tagRefStatusError(resp *http.Response, apiURL string, authenticated bool) error {
+	if rateLimit, ok := githubapi.DetectRateLimit(resp, authenticated); ok {
+		return fmt.Errorf("%w: %w (from %s)", ErrTagRefFetch, rateLimit, apiURL)
+	}
+	return fmt.Errorf("%w: status %s from %s", ErrTagRefFetch, resp.Status, apiURL)
+}
+
+// setAuthorizationIfAvailable reports whether a token was attached, so a
+// later rate-limit refusal can skip the "set a token" guidance.
+func setAuthorizationIfAvailable(req *http.Request) bool {
 	token := os.Getenv(envAuthTokenPrimary)
 	if token == "" {
 		token = os.Getenv(envAuthTokenSecondary)
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if token == "" {
+		return false
 	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	return true
 }
 
 // AssetNameFromReleaseAsset strips any query fragments and returns the base

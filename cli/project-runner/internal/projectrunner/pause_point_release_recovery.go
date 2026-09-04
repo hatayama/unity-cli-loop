@@ -55,23 +55,97 @@ func isSuccessfulEnableResponse(raw []byte) bool {
 	return probe.Success
 }
 
+func applyPausePointRecoverySwitchWarning(response *pausePointStatusResponse) {
+	if response == nil || !response.Success {
+		return
+	}
+	appendPausePointWarningToBothForms(response, pausePointAutoDebugSwitchWarning)
+}
+
+// appendPausePointWarningToBothForms adds one CLI-side warning while keeping Warnings the single
+// aggregate and Warning its joined form, so neither field can carry a topic the other is missing.
+func appendPausePointWarningToBothForms(response *pausePointStatusResponse, warning string) {
+	if response == nil {
+		return
+	}
+	*response = applyPausePointWarnings(*response, warning)
+}
+
+// injectPausePointRecoveryWarning adds the auto-switch note to an enable response Unity already
+// built. The response is rewritten as a raw field map so unrelated keys survive untouched, while
+// Warnings becomes the single aggregate, Warning its joined form, and Message's warning-count
+// pointer is restated: Unity computed that count before this note existed.
 func injectPausePointRecoveryWarning(raw []byte) ([]byte, error) {
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, err
 	}
-	existing := ""
-	if warningRaw, ok := fields["Warning"]; ok {
-		if err := json.Unmarshal(warningRaw, &existing); err != nil {
-			return nil, err
-		}
-	}
-	joined, err := json.Marshal(joinPausePointWarnings(existing, pausePointAutoDebugSwitchWarning))
+
+	warnings, err := decodePausePointWarningFields(fields)
 	if err != nil {
 		return nil, err
 	}
-	fields["Warning"] = joined
+	warnings = appendPausePointWarningEntry(warnings, pausePointAutoDebugSwitchWarning)
+
+	message := ""
+	if err := decodePausePointStringField(fields, "Message", &message); err != nil {
+		return nil, err
+	}
+
+	if err := encodePausePointField(fields, "Warning", joinPausePointWarnings(warnings...)); err != nil {
+		return nil, err
+	}
+	if err := encodePausePointField(fields, "Warnings", warnings); err != nil {
+		return nil, err
+	}
+	if err := encodePausePointField(
+		fields,
+		"Message",
+		restatePausePointWarningCountMessage(message, len(warnings)),
+	); err != nil {
+		return nil, err
+	}
 	return json.Marshal(fields)
+}
+
+// decodePausePointWarningFields reads a response's warnings as a list. A response that carries only
+// the joined Warning string still contributes its text as one entry rather than being discarded.
+func decodePausePointWarningFields(fields map[string]json.RawMessage) ([]string, error) {
+	if warningsRaw, ok := fields["Warnings"]; ok {
+		var warnings []string
+		if err := json.Unmarshal(warningsRaw, &warnings); err != nil {
+			return nil, err
+		}
+		if len(warnings) > 0 {
+			return warnings, nil
+		}
+	}
+
+	warning := ""
+	if err := decodePausePointStringField(fields, "Warning", &warning); err != nil {
+		return nil, err
+	}
+	if warning == "" {
+		return nil, nil
+	}
+	return []string{warning}, nil
+}
+
+func decodePausePointStringField(fields map[string]json.RawMessage, key string, target *string) error {
+	raw, ok := fields[key]
+	if !ok {
+		return nil
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func encodePausePointField(fields map[string]json.RawMessage, key string, value any) error {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	fields[key] = encoded
+	return nil
 }
 
 func waitContextDuration(ctx context.Context, duration time.Duration) error {
