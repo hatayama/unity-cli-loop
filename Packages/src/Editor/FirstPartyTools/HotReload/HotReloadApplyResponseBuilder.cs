@@ -95,6 +95,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ActivePatchTotal = result.ActivePatchTotal,
                 AddedFieldTotal = HotReloadAddedFieldRegistry.DescribeAll().Count,
                 UnchangedTotal = result.UnchangedTotal,
+                ClearedCount = result.RevertedUnchangedTotal,
                 AddedFields = result.AddedFields,
                 AddedConsts = result.AddedConsts,
                 Message = BuildApplyMessage(
@@ -169,7 +170,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return AppendWarningCount(
                     "All " + result.UnchangedTotal
-                    + " methods are unchanged since the last compile; nothing to patch.",
+                    + " methods are unchanged since the last compile; nothing to patch."
+                    + FormatStalePatchRevertNote(result.RevertedUnchangedTotal),
                     warningCount,
                     appendCompileResolution);
             }
@@ -224,7 +226,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (result.UnchangedTotal > 0)
             {
-                message += " " + result.UnchangedTotal + " unchanged methods were left untouched.";
+                message += " " + result.UnchangedTotal + " unchanged methods were left untouched."
+                    + FormatStalePatchRevertNote(result.RevertedUnchangedTotal);
             }
 
             int lifecycleNoteCount = CountLifecycleNotes(result);
@@ -238,6 +241,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return message;
+        }
+
+        private static string FormatStalePatchRevertNote(int revertedUnchangedTotal)
+        {
+            if (revertedUnchangedTotal <= 0)
+            {
+                return string.Empty;
+            }
+
+            return " " + string.Format(
+                HotReloadConstants.StalePatchesRevertedMessageFormat,
+                revertedUnchangedTotal);
         }
 
         private static int CountLifecycleNotes(HotReloadOrchestratorResult result)

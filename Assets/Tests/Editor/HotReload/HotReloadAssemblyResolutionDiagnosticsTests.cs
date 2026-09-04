@@ -163,7 +163,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
 
-            (HotReloadOrchestrator.HotReloadFileProcessResult earlyResult,
+            (HotReloadFileProcessResult earlyResult,
                 string projectRelativePath,
                 string assemblyName,
                 UnityCompilationAssembly compilationAssembly,

@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why a helper: ProcessFileAsync's pre-worker fail chain (assembly / DLL / MVID /
         // unchanged short-circuit) is one resolve stage and kept the method over CA1502.
         internal static (
-            HotReloadOrchestrator.HotReloadFileProcessResult EarlyResult,
+            HotReloadFileProcessResult EarlyResult,
             string ProjectRelativePath,
             string AssemblyName,
             UnityCompilationAssembly CompilationAssembly,
@@ -46,7 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "Script path is not part of any compiled assembly (Assets/Packages paths only): "
                         + assemblyResolvePath,
                         assemblyResolvePath));
-                return (new HotReloadOrchestrator.HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
             }
 
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
@@ -70,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "(file)",
                         resolutionFailureReason,
                         assemblyResolvePath));
-                return (new HotReloadOrchestrator.HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
             }
 
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -86,14 +86,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "(file)",
                         "Compiled assembly not found at '" + targetDllPath + "'. Compile the project first.",
                         assemblyResolvePath));
-                return (new HotReloadOrchestrator.HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
             }
 
             string mvidGuardError = CheckMvidGuard(assemblyName, targetDllPath);
             if (mvidGuardError != null)
             {
                 outcomes.Add(HotReloadMethodOutcome.Failed("(file)", mvidGuardError, assemblyResolvePath));
-                return (new HotReloadOrchestrator.HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
             }
 
             HotReloadUnchangedSourceDecision unchangedDecision = HotReloadAppliedSourceLifecycle.TryShortCircuitUnchangedAppliedSource(
@@ -104,7 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOrchestratorLog.LogHotReloadFileStart(projectRelativePath, unchangedDecision, correlationId);
             if (unchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
             {
-                return (new HotReloadOrchestrator.HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
             }
 
             if (unchangedDecision == HotReloadUnchangedSourceDecision.ReapplyNonBaseline)

@@ -2540,7 +2540,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 sourceContentSha256 = "preflight-match-failure"
             };
 
-            HotReloadOrchestrator.HotReloadFileProcessResult fileResult =
+            HotReloadFileProcessResult fileResult =
                 HotReloadEntryApplier.ApplyEntriesAndBuildResult(
                     typeof(HotReloadE2EFixture).Assembly.GetName().Name,
                     projectRelativePath,
@@ -2628,7 +2628,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     nameof(HotReloadHandwrittenShims.StaticPing__shim0))
             };
 
-            HotReloadOrchestrator.HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
+            HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
                 projectRelativePath,
                 entries);
             HotReloadOrchestratorResult result = ToOrchestratorResult(fileResult);
@@ -2690,7 +2690,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             try
             {
-                HotReloadOrchestrator.HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
+                HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
                     projectRelativePath,
                     entries);
                 HotReloadOrchestratorResult result = ToOrchestratorResult(fileResult);
@@ -2736,7 +2736,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             try
             {
-                HotReloadOrchestrator.HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
+                HotReloadFileProcessResult fileResult = ApplyEntriesDirect(
                     projectRelativePath,
                     entries);
                 HotReloadOrchestratorResult result = ToOrchestratorResult(fileResult);
@@ -2793,7 +2793,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
         }
 
-        private static HotReloadOrchestrator.HotReloadFileProcessResult ApplyEntriesDirect(
+        private static HotReloadFileProcessResult ApplyEntriesDirect(
             string projectRelativePath,
             TransformWorkerEntryDto[] entries)
         {
@@ -2825,7 +2825,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private static HotReloadOrchestratorResult ToOrchestratorResult(
-            HotReloadOrchestrator.HotReloadFileProcessResult fileResult)
+            HotReloadFileProcessResult fileResult)
         {
             return new HotReloadOrchestratorResult(
                 fileResult.Outcomes,

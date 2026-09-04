@@ -884,6 +884,79 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an all-unchanged run that peeled leftover patches reports ClearedCount and
+        /// the stale-patch sentence so testers do not read "nothing to patch" as a no-op.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AllUnchangedWithRevertedPatches_SetsClearedCountAndStalePatchMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0,
+                unchangedTotal: 5,
+                revertedUnchangedTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.ClearedCount, Is.EqualTo(1));
+            Assert.That(response.Message, Does.Contain("1 stale patch(es) were reverted"));
+        }
+
+        /// <summary>
+        /// What: an all-unchanged run with no leftover patches keeps ClearedCount 0 and the
+        /// historical nothing-to-patch message.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_AllUnchangedWithoutRevertedPatches_KeepsHistoricalMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 0,
+                unchangedTotal: 5,
+                revertedUnchangedTotal: 0);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.ClearedCount, Is.EqualTo(0));
+            Assert.That(
+                response.Message,
+                Is.EqualTo("All 5 methods are unchanged since the last compile; nothing to patch."));
+        }
+
+        /// <summary>
+        /// What: a patched run that also peeled unchanged leftovers appends the stale-patch
+        /// sentence after the untouched-methods note.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithUnchangedAndRevertedPatches_AppendsStalePatchNote()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 1,
+                activePatchTotal: 1,
+                unchangedTotal: 7,
+                revertedUnchangedTotal: 2);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.ClearedCount, Is.EqualTo(2));
+            Assert.That(
+                response.Message,
+                Is.EqualTo(
+                    "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
+                    + "7 unchanged methods were left untouched. "
+                    + "2 stale patch(es) were reverted so those methods run the compiled IL again."));
+        }
+
+        /// <summary>
         /// What: a patched run with UnchangedTotal appends the untouched-methods suffix.
         /// </summary>
         [Test]
