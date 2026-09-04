@@ -211,7 +211,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int addedCount = CountAddedOutcomes(result);
             if (hasFailure)
             {
-                return "Hot reload finished with one or more Failed method outcomes. See Methods.";
+                return AppendStaleSummary(
+                    "Hot reload finished with one or more Failed method outcomes. See Methods.",
+                    result);
             }
 
             if (result.Methods.Count == 0)

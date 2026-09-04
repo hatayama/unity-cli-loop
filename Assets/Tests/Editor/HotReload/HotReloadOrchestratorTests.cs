@@ -4053,6 +4053,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a return-type change is a replacement, not a deletion, so the superseded old
+        /// signature must not be reported as a stale patch even though the worker lists it as a
+        /// removed method signature.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_SameFileCallers_ReportsNoStaleOutcome()
+        {
+            string fixturePath = ResolveSignatureChangeSameFileFixturePath();
+            string edited = WithSameFileReturnTypeChange(File.ReadAllText(fixturePath));
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSameFileNoStale.cs", edited),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Stale),
+                    "A replaced signature is still declared in the source.\n"
+                    + FormatOutcomes(result.Methods));
+            }
+        }
+
+        /// <summary>
+        /// What: changing the return type of a method that an earlier run already patched is still
+        /// a replacement, so the old signature's surviving patch must not be reported as stale.
+        /// </summary>
+        [Test]
+        public async Task Run_ReturnTypeChange_AfterEarlierBodyPatch_ReportsNoStaleOutcome()
+        {
+            string fixturePath = ResolveSignatureChangeSameFileFixturePath();
+            string onDisk = File.ReadAllText(fixturePath);
+            string bodyOnlyEdit = onDisk.Replace(
+                "        public int Target(int value)\n        {\n            return value;\n        }",
+                "        public int Target(int value)\n        {\n            return value + 7;\n        }",
+                StringComparison.Ordinal);
+            Assert.That(bodyOnlyEdit, Is.Not.EqualTo(onDisk));
+
+            HotReloadOrchestratorResult firstRun = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSameFileBodyFirst.cs", bodyOnlyEdit),
+                CancellationToken.None);
+            AssertNoFileLevelFailure(firstRun);
+            AssertHasPatched(firstRun, nameof(HotReloadSignatureChangeSameFileFixture.Target));
+
+            HotReloadOrchestratorResult secondRun = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                WriteEditedSource("SignatureChangeSameFileReturnSecond.cs", WithSameFileReturnTypeChange(onDisk)),
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(secondRun);
+            foreach (HotReloadMethodOutcome outcome in secondRun.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Stale),
+                    "A replaced signature is still declared in the source.\n"
+                    + FormatOutcomes(secondRun.Methods));
+            }
+
+            // The first run's patch on the old signature survives alongside the replacement and
+            // the patched caller, so three changes are active behind two rows. That gap is the
+            // superseded-signature case, which --status explains through
+            // HotReloadSupersededSignatureRegistry; it is not a stale patch.
+            Assert.That(secondRun.ActivePatchTotal, Is.EqualTo(3));
+            Assert.That(secondRun.Methods.Count, Is.EqualTo(2), FormatOutcomes(secondRun.Methods));
+        }
+
+        /// <summary>
         /// What: applying a same-file return-type change records the old compiled signature
         /// as superseded using the Active --status Method key.
         /// </summary>

@@ -11,11 +11,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public static void Append(
             List<HotReloadMethodOutcome> outcomes,
-            TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures,
+            TransformWorkerOutputDto workerOutput,
             IReadOnlyCollection<string> gatedReplacementMethodKeys,
             string projectRelativePath,
             string assemblyResolvePath)
         {
+            TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures =
+                workerOutput?.removedMethodSignatures;
             if (removedMethodSignatures == null || removedMethodSignatures.Length == 0)
             {
                 return;
@@ -32,6 +34,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> gatedKeys = new HashSet<string>(
                 gatedReplacementMethodKeys ?? Array.Empty<string>(),
                 StringComparer.Ordinal);
+            IReadOnlyDictionary<string, TransformWorkerEntryDto> replacementsByWireKey =
+                HotReloadReplacedCompiledMethodEntries.IndexByReplacedWireKey(workerOutput.entries);
             HashSet<string> reported = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerRemovedMethodSignatureDto signature in removedMethodSignatures)
             {
@@ -42,15 +46,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 string[] parameterTypeFullNames =
                     signature.parameterTypeFullNames ?? Array.Empty<string>();
-                // Why the gate check uses the wire key: GatedReplacementMethodKeys is worker-side
-                // ("Type::Method(args)"), while the patch ledger keys are display-side
-                // ("Type.Method(args)"). A gated replacement is not a deletion, so it is not stale.
+                // Why the replacement check matters: a return-type change removes the old signature and
+        // adds a replacement under the same display key, so an earlier body patch on that key is
+        // still reachable and must not be read as a patch left behind by a deleted method.
+        // Why the gate and replacement checks use the wire key: both worker-side sets are
+                // "Type::Method(args)", while the patch ledger keys are display-side
+                // ("Type.Method(args)"). Neither a gated nor an applied replacement is a deletion.
                 string wireKey = HotReloadWireMethodKeys.BuildMethodKeyParts(
                     signature.typeMetadataName,
                     signature.methodName,
                     parameterTypeFullNames,
                     signature.genericArity);
-                if (gatedKeys.Contains(wireKey))
+                if (gatedKeys.Contains(wireKey) || replacementsByWireKey.ContainsKey(wireKey))
                 {
                     continue;
                 }
@@ -68,5 +75,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 outcomes.Add(HotReloadMethodOutcome.Stale(displayKey, assemblyResolvePath));
             }
         }
+
     }
 }

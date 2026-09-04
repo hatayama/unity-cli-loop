@@ -291,7 +291,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HotReloadStalePatchOutcomes.Append(
                 outcomes,
-                workerOutput.removedMethodSignatures,
+                workerOutput,
                 gateResult.GatedReplacementMethodKeys,
                 projectRelativePath,
                 assemblyResolvePath);

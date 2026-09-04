@@ -544,6 +544,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a failed run still summarizes its stale patches, so a failure does not hide the
+        /// patches that stayed active behind deleted methods.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WithFailureAndStaleOutcome_KeepsStaleSummaryInMessage()
+        {
+            HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
+                new List<HotReloadMethodOutcome>
+                {
+                    HotReloadMethodOutcome.Failed("Type.Broken()", "shim compile failed", "Assets/A.cs"),
+                    HotReloadMethodOutcome.Stale("Type.RemovedMethod()", "Assets/A.cs")
+                },
+                new List<string>(),
+                patchedTotal: 0,
+                activePatchTotal: 1);
+
+            HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Stale=1"));
+        }
+
+        /// <summary>
         /// What: a Stale row reaches the public response with its ledger invocation count and is
         /// summarized in Message, so an agent can tell why ActivePatchTotal exceeds the run.
         /// </summary>
