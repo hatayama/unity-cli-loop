@@ -687,6 +687,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: every entry, skipped and unchangedMethod row the worker returns carries the
+        /// projectRelativePath of the file the run was given.
+        /// </summary>
+        [Test]
+        public async Task Run_OnE2EFixture_StampsEveryRowWithTheSourceProjectRelativePath()
+        {
+            string expectedPath = ResolveE2EFixtureProjectRelativePath();
+
+            // Why two runs: a baseline-less run is the only one that produces skipped rows, and a
+            // run with a one-method-edit snapshot is the only one that produces unchanged rows.
+            TransformWorkerClientResult withoutSnapshot = await RunWorkerOnE2EFixtureAsync();
+            Assert.That(withoutSnapshot.Success, Is.True, withoutSnapshot.ErrorMessage);
+            Assert.That(withoutSnapshot.Output.entries, Is.Not.Empty);
+            Assert.That(withoutSnapshot.Output.skipped, Is.Not.Empty);
+            AssertRowsCarrySourcePath(withoutSnapshot, expectedPath);
+
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string snapshotSource = onDisk.Replace(
+                "return _secret + delta;",
+                "return _secret + delta + 999;",
+                StringComparison.Ordinal);
+            Assert.That(snapshotSource, Is.Not.EqualTo(onDisk), "Precondition: snapshot must differ.");
+
+            TransformWorkerClientResult withSnapshot = await RunWorkerOnE2EFixtureAsync(snapshotSource);
+            Assert.That(withSnapshot.Success, Is.True, withSnapshot.ErrorMessage);
+            Assert.That(withSnapshot.Output.entries, Is.Not.Empty);
+            Assert.That(withSnapshot.Output.unchangedMethods, Is.Not.Empty);
+            AssertRowsCarrySourcePath(withSnapshot, expectedPath);
+        }
+
+        /// <summary>
+        /// What: asserts every worker row of a result names <paramref name="expectedPath"/> as its source file.
+        /// </summary>
+        private static void AssertRowsCarrySourcePath(TransformWorkerClientResult result, string expectedPath)
+        {
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                Assert.That(
+                    entry.sourceProjectRelativePath,
+                    Is.EqualTo(expectedPath),
+                    "entry " + entry.methodName + " must name the edited file.");
+            }
+
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                Assert.That(
+                    skipped.sourceProjectRelativePath,
+                    Is.EqualTo(expectedPath),
+                    "skipped " + skipped.method + " must name the edited file.");
+            }
+
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+            {
+                Assert.That(
+                    unchanged.sourceProjectRelativePath,
+                    Is.EqualTo(expectedPath),
+                    "unchangedMethod " + unchanged.methodName + " must name the edited file.");
+            }
+        }
+
+        /// <summary>
         /// What: a snapshot that differs only by EOL (LF↔CRLF) treats every method as unchanged —
         /// Windows guardrail for line-ending noise — and lists ComputeWithPrivate in
         /// unchangedMethods.

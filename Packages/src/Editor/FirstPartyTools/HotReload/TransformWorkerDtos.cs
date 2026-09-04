@@ -117,6 +117,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     [Serializable]
     internal sealed class TransformWorkerUnchangedMethodDto
     {
+        // Project-relative forward-slash path of the file this row was produced from.
+        // Why: once several edited files share one shim assembly, a row must say which file it
+        // came from; today it always equals TransformWorkerInputDto.projectRelativePath.
+        public string sourceProjectRelativePath;
+
         public string typeMetadataName;
         public string methodName;
         public string[] parameterTypeFullNames;
@@ -128,6 +133,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     [Serializable]
     internal sealed class TransformWorkerEntryDto
     {
+        // Project-relative forward-slash path of the file this row was produced from.
+        // Why: once several edited files share one shim assembly, a row must say which file it
+        // came from; today it always equals TransformWorkerInputDto.projectRelativePath.
+        public string sourceProjectRelativePath;
+
         public string typeMetadataName;
         public string methodName;
         public string[] parameterTypeFullNames;
@@ -161,6 +171,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     [Serializable]
     internal sealed class TransformWorkerSkippedDto
     {
+        // Project-relative forward-slash path of the file this row was produced from.
+        // Why: once several edited files share one shim assembly, a row must say which file it
+        // came from; today it always equals TransformWorkerInputDto.projectRelativePath.
+        public string sourceProjectRelativePath;
+
         public string method;
         public string reason;
         // Wire key of the skipped method. Why: the isolation-retry closure must add this in

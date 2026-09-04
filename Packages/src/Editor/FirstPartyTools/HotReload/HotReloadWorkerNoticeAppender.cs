@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -28,6 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(outcomes != null, "outcomes must not be null.");
             Debug.Assert(warnings != null, "warnings must not be null.");
             Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
+            AssertEntryRowsCameFromTheEditedFile(workerOutput, projectRelativePath);
 
             AppendBaselineNotices(workerOutput, snapshotSource, projectRelativePath, assemblyName, warnings);
             AppendAll(warnings, workerOutput.parseErrors);
@@ -36,6 +38,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // the response when every method in the file is skipped or unchanged.
             AppendAll(warnings, workerOutput.declarationDriftWarnings);
             AppendAll(siblingDerivedWarnings, workerOutput.siblingConstDriftWarnings);
+        }
+
+        // States today's contract: one worker run covers one file, so every entry row it returns
+        // must name that file. Grouping several files into one shim assembly will relax this.
+        private static void AssertEntryRowsCameFromTheEditedFile(
+            TransformWorkerOutputDto workerOutput,
+            string projectRelativePath)
+        {
+            if (workerOutput.entries == null)
+            {
+                return;
+            }
+
+            foreach (TransformWorkerEntryDto entry in workerOutput.entries)
+            {
+                Debug.Assert(
+                    string.Equals(entry.sourceProjectRelativePath, projectRelativePath, StringComparison.Ordinal),
+                    "Worker entry row reports a different source file than the one this run edited.");
+            }
         }
 
         internal static void AppendRetrySiblingConstDriftWarnings(
