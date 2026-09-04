@@ -19,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal const string FrameSizeTooSmallMessage =
             "Play Mode view size is too small to record after rounding to even encoder dimensions.";
         internal const string NoRecordingMessage = "No recording is in progress.";
+        internal const string InvalidActionMessage = "Action must be Start, Stop, or Status.";
         internal const string StartedMessage = "Recording started.";
         internal const string StoppedMessage = "Recording stopped.";
         internal const string StatusRecordingMessage = "Recording is in progress.";

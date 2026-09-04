@@ -17,6 +17,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             ct.ThrowIfCancellationRequested();
 
+            if (!Enum.IsDefined(typeof(RecordVideoAction), parameters.Action))
+            {
+                return Task.FromResult(
+                    CreateFailure(parameters.Action, RecordVideoConstants.InvalidActionMessage));
+            }
+
             bool isLinux = Application.platform == RuntimePlatform.LinuxEditor;
             if (parameters.Action == RecordVideoAction.Stop)
             {
