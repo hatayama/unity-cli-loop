@@ -204,8 +204,11 @@ internal static class EventAccessorRules
 
         foreach (AttributeData attribute in compiledEvent.AddMethod.GetAttributes())
         {
+            // Full name, not the short one: a user-defined CompilerGeneratedAttribute must not
+            // pass for the framework marker the C# compiler emits on field-like accessors.
             if (attribute.AttributeClass != null
-                && attribute.AttributeClass.Name == "CompilerGeneratedAttribute")
+                && attribute.AttributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    == "global::System.Runtime.CompilerServices.CompilerGeneratedAttribute")
             {
                 return true;
             }
