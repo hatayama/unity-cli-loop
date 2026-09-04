@@ -321,7 +321,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "sibling const-drift scan limited to first {0} changed files ({1} total)";
 
         // Format: remaining ledger count. Appended to every validation-failure Message
-        // when ActiveChangeCount is greater than 0 so testers do not treat 0 as clean.
+        // when ActiveChangeCount is greater than 0 so callers do not treat 0 as clean.
         public const string ValidationFailureActiveChangesSuffixFormat =
             " {0} hot-reload change(s) are still active.";
 
