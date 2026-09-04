@@ -1854,6 +1854,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a static field-like event raised from a patched method actually runs, which
+        /// exercises the StaticFieldRefAccess binding rather than only the generated shim text:
+        /// a wrong backing-field name or FieldInfo would fail the bind and leave the compiled
+        /// body in place. 20 means every patch ran (2 net subscriptions x 5 per handled x 2
+        /// invokes); 2 means the compiled bodies did.
+        /// </summary>
+        [Test]
+        public async Task Run_StaticFieldLikeEventFile_PatchesRaiserAndRunsThroughStaticAccessor()
+        {
+            string fixturePath = ResolveStaticEventFixturePath();
+            string editedPath = WriteEditedSource(
+                "StaticEventFixtureEdit.cs",
+                BuildStaticEventFixtureSource());
+
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(result);
+            AssertHasPatched(result, nameof(HotReloadStaticEventFixture.RaiseScore));
+            AssertHasPatched(result, nameof(HotReloadStaticEventFixture.EnableCounting));
+
+            HotReloadStaticEventFixture fixture = new HotReloadStaticEventFixture();
+            fixture.ResetCounting();
+            fixture.EnableCounting();
+            fixture.RaiseScore();
+            Assert.That(
+                HotReloadStaticEventFixture.HandledCount,
+                Is.EqualTo(20),
+                "20 means the static accessor bound and every patch ran; 2 means the compiled "
+                + "bodies did.\n" + FormatOutcomes(result));
+        }
+
+        /// <summary>
         /// What: a field-like event raised from inside a lambda patches too. The closure body
         /// already needs the accessor-rewrite path, so this pins that the event rewrite composes
         /// with it. 20 means all three patches ran (2 subscriptions x 5 per handled x 2 invokes);
@@ -6898,6 +6933,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadEventFixtures.cs");
             Assert.That(File.Exists(path), Is.True, "Event fixture source missing: " + path);
             return Path.GetFullPath(path);
+        }
+
+        private static string ResolveStaticEventFixturePath()
+        {
+            string path = Path.Combine(
+                Application.dataPath, "Tests", "Editor", "HotReload", "HotReloadStaticEventFixture.cs");
+            Assert.That(File.Exists(path), Is.True, "Static event fixture source missing: " + path);
+            return Path.GetFullPath(path);
+        }
+
+        private static string BuildStaticEventFixtureSource()
+        {
+            return @"using System;
+using System.Runtime.CompilerServices;
+
+namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
+{
+    public class HotReloadStaticEventFixture
+    {
+        public static event Action ScoreChanged;
+
+        public static int HandledCount;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void EnableCounting()
+        {
+            ScoreChanged += HandleScoreChanged;
+            ScoreChanged += HandleScoreChanged;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void HandleScoreChanged()
+        {
+            HandledCount = HandledCount + 5;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void RaiseScore()
+        {
+            ScoreChanged?.Invoke();
+            ScoreChanged?.Invoke();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void ResetCounting()
+        {
+            ScoreChanged = null;
+            HandledCount = 0;
+        }
+    }
+}
+";
         }
 
         private static string ResolveEventLambdaFixturePath()

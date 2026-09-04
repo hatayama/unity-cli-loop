@@ -58,6 +58,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string StaticEventAccessorFieldName = "__EV_StaticScored";
 
+        private const string ScoreDelegateFullName =
+            "global::io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadScoreDelegate";
+
         /// <summary>
         /// What: 'E?.Invoke(a)' turns the method into a delegation entry whose event read goes
         /// through the Harmony backing-field accessor instead of the event member.
@@ -78,7 +81,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Raising a field-like event must patch, not skip. Skipped=" + FormatSkipped(result.Output.skipped));
             Assert.That(entry.patchKind, Is.EqualTo(DelegationPatchKind));
             string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
-            Assert.That(slice, Does.Contain(EventAccessorFieldName + "("));
+
+            // Read-once: 'E?.Invoke(a)' evaluates the event exactly once, so the accessor must be
+            // called once and its result cast, not called again for the invocation.
+            Assert.That(
+                CountOccurrences(slice, EventAccessorFieldName + "("),
+                Is.EqualTo(1),
+                "The accessor must be read once; a second call would re-read the event. slice=" + slice);
+            Assert.That(
+                slice,
+                Does.Contain(
+                    "((" + ScoreDelegateFullName + ")" + EventAccessorFieldName
+                    + "(" + InstanceParameterName + "))?.Invoke"));
             Assert.That(result.Output.hasAccessorDelegates, Is.True);
         }
 
@@ -126,7 +140,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Skipped=" + FormatSkipped(result.Output.skipped));
             string slice = SliceShimMethod(result.Output.shimSource, entry.shimMethodName);
             Assert.That(slice, Does.Not.Contain(InstanceParameterName + ".Scored"));
-            Assert.That(slice, Does.Contain(EventAccessorFieldName + "("));
+
+            // Both reads in the source stay reads: the null check and the invocation each go
+            // through the accessor, so the rewrite adds no third evaluation.
+            Assert.That(
+                CountOccurrences(slice, EventAccessorFieldName + "("),
+                Is.EqualTo(2),
+                "Two source reads must stay two accessor reads. slice=" + slice);
         }
 
         /// <summary>
@@ -357,6 +377,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return null;
+        }
+
+        private static int CountOccurrences(string text, string fragment)
+        {
+            int count = 0;
+            for (int index = text.IndexOf(fragment, StringComparison.Ordinal);
+                index >= 0;
+                index = text.IndexOf(fragment, index + fragment.Length, StringComparison.Ordinal))
+            {
+                count++;
+            }
+
+            return count;
         }
 
         private static void AssertHasSkip(
