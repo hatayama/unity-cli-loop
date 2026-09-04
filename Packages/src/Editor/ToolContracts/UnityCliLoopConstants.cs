@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace io.github.hatayama.UnityCliLoop.ToolContracts
 {
     /// <summary>
@@ -91,7 +93,9 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string PACKAGE_NAME_TEST_FRAMEWORK = "com.unity.test-framework";
 
         // File output directories
-        public const string OUTPUT_ROOT_DIR = ".uloop/outputs";
+        public const string OUTPUTS_DIR = "outputs";
+        // Built with Path.Combine so Windows never receives an embedded "/" that Path.Combine would keep as-is.
+        public static readonly string OUTPUT_ROOT_DIR = Path.Combine(ULOOP_DIR, OUTPUTS_DIR);
         public const string TEST_RESULTS_DIR = "TestResults";
         public const string HIERARCHY_RESULTS_DIR = "HierarchyResults";
         public const string FIND_GAMEOBJECTS_RESULTS_DIR = "FindGameObjectsResults";
