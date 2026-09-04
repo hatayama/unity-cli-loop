@@ -299,8 +299,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     warnings,
                     0,
                     unchangedMethodCount: unchangedMethodCount,
-                    sourceContentSha256: workerOutput.sourceContentSha256)
-                    .WithRevertedUnchangedCount(revertedUnchangedCount);
+                    sourceContentSha256: workerOutput.sourceContentSha256,
+                    revertedUnchangedCount: revertedUnchangedCount);
             }
 
             outcomes.AddRange(gateResult.SkippedOutcomes);
@@ -329,10 +329,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 retargetedPausePointIds,
                 unchangedMethodCount,
                 siblingDerivedWarnings,
+                revertedUnchangedCount,
                 ct).ConfigureAwait(false);
             if (earlyEntries != null)
             {
-                return earlyEntries.WithRevertedUnchangedCount(revertedUnchangedCount);
+                return earlyEntries;
             }
 
             addedFieldNames = resolvedAddedFieldNames;
@@ -360,8 +361,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         warnings,
                         0,
                         unchangedMethodCount: unchangedMethodCount,
-                        sourceContentSha256: workerOutput.sourceContentSha256)
-                        .WithRevertedUnchangedCount(revertedUnchangedCount);
+                        sourceContentSha256: workerOutput.sourceContentSha256,
+                        revertedUnchangedCount: revertedUnchangedCount);
                 }
 
                 HotReloadSignatureChangeCoverage.AppendSignatureChangeCallersRepatchedWarnings(
@@ -389,7 +390,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 suppressedPausePointIds,
                 retargetedPausePointIds,
                 unchangedMethodCount,
-                oneShotCallerNoteCandidates);
+                oneShotCallerNoteCandidates,
+                revertedUnchangedCount);
             // Why after apply: earlier returns (gate fail, shim compile, coverage loss)
             // never applied the replacement, so leftover Active rows must not claim they
             // were superseded.
@@ -397,7 +399,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 applied,
                 workerOutput,
                 gateResult.GatedReplacementMethodKeys);
-            return applied.WithRevertedUnchangedCount(revertedUnchangedCount);
+            return applied;
         }
 
         private static void RecordSupersededSignaturesAfterApply(

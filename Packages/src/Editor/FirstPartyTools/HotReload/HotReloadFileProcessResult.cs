@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public List<string> RetargetedPausePointIds { get; }
         public List<string> InlineRiskMethodLabels { get; }
         public int UnchangedMethodCount { get; }
-        public int RevertedUnchangedCount { get; private set; }
+        public int RevertedUnchangedCount { get; }
         public string[] AddedFieldNames { get; }
         public string[] AddedConstNames { get; }
         public string SourceContentSha256 { get; }
@@ -30,7 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> retargetedPausePointIds = null,
             string[] addedFieldNames = null,
             string sourceContentSha256 = null,
-            string[] addedConstNames = null)
+            string[] addedConstNames = null,
+            int revertedUnchangedCount = 0)
         {
             Outcomes = outcomes;
             Warnings = warnings;
@@ -42,12 +43,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AddedFieldNames = addedFieldNames ?? Array.Empty<string>();
             SourceContentSha256 = sourceContentSha256;
             AddedConstNames = addedConstNames ?? Array.Empty<string>();
-        }
-
-        public HotReloadFileProcessResult WithRevertedUnchangedCount(int revertedUnchangedCount)
-        {
             RevertedUnchangedCount = revertedUnchangedCount;
-            return this;
         }
     }
 }
