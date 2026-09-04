@@ -86,6 +86,30 @@ func TestPausePointAwaitAndStatusCLIOnlyHelpEntries(t *testing.T) {
 	}
 }
 
+// Verifies clear-pause-point's --help lists the CLI-only --file/--line flags. They are not in
+// ClearPausePointSchema, so the schema-driven loop cannot produce them.
+func TestVisibleOptionHelpEntriesIncludePausePointClearCLIOnlyOptions(t *testing.T) {
+	tool, ok := tools.Find(tools.LoadDefault(), pausePointClearCommandName)
+	if !ok {
+		t.Fatalf("embedded catalog has no %q tool", pausePointClearCommandName)
+	}
+
+	entries := VisibleOptionHelpEntriesForTool(tool)
+	for _, option := range PausePointClearCLIOnlyOptions() {
+		optionName := "--" + option.FlagName
+		entry, found := findOptionHelpEntry(entries, optionName)
+		if !found {
+			t.Fatalf("clear-pause-point --help is missing CLI-only option %s", optionName)
+		}
+		if entry.Description == "" {
+			t.Errorf("option %s has no description in --help", optionName)
+		}
+		if !strings.HasSuffix(entry.Usage, " <value>") {
+			t.Errorf("valued flag usage = %q, want a value placeholder", entry.Usage)
+		}
+	}
+}
+
 // Verifies both query commands describe the file:line target flags with the fixed contract text.
 func TestPausePointQueryCLIOnlyOptionsDescribeFileLineTarget(t *testing.T) {
 	for _, options := range [][]PausePointCLIOnlyOption{
@@ -107,6 +131,26 @@ func TestPausePointQueryCLIOnlyOptionsDescribeFileLineTarget(t *testing.T) {
 		if lineOption.Description != "1-based source line of a file:line pause point. Requires --file; mutually exclusive with --id" {
 			t.Fatalf("--line description = %q", lineOption.Description)
 		}
+	}
+}
+
+// Verifies clear-pause-point's CLI-only table describes --file/--line as exclusive with --id and --all.
+func TestPausePointClearCLIOnlyOptionsDescribeFileLineTarget(t *testing.T) {
+	options := PausePointClearCLIOnlyOptions()
+	fileOption, found := findPausePointCLIOnlyOption(options, "file")
+	if !found {
+		t.Fatal("missing --file option")
+	}
+	if fileOption.Description != "Project-relative source file of a file:line pause point. Requires --line; mutually exclusive with --id and --all" {
+		t.Fatalf("--file description = %q", fileOption.Description)
+	}
+
+	lineOption, found := findPausePointCLIOnlyOption(options, "line")
+	if !found {
+		t.Fatal("missing --line option")
+	}
+	if lineOption.Description != "1-based source line of a file:line pause point. Requires --file; mutually exclusive with --id and --all" {
+		t.Fatalf("--line description = %q", lineOption.Description)
 	}
 }
 

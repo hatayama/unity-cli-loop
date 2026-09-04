@@ -441,6 +441,33 @@ func TestRunDispatcherExecuteDynamicCodeHelpDoesNotRequireUnityProject(t *testin
 	}
 }
 
+// Tests that clear-pause-point --help lists CLI-only --file/--line without resolving a Unity project.
+func TestRunDispatcherClearPausePointHelpListsFileLine(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunDispatcher(context.Background(), []string{"clear-pause-point", "--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("clear-pause-point help failed: code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, expected := range []string{
+		"Usage:",
+		"uloop clear-pause-point",
+		"--id <value>",
+		"--all",
+		"--file <value>",
+		"--line <value>",
+		"mutually exclusive with --id and --all",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("clear-pause-point help missing %q:\n%s", expected, output)
+		}
+	}
+}
+
 // Tests that command help wins even after other tool options.
 func TestRunDispatcherCompileHelpWinsAfterOtherOptions(t *testing.T) {
 	t.Chdir(t.TempDir())

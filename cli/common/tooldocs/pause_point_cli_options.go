@@ -32,7 +32,10 @@ const (
 // pausePointEnableCommandName is private to this package: importing the clicore package that owns
 // the command-name constants would be an import cycle, the same reason
 // executeDynamicCodeCommandName is declared locally.
-const pausePointEnableCommandName = "enable-pause-point"
+const (
+	pausePointEnableCommandName = "enable-pause-point"
+	pausePointClearCommandName  = "clear-pause-point"
+)
 
 // PausePointCLIOnlyOption describes one CLI-only pause-point flag in the shape both listings need:
 // `--help` renders FlagName/Type/Description, and `uloop list` additionally reports Type and Values
@@ -90,6 +93,8 @@ const (
 	pausePointIDDescription                    = "Pause-point marker id matching UloopPausePoint.Pause or the id returned by enable-pause-point"
 	pausePointFileDescription                  = "Project-relative source file of a file:line pause point. Requires --line; mutually exclusive with --id"
 	pausePointLineDescription                  = "1-based source line of a file:line pause point. Requires --file; mutually exclusive with --id"
+	pausePointClearFileDescription             = "Project-relative source file of a file:line pause point. Requires --line; mutually exclusive with --id and --all"
+	pausePointClearLineDescription             = "1-based source line of a file:line pause point. Requires --file; mutually exclusive with --id and --all"
 	pausePointTimeoutSecondsDescription        = "Seconds to wait for a hit before timing out"
 	pausePointMatchingLogsMaxCountDescription  = "Maximum Console logs matching the marker id to include on a hit"
 	pausePointCapturedVariablesDescription     = "How much of each captured variable to include in the response"
@@ -176,6 +181,23 @@ func PausePointStatusCLIOnlyOptions() []PausePointCLIOnlyOption {
 	return pausePointSharedQueryCLIOnlyOptions()
 }
 
+// PausePointClearCLIOnlyOptions returns clear-pause-point's CLI-only --file/--line flags. A
+// fresh slice is built per call so a caller that sorts or appends cannot mutate the shared table.
+func PausePointClearCLIOnlyOptions() []PausePointCLIOnlyOption {
+	return []PausePointCLIOnlyOption{
+		{
+			FlagName:    PausePointFileFlagName,
+			Type:        "string",
+			Description: pausePointClearFileDescription,
+		},
+		{
+			FlagName:    PausePointLineFlagName,
+			Type:        "integer",
+			Description: pausePointClearLineDescription,
+		},
+	}
+}
+
 // PausePointCLIOnlyHelpEntries converts a CLI-only option table into --help rows.
 func PausePointCLIOnlyHelpEntries(options []PausePointCLIOnlyOption) []OptionHelpEntry {
 	entries := make([]OptionHelpEntry, 0, len(options))
@@ -199,6 +221,23 @@ func appendPausePointEnableCLIOnlyOptionHelpEntries(
 	}
 
 	for _, entry := range PausePointCLIOnlyHelpEntries(PausePointEnableCLIOnlyOptions()) {
+		if hasOptionHelpEntry(entries, entry.Name) {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+func appendPausePointClearCLIOnlyOptionHelpEntries(
+	toolName string,
+	entries []OptionHelpEntry,
+) []OptionHelpEntry {
+	if toolName != pausePointClearCommandName {
+		return entries
+	}
+
+	for _, entry := range PausePointCLIOnlyHelpEntries(PausePointClearCLIOnlyOptions()) {
 		if hasOptionHelpEntry(entries, entry.Name) {
 			continue
 		}
