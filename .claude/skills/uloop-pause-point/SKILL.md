@@ -5,7 +5,7 @@ description: "Pauses Unity playback at any source file:line without editing code
 
 # uloop pause-point
 
-A pause point captures locals at an exact frame without a source edit. Prefer it over sleeps when input timing or transition-frame fidelity matters.
+A pause point captures locals at an exact frame without a source edit. Prefer it over sleeps or after-the-fact reads when input delivery, event ordering, or transition-frame fidelity matters.
 
 ## Quick Check
 
@@ -18,13 +18,13 @@ uloop enable-pause-point --file Assets/Scripts/Enemy.cs --line 42 --timeout-seco
 ```
 
 3. Read `CapturedVariables` in the hit response first, then gather extra evidence while still paused (`execute-dynamic-code`, one screenshot).
-4. A `single-shot` marker (the default) disarms after the hit; clear other modes with `uloop clear-pause-point --id <marker-id>` or `--file`/`--line`.
+4. A `single-shot` marker (the default) disarms after the hit; clear other modes with `uloop clear-pause-point` (`--id`, or `--file`/`--line`).
 
 Only `CapturedVariables` is evidence of the values at the patched line. Before deviating, read `references/quick-check-template.md`.
 
 ## Parameters
 
-Unity-accepted parameters only; CLI-only flags (`--await`, `--trigger`, `--resume-play`, `--expect`) are in the references.
+Unity-accepted parameters only; CLI-only flags (`--await`, `--trigger`, `--resume-play`, `--expect`, capture filters) are in the references.
 
 ### enable-pause-point
 
@@ -90,9 +90,9 @@ On a wait timeout, `PAUSE_POINT_EXPIRED`, or an enable failure, read `Error.Deta
 
 ## Requirements & Safety
 
-- On the automatic Debug-switch warning: the pause point is already armed - do not interrupt the task or ask mid-flow. At the next stopping point, propose `uloop set-code-optimization debug --startup` only if the user approves (machine-wide; omit `--startup` for session-only). Each re-switch recompiles scripts.
+- On the automatic Debug-switch warning: the pause point is already armed - do not interrupt the task or ask mid-flow. The switch reverts on every Editor restart, so at the next stopping point propose `uloop set-code-optimization debug --startup` (session-only without `--startup`); only if the user approves. Trade-offs: `references/troubleshooting.md`.
 
-- Patches do not survive compiles or domain reloads — re-enable afterwards (a Play entry with Domain Reload enabled removes every source pause point; the enable response warns). `uloop compile` during PlayMode also resets the session.
+- Patches do not survive compiles or domain reloads, including a Play entry with Domain Reload enabled (the enable response warns) — re-enable afterwards. `uloop compile` during PlayMode also resets the session.
 - Physics message methods, their helpers, and pre-bound delegates can miss hits on pre-existing GameObjects; the enable response warns where detectable.
 - An `--id` marker waits on a hand-written `UloopPausePoint.Pause(id)` call; its hits record no `CapturedVariables`.
 - For scripts under `Packages/`, pass the package-id path form (`Packages/<package-id>/...`); physical checkout paths do not resolve.

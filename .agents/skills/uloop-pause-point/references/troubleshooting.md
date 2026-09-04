@@ -60,3 +60,7 @@ If `enable-pause-point` fails, branch on the failure `ErrorCode` and follow `Rec
 If enable fails with `PAUSE_POINT_RESOLVE_FAILED` while the file has active hot-reload patches, `--line` was resolved against the last compiled source (the editor shows the edited file). `ResolvedMethod` and `ResolvedLineText` stay empty on that failure — follow `RecommendedNextAction` rather than those fields. Recompute the line against the last compiled source, or run `uloop compile` and re-enable.
 
 If enable fails with a "No sequence point found" error even for clearly executable lines, that script's assembly lacks debug sequence points and no line in the file can be patched. Move the pause point to a script in an assembly that carries them, such as a script under `Assets/`.
+
+## Debug-switch trade-offs
+
+The automatic Debug switch is a machine-wide Unity preference that applies to every project. Each re-switch costs a full script recompile, and the setting reverts on every Editor restart unless `uloop set-code-optimization debug --startup` makes Debug the startup default. Only the project's C# scripts run slower, mainly in Play Mode - the Editor itself is not slowed.
