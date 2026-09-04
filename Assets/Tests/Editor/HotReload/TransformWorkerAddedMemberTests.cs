@@ -1047,7 +1047,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, "ExistingDefault", "Interface members are not patchable");
             Assert.That(FindEntry(result, "ExistingDefault"), Is.Null);
-            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(IHotReloadAddedMemberDefault).FullName,
                 "ExistingDefault",
                 Array.Empty<string>(),
@@ -1055,15 +1055,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindSkipMethod(result, "ExistingDefault"),
                 Is.EqualTo(expectedLabel),
-                "Skipped Methods[].Method must use the FormatMethodKeyParts label.");
+                "Skipped Methods[].Method must use the FormatMethodLabelParts label.");
         }
 
         /// <summary>
         /// What: a worker skip on a nested generic multi-parameter method uses the same
-        /// Methods[].Method label as FormatMethodKeyParts.
+        /// Methods[].Method label as FormatMethodLabelParts.
         /// </summary>
         [Test]
-        public async Task Skip_NestedGenericMultiArg_UsesFormatMethodKeyPartsLabel()
+        public async Task Skip_NestedGenericMultiArg_UsesFormatMethodLabelPartsLabel()
         {
             const string projectRelativePath =
                 "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
@@ -1078,7 +1078,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 projectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadMethodLabelNestedHost.INestedGeneric).FullName,
                 "GenericPing",
                 new[] { "System.Int32", "System.String" },
@@ -1086,7 +1086,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindSkipMethod(result, "GenericPing"),
                 Is.EqualTo(expectedLabel),
-                "Nested generic multi-arg skip labels must match FormatMethodKeyParts.");
+                "Nested generic multi-arg skip labels must match FormatMethodLabelParts.");
             AssertHasSkip(result, "GenericPing", "Interface members are not patchable");
         }
 

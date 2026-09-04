@@ -182,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 labels.Add(
-                    HotReloadPatcher.FormatMethodKeyParts(
+                    HotReloadMethodKeys.FormatMethodLabelParts(
                         entry.typeMetadataName,
                         entry.methodName,
                         entry.parameterTypeFullNames ?? Array.Empty<string>(),
