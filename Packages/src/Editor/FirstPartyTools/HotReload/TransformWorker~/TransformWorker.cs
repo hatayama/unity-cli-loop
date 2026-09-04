@@ -158,7 +158,8 @@ public static class TransformWorkerProgram
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
         SemanticModel semanticModel = compilation.GetSemanticModel(syntaxTree, ignoreAccessibility: true);
-        CompilationUnitSyntax root = syntaxTree.GetCompilationUnitRoot();
+        unit.SemanticModel = semanticModel;
+        CompilationUnitSyntax root = unit.Root;
 
         IAssemblySymbol targetTypesAssemblySymbol = ResolveTargetTypesAssemblySymbol(
             compilation,
@@ -183,6 +184,7 @@ public static class TransformWorkerProgram
 
         BaselineSnapshotState baseline =
             BaselineSnapshotBuilder.BuildBaselineSnapshotState(source.SnapshotSource, parseOptions, plainRoot);
+        unit.Baseline = baseline;
 
         List<WorkerEntry> entries = new List<WorkerEntry>();
         List<WorkerSkipped> skipped = new List<WorkerSkipped>();
@@ -198,11 +200,9 @@ public static class TransformWorkerProgram
         AddedFieldCatalog addedFieldCatalog = new AddedFieldCatalog();
         (List<TypeEmitState> typeEmitStates, int nextShimTypeCounter, int nextGlobalShimMethodCounter) =
             TypeEmitPlanner.QueueAllTypeEmitStates(
-                root,
-                semanticModel,
+                unit,
                 targetTypesAssemblySymbol,
                 input,
-                baseline,
                 assemblyGlobalUsings,
                 shimTypes,
                 addedMethodCatalog,
@@ -230,19 +230,15 @@ public static class TransformWorkerProgram
 
         AddedCallSiteGuard.SkipBodiesThatCannotUseAddedMethods(
             typeEmitStates,
-            semanticModel,
             addedMethodCatalog,
             addedFieldCatalog,
             skipped);
 
         ShimMethodEmitter.EmitQueuedMethodsAndPropertyGetters(
             typeEmitStates,
-            semanticModel,
             addedMethodCatalog,
             addedFieldCatalog,
-            root,
             input,
-            baseline,
             entries,
             skipped,
             unchangedMethods,

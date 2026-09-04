@@ -19,12 +19,9 @@ internal static class PropertyGetterEmitter
 {
     internal static (int ShimTypeCounter, int GlobalShimMethodCounter) EmitPropertyGettersForType(
         TypeEmitState typeState,
-        SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
-        CompilationUnitSyntax root,
         WorkerInput input,
-        BaselineSnapshotState baseline,
         List<WorkerEntry> entries,
         List<WorkerSkipped> skipped,
         List<WorkerUnchangedMethod> unchangedMethods,
@@ -33,6 +30,9 @@ internal static class PropertyGetterEmitter
         int shimTypeCounter,
         int globalShimMethodCounter)
     {
+        SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
+        CompilationUnitSyntax root = typeState.SourceUnit.Root;
+        BaselineSnapshotState baseline = typeState.SourceUnit.Baseline;
         foreach (PropertyDeclarationSyntax propertyDeclaration in typeState.TypeDeclaration.Members
             .OfType<PropertyDeclarationSyntax>())
         {
