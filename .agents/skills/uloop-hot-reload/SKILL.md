@@ -86,7 +86,7 @@ and a patched body that matches the baseline again is unpatched on that run.
   detectable).
 - A reload applies each file all-or-nothing: any `Failed` method leaves that file
   unapplied; patches in other files still apply, except bodies that call an added method
-  the failed file declared — those are `Skipped` until that method compiles.
+  whose own shim failed to compile — those are `Skipped` until it compiles.
 
 Full rules and the `Skipped`/`Failed` condition tables: `references/scope-and-limits.md`.
 
