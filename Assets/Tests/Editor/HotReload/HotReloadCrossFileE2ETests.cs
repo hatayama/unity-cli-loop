@@ -637,6 +637,87 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an all-deferred plan that appears before the last changed plan still has its
+        /// unique active caller absorbed and Patched against the new host shim.
+        /// </summary>
+        [Test]
+        public async Task Run_EarlierAllDeferredPlanWithActiveCaller_RebindsCallerInsteadOfAlreadyActive()
+        {
+            string firstHostSource = InsertHostMember(
+                "        public int Added()\n        {\n            return 5;\n        }\n\n");
+            string firstCallerSource = ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added();");
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            string otherPath = FixturePath(OtherSameAssemblyFileName);
+            string otherEdited = ReplaceInSource(
+                ReadFixture(OtherSameAssemblyFileName),
+                OtherExistingValueAnchor,
+                OtherExistingValueEdited);
+            string firstCallerEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindEarlierDeferredCaller.cs",
+                firstCallerSource);
+            string otherEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindEarlierDeferredOther.cs",
+                otherEdited);
+
+            await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindEarlierDeferredHost.cs",
+                        firstHostSource),
+                    [callerPath] = firstCallerEditPath
+                });
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
+
+            HotReloadOrchestratorResult activateOther = await HotReloadOrchestrator.RunAsync(
+                new[] { otherPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [otherPath] = otherEditPath
+                });
+            AssertNoFailure(activateOther);
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { otherPath, callerPath, otherPath, hostPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindEarlierDeferredHostReedited.cs",
+                        InsertHostMember(
+                            "        public int Added()\n        {\n            return 6;\n        }\n\n")),
+                    [otherPath] = otherEditPath,
+                    [callerPath] = firstCallerEditPath
+                });
+
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(6));
+            FindOutcomeForFile(
+                second,
+                callerPath,
+                HotReloadMethodOutcomeKind.Patched,
+                "Call");
+            foreach (HotReloadMethodOutcome outcome in CollectOutcomesForFile(second, callerPath))
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.AlreadyActive),
+                    "Caller must not stay AlreadyActive on the previous shim.\n"
+                    + FormatOutcomes(second));
+            }
+        }
+
+        /// <summary>
         /// What: a sibling pulled in to re-bind is not described as re-applied when the host
         /// shim compile fails; isolation reports the caller as Skipped and the live patch
         /// stays on the previous body.

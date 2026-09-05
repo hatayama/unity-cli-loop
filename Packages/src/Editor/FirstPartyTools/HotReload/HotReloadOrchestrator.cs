@@ -85,7 +85,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadFileGroupPlan plan = plans[planIndex];
                 if (allDeferred[planIndex])
                 {
-                    ApplyDeferredAlreadyActive(plan, groupFiles, resultSlots, deferredAlreadyActive);
                     continue;
                 }
 
@@ -93,7 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 List<int> inputIndexes = new List<int>(plan.InputIndexes);
                 if (isLastChangedGroup)
                 {
-                    AppendUniqueLaterDeferredInputIndexes(
+                    AppendUniqueDeferredInputIndexes(
                         plans,
                         allDeferred,
                         planIndex,
@@ -113,6 +112,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         extraResults,
                         run)
                     .ConfigureAwait(false);
+            }
+
+            // Why after every changed plan: an earlier all-deferred plan must not fill its
+            // slots before the last changed group can absorb its unique callers.
+            for (int planIndex = 0; planIndex < plans.Count; planIndex++)
+            {
+                if (allDeferred[planIndex])
+                {
+                    ApplyDeferredAlreadyActive(
+                        plans[planIndex],
+                        groupFiles,
+                        resultSlots,
+                        deferredAlreadyActive);
+                }
             }
 
             for (int index = 0; index < files.Count; index++)
@@ -230,10 +243,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
-        // Why absorbed here: a later all-deferred plan can hold an unchanged caller that is
-        // already in pathsInRun, so sibling auto-include cannot add it, and running that plan
-        // alone would emit a shim that omits this group's changed host.
-        private static void AppendUniqueLaterDeferredInputIndexes(
+        // Why every all-deferred plan of the assembly: a repeated path can open an
+        // all-deferred plan before the last changed group, and that plan can hold a
+        // caller that sibling auto-include cannot add because it is already in pathsInRun.
+        private static void AppendUniqueDeferredInputIndexes(
             IReadOnlyList<HotReloadFileGroupPlan> plans,
             bool[] allDeferred,
             int currentPlanIndex,
@@ -253,9 +266,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 pathsInGroup.Add(groupFiles[inputIndexes[position]].ProjectRelativePath);
             }
 
-            for (int planIndex = currentPlanIndex + 1; planIndex < plans.Count; planIndex++)
+            for (int planIndex = 0; planIndex < plans.Count; planIndex++)
             {
-                if (!allDeferred[planIndex]
+                if (planIndex == currentPlanIndex
+                    || !allDeferred[planIndex]
                     || !string.Equals(
                         plans[planIndex].AssemblyName,
                         assemblyName,
@@ -264,10 +278,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                IReadOnlyList<int> laterIndexes = plans[planIndex].InputIndexes;
-                for (int laterPosition = 0; laterPosition < laterIndexes.Count; laterPosition++)
+                IReadOnlyList<int> deferredIndexes = plans[planIndex].InputIndexes;
+                for (int deferredPosition = 0; deferredPosition < deferredIndexes.Count; deferredPosition++)
                 {
-                    int inputIndex = laterIndexes[laterPosition];
+                    int inputIndex = deferredIndexes[deferredPosition];
                     string path = groupFiles[inputIndex].ProjectRelativePath;
                     if (pathsInGroup.Add(path))
                     {
