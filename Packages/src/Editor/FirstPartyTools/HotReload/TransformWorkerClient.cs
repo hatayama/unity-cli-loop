@@ -26,7 +26,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken ct)
         {
             Debug.Assert(input != null, "input must not be null.");
-            Debug.Assert(!string.IsNullOrEmpty(input.sourcePath), "sourcePath must not be empty.");
+            Debug.Assert(input.sources != null, "sources must not be null.");
+            Debug.Assert(input.sources.Length > 0, "sources must not be empty.");
 
             TransformWorkerBootstrapResult bootstrapResult =
                 await TransformWorkerBootstrap.EnsureWorkerAsync(ct).ConfigureAwait(false);
@@ -89,6 +90,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 CoalesceOutput(output);
+
+                // Why fail here: run-level parseErrors describe a failure that belongs to no
+                // single source, so there is no per-file row to carry it. Turning it into a
+                // client failure at the process boundary is what makes the per-file row count
+                // an invariant for every caller downstream.
+                if (output.parseErrors.Length > 0)
+                {
+                    return TransformWorkerClientResult.Failure(string.Join("\n", output.parseErrors));
+                }
+
+                Debug.Assert(
+                    output.files.Length == input.sources.Length,
+                    "A successful worker run must return one per-file output per source.");
                 return TransformWorkerClientResult.SuccessResult(output);
             }
             finally
@@ -107,15 +121,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             output.entries ??= Array.Empty<TransformWorkerEntryDto>();
             output.skipped ??= Array.Empty<TransformWorkerSkippedDto>();
+            output.files ??= Array.Empty<TransformWorkerFileOutputDto>();
             output.parseErrors ??= Array.Empty<string>();
-            output.declarationDriftWarnings ??= Array.Empty<string>();
             output.siblingConstDriftWarnings ??= Array.Empty<string>();
             output.unchangedMethods ??= Array.Empty<TransformWorkerUnchangedMethodDto>();
-            output.removedMembers ??= Array.Empty<TransformWorkerRemovedMemberDto>();
-            output.removedMethodSignatures ??= Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
-            output.addedFieldNames ??= Array.Empty<string>();
-            output.addedConstNames ??= Array.Empty<string>();
             output.shimSource ??= string.Empty;
+            foreach (TransformWorkerFileOutputDto fileOutput in output.files)
+            {
+                if (fileOutput == null)
+                {
+                    continue;
+                }
+
+                fileOutput.sourceContentSha256 ??= string.Empty;
+                fileOutput.parseErrors ??= Array.Empty<string>();
+                fileOutput.declarationDriftWarnings ??= Array.Empty<string>();
+                fileOutput.removedMembers ??= Array.Empty<TransformWorkerRemovedMemberDto>();
+                fileOutput.removedMethodSignatures ??= Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
+                fileOutput.addedFieldNames ??= Array.Empty<string>();
+                fileOutput.addedConstNames ??= Array.Empty<string>();
+            }
+
             foreach (TransformWorkerEntryDto entry in output.entries)
             {
                 if (entry == null)

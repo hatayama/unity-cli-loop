@@ -1983,7 +1983,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo computeMethod = typeof(HotReloadE2EFixture).GetMethod(
                 nameof(HotReloadE2EFixture.ComputeWithPrivate));
             Assert.That(computeMethod, Is.Not.Null);
-            string methodKey = HotReloadPatcher.FormatMethodKey(computeMethod);
+            string methodKey = HotReloadMethodKeys.FormatMethodLabel(computeMethod);
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));
 
             HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
@@ -2417,7 +2417,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: when the only edited method fails shim compile, isolation is skipped
         /// (FailedEntries.Count == entries.Length) and Failed.Method uses that method's
-        /// FormatMethodKeyParts label (not "(shim-compile)"), while Reason still carries the
+        /// FormatMethodLabelParts label (not "(shim-compile)"), while Reason still carries the
         /// original-file "(line N)" from #line-mapped diagnostics.
         /// </summary>
         [Test]
@@ -2448,7 +2448,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             int expectedOriginalLine = FindLineNumberContaining(editedSource, "MissingHelperAddedByEdit");
             Assert.That(expectedOriginalLine, Is.GreaterThan(0));
-            string expectedMethodLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedMethodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadE2EFixture).FullName,
                 nameof(HotReloadE2EFixture.CallsMissingHelper),
                 new[] { typeof(int).FullName },
@@ -2589,7 +2589,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             const string projectRelativePath = "Assets/Tests/Editor/HotReload/PreflightMatchFailure.cs";
             const string missingMethodName = "DoesNotExistInCompiledAssembly";
             string typeName = typeof(HotReloadE2EFixture).FullName;
-            string expectedFailedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedFailedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeName,
                 missingMethodName,
                 new[] { typeof(int).FullName },
@@ -2627,30 +2627,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerOutputDto workerOutput = new TransformWorkerOutputDto
             {
                 entries = entries,
-                addedFieldNames = addedFieldNames,
-                sourceContentSha256 = "preflight-match-failure"
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto
+                    {
+                        projectRelativePath = projectRelativePath,
+                        addedFieldNames = addedFieldNames,
+                        sourceContentSha256 = "preflight-match-failure"
+                    }
+                }
             };
 
             HotReloadFileProcessResult fileResult =
-                HotReloadEntryApplier.ApplyEntriesAndBuildResult(
-                    typeof(HotReloadE2EFixture).Assembly.GetName().Name,
-                    projectRelativePath,
-                    projectRelativePath,
+                HotReloadEntryApplier.ApplyGroupAndBuildResults(
+                    CreateApplyContext(
+                        typeof(HotReloadE2EFixture).Assembly.GetName().Name,
+                        projectRelativePath,
+                        workerOutput,
+                        entries,
+                        addedFieldNames),
                     HotReloadShimCompileResult.SuccessResult(
                         typeof(HotReloadEntryApplier).Assembly,
                         new byte[] { 1 },
                         Array.Empty<byte>()),
-                    entries,
-                    addedFieldNames,
-                    Array.Empty<string>(),
-                    workerOutput,
-                    new HashSet<string>(),
-                    new HashSet<string>(),
-                    new List<HotReloadMethodOutcome>(),
-                    new List<string>(),
-                    new List<string>(),
-                    new List<string>(),
-                    unchangedMethodCount: 0);
+                    entries)[0];
 
             HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
                 fileResult.Outcomes,
@@ -2679,17 +2679,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             const string projectRelativePath = "Assets/Tests/Editor/HotReload/PreflightMatchFailureMid.cs";
             const string missingMethodName = "DoesNotExistInCompiledAssembly";
             string typeName = typeof(HotReloadCoreFixture).FullName;
-            string expectedPriorLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedPriorLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeName,
                 nameof(HotReloadCoreFixture.ReplaceableCompute),
                 new[] { typeof(int).FullName },
                 genericArity: 0);
-            string expectedFailedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedFailedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeName,
                 missingMethodName,
                 new[] { typeof(int).FullName },
                 genericArity: 0);
-            string expectedTrailingLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedTrailingLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeName,
                 nameof(HotReloadCoreFixture.StaticPing),
                 Array.Empty<string>(),
@@ -2844,6 +2844,98 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// What: when a Harmony apply-engine failure stops a file after an earlier entry patched,
+        /// only the patched entry is reported as applied, so the failed replacement's removed
+        /// signature is not recorded as superseded.
+        /// </summary>
+        [Test]
+        public void ApplyEntries_ReplacementFailsAfterPatchedEntry_RecordsNoSupersededSignature()
+        {
+            const string projectRelativePath = "Assets/Tests/Editor/HotReload/PartialApplyReplacement.cs";
+            string typeName = typeof(HotReloadCoreFixture).FullName;
+            string[] replacedParameterTypeFullNames = { typeof(int).FullName };
+            TransformWorkerEntryDto patchedEntry = CreateExistingMethodEntry(
+                typeName,
+                nameof(HotReloadCoreFixture.VoidBump),
+                Array.Empty<string>(),
+                nameof(HotReloadHandwrittenShims),
+                nameof(HotReloadHandwrittenShims.VoidBump__shim0));
+            TransformWorkerEntryDto failedReplacementEntry = CreateExistingMethodEntry(
+                typeName,
+                nameof(HotReloadCoreFixture.ReplaceableCompute),
+                replacedParameterTypeFullNames,
+                nameof(HotReloadOrchestratorTests),
+                nameof(ApplyEngineFailureExternShim));
+            failedReplacementEntry.replacesCompiledMethod = true;
+            TransformWorkerEntryDto[] entries = { patchedEntry, failedReplacementEntry };
+            TransformWorkerOutputDto workerOutput = new TransformWorkerOutputDto
+            {
+                entries = entries,
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto
+                    {
+                        projectRelativePath = projectRelativePath,
+                        addedFieldNames = Array.Empty<string>(),
+                        sourceContentSha256 = "partial-apply-replacement",
+                        removedMethodSignatures = new[]
+                        {
+                            new TransformWorkerRemovedMethodSignatureDto
+                            {
+                                typeMetadataName = typeName,
+                                methodName = nameof(HotReloadCoreFixture.ReplaceableCompute),
+                                parameterTypeFullNames = replacedParameterTypeFullNames,
+                                genericArity = 0
+                            }
+                        }
+                    }
+                }
+            };
+            string removedMethodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
+                typeName,
+                nameof(HotReloadCoreFixture.ReplaceableCompute),
+                replacedParameterTypeFullNames,
+                genericArity: 0);
+            HotReloadApplyContext context = CreateApplyContext(
+                typeof(HotReloadCoreFixture).Assembly.GetName().Name,
+                projectRelativePath,
+                workerOutput,
+                entries,
+                Array.Empty<string>());
+            HotReloadSupersededSignatureRegistry.ClearAll();
+
+            try
+            {
+                IReadOnlyList<HotReloadFileProcessResult> results =
+                    HotReloadEntryApplier.ApplyGroupAndBuildResults(
+                        context,
+                        HotReloadShimCompileResult.SuccessResult(
+                            typeof(HotReloadOrchestratorTests).Assembly,
+                            new byte[] { 1 },
+                            Array.Empty<byte>()),
+                        entries);
+
+                Assert.That(results[0].Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched));
+                Assert.That(results[0].Outcomes[1].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+                Assert.That(context.Files[0].Sinks.AppliedEntries, Is.EqualTo(new[] { patchedEntry }));
+
+                HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                    context.Files[0].Sinks.AppliedEntries,
+                    context.Files[0].FileOutput.removedMethodSignatures,
+                    Array.Empty<string>());
+
+                Assert.That(
+                    HotReloadSupersededSignatureRegistry.TryGetReplacement(removedMethodLabel, out string _),
+                    Is.False);
+            }
+            finally
+            {
+                HotReloadSupersededSignatureRegistry.ClearAll();
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
         [DllImport("__Internal")]
         public static extern int ApplyEngineFailureExternShim(int value);
 
@@ -2891,28 +2983,96 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerOutputDto workerOutput = new TransformWorkerOutputDto
             {
                 entries = entries,
-                addedFieldNames = Array.Empty<string>(),
-                sourceContentSha256 = "direct-apply-preflight"
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto
+                    {
+                        projectRelativePath = projectRelativePath,
+                        addedFieldNames = Array.Empty<string>(),
+                        sourceContentSha256 = "direct-apply-preflight"
+                    }
+                }
             };
-            return HotReloadEntryApplier.ApplyEntriesAndBuildResult(
-                typeof(HotReloadCoreFixture).Assembly.GetName().Name,
-                projectRelativePath,
-                projectRelativePath,
+            return HotReloadEntryApplier.ApplyGroupAndBuildResults(
+                CreateApplyContext(
+                    typeof(HotReloadCoreFixture).Assembly.GetName().Name,
+                    projectRelativePath,
+                    workerOutput,
+                    entries,
+                    Array.Empty<string>()),
                 HotReloadShimCompileResult.SuccessResult(
                     typeof(HotReloadOrchestratorTests).Assembly,
                     new byte[] { 1 },
                     Array.Empty<byte>()),
-                entries,
-                Array.Empty<string>(),
-                Array.Empty<string>(),
+                entries)[0];
+        }
+
+        /// <summary>
+        /// What: builds the one-file group context these direct-apply tests need, and stamps the
+        /// entries with that file so the apply stage can route them. The applier reads only the
+        /// assembly name, the group's single file and the worker output; the remaining fields
+        /// exist to satisfy the context's own preconditions.
+        /// </summary>
+        private static HotReloadApplyContext CreateApplyContext(
+            string assemblyName,
+            string projectRelativePath,
+            TransformWorkerOutputDto workerOutput,
+            TransformWorkerEntryDto[] entries,
+            string[] addedFieldNames)
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string targetDllPath = Path.Combine(
+                projectRoot,
+                HotReloadConstants.ScriptAssembliesRelativeDirectory,
+                assemblyName + ".dll");
+            UnityEditor.Compilation.Assembly compilationAssembly = null;
+            foreach (UnityEditor.Compilation.Assembly assembly in CompilationPipeline.GetAssemblies())
+            {
+                if (assembly.name == assemblyName)
+                {
+                    compilationAssembly = assembly;
+                    break;
+                }
+            }
+
+            Assert.That(compilationAssembly, Is.Not.Null, "Compilation assembly missing: " + assemblyName);
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                entry.sourceProjectRelativePath = projectRelativePath;
+            }
+
+            HotReloadGroupFile file = new HotReloadGroupFile(
+                projectRelativePath,
+                projectRelativePath,
+                projectRelativePath,
+                assemblyName,
+                compilationAssembly,
+                targetDllPath,
+                projectRoot,
+                new HotReloadFileSinks(new List<string>(), null))
+            {
+                FileOutput = workerOutput.files[0],
+                SnapshotLabels = new HashSet<string>(),
+                SnapshotAddedLabels = new HashSet<string>(),
+                AddedFieldNames = addedFieldNames,
+                AddedConstNames = Array.Empty<string>()
+            };
+            return new HotReloadApplyContext(
+                projectRoot,
+                assemblyName,
+                "direct-apply",
+                compilationAssembly,
+                targetDllPath,
+                compilationAssembly.defines ?? Array.Empty<string>(),
+                new TransformWorkerInputDto
+                {
+                    sources = new[]
+                    {
+                        new TransformWorkerSourceDto { projectRelativePath = projectRelativePath }
+                    }
+                },
                 workerOutput,
-                new HashSet<string>(),
-                new HashSet<string>(),
-                new List<HotReloadMethodOutcome>(),
-                new List<string>(),
-                new List<string>(),
-                new List<string>(),
-                unchangedMethodCount: 0);
+                new[] { file });
         }
 
         private static HotReloadOrchestratorResult ToOrchestratorResult(
@@ -3544,10 +3704,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { e2ePath, applyPath },
                 contentPathOverride: null,
                 CancellationToken.None,
-                new[]
+                new Dictionary<string, string>
                 {
-                    WriteEditedSource("AddedFieldSortE2E.cs", e2eEdited),
-                    WriteEditedSource("AddedFieldSortApply.cs", applyEdited)
+                    [e2ePath] = WriteEditedSource("AddedFieldSortE2E.cs", e2eEdited),
+                    [applyPath] = WriteEditedSource("AddedFieldSortApply.cs", applyEdited)
                 });
 
             AssertNoFileLevelFailure(result);
@@ -4199,7 +4359,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(HotReloadSignatureChangeSameFileFixture.Target),
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(oldTarget, Is.Not.Null);
-            string oldKey = HotReloadPatcher.FormatMethodKey(oldTarget);
+            string oldKey = HotReloadMethodKeys.FormatMethodLabel(oldTarget);
             bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
                 oldKey,
                 out string replacement);
@@ -4237,7 +4397,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(HotReloadSignatureChangeExternalHost.ToDelete),
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(deleted, Is.Not.Null);
-            string deletedKey = HotReloadPatcher.FormatMethodKey(deleted);
+            string deletedKey = HotReloadMethodKeys.FormatMethodLabel(deleted);
             bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
                 deletedKey,
                 out string _);
@@ -4289,8 +4449,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 modifiers: null);
             Assert.That(intTarget, Is.Not.Null);
             Assert.That(longTarget, Is.Not.Null);
-            string intKey = HotReloadPatcher.FormatMethodKey(intTarget);
-            string longKey = HotReloadPatcher.FormatMethodKey(longTarget);
+            string intKey = HotReloadMethodKeys.FormatMethodLabel(intTarget);
+            string longKey = HotReloadMethodKeys.FormatMethodLabel(longTarget);
             bool intRecorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
                 intKey,
                 out string intReplacement);
@@ -4340,7 +4500,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("SignatureChangeAlreadyActive2.cs", later),
                 CancellationToken.None);
             AssertNoFileLevelFailure(second);
-            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadSignatureChangeAlreadyActiveFixture).FullName,
                 nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target),
                 new[] { "System.Int32" },
@@ -4392,7 +4552,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 WriteEditedSource("SignatureChangeGatedDeactivate2.cs", later),
                 CancellationToken.None);
 
-            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadSignatureChangeAlreadyActiveFixture).FullName,
                 nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target),
                 new[] { "System.Int32" },
@@ -4404,7 +4564,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a gated replacement's wire key keeps Cecil '/' and '::', so it cannot match
-        /// a registry MethodKey until FormatMethodKeyParts normalizes it.
+        /// a registry MethodKey until FormatMethodLabelParts normalizes it.
         /// </summary>
         [Test]
         public void FormatGatedReplacementRegistryKey_NestedType_DiffersFromWireKey()
@@ -4536,7 +4696,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(HotReloadSignatureChangeExternalHost.Target),
                 BindingFlags.Instance | BindingFlags.Public);
             Assert.That(gatedTarget, Is.Not.Null);
-            string gatedKey = HotReloadPatcher.FormatMethodKey(gatedTarget);
+            string gatedKey = HotReloadMethodKeys.FormatMethodLabel(gatedTarget);
             bool recorded = HotReloadSupersededSignatureRegistry.TryGetReplacement(
                 gatedKey,
                 out string _);
@@ -4733,6 +4893,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 new TransformWorkerSkippedDto
                 {
+                    sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Mid()",
                     methodKey = "Host::Mid()",
                     reason = HotReloadConstants.UnavailableAddedCallSkipReason,
@@ -4740,6 +4901,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 new TransformWorkerSkippedDto
                 {
+                    sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Outer()",
                     methodKey = "Host::Outer()",
                     reason = HotReloadConstants.UnavailableAddedCallSkipReason,
@@ -4750,7 +4912,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
-                "test.dll",
+                HotReloadGroupFilePaths.ForSingleFile("Assets/Scripts/Host.cs", "test.dll"),
                 HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
                 new[] { "Host::Broken()" });
 
@@ -4770,6 +4932,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 new TransformWorkerSkippedDto
                 {
+                    sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Mid()",
                     methodKey = "Host::Mid()",
                     reason = HotReloadConstants.UnavailableAddedCallSkipReason,
@@ -4777,6 +4940,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 new TransformWorkerSkippedDto
                 {
+                    sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Outer()",
                     methodKey = "Host::Outer()",
                     reason = HotReloadConstants.UnavailableAddedCallSkipReason,
@@ -4787,7 +4951,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
-                "test.dll",
+                HotReloadGroupFilePaths.ForSingleFile("Assets/Scripts/Host.cs", "test.dll"),
                 HotReloadConstants.VibeLogIsolationTriggerSignatureChangeGate,
                 new[] { "Host::Broken()" });
 
@@ -4807,6 +4971,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 new TransformWorkerSkippedDto
                 {
+                    sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                     method = "Host.Caller()",
                     methodKey = "Host::Caller()",
                     reason = HotReloadConstants.UnavailableAddedCallSkipReason,
@@ -4817,7 +4982,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             List<HotReloadMethodOutcome> outcomes = HotReloadShimIsolation.CollectRetryOnlySkippedOutcomes(
                 Array.Empty<TransformWorkerSkippedDto>(),
                 retrySkipped,
-                "test.dll",
+                HotReloadGroupFilePaths.ForSingleFile("Assets/Scripts/Host.cs", "test.dll"),
                 HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
                 new[] { "Host::Broken()" });
 
@@ -4971,7 +5136,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string expectedOldSignature =
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeUnchangedCallerFixture::Target(System.Int32)";
-            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadSignatureChangeUnchangedCallerFixture).FullName,
                 nameof(HotReloadSignatureChangeUnchangedCallerFixture.StoreTarget),
                 new[] { "System.Int32" },
@@ -5100,12 +5265,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ", ",
                 new[]
                 {
-                    HotReloadPatcher.FormatMethodKeyParts(
+                    HotReloadMethodKeys.FormatMethodLabelParts(
                         typeof(HotReloadSignatureChangeTwoCallerFixture).FullName,
                         nameof(HotReloadSignatureChangeTwoCallerFixture.CallerAlpha),
                         new[] { "System.Int32" },
                         0),
-                    HotReloadPatcher.FormatMethodKeyParts(
+                    HotReloadMethodKeys.FormatMethodLabelParts(
                         typeof(HotReloadSignatureChangeTwoCallerFixture).FullName,
                         nameof(HotReloadSignatureChangeTwoCallerFixture.CallerBeta),
                         new[] { "System.Int32" },
@@ -5236,7 +5401,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 nameof(HotReloadSignatureChangeGenericCallerFixture.Target),
                 "The return type of");
-            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeGenericCallerFixture",
                 "Caller",
@@ -5279,7 +5444,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(patched);
-            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeGenericCallerFixture",
                 "Caller",
@@ -5492,7 +5657,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasAdded(
                 result,
                 nameof(HotReloadSignatureChangeMultiReplacementHost.TargetCovered));
-            string expectedCallerLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeMultiReplacementHost",
                 "CoveredCaller",
@@ -5528,7 +5693,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertNoFileLevelFailure(result);
-            string expectedAddedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedAddedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeExternalHost",
                 "ToDelete",
@@ -6791,7 +6956,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string AddedPingMethodLabel()
         {
-            return HotReloadPatcher.FormatMethodKeyParts(
+            return HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadAddedMethodApplyFixture).FullName,
                 "AddedPing",
                 new[] { "System.Int32" },
@@ -6800,7 +6965,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string AddedPongMethodLabel()
         {
-            return HotReloadPatcher.FormatMethodKeyParts(
+            return HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadAddedMethodApplyFixture).FullName,
                 "AddedPong",
                 new[] { "System.Int32" },
@@ -7242,14 +7407,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string WriteEditedSource(string fileName, string contents)
         {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string directory = Path.Combine(
-                projectRoot,
-                HotReloadConstants.TestSourcesRelativeDirectory);
-            Directory.CreateDirectory(directory);
-            string path = Path.Combine(directory, fileName);
-            File.WriteAllText(path, contents);
-            return path;
+            return HotReloadTestSourceWriter.WriteEditedSource(fileName, contents);
         }
 
         private static string ResolveSiblingConstDefinitionsPath()
@@ -7280,7 +7438,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value. Run 'uloop compile' to apply this change.";
 
         private const string ExpectedAddedSiblingTuningWarning =
-            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.AddedSiblingTuning exists only in the edited source, not in the compiled assembly. A method body in this file patched in this same run has the new value folded in, but bodies in other files that reference it fail shim compilation. Run 'uloop compile' to add it to the assemblies.";
+            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.AddedSiblingTuning exists only in the edited source, not in the compiled assembly. Method bodies patched in this same run have the new value folded in, but bodies in files outside this reload that reference it fail shim compilation. Run 'uloop compile' to add it to the assemblies.";
 
         private static IDisposable MutateSiblingTuningValue(int newValue)
         {

@@ -19,11 +19,9 @@ internal static class TypeEmitPlanner
 {
     internal static (List<TypeEmitState> TypeEmitStates, int ShimTypeCounter, int GlobalShimMethodCounter)
         QueueAllTypeEmitStates(
-            CompilationUnitSyntax root,
-            SemanticModel semanticModel,
+            WorkerSourceUnit sourceUnit,
             IAssemblySymbol targetTypesAssemblySymbol,
             WorkerInput input,
-            BaselineSnapshotState baseline,
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
             List<ShimTypeBuilder> shimTypes,
             AddedMethodCatalog addedMethodCatalog,
@@ -36,6 +34,9 @@ internal static class TypeEmitPlanner
             int shimTypeCounter,
             int globalShimMethodCounter)
     {
+        CompilationUnitSyntax root = sourceUnit.Root;
+        SemanticModel semanticModel = sourceUnit.SemanticModel;
+        BaselineSnapshotState baseline = sourceUnit.Baseline;
         List<TypeEmitState> typeEmitStates = new List<TypeEmitState>();
         foreach (TypeDeclarationSyntax typeDeclaration in TransformWorkerProgram.EnumerateTypeDeclarations(root))
         {
@@ -55,6 +56,7 @@ internal static class TypeEmitPlanner
                 Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap) =
                 baseline.GetAccessorBaselineMaps();
             UnsupportedMemberSkipCollector.AppendExplicitAccessorSkips(
+                sourceUnit.Input.ProjectRelativePath,
                 typeDeclaration,
                 typeMetadataNameFromSyntax,
                 semanticModel,
@@ -72,6 +74,7 @@ internal static class TypeEmitPlanner
                 Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap) =
                 baseline.GetUnsupportedMemberBaselineMaps();
             UnsupportedMemberSkipCollector.AppendUnsupportedMemberKindSkips(
+                sourceUnit.Input.ProjectRelativePath,
                 typeDeclaration,
                 typeMetadataNameFromSyntax,
                 semanticModel,
@@ -85,6 +88,7 @@ internal static class TypeEmitPlanner
 
             TypeEmitState typeState = new TypeEmitState
             {
+                SourceUnit = sourceUnit,
                 TypeDeclaration = typeDeclaration,
                 TypeSymbol = typeSymbol,
                 TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax

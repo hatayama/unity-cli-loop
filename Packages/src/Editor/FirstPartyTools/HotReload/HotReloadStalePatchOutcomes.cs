@@ -13,13 +13,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static void Append(
             List<HotReloadMethodOutcome> outcomes,
             TransformWorkerOutputDto workerOutput,
+            TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures,
             IReadOnlyCollection<string> gatedReplacementMethodKeys,
             string projectRelativePath,
             string assemblyResolvePath)
         {
-            TransformWorkerRemovedMethodSignatureDto[] removedMethodSignatures =
-                workerOutput?.removedMethodSignatures;
-            if (removedMethodSignatures == null || removedMethodSignatures.Length == 0)
+            if (workerOutput == null
+                || removedMethodSignatures == null || removedMethodSignatures.Length == 0)
             {
                 return;
             }
@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why the gate and replacement checks use the wire key: both worker-side sets are
                 // "Type::Method(args)", while the patch ledger keys are display-side
                 // ("Type.Method(args)"). Neither a gated nor an applied replacement is a deletion.
-                string wireKey = HotReloadWireMethodKeys.BuildMethodKeyParts(
+                string wireKey = HotReloadMethodKeys.BuildMethodKeyParts(
                     signature.typeMetadataName,
                     signature.methodName,
                     parameterTypeFullNames,
@@ -63,7 +63,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string displayKey = HotReloadPatcher.FormatMethodKeyParts(
+                string displayKey = HotReloadMethodKeys.FormatMethodLabelParts(
                     signature.typeMetadataName,
                     signature.methodName,
                     parameterTypeFullNames,

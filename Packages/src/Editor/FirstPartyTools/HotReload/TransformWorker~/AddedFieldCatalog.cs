@@ -71,23 +71,29 @@ internal sealed class AddedFieldCatalog
     // classification, so unused fields and isolation-excluded bodies would still list.
     // Excluded methods are dropped in TypeEmitPlanner.QueueTypeMethods before rewrite, so a file-wide
     // rewrite set matches emitted entries without per-entry tracking.
-    public string[] ListRewrittenAddedFieldDisplayNames()
+    public string[] ListRewrittenAddedFieldDisplayNames(string projectRelativePath)
     {
-        List<string> names = new List<string>(_rewrittenAddedFieldKeys.Count);
-        foreach (string fieldKey in _rewrittenAddedFieldKeys)
-        {
-            names.Add(FormatAddedFieldDisplayName(fieldKey));
-        }
-
-        names.Sort(StringComparer.Ordinal);
-        return names.ToArray();
+        return ListDisplayNamesOfFile(_rewrittenAddedFieldKeys, projectRelativePath);
     }
 
-    public string[] ListFoldedConstDisplayNames()
+    public string[] ListFoldedConstDisplayNames(string projectRelativePath)
     {
-        List<string> names = new List<string>(_foldedConstKeys.Count);
-        foreach (string fieldKey in _foldedConstKeys)
+        return ListDisplayNamesOfFile(_foldedConstKeys, projectRelativePath);
+    }
+
+    // Why filter by the binding's file: the catalog spans a whole group, while addedFieldNames
+    // and addedConstNames are per-file rows in the worker output.
+    private string[] ListDisplayNamesOfFile(HashSet<string> fieldKeys, string projectRelativePath)
+    {
+        List<string> names = new List<string>(fieldKeys.Count);
+        foreach (string fieldKey in fieldKeys)
         {
+            AddedFieldBinding binding = _byKey[fieldKey];
+            if (!string.Equals(binding.SourceProjectRelativePath, projectRelativePath, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             names.Add(FormatAddedFieldDisplayName(fieldKey));
         }
 

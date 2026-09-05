@@ -1,7 +1,7 @@
 ---
 name: uloop-hot-reload
 toolName: hot-reload
-description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible only to edited code in the same file); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New types, or members other files must reference, require 'uloop compile'."
+description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible to edited code in the same reload within the same assembly); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New types, or members referenced from other assemblies or from files not passed to the reload, require 'uloop compile'."
 ---
 
 # uloop hot-reload
@@ -53,11 +53,14 @@ interpretation rules are in `references/troubleshooting.md`.
 
 ## How It Works
 
-Each file resolves to its compiled assembly, every editable method body is rewritten
-into a static shim by an out-of-process Roslyn worker (private/internal access becomes
-accessor delegates where needed), the shims compile against publicized reference copies
-and load into the Editor domain, and each original method is patched with a Harmony
-transpiler (ID `io.github.hatayama.uloop.hot-reload`). Re-running after a real edit
+The edited files are grouped by the compiled assembly they belong to. Per group, every
+editable method body is rewritten into a static shim by an out-of-process Roslyn worker
+(private/internal access becomes accessor delegates where needed), the shims of the whole
+group compile into one shim assembly against publicized reference copies and load into the
+Editor domain, and each original method is patched with a Harmony transpiler (ID
+`io.github.hatayama.uloop.hot-reload`). Because a group shares one shim assembly, a body
+edited in one file can call a method or field added in another edited file of the same
+assembly. Re-running after a real edit
 replaces the patch; an unchanged file after a fully applied reload reports
 `AlreadyActive` rows and changes nothing. With a compile-time source baseline, only
 methods whose bodies actually changed are patched (`UnchangedTotal` counts the rest),
@@ -66,10 +69,11 @@ and a patched body that matches the baseline again is unpatched on that run.
 ## Scope in Brief
 
 - Patched: ordinary method bodies and property getters with a body.
-- Added members: new methods and fields apply, visible only to edited code in the same
-  file, and vanish on any compile or domain reload (an Editor-session illusion). New
-  types, cross-file references, reflection, serialization, and Unity message discovery
-  need `uloop compile`.
+- Added members: new methods and fields apply, visible to edited code in the same reload
+  within the same assembly (pass the declaring file and its callers together), and vanish
+  on any compile or domain reload (an Editor-session illusion). New types, references
+  from other assemblies or from files not passed to the reload, reflection, serialization,
+  and Unity message discovery need `uloop compile`.
 - Signature changes (return type, rename, parameters) follow the added-member rules. A
   return-type change is gated: it is `Skipped` unless the same reload — or an earlier one —
   has patched every live compiled caller of the old signature. A rename or parameter-list
@@ -81,7 +85,8 @@ and a patched body that matches the baseline again is unpatched on that run.
   other outside-body edits never change runtime behavior (drift is warned where
   detectable).
 - A reload applies each file all-or-nothing: any `Failed` method leaves that file
-  unapplied; patches in other files still apply.
+  unapplied; patches in other files still apply, except bodies that call an added method
+  whose own shim failed to compile — those are `Skipped` until it compiles.
 
 Full rules and the `Skipped`/`Failed` condition tables: `references/scope-and-limits.md`.
 

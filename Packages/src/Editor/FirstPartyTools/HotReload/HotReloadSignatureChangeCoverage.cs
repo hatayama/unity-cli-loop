@@ -18,7 +18,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> coveredKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerEntryDto entry in entries)
             {
-                coveredKeys.Add(HotReloadWireMethodKeys.BuildMethodKey(entry));
+                coveredKeys.Add(HotReloadMethodKeys.BuildMethodKey(entry));
             }
 
             foreach (HotReloadCallSiteScanner.CompiledMethodIdentity target in targets)
@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // change, which is still a consistent old world. Fail-closed only for live
                 // compiled callers that will keep invoking the old method.
                 coveredKeys.Add(
-                    HotReloadWireMethodKeys.BuildMethodKeyParts(
+                    HotReloadMethodKeys.BuildMethodKeyParts(
                         target.TypeMetadataName,
                         target.MethodName,
                         target.ParameterTypeFullNames,
@@ -74,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> warnings = new List<string>();
             foreach (TransformWorkerRemovedMethodSignatureDto signature in removedSignatures)
             {
-                string methodKey = HotReloadWireMethodKeys.BuildMethodKeyParts(
+                string methodKey = HotReloadMethodKeys.BuildMethodKeyParts(
                     signature.typeMetadataName,
                     signature.methodName,
                     signature.parameterTypeFullNames,
@@ -119,7 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> appliedReplacementKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerEntryDto entry in entriesToPatch)
             {
-                string methodKey = HotReloadWireMethodKeys.BuildMethodKey(entry);
+                string methodKey = HotReloadMethodKeys.BuildMethodKey(entry);
                 entryKeys.Add(methodKey);
                 if (entry.replacesCompiledMethod)
                 {
@@ -171,7 +171,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string FormatCallSiteCallerLabel(HotReloadCallSiteScanner.CallSiteHit hit)
         {
             Debug.Assert(hit != null, "hit must not be null.");
-            return HotReloadPatcher.FormatMethodKeyParts(
+            return HotReloadMethodKeys.FormatMethodLabelParts(
                 hit.CallerTypeMetadataName,
                 hit.CallerMethodName,
                 hit.CallerParameterTypeFullNames ?? Array.Empty<string>(),
@@ -233,7 +233,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> coveredKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerEntryDto entry in entriesToPatch)
             {
-                coveredKeys.Add(HotReloadWireMethodKeys.BuildMethodKey(entry));
+                coveredKeys.Add(HotReloadMethodKeys.BuildMethodKey(entry));
             }
 
             foreach (string targetKey in scanTargetKeys)
@@ -251,7 +251,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string methodKey = HotReloadWireMethodKeys.BuildMethodKey(entry);
+                string methodKey = HotReloadMethodKeys.BuildMethodKey(entry);
                 if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> callers)
                     && callers.Count > 0)
                 {
@@ -269,7 +269,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (HotReloadCallSiteScanner.CompiledMethodIdentity target in targets)
             {
                 keys.Add(
-                    HotReloadWireMethodKeys.BuildMethodKeyParts(
+                    HotReloadMethodKeys.BuildMethodKeyParts(
                         target.TypeMetadataName,
                         target.MethodName,
                         target.ParameterTypeFullNames,
@@ -286,13 +286,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HashSet<string> methodKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerEntryDto entry in entries)
             {
-                methodKeys.Add(HotReloadWireMethodKeys.BuildMethodKey(entry));
+                methodKeys.Add(HotReloadMethodKeys.BuildMethodKey(entry));
             }
 
             foreach (TransformWorkerUnchangedMethodDto unchanged in unchangedMethods)
             {
                 methodKeys.Add(
-                    HotReloadWireMethodKeys.BuildMethodKeyParts(
+                    HotReloadMethodKeys.BuildMethodKeyParts(
                         unchanged.typeMetadataName,
                         unchanged.methodName,
                         unchanged.parameterTypeFullNames,
@@ -300,6 +300,64 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return methodKeys;
+        }
+
+        /// <summary>
+        /// The edited-method keys of each file of the group, keyed by that file's project
+        /// relative path.
+        /// </summary>
+        /// <remarks>
+        /// Why per file: "every uncovered caller is in the edited file" is a statement about one
+        /// file. A group run transforms several files at once, so a set built from all of them
+        /// would call a caller in a sibling file a same-file caller.
+        /// </remarks>
+        internal static Dictionary<string, HashSet<string>> CollectEditedFileMethodKeysByFile(
+            TransformWorkerEntryDto[] entries,
+            TransformWorkerUnchangedMethodDto[] unchangedMethods)
+        {
+            Debug.Assert(entries != null, "entries must not be null.");
+            Debug.Assert(unchangedMethods != null, "unchangedMethods must not be null.");
+
+            Dictionary<string, HashSet<string>> methodKeysByFile =
+                new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                AddMethodKeyOfFile(
+                    methodKeysByFile,
+                    entry.sourceProjectRelativePath,
+                    HotReloadMethodKeys.BuildMethodKey(entry));
+            }
+
+            foreach (TransformWorkerUnchangedMethodDto unchanged in unchangedMethods)
+            {
+                AddMethodKeyOfFile(
+                    methodKeysByFile,
+                    unchanged.sourceProjectRelativePath,
+                    HotReloadMethodKeys.BuildMethodKeyParts(
+                        unchanged.typeMetadataName,
+                        unchanged.methodName,
+                        unchanged.parameterTypeFullNames,
+                        unchanged.genericArity));
+            }
+
+            return methodKeysByFile;
+        }
+
+        private static void AddMethodKeyOfFile(
+            Dictionary<string, HashSet<string>> methodKeysByFile,
+            string projectRelativePath,
+            string methodKey)
+        {
+            Debug.Assert(
+                !string.IsNullOrEmpty(projectRelativePath),
+                "A worker row must name the source file it came from.");
+            if (!methodKeysByFile.TryGetValue(projectRelativePath, out HashSet<string> methodKeys))
+            {
+                methodKeys = new HashSet<string>(StringComparer.Ordinal);
+                methodKeysByFile[projectRelativePath] = methodKeys;
+            }
+
+            methodKeys.Add(methodKey);
         }
 
         internal static bool AreAllUncoveredCallersInEditedFile(
