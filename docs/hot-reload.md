@@ -17,20 +17,27 @@ Editor-only. Players (Mono or IL2CPP) are out of scope.
 ## Pipeline Overview
 
 ```text
-edited .cs file
-  │ (1) resolve owning assembly, defines, and references via CompilationPipeline;
-  │     load a PDB-checksum-verified source snapshot when one exists for the file
+edited .cs files
+  │ (1) resolve each file's owning assembly, defines, and references via
+  │     CompilationPipeline; load a PDB-checksum-verified source snapshot when one
+  │     exists for the file
+  ▼
+group by assembly              (1b) files that compile into the same assembly form one
+  │                                 group, processed sequentially; steps (2)-(4) run once
+  │                                 per group, step (5) applies file by file
   ▼
 transform worker (external process: Unity-bundled Roslyn on the Unity-bundled .NET host)
-  │ (2) parse + semantic analysis; when a verified snapshot is available, diff method
-  │     declarations against it and emit shims only for edited methods (unchanged methods
-  │     are counted, not listed); convert each eligible edited method body into a static
-  │     shim method source (bare member references qualified via `__uloopInstance.` /
-  │     `global::Type.`), plus a manifest and per-method skip reasons
+  │ (2) parse + semantic analysis of every source in the group; when a verified snapshot
+  │     is available, diff method declarations against it and emit shims only for edited
+  │     methods (unchanged methods are counted, not listed); convert each eligible edited
+  │     method body into a static shim method source (bare member references qualified via
+  │     `__uloopInstance.` / `global::Type.`), plus a manifest and per-method skip reasons
   ▼
 shim compilation (existing external csc infrastructure, RoslynCompilerBackend)
-  │ (3) compile the shim source against publicized reference assemblies
-  │     (Cecil visibility rewrite, same assembly name) → dll + pdb bytes
+  │ (3) compile the group's shim source into one assembly against publicized reference
+  │     assemblies (Cecil visibility rewrite, same assembly name) → dll + pdb bytes;
+  │     members added in one file of the group are therefore visible to the bodies
+  │     edited in its siblings
   ▼
 Assembly.Load(bytes, pdb)      (4) load the shim assembly into the Editor domain
   ▼

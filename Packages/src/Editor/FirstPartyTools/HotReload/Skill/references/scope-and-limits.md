@@ -12,13 +12,17 @@ Adding a constructor, operator, or explicit event accessor is reported as
 ## Added methods and fields
 
 Hot reload can add new methods and fields alongside body edits, under one hard rule:
-an added member is visible only to edited code in the same file. Compiled, unedited
+an added member is visible only to edited code in the same reload, within the same
+compiled assembly. Files that compile into one assembly are reloaded together through
+one shim assembly, so a body edited in one of them can call a member added in another
+— pass the declaring file and its callers to the same command. Compiled, unedited
 code cannot see it, and neither can anything that resolves members by name at
 runtime: reflection (`GetType().GetMethod("NewM")` returns `null`), Unity's message
 discovery (an added `Update` or `OnCollisionEnter` on a `MonoBehaviour` is never
 invoked — a `Warnings` entry names it), UnityEvent/inspector wiring, and
-serialization. Referencing an added member from a different file fails that file's
-hot reload with the usual new-member hint; run `uloop compile` instead.
+serialization. Referencing an added member from a file this reload did not receive, or
+from another assembly, fails that file's hot reload with the usual new-member hint;
+run `uloop compile` instead.
 
 An added method reports its own row with Kind `Added`; the edited methods that call
 it report `Patched` as usual. Added `virtual`/`override`/`abstract` methods, explicit
@@ -85,14 +89,15 @@ from this generic warning); without a baseline it stays silent. Either way, use
 Changing a compiled method's return type is applied as a remove-plus-add: the old
 method stays in the compiled assembly (like any removed member), the new signature
 becomes an added method with its own `Added` row, and the edited methods that call
-it report `Patched`. Every added-member rule applies — same-file visibility, the
-Editor-session illusion, and the `virtual`/generic/interface exclusions.
+it report `Patched`. Every added-member rule applies — same-reload visibility within
+the assembly, the Editor-session illusion, and the `virtual`/generic/interface
+exclusions.
 
 A gate protects compiled callers: the change applies only when every live compiled
-call site of the old signature is patched by the same file's reload. A caller in
-another file — even one edited in the same run — or an *unedited* method in the
-same file (an implicit `int`→`long` widening can leave a caller's source
-untouched) would keep calling the old method silently, so the run reports the
+call site of the old signature is patched by the same reload. A caller this reload
+did not edit — in another file, in another assembly, or an *unedited* method in the
+edited file itself (an implicit `int`→`long` widening can leave a caller's source
+untouched) — would keep calling the old method silently, so the run reports the
 changed method and its edited callers as `Skipped` instead; land the change with
 `uloop compile`. When every uncovered caller is in the edited file itself, the
 `Skipped` reason names those callers: editing their bodies and reloading again
@@ -119,9 +124,10 @@ session illusion; run `uloop compile`.
 Treat hot reload as the exploration phase and `uloop compile` as the landing phase. While
 diagnosing or tuning, keep every edit inside existing method bodies — inline a would-be
 helper's logic at its call site for now instead of extracting it. New helper methods
-and fields can now be explored directly with hot reload inside the same file. When
-the change needs a new type, cross-file visibility, runtime name-based lookup, or
-serialization, collect those and run `uloop compile`
+and fields can now be explored directly with hot reload, across the files of one
+assembly as long as every file involved is passed to the same command. When the
+change needs a new type, visibility from another assembly or from a file outside the
+reload, runtime name-based lookup, or serialization, collect those and run `uloop compile`
 once: every compile triggers a domain reload that drops all active patches and pause points
 and resets the running PlayMode session, so compiling member-by-member pays that cost
 repeatedly. After the one compile, re-enter PlayMode and continue exploring on the freshly
@@ -222,9 +228,9 @@ stay `Skipped`.
 | Loaded assembly differs from the one on disk (pending compile) | Run `uloop compile` first, then retry |
 | Source file fails to parse | Per-file entry carrying the parse errors |
 | Method signature not found in the loaded assembly | Usually a stale assembly; run `uloop compile`. In-file renames and signature changes are classified as added members before reaching this point |
-| Shim compile error (e.g. the body calls a member that does not exist yet) | Failing methods are isolated: each reports `Failed` with its own compiler errors (plus the `uloop compile` hint when they indicate a missing member). When errors cannot be attributed per method, the whole file reports one `(shim-compile)` entry; if only one method was edited, the failure is attributed to that method's name instead |
+| Shim compile error (e.g. the body calls a member that does not exist yet) | The error is attributed to the file it came from: that file reports `Failed` with its own compiler errors (plus the `uloop compile` hint when they indicate a missing member) and the rest of the file is `Skipped`, while the other files of the assembly are recompiled without it and applied. Bodies elsewhere that call an added method the failed file declared are `Skipped`. When errors cannot be attributed to a file, every file of that assembly reports one `(shim-compile)` entry; if only one method was edited, the failure is attributed to that method's name instead |
 | Patch rejected or crashed at apply time (e.g. `[BurstCompile]`, a patch-engine emit failure) | The entry carries the rejection reason or the underlying engine error |
 | Accessor binding failed for a shim type | The source references a member the compiled assembly does not have yet; every delegation-patched method in that shim type reports the binder error — run `uloop compile` and retry |
-| The signature-change gate could not finish the run safely — the retry that skips a gated change failed, or shim-compile isolation dropped an edited caller that had covered a change | Per-file entry with `Method` = `(signature-change-gate)` carrying the specific cause; nothing from the file is applied — fix the failing edit or run `uloop compile` |
+| The signature-change gate could not finish the run safely — the retry that skips a gated change failed, or shim-compile isolation dropped an edited caller that had covered a change | Every file of that assembly reports `Method` = `(signature-change-gate)` carrying the specific cause; nothing from those files is applied, because the reload has no retry budget left to split them — fix the failing edit or run `uloop compile`. Files of other assemblies in the same command are unaffected |
 
-A reload applies each file all-or-nothing: when any method in a file fails to compile or validate, nothing from that file is applied and patches from earlier reloads stay active. The one exception is a Harmony patch-engine failure in the middle of applying a validated file; that run reports itself as partially applied and recommends 'uloop hot-reload --revert-all'.
+A reload applies each file all-or-nothing: when any method in a file fails to compile or validate, nothing from that file is applied and patches from earlier reloads stay active. The other files of the same assembly are still applied, except bodies that call an added method the failed file declared. The one exception is a Harmony patch-engine failure in the middle of applying a validated file; that run reports itself as partially applied and recommends 'uloop hot-reload --revert-all'.
