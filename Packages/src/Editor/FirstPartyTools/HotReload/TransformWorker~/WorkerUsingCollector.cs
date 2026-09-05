@@ -78,13 +78,20 @@ internal static class WorkerUsingCollector
         return false;
     }
 
-    // Why skip the run's own sources: their usings already come from the in-memory trees.
-    // Reading the on-disk copies would pick up the pre-edit sources.
+    // Why the edited roots are passed in: reading their on-disk copies would pick up the
+    // pre-edit sources, yet a global using one edited file declares still has to reach the
+    // shims of its siblings, so those come from the in-memory trees instead.
     internal static List<UsingDirectiveSyntax> CollectAssemblyGlobalUsings(
         WorkerInput input,
-        CSharpParseOptions parseOptions)
+        CSharpParseOptions parseOptions,
+        IReadOnlyList<CompilationUnitSyntax> editedRoots)
     {
         List<UsingDirectiveSyntax> collected = new List<UsingDirectiveSyntax>();
+        for (int index = 0; index < editedRoots.Count; index++)
+        {
+            AppendGlobalUsings(collected, editedRoots[index]);
+        }
+
         foreach (string assemblySourcePath in input.AssemblySourcePaths)
         {
             if (string.IsNullOrEmpty(assemblySourcePath)
@@ -131,7 +138,15 @@ internal static class WorkerUsingCollector
             SourceText.From(text, Encoding.UTF8),
             parseOptions,
             path: assemblySourcePath);
-        CompilationUnitSyntax unit = tree.GetCompilationUnitRoot();
+        AppendGlobalUsings(collected, tree.GetCompilationUnitRoot());
+    }
+
+    // Why stripped of the global keyword: the emitter puts these usings inside the shim type's
+    // namespace declaration, where a global using is not allowed.
+    internal static void AppendGlobalUsings(
+        List<UsingDirectiveSyntax> collected,
+        CompilationUnitSyntax unit)
+    {
         foreach (UsingDirectiveSyntax usingDirective in unit.Usings)
         {
             if (!usingDirective.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword))

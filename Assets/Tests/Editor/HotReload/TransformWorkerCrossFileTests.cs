@@ -27,6 +27,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileAddedMemberHost";
         private const string CallerTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileAddedMemberCaller";
+        // Declared by an edited source only, so the collector cannot find it on disk.
+        private const string EditedGlobalUsingLine =
+            "global using HotReloadEditedFileGlobalAlias = System.Text.StringBuilder;\n";
 
         /// <summary>
         /// What: a body edited in the caller file binds to a method added in the host file within
@@ -102,6 +105,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(run.Result.Output.files[0].addedConstNames, Has.Some.Contains("Limit"));
             Assert.That(run.Result.Output.files[1].addedConstNames, Is.Empty);
             FindEntry(run, CallerTypeMetadataName, "Call");
+        }
+
+        /// <summary>
+        /// What: a global using declared in one edited file reaches the shim source, because the
+        /// collector takes the edited sources from the in-memory trees instead of their pre-edit
+        /// copies on disk.
+        /// </summary>
+        [Test]
+        public async Task Run_TwoSources_GlobalUsingDeclaredInEditedFile_ReachesShimSource()
+        {
+            CrossFileRun run = await RunEditedPairAsync(
+                EditedGlobalUsingLine + ReadOnDisk(HostFileName),
+                ReplaceCallerBody(
+                    ReadOnDisk(CallerFileName),
+                    "return new HotReloadEditedFileGlobalAlias().Length;"));
+
+            Assert.That(run.Result.Success, Is.True, run.Result.ErrorMessage);
+            FindEntry(run, CallerTypeMetadataName, "Call");
+            AssertNoSkippedMethodNamed(run, "Call");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Contain("using HotReloadEditedFileGlobalAlias"),
+                "The shim source must carry the global using the edited sibling file declares.");
         }
 
         /// <summary>
