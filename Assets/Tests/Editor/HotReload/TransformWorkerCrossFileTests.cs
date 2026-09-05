@@ -254,6 +254,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a using-alias type-name receiver still binds an added static method, because
+        /// GetSymbolInfo on the alias identifier returns the target type, not IAliasSymbol.
+        /// </summary>
+        [Test]
+        public async Task Run_TypeAliasReceiverBindsAddedStaticMethod()
+        {
+            string editedCaller = ReplaceInSource(
+                ReadOnDisk(CallerFileName),
+                "using System.Runtime.CompilerServices;\n",
+                "using System.Runtime.CompilerServices;\n"
+                + "using HostAlias = io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileAddedMemberHost;\n");
+            editedCaller = ReplaceInSource(
+                editedCaller,
+                "return holder.Host.Value();",
+                "return HostAlias.AddedStatic();");
+            CrossFileRun run = await RunEditedPairAsync(
+                AddHostStaticMethod(ReadOnDisk(HostFileName)),
+                editedCaller);
+
+            Assert.That(run.Result.Success, Is.True, run.Result.ErrorMessage);
+            TransformWorkerEntryDto addedEntry = FindEntry(run, HostTypeMetadataName, "AddedStatic");
+            Assert.That(addedEntry.patchKind, Is.EqualTo("addedMethod"));
+            TransformWorkerEntryDto callerEntry = FindEntry(run, CallerTypeMetadataName, "CallThroughHolder");
+            Assert.That(callerEntry.calledAddedMethodKeys, Is.Not.Null);
+            Assert.That(
+                callerEntry.calledAddedMethodKeys,
+                Has.Some.Contains("AddedStatic"),
+                "A type-alias receiver must record the added static method.");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Not.Contain("HostAlias.AddedStatic("),
+                "The type-alias static call must be rewritten off the added method.");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Contain("." + addedEntry.shimMethodName + "("),
+                "The added static shim must be invoked from the type-alias call.");
+        }
+
+        /// <summary>
         /// What: an unreadable source reports its failure on its own per-file row only, and the
         /// other file of the run still produces entries.
         /// </summary>
