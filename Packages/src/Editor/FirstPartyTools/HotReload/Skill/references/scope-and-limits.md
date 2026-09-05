@@ -26,8 +26,9 @@ the usual new-member hint; run `uloop compile` instead. Unchanged files of the s
 assembly that already hold active patches are re-applied automatically so they bind
 to the newest shim. An edited body that reaches an added method through a
 compiled type still binds when the receiver's static type name, method name, and
-argument count uniquely match; the lookup uses that static type itself (not a base
-type), requires an exact argument count, and does not cover `?.`.
+argument count uniquely match and the call is static only when the receiver is a
+type name; the lookup uses that static type itself (not a base type), requires an
+exact argument count, and does not cover `?.`.
 
 An added method reports its own row with Kind `Added`; the edited methods that call
 it report `Patched` as usual. Added `virtual`/`override`/`abstract` methods, explicit

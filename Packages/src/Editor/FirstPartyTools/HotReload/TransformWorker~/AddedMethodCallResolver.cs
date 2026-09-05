@@ -64,7 +64,22 @@ internal static class AddedMethodCallResolver
             CecilTypeNames.ToMetadataName(named),
             memberAccess.Name.Identifier.ValueText,
             invocation.ArgumentList.Arguments.Count);
-        isStaticCall = binding != null && binding.IsStatic;
+        if (binding == null)
+        {
+            return null;
+        }
+
+        // Why match staticness: a value receiver plus a static added method is CS0176;
+        // rewriting it would drop receiver evaluation. A type-name receiver plus an
+        // instance method would pass the type name as the instance argument.
+        bool receiverIsTypeName =
+            semanticModel.GetSymbolInfo(memberAccess.Expression).Symbol is ITypeSymbol;
+        if (binding.IsStatic != receiverIsTypeName)
+        {
+            return null;
+        }
+
+        isStaticCall = binding.IsStatic;
         return binding;
     }
 }

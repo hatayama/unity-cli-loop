@@ -220,6 +220,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a metadata value receiver does not bind an added static method, so the call
+        /// stays unbound instead of rewriting away the receiver evaluation (CS0176).
+        /// </summary>
+        [Test]
+        public async Task Run_ValueReceiverDoesNotBindAddedStaticMethod()
+        {
+            string editedCaller = ReplaceInSource(
+                ReadOnDisk(CallerFileName),
+                "return holder.Host.Value();",
+                "return holder.Host.AddedStatic();");
+            CrossFileRun run = await RunEditedPairAsync(
+                AddHostStaticMethod(ReadOnDisk(HostFileName)),
+                editedCaller);
+
+            Assert.That(run.Result.Success, Is.True, run.Result.ErrorMessage);
+            TransformWorkerEntryDto addedEntry = FindEntry(run, HostTypeMetadataName, "AddedStatic");
+            Assert.That(addedEntry.patchKind, Is.EqualTo("addedMethod"));
+            TransformWorkerEntryDto callerEntry = FindEntry(run, CallerTypeMetadataName, "CallThroughHolder");
+            Assert.That(
+                callerEntry.calledAddedMethodKeys == null
+                || !Array.Exists(callerEntry.calledAddedMethodKeys, key => key.Contains("AddedStatic")),
+                Is.True,
+                "A value-receiver call must not record the added static method.");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Contain("holder.Host.AddedStatic("),
+                "The mismatched static call must stay on the compiled receiver.");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Not.Contain("." + addedEntry.shimMethodName + "("),
+                "The added static shim must not be invoked from the value-receiver call.");
+        }
+
+        /// <summary>
         /// What: an unreadable source reports its failure on its own per-file row only, and the
         /// other file of the run still produces entries.
         /// </summary>
@@ -251,6 +285,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return InsertIntoHostBody(
                 hostSource,
                 "        public int Added()\n        {\n            return 41;\n        }\n\n");
+        }
+
+        private static string AddHostStaticMethod(string hostSource)
+        {
+            return InsertIntoHostBody(
+                hostSource,
+                "        public static int AddedStatic()\n        {\n            return 41;\n        }\n\n");
         }
 
         private static string InsertIntoHostBody(string hostSource, string memberText)
