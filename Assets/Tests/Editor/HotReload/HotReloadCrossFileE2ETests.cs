@@ -555,6 +555,88 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a repeated unchanged path opens a later all-deferred group that still holds
+        /// an active caller, so that caller is processed as Patched against the new shim
+        /// instead of staying AlreadyActive on the previous one.
+        /// </summary>
+        [Test]
+        public async Task Run_RepeatedUnchangedPathWithActiveCaller_RebindsCallerInsteadOfAlreadyActive()
+        {
+            string firstHostSource = InsertHostMember(
+                "        public int Added()\n        {\n            return 5;\n        }\n\n");
+            string firstCallerSource = ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added();");
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            string otherPath = FixturePath(OtherSameAssemblyFileName);
+            string otherEdited = ReplaceInSource(
+                ReadFixture(OtherSameAssemblyFileName),
+                OtherExistingValueAnchor,
+                OtherExistingValueEdited);
+            string firstCallerEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindRepeatedCaller.cs",
+                firstCallerSource);
+            string otherEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindRepeatedOther.cs",
+                otherEdited);
+
+            await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindRepeatedHost.cs",
+                        firstHostSource),
+                    [callerPath] = firstCallerEditPath
+                });
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
+
+            HotReloadOrchestratorResult activateOther = await HotReloadOrchestrator.RunAsync(
+                new[] { otherPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [otherPath] = otherEditPath
+                });
+            AssertNoFailure(activateOther);
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, otherPath, otherPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindRepeatedHostReedited.cs",
+                        InsertHostMember(
+                            "        public int Added()\n        {\n            return 6;\n        }\n\n")),
+                    [otherPath] = otherEditPath,
+                    [callerPath] = firstCallerEditPath
+                });
+
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(6));
+            FindOutcomeForFile(
+                second,
+                callerPath,
+                HotReloadMethodOutcomeKind.Patched,
+                "Call");
+            foreach (HotReloadMethodOutcome outcome in CollectOutcomesForFile(second, callerPath))
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.AlreadyActive),
+                    "Caller must not stay AlreadyActive on the previous shim.\n"
+                    + FormatOutcomes(second));
+            }
+        }
+
+        /// <summary>
         /// What: a sibling pulled in to re-bind is not described as re-applied when the host
         /// shim compile fails; isolation reports the caller as Skipped and the live patch
         /// stays on the previous body.

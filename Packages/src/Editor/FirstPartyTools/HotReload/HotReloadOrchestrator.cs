@@ -75,13 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            bool[] shortCircuited = new bool[plans.Count];
-            for (int shortCircuitIndex = 0; shortCircuitIndex < plans.Count; shortCircuitIndex++)
-            {
-                shortCircuited[shortCircuitIndex] = ShouldShortCircuitWholeGroup(
-                    plans[shortCircuitIndex],
-                    deferredAlreadyActive);
-            }
+            bool[] allDeferred = ClassifyAllDeferredPlans(plans, deferredAlreadyActive);
 
             List<(string Path, HotReloadFileProcessResult Result)> extraResults =
                 new List<(string Path, HotReloadFileProcessResult Result)>();
@@ -89,21 +83,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 ct.ThrowIfCancellationRequested();
                 HotReloadFileGroupPlan plan = plans[planIndex];
-                if (shortCircuited[planIndex])
+                if (allDeferred[planIndex])
                 {
                     ApplyDeferredAlreadyActive(plan, groupFiles, resultSlots, deferredAlreadyActive);
                     continue;
                 }
 
+                bool isLastChangedGroup = IsLastChangedPlanForAssembly(plans, allDeferred, planIndex);
+                List<int> inputIndexes = new List<int>(plan.InputIndexes);
+                if (isLastChangedGroup)
+                {
+                    AppendUniqueLaterDeferredInputIndexes(
+                        plans,
+                        allDeferred,
+                        planIndex,
+                        groupFiles,
+                        inputIndexes);
+                }
+
                 await ProcessPlannedGroupAsync(
-                        plan,
+                        inputIndexes,
                         groupFiles,
                         resultSlots,
                         correlationId,
                         ct,
                         pathsInRun,
                         contentPathOverrideByFile,
-                        IsLastProcessedPlanForAssembly(plans, shortCircuited, planIndex),
+                        isLastChangedGroup,
                         extraResults,
                         run)
                     .ConfigureAwait(false);
@@ -191,7 +197,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             plannerInput.Add((index, assemblyName, projectRelativePath));
         }
 
-        private static bool ShouldShortCircuitWholeGroup(
+        private static bool[] ClassifyAllDeferredPlans(
+            IReadOnlyList<HotReloadFileGroupPlan> plans,
+            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
+        {
+            Debug.Assert(plans != null, "plans must not be null.");
+            Debug.Assert(deferredAlreadyActive != null, "deferredAlreadyActive must not be null.");
+
+            bool[] allDeferred = new bool[plans.Count];
+            for (int planIndex = 0; planIndex < plans.Count; planIndex++)
+            {
+                allDeferred[planIndex] = AreAllInputsDeferredAlreadyActive(
+                    plans[planIndex],
+                    deferredAlreadyActive);
+            }
+
+            return allDeferred;
+        }
+
+        private static bool AreAllInputsDeferredAlreadyActive(
             HotReloadFileGroupPlan plan,
             List<HotReloadMethodOutcome>[] deferredAlreadyActive)
         {
@@ -206,6 +230,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        // Why absorbed here: a later all-deferred plan can hold an unchanged caller that is
+        // already in pathsInRun, so sibling auto-include cannot add it, and running that plan
+        // alone would emit a shim that omits this group's changed host.
+        private static void AppendUniqueLaterDeferredInputIndexes(
+            IReadOnlyList<HotReloadFileGroupPlan> plans,
+            bool[] allDeferred,
+            int currentPlanIndex,
+            HotReloadGroupFile[] groupFiles,
+            List<int> inputIndexes)
+        {
+            Debug.Assert(plans != null, "plans must not be null.");
+            Debug.Assert(allDeferred != null, "allDeferred must not be null.");
+            Debug.Assert(groupFiles != null, "groupFiles must not be null.");
+            Debug.Assert(inputIndexes != null, "inputIndexes must not be null.");
+
+            string assemblyName = plans[currentPlanIndex].AssemblyName;
+            HashSet<string> pathsInGroup = new HashSet<string>(
+                HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
+            for (int position = 0; position < inputIndexes.Count; position++)
+            {
+                pathsInGroup.Add(groupFiles[inputIndexes[position]].ProjectRelativePath);
+            }
+
+            for (int planIndex = currentPlanIndex + 1; planIndex < plans.Count; planIndex++)
+            {
+                if (!allDeferred[planIndex]
+                    || !string.Equals(
+                        plans[planIndex].AssemblyName,
+                        assemblyName,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                IReadOnlyList<int> laterIndexes = plans[planIndex].InputIndexes;
+                for (int laterPosition = 0; laterPosition < laterIndexes.Count; laterPosition++)
+                {
+                    int inputIndex = laterIndexes[laterPosition];
+                    string path = groupFiles[inputIndex].ProjectRelativePath;
+                    if (pathsInGroup.Add(path))
+                    {
+                        inputIndexes.Add(inputIndex);
+                    }
+                }
+            }
+        }
+
         private static void ApplyDeferredAlreadyActive(
             HotReloadFileGroupPlan plan,
             HotReloadGroupFile[] groupFiles,
@@ -214,6 +285,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             foreach (int inputIndex in plan.InputIndexes)
             {
+                if (resultSlots[inputIndex] != null)
+                {
+                    continue;
+                }
+
+                Debug.Assert(
+                    deferredAlreadyActive[inputIndex] != null,
+                    "An unfilled deferred slot must have AlreadyActive rows.");
                 groupFiles[inputIndex].Sinks.Outcomes.AddRange(deferredAlreadyActive[inputIndex]);
                 resultSlots[inputIndex] = new HotReloadFileProcessResult(
                     groupFiles[inputIndex].Sinks.Outcomes,
@@ -223,7 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static async Task ProcessPlannedGroupAsync(
-            HotReloadFileGroupPlan plan,
+            IReadOnlyList<int> inputIndexes,
             HotReloadGroupFile[] groupFiles,
             HotReloadFileProcessResult[] resultSlots,
             string correlationId,
@@ -234,7 +313,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<(string Path, HotReloadFileProcessResult Result)> extraResults,
             HotReloadRunAccumulator run)
         {
-            IReadOnlyList<int> inputIndexes = plan.InputIndexes;
+            Debug.Assert(inputIndexes != null && inputIndexes.Count > 0, "A group must hold a file.");
             List<HotReloadGroupFile> filesOfGroup = new List<HotReloadGroupFile>(inputIndexes.Count);
             foreach (int inputIndex in inputIndexes)
             {
@@ -381,23 +460,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return sawApplied;
         }
 
-        // Why processed groups only: a trailing all-unchanged plan is skipped, so treating it
-        // as the assembly's last group would never auto-include active siblings.
-        private static bool IsLastProcessedPlanForAssembly(
+        // Why changed groups only: a trailing all-deferred plan is not the shim that carries
+        // this run's host edits, so auto-include and absorbed callers belong on the last
+        // changed group.
+        private static bool IsLastChangedPlanForAssembly(
             IReadOnlyList<HotReloadFileGroupPlan> plans,
-            bool[] shortCircuited,
+            bool[] allDeferred,
             int planIndex)
         {
             Debug.Assert(plans != null, "plans must not be null.");
-            Debug.Assert(shortCircuited != null, "shortCircuited must not be null.");
-            Debug.Assert(shortCircuited.Length == plans.Count, "shortCircuited must match plans.");
+            Debug.Assert(allDeferred != null, "allDeferred must not be null.");
+            Debug.Assert(allDeferred.Length == plans.Count, "allDeferred must match plans.");
             Debug.Assert(planIndex >= 0 && planIndex < plans.Count, "planIndex must be in range.");
-            Debug.Assert(!shortCircuited[planIndex], "Last-processed lookup is only for a running group.");
+            Debug.Assert(!allDeferred[planIndex], "Last-changed lookup is only for a changed group.");
 
             string assemblyName = plans[planIndex].AssemblyName;
             for (int index = planIndex + 1; index < plans.Count; index++)
             {
-                if (shortCircuited[index])
+                if (allDeferred[index])
                 {
                     continue;
                 }
