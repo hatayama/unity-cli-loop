@@ -270,11 +270,13 @@ func TestRunTestsWithImplicitCompileAppendsCompileWarningToCompileNote(t *testin
 	assertServerDidNotFail(t, serverErr)
 }
 
-// Verifies CompileNote stays the fixed sentence when compile Warning is missing or null.
+// Verifies CompileNote stays the fixed sentence when compile Warning is missing, null, or not a string.
 func TestRunTestsWithImplicitCompileWithoutWarningKeepsPlainCompileNote(t *testing.T) {
 	compileResults := []json.RawMessage{
 		json.RawMessage(`{"Success":true}`),
 		json.RawMessage(`{"Success":true,"Warning":null}`),
+		json.RawMessage(`{"Success":true,"Warning":7}`),
+		json.RawMessage(`{"Success":true,"Warning":{"x":1}}`),
 	}
 	for _, compileJSON := range compileResults {
 		func(compileJSON json.RawMessage) {
