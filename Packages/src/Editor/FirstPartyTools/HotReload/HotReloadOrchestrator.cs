@@ -75,13 +75,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
+            bool[] shortCircuited = new bool[plans.Count];
+            for (int shortCircuitIndex = 0; shortCircuitIndex < plans.Count; shortCircuitIndex++)
+            {
+                shortCircuited[shortCircuitIndex] = ShouldShortCircuitWholeGroup(
+                    plans[shortCircuitIndex],
+                    deferredAlreadyActive);
+            }
+
             List<(string Path, HotReloadFileProcessResult Result)> extraResults =
                 new List<(string Path, HotReloadFileProcessResult Result)>();
             for (int planIndex = 0; planIndex < plans.Count; planIndex++)
             {
                 ct.ThrowIfCancellationRequested();
                 HotReloadFileGroupPlan plan = plans[planIndex];
-                if (ShouldShortCircuitWholeGroup(plan, deferredAlreadyActive))
+                if (shortCircuited[planIndex])
                 {
                     ApplyDeferredAlreadyActive(plan, groupFiles, resultSlots, deferredAlreadyActive);
                     continue;
@@ -95,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         ct,
                         pathsInRun,
                         contentPathOverrideByFile,
-                        IsLastPlanForAssembly(plans, planIndex),
+                        IsLastProcessedPlanForAssembly(plans, shortCircuited, planIndex),
                         extraResults,
                         run)
                     .ConfigureAwait(false);
@@ -233,6 +241,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 filesOfGroup.Add(groupFiles[inputIndex]);
             }
 
+            int inputCount = inputIndexes.Count;
             if (isLastGroupOfAssembly)
             {
                 AppendActiveSiblingsToGroup(filesOfGroup, pathsInRun, contentPathOverrideByFile, run);
@@ -254,9 +263,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 resultSlots[inputIndexes[position]] = groupResults[position];
             }
 
-            for (int position = inputIndexes.Count; position < filesOfGroup.Count; position++)
+            for (int position = inputCount; position < filesOfGroup.Count; position++)
             {
                 extraResults.Add((filesOfGroup[position].ProjectRelativePath, groupResults[position]));
+            }
+
+            if (isLastGroupOfAssembly)
+            {
+                AddSiblingRebindResultWarnings(filesOfGroup, inputCount, groupResults);
             }
         }
 
@@ -287,31 +301,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         new HotReloadFileSinks(run.SiblingDerivedWarnings, run.OneShotCallerNoteCandidates)));
             }
 
-            AddSiblingRebindWarnings(firstFile, rebind);
+            AddChangedSinceApplyWarnings(firstFile, rebind);
         }
 
-        private static void AddSiblingRebindWarnings(
+        private static void AddChangedSinceApplyWarnings(
             HotReloadGroupFile firstFile,
             HotReloadActiveSiblingRebindPlan rebind)
         {
-            IReadOnlyList<(string ProjectRelativePath, string WorkerSourcePath)> filesToInclude =
-                rebind.FilesToInclude;
-            if (filesToInclude.Count > 0)
-            {
-                List<string> includedPaths = new List<string>(filesToInclude.Count);
-                for (int index = 0; index < filesToInclude.Count; index++)
-                {
-                    includedPaths.Add(filesToInclude[index].ProjectRelativePath);
-                }
-
-                firstFile.Sinks.Warnings.Add(
-                    string.Format(
-                        HotReloadConstants.ActiveSiblingsRebindWarningFormat,
-                        filesToInclude.Count,
-                        firstFile.AssemblyName,
-                        string.Join(", ", includedPaths)));
-            }
-
             IReadOnlyList<string> changedSinceApplyPaths = rebind.ChangedSinceApplyPaths;
             for (int index = 0; index < changedSinceApplyPaths.Count; index++)
             {
@@ -322,13 +318,90 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        private static bool IsLastPlanForAssembly(
+        private static void AddSiblingRebindResultWarnings(
+            List<HotReloadGroupFile> filesOfGroup,
+            int inputCount,
+            IReadOnlyList<HotReloadFileProcessResult> groupResults)
+        {
+            Debug.Assert(filesOfGroup != null, "filesOfGroup must not be null.");
+            Debug.Assert(groupResults != null, "groupResults must not be null.");
+            Debug.Assert(
+                groupResults.Count == filesOfGroup.Count,
+                "Rebind warnings need one result per group file.");
+            Debug.Assert(groupResults.Count > 0, "A processed group must have a result.");
+
+            List<string> reappliedPaths = new List<string>();
+            for (int position = inputCount; position < filesOfGroup.Count; position++)
+            {
+                string path = filesOfGroup[position].ProjectRelativePath;
+                if (ShouldDescribeSiblingAsReapplied(groupResults[position]))
+                {
+                    reappliedPaths.Add(path);
+                }
+                else
+                {
+                    groupResults[0].Warnings.Add(
+                        string.Format(
+                            HotReloadConstants.ActiveSiblingRebindFailedWarningFormat,
+                            path));
+                }
+            }
+
+            if (reappliedPaths.Count > 0)
+            {
+                groupResults[0].Warnings.Add(
+                    string.Format(
+                        HotReloadConstants.ActiveSiblingsRebindWarningFormat,
+                        reappliedPaths.Count,
+                        filesOfGroup[0].AssemblyName,
+                        string.Join(", ", reappliedPaths)));
+            }
+        }
+
+        // Why not "no Failed row": isolation leaves a sibling as Skipped when its added-method
+        // callee failed to compile, and claiming that file was re-applied would be false.
+        private static bool ShouldDescribeSiblingAsReapplied(HotReloadFileProcessResult result)
+        {
+            Debug.Assert(result != null, "result must not be null.");
+            bool sawApplied = false;
+            foreach (HotReloadMethodOutcome outcome in result.Outcomes)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
+                {
+                    return false;
+                }
+
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    || outcome.Kind == HotReloadMethodOutcomeKind.Added)
+                {
+                    sawApplied = true;
+                }
+            }
+
+            return sawApplied;
+        }
+
+        // Why processed groups only: a trailing all-unchanged plan is skipped, so treating it
+        // as the assembly's last group would never auto-include active siblings.
+        private static bool IsLastProcessedPlanForAssembly(
             IReadOnlyList<HotReloadFileGroupPlan> plans,
+            bool[] shortCircuited,
             int planIndex)
         {
+            Debug.Assert(plans != null, "plans must not be null.");
+            Debug.Assert(shortCircuited != null, "shortCircuited must not be null.");
+            Debug.Assert(shortCircuited.Length == plans.Count, "shortCircuited must match plans.");
+            Debug.Assert(planIndex >= 0 && planIndex < plans.Count, "planIndex must be in range.");
+            Debug.Assert(!shortCircuited[planIndex], "Last-processed lookup is only for a running group.");
+
             string assemblyName = plans[planIndex].AssemblyName;
             for (int index = planIndex + 1; index < plans.Count; index++)
             {
+                if (shortCircuited[index])
+                {
+                    continue;
+                }
+
                 if (string.Equals(plans[index].AssemblyName, assemblyName, StringComparison.Ordinal))
                 {
                     return false;

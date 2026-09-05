@@ -66,6 +66,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "'{0}' has active patches but its source changed since they were applied, so it was "
             + "not re-applied; pass it to hot-reload to update it.";
 
+        public const string ActiveSiblingRebindFailedWarningFormat =
+            "'{0}' was pulled in to re-bind its active patches but this reload failed for it; "
+            + "its patches stay as they were (see its rows).";
+
         // Wire value for TransformWorkerEntryDto.patchKind when the worker emits a shim for a
         // method that exists only in the edited source. Keep in sync with PatchKinds.AddedMethod
         // in TransformWorker~/PatchKinds.cs.
