@@ -1,7 +1,7 @@
 ---
 name: uloop-hot-reload
 toolName: hot-reload
-description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible to edited code in the same reload within the same assembly); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New types, or members referenced from other assemblies or from files not passed to the reload, require 'uloop compile'."
+description: "Hot reload applies method-body edits and can add new methods and fields (added members are visible to edited code in the same reload within the same assembly); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New types, or members referenced from other assemblies or from files that are neither passed to the reload nor already hot-reloaded, require 'uloop compile'."
 ---
 
 # uloop hot-reload
@@ -62,7 +62,10 @@ Editor domain, and each original method is patched with a Harmony transpiler (ID
 edited in one file can call a method or field added in another edited file of the same
 assembly. Re-running after a real edit
 replaces the patch; an unchanged file after a fully applied reload reports
-`AlreadyActive` rows and changes nothing. With a compile-time source baseline, only
+`AlreadyActive` rows and changes nothing, unless another edited file of the same
+assembly is in the reload — then it is re-applied with that group, and other
+files of the assembly that hold active patches and are unchanged since they were
+applied are re-applied too, so every active patch binds to the newest shim. With a compile-time source baseline, only
 methods whose bodies actually changed are patched (`UnchangedTotal` counts the rest),
 and a patched body that matches the baseline again is unpatched on that run.
 
@@ -72,7 +75,8 @@ and a patched body that matches the baseline again is unpatched on that run.
 - Added members: new methods and fields apply, visible to edited code in the same reload
   within the same assembly (pass the declaring file and its callers together), and vanish
   on any compile or domain reload (an Editor-session illusion). New types, references
-  from other assemblies or from files not passed to the reload, reflection, serialization,
+  from other assemblies or from files that are neither passed to the reload nor
+  already hot-reloaded, reflection, serialization,
   and Unity message discovery need `uloop compile`.
 - Signature changes (return type, rename, parameters) follow the added-member rules. A
   return-type change is gated: it is `Skipped` unless the same reload — or an earlier one —

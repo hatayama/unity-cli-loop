@@ -12,7 +12,10 @@ Re-running on the same method after a real edit replaces its previous patch;
 unchanged since the last fully applied reload (a run with no Skipped or Failed
 outcomes) is a no-op: each still-active method is reported
 as `AlreadyActive`, the existing patch stays in place, and the row carries the live `InvocationCount`.
-Edit the file and reload again to apply new changes.
+When another edited file of the same assembly is in the reload, that unchanged file is
+re-applied with the group instead, and other files of the assembly that hold active
+patches and are unchanged since they were applied are re-applied too, so every active
+patch binds to the newest shim. Edit the file and reload again to apply new changes.
 
 ## Convergence and Lifecycle
 

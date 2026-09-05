@@ -20,9 +20,11 @@ code cannot see it, and neither can anything that resolves members by name at
 runtime: reflection (`GetType().GetMethod("NewM")` returns `null`), Unity's message
 discovery (an added `Update` or `OnCollisionEnter` on a `MonoBehaviour` is never
 invoked — a `Warnings` entry names it), UnityEvent/inspector wiring, and
-serialization. Referencing an added member from a file this reload did not receive, or
-from another assembly, fails that file's hot reload with the usual new-member hint;
-run `uloop compile` instead.
+serialization. Referencing an added member from a file that is neither passed to this reload nor
+already hot-reloaded, or from another assembly, fails that file's hot reload with
+the usual new-member hint; run `uloop compile` instead. Unchanged files of the same
+assembly that already hold active patches are re-applied automatically so they bind
+to the newest shim.
 
 An added method reports its own row with Kind `Added`; the edited methods that call
 it report `Patched` as usual. Added `virtual`/`override`/`abstract` methods, explicit
@@ -125,7 +127,8 @@ Treat hot reload as the exploration phase and `uloop compile` as the landing pha
 diagnosing or tuning, keep every edit inside existing method bodies — inline a would-be
 helper's logic at its call site for now instead of extracting it. New helper methods
 and fields can now be explored directly with hot reload, across the files of one
-assembly as long as every file involved is passed to the same command. When the
+assembly: pass the files you edited; unchanged files that already hold active
+patches are re-applied with that group. When the
 change needs a new type, visibility from another assembly or from a file outside the
 reload, runtime name-based lookup, or serialization, collect those and run `uloop compile`
 once: every compile triggers a domain reload that drops all active patches and pause points
