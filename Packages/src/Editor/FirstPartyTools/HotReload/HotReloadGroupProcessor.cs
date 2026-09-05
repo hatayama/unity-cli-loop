@@ -31,6 +31,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadGroupFile firstFile = files[0];
             // Application.dataPath and the ledgers require the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            if (!TryAppendNewSourceMembershipFailure(files))
+            {
+                return BuildUnappliedResults(files);
+            }
+
             SnapshotGroupState(files);
 
             HotReloadChangedSiblingScanResult siblingScan = HotReloadChangedSiblingSourceDetector.Detect(
@@ -72,6 +77,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why before the empty-entries return: all-unchanged runs exit there, and those are
             // exactly the runs that must peel leftover patches so behavior converges to compiled IL.
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            if (!TryAppendNewSourceMembershipFailure(files))
+            {
+                return BuildUnappliedResults(files);
+            }
+
             RevertUnchangedPatchesPerFile(files, rows);
 
             HotReloadApplyContext context = new HotReloadApplyContext(
@@ -131,15 +141,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context,
                 gateResult,
                 compile,
-                async () =>
+                ct,
+                () =>
                 {
-                    await MainThreadSwitcher.SwitchToMainThread(ct);
                     IReadOnlyList<HotReloadFileProcessResult> results = HotReloadEntryApplier.ApplyGroupAndBuildResults(
                         context,
                         compile.CompileResult,
                         compile.EntriesToPatch);
                     RecordSupersededSignaturesAfterApply(context, gateResult.GatedReplacementMethodKeys);
-                    return results;
+                    return Task.FromResult(results);
                 }).ConfigureAwait(false);
         }
 
@@ -149,6 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadApplyContext context,
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
             HotReloadGroupCompileResult compile,
+            CancellationToken ct,
             Func<Task<IReadOnlyList<HotReloadFileProcessResult>>> continueAfterCoverage)
         {
             if (gateResult.DidScan && !AppendSignatureChangeCoverageNotices(context, gateResult, compile))
@@ -156,7 +167,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return BuildUnappliedResults(context.Files);
             }
 
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            ct.ThrowIfCancellationRequested();
+            if (!TryAppendNewSourceMembershipFailure(context.Files))
+            {
+                return BuildUnappliedResults(context.Files);
+            }
+
             return await continueAfterCoverage().ConfigureAwait(false);
+        }
+
+        internal static bool TryAppendNewSourceMembershipFailure(IReadOnlyList<HotReloadGroupFile> files)
+        {
+            string failure = HotReloadNewSourceMembershipValidator.TryRevalidateFiles(files);
+            if (failure == null)
+            {
+                return true;
+            }
+
+            HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", failure);
+            return false;
         }
 
         // Returns false when a replacement lost its covering caller and the group must fail.

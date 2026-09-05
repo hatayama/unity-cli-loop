@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 using NUnit.Framework;
@@ -38,6 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     context,
                     gateResult,
                     compile,
+                    CancellationToken.None,
                     () =>
                     {
                         continuationCalls++;
@@ -80,6 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     context,
                     gateResult,
                     compile,
+                    CancellationToken.None,
                     () =>
                     {
                         continuationCalls++;
@@ -108,6 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     context,
                     CreateGateResultWithDeletedCallerExemption(),
                     compile,
+                    CancellationToken.None,
                     () =>
                     {
                         continuationCalls++;
@@ -116,6 +120,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(continuationCalls, Is.EqualTo(1));
             Assert.That(results, Is.SameAs(expected));
+        }
+
+        /// <summary>
+        /// Membership evidence that changes after the worker prevents the production apply continuation from running.
+        /// </summary>
+        [Test]
+        public async Task CompleteApplyAfterCoverageAsync_WhenNewSourceMembershipChanges_DoesNotInvokeContinuation()
+        {
+            HotReloadApplyContext context = CreateContext(CreateChangedMembershipEvidence());
+            TransformWorkerEntryDto caller = CreateCallerEntry("Assets/CoverageCaller.cs");
+            TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
+            HotReloadGroupCompileResult compile = CreateCompile(caller, target);
+            int continuationCalls = 0;
+
+            IReadOnlyList<HotReloadFileProcessResult> results =
+                await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                    context,
+                    CreateGateResultWithoutExemptions(),
+                    compile,
+                    CancellationToken.None,
+                    () =>
+                    {
+                        continuationCalls++;
+                        return Task.FromResult<IReadOnlyList<HotReloadFileProcessResult>>(
+                            Array.Empty<HotReloadFileProcessResult>());
+                    });
+
+            Assert.That(continuationCalls, Is.EqualTo(0));
+            Assert.That(results, Has.Count.EqualTo(2));
+            for (int index = 0; index < results.Count; index++)
+            {
+                Assert.That(results[index].Outcomes, Has.Count.EqualTo(1));
+                Assert.That(results[index].Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+                Assert.That(results[index].Outcomes[0].Reason, Does.Contain("compiled assembly changed"));
+            }
         }
 
         private static HotReloadSignatureChangeGate.SignatureChangeGateResult CreateGateResultWithoutExemptions()
@@ -171,12 +210,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Array.Empty<byte>()));
         }
 
-        private static HotReloadApplyContext CreateContext()
+        private static HotReloadApplyContext CreateContext(
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             Assembly compilationAssembly = FindCompilationAssembly();
             HotReloadGroupFile callerFile = CreateFile(
-                "Assets/CoverageCaller.cs", projectRoot, compilationAssembly);
+                "Assets/CoverageCaller.cs", projectRoot, compilationAssembly, newSourceMembershipEvidence);
             HotReloadGroupFile targetFile = CreateFile(
                 "Assets/CoverageTarget.cs", projectRoot, compilationAssembly);
             TransformWorkerEntryDto caller = CreateCallerEntry(callerFile.ProjectRelativePath);
@@ -217,12 +257,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return null;
         }
 
-        private static HotReloadGroupFile CreateFile(string path, string projectRoot, Assembly compilationAssembly)
+        private static HotReloadGroupFile CreateFile(
+            string path,
+            string projectRoot,
+            Assembly compilationAssembly,
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null)
         {
             HotReloadGroupFile file = new HotReloadGroupFile(
                 path, path, path, AssemblyName, compilationAssembly,
                 Path.Combine(projectRoot, "Library", "ScriptAssemblies", AssemblyName + ".dll"),
-                projectRoot, new HotReloadFileSinks(new List<string>(), null));
+                projectRoot, new HotReloadFileSinks(new List<string>(), null), newSourceMembershipEvidence);
             file.FileOutput = new TransformWorkerFileOutputDto
             {
                 projectRelativePath = path,
@@ -231,6 +275,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             file.SnapshotLabels = new HashSet<string>();
             file.SnapshotAddedLabels = new HashSet<string>();
             return file;
+        }
+
+        private static HotReloadNewSourceMembershipEvidence CreateChangedMembershipEvidence()
+        {
+            return new HotReloadNewSourceMembershipEvidence(
+                "Assets/CoverageCaller.cs",
+                AssemblyName,
+                Path.Combine("Library", "ScriptAssemblies", AssemblyName + ".dll"),
+                "different-mvid",
+                null,
+                Array.Empty<HotReloadNewSourceMembershipBoundary>());
         }
 
         private static TransformWorkerEntryDto CreateCallerEntry(string path)

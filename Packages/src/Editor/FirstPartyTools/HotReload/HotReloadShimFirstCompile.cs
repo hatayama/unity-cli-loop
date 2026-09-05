@@ -25,6 +25,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(context != null, "context must not be null.");
             Debug.Assert(gateResult != null, "gateResult must not be null.");
 
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            if (!HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(context.Files))
+            {
+                return HotReloadGroupCompileResult.NothingToApply();
+            }
+
             if (gateResult.UsedWorkerRetry)
             {
                 AdoptRetryAddedMemberNames(context.Files, gateResult.Isolation.RetryFiles);
