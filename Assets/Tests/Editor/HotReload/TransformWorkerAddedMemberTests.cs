@@ -1560,6 +1560,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// A return-type replacement skipped by the added-call guard keeps its removed signature
+        /// and reports the replacement wire key.
+        /// </summary>
+        [Test]
+        public async Task Classify_ReturnTypeChangeSkippedByAddedCallGuard_ReportsRemovedSignatureAndMethodKey()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public virtual int AddedVirtual(int value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public long ExistingValue()\n        {\n            return AddedVirtual(1);\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("ReturnTypeGuardSkip.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue)), Is.Null);
+            Assert.That(
+                HasRemovedSignature(
+                    result.Output.files[0],
+                    typeof(HotReloadAddedMemberHost).FullName,
+                    nameof(HotReloadAddedMemberHost.ExistingValue)),
+                Is.True);
+
+            TransformWorkerSkippedDto skippedReplacement = null;
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null
+                    && skipped.method.Contains(nameof(HotReloadAddedMemberHost.ExistingValue)))
+                {
+                    skippedReplacement = skipped;
+                    break;
+                }
+            }
+
+            Assert.That(skippedReplacement, Is.Not.Null);
+            Assert.That(
+                skippedReplacement.methodKey,
+                Is.EqualTo(BuildHostMethodKey(nameof(HotReloadAddedMemberHost.ExistingValue))));
+        }
+
+        /// <summary>
         /// What: a return-type change that is also virtual is skipped with the existing
         /// added-method vtable reason.
         /// </summary>

@@ -127,22 +127,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return BuildUnappliedResults(files);
             }
 
+            return await CompleteApplyAfterCoverageAsync(
+                context,
+                gateResult,
+                compile,
+                async () =>
+                {
+                    await MainThreadSwitcher.SwitchToMainThread(ct);
+                    IReadOnlyList<HotReloadFileProcessResult> results = HotReloadEntryApplier.ApplyGroupAndBuildResults(
+                        context,
+                        compile.CompileResult,
+                        compile.EntriesToPatch);
+                    RecordSupersededSignaturesAfterApply(context, gateResult.GatedReplacementMethodKeys);
+                    return results;
+                }).ConfigureAwait(false);
+        }
+
+        // Why inject only the post-coverage continuation: coverage failure must use the real
+        // group failure routing, while tests must not invoke Harmony or main-thread work.
+        internal static async Task<IReadOnlyList<HotReloadFileProcessResult>> CompleteApplyAfterCoverageAsync(
+            HotReloadApplyContext context,
+            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
+            HotReloadGroupCompileResult compile,
+            Func<Task<IReadOnlyList<HotReloadFileProcessResult>>> continueAfterCoverage)
+        {
             if (gateResult.DidScan && !AppendSignatureChangeCoverageNotices(context, gateResult, compile))
             {
-                return BuildUnappliedResults(files);
+                return BuildUnappliedResults(context.Files);
             }
 
-            // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
-            await MainThreadSwitcher.SwitchToMainThread(ct);
-            IReadOnlyList<HotReloadFileProcessResult> results = HotReloadEntryApplier.ApplyGroupAndBuildResults(
-                context,
-                compile.CompileResult,
-                compile.EntriesToPatch);
-            // Why after apply: earlier returns (gate fail, shim compile, coverage loss)
-            // never applied the replacement, so leftover Active rows must not claim they
-            // were superseded.
-            RecordSupersededSignaturesAfterApply(context, gateResult.GatedReplacementMethodKeys);
-            return results;
+            return await continueAfterCoverage().ConfigureAwait(false);
         }
 
         // Returns false when a replacement lost its covering caller and the group must fail.
@@ -155,9 +169,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // retry can drop a covering caller without dropping the replacement. A third
             // worker run is not allowed (max two); fail the group instead of applying.
             List<string> lostReplacementKeys = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
+                context.AssemblyName,
                 compile.EntriesToPatch,
                 gateResult.Hits,
-                gateResult.ScanTargetKeys);
+                gateResult.DeletedCallerExemptions);
             if (lostReplacementKeys.Count > 0)
             {
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(
@@ -176,6 +191,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // the warning belongs to.
                 HotReloadSignatureChangeCoverage.AppendSignatureChangeCallersRepatchedWarnings(
                     file.Sinks.Warnings,
+                    context.AssemblyName,
                     compile.EntriesToPatch,
                     gateResult.Hits,
                     file.SnapshotLabels);

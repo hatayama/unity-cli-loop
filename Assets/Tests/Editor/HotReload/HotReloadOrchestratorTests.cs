@@ -4854,9 +4854,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
 
             List<string> lost = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
+                "TestAssembly",
                 new[] { replacement, caller },
                 hits,
-                new[] { "Host::Target(System.Int32)" });
+                new HashSet<HotReloadQualifiedMethodIdentity>());
 
             Assert.That(lost, Is.Empty);
         }
@@ -4875,9 +4876,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
 
             List<string> lost = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
+                "TestAssembly",
                 new[] { replacement },
                 hits,
-                new[] { "Host::Target(System.Int32)" });
+                new HashSet<HotReloadQualifiedMethodIdentity>());
 
             Assert.That(lost, Is.EqualTo(new[] { "Host::Target(System.Int32)" }));
         }
@@ -5000,8 +5002,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string names = HotReloadSignatureChangeCoverage.FormatUncoveredCallerShortNames(
                 new[]
                 {
-                    "Ns.Host::AlphaCaller(System.Int32)",
-                    "Ns.Outer/Inner::BetaCaller(System.Int32)"
+                    new HotReloadQualifiedMethodIdentity(
+                        "TestAssembly",
+                        "Ns.Host::AlphaCaller(System.Int32)"),
+                    new HotReloadQualifiedMethodIdentity(
+                        "TestAssembly",
+                        "Ns.Outer/Inner::BetaCaller(System.Int32)")
                 });
 
             Assert.That(names, Is.EqualTo("Host.AlphaCaller, Inner.BetaCaller"));
@@ -5316,7 +5322,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             TransformWorkerEntryDto replacement = CreateReplacementEntry("Host", "Target");
             bool sameFile = HotReloadSignatureChangeCoverage.AreUncoveredCallersInEditedFile(
-                new[] { "Host::OtherFileCaller(System.Int32)" },
+                "TestAssembly",
+                new[]
+                {
+                    new HotReloadQualifiedMethodIdentity(
+                        "TestAssembly",
+                        "Host::OtherFileCaller(System.Int32)")
+                },
                 new[] { replacement },
                 Array.Empty<TransformWorkerUnchangedMethodDto>());
 
@@ -6892,6 +6904,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return new HotReloadCallSiteScanner.CallSiteHit
             {
+                CallerAssemblyName = "TestAssembly",
                 CallerMethodKey = callerMethodKey,
                 CallerGenericArity = 0,
                 TargetMethodKey = targetMethodKey
