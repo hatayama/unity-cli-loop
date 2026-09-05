@@ -24,6 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Warnings = new List<string>();
             SuppressedPausePointIds = new List<string>();
             RetargetedPausePointIds = new List<string>();
+            AppliedEntries = new List<TransformWorkerEntryDto>();
             SiblingDerivedWarnings = siblingDerivedWarnings;
             OneShotCallerNoteCandidates = oneShotCallerNoteCandidates;
         }
@@ -35,6 +36,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal List<string> SuppressedPausePointIds { get; }
 
         internal List<string> RetargetedPausePointIds { get; }
+
+        // The worker rows this file actually patched or added. Why recorded here instead of
+        // derived from the outcomes: a partly applied file reports Patched rows next to Failed
+        // and file-atomic Skipped rows, so only the apply loop knows which row reached Harmony.
+        internal List<TransformWorkerEntryDto> AppliedEntries { get; }
 
         // Shared across the whole run so sibling-derived text can be deduped once at the end.
         internal List<string> SiblingDerivedWarnings { get; }

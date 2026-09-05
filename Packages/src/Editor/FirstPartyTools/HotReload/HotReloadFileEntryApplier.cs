@@ -177,6 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     || outcome.Kind == HotReloadMethodOutcomeKind.Added)
                 {
                     appliedThisRun++;
+                    sinks.AppliedEntries.Add(resolvedEntries[index].Entry);
                     if (outcome.Kind == HotReloadMethodOutcomeKind.Patched)
                     {
                         patchedCount++;

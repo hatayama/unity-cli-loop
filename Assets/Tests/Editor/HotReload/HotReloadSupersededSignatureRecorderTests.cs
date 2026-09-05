@@ -15,6 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string TypeMetadataName = "Sample.Host";
         private const string RemovedMethodLabel = "Sample.Host.Scaled(System.Int32)";
+        private const string DecoyMethodLabel = "Sample.Host.Other(System.Int32)";
 
         [SetUp]
         public void SetUp()
@@ -30,13 +31,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a removed signature whose replacement is among the applied entries is recorded
-        /// with that replacement's display name.
+        /// with that replacement's display name, chosen by signature rather than by taking the
+        /// first replacement entry of the list.
         /// </summary>
         [Test]
         public void RecordFromAppliedEntries_WhenReplacementWasApplied_RecordsTheSupersededSignature()
         {
             HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
-                new[] { CreateReplacementEntry() },
+                new[] { CreateDecoyReplacementEntry(), CreateReplacementEntry() },
                 new[] { CreateRemovedSignature() },
                 Array.Empty<string>());
 
@@ -46,6 +48,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(found, Is.True);
             Assert.That(replacementDisplayName, Is.EqualTo(RemovedMethodLabel));
+            Assert.That(replacementDisplayName, Is.Not.EqualTo(DecoyMethodLabel));
         }
 
         /// <summary>
@@ -95,6 +98,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 sourceProjectRelativePath = "Assets/Scripts/Host.cs",
                 typeMetadataName = TypeMetadataName,
                 methodName = "Scaled",
+                parameterTypeFullNames = new[] { "System.Int32" },
+                genericArity = 0,
+                replacesCompiledMethod = true
+            };
+        }
+
+        // A replacement of another compiled signature, so a recorder that picked the first
+        // replacement entry instead of the matching one would report this label.
+        private static TransformWorkerEntryDto CreateDecoyReplacementEntry()
+        {
+            return new TransformWorkerEntryDto
+            {
+                sourceProjectRelativePath = "Assets/Scripts/Host.cs",
+                typeMetadataName = TypeMetadataName,
+                methodName = "Other",
                 parameterTypeFullNames = new[] { "System.Int32" },
                 genericArity = 0,
                 replacesCompiledMethod = true
