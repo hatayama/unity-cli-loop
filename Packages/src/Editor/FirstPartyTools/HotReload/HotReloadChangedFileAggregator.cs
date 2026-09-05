@@ -76,7 +76,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(snapshotAssemblies != null, "snapshotAssemblies must not be null.");
 
             bool hasBaseline = false;
-            HashSet<string> changedPathSet = new HashSet<string>(GetProjectRelativePathComparer());
+            HashSet<string> changedPathSet = new HashSet<string>(HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
             List<string> scanLimitWarnings = new List<string>();
             HashSet<string> warningSet = new HashSet<string>(StringComparer.Ordinal);
             for (int index = 0; index < snapshotAssemblies.Count; index++)
@@ -102,7 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             List<string> changedProjectRelativePaths = new List<string>(changedPathSet);
-            changedProjectRelativePaths.Sort(GetProjectRelativePathComparer());
+            changedProjectRelativePaths.Sort(HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
             scanLimitWarnings.Sort(StringComparer.Ordinal);
             return new HotReloadChangedFileAggregationResult(
                 hasBaseline,
@@ -142,13 +142,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return snapshotAssemblies;
-        }
-
-        private static StringComparer GetProjectRelativePathComparer()
-        {
-            return Path.DirectorySeparatorChar == '\\'
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal;
         }
     }
 }

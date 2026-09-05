@@ -2844,6 +2844,98 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// What: when a Harmony apply-engine failure stops a file after an earlier entry patched,
+        /// only the patched entry is reported as applied, so the failed replacement's removed
+        /// signature is not recorded as superseded.
+        /// </summary>
+        [Test]
+        public void ApplyEntries_ReplacementFailsAfterPatchedEntry_RecordsNoSupersededSignature()
+        {
+            const string projectRelativePath = "Assets/Tests/Editor/HotReload/PartialApplyReplacement.cs";
+            string typeName = typeof(HotReloadCoreFixture).FullName;
+            string[] replacedParameterTypeFullNames = { typeof(int).FullName };
+            TransformWorkerEntryDto patchedEntry = CreateExistingMethodEntry(
+                typeName,
+                nameof(HotReloadCoreFixture.VoidBump),
+                Array.Empty<string>(),
+                nameof(HotReloadHandwrittenShims),
+                nameof(HotReloadHandwrittenShims.VoidBump__shim0));
+            TransformWorkerEntryDto failedReplacementEntry = CreateExistingMethodEntry(
+                typeName,
+                nameof(HotReloadCoreFixture.ReplaceableCompute),
+                replacedParameterTypeFullNames,
+                nameof(HotReloadOrchestratorTests),
+                nameof(ApplyEngineFailureExternShim));
+            failedReplacementEntry.replacesCompiledMethod = true;
+            TransformWorkerEntryDto[] entries = { patchedEntry, failedReplacementEntry };
+            TransformWorkerOutputDto workerOutput = new TransformWorkerOutputDto
+            {
+                entries = entries,
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto
+                    {
+                        projectRelativePath = projectRelativePath,
+                        addedFieldNames = Array.Empty<string>(),
+                        sourceContentSha256 = "partial-apply-replacement",
+                        removedMethodSignatures = new[]
+                        {
+                            new TransformWorkerRemovedMethodSignatureDto
+                            {
+                                typeMetadataName = typeName,
+                                methodName = nameof(HotReloadCoreFixture.ReplaceableCompute),
+                                parameterTypeFullNames = replacedParameterTypeFullNames,
+                                genericArity = 0
+                            }
+                        }
+                    }
+                }
+            };
+            string removedMethodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
+                typeName,
+                nameof(HotReloadCoreFixture.ReplaceableCompute),
+                replacedParameterTypeFullNames,
+                genericArity: 0);
+            HotReloadApplyContext context = CreateApplyContext(
+                typeof(HotReloadCoreFixture).Assembly.GetName().Name,
+                projectRelativePath,
+                workerOutput,
+                entries,
+                Array.Empty<string>());
+            HotReloadSupersededSignatureRegistry.ClearAll();
+
+            try
+            {
+                IReadOnlyList<HotReloadFileProcessResult> results =
+                    HotReloadEntryApplier.ApplyGroupAndBuildResults(
+                        context,
+                        HotReloadShimCompileResult.SuccessResult(
+                            typeof(HotReloadOrchestratorTests).Assembly,
+                            new byte[] { 1 },
+                            Array.Empty<byte>()),
+                        entries);
+
+                Assert.That(results[0].Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Patched));
+                Assert.That(results[0].Outcomes[1].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
+                Assert.That(context.Files[0].Sinks.AppliedEntries, Is.EqualTo(new[] { patchedEntry }));
+
+                HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                    context.Files[0].Sinks.AppliedEntries,
+                    context.Files[0].FileOutput.removedMethodSignatures,
+                    Array.Empty<string>());
+
+                Assert.That(
+                    HotReloadSupersededSignatureRegistry.TryGetReplacement(removedMethodLabel, out string _),
+                    Is.False);
+            }
+            finally
+            {
+                HotReloadSupersededSignatureRegistry.ClearAll();
+                HotReloadPatcher.RevertAll();
+            }
+        }
+
         [DllImport("__Internal")]
         public static extern int ApplyEngineFailureExternShim(int value);
 

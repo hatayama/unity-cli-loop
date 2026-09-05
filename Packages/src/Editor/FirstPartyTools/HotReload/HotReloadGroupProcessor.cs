@@ -141,11 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why after apply: earlier returns (gate fail, shim compile, coverage loss)
             // never applied the replacement, so leftover Active rows must not claim they
             // were superseded.
-            RecordSupersededSignaturesAfterApply(
-                results,
-                context,
-                compile.EntriesToPatch,
-                gateResult.GatedReplacementMethodKeys);
+            RecordSupersededSignaturesAfterApply(context, gateResult.GatedReplacementMethodKeys);
             return results;
         }
 
@@ -314,48 +310,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        // Why per file: a group applies file by file, so only the files that actually patched
-        // something may claim their removed signatures were superseded, and only through the
-        // entries that reached Harmony.
+        // Why per file: a group applies file by file, so only the rows that actually reached
+        // Harmony may claim their removed signatures were superseded. A partly applied file
+        // patches some rows and leaves the rest failed or file-atomically skipped.
         private static void RecordSupersededSignaturesAfterApply(
-            IReadOnlyList<HotReloadFileProcessResult> results,
             HotReloadApplyContext context,
-            TransformWorkerEntryDto[] appliedEntries,
             IReadOnlyCollection<string> gatedReplacementMethodKeys)
         {
-            Debug.Assert(
-                results.Count == context.Files.Count,
-                "A group must report one result per edited file.");
-            Dictionary<string, List<TransformWorkerEntryDto>> appliedEntriesByFile =
-                HotReloadWorkerRowsByFile.GroupEntriesBySourceFile(appliedEntries, context.ProjectRelativePaths);
-            for (int index = 0; index < results.Count; index++)
+            for (int index = 0; index < context.Files.Count; index++)
             {
-                if (!HasAppliedChange(results[index].Outcomes))
-                {
-                    continue;
-                }
-
                 HotReloadGroupFile file = context.Files[index];
+                Debug.Assert(file.FileOutput != null, "Every file must carry its worker output row.");
                 HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
-                    appliedEntriesByFile[file.ProjectRelativePath],
-                    file.FileOutput.removedMethodSignatures ?? Array.Empty<TransformWorkerRemovedMethodSignatureDto>(),
+                    file.Sinks.AppliedEntries,
+                    file.FileOutput.removedMethodSignatures
+                        ?? Array.Empty<TransformWorkerRemovedMethodSignatureDto>(),
                     gatedReplacementMethodKeys);
             }
-        }
-
-        private static bool HasAppliedChange(IReadOnlyList<HotReloadMethodOutcome> outcomes)
-        {
-            for (int index = 0; index < outcomes.Count; index++)
-            {
-                HotReloadMethodOutcomeKind kind = outcomes[index].Kind;
-                if (kind == HotReloadMethodOutcomeKind.Patched
-                    || kind == HotReloadMethodOutcomeKind.Added)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private static List<string> CollectProjectRelativePaths(IReadOnlyList<HotReloadGroupFile> files)
