@@ -25,7 +25,10 @@ internal static class WorkerUsingCollector
         List<UsingDirectiveSyntax> usings = new List<UsingDirectiveSyntax>();
         foreach (UsingDirectiveSyntax usingDirective in root.Usings)
         {
-            usings.Add(usingDirective.WithoutTrivia());
+            // Why the global keyword is dropped: a file may declare a global using next to a
+            // type that emits a shim, and the emitter puts these usings inside the shim type's
+            // namespace declaration, where a global using does not compile.
+            usings.Add(usingDirective.WithGlobalKeyword(default).WithoutTrivia());
         }
 
         for (SyntaxNode node = typeDeclaration.Parent; node != null; node = node.Parent)

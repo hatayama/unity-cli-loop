@@ -116,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public async Task Run_TwoSources_GlobalUsingDeclaredInEditedFile_ReachesShimSource()
         {
             CrossFileRun run = await RunEditedPairAsync(
-                EditedGlobalUsingLine + ReadOnDisk(HostFileName),
+                EditedGlobalUsingLine + AddHostMethod(ReadOnDisk(HostFileName)),
                 ReplaceCallerBody(
                     ReadOnDisk(CallerFileName),
                     "return new HotReloadEditedFileGlobalAlias().Length;"));
@@ -128,6 +128,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 run.Result.Output.shimSource,
                 Does.Contain("using HotReloadEditedFileGlobalAlias"),
                 "The shim source must carry the global using the edited sibling file declares.");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Not.Contain("global using"),
+                "A global using is not allowed inside the shim type's namespace declaration.");
         }
 
         /// <summary>
