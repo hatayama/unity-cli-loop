@@ -516,8 +516,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: added methods with a qualified [TestCase], [UnityTest], or [SetUp] each
-        /// produce a Unity Test Runner warning that names that method.
+        /// What: added methods with a qualified [TestCase], [global::NUnit.Framework.Test],
+        /// [UnityTest], or [SetUp] each produce a Unity Test Runner warning that names that method.
         /// </summary>
         [Test]
         public async Task Warn_AddedTestAttributes_QualifiedUnityTestAndSetUp_EmitWarningPerMethod()
@@ -526,6 +526,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string edited = WithHostMembers(
                 onDisk,
                 "[NUnit.Framework.TestCase(1)]\n        public void AddedCaseProbe(int value)\n        {\n        }\n\n"
+                + "        [global::NUnit.Framework.Test]\n        public void AddedGlobalProbe()\n        {\n        }\n\n"
                 + "        [UnityTest]\n        public System.Collections.IEnumerator AddedUnityProbe()\n        {\n"
                 + "            yield break;\n        }\n\n"
                 + "        [SetUp]\n        public void AddedSetUpProbe()\n        {\n        }");
@@ -539,6 +540,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("AddedCaseProbe").And.Contain("Unity Test Runner"),
+                FormatWarnings(result));
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.Some.Contain("AddedGlobalProbe").And.Contain("Unity Test Runner"),
                 FormatWarnings(result));
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,

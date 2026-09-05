@@ -83,14 +83,21 @@ internal static class TestAttributeNames
     private static string GetSimpleAttributeName(NameSyntax name)
     {
         NameSyntax current = name;
-        while (current is QualifiedNameSyntax qualified)
+        while (true)
         {
-            current = qualified.Right;
-        }
+            if (current is AliasQualifiedNameSyntax aliasQualified)
+            {
+                current = aliasQualified.Name;
+                continue;
+            }
 
-        if (current is AliasQualifiedNameSyntax aliasQualified)
-        {
-            current = aliasQualified.Name;
+            if (current is QualifiedNameSyntax qualified)
+            {
+                current = qualified.Right;
+                continue;
+            }
+
+            break;
         }
 
         string identifier = ReadIdentifier(current);
