@@ -302,6 +302,64 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return methodKeys;
         }
 
+        /// <summary>
+        /// The edited-method keys of each file of the group, keyed by that file's project
+        /// relative path.
+        /// </summary>
+        /// <remarks>
+        /// Why per file: "every uncovered caller is in the edited file" is a statement about one
+        /// file. A group run transforms several files at once, so a set built from all of them
+        /// would call a caller in a sibling file a same-file caller.
+        /// </remarks>
+        internal static Dictionary<string, HashSet<string>> CollectEditedFileMethodKeysByFile(
+            TransformWorkerEntryDto[] entries,
+            TransformWorkerUnchangedMethodDto[] unchangedMethods)
+        {
+            Debug.Assert(entries != null, "entries must not be null.");
+            Debug.Assert(unchangedMethods != null, "unchangedMethods must not be null.");
+
+            Dictionary<string, HashSet<string>> methodKeysByFile =
+                new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                AddMethodKeyOfFile(
+                    methodKeysByFile,
+                    entry.sourceProjectRelativePath,
+                    HotReloadMethodKeys.BuildMethodKey(entry));
+            }
+
+            foreach (TransformWorkerUnchangedMethodDto unchanged in unchangedMethods)
+            {
+                AddMethodKeyOfFile(
+                    methodKeysByFile,
+                    unchanged.sourceProjectRelativePath,
+                    HotReloadMethodKeys.BuildMethodKeyParts(
+                        unchanged.typeMetadataName,
+                        unchanged.methodName,
+                        unchanged.parameterTypeFullNames,
+                        unchanged.genericArity));
+            }
+
+            return methodKeysByFile;
+        }
+
+        private static void AddMethodKeyOfFile(
+            Dictionary<string, HashSet<string>> methodKeysByFile,
+            string projectRelativePath,
+            string methodKey)
+        {
+            Debug.Assert(
+                !string.IsNullOrEmpty(projectRelativePath),
+                "A worker row must name the source file it came from.");
+            if (!methodKeysByFile.TryGetValue(projectRelativePath, out HashSet<string> methodKeys))
+            {
+                methodKeys = new HashSet<string>(StringComparer.Ordinal);
+                methodKeysByFile[projectRelativePath] = methodKeys;
+            }
+
+            methodKeys.Add(methodKey);
+        }
+
         internal static bool AreAllUncoveredCallersInEditedFile(
             IReadOnlyList<string> uncoveredCallerKeys,
             HashSet<string> editedFileMethodKeys)

@@ -7,65 +7,70 @@ using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// The read-only inputs of one file's apply pipeline, fixed once the worker has run.
+    /// The read-only inputs of one group's apply pipeline, fixed once the worker has run.
     /// </summary>
     /// <remarks>
     /// Why: the gate, the first shim compile and the entry applier each took the same dozen
     /// values as separate parameters, so every stage signature grew with the pipeline. Passing
     /// them as one object keeps a stage's parameter list to what that stage itself computes.
+    /// The file-specific half lives in HotReloadGroupFile, one per edited file of the group.
     /// </remarks>
     internal sealed class HotReloadApplyContext
     {
         internal HotReloadApplyContext(
             string projectRoot,
             string assemblyName,
-            string assemblyResolvePath,
-            string projectRelativePath,
             string correlationId,
             UnityCompilationAssembly compilationAssembly,
             string targetDllPath,
             string[] defines,
             TransformWorkerInputDto workerInput,
             TransformWorkerOutputDto workerOutput,
-            TransformWorkerFileOutputDto fileOutput,
-            HashSet<string> snapshotLabels,
-            HashSet<string> snapshotAddedLabels)
+            IReadOnlyList<HotReloadGroupFile> files)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be empty.");
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be empty.");
-            Debug.Assert(!string.IsNullOrEmpty(assemblyResolvePath), "assemblyResolvePath must not be empty.");
-            Debug.Assert(!string.IsNullOrEmpty(projectRelativePath), "projectRelativePath must not be empty.");
             Debug.Assert(!string.IsNullOrEmpty(targetDllPath), "targetDllPath must not be empty.");
             Debug.Assert(compilationAssembly != null, "compilationAssembly must not be null.");
             Debug.Assert(defines != null, "defines must not be null.");
             Debug.Assert(workerInput != null, "workerInput must not be null.");
             Debug.Assert(workerOutput != null, "workerOutput must not be null.");
-            Debug.Assert(fileOutput != null, "fileOutput must not be null.");
-            Debug.Assert(snapshotLabels != null, "snapshotLabels must not be null.");
-            Debug.Assert(snapshotAddedLabels != null, "snapshotAddedLabels must not be null.");
+            Debug.Assert(files != null && files.Count > 0, "A group must hold a file.");
 
             ProjectRoot = projectRoot;
             AssemblyName = assemblyName;
-            AssemblyResolvePath = assemblyResolvePath;
-            ProjectRelativePath = projectRelativePath;
             CorrelationId = correlationId;
             CompilationAssembly = compilationAssembly;
             TargetDllPath = targetDllPath;
             Defines = defines;
             WorkerInput = workerInput;
             WorkerOutput = workerOutput;
-            FileOutput = fileOutput;
-            SnapshotLabels = snapshotLabels;
-            SnapshotAddedLabels = snapshotAddedLabels;
+            Files = files;
+
+            List<(string ProjectRelativePath, string AssemblyResolvePath)> filePaths =
+                new List<(string ProjectRelativePath, string AssemblyResolvePath)>(files.Count);
+            List<string> projectRelativePaths = new List<string>(files.Count);
+            List<TransformWorkerRemovedMethodSignatureDto> removedMethodSignatures =
+                new List<TransformWorkerRemovedMethodSignatureDto>();
+            foreach (HotReloadGroupFile file in files)
+            {
+                Debug.Assert(file.FileOutput != null, "Every file must carry its worker output row.");
+                filePaths.Add((file.ProjectRelativePath, file.AssemblyResolvePath));
+                projectRelativePaths.Add(file.ProjectRelativePath);
+                if (file.FileOutput.removedMethodSignatures != null)
+                {
+                    removedMethodSignatures.AddRange(file.FileOutput.removedMethodSignatures);
+                }
+            }
+
+            GroupFilePaths = new HotReloadGroupFilePaths(filePaths);
+            ProjectRelativePaths = projectRelativePaths;
+            RemovedMethodSignatures = removedMethodSignatures.ToArray();
         }
 
         internal string ProjectRoot { get; }
 
         internal string AssemblyName { get; }
-
-        internal string AssemblyResolvePath { get; }
-
-        internal string ProjectRelativePath { get; }
 
         internal string CorrelationId { get; }
 
@@ -79,13 +84,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal TransformWorkerOutputDto WorkerOutput { get; }
 
-        // The row set of ProjectRelativePath inside WorkerOutput.
-        internal TransformWorkerFileOutputDto FileOutput { get; }
+        // The edited files of this group, in the order they were sent to the worker.
+        internal IReadOnlyList<HotReloadGroupFile> Files { get; }
 
-        // Patch labels already active for this file when its apply started. Snapshotted because
-        // a multi-file run mutates the ledgers between files.
-        internal HashSet<string> SnapshotLabels { get; }
+        // Resolves the file identity a worker row carries into the path its outcomes report.
+        internal HotReloadGroupFilePaths GroupFilePaths { get; }
 
-        internal HashSet<string> SnapshotAddedLabels { get; }
+        internal IReadOnlyList<string> ProjectRelativePaths { get; }
+
+        // Every signature the group's files removed. Why joined: the call-site scan that gates a
+        // replacement runs once for the group, so it must see what the whole edit took away.
+        internal TransformWorkerRemovedMethodSignatureDto[] RemovedMethodSignatures { get; }
     }
 }

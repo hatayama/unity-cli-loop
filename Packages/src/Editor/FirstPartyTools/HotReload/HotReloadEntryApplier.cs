@@ -15,217 +15,57 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadEntryApplier
     {
-        // Why preflight before BeginFileGeneration: a match/bind/CheckPatchable failure
-        // must not replace the file's shim or added-member generation.
-        internal static HotReloadFileProcessResult ApplyEntriesAndBuildResult(
+        /// <summary>
+        /// Applies the group's entries file by file against the one compiled shim assembly, and
+        /// returns one result per file in the order the files were sent to the worker.
+        /// </summary>
+        /// <remarks>
+        /// Why per file: the shim assembly is shared, but a generation, an added-field ledger and
+        /// an apply result all belong to a single file, and a file whose entries cannot be
+        /// resolved must not stop its siblings from being applied.
+        /// </remarks>
+        internal static IReadOnlyList<HotReloadFileProcessResult> ApplyGroupAndBuildResults(
             HotReloadApplyContext context,
-            HotReloadFileSinks sinks,
             HotReloadShimCompileResult compileResult,
-            TransformWorkerEntryDto[] entriesToPatch,
-            string[] addedFieldNames,
-            string[] addedConstNames,
-            int unchangedMethodCount,
-            int revertedUnchangedCount)
+            TransformWorkerEntryDto[] entriesToPatch)
         {
             Debug.Assert(context != null, "context must not be null.");
-            Debug.Assert(sinks != null, "sinks must not be null.");
-            HotReloadEntryResolution.Result resolution = HotReloadEntryResolution.ResolveEntries(
-                context.AssemblyName,
-                context.AssemblyResolvePath,
-                compileResult.Assembly,
-                entriesToPatch);
-            if (!resolution.AllResolved)
+            Debug.Assert(compileResult != null, "compileResult must not be null.");
+            Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
+
+            Dictionary<string, List<TransformWorkerEntryDto>> entriesByFile =
+                HotReloadWorkerRowsByFile.GroupEntriesBySourceFile(entriesToPatch, context.ProjectRelativePaths);
+            // Why once for the group: every shim type of the group lives in this one assembly, so
+            // binding per file would re-run the same binders and hide which file first failed.
+            Dictionary<string, string> bindFailures = BindShimAccessors(compileResult.Assembly);
+            List<HotReloadFileProcessResult> results =
+                new List<HotReloadFileProcessResult>(context.Files.Count);
+            foreach (HotReloadGroupFile file in context.Files)
             {
-                sinks.Outcomes.AddRange(resolution.FailureOutcomes);
-                return FinishFileResult(
-                    sinks.Outcomes,
-                    sinks.Warnings,
-                    context.SnapshotLabels,
-                    context.SnapshotAddedLabels,
-                    context.ProjectRelativePath,
-                    context.WorkerOutput,
-                    context.FileOutput.sourceContentSha256,
-                    sinks.SuppressedPausePointIds,
-                    sinks.RetargetedPausePointIds,
-                    unchangedMethodCount,
-                    patchedCount: 0,
-                    addedFieldNames: null,
-                    addedConstNames: null,
-                    revertedUnchangedCount: revertedUnchangedCount);
-            }
-
-            HotReloadFileGenerations.BeginFileGeneration(
-                context.ProjectRelativePath,
-                compileResult.AssemblyBytes,
-                compileResult.PdbBytes,
-                compileResult.Assembly);
-            CommitAddedFieldsForFile(context.ProjectRelativePath, addedFieldNames);
-            // Why bind again: phase 1 already bound to detect failures; phase 2 keeps the
-            // historical apply order so a successful preflight still runs Bind before Patch.
-            BindShimAccessors(compileResult.Assembly);
-            List<string> inlineRiskMethodLabels = new List<string>();
-            int patchedCount = ApplyResolvedEntries(
-                resolution.ResolvedEntries,
-                entriesToPatch,
-                context.AssemblyResolvePath,
-                context.ProjectRelativePath,
-                sinks.Outcomes,
-                sinks.Warnings,
-                inlineRiskMethodLabels,
-                sinks.SuppressedPausePointIds,
-                sinks.RetargetedPausePointIds,
-                context.AssemblyName,
-                sinks.OneShotCallerNoteCandidates);
-
-            return FinishFileResult(
-                sinks.Outcomes,
-                sinks.Warnings,
-                context.SnapshotLabels,
-                context.SnapshotAddedLabels,
-                context.ProjectRelativePath,
-                context.WorkerOutput,
-                context.FileOutput.sourceContentSha256,
-                sinks.SuppressedPausePointIds,
-                sinks.RetargetedPausePointIds,
-                unchangedMethodCount,
-                patchedCount,
-                addedFieldNames,
-                addedConstNames,
-                inlineRiskMethodLabels,
-                revertedUnchangedCount);
-        }
-
-        private static HotReloadFileProcessResult FinishFileResult(
-            List<HotReloadMethodOutcome> outcomes,
-            List<string> warnings,
-            HashSet<string> snapshotLabels,
-            HashSet<string> snapshotAddedLabels,
-            string projectRelativePath,
-            TransformWorkerOutputDto workerOutput,
-            string sourceContentSha256,
-            List<string> suppressedPausePointIds,
-            List<string> retargetedPausePointIds,
-            int unchangedMethodCount,
-            int patchedCount,
-            string[] addedFieldNames,
-            string[] addedConstNames = null,
-            List<string> inlineRiskMethodLabels = null,
-            int revertedUnchangedCount = 0)
-        {
-            // Why here as well as the empty-entries return: apply can drop a still-declared
-            // added member by not re-Registering it after BeginFileGeneration.
-            HotReloadAppliedSourceLifecycle.AppendDeactivatedPatchesWarning(
-                warnings,
-                snapshotLabels,
-                snapshotAddedLabels,
-                projectRelativePath,
-                workerOutput,
-                outcomes);
-            return new HotReloadFileProcessResult(
-                outcomes,
-                warnings,
-                patchedCount,
-                suppressedPausePointIds,
-                inlineRiskMethodLabels ?? new List<string>(),
-                unchangedMethodCount,
-                retargetedPausePointIds,
-                addedFieldNames,
-                sourceContentSha256,
-                addedConstNames,
-                revertedUnchangedCount);
-        }
-
-        private static int ApplyResolvedEntries(
-            IReadOnlyList<HotReloadEntryResolution.ResolvedEntry> resolvedEntries,
-            TransformWorkerEntryDto[] entriesToPatch,
-            string assemblyResolvePath,
-            string projectRelativePath,
-            List<HotReloadMethodOutcome> outcomes,
-            List<string> warnings,
-            List<string> inlineRiskMethodLabels,
-            List<string> suppressedPausePointIds,
-            List<string> retargetedPausePointIds,
-            string assemblyName,
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates)
-        {
-            int patchedCount = 0;
-            int appliedThisRun = 0;
-            for (int index = 0; index < resolvedEntries.Count; index++)
-            {
-                HotReloadMethodOutcome outcome = ApplyResolvedEntry(
-                    resolvedEntries[index],
-                    projectRelativePath,
-                    inlineRiskMethodLabels,
-                    suppressedPausePointIds,
-                    retargetedPausePointIds);
-                outcomes.Add(outcome);
-                AppendOneShotCallerNoteCandidate(
-                    resolvedEntries[index],
-                    outcome,
-                    assemblyName,
-                    oneShotCallerNoteCandidates);
-                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
-                    || outcome.Kind == HotReloadMethodOutcomeKind.Added)
+                if (file.SkipApply)
                 {
-                    appliedThisRun++;
-                    if (outcome.Kind == HotReloadMethodOutcomeKind.Patched)
-                    {
-                        patchedCount++;
-                    }
-
+                    results.Add(HotReloadFileEntryApplier.BuildUnappliedResult(file));
                     continue;
                 }
 
-                if (outcome.Kind != HotReloadMethodOutcomeKind.Failed)
+                List<TransformWorkerEntryDto> fileEntries = entriesByFile[file.ProjectRelativePath];
+                if (fileEntries.Count == 0)
                 {
+                    HotReloadFileEntryApplier.ClearFileGeneration(context, file);
+                    results.Add(HotReloadFileEntryApplier.BuildUnappliedResult(file));
                     continue;
                 }
 
-                HotReloadEntryResolution.AppendAtomicSkipOutcomes(
-                    outcomes,
-                    entriesToPatch,
-                    index + 1,
-                    assemblyResolvePath);
-                if (appliedThisRun >= 1)
-                {
-                    warnings.Add(
-                        string.Format(
-                            HotReloadConstants.PartialApplyAfterPatchEngineFailureWarningFormat,
-                            appliedThisRun));
-                }
-
-                break;
+                results.Add(
+                    HotReloadFileEntryApplier.ApplyFileAndBuildResult(
+                        context,
+                        file,
+                        compileResult,
+                        fileEntries.ToArray(),
+                        bindFailures));
             }
 
-            return patchedCount;
-        }
-
-        private static void AppendOneShotCallerNoteCandidate(
-            HotReloadEntryResolution.ResolvedEntry resolved,
-            HotReloadMethodOutcome outcome,
-            string assemblyName,
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates)
-        {
-            if (candidates == null)
-            {
-                return;
-            }
-
-            if ((outcome.Kind != HotReloadMethodOutcomeKind.Patched
-                    && outcome.Kind != HotReloadMethodOutcomeKind.Added)
-                || !string.IsNullOrEmpty(outcome.LifecycleNote))
-            {
-                return;
-            }
-
-            HotReloadCallSiteScanner.CompiledMethodIdentity identity =
-                new HotReloadCallSiteScanner.CompiledMethodIdentity(
-                    assemblyName,
-                    resolved.Entry.typeMetadataName,
-                    resolved.Entry.methodName,
-                    resolved.Entry.parameterTypeFullNames ?? Array.Empty<string>(),
-                    resolved.Entry.genericArity);
-            candidates.Add(new HotReloadOneShotCallerNoteEnricher.Candidate(identity, outcome));
+            return results;
         }
 
         // Why only here and the empty-entries deactivation: a failed worker or shim compile
@@ -281,115 +121,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return revertedCount;
-        }
-
-        private static HotReloadMethodOutcome ApplyResolvedEntry(
-            HotReloadEntryResolution.ResolvedEntry resolved,
-            string projectRelativePath,
-            List<string> inlineRiskMethodLabels,
-            List<string> suppressedPausePointIds,
-            List<string> retargetedPausePointIds)
-        {
-            if (resolved.IsAddedMethod)
-            {
-                HotReloadAddedMemberRegistry.Register(
-                    projectRelativePath,
-                    resolved.MethodLabel,
-                    resolved.ShimMethod,
-                    resolved.FilePath);
-                return HotReloadMethodOutcome.Added(
-                    resolved.MethodLabel,
-                    resolved.FilePath,
-                    resolved.Entry.lifecycleNote);
-            }
-
-            // Why before Apply: Apply notifies OnHotReloadPatchStateChanged(true) after the
-            // ledger write; registration must already expose this method's shim for retarget.
-            HotReloadShimRegistry.RegisterMethod(
-                projectRelativePath,
-                resolved.OriginalMethod,
-                new HotReloadShimRegistry.MethodEntry(
-                    resolved.ShimMethod,
-                    resolved.PatchShape == HotReloadPatchShape.Delegation,
-                    resolved.Entry.sourceStartLine,
-                    resolved.Entry.sourceEndLine));
-            HotReloadPatchResult patchResult = HotReloadPatcher.Apply(
-                resolved.OriginalMethod,
-                resolved.ShimMethod,
-                resolved.PatchShape,
-                projectRelativePath);
-            if (!patchResult.Success)
-            {
-                HotReloadShimRegistry.RemoveMethod(resolved.OriginalMethod);
-                return HotReloadMethodOutcome.Failed(
-                    resolved.MethodLabel,
-                    patchResult.ErrorMessage,
-                    resolved.FilePath);
-            }
-
-            AppendPausePointTransitionIds(
-                resolved.OriginalMethod,
-                suppressedPausePointIds,
-                retargetedPausePointIds);
-
-            // Inline risk is flagged per method but reported as one aggregated warning so
-            // Warnings stay readable when many tiny methods are patched together.
-            if (patchResult.InlineRiskDetected)
-            {
-                inlineRiskMethodLabels.Add(resolved.MethodLabel);
-            }
-
-            return HotReloadMethodOutcome.Patched(
-                resolved.MethodLabel,
-                resolved.FilePath,
-                resolved.Entry.lifecycleNote);
-        }
-
-        // What: after Apply (+ retarget handler), splits armed markers into retargeted vs suppressed.
-        // Expired skips are recorded as a pending-drain event inside SourcePausePointPatcher and
-        // surfaced from HotReloadTools.BuildApplyResponse (same pattern as line-drift warnings).
-        private static void AppendPausePointTransitionIds(
-            MethodBase method,
-            List<string> suppressedPausePointIds,
-            List<string> retargetedPausePointIds)
-        {
-            IReadOnlyList<string> armedIds =
-                HotReloadPausePointCoordination.GetArmedMarkerIdsOnMethod?.Invoke(method);
-            if (armedIds == null || armedIds.Count == 0)
-            {
-                return;
-            }
-
-            IReadOnlyList<string> suppressedIds =
-                HotReloadPausePointCoordination.GetSuppressedMarkerIdsOnMethod?.Invoke(method)
-                ?? Array.Empty<string>();
-
-            // The same method can be patched twice in one run (duplicate file inputs,
-            // re-applied edits); the aggregated warning must list each marker id once.
-            foreach (string armedId in armedIds)
-            {
-                bool suppressed = false;
-                for (int index = 0; index < suppressedIds.Count; index++)
-                {
-                    if (suppressedIds[index] == armedId)
-                    {
-                        suppressed = true;
-                        break;
-                    }
-                }
-
-                if (suppressed)
-                {
-                    if (!suppressedPausePointIds.Contains(armedId))
-                    {
-                        suppressedPausePointIds.Add(armedId);
-                    }
-                }
-                else if (!retargetedPausePointIds.Contains(armedId))
-                {
-                    retargetedPausePointIds.Add(armedId);
-                }
-            }
         }
 
         /// <summary>

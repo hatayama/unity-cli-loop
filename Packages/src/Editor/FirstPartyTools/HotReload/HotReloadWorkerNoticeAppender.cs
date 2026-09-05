@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -14,57 +13,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         // Why after the worker: const-only / empty files have no patch candidates, so the
         // missing-baseline warning was pure noise (FB E). Emit only when the worker saw at
-        // least one method or accessor row.
+        // least one method or accessor row for this file.
         internal static void AppendWorkerNotices(
-            TransformWorkerOutputDto workerOutput,
             TransformWorkerFileOutputDto fileOutput,
+            IReadOnlyList<TransformWorkerSkippedDto> fileSkipped,
+            int patchCandidateRowCountForFile,
             string snapshotSource,
             string projectRelativePath,
             string assemblyName,
             string assemblyResolvePath,
             List<HotReloadMethodOutcome> outcomes,
-            List<string> warnings,
-            List<string> siblingDerivedWarnings)
+            List<string> warnings)
         {
-            Debug.Assert(workerOutput != null, "workerOutput must not be null.");
             Debug.Assert(fileOutput != null, "fileOutput must not be null.");
+            Debug.Assert(fileSkipped != null, "fileSkipped must not be null.");
+            Debug.Assert(patchCandidateRowCountForFile >= 0, "patchCandidateRowCountForFile must not be negative.");
             Debug.Assert(outcomes != null, "outcomes must not be null.");
             Debug.Assert(warnings != null, "warnings must not be null.");
-            Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
-            AssertEntryRowsCameFromTheEditedFile(workerOutput, projectRelativePath);
 
             AppendBaselineNotices(
-                workerOutput,
                 fileOutput,
+                patchCandidateRowCountForFile,
                 snapshotSource,
                 projectRelativePath,
                 assemblyName,
                 warnings);
             AppendAll(warnings, fileOutput.parseErrors);
-            AppendSkippedOutcomes(workerOutput.skipped, assemblyResolvePath, outcomes);
+            AppendSkippedOutcomes(fileSkipped, assemblyResolvePath, outcomes);
             // Surfaced before the empty-entries early return so const drift still reaches
             // the response when every method in the file is skipped or unchanged.
             AppendAll(warnings, fileOutput.declarationDriftWarnings);
-            AppendAll(siblingDerivedWarnings, workerOutput.siblingConstDriftWarnings);
-        }
-
-        // States today's contract: one worker run covers one file, so every entry row it returns
-        // must name that file. Grouping several files into one shim assembly will relax this.
-        private static void AssertEntryRowsCameFromTheEditedFile(
-            TransformWorkerOutputDto workerOutput,
-            string projectRelativePath)
-        {
-            if (workerOutput.entries == null)
-            {
-                return;
-            }
-
-            foreach (TransformWorkerEntryDto entry in workerOutput.entries)
-            {
-                Debug.Assert(
-                    string.Equals(entry.sourceProjectRelativePath, projectRelativePath, StringComparison.Ordinal),
-                    "Worker entry row reports a different source file than the one this run edited.");
-            }
         }
 
         internal static void AppendRetrySiblingConstDriftWarnings(
@@ -81,14 +59,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static void AppendBaselineNotices(
-            TransformWorkerOutputDto workerOutput,
             TransformWorkerFileOutputDto fileOutput,
+            int patchCandidateRowCountForFile,
             string snapshotSource,
             string projectRelativePath,
             string assemblyName,
             List<string> warnings)
         {
-            if (snapshotSource == null && CountPatchCandidateRows(workerOutput) >= 1)
+            if (snapshotSource == null && patchCandidateRowCountForFile >= 1)
             {
                 warnings.Add(
                     string.Format(
@@ -108,15 +86,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static void AppendSkippedOutcomes(
-            TransformWorkerSkippedDto[] skippedRows,
+            IReadOnlyList<TransformWorkerSkippedDto> skippedRows,
             string assemblyResolvePath,
             List<HotReloadMethodOutcome> outcomes)
         {
-            if (skippedRows == null)
-            {
-                return;
-            }
-
             foreach (TransformWorkerSkippedDto skipped in skippedRows)
             {
                 outcomes.Add(
@@ -138,15 +111,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 target.Add(additions[index]);
             }
-        }
-
-        private static int CountPatchCandidateRows(TransformWorkerOutputDto workerOutput)
-        {
-            int entryCount = workerOutput.entries != null ? workerOutput.entries.Length : 0;
-            int skippedCount = workerOutput.skipped != null ? workerOutput.skipped.Length : 0;
-            int unchangedCount =
-                workerOutput.unchangedMethods != null ? workerOutput.unchangedMethods.Length : 0;
-            return entryCount + skippedCount + unchangedCount;
         }
     }
 }

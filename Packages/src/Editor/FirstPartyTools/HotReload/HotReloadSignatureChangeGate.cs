@@ -22,9 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(context != null, "context must not be null.");
             TransformWorkerEntryDto[] entries = context.WorkerOutput.entries ?? Array.Empty<TransformWorkerEntryDto>();
-            TransformWorkerRemovedMethodSignatureDto[] removedSignatures =
-                context.FileOutput.removedMethodSignatures
-                ?? Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
+            TransformWorkerRemovedMethodSignatureDto[] removedSignatures = context.RemovedMethodSignatures;
             List<TransformWorkerEntryDto> replacementEntries = CollectReplacementEntries(entries);
             if (replacementEntries.Count == 0 && removedSignatures.Length == 0)
             {
@@ -56,19 +54,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadShimIsolation.IsolationExclusions exclusions = HotReloadShimIsolation.BuildIsolationExclusions(gatedReplacements, entries);
-            HashSet<string> editedFileMethodKeys = HotReloadSignatureChangeCoverage.CollectEditedFileMethodKeys(
-                entries,
-                context.WorkerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>());
+            Dictionary<string, HashSet<string>> editedFileMethodKeysByFile =
+                HotReloadSignatureChangeCoverage.CollectEditedFileMethodKeysByFile(
+                    entries,
+                    context.WorkerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>());
             List<HotReloadMethodOutcome> skippedOutcomes = BuildGatedReplacementSkipOutcomes(
                 gatedReplacements,
                 uncoveredCallersByTarget,
-                editedFileMethodKeys,
-                context.AssemblyResolvePath,
-                context.ProjectRelativePath);
+                editedFileMethodKeysByFile,
+                context.GroupFilePaths);
             skippedOutcomes.AddRange(
                 HotReloadShimIsolation.BuildSkippedCallerOutcomes(
                     exclusions.CallerEntries,
-                    context.AssemblyResolvePath,
+                    context.GroupFilePaths,
                     HotReloadConstants.SignatureChangedGatedCallerSkipReason));
 
             HotReloadShimIsolation.IsolationRetryRunResult retry = await HotReloadShimIsolation.RunIsolationRetryAsync(
@@ -80,7 +78,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.TargetDllPath,
                 context.Defines,
                 context.WorkerOutput.skipped,
-                context.AssemblyResolvePath,
+                context.GroupFilePaths,
                 HotReloadConstants.VibeLogIsolationTriggerSignatureChangeGate,
                 context.CorrelationId,
                 ct).ConfigureAwait(false);
@@ -236,9 +234,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static List<HotReloadMethodOutcome> BuildGatedReplacementSkipOutcomes(
             IReadOnlyList<TransformWorkerEntryDto> gatedReplacements,
             Dictionary<string, List<string>> uncoveredCallersByTarget,
-            HashSet<string> editedFileMethodKeys,
-            string assemblyResolvePath,
-            string projectRelativePath)
+            Dictionary<string, HashSet<string>> editedFileMethodKeysByFile,
+            HotReloadGroupFilePaths groupFilePaths)
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             foreach (TransformWorkerEntryDto entry in gatedReplacements)
@@ -248,13 +245,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string reason;
                 // Why live registry, not a run-start snapshot: BeginFileGeneration runs after
                 // this gate, so the previous apply's added members are still listed here.
-                if (HotReloadAddedMemberRegistry.IsActiveMember(projectRelativePath, methodLabel))
+                // Why the entry's own file: a group run gates the replacements of several files,
+                // and a member is active per file.
+                if (HotReloadAddedMemberRegistry.IsActiveMember(entry.sourceProjectRelativePath, methodLabel))
                 {
                     reason = string.Format(
                         HotReloadConstants.SignatureChangedGateSkipReasonAlreadyActiveFormat,
                         methodLabel);
                 }
+                // Why this entry's own file: a caller edited in a sibling file of the group is
+                // not a same-file caller, and telling the user otherwise points them at the
+                // wrong file.
                 else if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> uncoveredCallers)
+                    && editedFileMethodKeysByFile.TryGetValue(
+                        entry.sourceProjectRelativePath,
+                        out HashSet<string> editedFileMethodKeys)
                     && HotReloadSignatureChangeCoverage.AreAllUncoveredCallersInEditedFile(uncoveredCallers, editedFileMethodKeys))
                 {
                     reason = string.Format(
@@ -273,7 +278,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadMethodOutcome.Skipped(
                         methodLabel,
                         reason,
-                        assemblyResolvePath));
+                        groupFilePaths.ResolveAssemblyResolvePath(entry.sourceProjectRelativePath)));
             }
 
             return outcomes;
