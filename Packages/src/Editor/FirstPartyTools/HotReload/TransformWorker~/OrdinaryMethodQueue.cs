@@ -390,7 +390,8 @@ internal static class OrdinaryMethodQueue
                     ShimTypeName = shimType.ShimTypeName,
                     ShimMethodName = shimMethodName,
                     NamespaceName = shimType.NamespaceName,
-                    IsStatic = methodSymbol.IsStatic
+                    IsStatic = methodSymbol.IsStatic,
+                    ParameterCount = methodSymbol.Parameters.Length
                 });
             RemovedMemberCollector.RecordHandledAddedMethodSyntaxKey(
                 addedMethodCatalog,

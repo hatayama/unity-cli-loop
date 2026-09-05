@@ -186,6 +186,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a caller that reaches an added host method through a compiled holder property
+        /// still records the added method and rewrites the invocation, because the receiver type
+        /// name plus method name plus argument count is enough to bind when GetSymbolInfo cannot.
+        /// </summary>
+        [Test]
+        public async Task Run_CallerReachesHostThroughCompiledHolder_BindsAddedMethodByReceiverType()
+        {
+            string editedCaller = ReplaceInSource(
+                ReadOnDisk(CallerFileName),
+                "return holder.Host.Value();",
+                "return Twice(holder.Host.Added());");
+            CrossFileRun run = await RunEditedPairAsync(
+                AddHostMethod(ReadOnDisk(HostFileName)),
+                editedCaller);
+
+            Assert.That(run.Result.Success, Is.True, run.Result.ErrorMessage);
+            TransformWorkerEntryDto callerEntry = FindEntry(run, CallerTypeMetadataName, "CallThroughHolder");
+            Assert.That(callerEntry.calledAddedMethodKeys, Is.Not.Null);
+            Assert.That(
+                callerEntry.calledAddedMethodKeys,
+                Has.Some.Contains("Added"),
+                "The edited caller body must record the added host method reached through the holder.");
+            AssertNoSkippedMethodNamed(run, "CallThroughHolder");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Not.Contain("holder.Host.Added("),
+                "The unbound metadata-receiver call must be rewritten off the added method.");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Contain("__uloopInstance.Twice("),
+                "The collateral unbound compiled call must be qualified onto the instance parameter.");
+        }
+
+        /// <summary>
         /// What: an unreadable source reports its failure on its own per-file row only, and the
         /// other file of the run still produces entries.
         /// </summary>
@@ -233,9 +267,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string ReplaceCallerBody(string callerSource, string bodyText)
         {
-            const string anchor = "return host.Value();";
-            Assert.That(callerSource, Does.Contain(anchor), "Precondition: caller anchor must exist.");
-            return callerSource.Replace(anchor, bodyText, StringComparison.Ordinal);
+            return ReplaceInSource(callerSource, "return host.Value();", bodyText);
+        }
+
+        private static string ReplaceInSource(string source, string anchor, string replacement)
+        {
+            Assert.That(source, Does.Contain(anchor), "Precondition: anchor must exist: " + anchor);
+            return source.Replace(anchor, replacement, StringComparison.Ordinal);
         }
 
         private static TransformWorkerEntryDto FindEntry(

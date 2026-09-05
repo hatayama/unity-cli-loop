@@ -32,6 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static readonly string[] SelfSnapshotMethodlessTypeAllowList =
         {
             "HotReloadSiblingConstDefinitions.cs",
+            "HotReloadCrossFileAddedMemberHolder.cs",
         };
 
         /// <summary>
