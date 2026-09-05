@@ -320,11 +320,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < context.Files.Count; index++)
             {
                 HotReloadGroupFile file = context.Files[index];
-                if (file.FileOutput == null)
-                {
-                    continue;
-                }
-
+                Debug.Assert(file.FileOutput != null, "Every file must carry its worker output row.");
                 HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
                     file.Sinks.AppliedEntries,
                     file.FileOutput.removedMethodSignatures
