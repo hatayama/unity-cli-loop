@@ -403,6 +403,11 @@ internal static class OrdinaryMethodQueue
                 typeState.TypeSymbol,
                 methodSymbol,
                 declarationDriftWarnings);
+            TestAttributeNames.AppendAddedTestMethodWarningIfNeeded(
+                methodDeclaration,
+                typeState.TypeSymbol,
+                methodSymbol,
+                declarationDriftWarnings);
         }
 
         return (shimTypeCounter, globalShimMethodCounter);

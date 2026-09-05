@@ -19,7 +19,9 @@ one shim assembly, so a body edited in one of them can call a member added in an
 code cannot see it, and neither can anything that resolves members by name at
 runtime: reflection (`GetType().GetMethod("NewM")` returns `null`), Unity's message
 discovery (an added `Update` or `OnCollisionEnter` on a `MonoBehaviour` is never
-invoked — a `Warnings` entry names it), UnityEvent/inspector wiring, and
+invoked — a `Warnings` entry names it), the Unity Test Runner (an added `[Test]` /
+`[UnityTest]` method is not enumerated by `uloop run-tests --skip-compile` — a
+`Warnings` entry names it; run `uloop compile` first), UnityEvent/inspector wiring, and
 serialization. Referencing an added member from a file that is neither passed to this reload nor
 already hot-reloaded, or from another assembly, fails that file's hot reload with
 the usual new-member hint; run `uloop compile` instead. Unchanged files of the same
