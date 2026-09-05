@@ -114,7 +114,18 @@ internal static class PropertyGetterEmitter
             PropertyGetterClassifier.TryGetPropertyGetterBody(propertyDeclaration);
         if (!hasGetterBody)
         {
-            // Auto-property / setter-only: not a patch candidate (no Skipped row either).
+            // Why skip added auto-properties: Harmony looks up get_<Name> on the compiled type
+            // and fails when the member does not exist. An existing auto-property stays silent.
+            PropertyGetterClassifier.TrySkipAddedProperty(
+                sourceProjectRelativePath,
+                hasBaseline,
+                snapshotPropertyMap,
+                plainCurrentPropertyMap,
+                typeMetadataNameFromSyntax,
+                propertyDeclaration,
+                propertySymbol.GetMethod,
+                skipped,
+                addedMethodCatalog);
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
 

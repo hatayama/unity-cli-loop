@@ -136,6 +136,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: referencing an auto-property added in another file of the same reload fails
+        /// the caller with the skipped-member compile note that names the property.
+        /// </summary>
+        [Test]
+        public async Task Run_CallerFileUsesAutoPropertyAddedInOtherFile_FailsWithSkippedPropertyNote()
+        {
+            HotReloadOrchestratorResult result = await RunPairAsync(
+                "CrossFileAddedAutoProperty",
+                InsertHostMember("        public bool HasTarget { get; private set; }\n\n"),
+                ReplaceCallerBody(CallerCallBodyAnchor, "return host.HasTarget ? 1 : 0;"));
+
+            HotReloadMethodOutcome failure = FindOutcome(result, HotReloadMethodOutcomeKind.Failed, "Call");
+            Assert.That(
+                failure.Reason,
+                Does.Contain(string.Format(
+                    HotReloadConstants.SkippedMemberCompileFailureNoteFormat,
+                    "HasTarget",
+                    "Added properties are out of scope")));
+            Assert.That(failure.Reason, Does.Contain("Added properties are out of scope"));
+        }
+
+        /// <summary>
         /// What: a compile error in one file of the group takes down only that file — its other
         /// edited method reports the file-atomic skip and it starts no generation — while the
         /// healthy sibling file is applied and its runtime is updated.
