@@ -160,10 +160,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// <summary>
         /// What: when the file that declares an added method fails to compile, the sibling file's
         /// body that calls it is skipped as an isolated added-method caller instead of being
-        /// reported as one more file-atomic skip.
+        /// reported as one more file-atomic skip, and nothing of the reload is applied because
+        /// the surviving file's only edited body was that caller.
         /// </summary>
         [Test]
-        public async Task Run_TwoFilesBrokenFileDeclaresAddedMethodUsedByOther_SkipsCallerBodyAndAppliesRest()
+        public async Task Run_TwoFilesBrokenFileDeclaresAddedMethodUsedByOther_SkipsCallerBodyAndAppliesNothing()
         {
             string hostSource = InsertHostMember(
                 "        public int Added()\n        {\n            return 41;\n        }\n\n");
@@ -184,6 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadMethodOutcome callerSkip = FindOutcome(result, HotReloadMethodOutcomeKind.Skipped, "Call(");
             Assert.That(callerSkip.Reason, Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason));
             Assert.That(callerSkip.FilePath, Is.EqualTo(FixturePath(CallerFileName)));
+            AssertNothingApplied(result);
         }
 
         /// <summary>
@@ -357,6 +359,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     outcome.Kind,
                     Is.Not.EqualTo(HotReloadMethodOutcomeKind.Failed),
                     "Unexpected failure.\n" + FormatOutcomes(result));
+            }
+        }
+
+        private static void AssertNothingApplied(HotReloadOrchestratorResult result)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Patched),
+                    "Nothing may be applied here.\n" + FormatOutcomes(result));
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.Added),
+                    "Nothing may be applied here.\n" + FormatOutcomes(result));
             }
         }
 

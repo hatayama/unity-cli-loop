@@ -13,7 +13,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Why first-wins: duplicate keys would mean two entries claim the same compiled signature,
         // and the recorder's original linear scan reported the first match.
         public static IReadOnlyDictionary<string, TransformWorkerEntryDto> IndexByReplacedWireKey(
-            TransformWorkerEntryDto[] entries)
+            IReadOnlyList<TransformWorkerEntryDto> entries)
         {
             Dictionary<string, TransformWorkerEntryDto> entriesByWireKey =
                 new Dictionary<string, TransformWorkerEntryDto>(StringComparer.Ordinal);
@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return entriesByWireKey;
             }
 
-            for (int index = 0; index < entries.Length; index++)
+            for (int index = 0; index < entries.Count; index++)
             {
                 TransformWorkerEntryDto entry = entries[index];
                 if (entry == null || !entry.replacesCompiledMethod)

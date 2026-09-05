@@ -141,7 +141,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why after apply: earlier returns (gate fail, shim compile, coverage loss)
             // never applied the replacement, so leftover Active rows must not claim they
             // were superseded.
-            RecordSupersededSignaturesAfterApply(results, context, gateResult.GatedReplacementMethodKeys);
+            RecordSupersededSignaturesAfterApply(
+                results,
+                context,
+                compile.EntriesToPatch,
+                gateResult.GatedReplacementMethodKeys);
             return results;
         }
 
@@ -310,23 +314,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        // Why per file: a group applies file by file, so only the files that actually patched
+        // something may claim their removed signatures were superseded, and only through the
+        // entries that reached Harmony.
         private static void RecordSupersededSignaturesAfterApply(
             IReadOnlyList<HotReloadFileProcessResult> results,
             HotReloadApplyContext context,
+            TransformWorkerEntryDto[] appliedEntries,
             IReadOnlyCollection<string> gatedReplacementMethodKeys)
         {
-            foreach (HotReloadFileProcessResult result in results)
+            Debug.Assert(
+                results.Count == context.Files.Count,
+                "A group must report one result per edited file.");
+            Dictionary<string, List<TransformWorkerEntryDto>> appliedEntriesByFile =
+                HotReloadWorkerRowsByFile.GroupEntriesBySourceFile(appliedEntries, context.ProjectRelativePaths);
+            for (int index = 0; index < results.Count; index++)
             {
-                if (!HasAppliedChange(result.Outcomes))
+                if (!HasAppliedChange(results[index].Outcomes))
                 {
                     continue;
                 }
 
-                HotReloadSupersededSignatureRecorder.RecordFromWorkerOutput(
-                    context.WorkerOutput,
-                    context.RemovedMethodSignatures,
+                HotReloadGroupFile file = context.Files[index];
+                HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                    appliedEntriesByFile[file.ProjectRelativePath],
+                    file.FileOutput.removedMethodSignatures ?? Array.Empty<TransformWorkerRemovedMethodSignatureDto>(),
                     gatedReplacementMethodKeys);
-                return;
             }
         }
 

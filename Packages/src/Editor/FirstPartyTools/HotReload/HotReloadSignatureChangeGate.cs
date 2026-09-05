@@ -54,13 +54,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadShimIsolation.IsolationExclusions exclusions = HotReloadShimIsolation.BuildIsolationExclusions(gatedReplacements, entries);
-            HashSet<string> editedFileMethodKeys = HotReloadSignatureChangeCoverage.CollectEditedFileMethodKeys(
-                entries,
-                context.WorkerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>());
+            Dictionary<string, HashSet<string>> editedFileMethodKeysByFile =
+                HotReloadSignatureChangeCoverage.CollectEditedFileMethodKeysByFile(
+                    entries,
+                    context.WorkerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>());
             List<HotReloadMethodOutcome> skippedOutcomes = BuildGatedReplacementSkipOutcomes(
                 gatedReplacements,
                 uncoveredCallersByTarget,
-                editedFileMethodKeys,
+                editedFileMethodKeysByFile,
                 context.GroupFilePaths);
             skippedOutcomes.AddRange(
                 HotReloadShimIsolation.BuildSkippedCallerOutcomes(
@@ -233,7 +234,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static List<HotReloadMethodOutcome> BuildGatedReplacementSkipOutcomes(
             IReadOnlyList<TransformWorkerEntryDto> gatedReplacements,
             Dictionary<string, List<string>> uncoveredCallersByTarget,
-            HashSet<string> editedFileMethodKeys,
+            Dictionary<string, HashSet<string>> editedFileMethodKeysByFile,
             HotReloadGroupFilePaths groupFilePaths)
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
@@ -252,7 +253,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         HotReloadConstants.SignatureChangedGateSkipReasonAlreadyActiveFormat,
                         methodLabel);
                 }
+                // Why this entry's own file: a caller edited in a sibling file of the group is
+                // not a same-file caller, and telling the user otherwise points them at the
+                // wrong file.
                 else if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> uncoveredCallers)
+                    && editedFileMethodKeysByFile.TryGetValue(
+                        entry.sourceProjectRelativePath,
+                        out HashSet<string> editedFileMethodKeys)
                     && HotReloadSignatureChangeCoverage.AreAllUncoveredCallersInEditedFile(uncoveredCallers, editedFileMethodKeys))
                 {
                     reason = string.Format(

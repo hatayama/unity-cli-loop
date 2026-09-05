@@ -87,8 +87,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private sealed class GroupBuilder
         {
             private readonly List<int> inputIndexes = new List<int>();
+            // Why platform-aware: on Windows two spellings that differ only in case name the
+            // same physical file, and one worker run cannot parse the same source twice.
             private readonly HashSet<string> projectRelativePaths =
-                new HashSet<string>(StringComparer.Ordinal);
+                new HashSet<string>(HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
 
             public string AssemblyName { get; }
 

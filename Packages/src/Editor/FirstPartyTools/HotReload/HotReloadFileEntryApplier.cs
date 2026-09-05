@@ -74,12 +74,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadFileGenerations.ListActiveAddedMethodKeys(file.ProjectRelativePath);
             HotReloadOrchestratorLog.LogHotReloadEmptyEntriesClear(addedLabelsAtClear, context.CorrelationId);
             HotReloadAddedMemberRegistry.BeginFileGeneration(file.ProjectRelativePath);
-            HotReloadEntryApplier.CommitAddedFieldsForFile(
-                file.ProjectRelativePath,
-                file.FileOutput.addedFieldNames);
+            // Why AddedFieldNames first: a retry (gate or isolation) replaces this file's added
+            // field names, and committing the first-pass names would resurrect a field the
+            // retry no longer emits. The worker row is the first-pass fallback.
+            string[] addedFieldNames = file.AddedFieldNames ?? file.FileOutput.addedFieldNames;
+            HotReloadEntryApplier.CommitAddedFieldsForFile(file.ProjectRelativePath, addedFieldNames);
             // Why recorded: a file that only declares an added member has no entry of its own,
             // yet a sibling file's applied body uses that field, so the run must report it.
-            file.ClearedAddedFieldNames = file.FileOutput.addedFieldNames;
+            file.ClearedAddedFieldNames = addedFieldNames;
             // Why after the clear: a still-declared added method can be worker-skipped
             // (virtual/generic), leaving entries empty while the registry drop is real.
             HotReloadAppliedSourceLifecycle.AppendDeactivatedPatchesWarning(
