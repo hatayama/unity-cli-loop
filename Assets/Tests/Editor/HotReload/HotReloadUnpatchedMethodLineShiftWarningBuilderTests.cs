@@ -335,6 +335,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a Failed sibling pulled in by auto re-apply still folds into the continuing
+        /// line-shift summary; outcome Kind does not restore the full per-file warning.
+        /// </summary>
+        [Test]
+        public void Append_WhenReappliedSiblingHasFailedOutcome_AddsOneContinuingWarning()
+        {
+            List<string> warnings = new List<string>();
+            List<HotReloadMethodOutcome> methods = new List<HotReloadMethodOutcome>
+            {
+                HotReloadMethodOutcome.Failed("Enemy.Idle", "shim compile failed", "Assets/Scripts/Enemy.cs")
+            };
+
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                methods,
+                file => "line1\nline2\nline3",
+                file => "line1\nline2",
+                new[] { "Assets/Scripts/Enemy.cs" });
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    string.Format(
+                        HotReloadConstants.ContinuingLineShiftWarningFormat,
+                        1,
+                        "Assets/Scripts/Enemy.cs")));
+            Assert.That(warnings[0], Does.Not.Contain("line count differs from the last compiled source"));
+        }
+
+        /// <summary>
         /// What: a Patched file passed in --files still gets the full per-file line-count
         /// warning when it is not an auto-reapplied sibling.
         /// </summary>
