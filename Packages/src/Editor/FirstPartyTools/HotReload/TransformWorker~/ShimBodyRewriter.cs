@@ -237,9 +237,12 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         IMethodSymbol addedMethod,
         AddedMethodBinding binding)
     {
-        string qualifiedShimType = string.IsNullOrEmpty(binding.NamespaceName)
-            ? "global::" + binding.ShimTypeName
-            : "global::" + binding.NamespaceName + "." + binding.ShimTypeName;
+        // Why the resolved namespace: a type from the global namespace gets a synthesized one,
+        // so naming the shim without it would not compile.
+        string qualifiedShimType = "global::"
+            + ShimNamespaceNames.ResolveShimNamespaceName(binding.NamespaceName)
+            + "."
+            + binding.ShimTypeName;
         ExpressionSyntax shimTypeExpression = SyntaxFactory.ParseTypeName(qualifiedShimType);
         ExpressionSyntax shimAccess = SyntaxFactory.MemberAccessExpression(
             SyntaxKind.SimpleMemberAccessExpression,
