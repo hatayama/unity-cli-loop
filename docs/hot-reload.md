@@ -211,11 +211,13 @@ Wire details:
 
 ## Known Limits (documented, not worked around)
 
-- Adding fields, types, or methods; changing signatures; changing field initializers or
-  `const` values — all require `uloop compile`. Shim compile errors caused by references to
-  newly added members are reported with that hint, and changed `const` values (including
-  enum members) are compared against the compiled target assembly and reported as a
-  response warning; other outside-body edits stay silent.
+- New types; added members referenced from another assembly or from a file this reload did
+  not receive; changed field initializers or `const` values — all require `uloop compile`.
+  Added fields and methods themselves apply, and are visible to the bodies edited in any file
+  of the same assembly passed to the same reload. Shim compile errors caused by references to
+  members that are still missing are reported with that hint, and changed `const` values
+  (including enum members) are compared against the compiled target assembly and reported as
+  a response warning; other outside-body edits stay silent.
 - In-flight async methods and coroutines keep running the old code until re-entered.
 - Callers whose call sites were JIT-inlined may not observe the detour (`IsLikelyJitInlined`
   heuristic produces a warning, as with pause points).
