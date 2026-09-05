@@ -88,6 +88,11 @@ internal static class AccessorEligibility
 
     private static bool AreMethodSignatureTypesVisible(IMethodSymbol methodSymbol, out string rejectReason)
     {
+        if (TryDescribeUnresolvedType(methodSymbol.ReturnType, "method return type", out rejectReason))
+        {
+            return false;
+        }
+
         if (!AccessibilityRules.IsExternallyVisibleType(methodSymbol.ReturnType))
         {
             rejectReason = "method return type is not visible from an external assembly (condition c).";
@@ -96,6 +101,11 @@ internal static class AccessorEligibility
 
         foreach (IParameterSymbol parameter in methodSymbol.Parameters)
         {
+            if (TryDescribeUnresolvedType(parameter.Type, "method parameter type", out rejectReason))
+            {
+                return false;
+            }
+
             if (!AccessibilityRules.IsExternallyVisibleType(parameter.Type))
             {
                 rejectReason =
@@ -105,6 +115,23 @@ internal static class AccessorEligibility
         }
 
         rejectReason = null;
+        return true;
+    }
+
+    // Why before visibility: TypeKind.Error is not "invisible"; treating it as condition c
+    // tells the caller the type exists but cannot be seen, which hides missing usings/typos.
+    private static bool TryDescribeUnresolvedType(ITypeSymbol typeSymbol, string role, out string reason)
+    {
+        if (typeSymbol == null || typeSymbol.TypeKind != TypeKind.Error)
+        {
+            reason = null;
+            return false;
+        }
+
+        reason = role
+            + " '"
+            + typeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+            + "' could not be resolved (missing using directive, typo, or a type that is not compiled yet).";
         return true;
     }
 
