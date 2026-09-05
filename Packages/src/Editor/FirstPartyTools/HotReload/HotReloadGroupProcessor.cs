@@ -76,13 +76,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why before the empty-entries return: all-unchanged runs exit there, and those are
             // exactly the runs that must peel leftover patches so behavior converges to compiled IL.
-            await MainThreadSwitcher.SwitchToMainThread(ct);
-            if (!TryAppendNewSourceMembershipFailure(files))
+            if (!await RevalidateBeforeRevertAsync(
+                    files,
+                    ct,
+                    () => RevertUnchangedPatchesPerFile(files, rows)).ConfigureAwait(false))
             {
                 return BuildUnappliedResults(files);
             }
-
-            RevertUnchangedPatchesPerFile(files, rows);
 
             HotReloadApplyContext context = new HotReloadApplyContext(
                 firstFile.ProjectRoot,
@@ -187,6 +187,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", failure);
             return false;
+        }
+
+        internal static async Task<bool> RevalidateBeforeRevertAsync(
+            IReadOnlyList<HotReloadGroupFile> files,
+            CancellationToken ct,
+            Action revertUnchangedPatches)
+        {
+            Debug.Assert(revertUnchangedPatches != null, "revertUnchangedPatches must not be null.");
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            ct.ThrowIfCancellationRequested();
+            if (!TryAppendNewSourceMembershipFailure(files))
+            {
+                return false;
+            }
+
+            revertUnchangedPatches();
+            return true;
         }
 
         // Returns false when a replacement lost its covering caller and the group must fail.

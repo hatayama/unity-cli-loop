@@ -150,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Resolves one input path's patch target and either records its early result or enrolls
         // it in the group plan.
-        private static void ResolveInputFile(
+        internal static void ResolveInputFile(
             string filePath,
             int index,
             string contentPathOverride,
