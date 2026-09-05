@@ -485,6 +485,133 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added [Test] method stays Success/addedMethod and emits exactly one
+        /// Unity Test Runner visibility warning naming that method.
+        /// </summary>
+        [Test]
+        public async Task Warn_AddedTestMethod_KeepsEntryAndEmitsWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "[Test]\n        public void AddedProbe()\n        {\n        }");
+            string sourcePath = WriteEdited("AddedTestMethod.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto added = FindEntry(result, "AddedProbe");
+            Assert.That(added, Is.Not.Null, "AddedProbe must still be an entry.");
+            Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(
+                CountWarningsContaining(result, "Unity Test Runner"),
+                Is.EqualTo(1),
+                FormatWarnings(result));
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.Some.Contain("AddedProbe").And.Contain("Unity Test Runner"));
+        }
+
+        /// <summary>
+        /// What: added methods with a qualified [TestCase], [UnityTest], or [SetUp] each
+        /// produce a Unity Test Runner warning that names that method.
+        /// </summary>
+        [Test]
+        public async Task Warn_AddedTestAttributes_QualifiedUnityTestAndSetUp_EmitWarningPerMethod()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "[NUnit.Framework.TestCase(1)]\n        public void AddedCaseProbe(int value)\n        {\n        }\n\n"
+                + "        [UnityTest]\n        public System.Collections.IEnumerator AddedUnityProbe()\n        {\n"
+                + "            yield break;\n        }\n\n"
+                + "        [SetUp]\n        public void AddedSetUpProbe()\n        {\n        }");
+            string sourcePath = WriteEdited("AddedTestAttributeShapes.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.Some.Contain("AddedCaseProbe").And.Contain("Unity Test Runner"),
+                FormatWarnings(result));
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.Some.Contain("AddedUnityProbe").And.Contain("Unity Test Runner"),
+                FormatWarnings(result));
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.Some.Contain("AddedSetUpProbe").And.Contain("Unity Test Runner"),
+                FormatWarnings(result));
+        }
+
+        /// <summary>
+        /// What: an added method with no test attribute, or only [System.Obsolete], does not
+        /// emit a Unity Test Runner warning.
+        /// </summary>
+        [Test]
+        public async Task Warn_AddedMethodWithoutTestAttribute_DoesNotEmitTestRunnerWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public void AddedPlainProbe()\n        {\n        }\n\n"
+                + "        [System.Obsolete]\n        public void AddedObsoleteProbe()\n        {\n        }");
+            string sourcePath = WriteEdited("AddedNonTestMethod.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "AddedPlainProbe"), Is.Not.Null);
+            Assert.That(FindEntry(result, "AddedObsoleteProbe"), Is.Not.Null);
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.None.Contain("Unity Test Runner"),
+                FormatWarnings(result));
+        }
+
+        /// <summary>
+        /// What: editing only the body of a baseline [Test] method (Patched) does not emit
+        /// a Unity Test Runner warning.
+        /// </summary>
+        [Test]
+        public async Task Warn_PatchedExistingTestMethod_DoesNotEmitTestRunnerWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            const string originalExistingValue =
+                "        public int ExistingValue()\n        {\n            return 1;\n        }";
+            string snapshot = onDisk.Replace(
+                originalExistingValue,
+                "        [Test]\n        public int ExistingValue()\n        {\n            return 1;\n        }",
+                StringComparison.Ordinal);
+            string edited = onDisk.Replace(
+                originalExistingValue,
+                "        [Test]\n        public int ExistingValue()\n        {\n            return 99;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("PatchedExistingTestMethod.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: snapshot);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto entry = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            Assert.That(entry, Is.Not.Null);
+            Assert.That(entry.patchKind, Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.None.Contain("Unity Test Runner"),
+                FormatWarnings(result));
+        }
+
+        /// <summary>
         /// What: adding or removing a method does not emit the outside-method-body drift warning;
         /// a field-initializer change still does.
         /// </summary>
@@ -1715,6 +1842,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return null;
+        }
+
+        private static int CountWarningsContaining(TransformWorkerClientResult result, string fragment)
+        {
+            string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
+            int count = 0;
+            foreach (string warning in warnings)
+            {
+                if (warning.Contains(fragment, StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static string FormatWarnings(TransformWorkerClientResult result)
+        {
+            string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
+            if (warnings.Length == 0)
+            {
+                return "declarationDriftWarnings=(none)";
+            }
+
+            return "declarationDriftWarnings=\n" + string.Join("\n", warnings);
         }
 
         private static string FormatSkipped(TransformWorkerSkippedDto[] skipped)
