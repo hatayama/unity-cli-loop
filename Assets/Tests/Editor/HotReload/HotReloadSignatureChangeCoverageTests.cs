@@ -194,6 +194,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(warnings, Is.Empty);
         }
 
+        /// <summary>
+        /// What: stale warnings de-duplicate only their displayed caller keys, preserving distinct
+        /// cross-assembly caller identities for coverage decisions.
+        /// </summary>
+        [Test]
+        public void FormatUncoveredCallerMethodKeys_CrossAssemblySameKey_DeduplicatesDisplayOnly()
+        {
+            List<HotReloadQualifiedMethodIdentity> sameKeyCallers =
+                new List<HotReloadQualifiedMethodIdentity>
+                {
+                    new HotReloadQualifiedMethodIdentity(EditedAssemblyName, CallerKey),
+                    new HotReloadQualifiedMethodIdentity(ExternalAssemblyName, CallerKey)
+                };
+            List<HotReloadQualifiedMethodIdentity> differentKeyCallers =
+                new List<HotReloadQualifiedMethodIdentity>
+                {
+                    new HotReloadQualifiedMethodIdentity(EditedAssemblyName, CallerKey),
+                    new HotReloadQualifiedMethodIdentity(
+                        ExternalAssemblyName,
+                        "Example.OtherCaller::Call()")
+                };
+
+            Assert.That(sameKeyCallers, Has.Count.EqualTo(2));
+            Assert.That(
+                CountOccurrences(CollectStaleWarning(sameKeyCallers), CallerKey),
+                Is.EqualTo(1));
+            Assert.That(
+                CollectStaleWarning(differentKeyCallers),
+                Does.Contain("Example.Caller::Call(), Example.OtherCaller::Call()"));
+        }
+
         private static TransformWorkerEntryDto CreateReplacementEntry()
         {
             return new TransformWorkerEntryDto
@@ -205,6 +236,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 genericArity = 0,
                 replacesCompiledMethod = true
             };
+        }
+
+        private static string CollectStaleWarning(
+            List<HotReloadQualifiedMethodIdentity> callers)
+        {
+            TransformWorkerRemovedMethodSignatureDto removedSignature =
+                new TransformWorkerRemovedMethodSignatureDto
+                {
+                    typeMetadataName = "Example.Target",
+                    methodName = "Call",
+                    parameterTypeFullNames = Array.Empty<string>(),
+                    genericArity = 0
+                };
+            Dictionary<string, List<HotReloadQualifiedMethodIdentity>> callersByTarget =
+                new Dictionary<string, List<HotReloadQualifiedMethodIdentity>>(StringComparer.Ordinal)
+                {
+                    { ReplacementKey, callers }
+                };
+
+            List<string> warnings = HotReloadSignatureChangeCoverage.CollectStaleSignatureWarnings(
+                new[] { removedSignature },
+                callersByTarget);
+
+            return warnings[0];
+        }
+
+        private static int CountOccurrences(string text, string value)
+        {
+            int count = 0;
+            int startIndex = 0;
+            while (true)
+            {
+                int occurrenceIndex = text.IndexOf(value, startIndex, StringComparison.Ordinal);
+                if (occurrenceIndex < 0)
+                {
+                    return count;
+                }
+
+                count++;
+                startIndex = occurrenceIndex + value.Length;
+            }
         }
 
         private static TransformWorkerEntryDto CreateOrdinaryEntry()

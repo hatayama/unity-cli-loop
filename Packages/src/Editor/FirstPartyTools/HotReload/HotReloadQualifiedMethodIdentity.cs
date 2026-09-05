@@ -20,15 +20,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodKey = methodKey;
         }
 
-        public bool Equals(HotReloadQualifiedMethodIdentity other)
+        bool IEquatable<HotReloadQualifiedMethodIdentity>.Equals(HotReloadQualifiedMethodIdentity other)
         {
-            return string.Equals(AssemblyName, other.AssemblyName, StringComparison.Ordinal)
-                && string.Equals(MethodKey, other.MethodKey, StringComparison.Ordinal);
+            return HasSameValue(other);
         }
 
         public override bool Equals(object obj)
         {
-            return obj is HotReloadQualifiedMethodIdentity other && Equals(other);
+            return obj is HotReloadQualifiedMethodIdentity other && HasSameValue(other);
         }
 
         public override int GetHashCode()
@@ -36,6 +35,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int assemblyHashCode = StringComparer.Ordinal.GetHashCode(AssemblyName);
             int methodKeyHashCode = StringComparer.Ordinal.GetHashCode(MethodKey);
             return (assemblyHashCode * 397) ^ methodKeyHashCode;
+        }
+
+        private bool HasSameValue(HotReloadQualifiedMethodIdentity other)
+        {
+            return string.Equals(AssemblyName, other.AssemblyName, StringComparison.Ordinal)
+                && string.Equals(MethodKey, other.MethodKey, StringComparison.Ordinal);
         }
     }
 }

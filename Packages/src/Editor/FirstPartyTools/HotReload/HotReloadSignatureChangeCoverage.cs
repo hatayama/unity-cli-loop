@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HashSet<HotReloadQualifiedMethodIdentity>();
             foreach (TransformWorkerEntryDto entry in entries)
             {
-                coveredIdentities.Add(CreateIdentity(assemblyName, entry));
+                coveredIdentities.Add(CreateEntryIdentity(assemblyName, entry));
             }
 
             foreach (HotReloadCallSiteScanner.CompiledMethodIdentity target in targets)
@@ -30,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // corpse as uncovered would gate a same-file helper-delete + return-type
                 // change, which is still a consistent old world. Fail-closed only for live
                 // compiled callers that will keep invoking the old method.
-                coveredIdentities.Add(CreateIdentity(target));
+                coveredIdentities.Add(CreateTargetIdentity(target));
             }
 
             return coveredIdentities;
@@ -44,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new Dictionary<string, List<HotReloadQualifiedMethodIdentity>>(StringComparer.Ordinal);
             foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
             {
-                HotReloadQualifiedMethodIdentity callerIdentity = CreateIdentity(hit);
+                HotReloadQualifiedMethodIdentity callerIdentity = CreateCallerIdentity(hit);
                 if (coveredIdentities.Contains(callerIdentity))
                 {
                     continue;
@@ -124,7 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (TransformWorkerEntryDto entry in entriesToPatch)
             {
                 string methodKey = HotReloadMethodKeys.BuildMethodKey(entry);
-                entryIdentities.Add(CreateIdentity(assemblyName, methodKey));
+                entryIdentities.Add(new HotReloadQualifiedMethodIdentity(assemblyName, methodKey));
                 if (entry.replacesCompiledMethod)
                 {
                     appliedReplacementKeys.Add(methodKey);
@@ -137,7 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (hit == null
                     || !appliedReplacementKeys.Contains(hit.TargetMethodKey)
-                    || !entryIdentities.Contains(CreateIdentity(hit)))
+                    || !entryIdentities.Contains(CreateCallerIdentity(hit)))
                 {
                     continue;
                 }
@@ -240,12 +240,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HashSet<HotReloadQualifiedMethodIdentity>();
             foreach (TransformWorkerEntryDto entry in entriesToPatch)
             {
-                coveredIdentities.Add(CreateIdentity(assemblyName, entry));
+                coveredIdentities.Add(CreateEntryIdentity(assemblyName, entry));
             }
 
             foreach (string targetKey in scanTargetKeys)
             {
-                coveredIdentities.Add(CreateIdentity(assemblyName, targetKey));
+                coveredIdentities.Add(new HotReloadQualifiedMethodIdentity(assemblyName, targetKey));
             }
 
             Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncoveredCallersByTarget =
@@ -297,12 +297,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HashSet<HotReloadQualifiedMethodIdentity>();
             foreach (TransformWorkerEntryDto entry in entries)
             {
-                methodIdentities.Add(CreateIdentity(assemblyName, entry));
+                methodIdentities.Add(CreateEntryIdentity(assemblyName, entry));
             }
 
             foreach (TransformWorkerUnchangedMethodDto unchanged in unchangedMethods)
             {
-                methodIdentities.Add(CreateIdentity(assemblyName, unchanged));
+                methodIdentities.Add(CreateUnchangedMethodIdentity(assemblyName, unchanged));
             }
 
             return methodIdentities;
@@ -332,7 +332,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AddMethodIdentityOfFile(
                     methodIdentitiesByFile,
                     entry.sourceProjectRelativePath,
-                    CreateIdentity(assemblyName, entry));
+                    CreateEntryIdentity(assemblyName, entry));
             }
 
             foreach (TransformWorkerUnchangedMethodDto unchanged in unchangedMethods)
@@ -340,7 +340,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AddMethodIdentityOfFile(
                     methodIdentitiesByFile,
                     unchanged.sourceProjectRelativePath,
-                    CreateIdentity(assemblyName, unchanged));
+                    CreateUnchangedMethodIdentity(assemblyName, unchanged));
             }
 
             return methodIdentitiesByFile;
@@ -413,22 +413,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadQualifiedMethodIdentity> callers)
         {
             List<string> methodKeys = new List<string>(callers.Count);
+            HashSet<string> seenMethodKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (HotReloadQualifiedMethodIdentity caller in callers)
             {
+                if (!seenMethodKeys.Add(caller.MethodKey))
+                {
+                    continue;
+                }
+
                 methodKeys.Add(caller.MethodKey);
             }
 
             return string.Join(", ", methodKeys);
         }
 
-        private static HotReloadQualifiedMethodIdentity CreateIdentity(
+        private static HotReloadQualifiedMethodIdentity CreateEntryIdentity(
             string assemblyName,
             TransformWorkerEntryDto entry)
         {
-            return CreateIdentity(assemblyName, HotReloadMethodKeys.BuildMethodKey(entry));
+            return new HotReloadQualifiedMethodIdentity(
+                assemblyName,
+                HotReloadMethodKeys.BuildMethodKey(entry));
         }
 
-        private static HotReloadQualifiedMethodIdentity CreateIdentity(
+        private static HotReloadQualifiedMethodIdentity CreateUnchangedMethodIdentity(
             string assemblyName,
             TransformWorkerUnchangedMethodDto unchanged)
         {
@@ -437,10 +445,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unchanged.methodName,
                 unchanged.parameterTypeFullNames,
                 unchanged.genericArity);
-            return CreateIdentity(assemblyName, methodKey);
+            return new HotReloadQualifiedMethodIdentity(assemblyName, methodKey);
         }
 
-        private static HotReloadQualifiedMethodIdentity CreateIdentity(
+        private static HotReloadQualifiedMethodIdentity CreateTargetIdentity(
             HotReloadCallSiteScanner.CompiledMethodIdentity target)
         {
             string methodKey = HotReloadMethodKeys.BuildMethodKeyParts(
@@ -448,21 +456,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 target.MethodName,
                 target.ParameterTypeFullNames,
                 target.GenericArity);
-            return CreateIdentity(target.AssemblyName, methodKey);
+            return new HotReloadQualifiedMethodIdentity(target.AssemblyName, methodKey);
         }
 
-        private static HotReloadQualifiedMethodIdentity CreateIdentity(
+        private static HotReloadQualifiedMethodIdentity CreateCallerIdentity(
             HotReloadCallSiteScanner.CallSiteHit hit)
         {
             Debug.Assert(hit != null, "hit must not be null.");
-            return CreateIdentity(hit.CallerAssemblyName, hit.CallerMethodKey);
-        }
-
-        private static HotReloadQualifiedMethodIdentity CreateIdentity(
-            string assemblyName,
-            string methodKey)
-        {
-            return new HotReloadQualifiedMethodIdentity(assemblyName, methodKey);
+            return new HotReloadQualifiedMethodIdentity(hit.CallerAssemblyName, hit.CallerMethodKey);
         }
 
         internal static string FormatCallerShortName(string wireKey)
