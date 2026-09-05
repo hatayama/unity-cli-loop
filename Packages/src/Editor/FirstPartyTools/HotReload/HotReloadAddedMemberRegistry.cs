@@ -86,6 +86,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return keys;
         }
 
+        public static IReadOnlyList<string> ListPathsWithActiveMembers()
+        {
+            List<string> paths = new List<string>();
+            foreach (KeyValuePair<string, FileGeneration> pair in GenerationsByPath)
+            {
+                if (pair.Value.Members.Count > 0)
+                {
+                    paths.Add(pair.Key);
+                }
+            }
+
+            return paths;
+        }
+
         public static int Count
         {
             get

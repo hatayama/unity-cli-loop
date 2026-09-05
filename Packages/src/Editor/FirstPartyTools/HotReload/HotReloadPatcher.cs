@@ -340,6 +340,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return keys;
         }
 
+        public static IReadOnlyList<string> ListActiveFilePaths()
+        {
+            HashSet<string> paths = new HashSet<string>(StringComparer.Ordinal);
+            foreach (KeyValuePair<MethodBase, string> pair in FilePathByMethod)
+            {
+                if (string.IsNullOrEmpty(pair.Value))
+                {
+                    continue;
+                }
+
+                paths.Add(pair.Value);
+            }
+
+            return new List<string>(paths);
+        }
+
         private static IEnumerable<CodeInstruction> ReplaceWithTransplantSourceTranspiler(
             IEnumerable<CodeInstruction> instructions,
             ILGenerator generator,

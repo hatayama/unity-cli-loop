@@ -47,6 +47,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Sinks = sinks;
         }
 
+        internal static HotReloadGroupFile ForActiveSibling(
+            HotReloadGroupFile template,
+            string projectRelativePath,
+            string workerSourcePath,
+            HotReloadFileSinks sinks)
+        {
+            Debug.Assert(template != null, "template must not be null.");
+            return new HotReloadGroupFile(
+                projectRelativePath,
+                workerSourcePath,
+                projectRelativePath,
+                template.AssemblyName,
+                template.CompilationAssembly,
+                template.TargetDllPath,
+                template.ProjectRoot,
+                sinks);
+        }
+
         // The path the caller asked to reload, used as the outcome file path.
         internal string AssemblyResolvePath { get; }
 

@@ -44,6 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadFileProcessResult[] resultSlots = new HotReloadFileProcessResult[files.Count];
             string[] resultPaths = new string[files.Count];
             HotReloadGroupFile[] groupFiles = new HotReloadGroupFile[files.Count];
+            List<HotReloadMethodOutcome>[] deferredAlreadyActive = new List<HotReloadMethodOutcome>[files.Count];
             List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput =
                 new List<(int InputIndex, string AssemblyName, string ProjectRelativePath)>();
             for (int index = 0; index < files.Count; index++)
@@ -59,20 +60,55 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     resultSlots,
                     resultPaths,
                     groupFiles,
-                    plannerInput);
+                    plannerInput,
+                    deferredAlreadyActive);
             }
 
             IReadOnlyList<HotReloadFileGroupPlan> plans = HotReloadFileGroupPlanner.Plan(plannerInput);
-            foreach (HotReloadFileGroupPlan plan in plans)
+            HashSet<string> pathsInRun = new HashSet<string>(
+                HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
+            for (int pathIndex = 0; pathIndex < resultPaths.Length; pathIndex++)
+            {
+                if (!string.IsNullOrEmpty(resultPaths[pathIndex]))
+                {
+                    pathsInRun.Add(resultPaths[pathIndex]);
+                }
+            }
+
+            List<(string Path, HotReloadFileProcessResult Result)> extraResults =
+                new List<(string Path, HotReloadFileProcessResult Result)>();
+            for (int planIndex = 0; planIndex < plans.Count; planIndex++)
             {
                 ct.ThrowIfCancellationRequested();
-                await ProcessPlannedGroupAsync(plan, groupFiles, resultSlots, correlationId, ct)
+                HotReloadFileGroupPlan plan = plans[planIndex];
+                if (ShouldShortCircuitWholeGroup(plan, deferredAlreadyActive))
+                {
+                    ApplyDeferredAlreadyActive(plan, groupFiles, resultSlots, deferredAlreadyActive);
+                    continue;
+                }
+
+                await ProcessPlannedGroupAsync(
+                        plan,
+                        groupFiles,
+                        resultSlots,
+                        correlationId,
+                        ct,
+                        pathsInRun,
+                        contentPathOverrideByFile,
+                        IsLastPlanForAssembly(plans, planIndex),
+                        extraResults,
+                        run)
                     .ConfigureAwait(false);
             }
 
             for (int index = 0; index < files.Count; index++)
             {
                 run.Add(resultPaths[index], resultSlots[index]);
+            }
+
+            for (int extraIndex = 0; extraIndex < extraResults.Count; extraIndex++)
+            {
+                run.Add(extraResults[extraIndex].Path, extraResults[extraIndex].Result);
             }
 
             run.RecordAppliedSourceHashes();
@@ -97,7 +133,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadFileProcessResult[] resultSlots,
             string[] resultPaths,
             HotReloadGroupFile[] groupFiles,
-            List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput)
+            List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput,
+            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
         {
             string workerSourcePath = ResolveWorkerSourcePath(
                 filePath,
@@ -106,23 +143,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadFileSinks sinks = new HotReloadFileSinks(
                 run.SiblingDerivedWarnings,
                 run.OneShotCallerNoteCandidates);
+            List<HotReloadMethodOutcome> alreadyActiveOutcomes = new List<HotReloadMethodOutcome>();
 
             (HotReloadFileProcessResult earlyResolve,
                 string projectRelativePath,
                 string assemblyName,
                 UnityCompilationAssembly compilationAssembly,
                 string targetDllPath,
-                string projectRoot) = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                string projectRoot,
+                HotReloadUnchangedSourceDecision unchangedDecision) = HotReloadPatchTargetSupport.ResolvePatchTarget(
                 filePath,
                 workerSourcePath,
                 sinks.Outcomes,
                 sinks.Warnings,
-                correlationId);
+                correlationId,
+                alreadyActiveOutcomes);
             if (earlyResolve != null)
             {
                 resultSlots[index] = earlyResolve;
                 resultPaths[index] = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath);
                 return;
+            }
+
+            if (unchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
+            {
+                deferredAlreadyActive[index] = alreadyActiveOutcomes;
             }
 
             groupFiles[index] = new HotReloadGroupFile(
@@ -138,18 +183,59 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             plannerInput.Add((index, assemblyName, projectRelativePath));
         }
 
+        private static bool ShouldShortCircuitWholeGroup(
+            HotReloadFileGroupPlan plan,
+            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
+        {
+            foreach (int inputIndex in plan.InputIndexes)
+            {
+                if (deferredAlreadyActive[inputIndex] == null)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static void ApplyDeferredAlreadyActive(
+            HotReloadFileGroupPlan plan,
+            HotReloadGroupFile[] groupFiles,
+            HotReloadFileProcessResult[] resultSlots,
+            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
+        {
+            foreach (int inputIndex in plan.InputIndexes)
+            {
+                groupFiles[inputIndex].Sinks.Outcomes.AddRange(deferredAlreadyActive[inputIndex]);
+                resultSlots[inputIndex] = new HotReloadFileProcessResult(
+                    groupFiles[inputIndex].Sinks.Outcomes,
+                    groupFiles[inputIndex].Sinks.Warnings,
+                    0);
+            }
+        }
+
         private static async Task ProcessPlannedGroupAsync(
             HotReloadFileGroupPlan plan,
             HotReloadGroupFile[] groupFiles,
             HotReloadFileProcessResult[] resultSlots,
             string correlationId,
-            CancellationToken ct)
+            CancellationToken ct,
+            HashSet<string> pathsInRun,
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile,
+            bool isLastGroupOfAssembly,
+            List<(string Path, HotReloadFileProcessResult Result)> extraResults,
+            HotReloadRunAccumulator run)
         {
             IReadOnlyList<int> inputIndexes = plan.InputIndexes;
             List<HotReloadGroupFile> filesOfGroup = new List<HotReloadGroupFile>(inputIndexes.Count);
             foreach (int inputIndex in inputIndexes)
             {
                 filesOfGroup.Add(groupFiles[inputIndex]);
+            }
+
+            if (isLastGroupOfAssembly)
+            {
+                AppendActiveSiblingsToGroup(filesOfGroup, pathsInRun, contentPathOverrideByFile, run);
             }
 
             // Why ConfigureAwait(false): UnityCliLoopTool forbids capturing Unity's
@@ -161,12 +247,119 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 await HotReloadGroupProcessor.ProcessGroupAsync(filesOfGroup, correlationId, ct)
                     .ConfigureAwait(false);
             Debug.Assert(
-                groupResults.Count == inputIndexes.Count,
-                "A group must report one result per edited file.");
+                groupResults.Count == filesOfGroup.Count,
+                "A group must report one result per file, including re-applied siblings.");
             for (int position = 0; position < inputIndexes.Count; position++)
             {
                 resultSlots[inputIndexes[position]] = groupResults[position];
             }
+
+            for (int position = inputIndexes.Count; position < filesOfGroup.Count; position++)
+            {
+                extraResults.Add((filesOfGroup[position].ProjectRelativePath, groupResults[position]));
+            }
+        }
+
+        private static void AppendActiveSiblingsToGroup(
+            List<HotReloadGroupFile> filesOfGroup,
+            HashSet<string> pathsInRun,
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile,
+            HotReloadRunAccumulator run)
+        {
+            HotReloadGroupFile firstFile = filesOfGroup[0];
+            HotReloadActiveSiblingRebindPlan rebind = HotReloadActiveSiblingRebindPlanner.Plan(
+                firstFile.AssemblyName,
+                firstFile.CompilationAssembly.sourceFiles,
+                pathsInRun,
+                path => ResolveSiblingWorkerSourcePath(
+                    path,
+                    firstFile.ProjectRoot,
+                    contentPathOverrideByFile));
+            IReadOnlyList<(string ProjectRelativePath, string WorkerSourcePath)> filesToInclude =
+                rebind.FilesToInclude;
+            for (int index = 0; index < filesToInclude.Count; index++)
+            {
+                filesOfGroup.Add(
+                    HotReloadGroupFile.ForActiveSibling(
+                        firstFile,
+                        filesToInclude[index].ProjectRelativePath,
+                        filesToInclude[index].WorkerSourcePath,
+                        new HotReloadFileSinks(run.SiblingDerivedWarnings, run.OneShotCallerNoteCandidates)));
+            }
+
+            AddSiblingRebindWarnings(firstFile, rebind);
+        }
+
+        private static void AddSiblingRebindWarnings(
+            HotReloadGroupFile firstFile,
+            HotReloadActiveSiblingRebindPlan rebind)
+        {
+            IReadOnlyList<(string ProjectRelativePath, string WorkerSourcePath)> filesToInclude =
+                rebind.FilesToInclude;
+            if (filesToInclude.Count > 0)
+            {
+                List<string> includedPaths = new List<string>(filesToInclude.Count);
+                for (int index = 0; index < filesToInclude.Count; index++)
+                {
+                    includedPaths.Add(filesToInclude[index].ProjectRelativePath);
+                }
+
+                firstFile.Sinks.Warnings.Add(
+                    string.Format(
+                        HotReloadConstants.ActiveSiblingsRebindWarningFormat,
+                        filesToInclude.Count,
+                        firstFile.AssemblyName,
+                        string.Join(", ", includedPaths)));
+            }
+
+            IReadOnlyList<string> changedSinceApplyPaths = rebind.ChangedSinceApplyPaths;
+            for (int index = 0; index < changedSinceApplyPaths.Count; index++)
+            {
+                firstFile.Sinks.Warnings.Add(
+                    string.Format(
+                        HotReloadConstants.ActiveSiblingChangedSinceApplyWarningFormat,
+                        changedSinceApplyPaths[index]));
+            }
+        }
+
+        private static bool IsLastPlanForAssembly(
+            IReadOnlyList<HotReloadFileGroupPlan> plans,
+            int planIndex)
+        {
+            string assemblyName = plans[planIndex].AssemblyName;
+            for (int index = planIndex + 1; index < plans.Count; index++)
+            {
+                if (string.Equals(plans[index].AssemblyName, assemblyName, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static string ResolveSiblingWorkerSourcePath(
+            string projectRelativePath,
+            string projectRoot,
+            IReadOnlyDictionary<string, string> overrideByFile)
+        {
+            if (overrideByFile != null)
+            {
+                StringComparer comparer = HotReloadSourcePathNormalizer.ProjectRelativePathComparer();
+                foreach (KeyValuePair<string, string> pair in overrideByFile)
+                {
+                    string keyRelative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(pair.Key);
+                    if (comparer.Equals(keyRelative, projectRelativePath))
+                    {
+                        return Path.GetFullPath(pair.Value);
+                    }
+                }
+            }
+
+            return Path.GetFullPath(
+                Path.Combine(
+                    projectRoot,
+                    projectRelativePath.Replace('/', Path.DirectorySeparatorChar)));
         }
 
         // Why keyed by path (not by index): one contentPathOverride cannot feed two edited

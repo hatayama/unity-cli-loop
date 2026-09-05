@@ -53,5 +53,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return HotReloadAddedMemberRegistry.ListActiveMethodKeys(projectRelativePath);
         }
+
+        internal static IReadOnlyList<string> ListPathsWithActiveAddedMembers()
+        {
+            return HotReloadAddedMemberRegistry.ListPathsWithActiveMembers();
+        }
     }
 }
