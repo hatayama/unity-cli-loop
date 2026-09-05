@@ -147,6 +147,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
             {
+                // A delegate target can run after its Awake registration, so a function-pointer
+                // load cannot prove the target is called only from one-shot lifecycle methods.
                 if (hit.IsFunctionPointerLoad)
                 {
                     return false;
