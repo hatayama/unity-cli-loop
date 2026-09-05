@@ -50,8 +50,9 @@ method instead; for a reference type, guard that with
 the method `Skipped`. Added `const` values are folded into edited bodies as literals,
 like `nameof`. Pause-point
 `CapturedVariables` never includes added fields; `enable-pause-point` warns when the
-resolved type has any — read them from a patched method body or
-`uloop execute-dynamic-code` instead.
+resolved type has any — their values live in the hot-reload shim and are not visible
+to `uloop execute-dynamic-code` (it compiles against the compiled assembly, so those
+names fail with CS1061). Read them from a patched method body instead.
 
 Added members are an Editor-session illusion. Any real compile or domain reload
 drops them all: added methods disappear from the ledger and added-field values are
