@@ -273,22 +273,17 @@ internal static class AddedCallSiteGuard
                 continue;
             }
 
-            ISymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol;
-            if (symbol is not IMethodSymbol methodSymbol)
+            AddedMethodBinding binding = AddedMethodCallResolver.ResolveBindingOrNull(
+                invocation,
+                semanticModel,
+                addedMethodCatalog,
+                out _);
+            if (binding == null || binding.MethodKey == selfMethodKey)
             {
                 continue;
             }
 
-            string calledKey = WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol);
-            if (calledKey == selfMethodKey)
-            {
-                continue;
-            }
-
-            if (addedMethodCatalog.Contains(calledKey))
-            {
-                keys.Add(calledKey);
-            }
+            keys.Add(binding.MethodKey);
         }
 
         if (keys.Count == 0)

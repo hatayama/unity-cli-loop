@@ -36,5 +36,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return host.Gated(1);
         }
+
+        // Reaches the host through a compiled holder property so the receiver type is metadata.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int CallThroughHolder(HotReloadCrossFileAddedMemberHolder holder)
+        {
+            return holder.Host.Value();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int Twice(int value)
+        {
+            return value * 2;
+        }
     }
 }

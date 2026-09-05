@@ -26,4 +26,6 @@ internal sealed class AddedMethodBinding
     public string NamespaceName { get; set; }
 
     public bool IsStatic { get; set; }
+
+    public int ParameterCount { get; set; }
 }

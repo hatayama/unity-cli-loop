@@ -790,6 +790,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a caller that reaches an added host method through a compiled holder property
+        /// still patches and returns the added-method value, because the worker binds that call
+        /// from the metadata receiver type when GetSymbolInfo cannot.
+        /// </summary>
+        [Test]
+        public async Task Run_CallerReachesAddedMethodThroughCompiledHolderProperty_PatchesBehavior()
+        {
+            HotReloadOrchestratorResult result = await RunPairAsync(
+                "HolderReceiver",
+                InsertHostMember("        public int Added()\n        {\n            return 5;\n        }\n\n"),
+                ReplaceCallerBody("return holder.Host.Value();", "return Twice(holder.Host.Added());"));
+
+            AssertNoFailure(result);
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().CallThroughHolder(
+                    new HotReloadCrossFileAddedMemberHolder()),
+                Is.EqualTo(10));
+        }
+
+        /// <summary>
         /// What: changing a method's return type is applied when its only call site was edited in
         /// another file of the same reload, because the signature-change gate sees that caller
         /// covered by this run.

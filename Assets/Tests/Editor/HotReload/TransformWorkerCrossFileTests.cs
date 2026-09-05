@@ -186,6 +186,113 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a caller that reaches an added host method through a compiled holder property
+        /// still records the added method and rewrites the invocation, because the receiver type
+        /// name plus method name plus argument count is enough to bind when GetSymbolInfo cannot.
+        /// </summary>
+        [Test]
+        public async Task Run_CallerReachesHostThroughCompiledHolder_BindsAddedMethodByReceiverType()
+        {
+            string editedCaller = ReplaceInSource(
+                ReadOnDisk(CallerFileName),
+                "return holder.Host.Value();",
+                "return Twice(holder.Host.Added());");
+            CrossFileRun run = await RunEditedPairAsync(
+                AddHostMethod(ReadOnDisk(HostFileName)),
+                editedCaller);
+
+            Assert.That(run.Result.Success, Is.True, run.Result.ErrorMessage);
+            TransformWorkerEntryDto callerEntry = FindEntry(run, CallerTypeMetadataName, "CallThroughHolder");
+            Assert.That(callerEntry.calledAddedMethodKeys, Is.Not.Null);
+            Assert.That(
+                callerEntry.calledAddedMethodKeys,
+                Has.Some.Contains("Added"),
+                "The edited caller body must record the added host method reached through the holder.");
+            AssertNoSkippedMethodNamed(run, "CallThroughHolder");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Not.Contain("holder.Host.Added("),
+                "The unbound metadata-receiver call must be rewritten off the added method.");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Contain("__uloopInstance.Twice("),
+                "The collateral unbound compiled call must be qualified onto the instance parameter.");
+        }
+
+        /// <summary>
+        /// What: a metadata value receiver does not bind an added static method, so the call
+        /// stays unbound instead of rewriting away the receiver evaluation (CS0176).
+        /// </summary>
+        [Test]
+        public async Task Run_ValueReceiverDoesNotBindAddedStaticMethod()
+        {
+            string editedCaller = ReplaceInSource(
+                ReadOnDisk(CallerFileName),
+                "return holder.Host.Value();",
+                "return holder.Host.AddedStatic();");
+            CrossFileRun run = await RunEditedPairAsync(
+                AddHostStaticMethod(ReadOnDisk(HostFileName)),
+                editedCaller);
+
+            Assert.That(run.Result.Success, Is.True, run.Result.ErrorMessage);
+            TransformWorkerEntryDto addedEntry = FindEntry(run, HostTypeMetadataName, "AddedStatic");
+            Assert.That(addedEntry.patchKind, Is.EqualTo("addedMethod"));
+            TransformWorkerEntryDto callerEntry = FindEntry(run, CallerTypeMetadataName, "CallThroughHolder");
+            Assert.That(
+                callerEntry.calledAddedMethodKeys == null
+                || !Array.Exists(callerEntry.calledAddedMethodKeys, key => key.Contains("AddedStatic")),
+                Is.True,
+                "A value-receiver call must not record the added static method.");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Contain("holder.Host.AddedStatic("),
+                "The mismatched static call must stay on the compiled receiver.");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Not.Contain("." + addedEntry.shimMethodName + "("),
+                "The added static shim must not be invoked from the value-receiver call.");
+        }
+
+        /// <summary>
+        /// What: a using-alias type-name receiver still binds an added static method, because
+        /// GetSymbolInfo on the alias identifier returns the target type, not IAliasSymbol.
+        /// </summary>
+        [Test]
+        public async Task Run_TypeAliasReceiverBindsAddedStaticMethod()
+        {
+            string editedCaller = ReplaceInSource(
+                ReadOnDisk(CallerFileName),
+                "using System.Runtime.CompilerServices;\n",
+                "using System.Runtime.CompilerServices;\n"
+                + "using HostAlias = io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileAddedMemberHost;\n");
+            editedCaller = ReplaceInSource(
+                editedCaller,
+                "return holder.Host.Value();",
+                "return HostAlias.AddedStatic();");
+            CrossFileRun run = await RunEditedPairAsync(
+                AddHostStaticMethod(ReadOnDisk(HostFileName)),
+                editedCaller);
+
+            Assert.That(run.Result.Success, Is.True, run.Result.ErrorMessage);
+            TransformWorkerEntryDto addedEntry = FindEntry(run, HostTypeMetadataName, "AddedStatic");
+            Assert.That(addedEntry.patchKind, Is.EqualTo("addedMethod"));
+            TransformWorkerEntryDto callerEntry = FindEntry(run, CallerTypeMetadataName, "CallThroughHolder");
+            Assert.That(callerEntry.calledAddedMethodKeys, Is.Not.Null);
+            Assert.That(
+                callerEntry.calledAddedMethodKeys,
+                Has.Some.Contains("AddedStatic"),
+                "A type-alias receiver must record the added static method.");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Not.Contain("HostAlias.AddedStatic("),
+                "The type-alias static call must be rewritten off the added method.");
+            Assert.That(
+                run.Result.Output.shimSource,
+                Does.Contain("." + addedEntry.shimMethodName + "("),
+                "The added static shim must be invoked from the type-alias call.");
+        }
+
+        /// <summary>
         /// What: an unreadable source reports its failure on its own per-file row only, and the
         /// other file of the run still produces entries.
         /// </summary>
@@ -219,6 +326,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public int Added()\n        {\n            return 41;\n        }\n\n");
         }
 
+        private static string AddHostStaticMethod(string hostSource)
+        {
+            return InsertIntoHostBody(
+                hostSource,
+                "        public static int AddedStatic()\n        {\n            return 41;\n        }\n\n");
+        }
+
         private static string InsertIntoHostBody(string hostSource, string memberText)
         {
             const string anchor = "        public int Value()";
@@ -233,9 +347,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string ReplaceCallerBody(string callerSource, string bodyText)
         {
-            const string anchor = "return host.Value();";
-            Assert.That(callerSource, Does.Contain(anchor), "Precondition: caller anchor must exist.");
-            return callerSource.Replace(anchor, bodyText, StringComparison.Ordinal);
+            return ReplaceInSource(callerSource, "return host.Value();", bodyText);
+        }
+
+        private static string ReplaceInSource(string source, string anchor, string replacement)
+        {
+            Assert.That(source, Does.Contain(anchor), "Precondition: anchor must exist: " + anchor);
+            return source.Replace(anchor, replacement, StringComparison.Ordinal);
         }
 
         private static TransformWorkerEntryDto FindEntry(

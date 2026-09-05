@@ -140,14 +140,14 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitInvocationExpression(node);
         }
 
-        if (invokedSymbol is IMethodSymbol addedMethod
-            && addedMethod.MethodKind == MethodKind.Ordinary)
+        AddedMethodBinding binding = AddedMethodCallResolver.ResolveBindingOrNull(
+            node,
+            _semanticModel,
+            _addedMethodCatalog,
+            out bool isStaticCall);
+        if (binding != null)
         {
-            AddedMethodBinding binding = _addedMethodCatalog.FindOrNull(BuildAddedMethodKey(addedMethod));
-            if (binding != null)
-            {
-                return RewriteAddedMethodInvocation(node, addedMethod, binding);
-            }
+            return RewriteAddedMethodInvocation(node, isStaticCall, binding);
         }
 
         if (_accessorPlan == null)
@@ -234,7 +234,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     private SyntaxNode RewriteAddedMethodInvocation(
         InvocationExpressionSyntax node,
-        IMethodSymbol addedMethod,
+        bool isStaticCall,
         AddedMethodBinding binding)
     {
         // Why the resolved namespace: a type from the global namespace gets a synthesized one,
@@ -250,7 +250,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             SyntaxFactory.IdentifierName(binding.ShimMethodName));
 
         List<ArgumentSyntax> arguments = new List<ArgumentSyntax>();
-        if (!addedMethod.IsStatic)
+        if (!isStaticCall)
         {
             ExpressionSyntax receiver = ExtractReceiver(node.Expression);
             arguments.Add(SyntaxFactory.Argument(VisitReceiver(receiver)));
@@ -423,7 +423,8 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return original;
         }
 
-        ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol;
+        ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
+            ?? UnboundOwnedCallQualifier.ResolveOwnedMethodOrNull(node, _semanticModel, _targetType);
         if (symbol == null)
         {
             return original;
