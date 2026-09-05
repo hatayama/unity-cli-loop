@@ -7438,7 +7438,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value. Run 'uloop compile' to apply this change.";
 
         private const string ExpectedAddedSiblingTuningWarning =
-            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.AddedSiblingTuning exists only in the edited source, not in the compiled assembly. A method body in this file patched in this same run has the new value folded in, but bodies in other files that reference it fail shim compilation. Run 'uloop compile' to add it to the assemblies.";
+            "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.AddedSiblingTuning exists only in the edited source, not in the compiled assembly. Method bodies patched in this same run have the new value folded in, but bodies in files outside this reload that reference it fail shim compilation. Run 'uloop compile' to add it to the assemblies.";
 
         private static IDisposable MutateSiblingTuningValue(int newValue)
         {
