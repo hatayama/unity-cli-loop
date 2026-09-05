@@ -22,9 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(context != null, "context must not be null.");
             TransformWorkerEntryDto[] entries = context.WorkerOutput.entries ?? Array.Empty<TransformWorkerEntryDto>();
-            TransformWorkerRemovedMethodSignatureDto[] removedSignatures =
-                context.FileOutput.removedMethodSignatures
-                ?? Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
+            TransformWorkerRemovedMethodSignatureDto[] removedSignatures = context.RemovedMethodSignatures;
             List<TransformWorkerEntryDto> replacementEntries = CollectReplacementEntries(entries);
             if (replacementEntries.Count == 0 && removedSignatures.Length == 0)
             {

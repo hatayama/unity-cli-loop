@@ -14,21 +14,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         /// <summary>
         /// Returns changed sibling absolute paths for <paramref name="sourceFiles"/>, excluding
-        /// <paramref name="editedProjectRelativePath"/>. Missing snapshots or DLLs yield an empty
+        /// <paramref name="editedProjectRelativePaths"/>. Missing snapshots or DLLs yield an empty
         /// result with no extra warning — the existing missing-baseline path already covers that.
         /// </summary>
+        /// <remarks>
+        /// Why a collection of edited paths: one run transforms every edited file of an assembly
+        /// together, and a file edited in the same run is not a drifted sibling of its own group.
+        /// </remarks>
         internal static HotReloadChangedSiblingScanResult Detect(
             string projectRoot,
             string assemblyName,
             string targetDllPath,
             string[] sourceFiles,
-            string editedProjectRelativePath)
+            IReadOnlyCollection<string> editedProjectRelativePaths)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
             Debug.Assert(
-                !string.IsNullOrEmpty(editedProjectRelativePath),
-                "editedProjectRelativePath must not be null or empty.");
+                editedProjectRelativePaths != null && editedProjectRelativePaths.Count > 0,
+                "editedProjectRelativePaths must not be empty.");
 
             if (string.IsNullOrEmpty(targetDllPath) || !File.Exists(targetDllPath))
             {
@@ -46,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRoot,
                 assemblyName + "-" + mvid,
                 sourceFiles,
-                editedProjectRelativePath);
+                editedProjectRelativePaths);
         }
 
         // Why a directory-name entry: EditMode tests plant a snapshot tree without a real DLL.
@@ -54,15 +58,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRoot,
             string assemblySnapshotDirectoryName,
             string[] sourceFiles,
-            string editedProjectRelativePath)
+            IReadOnlyCollection<string> editedProjectRelativePaths)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be null or empty.");
             Debug.Assert(
                 !string.IsNullOrEmpty(assemblySnapshotDirectoryName),
                 "assemblySnapshotDirectoryName must not be null or empty.");
             Debug.Assert(
-                !string.IsNullOrEmpty(editedProjectRelativePath),
-                "editedProjectRelativePath must not be null or empty.");
+                editedProjectRelativePaths != null && editedProjectRelativePaths.Count > 0,
+                "editedProjectRelativePaths must not be empty.");
 
             if (sourceFiles == null || sourceFiles.Length == 0)
             {
@@ -73,7 +77,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRoot,
                 assemblySnapshotDirectoryName,
                 sourceFiles,
-                editedProjectRelativePath);
+                editedProjectRelativePaths);
             List<string> changedSiblingAbsolutePaths = new List<string>(
                 sourceScan.ChangedProjectRelativePaths.Count);
             for (int index = 0; index < sourceScan.ChangedProjectRelativePaths.Count; index++)
@@ -104,14 +108,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRoot,
                 assemblySnapshotDirectoryName,
                 sourceFiles,
-                excludedProjectRelativePath: null);
+                excludedProjectRelativePaths: null);
         }
 
         private static HotReloadChangedSourceScanResult DetectChangedFromSnapshotDirectory(
             string projectRoot,
             string assemblySnapshotDirectoryName,
             string[] sourceFiles,
-            string excludedProjectRelativePath)
+            IReadOnlyCollection<string> excludedProjectRelativePaths)
         {
             string snapshotDirectory = Path.Combine(
                 projectRoot,
@@ -134,7 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     projectRoot,
                     snapshotDirectory,
                     sourceFiles[index],
-                    excludedProjectRelativePath);
+                    excludedProjectRelativePaths);
                 if (changedPath != null)
                 {
                     changedProjectRelativePaths.Add(changedPath);
@@ -148,7 +152,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRoot,
             string snapshotDirectory,
             string projectRelativeSourcePath,
-            string excludedProjectRelativePath)
+            IReadOnlyCollection<string> excludedProjectRelativePaths)
         {
             if (string.IsNullOrEmpty(projectRelativeSourcePath))
             {
@@ -156,8 +160,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string normalizedRelativePath = projectRelativeSourcePath.Replace('\\', '/');
-            if (!string.IsNullOrEmpty(excludedProjectRelativePath)
-                && IsSameProjectRelativePath(normalizedRelativePath, excludedProjectRelativePath))
+            if (IsExcludedProjectRelativePath(normalizedRelativePath, excludedProjectRelativePaths))
             {
                 return null;
             }
@@ -214,6 +217,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             return Path.GetFullPath(
                 Path.Combine(projectRoot, projectRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+        }
+
+        private static bool IsExcludedProjectRelativePath(
+            string normalizedRelativePath,
+            IReadOnlyCollection<string> excludedProjectRelativePaths)
+        {
+            if (excludedProjectRelativePaths == null)
+            {
+                return false;
+            }
+
+            foreach (string excludedProjectRelativePath in excludedProjectRelativePaths)
+            {
+                if (!string.IsNullOrEmpty(excludedProjectRelativePath)
+                    && IsSameProjectRelativePath(normalizedRelativePath, excludedProjectRelativePath))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool IsSameProjectRelativePath(string left, string right)

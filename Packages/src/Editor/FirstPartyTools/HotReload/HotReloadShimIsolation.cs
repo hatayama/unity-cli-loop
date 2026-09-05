@@ -14,16 +14,17 @@ using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Retries shim compile once by excluding attributed failures and their added-method callers.
+    /// Retries shim compile once by excluding every entry of the files a compile error was
+    /// attributed to, so the remaining files of the group can still be applied.
     /// </summary>
     internal static class HotReloadShimIsolation
     {
         /// <summary>
-        /// Retries the failed shim compile once, excluding the method(s) whose compiler errors can
-        /// be attributed to them, so the rest of the file's methods can still patch. Returns null
-        /// when isolation is not possible (unattributable errors, all/none of the entries failing,
-        /// the retry worker run failing, or the retry compile failing) — the caller then falls back
-        /// to a single Failed outcome (method-attributed when only one entry remains).
+        /// Retries the failed shim compile once, excluding every entry of the files whose compiler
+        /// errors could be attributed to them, so the other files of the group can still patch.
+        /// Returns null when isolation is not possible (unattributable errors, every entry failing,
+        /// the retry worker run failing, or the retry compile failing) — the caller then falls back to one group-level
+        /// Failed outcome per file (method-attributed when the group holds a single entry).
         /// </summary>
         internal static async Task<HotReloadShimIsolationResult> TryIsolateShimCompileFailureAsync(
             TransformWorkerInputDto workerInput,
@@ -49,18 +50,28 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 || attribution.FailedEntries.Count == 0
                 || attribution.FailedEntries.Count == workerOutput.entries.Length)
             {
-                // Unattributable errors (header/binder/using-level / scaffold path), or isolating
-                // everyone / no one would not narrow the failure at all.
+                // Unattributable errors (header/binder/using-level or scaffold path): naming a
+                // file would be a guess, so the caller falls back to one group-level failure.
+                // Every entry failing is the same situation from the other side: excluding all
+                // of them would narrow nothing, and there is no file left to save.
                 return null;
             }
 
+            List<string> groupPaths = CollectSourceProjectRelativePaths(workerInput);
+            HotReloadFileAtomicIsolationPlan plan = HotReloadFileAtomicIsolationPlan.Build(
+                workerOutput.entries,
+                attribution,
+                workerOutput.skipped,
+                groupFilePaths,
+                groupPaths);
             List<HotReloadMethodOutcome> failedMethodOutcomes =
-                BuildFailedMethodOutcomes(attribution, groupFilePaths, workerOutput.skipped);
-            IsolationExclusions exclusions = BuildIsolationExclusions(
-                attribution.FailedEntries,
-                workerOutput.entries);
+                HotReloadFileAtomicIsolationPlan.CollectOutcomes(plan.FailedOutcomesByFile, groupPaths);
+            IsolationExclusions exclusions = new IsolationExclusions(
+                plan.ExcludedMethodKeys,
+                plan.ExcludedAddedMethodKeys,
+                plan.CallerEntries);
             List<HotReloadMethodOutcome> skippedCallerOutcomes = BuildSkippedCallerOutcomes(
-                exclusions.CallerEntries,
+                plan.CallerEntries,
                 groupFilePaths,
                 HotReloadConstants.IsolatedAddedMethodCallerSkipReason);
 
@@ -77,6 +88,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadConstants.VibeLogIsolationTriggerShimCompileFailure,
                 correlationId,
                 ct).ConfigureAwait(false);
+            retry.Isolation?.AttachPlan(plan);
             return retry.Isolation;
         }
 
@@ -129,11 +141,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             TransformWorkerOutputDto retryOutput = retryWorkerResult.Output;
-            // One source in, one per-file row out. Assembly grouping widens this to the group size.
             Debug.Assert(
-                retryOutput.files.Length == 1,
-                "A single-source retry worker run must return exactly one per-file output.");
-            TransformWorkerFileOutputDto retryFileOutput = retryOutput.files[0];
+                retryOutput.files.Length == workerInput.sources.Length,
+                "A retry worker run must return one per-file output per source.");
             // Why drop first-pass (Method, Reason) pairs: consuming them again would duplicate
             // every per-file skip. Retry-only pairs are new — typically transitive callers of
             // excluded added methods — and must surface or the edit is applied nowhere.
@@ -161,9 +171,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         skippedCallerOutcomes,
                         Array.Empty<TransformWorkerEntryDto>(),
                         null,
-                        retryFileOutput.addedFieldNames,
-                        retryOutput.siblingConstDriftWarnings,
-                        retryFileOutput.addedConstNames));
+                        retryOutput.files,
+                        retryOutput.siblingConstDriftWarnings));
             }
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -187,7 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 retryOutput.shimSource,
                 shimReferences,
                 defines,
-                workerInput.sources[0].projectRelativePath,
+                CollectSourceProjectRelativePaths(workerInput),
                 ct).ConfigureAwait(false);
             if (!retryCompileResult.Success)
             {
@@ -205,9 +214,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     skippedCallerOutcomes,
                     retryOutput.entries,
                     retryCompileResult,
-                    retryFileOutput.addedFieldNames,
-                    retryOutput.siblingConstDriftWarnings,
-                    retryFileOutput.addedConstNames));
+                    retryOutput.files,
+                    retryOutput.siblingConstDriftWarnings));
         }
 
         /// <summary>
@@ -328,32 +336,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static List<HotReloadMethodOutcome> BuildFailedMethodOutcomes(
-            HotReloadShimErrorAttribution.ShimCompileErrorAttribution attribution,
-            HotReloadGroupFilePaths groupFilePaths,
-            TransformWorkerSkippedDto[] skipped)
+        // The project-relative paths of every source the run transformed, for shim-diagnostic
+        // line mapping.
+        internal static List<string> CollectSourceProjectRelativePaths(TransformWorkerInputDto workerInput)
         {
-            List<HotReloadMethodOutcome> failedMethodOutcomes = new List<HotReloadMethodOutcome>();
-            foreach (TransformWorkerEntryDto failedEntry in attribution.FailedEntries)
+            List<string> projectRelativePaths = new List<string>(workerInput.sources.Length);
+            foreach (TransformWorkerSourceDto source in workerInput.sources)
             {
-                string methodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                    failedEntry.typeMetadataName,
-                    failedEntry.methodName,
-                    failedEntry.parameterTypeFullNames ?? Array.Empty<string>(),
-                    failedEntry.genericArity);
-                List<string> entryErrorMessages = attribution.ErrorMessagesByEntry[failedEntry];
-                string composedMessage = HotReloadShimCompiler.ComposeShimCompileFailureMessage(entryErrorMessages);
-                failedMethodOutcomes.Add(
-                    HotReloadMethodOutcome.Failed(
-                        methodLabel,
-                        HotReloadSkippedMemberCompileNote.AppendNotes(
-                            composedMessage,
-                            entryErrorMessages,
-                            skipped),
-                        groupFilePaths.ResolveAssemblyResolvePath(failedEntry.sourceProjectRelativePath)));
+                projectRelativePaths.Add(source.projectRelativePath);
             }
 
-            return failedMethodOutcomes;
+            return projectRelativePaths;
         }
 
         internal static IsolationExclusions BuildIsolationExclusions(
@@ -532,27 +525,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             public List<HotReloadMethodOutcome> SkippedCallerOutcomes { get; }
             public TransformWorkerEntryDto[] RetryEntries { get; }
             public HotReloadShimCompileResult RetryCompileResult { get; }
-            public string[] AddedFieldNames { get; }
-            public string[] AddedConstNames { get; }
+
+            // Per-file rows of the retry worker run. Why the rows (not one added-name array): the
+            // retry covers the whole group, and added fields and consts are per-file results.
+            public TransformWorkerFileOutputDto[] RetryFiles { get; }
+
             public string[] SiblingConstDriftWarnings { get; }
+
+            // How the failed shim compile was split across the group's files. Null when the
+            // signature-change gate drove the retry: that retry isolates gated replacements,
+            // not compile failures, so no file was taken down by an error.
+            public HotReloadFileAtomicIsolationPlan Plan { get; private set; }
+
+            internal void AttachPlan(HotReloadFileAtomicIsolationPlan plan)
+            {
+                Debug.Assert(plan != null, "plan must not be null.");
+                Plan = plan;
+            }
 
             public HotReloadShimIsolationResult(
                 List<HotReloadMethodOutcome> failedMethodOutcomes,
                 List<HotReloadMethodOutcome> skippedCallerOutcomes,
                 TransformWorkerEntryDto[] retryEntries,
                 HotReloadShimCompileResult retryCompileResult,
-                string[] addedFieldNames = null,
-                string[] siblingConstDriftWarnings = null,
-                string[] addedConstNames = null)
+                TransformWorkerFileOutputDto[] retryFiles = null,
+                string[] siblingConstDriftWarnings = null)
             {
                 Debug.Assert(skippedCallerOutcomes != null, "skippedCallerOutcomes must not be null.");
                 FailedMethodOutcomes = failedMethodOutcomes;
                 SkippedCallerOutcomes = skippedCallerOutcomes;
                 RetryEntries = retryEntries;
                 RetryCompileResult = retryCompileResult;
-                AddedFieldNames = addedFieldNames ?? Array.Empty<string>();
+                RetryFiles = retryFiles ?? Array.Empty<TransformWorkerFileOutputDto>();
                 SiblingConstDriftWarnings = siblingConstDriftWarnings ?? Array.Empty<string>();
-                AddedConstNames = addedConstNames ?? Array.Empty<string>();
             }
         }
     }

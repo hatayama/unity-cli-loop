@@ -84,6 +84,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileOutputsByFile);
         }
 
+        // Groups an entry list that did not come from the group output itself - the isolation
+        // retry produces its own entries - so the apply stage can walk one file at a time.
+        public static Dictionary<string, List<TransformWorkerEntryDto>> GroupEntriesBySourceFile(
+            IReadOnlyList<TransformWorkerEntryDto> entries,
+            IReadOnlyCollection<string> groupPaths)
+        {
+            Debug.Assert(entries != null, "entries must not be null.");
+            Debug.Assert(groupPaths != null && groupPaths.Count > 0, "A group must hold a file.");
+
+            Dictionary<string, List<TransformWorkerEntryDto>> entriesByFile =
+                new Dictionary<string, List<TransformWorkerEntryDto>>(StringComparer.Ordinal);
+            foreach (string groupPath in groupPaths)
+            {
+                entriesByFile[groupPath] = new List<TransformWorkerEntryDto>();
+            }
+
+            HashSet<string> groupPathSet = new HashSet<string>(groupPaths, StringComparer.Ordinal);
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                AssertRowBelongsToGroup(groupPathSet, entry.sourceProjectRelativePath, "entry");
+                entriesByFile[entry.sourceProjectRelativePath].Add(entry);
+            }
+
+            return entriesByFile;
+        }
+
         public IReadOnlyList<TransformWorkerEntryDto> EntriesFor(string projectRelativePath)
         {
             Debug.Assert(
