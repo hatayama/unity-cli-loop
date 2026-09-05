@@ -174,6 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return BuildUnappliedResults(context.Files);
             }
 
+            ct.ThrowIfCancellationRequested();
             return await continueAfterCoverage().ConfigureAwait(false);
         }
 
@@ -202,6 +203,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
+            ct.ThrowIfCancellationRequested();
             revertUnchangedPatches();
             return true;
         }

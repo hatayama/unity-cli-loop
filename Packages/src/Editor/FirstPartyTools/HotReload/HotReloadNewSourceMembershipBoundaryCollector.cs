@@ -22,6 +22,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string projectRelativePath,
             out HotReloadNewSourceMembershipBoundary[] boundaries)
         {
+            string sourceAbsolutePath = Path.Combine(projectRoot, projectRelativePath);
+            string sourceDirectory = Path.GetDirectoryName(sourceAbsolutePath);
+            if (string.IsNullOrEmpty(sourceDirectory) || !Directory.Exists(sourceDirectory))
+            {
+                boundaries = null;
+                return "The new source membership boundary is not available on disk. Compile the project and retry hot reload.";
+            }
+
             List<string> paths = CollectAncestorBoundaryPaths(projectRoot, projectRelativePath);
             AppendImportedAncestorBoundaryPaths(projectRoot, projectRelativePath, paths);
             AppendNearestAsmrefTargetPath(paths);
@@ -31,6 +39,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 string boundaryPath = paths[index];
                 string absolutePath = Path.Combine(projectRoot, boundaryPath);
+                string boundaryDirectory = Path.GetDirectoryName(absolutePath);
+                if (string.IsNullOrEmpty(boundaryDirectory) || !Directory.Exists(boundaryDirectory))
+                {
+                    boundaries = null;
+                    return "The assembly definition membership boundary is not available on disk. Compile the project and retry hot reload.";
+                }
+
                 TextAsset imported = AssetDatabase.LoadAssetAtPath<TextAsset>(boundaryPath);
                 byte[] diskBytes = File.Exists(absolutePath) ? File.ReadAllBytes(absolutePath) : null;
                 byte[] importedBytes = imported?.bytes;

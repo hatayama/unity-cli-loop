@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-using Mono.Cecil;
-
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
@@ -135,7 +133,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 NormalizeProjectRelativePath(projectRelativePath),
                 assemblyName,
                 Path.GetFullPath(targetDllPath),
-                ReadMvid(targetDllPath),
+                HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
                 NormalizeProjectRelativePath(resolvedAssemblyDefinitionPath),
                 boundaries);
             return null;
@@ -164,7 +162,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 evidence.AssemblyName + HotReloadConstants.CompiledAssemblyExtension);
             if (!string.Equals(Path.GetFullPath(targetDllPath), evidence.TargetDllPath, StringComparison.Ordinal)
                 || !File.Exists(targetDllPath)
-                || !string.Equals(ReadMvid(targetDllPath), evidence.TargetDllMvid, StringComparison.Ordinal)
+                || !string.Equals(
+                    HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
+                    evidence.TargetDllMvid,
+                    StringComparison.Ordinal)
                 || HotReloadPatchTargetSupport.CheckMvidGuard(evidence.AssemblyName, targetDllPath) != null)
             {
                 return "The compiled assembly changed while hot reload was preparing. Compile the project and retry hot reload.";
@@ -196,7 +197,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 NormalizeProjectRelativePath(evidence.ProjectRelativePath),
                 evidence.AssemblyName,
                 Path.GetFullPath(targetDllPath),
-                ReadMvid(targetDllPath),
+                HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath),
                 NormalizeProjectRelativePath(resolvedAssemblyDefinitionPath),
                 currentBoundaries);
             if (!EvidenceMatches(evidence, currentEvidence))
@@ -243,10 +244,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return "Unity resolved the new source to a different assembly. Compile the project and retry hot reload.";
             }
 
-            string expectedAssemblyDefinitionPath = ResolveNearestBoundaryTarget(
+            string boundaryJsonFailure = TryValidateBoundaryJson(boundaries);
+            if (boundaryJsonFailure != null)
+            {
+                return boundaryJsonFailure;
+            }
+
+            string boundaryResolutionFailure = TryResolveNearestBoundaryTarget(
                 boundaries,
                 AssetDatabase.GUIDToAssetPath,
-                FindAsmdefPathByName);
+                FindAsmdefPathByName,
+                out string expectedAssemblyDefinitionPath);
+            if (boundaryResolutionFailure != null)
+            {
+                return boundaryResolutionFailure;
+            }
+
             if (!string.Equals(
                     NormalizeProjectRelativePath(expectedAssemblyDefinitionPath),
                     NormalizeProjectRelativePath(resolvedAssemblyDefinitionPath),
@@ -291,16 +304,75 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return findAsmdefPathByName(reference);
         }
 
+        internal static string TryResolveNearestBoundaryTarget(
+            HotReloadNewSourceMembershipBoundary[] boundaries,
+            Func<string, string> resolveGuidToAssetPath,
+            Func<string, string> findAsmdefPathByName,
+            out string targetPath)
+        {
+            targetPath = ResolveNearestBoundaryTarget(
+                boundaries,
+                resolveGuidToAssetPath,
+                findAsmdefPathByName);
+            if (boundaries.Length == 0
+                || !boundaries[0].ProjectRelativePath.EndsWith(".asmref", StringComparison.OrdinalIgnoreCase)
+                || !string.IsNullOrEmpty(targetPath))
+            {
+                return null;
+            }
+
+            return "The nearest assembly reference could not be resolved. Compile the project and retry hot reload.";
+        }
+
+        internal static string TryValidateBoundaryJson(HotReloadNewSourceMembershipBoundary[] boundaries)
+        {
+            for (int index = 0; index < boundaries.Length; index++)
+            {
+                HotReloadNewSourceMembershipBoundary boundary = boundaries[index];
+                string contents = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(boundary.DiskContents));
+                bool isAsmdef = boundary.ProjectRelativePath.EndsWith(".asmdef", StringComparison.OrdinalIgnoreCase);
+                string value = isAsmdef
+                    ? ReadAssemblyDefinitionName(contents)
+                    : ReadAsmrefReference(contents);
+                if (string.IsNullOrEmpty(value))
+                {
+                    return "An assembly definition membership boundary has invalid JSON. Compile the project and retry hot reload.";
+                }
+            }
+
+            return null;
+        }
+
         internal static string ReadAssemblyDefinitionName(string contents)
         {
-            AssemblyDefinitionJson asmdef = JsonUtility.FromJson<AssemblyDefinitionJson>(contents);
-            return asmdef?.name;
+            try
+            {
+                AssemblyDefinitionJson asmdef = JsonUtility.FromJson<AssemblyDefinitionJson>(contents);
+                return asmdef?.name;
+            }
+            catch (ArgumentException exception)
+            {
+                Debug.LogWarning(
+                    "Assembly definition membership JSON could not be parsed. Compile the project and retry hot reload. "
+                    + exception.Message);
+                return null;
+            }
         }
 
         internal static string ReadAsmrefReference(string contents)
         {
-            AssemblyReferenceJson asmref = JsonUtility.FromJson<AssemblyReferenceJson>(contents);
-            return asmref?.reference;
+            try
+            {
+                AssemblyReferenceJson asmref = JsonUtility.FromJson<AssemblyReferenceJson>(contents);
+                return asmref?.reference;
+            }
+            catch (ArgumentException exception)
+            {
+                Debug.LogWarning(
+                    "Assembly reference membership JSON could not be parsed. Compile the project and retry hot reload. "
+                    + exception.Message);
+                return null;
+            }
         }
 
         internal static string FindAsmdefPathByName(string assemblyName)
@@ -371,14 +443,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return null;
-        }
-
-        private static string ReadMvid(string assemblyPath)
-        {
-            ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
-            using AssemblyDefinition assemblyDefinition =
-                AssemblyDefinition.ReadAssembly(assemblyPath, readerParameters);
-            return assemblyDefinition.MainModule.Mvid.ToString();
         }
 
         private static string NormalizeProjectRelativePath(string path)

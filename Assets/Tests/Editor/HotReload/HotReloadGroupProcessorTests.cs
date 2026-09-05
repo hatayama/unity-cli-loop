@@ -263,6 +263,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Cancellation that arrives during synchronous membership revalidation prevents the final continuation.
+        /// </summary>
+        [Test]
+        public void CompleteApplyAfterCoverageAsync_WhenCancelledDuringRevalidation_DoesNotInvokeContinuation()
+        {
+            HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
+            HotReloadApplyContext context = CreateContext(evidence);
+            TransformWorkerEntryDto caller = CreateCallerEntry("Assets/CoverageCaller.cs");
+            TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
+            int continuationCalls = 0;
+            using CancellationTokenSource cancellation = new CancellationTokenSource();
+            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
+            {
+                cancellation.Cancel();
+                return new HotReloadEditorStateSnapshot(false, false, false);
+            };
+
+            Assert.ThrowsAsync<TaskCanceledException>(async () =>
+                await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                    context,
+                    CreateGateResultWithoutExemptions(),
+                    CreateCompile(caller, target),
+                    cancellation.Token,
+                    () =>
+                    {
+                        continuationCalls++;
+                        return Task.FromResult<IReadOnlyList<HotReloadFileProcessResult>>(
+                            Array.Empty<HotReloadFileProcessResult>());
+                    }));
+
+            Assert.That(continuationCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// Unsafe membership evidence after a worker result prevents the production revert continuation.
         /// </summary>
         [Test]

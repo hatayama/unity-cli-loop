@@ -22,6 +22,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Assets/Tests/Editor/HotReload/HotReloadToolTests.cs";
         private const string HotReloadTestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
 
+        private Func<HotReloadEditorStateSnapshot> _previousSnapshotProvider;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _previousSnapshotProvider = HotReloadEditorStateSnapshotProvider.CaptureForTesting;
+            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
+                new HotReloadEditorStateSnapshot(false, false, false);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
+        }
+
         /// <summary>
         /// What: a resolved assembly that is absent from CompilationPipeline gets the
         /// compile-first reason that names the fallback predefined-assembly behavior.

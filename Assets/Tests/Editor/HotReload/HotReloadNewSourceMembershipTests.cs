@@ -257,6 +257,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// An unresolved nearest asmref target is rejected instead of being mistaken for a predefined assembly.
+        /// </summary>
+        [Test]
+        public void TryResolveNearestBoundaryTarget_WhenAsmrefTargetIsMissing_ReturnsFailure()
+        {
+            HotReloadNewSourceMembershipBoundary asmref = new HotReloadNewSourceMembershipBoundary(
+                "Assets/Feature/Nearest.asmref",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes("{\"reference\":\"MissingAssembly\"}")),
+                "import",
+                "guid",
+                "guid");
+
+            string failure = HotReloadNewSourceMembershipValidator.TryResolveNearestBoundaryTarget(
+                new[] { asmref },
+                reference => null,
+                reference => null,
+                out string targetPath);
+
+            Assert.That(failure, Does.Contain("could not be resolved"));
+            Assert.That(targetPath, Is.Null);
+        }
+
+        /// <summary>
+        /// Malformed assembly boundary JSON is treated as unresolved by Unity's structured parser.
+        /// </summary>
+        [Test]
+        public void ReadAssemblyBoundaryJson_WhenMalformed_ReturnsNull()
+        {
+            Assert.That(HotReloadNewSourceMembershipValidator.ReadAssemblyDefinitionName("{ invalid"), Is.Null);
+            Assert.That(HotReloadNewSourceMembershipValidator.ReadAsmrefReference("{ invalid"), Is.Null);
+        }
+
+        /// <summary>
+        /// Malformed asmdef and asmref boundary contents fail membership validation with retry guidance.
+        /// </summary>
+        [Test]
+        public void TryValidateBoundaryJson_WhenAsmdefOrAsmrefIsMalformed_ReturnsFailure()
+        {
+            HotReloadNewSourceMembershipBoundary malformedAsmdef = new HotReloadNewSourceMembershipBoundary(
+                "Assets/Feature/Invalid.asmdef",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes("{ invalid")),
+                "import",
+                "guid",
+                "guid");
+            HotReloadNewSourceMembershipBoundary malformedAsmref = new HotReloadNewSourceMembershipBoundary(
+                "Assets/Feature/Invalid.asmref",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes("{ invalid")),
+                "import",
+                "guid",
+                "guid");
+
+            string asmdefFailure = HotReloadNewSourceMembershipValidator.TryValidateBoundaryJson(
+                new[] { malformedAsmdef });
+            string asmrefFailure = HotReloadNewSourceMembershipValidator.TryValidateBoundaryJson(
+                new[] { malformedAsmref });
+
+            Assert.That(asmdefFailure, Does.Contain("invalid JSON"));
+            Assert.That(asmrefFailure, Does.Contain("invalid JSON"));
+        }
+
+        /// <summary>
         /// The collector does not resolve an outer asmref target when an inner asmdef is nearest.
         /// </summary>
         [Test]
@@ -386,6 +447,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(failure, Is.Null);
             Assert.That(boundary, Is.Not.Null);
             Assert.That(boundary.ProjectRelativePath, Is.EqualTo("Assets/Feature/Ready.asmdef"));
+        }
+
+        /// <summary>
+        /// A package path without a readable physical directory fails membership capture before directory enumeration.
+        /// </summary>
+        [Test]
+        public void TryCapture_WhenPackageBoundaryDirectoryIsUnavailable_ReturnsFailure()
+        {
+            string projectRoot = System.IO.Path.GetFullPath(
+                System.IO.Path.Combine(UnityEngine.Application.dataPath, ".."));
+
+            string failure = HotReloadNewSourceMembershipBoundaryCollector.TryCapture(
+                projectRoot,
+                "Packages/unavailable-package/NewSource.cs",
+                out HotReloadNewSourceMembershipBoundary[] boundaries);
+
+            Assert.That(failure, Does.Contain("not available on disk"));
+            Assert.That(boundaries, Is.Null);
         }
 
         private static HotReloadNewSourceMembershipEvidence CreateEvidence(
