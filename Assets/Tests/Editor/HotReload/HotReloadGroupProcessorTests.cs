@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadApplyContext context = CreateContext();
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
-            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = CreateGateResult();
+            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = CreateGateResultWithoutExemptions();
             HotReloadGroupCompileResult compile = CreateCompile(target);
             int continuationCalls = 0;
 
@@ -47,13 +47,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(continuationCalls, Is.EqualTo(0));
             Assert.That(results, Has.Count.EqualTo(2));
-            foreach (HotReloadFileProcessResult result in results)
+            string[] expectedPaths = { "Assets/CoverageCaller.cs", "Assets/CoverageTarget.cs" };
+            for (int index = 0; index < results.Count; index++)
             {
+                HotReloadFileProcessResult result = results[index];
                 Assert.That(result.PatchedCount, Is.EqualTo(0));
                 Assert.That(result.Outcomes, Has.Count.EqualTo(1));
                 Assert.That(result.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
                 Assert.That(result.Outcomes[0].Method, Is.EqualTo("(signature-change-gate)"));
                 Assert.That(result.Outcomes[0].Reason, Does.Contain(TargetKey));
+                Assert.That(result.Outcomes[0].FilePath, Is.EqualTo(expectedPaths[index]));
             }
         }
 
@@ -66,7 +69,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadApplyContext context = CreateContext();
             TransformWorkerEntryDto caller = CreateCallerEntry("Assets/CoverageCaller.cs");
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
-            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = CreateGateResult();
+            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = CreateGateResultWithoutExemptions();
             HotReloadGroupCompileResult compile = CreateCompile(caller, target);
             int continuationCalls = 0;
             IReadOnlyList<HotReloadFileProcessResult> expected =
@@ -87,7 +90,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(results, Is.SameAs(expected));
         }
 
-        private static HotReloadSignatureChangeGate.SignatureChangeGateResult CreateGateResult()
+        /// <summary>
+        /// A deletion exemption carried by the gate covers a caller absent from final entries.
+        /// </summary>
+        [Test]
+        public async Task CompleteApplyAfterCoverageAsync_DeletedCallerExemption_InvokesContinuationAndReturnsItsResults()
+        {
+            HotReloadApplyContext context = CreateContext();
+            TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
+            HotReloadGroupCompileResult compile = CreateCompile(target);
+            int continuationCalls = 0;
+            IReadOnlyList<HotReloadFileProcessResult> expected =
+                new[] { new HotReloadFileProcessResult(new List<HotReloadMethodOutcome>(), new List<string>(), 1) };
+
+            IReadOnlyList<HotReloadFileProcessResult> results =
+                await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                    context,
+                    CreateGateResultWithDeletedCallerExemption(),
+                    compile,
+                    () =>
+                    {
+                        continuationCalls++;
+                        return Task.FromResult(expected);
+                    });
+
+            Assert.That(continuationCalls, Is.EqualTo(1));
+            Assert.That(results, Is.SameAs(expected));
+        }
+
+        private static HotReloadSignatureChangeGate.SignatureChangeGateResult CreateGateResultWithoutExemptions()
         {
             return HotReloadSignatureChangeGate.SignatureChangeGateResult.WarningsOnly(
                 new List<string>(),
@@ -104,6 +135,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 },
                 new HashSet<HotReloadQualifiedMethodIdentity>());
+        }
+
+        private static HotReloadSignatureChangeGate.SignatureChangeGateResult CreateGateResultWithDeletedCallerExemption()
+        {
+            HashSet<HotReloadQualifiedMethodIdentity> exemptions =
+                new HashSet<HotReloadQualifiedMethodIdentity>
+                {
+                    new HotReloadQualifiedMethodIdentity(AssemblyName, CallerKey)
+                };
+            return HotReloadSignatureChangeGate.SignatureChangeGateResult.WarningsOnly(
+                new List<string>(),
+                new List<HotReloadCallSiteScanner.CallSiteHit>
+                {
+                    new HotReloadCallSiteScanner.CallSiteHit
+                    {
+                        CallerAssemblyName = AssemblyName,
+                        CallerMethodKey = CallerKey,
+                        CallerTypeMetadataName = "Coverage.Host",
+                        CallerMethodName = "Caller",
+                        CallerParameterTypeFullNames = Array.Empty<string>(),
+                        TargetMethodKey = TargetKey
+                    }
+                },
+                exemptions);
         }
 
         private static HotReloadGroupCompileResult CreateCompile(params TransformWorkerEntryDto[] entries)

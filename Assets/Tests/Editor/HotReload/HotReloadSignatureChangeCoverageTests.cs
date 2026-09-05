@@ -179,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { callerReplacement, targetReplacement },
                 Array.Empty<TransformWorkerUnchangedMethodDto>(),
                 Array.Empty<TransformWorkerSkippedDto>(),
-                Array.Empty<TransformWorkerRemovedMethodSignatureDto>());
+                new[] { CreateCallerRemovedSignature() });
 
             List<string> losses = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
                 EditedAssemblyName,
@@ -204,7 +204,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[] { callerReplacement, targetReplacement },
                 Array.Empty<TransformWorkerUnchangedMethodDto>(),
                 Array.Empty<TransformWorkerSkippedDto>(),
-                Array.Empty<TransformWorkerRemovedMethodSignatureDto>());
+                new[] { CreateCallerRemovedSignature() });
 
             List<string> losses = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
                 EditedAssemblyName,
@@ -213,6 +213,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 exemptions);
 
             Assert.That(losses, Is.Empty);
+        }
+
+        /// <summary>
+        /// An unchanged initial caller is source-live and cannot become a deletion exemption.
+        /// </summary>
+        [Test]
+        public void FindSignatureChangeCoverageLosses_UnchangedSourceLiveCaller_GatesRemainingReplacement()
+        {
+            TransformWorkerEntryDto targetReplacement = CreateReplacementEntry();
+            HashSet<HotReloadQualifiedMethodIdentity> exemptions = HotReloadDeletedCallerExemptions.Collect(
+                EditedAssemblyName,
+                new[] { targetReplacement },
+                new[] { CreateCallerUnchangedMethod() },
+                Array.Empty<TransformWorkerSkippedDto>(),
+                new[] { CreateCallerRemovedSignature() });
+
+            List<string> losses = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
+                EditedAssemblyName,
+                new[] { targetReplacement },
+                new[] { CreateHit(EditedAssemblyName) },
+                exemptions);
+
+            Assert.That(exemptions, Is.Empty);
+            Assert.That(losses, Is.EqualTo(new[] { ReplacementKey }));
         }
 
         /// <summary>
@@ -386,6 +410,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             return new TransformWorkerRemovedMethodSignatureDto
             {
+                typeMetadataName = "Example.Caller",
+                methodName = "Call",
+                parameterTypeFullNames = Array.Empty<string>(),
+                genericArity = 0
+            };
+        }
+
+        private static TransformWorkerUnchangedMethodDto CreateCallerUnchangedMethod()
+        {
+            return new TransformWorkerUnchangedMethodDto
+            {
+                sourceProjectRelativePath = "Assets/Fixture.cs",
                 typeMetadataName = "Example.Caller",
                 methodName = "Call",
                 parameterTypeFullNames = Array.Empty<string>(),
