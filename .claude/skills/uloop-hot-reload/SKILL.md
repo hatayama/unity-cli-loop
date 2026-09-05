@@ -94,7 +94,7 @@ Full rules and the `Skipped`/`Failed` condition tables: `references/scope-and-li
 
 Treat hot reload as the exploration phase and `uloop compile` as the landing phase:
 keep edits inside the edited files, collect structural changes, and compile once —
-every compile drops all patches and pause points and resets the PlayMode session.
+every compile drops all patches and pause points and resets the PlayMode session (the compile response's Warning states how many were live).
 While patches are active, `AutoRefreshHeld` is true so returning focus does not
 recompile; `uloop compile` or `--revert-all` releases the hold.
 One-shot methods (`Awake`, `Start`, initialization helpers) patch successfully but show

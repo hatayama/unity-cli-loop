@@ -228,6 +228,91 @@ func TestRunTestsWithImplicitCompileFailsFastWithCompileResponse(t *testing.T) {
 	assertServerDidNotFail(t, serverErr)
 }
 
+// Verifies CompileNote starts with the fixed sentence and then repeats the compile Warning.
+func TestRunTestsWithImplicitCompileAppendsCompileWarningToCompileNote(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeRunTestsCompileToolCache(t, projectRoot)
+	listener := newLoopbackIpcListener(t)
+	requests := make(chan map[string]any, 1)
+	serverErr := make(chan error, 1)
+	go serveSingleIPCResponse(listener, clicore.RunTestsCommandName, requests, serverErr, `{"Success":true,"Status":"Passed","Message":"Test execution completed with status: Passed"}`)
+
+	original := runTestsImplicitCompile
+	runTestsImplicitCompile = func(context.Context, unityipc.Connection, io.Writer) compileExecutionResult {
+		return compileExecutionResult{
+			result:   json.RawMessage(`{"Success":true,"Warning":"2 active hot-reload change(s) were live when this compile was requested."}`),
+			exitCode: 0,
+		}
+	}
+	t.Cleanup(func() {
+		runTestsImplicitCompile = original
+	})
+
+	connection := unityipc.Connection{
+		Endpoint:    unityipc.Endpoint{Network: listener.Addr().Network(), Address: listener.Addr().String()},
+		ProjectRoot: projectRoot,
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runTestsWithImplicitCompile(context.Background(), connection, nil, projectRoot, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("run-tests failed: code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	readIPCRequest(t, requests)
+	note := decodeRunTestsCompileNote(t, stdout.Bytes())
+	if !bytes.HasPrefix([]byte(note), []byte(runTestsCompileNote)) {
+		t.Fatalf("CompileNote must start with the fixed sentence: %q", note)
+	}
+	if !bytes.Contains([]byte(note), []byte(" 2 active hot-reload change(s)")) {
+		t.Fatalf("CompileNote must append the compile Warning: %q", note)
+	}
+	assertServerDidNotFail(t, serverErr)
+}
+
+// Verifies CompileNote stays the fixed sentence when compile Warning is missing, null, or not a string.
+func TestRunTestsWithImplicitCompileWithoutWarningKeepsPlainCompileNote(t *testing.T) {
+	compileResults := []json.RawMessage{
+		json.RawMessage(`{"Success":true}`),
+		json.RawMessage(`{"Success":true,"Warning":null}`),
+		json.RawMessage(`{"Success":true,"Warning":7}`),
+		json.RawMessage(`{"Success":true,"Warning":{"x":1}}`),
+	}
+	for _, compileJSON := range compileResults {
+		func(compileJSON json.RawMessage) {
+			projectRoot := t.TempDir()
+			writeRunTestsCompileToolCache(t, projectRoot)
+			listener := newLoopbackIpcListener(t)
+			requests := make(chan map[string]any, 1)
+			serverErr := make(chan error, 1)
+			go serveSingleIPCResponse(listener, clicore.RunTestsCommandName, requests, serverErr, `{"Success":true,"Status":"Passed","Message":"Test execution completed with status: Passed"}`)
+
+			original := runTestsImplicitCompile
+			runTestsImplicitCompile = func(context.Context, unityipc.Connection, io.Writer) compileExecutionResult {
+				return compileExecutionResult{result: compileJSON, exitCode: 0}
+			}
+			t.Cleanup(func() {
+				runTestsImplicitCompile = original
+			})
+
+			connection := unityipc.Connection{
+				Endpoint:    unityipc.Endpoint{Network: listener.Addr().Network(), Address: listener.Addr().String()},
+				ProjectRoot: projectRoot,
+			}
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+
+			code := runTestsWithImplicitCompile(context.Background(), connection, nil, projectRoot, &stdout, &stderr)
+			if code != 0 {
+				t.Fatalf("run-tests failed: code=%d stdout=%s stderr=%s compile=%s", code, stdout.String(), stderr.String(), compileJSON)
+			}
+			readIPCRequest(t, requests)
+			assertSingleRunTestsJSON(t, stdout.Bytes(), true)
+			assertServerDidNotFail(t, serverErr)
+		}(compileJSON)
+	}
+}
+
 func writeRunTestsCompileToolCache(t *testing.T, projectRoot string) {
 	t.Helper()
 	clitest.WriteProjectFile(t, projectRoot, filepath.Join(clicore.CacheDirectoryName, clicore.CacheFileName), `{
@@ -260,6 +345,23 @@ func writeRunTestsCompileToolCacheWithTestMode(t *testing.T, projectRoot string)
     }
   ]
 }`)
+}
+
+func decodeRunTestsCompileNote(t *testing.T, output []byte) string {
+	t.Helper()
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(output, &fields); err != nil {
+		t.Fatalf("stdout must contain JSON: %v\n%s", err, output)
+	}
+	compileNote, present := fields["CompileNote"]
+	if !present {
+		t.Fatalf("CompileNote missing: %s", output)
+	}
+	var note string
+	if err := json.Unmarshal(compileNote, &note); err != nil {
+		t.Fatalf("CompileNote must be a string: %v", err)
+	}
+	return note
 }
 
 func assertSingleRunTestsJSON(t *testing.T, output []byte, expectCompileNote bool) {
