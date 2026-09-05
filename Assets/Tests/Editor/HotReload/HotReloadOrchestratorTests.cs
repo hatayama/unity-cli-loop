@@ -4857,7 +4857,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "TestAssembly",
                 new[] { replacement, caller },
                 hits,
-                new[] { "Host::Target(System.Int32)" });
+                new HashSet<HotReloadQualifiedMethodIdentity>());
 
             Assert.That(lost, Is.Empty);
         }
@@ -4879,7 +4879,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "TestAssembly",
                 new[] { replacement },
                 hits,
-                new[] { "Host::Target(System.Int32)" });
+                new HashSet<HotReloadQualifiedMethodIdentity>());
 
             Assert.That(lost, Is.EqualTo(new[] { "Host::Target(System.Int32)" }));
         }
