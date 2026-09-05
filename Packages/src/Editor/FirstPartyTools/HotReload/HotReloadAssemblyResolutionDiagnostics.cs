@@ -36,14 +36,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     assemblyName);
             }
 
-            if (!ContainsProjectRelativeSourceFile(compilationAssembly.sourceFiles, projectRelativePath))
-            {
-                return string.Format(
-                    HotReloadConstants.SourceFileNotInCompiledAssemblyReasonFormat,
-                    projectRelativePath,
-                    compilationAssembly.name);
-            }
-
             return null;
         }
 
@@ -79,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return false;
         }
 
-        private static bool ContainsProjectRelativeSourceFile(string[] sourceFiles, string projectRelativePath)
+        internal static bool ContainsProjectRelativeSourceFile(string[] sourceFiles, string projectRelativePath)
         {
             if (sourceFiles == null || sourceFiles.Length == 0)
             {

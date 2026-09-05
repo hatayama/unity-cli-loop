@@ -150,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Resolves one input path's patch target and either records its early result or enrolls
         // it in the group plan.
-        private static void ResolveInputFile(
+        internal static void ResolveInputFile(
             string filePath,
             int index,
             string contentPathOverride,
@@ -178,7 +178,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 UnityCompilationAssembly compilationAssembly,
                 string targetDllPath,
                 string projectRoot,
-                HotReloadUnchangedSourceDecision unchangedDecision) = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadUnchangedSourceDecision unchangedDecision,
+                HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence) = HotReloadPatchTargetSupport.ResolvePatchTarget(
                 filePath,
                 workerSourcePath,
                 sinks.Outcomes,
@@ -205,7 +206,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compilationAssembly,
                 targetDllPath,
                 projectRoot,
-                sinks);
+                sinks,
+                newSourceMembershipEvidence);
             resultPaths[index] = projectRelativePath;
             plannerInput.Add((index, assemblyName, projectRelativePath));
         }

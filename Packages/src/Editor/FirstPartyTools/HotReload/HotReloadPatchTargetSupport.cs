@@ -30,7 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCompilationAssembly CompilationAssembly,
             string TargetDllPath,
             string ProjectRoot,
-            HotReloadUnchangedSourceDecision UnchangedDecision) ResolvePatchTarget(
+            HotReloadUnchangedSourceDecision UnchangedDecision,
+            HotReloadNewSourceMembershipEvidence NewSourceMembershipEvidence) ResolvePatchTarget(
             string assemblyResolvePath,
             string workerSourcePath,
             List<HotReloadMethodOutcome> outcomes,
@@ -59,7 +60,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     null,
                     null,
                     null,
-                    HotReloadUnchangedSourceDecision.NotUnchanged);
+                    HotReloadUnchangedSourceDecision.NotUnchanged,
+                    null);
             }
 
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
@@ -90,7 +92,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     null,
                     null,
                     null,
-                    HotReloadUnchangedSourceDecision.NotUnchanged);
+                    HotReloadUnchangedSourceDecision.NotUnchanged,
+                    null);
+            }
+
+            bool isNewSource = !HotReloadAssemblyResolutionDiagnostics.ContainsProjectRelativeSourceFile(
+                compilationAssembly.sourceFiles,
+                projectRelativePath);
+            if (isNewSource)
+            {
+                string notReadyReason = HotReloadEditorStateSnapshotProvider.GetNotReadyReason(
+                    HotReloadEditorStateSnapshotProvider.CaptureCurrent());
+                if (notReadyReason != null)
+                {
+                    outcomes.Add(HotReloadMethodOutcome.Failed("(file)", notReadyReason, assemblyResolvePath));
+                    return (
+                        new HotReloadFileProcessResult(outcomes, warnings, 0),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        HotReloadUnchangedSourceDecision.NotUnchanged,
+                        null);
+                }
             }
 
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -113,7 +138,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     null,
                     null,
                     null,
-                    HotReloadUnchangedSourceDecision.NotUnchanged);
+                    HotReloadUnchangedSourceDecision.NotUnchanged,
+                    null);
             }
 
             string mvidGuardError = CheckMvidGuard(assemblyName, targetDllPath);
@@ -127,7 +153,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     null,
                     null,
                     null,
-                    HotReloadUnchangedSourceDecision.NotUnchanged);
+                    HotReloadUnchangedSourceDecision.NotUnchanged,
+                    null);
+            }
+
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null;
+            if (isNewSource)
+            {
+                string membershipFailure = HotReloadNewSourceMembershipValidator.TryCapture(
+                    projectRoot,
+                    projectRelativePath,
+                    assemblyName,
+                    compilationAssembly,
+                    targetDllPath,
+                    out newSourceMembershipEvidence);
+                if (membershipFailure != null)
+                {
+                    outcomes.Add(HotReloadMethodOutcome.Failed("(file)", membershipFailure, assemblyResolvePath));
+                    return (
+                        new HotReloadFileProcessResult(outcomes, warnings, 0),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        HotReloadUnchangedSourceDecision.NotUnchanged,
+                        null);
+                }
             }
 
             HotReloadUnchangedSourceDecision unchangedDecision = HotReloadAppliedSourceLifecycle.TryShortCircuitUnchangedAppliedSource(
@@ -151,7 +203,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compilationAssembly,
                 targetDllPath,
                 projectRoot,
-                unchangedDecision);
+                unchangedDecision,
+                newSourceMembershipEvidence);
         }
 
         private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)
@@ -190,7 +243,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return paths;
         }
 
-        private static string CheckMvidGuard(string assemblyName, string targetDllPath)
+        internal static string CheckMvidGuard(string assemblyName, string targetDllPath)
         {
             ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
             using AssemblyDefinition assemblyDefinition =
