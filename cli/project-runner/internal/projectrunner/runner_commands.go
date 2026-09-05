@@ -57,7 +57,7 @@ func runDynamicProjectTool(
 	if command == clicore.RunTestsCommandName {
 		return runTestsWithImplicitCompile(ctx, connection, commandArgs, startPath, stdout, stderr)
 	}
-	return runDynamicProjectToolWithCompileNote(ctx, connection, command, commandArgs, startPath, stdout, stderr, false)
+	return runDynamicProjectToolWithCompileNote(ctx, connection, command, commandArgs, startPath, stdout, stderr, false, "")
 }
 
 func runDynamicProjectToolWithCompileNote(
@@ -69,6 +69,7 @@ func runDynamicProjectToolWithCompileNote(
 	stdout io.Writer,
 	stderr io.Writer,
 	includeCompileNote bool,
+	compileWarning string,
 ) int {
 	tool, cache, ok, err := clicore.FindToolForCommand(connection.ProjectRoot, command)
 	if err != nil {
@@ -112,7 +113,7 @@ func runDynamicProjectToolWithCompileNote(
 	if len(result.result) == 0 {
 		return result.exitCode
 	}
-	withCompileNote, err := injectRunTestsCompileNote(result.result)
+	withCompileNote, err := injectRunTestsCompileNote(result.result, compileWarning)
 	if err != nil {
 		writeRunTestsCompileNoteError(stderr, connection, err)
 		return 1
