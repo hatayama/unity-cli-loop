@@ -17,10 +17,6 @@ using Microsoft.CodeAnalysis.Text;
 
 internal static class ShimSourceEmitter
 {
-    // Host namespace for shim types whose original type lives in the global namespace. The
-    // orchestrator resolves shim types by short name, so the namespace stays invisible to it.
-    private const string GlobalNamespaceShimNamespaceName = "UloopHotReloadGlobalShim";
-
     public static string Emit(List<ShimTypeBuilder> shimTypes)
     {
         if (shimTypes.Count == 0)
@@ -53,9 +49,7 @@ internal static class ShimSourceEmitter
             // would break the whole shim assembly. A namespace declaration scopes each file's
             // usings to its own shim type. Unqualified references to global-namespace types still
             // resolve, because name lookup from inside a namespace walks outward to global.
-            string namespaceName = string.IsNullOrEmpty(shimType.NamespaceName)
-                ? GlobalNamespaceShimNamespaceName
-                : shimType.NamespaceName;
+            string namespaceName = ShimNamespaceNames.ResolveShimNamespaceName(shimType.NamespaceName);
             NamespaceDeclarationSyntax namespaceDeclaration = SyntaxFactory.NamespaceDeclaration(
                     SyntaxFactory.ParseName(namespaceName))
                 .WithUsings(SyntaxFactory.List(shimType.Usings))

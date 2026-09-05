@@ -70,8 +70,14 @@ internal static class WorkerGroupPipeline
         IAssemblySymbol targetTypesAssemblySymbol = ResolveTargetTypesAssemblySymbol(
             compilation,
             targetTypesReference);
+        List<CompilationUnitSyntax> editedRoots = new List<CompilationUnitSyntax>(loadedUnits.Count);
+        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        {
+            editedRoots.Add(loadedUnit.Root);
+        }
+
         List<UsingDirectiveSyntax> assemblyGlobalUsings =
-            WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions);
+            WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions, editedRoots);
         List<string> siblingConstDriftWarnings = SiblingConstDriftCollector.CollectConstDriftWarnings(
             input.ChangedSiblingSourcePaths,
             parseOptions,
