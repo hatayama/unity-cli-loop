@@ -165,7 +165,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                     pendingCompileSessionRepository);
                 useCase.SetPlayModeStopWarningInputsForTesting(
                     wasPlayingAtRequestStart: true,
-                    activePausePointCount: 0);
+                    activePausePointCount: 0,
+                    activeHotReloadChangeCount: 0);
                 useCase.SetCompilationStateValidationForTesting(() =>
                     ValidationResult.FailureWithErrorCode(
                         "Compilation is already in progress. Please wait for the current compilation to finish.",
@@ -194,6 +195,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(response.Warning, Is.EqualTo(expectedWarning));
                 Assert.That(storedResult.HasResult, Is.True);
                 Assert.That(storedResponse.Warning, Is.EqualTo(expectedWarning));
+            }
+            finally
+            {
+                originalSnapshot.Restore();
+            }
+        }
+
+        /// <summary>
+        /// What: a validation failure with active hot-reload changes returns and stores the drop Warning.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_WhenValidationFailsWithActiveHotReloadChanges_SetsHotReloadDropWarningOnImmediateAndStoredResponses()
+        {
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService =
+                new(
+                    UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository(),
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+
+            try
+            {
+                CompileUseCase useCase = new(
+                    compileSessionLifecycleService,
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+                useCase.SetPlayModeStopWarningInputsForTesting(
+                    wasPlayingAtRequestStart: false,
+                    activePausePointCount: 0,
+                    activeHotReloadChangeCount: 4);
+                useCase.SetCompilationStateValidationForTesting(() =>
+                    ValidationResult.FailureWithErrorCode(
+                        "Compilation is already in progress. Please wait for the current compilation to finish.",
+                        CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                {
+                    throw new InvalidOperationException("validation failure must not start compilation");
+                });
+
+                CompileResponse response = await useCase.CompileAsync(
+                    new CompileSchema
+                    {
+                        WaitForDomainReload = true,
+                        RequestId = "compile_validation_hot_reload_drop_warning",
+                        ForceRecompile = false,
+                        ReloadExternalSceneChanges = true
+                    },
+                    CancellationToken.None);
+
+                UnityCliLoopStoredCompileResult storedResult =
+                    compileResultSessionRepository.GetCompileResult("compile_validation_hot_reload_drop_warning");
+                CompileResponse storedResponse = JsonConvert.DeserializeObject<CompileResponse>(
+                    storedResult.ResultJson,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings);
+
+                Assert.That(response.Warning, Does.Contain("4 active hot-reload change(s)"));
+                Assert.That(storedResult.HasResult, Is.True);
+                Assert.That(storedResponse.Warning, Does.Contain("4 active hot-reload change(s)"));
             }
             finally
             {

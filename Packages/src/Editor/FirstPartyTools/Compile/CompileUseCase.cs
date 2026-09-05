@@ -24,7 +24,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
         private Func<CompileSchema, string, CancellationToken, Task<CompileResult>> _executeCompilationAsync;
         private Func<ValidationResult> _validateCompilationState;
-        private Func<(bool WasPlayingAtRequestStart, int ActivePausePointCount)> _capturePlayModeStopWarningInputs;
+        private Func<(bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActiveHotReloadChangeCount)> _capturePlayModeStopWarningInputs;
 
         public CompileUseCase(
             UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService,
@@ -69,9 +69,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// Replaces Play-at-request-start capture so tests can exercise the Play-stop Warning
         /// without entering Play Mode.
         /// </summary>
-        internal void SetPlayModeStopWarningInputsForTesting(bool wasPlayingAtRequestStart, int activePausePointCount)
+        internal void SetPlayModeStopWarningInputsForTesting(
+            bool wasPlayingAtRequestStart,
+            int activePausePointCount,
+            int activeHotReloadChangeCount)
         {
-            _capturePlayModeStopWarningInputs = () => (wasPlayingAtRequestStart, activePausePointCount);
+            _capturePlayModeStopWarningInputs = () =>
+                (wasPlayingAtRequestStart, activePausePointCount, activeHotReloadChangeCount);
         }
 
         /// <summary>
@@ -93,10 +97,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Captured before PlayMode preparation can stop Play Mode, so the warning reflects
             // the state compile was actually requested in, not the state after this method mutates it.
-            (bool WasPlayingAtRequestStart, int ActivePausePointCount) playModeStopWarningInputs =
-                _capturePlayModeStopWarningInputs();
+            (bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActiveHotReloadChangeCount)
+                playModeStopWarningInputs = _capturePlayModeStopWarningInputs();
             bool wasPlayingAtRequestStart = playModeStopWarningInputs.WasPlayingAtRequestStart;
             int activePausePointCountAtRequestStart = playModeStopWarningInputs.ActivePausePointCount;
+            int activeHotReloadChangeCountAtRequestStart = playModeStopWarningInputs.ActiveHotReloadChangeCount;
 
             DateTime utcNow = DateTime.UtcNow;
             _compileSessionLifecycleService.ClearExpiredCompileResult(utcNow);
@@ -164,7 +169,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // path above must not carry this Warning: Play is still running, so "discarded" would be false.
             string playModeStopWarning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart,
-                activePausePointCountAtRequestStart);
+                activePausePointCountAtRequestStart,
+                activeHotReloadChangeCountAtRequestStart);
 
             // 2. Compilation state validation
             ValidationResult validation = _validateCompilationState();
@@ -355,9 +361,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId);
         }
 
-        private static (bool WasPlayingAtRequestStart, int ActivePausePointCount) CaptureLivePlayModeStopWarningInputs()
+        private static (bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActiveHotReloadChangeCount)
+            CaptureLivePlayModeStopWarningInputs()
         {
-            return (EditorApplication.isPlaying, UloopPausePointRegistry.GetActiveCount());
+            Func<int> getter = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
+            int count = getter == null ? 0 : getter();
+            return (EditorApplication.isPlaying, UloopPausePointRegistry.GetActiveCount(), count);
         }
 
         private static string ResolveCorrelationId(CompileSchema request)
