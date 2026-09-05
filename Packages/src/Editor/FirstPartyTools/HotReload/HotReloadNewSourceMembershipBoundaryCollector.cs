@@ -39,13 +39,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 string boundaryPath = paths[index];
                 string absolutePath = Path.Combine(projectRoot, boundaryPath);
-                string boundaryDirectory = Path.GetDirectoryName(absolutePath);
-                if (string.IsNullOrEmpty(boundaryDirectory) || !Directory.Exists(boundaryDirectory))
-                {
-                    boundaries = null;
-                    return "The assembly definition membership boundary is not available on disk. Compile the project and retry hot reload.";
-                }
-
                 TextAsset imported = AssetDatabase.LoadAssetAtPath<TextAsset>(boundaryPath);
                 byte[] diskBytes = File.Exists(absolutePath) ? File.ReadAllBytes(absolutePath) : null;
                 byte[] importedBytes = imported?.bytes;

@@ -318,6 +318,58 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// The production resolved-assembly boundary rejects malformed boundary JSON before admitting a new source.
+        /// </summary>
+        [Test]
+        public void ValidateResolvedAssemblyDefinition_WhenBoundaryJsonIsMalformed_ReturnsFailure()
+        {
+            UnityEditor.Compilation.Assembly compilationAssembly = FindHotReloadCompilationAssembly();
+            string resolvedAssemblyDefinitionPath = UnityEditor.Compilation.CompilationPipeline
+                .GetAssemblyDefinitionFilePathFromScriptPath(MissingHotReloadScriptPath);
+            HotReloadNewSourceMembershipBoundary malformedBoundary = new HotReloadNewSourceMembershipBoundary(
+                resolvedAssemblyDefinitionPath,
+                Convert.ToBase64String(Encoding.UTF8.GetBytes("{ invalid")),
+                "import",
+                "guid",
+                "guid");
+
+            string failure = HotReloadNewSourceMembershipValidator.ValidateResolvedAssemblyDefinition(
+                MissingHotReloadScriptPath,
+                compilationAssembly.name,
+                compilationAssembly,
+                new[] { malformedBoundary },
+                resolvedAssemblyDefinitionPath);
+
+            Assert.That(failure, Does.Contain("invalid JSON"));
+        }
+
+        /// <summary>
+        /// The production resolved-assembly boundary rejects an unresolved nearest asmref before admitting a new source.
+        /// </summary>
+        [Test]
+        public void ValidateResolvedAssemblyDefinition_WhenNearestAsmrefIsUnresolved_ReturnsFailure()
+        {
+            UnityEditor.Compilation.Assembly compilationAssembly = FindHotReloadCompilationAssembly();
+            string resolvedAssemblyDefinitionPath = UnityEditor.Compilation.CompilationPipeline
+                .GetAssemblyDefinitionFilePathFromScriptPath(MissingHotReloadScriptPath);
+            HotReloadNewSourceMembershipBoundary unresolvedAsmref = new HotReloadNewSourceMembershipBoundary(
+                "Assets/Tests/Editor/HotReload/Unresolved.asmref",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes("{ \"reference\" : \"Missing Assembly\" }")),
+                "import",
+                "guid",
+                "guid");
+
+            string failure = HotReloadNewSourceMembershipValidator.ValidateResolvedAssemblyDefinition(
+                MissingHotReloadScriptPath,
+                compilationAssembly.name,
+                compilationAssembly,
+                new[] { unresolvedAsmref },
+                resolvedAssemblyDefinitionPath);
+
+            Assert.That(failure, Does.Contain("could not be resolved"));
+        }
+
+        /// <summary>
         /// The collector does not resolve an outer asmref target when an inner asmdef is nearest.
         /// </summary>
         [Test]
@@ -494,6 +546,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         referencedTargetGuid,
                         referencedTargetGuid)
                 });
+        }
+
+        private static UnityEditor.Compilation.Assembly FindHotReloadCompilationAssembly()
+        {
+            UnityEditor.Compilation.Assembly[] assemblies = UnityEditor.Compilation.CompilationPipeline.GetAssemblies();
+            for (int index = 0; index < assemblies.Length; index++)
+            {
+                if (string.Equals(assemblies[index].name, "UnityCLILoop.Tests.Editor.HotReload", StringComparison.Ordinal))
+                {
+                    return assemblies[index];
+                }
+            }
+
+            Assert.Fail("The hot reload test assembly was not found.");
+            return null;
         }
     }
 }

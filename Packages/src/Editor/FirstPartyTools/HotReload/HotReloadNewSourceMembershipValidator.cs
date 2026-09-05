@@ -229,7 +229,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return null;
         }
 
-        private static string ValidateResolvedAssemblyDefinition(
+        internal static string ValidateResolvedAssemblyDefinition(
             string projectRelativePath,
             string assemblyName,
             UnityCompilationAssembly compilationAssembly,

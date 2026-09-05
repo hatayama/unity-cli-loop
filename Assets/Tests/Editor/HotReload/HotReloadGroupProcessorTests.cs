@@ -319,6 +319,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Cancellation during pre-revert membership revalidation prevents the revert continuation.
+        /// </summary>
+        [Test]
+        public void RevalidateBeforeRevertAsync_WhenCancelledDuringRevalidation_DoesNotInvokeRevert()
+        {
+            HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
+            HotReloadApplyContext context = CreateContext(evidence);
+            int revertCalls = 0;
+            using CancellationTokenSource cancellation = new CancellationTokenSource();
+            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
+            {
+                cancellation.Cancel();
+                return new HotReloadEditorStateSnapshot(false, false, false);
+            };
+
+            Assert.ThrowsAsync<TaskCanceledException>(async () =>
+                await HotReloadGroupProcessor.RevalidateBeforeRevertAsync(
+                    context.Files,
+                    cancellation.Token,
+                    () => revertCalls++));
+
+            Assert.That(revertCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// Planning a new source through the orchestrator retains evidence for the later pre-revert rejection.
         /// </summary>
         [Test]
