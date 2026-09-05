@@ -123,6 +123,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Supplies a public target with same-key callers compiled into two different assemblies.
+    /// </summary>
+    public static class HotReloadQualifiedCallerIdentityTarget
+    {
+        public static int Called()
+        {
+            return 9;
+        }
+    }
+
+    /// <summary>
+    /// Supplies the main-assembly side of a same-metadata-name internal caller pair.
+    /// </summary>
+    internal static class HotReloadQualifiedCallerIdentityCaller
+    {
+        internal static int Call()
+        {
+            return HotReloadQualifiedCallerIdentityTarget.Called();
+        }
+    }
+
+    /// <summary>
     /// Open generic host so call sites go through a constructed <c>GenericHost&lt;int&gt;</c>.
     /// </summary>
     public class GenericHost<T>

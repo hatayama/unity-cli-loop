@@ -27,4 +27,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return 8;
         }
     }
+
+    /// <summary>
+    /// Supplies the foreign-assembly side of the same-metadata-name internal caller pair.
+    /// </summary>
+    internal static class HotReloadQualifiedCallerIdentityCaller
+    {
+        internal static int Call()
+        {
+            return HotReloadQualifiedCallerIdentityTarget.Called();
+        }
+    }
 }

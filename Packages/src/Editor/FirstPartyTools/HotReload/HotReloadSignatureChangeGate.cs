@@ -35,9 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 removedSignatures);
             List<HotReloadCallSiteScanner.CallSiteHit> hits =
                 HotReloadCallSiteScanner.FindCallSites(context.ProjectRoot, targets).Hits;
-            HashSet<string> coveredKeys = HotReloadSignatureChangeCoverage.CollectCoveredMethodKeys(entries, targets);
-            Dictionary<string, List<string>> uncoveredCallersByTarget =
-                HotReloadSignatureChangeCoverage.CollectUncoveredCallersByTarget(hits, coveredKeys);
+            Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncoveredCallersByTarget =
+                CollectInitialUncoveredCallers(context.AssemblyName, entries, targets, hits);
 
             List<string> staleWarnings = HotReloadSignatureChangeCoverage.CollectStaleSignatureWarnings(
                 removedSignatures,
@@ -54,14 +53,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadShimIsolation.IsolationExclusions exclusions = HotReloadShimIsolation.BuildIsolationExclusions(gatedReplacements, entries);
-            Dictionary<string, HashSet<string>> editedFileMethodKeysByFile =
-                HotReloadSignatureChangeCoverage.CollectEditedFileMethodKeysByFile(
+            Dictionary<string, HashSet<HotReloadQualifiedMethodIdentity>> editedFileMethodIdentitiesByFile =
+                HotReloadSignatureChangeCoverage.CollectEditedFileMethodIdentitiesByFile(
+                    context.AssemblyName,
                     entries,
                     context.WorkerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>());
             List<HotReloadMethodOutcome> skippedOutcomes = BuildGatedReplacementSkipOutcomes(
                 gatedReplacements,
                 uncoveredCallersByTarget,
-                editedFileMethodKeysByFile,
+                editedFileMethodIdentitiesByFile,
                 context.GroupFilePaths);
             skippedOutcomes.AddRange(
                 HotReloadShimIsolation.BuildSkippedCallerOutcomes(
@@ -116,6 +116,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return replacements;
+        }
+
+        /// <summary>
+        /// Classifies scanned callers against the first worker output using the edited assembly.
+        /// </summary>
+        internal static Dictionary<string, List<HotReloadQualifiedMethodIdentity>> CollectInitialUncoveredCallers(
+            string assemblyName,
+            TransformWorkerEntryDto[] entries,
+            HotReloadCallSiteScanner.CompiledMethodIdentity[] targets,
+            IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits)
+        {
+            HashSet<HotReloadQualifiedMethodIdentity> coveredIdentities =
+                HotReloadSignatureChangeCoverage.CollectCoveredMethodIdentities(
+                    assemblyName,
+                    entries,
+                    targets);
+            return HotReloadSignatureChangeCoverage.CollectUncoveredCallersByTarget(
+                hits,
+                coveredIdentities);
         }
 
         private static HotReloadCallSiteScanner.CompiledMethodIdentity[] CollectScanTargets(
@@ -183,13 +202,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static List<TransformWorkerEntryDto> CollectGatedReplacementEntries(
             IReadOnlyList<TransformWorkerEntryDto> replacementEntries,
-            Dictionary<string, List<string>> uncoveredCallersByTarget)
+            Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncoveredCallersByTarget)
         {
             List<TransformWorkerEntryDto> gated = new List<TransformWorkerEntryDto>();
             foreach (TransformWorkerEntryDto entry in replacementEntries)
             {
                 string methodKey = HotReloadMethodKeys.BuildMethodKey(entry);
-                if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> callers)
+                if (uncoveredCallersByTarget.TryGetValue(
+                        methodKey,
+                        out List<HotReloadQualifiedMethodIdentity> callers)
                     && callers.Count > 0)
                 {
                     gated.Add(entry);
@@ -231,10 +252,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 entry.genericArity);
         }
 
-        private static List<HotReloadMethodOutcome> BuildGatedReplacementSkipOutcomes(
+        internal static List<HotReloadMethodOutcome> BuildGatedReplacementSkipOutcomes(
             IReadOnlyList<TransformWorkerEntryDto> gatedReplacements,
-            Dictionary<string, List<string>> uncoveredCallersByTarget,
-            Dictionary<string, HashSet<string>> editedFileMethodKeysByFile,
+            Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncoveredCallersByTarget,
+            Dictionary<string, HashSet<HotReloadQualifiedMethodIdentity>> editedFileMethodIdentitiesByFile,
             HotReloadGroupFilePaths groupFilePaths)
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
@@ -256,11 +277,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // Why this entry's own file: a caller edited in a sibling file of the group is
                 // not a same-file caller, and telling the user otherwise points them at the
                 // wrong file.
-                else if (uncoveredCallersByTarget.TryGetValue(methodKey, out List<string> uncoveredCallers)
-                    && editedFileMethodKeysByFile.TryGetValue(
+                else if (uncoveredCallersByTarget.TryGetValue(
+                             methodKey,
+                             out List<HotReloadQualifiedMethodIdentity> uncoveredCallers)
+                    && editedFileMethodIdentitiesByFile.TryGetValue(
                         entry.sourceProjectRelativePath,
-                        out HashSet<string> editedFileMethodKeys)
-                    && HotReloadSignatureChangeCoverage.AreAllUncoveredCallersInEditedFile(uncoveredCallers, editedFileMethodKeys))
+                        out HashSet<HotReloadQualifiedMethodIdentity> editedFileMethodIdentities)
+                    && HotReloadSignatureChangeCoverage.AreAllUncoveredCallersInEditedFile(
+                        uncoveredCallers,
+                        editedFileMethodIdentities))
                 {
                     reason = string.Format(
                         HotReloadConstants.SignatureChangedGateSkipReasonSameFileCallersFormat,

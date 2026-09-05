@@ -155,6 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // retry can drop a covering caller without dropping the replacement. A third
             // worker run is not allowed (max two); fail the group instead of applying.
             List<string> lostReplacementKeys = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
+                context.AssemblyName,
                 compile.EntriesToPatch,
                 gateResult.Hits,
                 gateResult.ScanTargetKeys);
@@ -176,6 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // the warning belongs to.
                 HotReloadSignatureChangeCoverage.AppendSignatureChangeCallersRepatchedWarnings(
                     file.Sinks.Warnings,
+                    context.AssemblyName,
                     compile.EntriesToPatch,
                     gateResult.Hits,
                     file.SnapshotLabels);

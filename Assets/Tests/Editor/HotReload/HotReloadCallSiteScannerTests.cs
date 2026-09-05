@@ -28,6 +28,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CrossAssemblyTargetTypeMetadataName =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCallSiteScannerCrossAssemblyTarget";
 
+        private const string QualifiedCallerIdentityTargetTypeMetadataName =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadQualifiedCallerIdentityTarget";
+
         /// <summary>
         /// What: a method called from an ordinary method is reported with that caller's method key.
         /// </summary>
@@ -257,6 +260,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                     + ".HotReloadCallSiteCrossAssemblyCaller::Call()"));
+        }
+
+        /// <summary>
+        /// What: callers with the same metadata name and wire key are reported with their distinct assemblies.
+        /// </summary>
+        [Test]
+        public void FindCallSites_SameKeyCallersAcrossAssemblies_ReportsBothCallerAssemblies()
+        {
+            List<HotReloadCallSiteScanner.CallSiteHit> hits = FindHits(
+                QualifiedCallerIdentityTargetTypeMetadataName,
+                nameof(HotReloadQualifiedCallerIdentityTarget.Called),
+                Array.Empty<string>(),
+                0);
+            List<string> callerAssemblyNames = new List<string>();
+            foreach (HotReloadCallSiteScanner.CallSiteHit hit in hits)
+            {
+                callerAssemblyNames.Add(hit.CallerAssemblyName);
+                Assert.That(
+                    hit.CallerMethodKey,
+                    Is.EqualTo(
+                        "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                        + ".HotReloadQualifiedCallerIdentityCaller::Call()"));
+            }
+
+            Assert.That(hits, Has.Count.EqualTo(2));
+            Assert.That(
+                callerAssemblyNames,
+                Does.Contain("UnityCLILoop.Tests.Editor.HotReload"));
+            Assert.That(
+                callerAssemblyNames,
+                Does.Contain("UnityCLILoop.Tests.Editor.HotReload.CallSiteCrossAssembly"));
         }
 
         /// <summary>
