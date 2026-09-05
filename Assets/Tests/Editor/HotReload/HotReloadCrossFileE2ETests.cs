@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostFileName = "HotReloadCrossFileAddedMemberHost.cs";
         private const string CallerFileName = "HotReloadCrossFileAddedMemberCaller.cs";
         private const string CrossAssemblyFileName = "HotReloadCallSiteCrossAssemblyCaller.cs";
+        private const string OtherSameAssemblyFileName = "HotReloadAddedMemberHost.cs";
         // The registry keys added members by their display label, not by the worker wire key.
         private const string HostAddedMethodLabel =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadCrossFileAddedMemberHost.Added()";
@@ -32,6 +33,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CallerOtherBodyAnchor = "return 7;";
         private const string CallerGatedCallBodyAnchor = "return host.Gated(1);";
         private const string CrossAssemblyBodyAnchor = "return 8;";
+        private const string OtherExistingValueAnchor =
+            "        public int ExistingValue()\n        {\n            return 1;\n        }";
+        private const string OtherExistingValueEdited =
+            "        public int ExistingValue()\n        {\n            return 2;\n        }";
+        private const string SiblingRebindFailedWarningNeedle =
+            "pulled in to re-bind its active patches but this reload failed for it";
 
         [SetUp]
         public void SetUp()
@@ -243,6 +250,543 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 FindOutcome(isolated, HotReloadMethodOutcomeKind.Failed, "CalledFromCrossAssembly");
             Assert.That(failure.FilePath, Is.EqualTo(crossAssemblyPath));
             Assert.That(new HotReloadCrossFileAddedMemberHost().Scaled(1), Is.EqualTo(301));
+        }
+
+        /// <summary>
+        /// What: an unchanged host that already carries an added method is re-applied together
+        /// with an edited caller in the same reload, so the caller binds to the host shim
+        /// instead of failing, and the host Added row is not AlreadyActive.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedHostWithActiveAddedMethod_AndEditedCaller_RebindsCallerToHostShim()
+        {
+            string hostSource = InsertHostMember(
+                "        public int Added()\n        {\n            return 5;\n        }\n\n");
+            await RunPairAsync(
+                "RebindT1",
+                hostSource,
+                ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added();"));
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
+
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindT1Host.cs",
+                        hostSource),
+                    [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindT1CallerEdited.cs",
+                        ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added() + 2;"))
+                });
+
+            AssertNoFailure(second);
+            AssertKind(second, HotReloadMethodOutcomeKind.Patched, "Call");
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(7));
+            AssertHostAddedIsAppliedNotAlreadyActive(second);
+        }
+
+        /// <summary>
+        /// What: re-editing only the host added-method body re-applies an unchanged caller that
+        /// was not in files, so the caller binds to the new shim and the run warns that it
+        /// was re-applied.
+        /// </summary>
+        [Test]
+        public async Task Run_HostAddedMethodBodyReedited_WithoutCallerInFiles_ReappliesCallerAgainstNewShim()
+        {
+            string firstHostSource = InsertHostMember(
+                "        public int Added()\n        {\n            return 5;\n        }\n\n");
+            string firstCallerSource = ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added();");
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            string firstCallerEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindT2Caller.cs",
+                firstCallerSource);
+
+            await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindT2Host.cs",
+                        firstHostSource),
+                    [callerPath] = firstCallerEditPath
+                });
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindT2HostReedited.cs",
+                        InsertHostMember(
+                            "        public int Added()\n        {\n            return 6;\n        }\n\n")),
+                    [callerPath] = firstCallerEditPath
+                });
+
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(6));
+            AssertWarningContains(second, CallerProjectRelativePath(), "re-applied");
+            FindOutcomeForFile(
+                second,
+                CallerProjectRelativePath(),
+                HotReloadMethodOutcomeKind.Patched,
+                "Call");
+        }
+
+        /// <summary>
+        /// What: passing the same host path twice opens two groups, but an active unchanged
+        /// caller is re-applied only with the last group, so it appears once.
+        /// </summary>
+        [Test]
+        public async Task Run_SameHostPassedTwice_WithActiveCaller_ReappliesCallerOnce()
+        {
+            string firstHostSource = InsertHostMember(
+                "        public int Added()\n        {\n            return 5;\n        }\n\n");
+            string firstCallerSource = ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added();");
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            string firstCallerEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindDupCaller.cs",
+                firstCallerSource);
+
+            await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindDupHost.cs",
+                        firstHostSource),
+                    [callerPath] = firstCallerEditPath
+                });
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, hostPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindDupHostReedited.cs",
+                        InsertHostMember(
+                            "        public int Added()\n        {\n            return 6;\n        }\n\n")),
+                    [callerPath] = firstCallerEditPath
+                });
+
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(6));
+            Assert.That(
+                CountOutcomesForFile(second, CallerProjectRelativePath()),
+                Is.EqualTo(1),
+                "Caller must be re-applied once.\n" + FormatOutcomes(second));
+            FindOutcomeForFile(
+                second,
+                CallerProjectRelativePath(),
+                HotReloadMethodOutcomeKind.Patched,
+                "Call");
+            Assert.That(
+                CountWarningsContaining(second, "re-applied"),
+                Is.EqualTo(1),
+                string.Join("\n", second.Warnings));
+        }
+
+        /// <summary>
+        /// What: a caller whose source changed since it was applied is left on the previous
+        /// shim and the run warns that it was not re-applied.
+        /// </summary>
+        [Test]
+        public async Task Run_HostReedited_WhenCallerChangedSinceApply_LeavesCallerAndWarns()
+        {
+            string firstHostSource = InsertHostMember(
+                "        public int Added()\n        {\n            return 5;\n        }\n\n");
+            string firstCallerSource = ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added();");
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+
+            await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindChangedCallerHost.cs",
+                        firstHostSource),
+                    [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindChangedCaller.cs",
+                        firstCallerSource)
+                });
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindChangedCallerHostReedited.cs",
+                        InsertHostMember(
+                            "        public int Added()\n        {\n            return 6;\n        }\n\n")),
+                    [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindChangedCallerDiverged.cs",
+                        ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added() + 100;"))
+                });
+
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
+            AssertWarningContains(second, CallerProjectRelativePath(), "changed since");
+            Assert.That(
+                CountOutcomesForFile(second, CallerProjectRelativePath()),
+                Is.EqualTo(0),
+                "Changed caller must not appear in outcomes.\n" + FormatOutcomes(second));
+        }
+
+        /// <summary>
+        /// What: a later all-unchanged group of the same assembly does not steal last-group
+        /// sibling rebind from the last group that actually processes files.
+        /// </summary>
+        [Test]
+        public async Task Run_LastProcessedGroupRebindsSibling_WhenLaterSameAssemblyGroupIsAllUnchanged()
+        {
+            string firstHostSource = InsertHostMember(
+                "        public int Added()\n        {\n            return 5;\n        }\n\n");
+            string firstCallerSource = ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added();");
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            string otherPath = FixturePath(OtherSameAssemblyFileName);
+            string otherOnDisk = ReadFixture(OtherSameAssemblyFileName);
+            string otherEdited = ReplaceInSource(
+                otherOnDisk,
+                OtherExistingValueAnchor,
+                OtherExistingValueEdited);
+            string firstCallerEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindLastProcessedCaller.cs",
+                firstCallerSource);
+            string otherEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindLastProcessedOther.cs",
+                otherEdited);
+
+            await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindLastProcessedHost.cs",
+                        firstHostSource),
+                    [callerPath] = firstCallerEditPath
+                });
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
+
+            HotReloadOrchestratorResult activateOther = await HotReloadOrchestrator.RunAsync(
+                new[] { otherPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [otherPath] = otherEditPath
+                });
+            AssertNoFailure(activateOther);
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { otherPath, hostPath, otherPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [otherPath] = otherEditPath,
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindLastProcessedHostReedited.cs",
+                        InsertHostMember(
+                            "        public int Added()\n        {\n            return 6;\n        }\n\n")),
+                    [callerPath] = firstCallerEditPath
+                });
+
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(6));
+            Assert.That(
+                CountOutcomesForFile(second, CallerProjectRelativePath()),
+                Is.EqualTo(1),
+                "Caller must be re-applied once.\n" + FormatOutcomes(second));
+            Assert.That(
+                CountWarningsContaining(second, "re-applied"),
+                Is.EqualTo(1),
+                string.Join("\n", second.Warnings));
+            List<HotReloadMethodOutcome> otherOutcomes = CollectOutcomesForFileName(
+                second,
+                OtherSameAssemblyFileName);
+            Assert.That(otherOutcomes.Count, Is.GreaterThan(0), FormatOutcomes(second));
+            Assert.That(
+                otherOutcomes.Exists(outcome =>
+                    outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    || outcome.Kind == HotReloadMethodOutcomeKind.Added),
+                Is.True,
+                "Last processed group must apply the other fixture.\n" + FormatOutcomes(second));
+        }
+
+        /// <summary>
+        /// What: a repeated unchanged path opens a later all-deferred group that still holds
+        /// an active caller, so that caller is processed as Patched against the new shim
+        /// instead of staying AlreadyActive on the previous one.
+        /// </summary>
+        [Test]
+        public async Task Run_RepeatedUnchangedPathWithActiveCaller_RebindsCallerInsteadOfAlreadyActive()
+        {
+            string firstHostSource = InsertHostMember(
+                "        public int Added()\n        {\n            return 5;\n        }\n\n");
+            string firstCallerSource = ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added();");
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            string otherPath = FixturePath(OtherSameAssemblyFileName);
+            string otherEdited = ReplaceInSource(
+                ReadFixture(OtherSameAssemblyFileName),
+                OtherExistingValueAnchor,
+                OtherExistingValueEdited);
+            string firstCallerEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindRepeatedCaller.cs",
+                firstCallerSource);
+            string otherEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindRepeatedOther.cs",
+                otherEdited);
+
+            await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindRepeatedHost.cs",
+                        firstHostSource),
+                    [callerPath] = firstCallerEditPath
+                });
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
+
+            HotReloadOrchestratorResult activateOther = await HotReloadOrchestrator.RunAsync(
+                new[] { otherPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [otherPath] = otherEditPath
+                });
+            AssertNoFailure(activateOther);
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, otherPath, otherPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindRepeatedHostReedited.cs",
+                        InsertHostMember(
+                            "        public int Added()\n        {\n            return 6;\n        }\n\n")),
+                    [otherPath] = otherEditPath,
+                    [callerPath] = firstCallerEditPath
+                });
+
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(6));
+            FindOutcomeForFile(
+                second,
+                callerPath,
+                HotReloadMethodOutcomeKind.Patched,
+                "Call");
+            foreach (HotReloadMethodOutcome outcome in CollectOutcomesForFile(second, callerPath))
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.AlreadyActive),
+                    "Caller must not stay AlreadyActive on the previous shim.\n"
+                    + FormatOutcomes(second));
+            }
+        }
+
+        /// <summary>
+        /// What: an all-deferred plan that appears before the last changed plan still has its
+        /// unique active caller absorbed and Patched against the new host shim.
+        /// </summary>
+        [Test]
+        public async Task Run_EarlierAllDeferredPlanWithActiveCaller_RebindsCallerInsteadOfAlreadyActive()
+        {
+            string firstHostSource = InsertHostMember(
+                "        public int Added()\n        {\n            return 5;\n        }\n\n");
+            string firstCallerSource = ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added();");
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            string otherPath = FixturePath(OtherSameAssemblyFileName);
+            string otherEdited = ReplaceInSource(
+                ReadFixture(OtherSameAssemblyFileName),
+                OtherExistingValueAnchor,
+                OtherExistingValueEdited);
+            string firstCallerEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindEarlierDeferredCaller.cs",
+                firstCallerSource);
+            string otherEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindEarlierDeferredOther.cs",
+                otherEdited);
+
+            await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindEarlierDeferredHost.cs",
+                        firstHostSource),
+                    [callerPath] = firstCallerEditPath
+                });
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
+
+            HotReloadOrchestratorResult activateOther = await HotReloadOrchestrator.RunAsync(
+                new[] { otherPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [otherPath] = otherEditPath
+                });
+            AssertNoFailure(activateOther);
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { otherPath, callerPath, otherPath, hostPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindEarlierDeferredHostReedited.cs",
+                        InsertHostMember(
+                            "        public int Added()\n        {\n            return 6;\n        }\n\n")),
+                    [otherPath] = otherEditPath,
+                    [callerPath] = firstCallerEditPath
+                });
+
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(6));
+            FindOutcomeForFile(
+                second,
+                callerPath,
+                HotReloadMethodOutcomeKind.Patched,
+                "Call");
+            foreach (HotReloadMethodOutcome outcome in CollectOutcomesForFile(second, callerPath))
+            {
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.AlreadyActive),
+                    "Caller must not stay AlreadyActive on the previous shim.\n"
+                    + FormatOutcomes(second));
+            }
+        }
+
+        /// <summary>
+        /// What: a sibling pulled in to re-bind is not described as re-applied when the host
+        /// shim compile fails; isolation reports the caller as Skipped and the live patch
+        /// stays on the previous body.
+        /// </summary>
+        [Test]
+        public async Task Run_FailedSiblingRebindDoesNotClaimReApplied()
+        {
+            string firstHostSource = InsertHostMember(
+                "        public int Added()\n        {\n            return 5;\n        }\n\n");
+            string firstCallerSource = ReplaceCallerBody(CallerCallBodyAnchor, "return host.Added();");
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            string firstCallerEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RebindFailedSiblingCaller.cs",
+                firstCallerSource);
+
+            await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath, callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindFailedSiblingHost.cs",
+                        firstHostSource),
+                    [callerPath] = firstCallerEditPath
+                });
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
+
+            HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string>
+                {
+                    [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                        "RebindFailedSiblingHostBroken.cs",
+                        InsertHostMember(
+                            "        public int Added()\n        {\n            return Missing();\n        }\n\n")),
+                    [callerPath] = firstCallerEditPath
+                });
+
+            FindOutcomeForFile(
+                second,
+                hostPath,
+                HotReloadMethodOutcomeKind.Failed,
+                "Added");
+            HotReloadMethodOutcome callerOutcome = FindOutcomeForFile(
+                second,
+                CallerProjectRelativePath(),
+                HotReloadMethodOutcomeKind.Skipped,
+                "Call");
+            Assert.That(
+                callerOutcome.Reason,
+                Is.EqualTo(HotReloadConstants.IsolatedAddedMethodCallerSkipReason),
+                FormatOutcomes(second));
+            Assert.That(
+                CountWarningsContaining(second, "re-applied"),
+                Is.EqualTo(0),
+                string.Join("\n", second.Warnings));
+            Assert.That(
+                CountWarningsContaining(second, SiblingRebindFailedWarningNeedle),
+                Is.EqualTo(1),
+                string.Join("\n", second.Warnings));
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(5));
         }
 
         /// <summary>
@@ -465,6 +1009,125 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return string.Join("\n", lines);
+        }
+
+        private static void AssertHostAddedIsAppliedNotAlreadyActive(HotReloadOrchestratorResult result)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Method == null || !outcome.Method.Contains("Added"))
+                {
+                    continue;
+                }
+
+                Assert.That(
+                    outcome.Kind,
+                    Is.Not.EqualTo(HotReloadMethodOutcomeKind.AlreadyActive),
+                    "Host Added must not be AlreadyActive.\n" + FormatOutcomes(result));
+                Assert.That(
+                    outcome.Kind == HotReloadMethodOutcomeKind.Added
+                    || outcome.Kind == HotReloadMethodOutcomeKind.Patched,
+                    Is.True,
+                    "Host Added must be Added or Patched.\n" + FormatOutcomes(result));
+                return;
+            }
+
+            Assert.Fail("Expected an Added or Patched host Added row.\n" + FormatOutcomes(result));
+        }
+
+        private static HotReloadMethodOutcome FindOutcomeForFile(
+            HotReloadOrchestratorResult result,
+            string filePath,
+            HotReloadMethodOutcomeKind kind,
+            string methodNamePart)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == kind
+                    && outcome.FilePath == filePath
+                    && outcome.Method != null
+                    && outcome.Method.Contains(methodNamePart))
+                {
+                    return outcome;
+                }
+            }
+
+            Assert.Fail(
+                "Expected " + kind + " for " + methodNamePart + " at " + filePath + ".\n"
+                + FormatOutcomes(result));
+            return null;
+        }
+
+        private static int CountOutcomesForFile(HotReloadOrchestratorResult result, string filePath)
+        {
+            return CollectOutcomesForFile(result, filePath).Count;
+        }
+
+        private static List<HotReloadMethodOutcome> CollectOutcomesForFile(
+            HotReloadOrchestratorResult result,
+            string filePath)
+        {
+            List<HotReloadMethodOutcome> matches = new List<HotReloadMethodOutcome>();
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.FilePath == filePath)
+                {
+                    matches.Add(outcome);
+                }
+            }
+
+            return matches;
+        }
+
+        private static List<HotReloadMethodOutcome> CollectOutcomesForFileName(
+            HotReloadOrchestratorResult result,
+            string fileName)
+        {
+            List<HotReloadMethodOutcome> matches = new List<HotReloadMethodOutcome>();
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.FilePath != null
+                    && outcome.FilePath.EndsWith(fileName, StringComparison.Ordinal))
+                {
+                    matches.Add(outcome);
+                }
+            }
+
+            return matches;
+        }
+
+        private static void AssertWarningContains(
+            HotReloadOrchestratorResult result,
+            string pathPart,
+            string textPart)
+        {
+            foreach (string warning in result.Warnings)
+            {
+                if (warning != null
+                    && warning.Contains(pathPart)
+                    && warning.Contains(textPart))
+                {
+                    return;
+                }
+            }
+
+            Assert.Fail(
+                "Expected a warning containing '" + pathPart + "' and '" + textPart + "'.\n"
+                + string.Join("\n", result.Warnings));
+        }
+
+        private static int CountWarningsContaining(HotReloadOrchestratorResult result, string textPart)
+        {
+            int count = 0;
+            foreach (string warning in result.Warnings)
+            {
+                if (warning != null && warning.Contains(textPart))
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
     }
 }

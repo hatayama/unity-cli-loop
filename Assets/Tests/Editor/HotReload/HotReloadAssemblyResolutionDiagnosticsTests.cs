@@ -168,12 +168,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 string assemblyName,
                 UnityCompilationAssembly compilationAssembly,
                 string targetDllPath,
-                string projectRoot) = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                string projectRoot,
+                HotReloadUnchangedSourceDecision unchangedDecision) = HotReloadPatchTargetSupport.ResolvePatchTarget(
                 MissingHotReloadScriptPath,
                 MissingHotReloadScriptPath,
                 outcomes,
                 warnings,
-                "assembly-resolution-wiring");
+                "assembly-resolution-wiring",
+                new List<HotReloadMethodOutcome>());
 
             Assert.That(earlyResult, Is.Not.Null);
             Assert.That(earlyResult.Outcomes.Count, Is.EqualTo(1));
@@ -187,6 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(compilationAssembly, Is.Null);
             Assert.That(targetDllPath, Is.Null);
             Assert.That(projectRoot, Is.Null);
+            Assert.That(unchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
         }
 
         private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)
