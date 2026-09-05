@@ -266,6 +266,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: a successful compile with live hot-reload changes passes the drop Warning into compilation execution.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_WhenHotReloadChangesActive_PassesDropWarningToCompilationExecution()
+        {
+            UnityCliLoopCompileResultSessionRepository innerCompileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            CountingCompileResultSessionRepository compileResultSessionRepository =
+                new(innerCompileResultSessionRepository);
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService =
+                new(
+                    UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository(),
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+
+            try
+            {
+                CompileSchema request = new()
+                {
+                    WaitForDomainReload = true,
+                    RequestId = "compile_success_hot_reload_drop_warning",
+                    ForceRecompile = false,
+                    ReloadExternalSceneChanges = true
+                };
+                CompileResult executionResult = CreateSuccessfulCompileResult();
+                CompileUseCase useCase = new(
+                    compileSessionLifecycleService,
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+                useCase.SetPlayModeStopWarningInputsForTesting(
+                    wasPlayingAtRequestStart: false,
+                    activePausePointCount: 0,
+                    activeHotReloadChangeCount: 2);
+                string capturedPlayModeStopWarning = null;
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                {
+                    capturedPlayModeStopWarning = playModeStopWarning;
+                    ct.ThrowIfCancellationRequested();
+                    CompileResultSessionRecorder.RecordCompileResult(
+                        compileResultSessionRepository,
+                        pendingCompileSessionRepository,
+                        compileRequest.RequestId,
+                        compileRequest.ForceRecompile,
+                        executionResult,
+                        compileRequest.RequestId);
+                    return Task.FromResult(executionResult);
+                });
+
+                await useCase.CompileAsync(request, CancellationToken.None);
+
+                Assert.That(capturedPlayModeStopWarning, Does.Contain("2 active hot-reload change(s)"));
+            }
+            finally
+            {
+                originalSnapshot.Restore();
+            }
+        }
+
         private static CompileResult CreateSuccessfulCompileResult()
         {
             CompilerMessage warning = new()
