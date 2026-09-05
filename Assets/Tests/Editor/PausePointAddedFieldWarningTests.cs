@@ -70,6 +70,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: the added-fields warning does not recommend execute-dynamic-code as a read
+        /// path and instead states that those names are invisible to it.
+        /// </summary>
+        [Test]
+        public void Enable_WhenDeclaringTypeHasAddedFields_WarningDoesNotRecommendExecuteDynamicCode()
+        {
+            string typeName = typeof(EnableBySourceLocationFixture).FullName;
+            HotReloadAddedFieldRegistry.ReplaceForFile(
+                FixtureFilePath,
+                new[] { typeName + ".beta", typeName + ".alpha" });
+
+            PausePointResponse response = new PausePointUseCase().Enable(new EnablePausePointSchema
+            {
+                File = FixtureFilePath,
+                Line = FixtureLine,
+                TimeoutSeconds = 30,
+                Mode = UloopPausePointCaptureMode.SingleShot
+            });
+
+            Assert.That(
+                response.Success,
+                Is.True,
+                response.ErrorCode + " / " + response.Message);
+            Assert.That(
+                response.Warning,
+                Does.Not.Contain(
+                    "Read them via a patched method body or 'uloop execute-dynamic-code' instead"));
+            Assert.That(
+                response.Warning,
+                Does.Contain("not visible to 'uloop execute-dynamic-code'"));
+            Assert.That(
+                response.Warning,
+                Does.Contain("Read them from a patched method body"));
+        }
+
+        /// <summary>
         /// What: enabling a pause point on a type with no added fields yields only the usual
         /// enable warnings, with an exact full-string match and no added-field sentence.
         /// </summary>
