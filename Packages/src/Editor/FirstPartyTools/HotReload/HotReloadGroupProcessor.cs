@@ -102,6 +102,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadGroupFile gateWarningSink,
             CancellationToken ct)
         {
+            // The worker-bound continuation after the pre-revert check is not guaranteed to
+            // resume on Unity's context, while the signature gate reads compilation state.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            ct.ThrowIfCancellationRequested();
             IReadOnlyList<HotReloadGroupFile> files = context.Files;
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = await HotReloadSignatureChangeGate.TryApplySignatureChangeGateAsync(
                 context,
