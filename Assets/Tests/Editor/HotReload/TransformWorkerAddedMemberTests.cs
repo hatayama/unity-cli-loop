@@ -105,6 +105,67 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an auto-property present only in the edited source is skipped with the
+        /// added-property reason and does not fire the outside-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedAutoProperty_SkipsGetterWithAddedPropertyReason()
+        {
+            const string expectedReason =
+                "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
+                + "For a computed value, add a same-file method instead (e.g. 'private T GetX()'), which applies "
+                + "through hot reload; for a constant, use a 'const' or a plain added field; otherwise run "
+                + "'uloop compile'.";
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedAuto { get; private set; }");
+            string sourcePath = WriteEdited("ClassifyAddedAutoProperty.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            Assert.That(
+                FindEntry(result, "get_AddedAuto"),
+                Is.Null,
+                "Added auto-property getter must not be an entry.");
+            Assert.That(FindSkipReason(result, "get_AddedAuto"), Is.EqualTo(expectedReason));
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Added auto-property must not fire outside-body drift.\n"
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
+        }
+
+        /// <summary>
+        /// What: an auto-property already present in the baseline snapshot stays silent
+        /// (no Skipped row and no unchanged row) when the declaration is unchanged.
+        /// </summary>
+        [Test]
+        public async Task Classify_ExistingUnchangedAutoProperty_DoesNotSkip()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string withExistingAuto = WithHostMembers(
+                onDisk,
+                "public int ExistingAuto { get; private set; }");
+            string sourcePath = WriteEdited("ClassifyExistingAutoProperty.cs", withExistingAuto);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: withExistingAuto);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindSkipReason(result, "get_ExistingAuto"),
+                Is.Null,
+                "Unchanged baseline auto-property must not emit a Skipped row.");
+            Assert.That(FindEntry(result, "get_ExistingAuto"), Is.Null);
+        }
+
+        /// <summary>
         /// What: an added method entry is emitted as a public static shim method in shimSource.
         /// </summary>
         [Test]

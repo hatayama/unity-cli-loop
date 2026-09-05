@@ -1078,11 +1078,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: adding an auto-property emits no skip row, so the outside-body drift warning
-        /// remains the only signal that the new member was not applied.
+        /// What: adding an auto-property plus a method-body edit skips the getter with the
+        /// added-property reason and does not emit the outside-body drift warning.
         /// </summary>
         [Test]
-        public async Task Run_AddedAutoPropertyPlusBodyEdit_EmitsOutsideBodyWarningWithoutSkipRow()
+        public async Task Run_AddedAutoPropertyPlusBodyEdit_SkipsGetterWithoutOutsideBodyWarning()
         {
             const string fileName = "AddedAutoPropertyDrift.cs";
             TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
@@ -1099,8 +1099,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         StringComparison.Ordinal);
                 });
 
-            AssertSkippedDoesNotContain(result, "AddedAuto");
-            AssertContainsOutsideMethodBodyDriftWarning(result, fileName);
+            AssertSkippedContains(result, "get_AddedAuto", ExpectedAddedPropertySkipReason);
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
             AssertPatchedComputeWithPrivate(result);
         }
 

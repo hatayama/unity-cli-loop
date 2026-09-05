@@ -1612,11 +1612,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: adding a property does not emit the compiled property warning and does
-        /// not add an individual Skipped row for that property (SKILL discrepancy kept).
+        /// What: adding an auto-property does not emit the compiled property warning and
+        /// skips the getter with the added-property reason.
         /// </summary>
         [Test]
-        public async Task Classify_AddedProperty_DoesNotWarnOrSkipTheProperty()
+        public async Task Classify_AddedProperty_SkipsGetterWithAddedPropertyReason()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(
@@ -1629,7 +1629,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasNoCompiledKindChangeWarningForMember(result, "ExtraHp");
-            AssertHasNoSkipContaining(result, "ExtraHp");
+            AssertHasSkip(result, "get_ExtraHp", "Added properties are out of scope");
         }
 
         /// <summary>
