@@ -313,6 +313,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added method whose return type is a generic wrapping an unresolved type
+        /// still reports that the type could not be resolved, not condition c.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodReturningListOfUnresolvedType_ReportsUnresolvedTypeNotVisibility()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "private System.Collections.Generic.List<MissingType> _missingList;\n"
+                + "        public System.Collections.Generic.List<MissingType> AddedUnresolvedList()\n        {\n"
+                + "            return _missingList;\n        }");
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string reason = FindSkipReason(result, "AddedUnresolvedList");
+            Assert.That(reason, Is.Not.Null, "Expected a skip for AddedUnresolvedList.");
+            Assert.That(reason, Does.Contain("could not be resolved"));
+            Assert.That(reason, Does.Not.Contain("condition c"));
+        }
+
+        /// <summary>
         /// What: an added method whose private access has no accessor rewrite is Skipped
         /// with the added-method prefix plus the eligibility reason.
         /// </summary>

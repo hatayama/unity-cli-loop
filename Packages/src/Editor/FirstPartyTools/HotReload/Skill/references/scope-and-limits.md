@@ -24,7 +24,10 @@ serialization. Referencing an added member from a file that is neither passed to
 already hot-reloaded, or from another assembly, fails that file's hot reload with
 the usual new-member hint; run `uloop compile` instead. Unchanged files of the same
 assembly that already hold active patches are re-applied automatically so they bind
-to the newest shim.
+to the newest shim. An edited body that reaches an added method through a
+compiled type still binds when the receiver's static type name, method name, and
+argument count uniquely match; the lookup uses that static type itself (not a base
+type), requires an exact argument count, and does not cover `?.`.
 
 An added method reports its own row with Kind `Added`; the edited methods that call
 it report `Patched` as usual. Added `virtual`/`override`/`abstract` methods, explicit
@@ -215,7 +218,7 @@ stay `Skipped`.
 | Body contains a `base.` call | `base` cannot be expressed from outside the type |
 | Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
-| A declared return or parameter type cannot be resolved (an uncompiled new type, a missing using, or a typo) | Skipped; run `uloop compile` after the type exists |
+| A declared return or parameter type cannot be resolved (an uncompiled new type, a missing using, or a typo) | Skipped; add the missing type, add the required `using`, or fix the typo, then run `uloop compile` |
 | Property setter, init, or indexer accessor with an explicit body | Accessor patching covers getters only; `uloop compile` applies setter/init/indexer edits |
 | Constructor (instance or static), operator, conversion operator, or explicit event accessor (add/remove) | Out of scope for v1; `uloop compile` applies these edits |
 | Method raises or reads a field-like event that has no reachable backing field | Custom `add`/`remove` accessors, an `abstract`/`extern`/interface event, a delegate type that is not visible outside the assembly, or an event added in this edit leave nothing for the shim's Harmony accessor to bind |

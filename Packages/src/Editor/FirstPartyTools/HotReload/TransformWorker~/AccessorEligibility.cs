@@ -120,19 +120,47 @@ internal static class AccessorEligibility
 
     // Why before visibility: TypeKind.Error is not "invisible"; treating it as condition c
     // tells the caller the type exists but cannot be seen, which hides missing usings/typos.
+    // Why recurse: List<MissingType> and MissingType[] have a resolved outer kind, so only
+    // the type argument or element is Error.
     private static bool TryDescribeUnresolvedType(ITypeSymbol typeSymbol, string role, out string reason)
     {
-        if (typeSymbol == null || typeSymbol.TypeKind != TypeKind.Error)
+        if (typeSymbol == null)
         {
             reason = null;
             return false;
         }
 
-        reason = role
-            + " '"
-            + typeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
-            + "' could not be resolved (missing using directive, typo, or a type that is not compiled yet).";
-        return true;
+        if (typeSymbol.TypeKind == TypeKind.Error)
+        {
+            reason = role
+                + " '"
+                + typeSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)
+                + "' could not be resolved (missing using directive, typo, or a type that is not compiled yet).";
+            return true;
+        }
+
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            return TryDescribeUnresolvedType(arrayType.ElementType, role, out reason);
+        }
+
+        INamedTypeSymbol namedType = typeSymbol as INamedTypeSymbol;
+        if (namedType == null)
+        {
+            reason = null;
+            return false;
+        }
+
+        foreach (ITypeSymbol typeArgument in namedType.TypeArguments)
+        {
+            if (TryDescribeUnresolvedType(typeArgument, role, out reason))
+            {
+                return true;
+            }
+        }
+
+        reason = null;
+        return false;
     }
 
     private static bool AreBodyTypeUsagesVisible(
