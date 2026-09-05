@@ -2639,21 +2639,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
 
             HotReloadFileProcessResult fileResult =
-                HotReloadEntryApplier.ApplyEntriesAndBuildResult(
+                HotReloadEntryApplier.ApplyGroupAndBuildResults(
                     CreateApplyContext(
                         typeof(HotReloadE2EFixture).Assembly.GetName().Name,
                         projectRelativePath,
-                        workerOutput),
-                    new HotReloadFileSinks(new List<string>(), null),
+                        workerOutput,
+                        entries,
+                        addedFieldNames),
                     HotReloadShimCompileResult.SuccessResult(
                         typeof(HotReloadEntryApplier).Assembly,
                         new byte[] { 1 },
                         Array.Empty<byte>()),
-                    entries,
-                    addedFieldNames,
-                    Array.Empty<string>(),
-                    unchangedMethodCount: 0,
-                    revertedUnchangedCount: 0);
+                    entries)[0];
 
             HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
                 fileResult.Outcomes,
@@ -2904,32 +2901,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 }
             };
-            return HotReloadEntryApplier.ApplyEntriesAndBuildResult(
+            return HotReloadEntryApplier.ApplyGroupAndBuildResults(
                 CreateApplyContext(
                     typeof(HotReloadCoreFixture).Assembly.GetName().Name,
                     projectRelativePath,
-                    workerOutput),
-                new HotReloadFileSinks(new List<string>(), null),
+                    workerOutput,
+                    entries,
+                    Array.Empty<string>()),
                 HotReloadShimCompileResult.SuccessResult(
                     typeof(HotReloadOrchestratorTests).Assembly,
                     new byte[] { 1 },
                     Array.Empty<byte>()),
-                entries,
-                Array.Empty<string>(),
-                Array.Empty<string>(),
-                unchangedMethodCount: 0,
-                revertedUnchangedCount: 0);
+                entries)[0];
         }
 
         /// <summary>
-        /// What: builds the apply-pipeline context these direct-apply tests need. The applier
-        /// reads only the assembly name, the file path and the worker output; the remaining
-        /// fields exist to satisfy the context's own preconditions.
+        /// What: builds the one-file group context these direct-apply tests need, and stamps the
+        /// entries with that file so the apply stage can route them. The applier reads only the
+        /// assembly name, the group's single file and the worker output; the remaining fields
+        /// exist to satisfy the context's own preconditions.
         /// </summary>
         private static HotReloadApplyContext CreateApplyContext(
             string assemblyName,
             string projectRelativePath,
-            TransformWorkerOutputDto workerOutput)
+            TransformWorkerOutputDto workerOutput,
+            TransformWorkerEntryDto[] entries,
+            string[] addedFieldNames)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -2947,11 +2944,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             Assert.That(compilationAssembly, Is.Not.Null, "Compilation assembly missing: " + assemblyName);
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                entry.sourceProjectRelativePath = projectRelativePath;
+            }
+
+            HotReloadGroupFile file = new HotReloadGroupFile(
+                projectRelativePath,
+                projectRelativePath,
+                projectRelativePath,
+                assemblyName,
+                compilationAssembly,
+                targetDllPath,
+                projectRoot,
+                new HotReloadFileSinks(new List<string>(), null))
+            {
+                FileOutput = workerOutput.files[0],
+                SnapshotLabels = new HashSet<string>(),
+                SnapshotAddedLabels = new HashSet<string>(),
+                AddedFieldNames = addedFieldNames,
+                AddedConstNames = Array.Empty<string>()
+            };
             return new HotReloadApplyContext(
                 projectRoot,
                 assemblyName,
-                projectRelativePath,
-                projectRelativePath,
                 "direct-apply",
                 compilationAssembly,
                 targetDllPath,
@@ -2964,9 +2980,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 },
                 workerOutput,
-                workerOutput.files[0],
-                new HashSet<string>(),
-                new HashSet<string>());
+                new[] { file });
         }
 
         private static HotReloadOrchestratorResult ToOrchestratorResult(
@@ -7301,14 +7315,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string WriteEditedSource(string fileName, string contents)
         {
-            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string directory = Path.Combine(
-                projectRoot,
-                HotReloadConstants.TestSourcesRelativeDirectory);
-            Directory.CreateDirectory(directory);
-            string path = Path.Combine(directory, fileName);
-            File.WriteAllText(path, contents);
-            return path;
+            return HotReloadTestSourceWriter.WriteEditedSource(fileName, contents);
         }
 
         private static string ResolveSiblingConstDefinitionsPath()
