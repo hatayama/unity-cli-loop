@@ -348,6 +348,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CallerProjectRelativePath(),
                 HotReloadMethodOutcomeKind.Patched,
                 "Call");
+            Assert.That(
+                second.ReappliedSiblingPaths,
+                Is.EquivalentTo(new[] { CallerProjectRelativePath() }));
         }
 
         /// <summary>

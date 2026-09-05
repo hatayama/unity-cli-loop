@@ -135,7 +135,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             for (int extraIndex = 0; extraIndex < extraResults.Count; extraIndex++)
             {
-                run.Add(extraResults[extraIndex].Path, extraResults[extraIndex].Result);
+                run.AddReappliedSibling(extraResults[extraIndex].Path, extraResults[extraIndex].Result);
             }
 
             run.RecordAppliedSourceHashes();

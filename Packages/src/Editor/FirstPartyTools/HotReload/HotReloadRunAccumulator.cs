@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly List<string> _addedFields = new List<string>();
         private readonly List<string> _addedConsts = new List<string>();
         private readonly List<string> _siblingDerivedWarnings = new List<string>();
+        private readonly List<string> _reappliedSiblingPaths = new List<string>();
         private readonly List<HotReloadOneShotCallerNoteEnricher.Candidate> _oneShotCallerNoteCandidates =
             new List<HotReloadOneShotCallerNoteEnricher.Candidate>();
         // Why staged (not recorded per file): duplicate paths in one run must still apply
@@ -64,6 +65,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 fileResult.SourceContentSha256,
                 fileResult.Outcomes);
+        }
+
+        /// <summary>
+        /// Merges one auto-reapplied sibling file and records its project-relative path.
+        /// </summary>
+        public void AddReappliedSibling(string projectRelativePath, HotReloadFileProcessResult fileResult)
+        {
+            // Overloads are forbidden, so this distinct name both Adds and records extraResults
+            // paths for continuing line-shift aggregation.
+            Add(projectRelativePath, fileResult);
+            _reappliedSiblingPaths.Add(projectRelativePath);
         }
 
         /// <summary>Writes the staged applied-source hashes to the ledger. Call once after every file was added.</summary>
@@ -112,7 +124,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _addedFields.ToArray(),
                 _addedConsts.ToArray(),
                 _revertedUnchangedTotal,
-                autoRefreshHold);
+                autoRefreshHold,
+                _reappliedSiblingPaths.ToArray());
         }
 
         private void AppendInlineRiskWarning()

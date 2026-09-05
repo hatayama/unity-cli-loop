@@ -58,7 +58,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 warnings,
                 result.Methods,
                 HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadEditedSourceFromDisk,
-                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadCompiledSnapshot);
+                HotReloadUnpatchedMethodLineShiftWarningBuilder.ReadCompiledSnapshot,
+                result.ReappliedSiblingPaths);
 
             // Why before the count snapshot: a Skipped method is applied by 'uloop compile' like
             // the warnings above it, so it must count toward the single-compile resolution suffix.
