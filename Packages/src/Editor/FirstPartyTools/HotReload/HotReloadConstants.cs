@@ -68,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public const string ActiveSiblingRebindFailedWarningFormat =
             "'{0}' was pulled in to re-bind its active patches but this reload failed for it; "
-            + "its patches stay as they were (see its rows).";
+            + "see its rows for which patches changed and run uloop compile to clear the run.";
 
         // Wire value for TransformWorkerEntryDto.patchKind when the worker emits a shim for a
         // method that exists only in the edited source. Keep in sync with PatchKinds.AddedMethod
