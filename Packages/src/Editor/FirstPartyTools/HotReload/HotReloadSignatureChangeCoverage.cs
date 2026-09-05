@@ -13,24 +13,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         internal static HashSet<HotReloadQualifiedMethodIdentity> CollectCoveredMethodIdentities(
             string assemblyName,
-            TransformWorkerEntryDto[] entries,
-            HotReloadCallSiteScanner.CompiledMethodIdentity[] targets)
+            TransformWorkerEntryDto[] entries)
         {
             HashSet<HotReloadQualifiedMethodIdentity> coveredIdentities =
                 new HashSet<HotReloadQualifiedMethodIdentity>();
             foreach (TransformWorkerEntryDto entry in entries)
             {
                 coveredIdentities.Add(CreateEntryIdentity(assemblyName, entry));
-            }
-
-            foreach (HotReloadCallSiteScanner.CompiledMethodIdentity target in targets)
-            {
-                // Why include removed-signature targets: a deleted helper that called the
-                // replaced method is already stale (removed-members warning). Treating that
-                // corpse as uncovered would gate a same-file helper-delete + return-type
-                // change, which is still a consistent old world. Fail-closed only for live
-                // compiled callers that will keep invoking the old method.
-                coveredIdentities.Add(CreateTargetIdentity(target));
             }
 
             return coveredIdentities;
@@ -230,11 +219,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string assemblyName,
             TransformWorkerEntryDto[] entriesToPatch,
             IReadOnlyList<HotReloadCallSiteScanner.CallSiteHit> hits,
-            IReadOnlyList<string> scanTargetKeys)
+            IReadOnlyCollection<HotReloadQualifiedMethodIdentity> deletedCallerExemptions)
         {
             Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
             Debug.Assert(hits != null, "hits must not be null.");
-            Debug.Assert(scanTargetKeys != null, "scanTargetKeys must not be null.");
+            Debug.Assert(deletedCallerExemptions != null, "deletedCallerExemptions must not be null.");
 
             HashSet<HotReloadQualifiedMethodIdentity> coveredIdentities =
                 new HashSet<HotReloadQualifiedMethodIdentity>();
@@ -243,9 +232,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 coveredIdentities.Add(CreateEntryIdentity(assemblyName, entry));
             }
 
-            foreach (string targetKey in scanTargetKeys)
+            foreach (HotReloadQualifiedMethodIdentity deletedCallerExemption in deletedCallerExemptions)
             {
-                coveredIdentities.Add(new HotReloadQualifiedMethodIdentity(assemblyName, targetKey));
+                coveredIdentities.Add(deletedCallerExemption);
             }
 
             Dictionary<string, List<HotReloadQualifiedMethodIdentity>> uncoveredCallersByTarget =
@@ -269,23 +258,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return lostReplacementKeys;
-        }
-
-        internal static List<string> CollectScanTargetKeys(
-            HotReloadCallSiteScanner.CompiledMethodIdentity[] targets)
-        {
-            List<string> keys = new List<string>(targets.Length);
-            foreach (HotReloadCallSiteScanner.CompiledMethodIdentity target in targets)
-            {
-                keys.Add(
-                    HotReloadMethodKeys.BuildMethodKeyParts(
-                        target.TypeMetadataName,
-                        target.MethodName,
-                        target.ParameterTypeFullNames,
-                        target.GenericArity));
-            }
-
-            return keys;
         }
 
         internal static HashSet<HotReloadQualifiedMethodIdentity> CollectEditedFileMethodIdentities(
@@ -446,17 +418,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 unchanged.parameterTypeFullNames,
                 unchanged.genericArity);
             return new HotReloadQualifiedMethodIdentity(assemblyName, methodKey);
-        }
-
-        private static HotReloadQualifiedMethodIdentity CreateTargetIdentity(
-            HotReloadCallSiteScanner.CompiledMethodIdentity target)
-        {
-            string methodKey = HotReloadMethodKeys.BuildMethodKeyParts(
-                target.TypeMetadataName,
-                target.MethodName,
-                target.ParameterTypeFullNames,
-                target.GenericArity);
-            return new HotReloadQualifiedMethodIdentity(target.AssemblyName, methodKey);
         }
 
         private static HotReloadQualifiedMethodIdentity CreateCallerIdentity(

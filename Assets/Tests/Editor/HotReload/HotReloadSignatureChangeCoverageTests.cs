@@ -30,8 +30,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadSignatureChangeGate.CollectInitialUncoveredCallers(
                     EditedAssemblyName,
                     new[] { localCaller },
-                    Array.Empty<HotReloadCallSiteScanner.CompiledMethodIdentity>(),
-                    new[] { hit });
+                    new[] { hit },
+                    new HashSet<HotReloadQualifiedMethodIdentity>());
 
             Assert.That(uncovered, Does.ContainKey(ReplacementKey));
             Assert.That(
@@ -52,8 +52,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadSignatureChangeGate.CollectInitialUncoveredCallers(
                     EditedAssemblyName,
                     new[] { localCaller },
-                    Array.Empty<HotReloadCallSiteScanner.CompiledMethodIdentity>(),
-                    new[] { hit });
+                    new[] { hit },
+                    new HashSet<HotReloadQualifiedMethodIdentity>());
 
             Assert.That(uncovered, Is.Empty);
         }
@@ -160,8 +160,152 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 EditedAssemblyName,
                 new[] { replacement, localCaller },
                 new[] { hit },
-                new[] { ReplacementKey });
+                new HashSet<HotReloadQualifiedMethodIdentity>());
 
+            Assert.That(losses, Is.EqualTo(new[] { ReplacementKey }));
+        }
+
+        /// <summary>
+        /// A caller replacement that disappears after the gate retry is not treated as a deletion.
+        /// </summary>
+        [Test]
+        public void FindSignatureChangeCoverageLosses_DroppedSourceLiveCaller_GatesRemainingReplacement()
+        {
+            TransformWorkerEntryDto callerReplacement = CreateOrdinaryEntry();
+            callerReplacement.replacesCompiledMethod = true;
+            TransformWorkerEntryDto targetReplacement = CreateReplacementEntry();
+            HashSet<HotReloadQualifiedMethodIdentity> exemptions = HotReloadDeletedCallerExemptions.Collect(
+                EditedAssemblyName,
+                new[] { callerReplacement, targetReplacement },
+                Array.Empty<TransformWorkerUnchangedMethodDto>(),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                Array.Empty<TransformWorkerRemovedMethodSignatureDto>());
+
+            List<string> losses = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
+                EditedAssemblyName,
+                new[] { targetReplacement },
+                new[] { CreateHit(EditedAssemblyName) },
+                exemptions);
+
+            Assert.That(losses, Is.EqualTo(new[] { ReplacementKey }));
+        }
+
+        /// <summary>
+        /// A caller replacement that remains in the final apply set covers its target.
+        /// </summary>
+        [Test]
+        public void FindSignatureChangeCoverageLosses_RetainedSourceLiveCaller_AllowsRemainingReplacement()
+        {
+            TransformWorkerEntryDto callerReplacement = CreateOrdinaryEntry();
+            callerReplacement.replacesCompiledMethod = true;
+            TransformWorkerEntryDto targetReplacement = CreateReplacementEntry();
+            HashSet<HotReloadQualifiedMethodIdentity> exemptions = HotReloadDeletedCallerExemptions.Collect(
+                EditedAssemblyName,
+                new[] { callerReplacement, targetReplacement },
+                Array.Empty<TransformWorkerUnchangedMethodDto>(),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                Array.Empty<TransformWorkerRemovedMethodSignatureDto>());
+
+            List<string> losses = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
+                EditedAssemblyName,
+                new[] { callerReplacement, targetReplacement },
+                new[] { CreateHit(EditedAssemblyName) },
+                exemptions);
+
+            Assert.That(losses, Is.Empty);
+        }
+
+        /// <summary>
+        /// A caller absent from the initial source-live rows remains a deletion exemption.
+        /// </summary>
+        [Test]
+        public void FindSignatureChangeCoverageLosses_DeletedCaller_AllowsRemainingReplacement()
+        {
+            TransformWorkerEntryDto targetReplacement = CreateReplacementEntry();
+            HashSet<HotReloadQualifiedMethodIdentity> exemptions = HotReloadDeletedCallerExemptions.Collect(
+                EditedAssemblyName,
+                new[] { targetReplacement },
+                Array.Empty<TransformWorkerUnchangedMethodDto>(),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                new[] { CreateCallerRemovedSignature() });
+
+            List<string> losses = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
+                EditedAssemblyName,
+                new[] { targetReplacement },
+                new[] { CreateHit(EditedAssemblyName) },
+                exemptions);
+
+            Assert.That(losses, Is.Empty);
+        }
+
+        /// <summary>
+        /// A deleted local caller does not exempt a same-key caller from another assembly.
+        /// </summary>
+        [Test]
+        public void FindSignatureChangeCoverageLosses_ExternalSameKeyCaller_IsNotDeletionExempt()
+        {
+            TransformWorkerEntryDto targetReplacement = CreateReplacementEntry();
+            HashSet<HotReloadQualifiedMethodIdentity> exemptions = HotReloadDeletedCallerExemptions.Collect(
+                EditedAssemblyName,
+                new[] { targetReplacement },
+                Array.Empty<TransformWorkerUnchangedMethodDto>(),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                new[] { CreateCallerRemovedSignature() });
+
+            List<string> losses = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
+                EditedAssemblyName,
+                new[] { targetReplacement },
+                new[] { CreateHit(ExternalAssemblyName) },
+                exemptions);
+
+            Assert.That(losses, Is.EqualTo(new[] { ReplacementKey }));
+        }
+
+        /// <summary>
+        /// An unidentified initial skipped row removes every deletion exemption.
+        /// </summary>
+        [Test]
+        public void FindSignatureChangeCoverageLosses_UnknownSkippedMethodKey_GatesRemainingReplacement()
+        {
+            TransformWorkerEntryDto targetReplacement = CreateReplacementEntry();
+            HashSet<HotReloadQualifiedMethodIdentity> exemptions = HotReloadDeletedCallerExemptions.Collect(
+                EditedAssemblyName,
+                new[] { targetReplacement },
+                Array.Empty<TransformWorkerUnchangedMethodDto>(),
+                new[] { new TransformWorkerSkippedDto() },
+                new[] { CreateCallerRemovedSignature() });
+
+            List<string> losses = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
+                EditedAssemblyName,
+                new[] { targetReplacement },
+                new[] { CreateHit(EditedAssemblyName) },
+                exemptions);
+
+            Assert.That(exemptions, Is.Empty);
+            Assert.That(losses, Is.EqualTo(new[] { ReplacementKey }));
+        }
+
+        /// <summary>
+        /// A keyed skipped caller remains source-live and is not a deletion exemption.
+        /// </summary>
+        [Test]
+        public void FindSignatureChangeCoverageLosses_KeyedSkippedCaller_GatesRemainingReplacement()
+        {
+            TransformWorkerEntryDto targetReplacement = CreateReplacementEntry();
+            HashSet<HotReloadQualifiedMethodIdentity> exemptions = HotReloadDeletedCallerExemptions.Collect(
+                EditedAssemblyName,
+                new[] { targetReplacement },
+                Array.Empty<TransformWorkerUnchangedMethodDto>(),
+                new[] { new TransformWorkerSkippedDto { methodKey = CallerKey } },
+                new[] { CreateCallerRemovedSignature() });
+
+            List<string> losses = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
+                EditedAssemblyName,
+                new[] { targetReplacement },
+                new[] { CreateHit(EditedAssemblyName) },
+                exemptions);
+
+            Assert.That(exemptions, Is.Empty);
             Assert.That(losses, Is.EqualTo(new[] { ReplacementKey }));
         }
 
@@ -235,6 +379,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 parameterTypeFullNames = Array.Empty<string>(),
                 genericArity = 0,
                 replacesCompiledMethod = true
+            };
+        }
+
+        private static TransformWorkerRemovedMethodSignatureDto CreateCallerRemovedSignature()
+        {
+            return new TransformWorkerRemovedMethodSignatureDto
+            {
+                typeMetadataName = "Example.Caller",
+                methodName = "Call",
+                parameterTypeFullNames = Array.Empty<string>(),
+                genericArity = 0
             };
         }
 
