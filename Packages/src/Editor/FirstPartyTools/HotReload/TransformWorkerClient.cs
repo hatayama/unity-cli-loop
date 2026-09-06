@@ -38,6 +38,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return TransformWorkerClientResult.Failure(artifactError);
             }
 
+            return await RunWorkerAsync(input, ct).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Runs the worker on a request that has already been checked, without checking it again.
+        /// </summary>
+        // Why separate from RunAsync: the worker consumes the request JSON as a boundary of its
+        // own and has to refuse a record it cannot act on even when the request did not come from
+        // this client. Its guard can only be shown by handing it a request this client would have
+        // refused first.
+        internal static async Task<TransformWorkerClientResult> RunWorkerAsync(
+            TransformWorkerInputDto input,
+            CancellationToken ct)
+        {
             TransformWorkerBootstrapResult bootstrapResult =
                 await TransformWorkerBootstrap.EnsureWorkerAsync(ct).ConfigureAwait(false);
             if (!bootstrapResult.Success)

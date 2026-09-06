@@ -123,6 +123,16 @@ internal sealed class IntroducedTypeArtifactMap
             return false;
         }
 
+        // Without the owning file and the fingerprint, re-verification finds no record to compare
+        // the edited declaration against, silently leaves it in the tree and binds the type from
+        // source while the loaded assembly already holds it.
+        if (string.IsNullOrWhiteSpace(artifactType.OwnerProjectRelativePath)
+            || string.IsNullOrWhiteSpace(artifactType.DeclarationFingerprint))
+        {
+            errorMessage = "Introduced-type artifact entry must carry its owning file and its declaration fingerprint.";
+            return false;
+        }
+
         if (assembly.GetTypeByMetadataName(artifactType.MetadataName) == null)
         {
             errorMessage = "Introduced-type artifact does not contain " + artifactType.MetadataName + ".";

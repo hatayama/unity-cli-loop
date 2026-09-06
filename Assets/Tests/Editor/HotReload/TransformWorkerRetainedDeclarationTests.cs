@@ -172,6 +172,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: the worker itself refuses a record whose type names no owning file, so a request
+        /// that did not pass through the client's own check still fails the run instead of
+        /// silently leaving the declaration in the tree and binding the type from source.
+        /// </summary>
+        [Test]
+        public async Task Transform_ArtifactTypeWithoutOwner_FailsRunInsideTheWorker()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateAsync("WorkerWithoutOwner", EditedSource);
+            TransformWorkerIntroducedTypeArtifactDto ownerless =
+                fixture.CreateRecordedArtifact(fixture.RetainedFingerprint);
+            ownerless.types[0].ownerProjectRelativePath = string.Empty;
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunWorkerAsync(
+                fixture.BuildTransformInput(new[] { ownerless }),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Output, Is.Null.Or.Property("entries").Empty);
+        }
+
+        /// <summary>
         /// What: a preprocessor region that closes inside the retained declaration makes the
         /// blanked text unparseable, and the run fails instead of transforming the file against a
         /// tree the parser had to guess at.
