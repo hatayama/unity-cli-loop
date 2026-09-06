@@ -9,8 +9,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         public Func<int> GetCurrentGroup { get; set; }
 
-        public Action<string> SetCurrentGroupName { get; set; }
-
         public Action<int> CollapseUndoOperations { get; set; }
+
+        public Action IncrementCurrentGroup { get; set; }
     }
 }
