@@ -228,11 +228,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             finally
             {
-                if (Directory.Exists(tempDirectory))
-                {
-                    Directory.Delete(tempDirectory, recursive: true);
-                }
+                DeleteTempDirectory(tempDirectory);
             }
+        }
+
+        // Why swallow only these two: a worker killed on the timeout path can still hold the
+        // request files open (Windows most of all), and losing a decided result to a cleanup
+        // error would be worse than leaving a temp directory behind for the OS to reap.
+        private static void DeleteTempDirectory(string tempDirectory)
+        {
+            if (!Directory.Exists(tempDirectory))
+            {
+                return;
+            }
+
+            try
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+            catch (IOException ex)
+            {
+                LogTempCleanupFailure(tempDirectory, ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                LogTempCleanupFailure(tempDirectory, ex.Message);
+            }
+        }
+
+        private static void LogTempCleanupFailure(string tempDirectory, string reason)
+        {
+            VibeLogger.LogWarning(
+                HotReloadConstants.VibeLogWorkerHostTempCleanupFailed,
+                "Resident transform worker request files could not be deleted.",
+                new { path = tempDirectory, reason });
         }
 
         // One exchange with one process. Returns a final result, or a broken-conversation reason
@@ -482,13 +511,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (!channel.TryQuitGracefully(GracefulQuitWaitMilliseconds))
                 {
-                    channel.Kill(KillWaitMilliseconds);
+                    KillQuietly(channel);
                 }
             }
             catch (IOException)
             {
                 // The pipe is already gone; the process is exiting or exited.
-                channel.Kill(KillWaitMilliseconds);
+                KillQuietly(channel);
             }
             catch (InvalidOperationException)
             {
@@ -497,6 +526,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             finally
             {
                 channel.Dispose();
+            }
+        }
+
+        // Why swallow: the process can exit between the liveness check and the kill, and a race
+        // the host lost still leaves it with the outcome it asked for - a dead worker.
+        private static void KillQuietly(ITransformWorkerChannel channel)
+        {
+            try
+            {
+                channel.Kill(KillWaitMilliseconds);
+            }
+            catch (InvalidOperationException)
+            {
+                // The process exited on its own first.
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // The OS refused the kill because the process is already gone.
             }
         }
 

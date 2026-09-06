@@ -194,7 +194,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using CancellationTokenSource queuedCancellation = new CancellationTokenSource();
 
             Task<TransformWorkerHostResult> first = _host.RunAsync(CreateInput(1), firstCancellation.Token);
-            await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds);
+            Assert.That(
+                await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds),
+                Is.True,
+                "The scripted worker never received the request.");
             Task<TransformWorkerHostResult> queued = _host.RunAsync(CreateInput(1), queuedCancellation.Token);
             queuedCancellation.Cancel();
 
@@ -221,7 +224,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using CancellationTokenSource cancellation = new CancellationTokenSource();
 
             Task<TransformWorkerHostResult> inFlight = _host.RunAsync(CreateInput(1), cancellation.Token);
-            await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds);
+            Assert.That(
+                await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds),
+                Is.True,
+                "The scripted worker never received the request.");
             cancellation.Cancel();
 
             Assert.That(await CompletesWithCancellationAsync(inFlight), Is.True, "The in-flight request must be canceled.");
@@ -244,7 +250,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _factory.Enqueue(ScriptStep.Succeed);
 
             Task<TransformWorkerHostResult> inFlight = _host.RunAsync(CreateInput(1), CancellationToken.None);
-            await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds);
+            Assert.That(
+                await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds),
+                Is.True,
+                "The scripted worker never received the request.");
             _host.Shutdown("assembly reload for test");
 
             TransformWorkerHostResult closed = await inFlight;
@@ -391,7 +400,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _factory.Enqueue(ScriptStep.Hang);
 
             Task<TransformWorkerHostResult> first = _host.RunAsync(CreateInput(1), CancellationToken.None);
-            await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds);
+            Assert.That(
+                await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds),
+                Is.True,
+                "The scripted worker never received the request.");
             Task<TransformWorkerHostResult> queued = _host.RunAsync(CreateInput(1), CancellationToken.None);
 
             TransformWorkerHostResult firstResult = await first;
@@ -417,7 +429,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Stopwatch elapsed = Stopwatch.StartNew();
             Task<TransformWorkerHostResult> request = _host.RunAsync(CreateInput(1), CancellationToken.None);
-            await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds);
+            Assert.That(
+                await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds),
+                Is.True,
+                "The scripted worker never received the request.");
             await Task.Delay(BreakConversationDelayMilliseconds);
             _factory.Channels[0].ReleaseHang(ScriptStep.Garbage);
 
@@ -575,9 +590,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             get { return _exited; }
         }
 
-        public Task WaitForRequestAsync(int timeoutMilliseconds)
+        /// <summary>True when the first request arrived, false when the wait timed out.</summary>
+        public async Task<bool> WaitForRequestAsync(int timeoutMilliseconds)
         {
-            return Task.WhenAny(_firstRequestReceived.Task, Task.Delay(timeoutMilliseconds));
+            Task completed = await Task.WhenAny(_firstRequestReceived.Task, Task.Delay(timeoutMilliseconds));
+            return ReferenceEquals(completed, _firstRequestReceived.Task);
         }
 
         /// <summary>Lets a hanging request continue with <paramref name="step"/>.</summary>
