@@ -981,7 +981,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
                 FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
-                Is.Not.Null,
+                Is.EqualTo(PropertyPatternReason),
                 FormatSkipped(result.Output.skipped));
         }
 
