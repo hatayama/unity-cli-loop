@@ -41,6 +41,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// The reusable Cecil view of one dll file, valid while <see cref="Fingerprint"/> matches the file.
+        /// An entry is returned outside the cache lock and may be disposed by a later lookup that
+        /// replaces or evicts it, so its lifetime relies on hot reload runs being single-flight:
+        /// a caller must finish with an entry before the next run starts.
         /// </summary>
         internal sealed class Entry : IDisposable
         {
@@ -113,16 +116,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        /// <summary>
+        /// Test-only hooks into the load path, used to force a file change between the fingerprint
+        /// and the Cecil read, or a failure while the index is being built.
+        /// </summary>
+        internal sealed class LoadProbes
+        {
+            public Action<string> BeforeAssemblyRead;
+            public Action<AssemblyDefinition> AfterAssemblyRead;
+        }
+
+        // Why two attempts: the fingerprint and the full Cecil read are separate opens, so the
+        // file can be replaced in between. One retry absorbs a single replacement; a second
+        // mismatch means the file is being rewritten continuously and the caller must fail.
+        private const int MaxConsistentLoadAttempts = 2;
+
         public static HotReloadCompiledCallSiteCache Shared { get; } =
             new HotReloadCompiledCallSiteCache(DefaultCapacity);
 
         private readonly object _gate = new object();
         private readonly int _capacity;
+        private readonly LoadProbes _probes;
         private readonly Dictionary<string, Entry> _entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
         private long _accessSequence;
         private int _loadCount;
 
-        public HotReloadCompiledCallSiteCache(int capacity)
+        public HotReloadCompiledCallSiteCache(int capacity, LoadProbes probes = null)
         {
             if (capacity <= 0)
             {
@@ -130,6 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             _capacity = capacity;
+            _probes = probes;
         }
 
         /// <summary>
@@ -161,19 +181,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Returns the cached view of <paramref name="dllPath"/> when the file is byte-identical to
-        /// the cached one, otherwise reads it and replaces the stale entry. The file must exist.
+        /// Returns the cached view of <paramref name="dllPath"/> while the file's length, last
+        /// write time, and module version id (MVID) all match the cached entry; otherwise reads the
+        /// file and replaces the stale entry. This is a heuristic identity, not a content hash: it
+        /// assumes a recompile assigns a new MVID, which the compiler does for every build output.
+        /// A rewrite that keeps all three (a metadata-preserving edit with the timestamp restored)
+        /// is served stale. The file must exist.
         /// </summary>
+        /// <exception cref="IOException">The file kept changing while it was being read.</exception>
         public Entry GetOrLoad(string dllPath)
         {
             Debug.Assert(!string.IsNullOrEmpty(dllPath), "dllPath must not be null or empty.");
 
             string fullPath = Path.GetFullPath(dllPath);
-            FileInfo fileInfo = new FileInfo(fullPath);
-            DllFingerprint fingerprint = new DllFingerprint(
-                fileInfo.Length,
-                fileInfo.LastWriteTimeUtc.Ticks,
-                ReadModuleVersionId(fullPath));
+            DllFingerprint fingerprint = ReadFingerprint(fullPath);
 
             lock (_gate)
             {
@@ -190,9 +211,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     existing.Dispose();
                 }
 
-                Entry loaded = Load(fullPath, fingerprint);
+                Entry loaded = LoadConsistent(fullPath, fingerprint);
                 loaded.LastAccess = _accessSequence;
-                _loadCount++;
                 EvictLeastRecentlyUsedWhileOverCapacity();
                 _entries[fullPath] = loaded;
                 return loaded;
@@ -237,6 +257,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        private static DllFingerprint ReadFingerprint(string fullPath)
+        {
+            FileInfo fileInfo = new FileInfo(fullPath);
+            return new DllFingerprint(
+                fileInfo.Length,
+                fileInfo.LastWriteTimeUtc.Ticks,
+                ReadModuleVersionId(fullPath));
+        }
+
         private static Guid ReadModuleVersionId(string fullPath)
         {
             // Deferred reading touches only the metadata header, which is what makes this check
@@ -246,25 +275,72 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return module.Mvid;
         }
 
-        private static Entry Load(string fullPath, DllFingerprint fingerprint)
+        // Publishes an entry only when the file read by Cecil is the file the fingerprint
+        // describes: the module's own MVID must equal the fingerprinted one, and the length and
+        // write time must still match after the read.
+        private Entry LoadConsistent(string fullPath, DllFingerprint fingerprint)
         {
+            DllFingerprint expected = fingerprint;
+            for (int attempt = 1; attempt <= MaxConsistentLoadAttempts; attempt++)
+            {
+                Entry loaded = Load(fullPath, expected);
+                _loadCount++;
+                FileInfo afterRead = new FileInfo(fullPath);
+                DllFingerprint observed = new DllFingerprint(
+                    afterRead.Length,
+                    afterRead.LastWriteTimeUtc.Ticks,
+                    loaded.Module.Mvid);
+                if (observed.Equals(expected))
+                {
+                    return loaded;
+                }
+
+                loaded.Dispose();
+                expected = ReadFingerprint(fullPath);
+            }
+
+            throw new IOException(
+                "Compiled assembly changed while it was being read " + MaxConsistentLoadAttempts
+                + " times in a row: " + fullPath);
+        }
+
+        private Entry Load(string fullPath, DllFingerprint fingerprint)
+        {
+            _probes?.BeforeAssemblyRead?.Invoke(fullPath);
+
             // InMemory + no resolver: operand FullName comparison in the scanner does not require
             // type resolution, and the file handle is released as soon as the read completes.
             ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
             AssemblyDefinition assembly = AssemblyDefinition.ReadAssembly(fullPath, readerParameters);
-            ModuleDefinition module = assembly.MainModule;
-            Dictionary<string, MethodDefinition> logicalOwners = new Dictionary<string, MethodDefinition>();
-            List<CompiledCallSite> callSites = new List<CompiledCallSite>();
-            foreach (TypeDefinition type in module.GetTypes())
+            // Why an ownership flag: the entry takes over disposal once constructed; until then a
+            // failure while indexing must release the assembly here.
+            bool ownershipTransferred = false;
+            try
             {
-                foreach (MethodDefinition method in type.Methods)
+                _probes?.AfterAssemblyRead?.Invoke(assembly);
+                ModuleDefinition module = assembly.MainModule;
+                Dictionary<string, MethodDefinition> logicalOwners = new Dictionary<string, MethodDefinition>();
+                List<CompiledCallSite> callSites = new List<CompiledCallSite>();
+                foreach (TypeDefinition type in module.GetTypes())
                 {
-                    TryIndexStateMachineOwner(method, logicalOwners);
-                    CollectCallSites(method, callSites);
+                    foreach (MethodDefinition method in type.Methods)
+                    {
+                        TryIndexStateMachineOwner(method, logicalOwners);
+                        CollectCallSites(method, callSites);
+                    }
+                }
+
+                Entry entry = new Entry(fullPath, fingerprint, assembly, logicalOwners, callSites);
+                ownershipTransferred = true;
+                return entry;
+            }
+            finally
+            {
+                if (!ownershipTransferred)
+                {
+                    assembly.Dispose();
                 }
             }
-
-            return new Entry(fullPath, fingerprint, assembly, logicalOwners, callSites);
         }
 
         private static void CollectCallSites(MethodDefinition method, List<CompiledCallSite> callSites)

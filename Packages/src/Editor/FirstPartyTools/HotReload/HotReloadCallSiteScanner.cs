@@ -152,6 +152,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // change, which recompiles and reloads the domain (resetting this field).
         private static Dictionary<string, string[]> _referencedDllFileNamesByAssembly;
 
+        static HotReloadCallSiteScanner()
+        {
+            // Why: a compile that fails keeps the domain alive, so without this an asmdef change
+            // made during a broken compile would survive in the memo until the next reload.
+            CompilationPipeline.compilationStarted += _ => _referencedDllFileNamesByAssembly = null;
+        }
+
         private static Dictionary<string, string[]> GetReferencedDllFileNamesByAssembly()
         {
             if (_referencedDllFileNamesByAssembly != null)

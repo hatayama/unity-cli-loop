@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using System.Linq;
+
+using Mono.Cecil;
 
 using NUnit.Framework;
 
@@ -145,6 +148,118 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: when the dll is replaced between the fingerprint and the Cecil read, the entry
+        /// published describes the file actually read (fingerprint MVID equals the module MVID),
+        /// never the pre-replacement fingerprint paired with the post-replacement view.
+        /// </summary>
+        [Test]
+        public void GetOrLoad_FileReplacedBetweenFingerprintAndRead_PublishesConsistentEntry()
+        {
+            string dllPath = CopyTestAssembly("a.dll");
+            DateTime originalWriteTime = File.GetLastWriteTimeUtc(dllPath);
+            byte[] otherModule = ReadOtherAssemblyPaddedTo(new FileInfo(dllPath).Length);
+            int readCount = 0;
+            HotReloadCompiledCallSiteCache.LoadProbes probes = new HotReloadCompiledCallSiteCache.LoadProbes
+            {
+                BeforeAssemblyRead = _ =>
+                {
+                    readCount++;
+                    if (readCount != 1)
+                    {
+                        return;
+                    }
+
+                    File.WriteAllBytes(dllPath, otherModule);
+                    File.SetLastWriteTimeUtc(dllPath, originalWriteTime);
+                }
+            };
+            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(2, probes);
+            try
+            {
+                HotReloadCompiledCallSiteCache.Entry entry = cache.GetOrLoad(dllPath);
+
+                Guid onDisk = ModuleDefinition.ReadModule(dllPath, new ReaderParameters { ReadingMode = ReadingMode.Deferred }).Mvid;
+                Assert.That(entry.Fingerprint.ModuleVersionId, Is.EqualTo(entry.Module.Mvid));
+                Assert.That(entry.Module.Mvid, Is.EqualTo(onDisk));
+                Assert.That(cache.LoadCount, Is.EqualTo(2), "The inconsistent first read must be discarded and retried.");
+                Assert.That(cache.Count, Is.EqualTo(1));
+            }
+            finally
+            {
+                cache.Clear();
+            }
+        }
+
+        /// <summary>
+        /// What: a dll that changes before every read is reported as an I/O failure instead of a
+        /// stale entry, and nothing is published.
+        /// </summary>
+        [Test]
+        public void GetOrLoad_FileChangesBeforeEveryRead_ThrowsWithoutPublishing()
+        {
+            string dllPath = CopyTestAssembly("a.dll");
+            byte[] original = File.ReadAllBytes(dllPath);
+            byte[] otherModule = ReadOtherAssemblyPaddedTo(original.Length);
+            bool useOther = true;
+            HotReloadCompiledCallSiteCache.LoadProbes probes = new HotReloadCompiledCallSiteCache.LoadProbes
+            {
+                BeforeAssemblyRead = _ =>
+                {
+                    File.WriteAllBytes(dllPath, useOther ? otherModule : original);
+                    useOther = !useOther;
+                }
+            };
+            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(2, probes);
+            try
+            {
+                Assert.Throws<IOException>(() => cache.GetOrLoad(dllPath));
+                Assert.That(cache.Count, Is.EqualTo(0));
+            }
+            finally
+            {
+                cache.Clear();
+            }
+        }
+
+        /// <summary>
+        /// What: a failure while the index is being built releases the Cecil assembly and lets the
+        /// original exception through unchanged; the cache stays empty.
+        /// </summary>
+        [Test]
+        public void GetOrLoad_IndexBuildFails_DisposesAssemblyAndRethrows()
+        {
+            string dllPath = CopyTestAssembly("a.dll");
+            InvalidOperationException injected = new InvalidOperationException("index failure for test");
+            AssemblyDefinition captured = null;
+            HotReloadCompiledCallSiteCache.LoadProbes probes = new HotReloadCompiledCallSiteCache.LoadProbes
+            {
+                AfterAssemblyRead = assembly =>
+                {
+                    captured = assembly;
+                    throw injected;
+                }
+            };
+            HotReloadCompiledCallSiteCache cache = new HotReloadCompiledCallSiteCache(2, probes);
+            try
+            {
+                InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() => cache.GetOrLoad(dllPath));
+
+                Assert.That(thrown, Is.SameAs(injected));
+                Assert.That(captured, Is.Not.Null);
+                // Why this observation: metadata tables are already in memory, but a method body
+                // is read lazily from the image stream, which a disposed module has closed. That
+                // read is the only externally visible trace of AssemblyDefinition.Dispose().
+                Assert.Throws<ObjectDisposedException>(() => ReadFirstMethodBody(captured));
+                Assert.That(cache.Count, Is.EqualTo(0));
+                Assert.That(cache.LoadCount, Is.EqualTo(0));
+            }
+            finally
+            {
+                cache.Clear();
+            }
+        }
+
+        /// <summary>
         /// What: the same bytes under a different path are a separate entry and trigger a load.
         /// </summary>
         [Test]
@@ -194,6 +309,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void Constructor_NonPositiveCapacity_Throws()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => new HotReloadCompiledCallSiteCache(0));
+        }
+
+        private static void ReadFirstMethodBody(AssemblyDefinition assembly)
+        {
+            MethodDefinition firstWithBody = assembly.MainModule.GetTypes()
+                .SelectMany(type => type.Methods)
+                .First(method => method.HasBody);
+            _ = firstWithBody.Body.Instructions.Count;
         }
 
         private static byte[] ReadOtherAssemblyPaddedTo(long length)
