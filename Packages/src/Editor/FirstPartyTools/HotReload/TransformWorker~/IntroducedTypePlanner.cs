@@ -24,6 +24,7 @@ internal static class IntroducedTypePlanner
         IAssemblySymbol targetAssembly,
         string targetAssemblyName,
         string targetAssemblyMvid,
+        IntroducedTypeArtifactMap artifactMap,
         IReadOnlyList<string> defineSymbols,
         IReadOnlyList<UsingDirectiveSyntax> assemblyGlobalUsings)
     {
@@ -65,6 +66,16 @@ internal static class IntroducedTypePlanner
                 continue;
             }
 
+            string changedConst = IntroducedTypeConstDriftDetector.FindChangedReferencedConst(
+                declaration, unit.ConstDriftSemanticModel ?? unit.SemanticModel, targetAssembly);
+            if (changedConst != null)
+            {
+                unit.IntroducedTypeDiagnostics.Add(
+                    "Changed const requires a compile: " + changedConst
+                    + " referenced by " + CecilTypeNames.ToMetadataName(typeSymbol));
+                continue;
+            }
+
             unit.IntroducedTypes.Add(
                 new WorkerIntroducedType
                 {
@@ -72,7 +83,7 @@ internal static class IntroducedTypePlanner
                     OriginalAssemblyMvid = targetAssemblyMvid ?? string.Empty,
                     MetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
                     OwnerProjectRelativePath = unit.Input.ProjectRelativePath,
-                    DeclarationFingerprint = ComputeFingerprint(
+                    DeclarationFingerprint = IntroducedTypeFingerprint.Compute(
                         unit.Root,
                         declaration,
                         defineSymbols,
@@ -80,7 +91,8 @@ internal static class IntroducedTypePlanner
                         unit.SemanticModel,
                         targetAssembly,
                         targetAssemblyName,
-                        targetAssemblyMvid),
+                        targetAssemblyMvid,
+                        artifactMap),
                     Source = BuildTypeSource(unit.Root, typeSymbol, declaration, assemblyGlobalUsings)
                 });
         }
@@ -321,162 +333,5 @@ internal static class IntroducedTypePlanner
         }
 
         return false;
-    }
-
-    private static string ComputeFingerprint(
-        CompilationUnitSyntax root,
-        BaseTypeDeclarationSyntax declaration,
-        IReadOnlyList<string> defineSymbols,
-        INamedTypeSymbol typeSymbol,
-        SemanticModel semanticModel,
-        IAssemblySymbol targetAssembly,
-        string targetAssemblyName,
-        string targetAssemblyMvid)
-    {
-        StringBuilder input = new StringBuilder();
-        AppendTokens(input, declaration.DescendantTokens());
-
-        foreach (string defineSymbol in defineSymbols.OrderBy(symbol => symbol, StringComparer.Ordinal))
-        {
-            AppendValue(input, defineSymbol);
-        }
-
-        foreach (string dependencyIdentity in CollectDependencyIdentities(
-            declaration,
-            typeSymbol,
-            semanticModel,
-            targetAssembly,
-            targetAssemblyName,
-            targetAssemblyMvid))
-        {
-            AppendValue(input, dependencyIdentity);
-        }
-
-        byte[] sourceBytes = Encoding.UTF8.GetBytes(input.ToString());
-        using SHA256 hash = SHA256.Create();
-        byte[] bytes = hash.ComputeHash(sourceBytes);
-        StringBuilder builder = new StringBuilder(bytes.Length * 2);
-        for (int index = 0; index < bytes.Length; index++)
-        {
-            builder.Append(bytes[index].ToString("x2", CultureInfo.InvariantCulture));
-        }
-
-        return builder.ToString();
-    }
-
-    private static void AppendTokens(StringBuilder builder, IEnumerable<SyntaxToken> tokens)
-    {
-        foreach (SyntaxToken token in tokens)
-        {
-            builder.Append(token.RawKind.ToString(CultureInfo.InvariantCulture));
-            builder.Append(':');
-            AppendValue(builder, token.Text);
-        }
-    }
-
-    private static void AppendValue(StringBuilder builder, string value)
-    {
-        string safeValue = value ?? string.Empty;
-        builder.Append(safeValue.Length.ToString(CultureInfo.InvariantCulture));
-        builder.Append(':');
-        builder.Append(safeValue);
-        builder.Append('\n');
-    }
-
-    // Records each dependency against the ordinal position of the declaration node that binds it.
-    // An unordered set cannot tell two aliases apart when they exchange the types they bind to:
-    // the tokens are identical and the set of referenced types is the same, so the fingerprint
-    // would stay equal while the definition changed. The position is a traversal ordinal rather
-    // than an absolute span, so it survives trivia edits and unrelated using directives.
-    private static IReadOnlyList<string> CollectDependencyIdentities(
-        BaseTypeDeclarationSyntax declaration,
-        INamedTypeSymbol typeSymbol,
-        SemanticModel semanticModel,
-        IAssemblySymbol targetAssembly,
-        string targetAssemblyName,
-        string targetAssemblyMvid)
-    {
-        List<string> positionedDependencies = new List<string>();
-        HashSet<string> declaringDependency = new HashSet<string>(StringComparer.Ordinal);
-        AddDependency(typeSymbol, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, declaringDependency);
-        foreach (string identity in declaringDependency.OrderBy(identity => identity, StringComparer.Ordinal))
-        {
-            positionedDependencies.Add("self|" + identity);
-        }
-
-        int position = 0;
-        foreach (SyntaxNode node in declaration.DescendantNodesAndSelf())
-        {
-            HashSet<string> nodeDependencies = new HashSet<string>(StringComparer.Ordinal);
-            SymbolInfo symbolInfo = semanticModel.GetSymbolInfo(node);
-            AddDependency(symbolInfo.Symbol, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, nodeDependencies);
-            foreach (ISymbol candidate in symbolInfo.CandidateSymbols)
-            {
-                AddDependency(candidate, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, nodeDependencies);
-            }
-
-            TypeInfo typeInfo = semanticModel.GetTypeInfo(node);
-            AddDependency(typeInfo.Type, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, nodeDependencies);
-            AddDependency(typeInfo.ConvertedType, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, nodeDependencies);
-            foreach (string identity in nodeDependencies.OrderBy(identity => identity, StringComparer.Ordinal))
-            {
-                positionedDependencies.Add(position.ToString(CultureInfo.InvariantCulture) + "|" + identity);
-            }
-
-            position++;
-        }
-
-        return positionedDependencies;
-    }
-
-    private static void AddDependency(
-        ISymbol symbol,
-        SemanticModel semanticModel,
-        IAssemblySymbol targetAssembly,
-        string targetAssemblyName,
-        string targetAssemblyMvid,
-        HashSet<string> dependencies)
-    {
-        if (symbol == null)
-        {
-            return;
-        }
-
-        INamedTypeSymbol namedType = symbol as INamedTypeSymbol;
-        if (symbol is IMethodSymbol methodSymbol)
-        {
-            namedType = methodSymbol.ContainingType;
-        }
-        else if (symbol is IPropertySymbol propertySymbol)
-        {
-            namedType = propertySymbol.ContainingType;
-        }
-        else if (symbol is IFieldSymbol fieldSymbol)
-        {
-            namedType = fieldSymbol.ContainingType;
-        }
-
-        if (namedType == null)
-        {
-            return;
-        }
-
-        IAssemblySymbol containingAssembly = namedType.ContainingAssembly;
-        if (containingAssembly == null)
-        {
-            return;
-        }
-
-        if (SymbolEqualityComparer.Default.Equals(containingAssembly, semanticModel.Compilation.Assembly)
-            || SymbolEqualityComparer.Default.Equals(containingAssembly, targetAssembly))
-        {
-            dependencies.Add((targetAssemblyName ?? string.Empty)
-                + "|" + (targetAssemblyMvid ?? string.Empty)
-                + "|" + CecilTypeNames.ToMetadataName(namedType.OriginalDefinition));
-            return;
-        }
-
-        dependencies.Add(containingAssembly.Identity.GetDisplayName()
-            + "|" + CecilTypeNames.ToMetadataName(namedType.OriginalDefinition));
     }
 }

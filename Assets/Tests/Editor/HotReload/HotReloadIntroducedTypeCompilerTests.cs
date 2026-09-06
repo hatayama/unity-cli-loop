@@ -647,6 +647,95 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// What: a batch whose type derives from a type an earlier artifact already holds compiles
+        /// only when that artifact is among the reference paths, so the retained-artifact
+        /// references a run collects are what makes a continuation batch buildable at all.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_ContinuationBatch_NeedsTheEarlierArtifactReference()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadIntroducedTypeArtifactPaths firstPaths =
+                new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "compiler-continuation-first").Create();
+            HotReloadIntroducedTypeArtifactPaths withoutReferencePaths =
+                new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "compiler-continuation-without").Create();
+            HotReloadIntroducedTypeArtifactPaths withReferencePaths =
+                new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "compiler-continuation-with").Create();
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                new HotReloadIntroducedTypeCompilerEnvironment());
+
+            try
+            {
+                HotReloadIntroducedTypeCompilerResult first = await compiler.CompileAsync(
+                    CreateContinuationRequest(
+                        firstPaths,
+                        "ContinuationFixture.Base",
+                        "namespace ContinuationFixture { public class Base { } }",
+                        CreateReferencePaths()),
+                    CancellationToken.None);
+                Assert.That(first.Success, Is.True, first.ErrorMessage);
+
+                List<string> referencesWithArtifact = new List<string>(CreateReferencePaths());
+                HotReloadShimReferenceBuilder.AppendIntroducedTypeArtifactReferences(
+                    referencesWithArtifact,
+                    new[]
+                    {
+                        new TransformWorkerIntroducedTypeArtifactDto
+                        {
+                            assemblyFullName = firstPaths.AssemblyFullName,
+                            referencePath = firstPaths.DllPath,
+                            types = Array.Empty<TransformWorkerIntroducedTypeArtifactTypeDto>()
+                        }
+                    });
+
+                HotReloadIntroducedTypeCompilerResult withoutReference = await compiler.CompileAsync(
+                    CreateContinuationRequest(
+                        withoutReferencePaths,
+                        "ContinuationFixture.Derived",
+                        "namespace ContinuationFixture { public class Derived : Base { } }",
+                        CreateReferencePaths()),
+                    CancellationToken.None);
+                HotReloadIntroducedTypeCompilerResult withReference = await compiler.CompileAsync(
+                    CreateContinuationRequest(
+                        withReferencePaths,
+                        "ContinuationFixture.Derived",
+                        "namespace ContinuationFixture { public class Derived : Base { } }",
+                        referencesWithArtifact.ToArray()),
+                    CancellationToken.None);
+
+                Assert.That(withoutReference.Success, Is.False);
+                Assert.That(withReference.Success, Is.True, withReference.ErrorMessage);
+                Assert.That(withReference.Artifact.Assembly.GetType("ContinuationFixture.Derived"), Is.Not.Null);
+            }
+            finally
+            {
+                DeleteArtifactDirectory(firstPaths.DllPath);
+                DeleteArtifactDirectory(withoutReferencePaths.DllPath);
+                DeleteArtifactDirectory(withReferencePaths.DllPath);
+            }
+        }
+
+        private static HotReloadIntroducedTypeCompilationRequest CreateContinuationRequest(
+            HotReloadIntroducedTypeArtifactPaths paths,
+            string metadataName,
+            string source,
+            string[] referencePaths)
+        {
+            HotReloadIntroducedTypeDescriptor descriptor = new HotReloadIntroducedTypeDescriptor(
+                "OriginalAssembly",
+                "original-mvid",
+                metadataName,
+                "Assets/Continuation.cs",
+                "continuation",
+                source);
+            return HotReloadIntroducedTypeCompilationRequest.CreateBatch(
+                paths,
+                new[] { descriptor },
+                referencePaths,
+                Array.Empty<string>());
+        }
+
         // The artifact assembly is loaded from bytes rather than mapped from the file, so its
         // directory can be removed as soon as the assertions have read the emitted DLL and PDB.
         private static void DeleteArtifactDirectory(string dllPath)

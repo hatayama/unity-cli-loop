@@ -50,4 +50,8 @@ internal sealed class WorkerInput
     // Absolute paths of snapshot-mismatched sibling sources in the same compilation assembly.
     // Null/omitted is treated as empty (no sibling const-drift scan).
     public string[] ChangedSiblingSourcePaths { get; set; }
+
+    // Retained introduced-type assemblies this run may bind against.
+    // Null/omitted is treated as empty (nothing is normalized through an artifact).
+    public WorkerIntroducedTypeArtifact[] IntroducedTypeArtifacts { get; set; }
 }

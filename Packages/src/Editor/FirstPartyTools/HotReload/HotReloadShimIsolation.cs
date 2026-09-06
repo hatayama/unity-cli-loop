@@ -115,6 +115,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 defines = workerInput.defines,
                 referencePaths = workerInput.referencePaths,
                 targetTypesAssemblyPath = workerInput.targetTypesAssemblyPath,
+                // Why copy the identity and the records, and why never the operation: the retry is
+                // still a transform, and it recomputes each retained declaration's fingerprint
+                // through the artifact mapping. Without them the retry binds the retained types
+                // back to their source and emits types a loaded assembly already holds.
+                targetAssemblyName = workerInput.targetAssemblyName,
+                targetAssemblyMvid = workerInput.targetAssemblyMvid,
+                introducedTypeArtifacts = workerInput.introducedTypeArtifacts,
                 excludedMethodKeys = exclusions.ExcludedMethodKeys,
                 excludedAddedMethodKeys = exclusions.ExcludedAddedMethodKeys,
                 assemblySourcePaths = workerInput.assemblySourcePaths,
@@ -182,7 +189,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 compilationAssembly,
                 targetDllPath,
                 includeHarmonyReference,
-                includeAddedFieldStoreReference);
+                includeAddedFieldStoreReference,
+                workerInput.introducedTypeArtifacts);
             if (shimReferencePaths.ErrorMessage != null)
             {
                 // First-pass publicize already succeeded, so a miss here is rare; abandon

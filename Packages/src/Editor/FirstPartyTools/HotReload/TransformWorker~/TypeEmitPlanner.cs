@@ -34,7 +34,7 @@ internal static class TypeEmitPlanner
             int shimTypeCounter,
             int globalShimMethodCounter)
     {
-        CompilationUnitSyntax root = sourceUnit.Root;
+        CompilationUnitSyntax root = sourceUnit.BindingRoot;
         SemanticModel semanticModel = sourceUnit.SemanticModel;
         BaselineSnapshotState baseline = sourceUnit.Baseline;
         List<TypeEmitState> typeEmitStates = new List<TypeEmitState>();

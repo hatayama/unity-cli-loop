@@ -39,6 +39,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The worker scans these for const drift the edited file's syntax tree cannot see.
         // Null/omitted is treated as empty.
         public string[] changedSiblingSourcePaths;
+
+        // Retained introduced-type assemblies the worker may bind against. Each record carries the
+        // complete identity and the reference path together, so the worker can confirm the file it
+        // resolved really is the assembly the record claims before it normalizes anything through
+        // it. Null/omitted is treated as empty.
+        public TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts;
+    }
+
+    /// <summary>
+    /// One retained introduced-type assembly a worker run may bind against.
+    /// </summary>
+    // Keep in sync with TransformWorker~/WorkerIntroducedTypeArtifact.cs.
+    [Serializable]
+    internal sealed class TransformWorkerIntroducedTypeArtifactDto
+    {
+        // Complete assembly identity display name of the artifact assembly, not a simple name.
+        // The worker rejects the record when the assembly it resolves from referencePath reports
+        // a different identity, so a self-reported name alone can never drive normalization.
+        public string assemblyFullName;
+
+        // Absolute path the artifact assembly is referenced from.
+        public string referencePath;
+
+        // Types this artifact holds, with the original identity each one must normalize back to.
+        public TransformWorkerIntroducedTypeArtifactTypeDto[] types;
+    }
+
+    /// <summary>
+    /// One retained type inside an introduced-type artifact assembly.
+    /// </summary>
+    // Keep in sync with TransformWorker~/WorkerIntroducedTypeArtifactType.cs.
+    [Serializable]
+    internal sealed class TransformWorkerIntroducedTypeArtifactTypeDto
+    {
+        // Metadata name of the type as it exists inside the artifact assembly.
+        public string metadataName;
+
+        // Assembly the type is attributed to once normalized: the assembly its source belongs to.
+        public string originalAssemblyName;
+
+        public string originalAssemblyMvid;
+
+        // Project-relative forward-slash path of the source the retained type was planned from.
+        public string ownerProjectRelativePath;
+
+        // Fingerprint the retained type was planned with. A declaration may only be removed from
+        // the tree the transform binds against when the source still produces this value.
+        public string declarationFingerprint;
     }
 
     /// <summary>

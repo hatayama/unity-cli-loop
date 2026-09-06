@@ -167,10 +167,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         public int Existing;
 
+        public HotReloadAddedFieldNestedStruct Nested;
+
+        public int this[int index]
+        {
+            get { return Existing + index; }
+            set { Existing = value + index; }
+        }
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         public int ReadExisting()
         {
             return Existing;
+        }
+    }
+
+    /// <summary>
+    /// Compiled struct nested inside the struct host, so a write reached through more than one
+    /// member step can be tested against a real type.
+    /// </summary>
+    public struct HotReloadAddedFieldNestedStruct
+    {
+        public int Inner;
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public void Bump()
+        {
+            Inner += 1;
         }
     }
 
