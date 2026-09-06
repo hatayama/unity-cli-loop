@@ -111,6 +111,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(input != null, "input must not be null.");
             Debug.Assert(input.sources != null && input.sources.Length > 0, "sources must not be empty.");
 
+            // Why start the clock before the gate: the caller's wait for an earlier request is
+            // part of this request's latency, so a queued request must not be granted a fresh
+            // response budget once it finally reaches the worker.
+            Stopwatch deadline = Stopwatch.StartNew();
+
             // Why WaitAsync before the try: a cancel while queued must not release a gate this
             // request never acquired.
             await _conversationGate.WaitAsync(ct).ConfigureAwait(false);
@@ -123,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return TransformWorkerHostResult.Failure(TransformWorkerHostResultKind.BootstrapFailed, target.ErrorMessage);
                 }
 
-                return await RunConversationsAsync(input, target, generation, ct).ConfigureAwait(false);
+                return await RunConversationsAsync(input, target, generation, deadline, ct).ConfigureAwait(false);
             }
             finally
             {
@@ -167,6 +172,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TransformWorkerInputDto input,
             TransformWorkerLaunchTarget target,
             int generation,
+            Stopwatch deadline,
             CancellationToken ct)
         {
             string tempDirectory = Path.Combine(Path.GetTempPath(), "uloop-hot-reload-" + Guid.NewGuid().ToString("N"));
@@ -186,8 +192,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         return LifecycleClosed("before starting attempt " + attempt);
                     }
 
+                    // Why give up before touching a process: the budget is already spent, and the
+                    // worker that would serve this attempt is healthy and must not be killed for it.
+                    if (RemainingMilliseconds(deadline) <= 0)
+                    {
+                        return TransformWorkerHostResult.Failure(
+                            TransformWorkerHostResultKind.TimedOut,
+                            "Transform worker request exceeded " + _responseTimeoutMilliseconds
+                            + " ms before attempt " + attempt + " could start.");
+                    }
+
                     ConversationOutcome outcome = await RunOneConversationAsync(
-                        target, requestLine, outputJsonPath, input.sources.Length, generation, ct).ConfigureAwait(false);
+                        target, requestLine, outputJsonPath, input.sources.Length, generation, deadline, ct).ConfigureAwait(false);
                     if (outcome.Result != null)
                     {
                         return outcome.Result;
@@ -227,20 +243,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string outputJsonPath,
             int expectedFileCount,
             int generation,
+            Stopwatch deadline,
             CancellationToken ct)
         {
-            ITransformWorkerChannel channel = EnsureChannel(target, out string startFailure);
+            ITransformWorkerChannel channel = EnsureChannel(target, generation, out string startFailure, out bool lifecycleClosed);
             if (channel == null)
             {
-                return ConversationOutcome.Broken(startFailure);
+                return lifecycleClosed
+                    ? ConversationOutcome.Final(LifecycleClosed("while starting the worker"))
+                    : ConversationOutcome.Broken(startFailure);
             }
 
             if (IsGenerationClosed(generation))
             {
+                // Why discard: a Shutdown that ran while this channel was being handed back saw
+                // the registered channel and may have taken it, but a channel registered after it
+                // read the state would otherwise stay alive with nobody owning it.
+                DiscardChannel(channel);
                 return ConversationOutcome.Final(LifecycleClosed("before sending the request"));
             }
 
-            Stopwatch deadline = Stopwatch.StartNew();
             try
             {
                 channel.RequestWriter.WriteLine(requestLine);
@@ -357,15 +379,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private async Task<string> ReadWithinDeadlineAsync(ITransformWorkerChannel channel, Stopwatch deadline, CancellationToken ct)
         {
-            int remaining = _responseTimeoutMilliseconds - (int)Math.Min(deadline.ElapsedMilliseconds, int.MaxValue);
+            int remaining = RemainingMilliseconds(deadline);
             return await TransformWorkerHostLineReader.ReadLineAsync(channel.ResponseReader, remaining, ct).ConfigureAwait(false);
         }
 
+        // Milliseconds of the request's single response budget that are still unspent.
+        private int RemainingMilliseconds(Stopwatch deadline)
+        {
+            return _responseTimeoutMilliseconds - (int)Math.Min(deadline.ElapsedMilliseconds, int.MaxValue);
+        }
+
         // Returns the live channel for the target directory, starting a new process when none is
-        // alive or the compiled worker moved. Null with a reason when the process could not start.
-        private ITransformWorkerChannel EnsureChannel(TransformWorkerLaunchTarget target, out string startFailure)
+        // alive or the compiled worker moved. Null when the process could not start (with a reason)
+        // or when a shutdown landed while it was starting (lifecycleClosed).
+        private ITransformWorkerChannel EnsureChannel(
+            TransformWorkerLaunchTarget target,
+            int generation,
+            out string startFailure,
+            out bool lifecycleClosed)
         {
             startFailure = null;
+            lifecycleClosed = false;
             ITransformWorkerChannel stale = null;
             lock (_stateLock)
             {
@@ -395,10 +429,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int launchCount;
             lock (_stateLock)
             {
-                _channel = started;
-                _channelWorkerDirectory = target.WorkerDirectory;
-                _launchCount++;
+                if (_generation != generation)
+                {
+                    // Shutdown ran while this process was starting, so it saw no channel to take;
+                    // this request owns the process and must end it instead of registering it.
+                    lifecycleClosed = true;
+                }
+                else
+                {
+                    _channel = started;
+                    _channelWorkerDirectory = target.WorkerDirectory;
+                    _launchCount++;
+                }
+
                 launchCount = _launchCount;
+            }
+
+            if (lifecycleClosed)
+            {
+                TerminateChannel(started);
+                return null;
             }
 
             VibeLogger.LogInfo(

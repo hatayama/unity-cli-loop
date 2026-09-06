@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,6 +23,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const int DefaultTimeoutMilliseconds = 30_000;
         private const int ShortTimeoutMilliseconds = 300;
         private const int WaitMilliseconds = 15_000;
+        private const int GateDeadlineTimeoutMilliseconds = 1_000;
+        private const int RemainderDeadlineTimeoutMilliseconds = 1_000;
+        private const int BreakConversationDelayMilliseconds = 800;
+        // The response budget (1000) plus the graceful-quit wait the timeout path spends killing the
+        // hung worker (500), plus slack. An implementation that restarts the budget per attempt spends
+        // 800 + 1000 + 500 instead and lands well above this bound.
+        private const int RemainderDeadlineBudgetMilliseconds = 1_900;
 
         private ScriptedChannelFactory _factory;
         private string _workerDirectory;
@@ -306,6 +314,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a response frame whose diagnostics payload is shorter than its declared length is a
+        /// broken conversation, so the process is discarded and a fresh one answers the retry.
+        /// </summary>
+        [Test]
+        public async Task RunAsync_DiagnosticsLengthMismatch_TreatedAsBrokenConversation()
+        {
+            _factory.Enqueue(ScriptStep.LengthMismatchDiagnostics);
+            _factory.Enqueue(ScriptStep.Succeed);
+
+            TransformWorkerHostResult result = await _host.RunAsync(CreateInput(1), CancellationToken.None);
+
+            Assert.That(result.Kind, Is.EqualTo(TransformWorkerHostResultKind.Completed), result.ErrorMessage);
+            Assert.That(_host.LaunchCount, Is.EqualTo(2));
+            Assert.That(_factory.Channels[0].HasExited, Is.True);
+        }
+
+        /// <summary>
         /// What: a launch-target failure (worker could not be compiled) is BootstrapFailed and starts nothing.
         /// </summary>
         [Test]
@@ -334,6 +359,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Kind, Is.EqualTo(TransformWorkerHostResultKind.RetryExhausted));
             Assert.That(result.ErrorMessage, Does.Contain("could not be started"));
             Assert.That(_host.LaunchCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a shutdown that lands while a process is starting discards that process instead of
+        /// registering it, and ends the request without retrying on yet another process.
+        /// </summary>
+        [Test]
+        public async Task Shutdown_DuringProcessStart_DiscardsNewProcessAndClosesRequest()
+        {
+            _factory.Enqueue(ScriptStep.Succeed);
+            _factory.OnStarted = channel => _host.Shutdown("reload during start");
+
+            TransformWorkerHostResult result = await _host.RunAsync(CreateInput(1), CancellationToken.None);
+
+            Assert.That(result.Kind, Is.EqualTo(TransformWorkerHostResultKind.LifecycleClosed), result.ErrorMessage);
+            Assert.That(_host.LaunchCount, Is.EqualTo(0));
+            Assert.That(_host.CurrentProcessId, Is.Null);
+            Assert.That(_factory.Channels.Count, Is.EqualTo(1));
+            Assert.That(_factory.Channels[0].HasExited, Is.True);
+        }
+
+        /// <summary>
+        /// What: the response budget starts before the gate wait, so a request that spends it all
+        /// queued behind another times out without starting or touching a worker.
+        /// </summary>
+        [Test]
+        public async Task RunAsync_GateWaitConsumesDeadline_TimesOutWithoutLaunch()
+        {
+            _host = CreateHost(GateDeadlineTimeoutMilliseconds);
+            _factory.Enqueue(ScriptStep.Hang);
+
+            Task<TransformWorkerHostResult> first = _host.RunAsync(CreateInput(1), CancellationToken.None);
+            await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds);
+            Task<TransformWorkerHostResult> queued = _host.RunAsync(CreateInput(1), CancellationToken.None);
+
+            TransformWorkerHostResult firstResult = await first;
+            TransformWorkerHostResult queuedResult = await queued;
+
+            Assert.That(firstResult.Kind, Is.EqualTo(TransformWorkerHostResultKind.TimedOut), firstResult.ErrorMessage);
+            Assert.That(queuedResult.Kind, Is.EqualTo(TransformWorkerHostResultKind.TimedOut), queuedResult.ErrorMessage);
+            Assert.That(queuedResult.ErrorMessage, Does.Contain("before attempt 1"));
+            Assert.That(_host.LaunchCount, Is.EqualTo(1));
+            Assert.That(_factory.Channels.Count, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: a conversation that breaks late leaves the retry only the unspent remainder of the
+        /// budget, instead of restarting the full response timeout per attempt.
+        /// </summary>
+        [Test]
+        public async Task RunAsync_BrokenNearDeadline_SecondAttemptGetsOnlyRemainder()
+        {
+            _host = CreateHost(RemainderDeadlineTimeoutMilliseconds);
+            _factory.Enqueue(ScriptStep.Hang);
+            _factory.Enqueue(ScriptStep.Hang);
+
+            Stopwatch elapsed = Stopwatch.StartNew();
+            Task<TransformWorkerHostResult> request = _host.RunAsync(CreateInput(1), CancellationToken.None);
+            await _factory.Channels[0].WaitForRequestAsync(WaitMilliseconds);
+            await Task.Delay(BreakConversationDelayMilliseconds);
+            _factory.Channels[0].ReleaseHang(ScriptStep.Garbage);
+
+            TransformWorkerHostResult result = await request;
+            elapsed.Stop();
+
+            Assert.That(result.Kind, Is.EqualTo(TransformWorkerHostResultKind.TimedOut), result.ErrorMessage);
+            Assert.That(_host.LaunchCount, Is.EqualTo(2));
+            Assert.That(elapsed.ElapsedMilliseconds, Is.LessThan(RemainderDeadlineBudgetMilliseconds));
         }
 
         private static async Task<bool> CompletesWithCancellationAsync(Task<TransformWorkerHostResult> request)
@@ -391,6 +484,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         SucceedWrongFileCount,
         Fail,
         Garbage,
+        LengthMismatchDiagnostics,
         Crash,
         Hang
     }
@@ -405,6 +499,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         public List<ScriptedWorkerChannel> Channels { get; } = new List<ScriptedWorkerChannel>();
         public int StartFailuresRemaining { get; set; }
+
+        /// <summary>Runs while the host is still starting the process, before it registers it.</summary>
+        public Action<ScriptedWorkerChannel> OnStarted { get; set; }
 
         /// <summary>Queues the script for the next launched process.</summary>
         public void Enqueue(params ScriptStep[] steps)
@@ -423,6 +520,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Queue<ScriptStep> script = _scriptsPerLaunch.Count > 0 ? _scriptsPerLaunch.Dequeue() : new Queue<ScriptStep>();
             ScriptedWorkerChannel channel = new ScriptedWorkerChannel(Channels.Count + 1, workerDirectory, script);
             Channels.Add(channel);
+            OnStarted?.Invoke(channel);
             return channel;
         }
 
@@ -595,6 +693,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 case ScriptStep.Garbage:
                     _protocolOutput.WriteLine("this is not a frame");
                     return true;
+                case ScriptStep.LengthMismatchDiagnostics:
+                    WriteLengthMismatchFrame();
+                    return true;
                 case ScriptStep.Crash:
                     Exit();
                     return false;
@@ -624,6 +725,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             TransformWorkerOutputDto output = new TransformWorkerOutputDto { files = files, parseErrors = parseErrors };
             File.WriteAllText(outputPath, JsonConvert.SerializeObject(output));
+        }
+
+        // Announces one byte more than the payload carries, which the host must reject.
+        private void WriteLengthMismatchFrame()
+        {
+            string payload = TransformWorkerServeProtocol.EncodeDiagnostics("ok", out int byteCount);
+            _protocolOutput.WriteLine(TransformWorkerServeProtocol.EncodeResponseHeader(0, byteCount + 1));
+            _protocolOutput.WriteLine(payload);
         }
 
         private void WriteFrame(int exitCode, string diagnostics)
