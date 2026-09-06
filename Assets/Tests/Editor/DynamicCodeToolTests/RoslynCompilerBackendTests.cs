@@ -200,6 +200,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Multi-source source-path validation follows the platform case rules for one parent directory.
+        /// </summary>
+        [Test]
+        public void ValidateSourcePaths_SameDirectoryWithDifferentCase_FollowsPlatformPathRules()
+        {
+            string rootDirectory = Path.Combine(Path.GetTempPath(), "roslyn-case-directory-" + Path.GetRandomFileName());
+            Directory.CreateDirectory(rootDirectory);
+            string parentDirectory = Path.GetDirectoryName(rootDirectory);
+            string alternateDirectory = Path.Combine(parentDirectory, Path.GetFileName(rootDirectory).ToUpperInvariant());
+            string firstSourcePath = Path.Combine(rootDirectory, "first.cs");
+            string secondSourcePath = Path.Combine(alternateDirectory, "second.cs");
+            try
+            {
+                if (Path.DirectorySeparatorChar == '\\')
+                {
+                    Assert.DoesNotThrow(
+                        () => RoslynCompilerRequestFileWriter.ValidateSourcePaths(
+                            new[] { firstSourcePath, secondSourcePath }));
+                    return;
+                }
+
+                ArgumentException exception = Assert.Throws<ArgumentException>(
+                    () => RoslynCompilerRequestFileWriter.ValidateSourcePaths(
+                        new[] { firstSourcePath, secondSourcePath }));
+                Assert.That(exception.ParamName, Is.EqualTo("sourcePaths"));
+            }
+            finally
+            {
+                if (Directory.Exists(rootDirectory))
+                {
+                    Directory.Delete(rootDirectory, recursive: true);
+                }
+            }
+        }
+
+        /// <summary>
         /// WriteWorkerRequestFile encodes emitDebugCode for the shared Roslyn worker.
         /// </summary>
         [Test]

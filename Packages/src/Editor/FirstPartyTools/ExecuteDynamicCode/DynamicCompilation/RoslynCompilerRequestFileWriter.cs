@@ -22,6 +22,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool emitDebugCode)
         {
             List<string> lines = CreateCompilerOptions(dllPath, allowUnsafeCode, emitDebugCode);
+            // csc resolves relative #line document paths from the source directory and otherwise
+            // writes work-directory absolute URLs into PDB files. Map that directory to the project
+            // root so PDB documents identify project files even if external code changes the CWD.
+            // UnityCliLoopPathResolver owns the project-root value as the single source of truth.
             string sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
             lines.Add(QuoteArgument("-pathmap:", sourceDirectory + "=" + UnityCliLoopPathResolver.GetProjectRoot()));
             AddDefines(lines, defineSymbols);
@@ -99,7 +103,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentException("Source paths must not be empty.", nameof(sourcePaths));
             }
 
-            HashSet<string> paths = new HashSet<string>(StringComparer.Ordinal);
+            StringComparer pathComparer = CreatePathComparer();
+            HashSet<string> paths = new HashSet<string>(pathComparer);
             string sourceDirectory = null;
             foreach (string sourcePath in sourcePaths)
             {
@@ -122,7 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 // This request format emits a single source-directory mapping.
-                if (!string.Equals(sourceDirectory, currentDirectory, StringComparison.Ordinal))
+                if (!pathComparer.Equals(sourceDirectory, currentDirectory))
                 {
                     throw new ArgumentException(
                         "Source paths must share one normalized parent directory.",
@@ -143,15 +148,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new List<string>
             {
                 "-nologo",
+                // AI consumers need machine-readable English diagnostics encoded as UTF-8.
                 "-preferreduilang:en-US",
                 "-utf8output",
                 "-nostdlib+",
                 "-target:library",
+                // Hot-reload shims need PDB locals for pause-point capture; dynamic code keeps optimization enabled.
                 emitDebugCode ? "-optimize-" : "-optimize+",
+                // One-shot compilation needs a portable PDB to map Assembly.Load exceptions to user-snippet.cs lines.
                 "-debug:portable",
                 allowUnsafeCode ? "-unsafe+" : "-unsafe-",
                 QuoteArgument("-out:", dllPath)
             };
+        }
+
+        private static StringComparer CreatePathComparer()
+        {
+            return Path.DirectorySeparatorChar == '\\'
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
         }
 
         private static void AddDefines(List<string> lines, IReadOnlyCollection<string> defineSymbols)
