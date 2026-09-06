@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.4.1](https://github.com/hatayama/unity-cli-loop/compare/v3.4.0...v3.4.1) (2026-09-06)
+
+
+### Bug Fixes
+
+* Hot reload no longer pays a process start for every worker run ([#2648](https://github.com/hatayama/unity-cli-loop/issues/2648)) ([0adfbb2](https://github.com/hatayama/unity-cli-loop/commit/0adfbb2bb6e4834d73bd531ef722bf1f843ee635))
+* Hot reload no longer re-scans an unchanged assembly for callers on every run ([#2642](https://github.com/hatayama/unity-cli-loop/issues/2642)) ([318884c](https://github.com/hatayama/unity-cli-loop/commit/318884c5015b596d177fda4b353b342e3aea107b))
+
 ## [3.4.0](https://github.com/hatayama/unity-cli-loop/compare/v3.3.0...v3.4.0) (2026-09-06)
 
 
