@@ -178,7 +178,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 HotReloadCompiledCallSiteCache.Entry entry = cache.GetOrLoad(dllPath);
 
-                Guid onDisk = ModuleDefinition.ReadModule(dllPath, new ReaderParameters { ReadingMode = ReadingMode.Deferred }).Mvid;
+                Guid onDisk;
+                // Why dispose: an undisposed module keeps the dll open, and the TearDown that
+                // deletes the temp directory then fails on Windows.
+                using (ModuleDefinition module = ModuleDefinition.ReadModule(dllPath, new ReaderParameters { ReadingMode = ReadingMode.Deferred }))
+                {
+                    onDisk = module.Mvid;
+                }
                 Assert.That(entry.Fingerprint.ModuleVersionId, Is.EqualTo(entry.Module.Mvid));
                 Assert.That(entry.Module.Mvid, Is.EqualTo(onDisk));
                 Assert.That(cache.LoadCount, Is.EqualTo(2), "The inconsistent first read must be discarded and retried.");

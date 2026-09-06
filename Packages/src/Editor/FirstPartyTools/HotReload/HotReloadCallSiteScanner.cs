@@ -172,7 +172,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 graph[assembly.name] = CollectReferenceFileNames(assembly.allReferences);
             }
 
-            _referencedDllFileNamesByAssembly = graph;
+            // Why not memoize an empty graph: GetAssemblies() returns nothing while a compile is in
+            // flight, and caching that would shrink the scan set for the rest of the domain's life.
+            if (graph.Count > 0)
+            {
+                _referencedDllFileNamesByAssembly = graph;
+            }
+
             return graph;
         }
 
