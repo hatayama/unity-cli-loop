@@ -304,6 +304,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogWorkerHostLifecycleClosed = "hot_reload_worker_lifecycle_closed";
         public const string VibeLogWorkerHostBrokenConversation = "hot_reload_worker_broken_conversation";
         public const string VibeLogWorkerHostTempCleanupFailed = "hot_reload_worker_temp_cleanup_failed";
+        public const string VibeLogWorkerHostFallbackOneShot = "hot_reload_worker_fallback_one_shot";
         public const string VibeLogFileStart = "hot_reload_file_start";
         public const string VibeLogWorkerResult = "hot_reload_worker_result";
         public const string VibeLogShimCompileFailed = "hot_reload_shim_compile_failed";

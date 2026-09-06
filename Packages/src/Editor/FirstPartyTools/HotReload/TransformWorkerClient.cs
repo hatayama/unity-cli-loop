@@ -13,13 +13,18 @@ using Debug = UnityEngine.Debug;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Runs the cached transform worker with file-path JSON I/O (UTF-8, no BOM).
+    /// Runs transform requests through the resident worker host, falling back to a single one-shot
+    /// worker process when the resident conversation cannot be held.
     /// </summary>
     internal static class TransformWorkerClient
     {
+        // Why a test seam on a static class: the client has no instance to inject into, and the
+        // resident host must be replaceable so routing tests do not depend on the real worker.
+        internal static TransformWorkerHost HostOverrideForTests;
+
         /// <summary>
-        /// Bootstraps the worker if needed, writes <paramref name="input"/> to a temp JSON file,
-        /// runs <c>dotnet worker.dll &lt;in&gt; &lt;out&gt;</c>, and deserializes the output.
+        /// Transforms <paramref name="input"/> through the resident worker, and only when two fresh
+        /// resident processes broke the conversation, once more through a one-shot worker process.
         /// </summary>
         public static async Task<TransformWorkerClientResult> RunAsync(
             TransformWorkerInputDto input,
@@ -29,6 +34,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(input.sources != null, "sources must not be null.");
             Debug.Assert(input.sources.Length > 0, "sources must not be empty.");
 
+            TransformWorkerHost host = HostOverrideForTests ?? TransformWorkerHost.Shared;
+            TransformWorkerHostResult hostResult = await host.RunAsync(input, ct).ConfigureAwait(false);
+            if (hostResult.Kind == TransformWorkerHostResultKind.Completed)
+            {
+                Debug.Assert(
+                    hostResult.Output.files.Length == input.sources.Length,
+                    "A successful worker run must return one per-file output per source.");
+                return TransformWorkerClientResult.SuccessResult(hostResult.Output);
+            }
+
+            // WorkerFailed, TimedOut, BootstrapFailed and LifecycleClosed describe the request or a
+            // deliberate stop, so repeating them on a one-shot process only costs time.
+            if (hostResult.Kind != TransformWorkerHostResultKind.RetryExhausted)
+            {
+                return TransformWorkerClientResult.Failure(hostResult.ErrorMessage);
+            }
+
+            // Why fall back only here: two fresh processes broke the conversation without the worker
+            // reporting anything, so the resident path itself is suspect and a one-shot process is
+            // the only way to still serve this run.
+            VibeLogger.LogWarning(
+                HotReloadConstants.VibeLogWorkerHostFallbackOneShot,
+                "Resident transform worker conversation broke twice; running this request as a one-shot process.",
+                new { reason = hostResult.ErrorMessage });
+            return await RunOneShotAsync(input, ct).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Bootstraps the worker if needed, writes <paramref name="input"/> to a temp JSON file, runs
+        /// <c>dotnet worker.dll &lt;in&gt; &lt;out&gt;</c> once, and deserializes the output.
+        /// </summary>
+        private static async Task<TransformWorkerClientResult> RunOneShotAsync(
+            TransformWorkerInputDto input,
+            CancellationToken ct)
+        {
             TransformWorkerBootstrapResult bootstrapResult =
                 await TransformWorkerBootstrap.EnsureWorkerAsync(ct).ConfigureAwait(false);
             if (!bootstrapResult.Success)
@@ -73,23 +113,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         + "\nstderr:\n" + standardError);
                 }
 
-                if (!File.Exists(outputJsonPath))
-                {
-                    return TransformWorkerClientResult.Failure(
-                        "Transform worker did not produce an output JSON file.");
-                }
-
-                string outputJson = File.ReadAllText(
+                TransformWorkerOutputDto output = TransformWorkerOutputReader.TryRead(
                     outputJsonPath,
-                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                TransformWorkerOutputDto output = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(outputJson);
+                    input.sources.Length,
+                    out string readError);
                 if (output == null)
                 {
-                    return TransformWorkerClientResult.Failure(
-                        "Failed to deserialize transform worker output JSON.");
+                    return TransformWorkerClientResult.Failure(readError);
                 }
-
-                CoalesceOutput(output);
 
                 // Why fail here: run-level parseErrors describe a failure that belongs to no
                 // single source, so there is no per-file row to carry it. Turning it into a
@@ -100,9 +131,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return TransformWorkerClientResult.Failure(string.Join("\n", output.parseErrors));
                 }
 
-                Debug.Assert(
-                    output.files.Length == input.sources.Length,
-                    "A successful worker run must return one per-file output per source.");
                 return TransformWorkerClientResult.SuccessResult(output);
             }
             finally
