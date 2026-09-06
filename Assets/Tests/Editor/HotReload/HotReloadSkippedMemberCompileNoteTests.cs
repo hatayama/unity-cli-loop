@@ -145,7 +145,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public void FindSkippedMemberNote_WhenAccessorPrefixMatchesPropertyName_ReturnsReason()
         {
-            const string reason = "Added properties are out of scope for hot reload.";
+            const string reason =
+                "Added properties with only a setter are skipped; the shim requires a getter identity. "
+                + "Run 'uloop compile' to add them.";
             TransformWorkerSkippedDto[] getterSkipped =
             {
                 new TransformWorkerSkippedDto

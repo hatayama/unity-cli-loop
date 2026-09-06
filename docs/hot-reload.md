@@ -214,8 +214,11 @@ Wire details:
 - New types; added members referenced from another assembly or from a file that is
   neither passed to this reload nor already hot-reloaded; changed field initializers or
   `const` values — all require `uloop compile`.
-  Added fields and methods themselves apply, and are visible to the bodies edited in any file
-  of the same assembly passed to the same reload. Unchanged files of that assembly that
+  Added fields, methods, and properties themselves apply, and are visible to the bodies
+  edited in any file of the same assembly passed to the same reload. An added
+  auto-property is backed by the added-field store, so its value shares that lifetime.
+  Added events, indexers, and the property shapes listed in the skill's scope reference
+  (set-only, virtual, explicit interface, `init`, struct host) still require `uloop compile`. Unchanged files of that assembly that
   already hold active patches are re-applied so they bind to the newest shim. Shim compile errors caused by references to
   members that are still missing are reported with that hint, and changed `const` values
   (including enum members) are compared against the compiled target assembly and reported as

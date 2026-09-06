@@ -136,25 +136,63 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: referencing an auto-property added in another file of the same reload fails
-        /// the caller with the skipped-member compile note that names the property.
+        /// What: an auto-property added in the host file is readable and writable from the caller
+        /// file's edited body within one reload, its backing value survives across calls because
+        /// it lives in the added-field store, and the run reports that one added field once.
         /// </summary>
         [Test]
-        public async Task Run_CallerFileUsesAutoPropertyAddedInOtherFile_FailsWithSkippedPropertyNote()
+        public async Task Run_CallerFileUsesAutoPropertyAddedInOtherFile_AppliesAndRoundTripsValue()
         {
             HotReloadOrchestratorResult result = await RunPairAsync(
                 "CrossFileAddedAutoProperty",
-                InsertHostMember("        public bool HasTarget { get; private set; }\n\n"),
-                ReplaceCallerBody(CallerCallBodyAnchor, "return host.HasTarget ? 1 : 0;"));
+                InsertHostMember("        public int Count { get; set; }\n\n"),
+                ReplaceCallerBody(
+                    CallerCallBodyAnchor,
+                    "host.Count = host.Count + 1;\n            return host.Count + 40;"));
 
-            HotReloadMethodOutcome failure = FindOutcome(result, HotReloadMethodOutcomeKind.Failed, "Call");
+            AssertNoFailure(result);
+            AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Call");
+            AssertKind(result, HotReloadMethodOutcomeKind.Added, "get_Count");
+            AssertKind(result, HotReloadMethodOutcomeKind.Added, "set_Count");
+            HotReloadCrossFileAddedMemberCaller caller = new HotReloadCrossFileAddedMemberCaller();
+            HotReloadCrossFileAddedMemberHost host = new HotReloadCrossFileAddedMemberHost();
+
+            // Why two calls on the same host: only a value that outlives the call proves the
+            // accessors read and write the store rather than transient state.
+            Assert.That(caller.Call(host), Is.EqualTo(41));
+            Assert.That(caller.Call(host), Is.EqualTo(42));
             Assert.That(
-                failure.Reason,
-                Does.Contain(string.Format(
-                    HotReloadConstants.SkippedMemberCompileFailureNoteFormat,
-                    "HasTarget",
-                    "Added properties are out of scope")));
-            Assert.That(failure.Reason, Does.Contain("Added properties are out of scope"));
+                HotReloadAddedFieldRegistry.GetFieldsForType(
+                    typeof(HotReloadCrossFileAddedMemberHost).FullName),
+                Is.EqualTo(new[] { "Count" }));
+            Assert.That(result.AddedFields, Has.Length.EqualTo(1));
+            Assert.That(result.AddedFields[0], Does.Contain("Count"));
+            Assert.That(CountAddedFieldsLifetimeWarnings(result), Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// A bodied property added in the host file is callable from the patched sibling and
+        /// reaches the host's compiled private state through accessor delegates.
+        /// </summary>
+        [Test]
+        public async Task Run_CallerFileUsesBodiedPropertyAddedInOtherFile_AppliesAndRoundTripsValue()
+        {
+            HotReloadOrchestratorResult result = await RunPairAsync(
+                "CrossFileAddedBodiedProperty",
+                InsertHostMember(
+                    "        public int Stored\n        {\n            get => _stored;\n"
+                    + "            set => _stored = value;\n        }\n\n"),
+                ReplaceCallerBody(
+                    CallerCallBodyAnchor,
+                    "host.Stored = 3;\n            return host.Stored + 1;"));
+
+            AssertNoFailure(result);
+            AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Call");
+            AssertKind(result, HotReloadMethodOutcomeKind.Added, "get_Stored");
+            AssertKind(result, HotReloadMethodOutcomeKind.Added, "set_Stored");
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(4));
         }
 
         /// <summary>

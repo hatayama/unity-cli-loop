@@ -74,17 +74,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an expression-bodied property present only in the edited source is skipped with
-        /// the added-property reason and does not become a getter entry.
+        /// An expression-bodied property present only in the edited source is emitted as
+        /// an added getter entry instead of a skipped property.
         /// </summary>
         [Test]
-        public async Task Classify_AddedExpressionBodiedProperty_SkipsGetterWithAddedPropertyReason()
+        public async Task Emit_AddedExpressionBodiedProperty_RegistersAddedGetter()
         {
-            const string expectedReason =
-                "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
-                + "For a computed value, add a same-file method instead (e.g. 'private T GetX()'), which applies "
-                + "through hot reload; for a constant, use a 'const' or a plain added field; otherwise run "
-                + "'uloop compile'.";
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = WithHostMembers(
                 onDisk,
@@ -97,25 +92,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
 
-            Assert.That(
-                FindEntry(result, "get_AddedAmplitude"),
-                Is.Null,
-                "Added property getter must not be an entry.");
-            Assert.That(FindSkipReason(result, "get_AddedAmplitude"), Is.EqualTo(expectedReason));
+            TransformWorkerEntryDto getter = FindEntry(result, "get_AddedAmplitude");
+            Assert.That(getter, Is.Not.Null, "Added property getter must be an entry.");
+            Assert.That(getter.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(FindSkipReason(result, "get_AddedAmplitude"), Is.Null);
         }
 
         /// <summary>
-        /// What: an auto-property present only in the edited source is skipped with the
-        /// added-property reason and does not fire the outside-body drift warning.
+        /// What: an auto-property present only in the edited source emits its accessors as
+        /// added members and does not fire the outside-body drift warning.
         /// </summary>
         [Test]
-        public async Task Classify_AddedAutoProperty_SkipsGetterWithAddedPropertyReason()
+        public async Task Classify_AddedAutoProperty_EmitsAccessorsWithoutDrift()
         {
-            const string expectedReason =
-                "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
-                + "For a computed value, add a same-file method instead (e.g. 'private T GetX()'), which applies "
-                + "through hot reload; for a constant, use a 'const' or a plain added field; otherwise run "
-                + "'uloop compile'.";
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = WithHostMembers(
                 onDisk,
@@ -130,9 +119,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(
                 FindEntry(result, "get_AddedAuto"),
-                Is.Null,
-                "Added auto-property getter must not be an entry.");
-            Assert.That(FindSkipReason(result, "get_AddedAuto"), Is.EqualTo(expectedReason));
+                Is.Not.Null,
+                "Added auto-property getter must be an added entry.");
+            Assert.That(FindSkipReason(result, "get_AddedAuto"), Is.Null);
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
@@ -1706,6 +1695,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasRemovedMemberName(result, nameof(HotReloadAddedMemberPartialHost.PartialRemoved));
             Assert.That(result.Output.files[0].removedMethodSignatures, Is.Not.Null);
             Assert.That(result.Output.files[0].removedMethodSignatures, Is.Empty);
+        }
+
+        /// <summary>
+        /// An added bodied property on a partial host is skipped before accessor shims are emitted.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedBodiedPropertyOnPartialHost_SkipsAccessors()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PartialKept()\n        {\n            return 1;\n        }",
+                "        public int AddedPartial { get => 1; set { } }\n\n"
+                + "        public int PartialKept()\n        {\n            return 1;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("AddedPartialProperty.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_AddedPartial"), Is.Null);
+            Assert.That(FindEntry(result, "set_AddedPartial"), Is.Null);
+            Assert.That(FindSkipReason(result, "get_AddedPartial"), Does.Contain("Partial types are skipped"));
+            Assert.That(FindSkipReason(result, "set_AddedPartial"), Does.Contain("Partial types are skipped"));
         }
 
         /// <summary>

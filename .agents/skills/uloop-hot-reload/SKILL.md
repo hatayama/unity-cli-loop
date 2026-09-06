@@ -72,7 +72,8 @@ and a patched body that matches the baseline again is unpatched on that run.
 ## Scope in Brief
 
 - Patched: ordinary method bodies and property getters with a body.
-- Added members: new methods and fields apply, visible to edited code in the same reload
+- Added members: new methods, fields, and supported properties apply as `Added` rows
+  (see the scope reference for the property shapes still skipped), visible to edited code in the same reload
   within the same assembly (pass the declaring file and its callers together), and vanish
   on any compile or domain reload (an Editor-session illusion). New types, references
   from other assemblies or from files that are neither passed to the reload nor
@@ -84,8 +85,8 @@ and a patched body that matches the baseline again is unpatched on that run.
   change is not gated: it follows the delete rules — the old signature is reported removed,
   and a `Warnings` entry names each compiled call site left on the old behavior until
   `uloop compile`.
-- Constructors, operators, setter/init/indexer accessors, and event accessors are
-  `Skipped`; finalizers and interface members are silently not applied. `const` and
+- Constructors, operators, compiled setter/init/indexer accessors, and event accessors
+  are `Skipped`; finalizers and interface members are silently not applied. `const` and
   other outside-body edits never change runtime behavior (drift is warned where
   detectable).
 - A reload applies each file all-or-nothing: any `Failed` method leaves that file

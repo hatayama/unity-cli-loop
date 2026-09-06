@@ -1,6 +1,7 @@
 # Hot Reload Scope and Limits
 
-Only ordinary method declarations and property getters with a body are patched.
+Only ordinary method declarations and property getters with a body are patched. A
+property added to a compiled type applies as an added member instead (see below).
 Constructors, operators, and explicit event accessors are reported as `Skipped`
 when edited (with a verified baseline, unchanged members of those kinds produce
 no row). Finalizers and `interface` members (including default interface
@@ -70,14 +71,30 @@ baseline, event declarations are compared per accessor, so only the edited
 add or remove appears as a `Skipped` row. A newly added explicit event, or
 an edit before the first compile snapshot, still reports both accessors.
 Adding a type
-(`class`, `struct`, `enum`, `record`), a property, an event, or an indexer
-is still out of scope. Added properties are reported per member: the
-property's getter appears as a `Skipped` row that says to use a 'const' or
-a plain added field for the value, or to run 'uloop compile'. That includes
-auto-properties: the response shows `Skipped ... get_X: Added properties are
-out of scope` rather than a generic outside-method-bodies warning. Types, events,
-and indexers are not reported per member — no `Skipped` row names them; at
-most they surface as outside-body drift in `Warnings`. Treat their silence
+(`class`, `struct`, `enum`, `record`), an event, or an indexer is still out of scope.
+
+An added property applies unless its shape is listed below. A bodied getter or setter is
+emitted like an added method;
+an auto-property is emitted as a pair of accessors over the added-field store, so its
+value follows the same lifetime as an added field and appears in `--status` as one
+`Added` row per accessor plus one `AddedField` row for the value — three rows for a
+get/set auto-property, two for a getter-only one. The rows read
+`Ns.Type.get_X()`, `Ns.Type.set_X(System.Int32)`, and `Ns.Type.X`. The added-fields lifetime warning covers it. Accessors are not
+pause points, and the value never appears in `CapturedVariables`.
+
+These property shapes stay `Skipped` with a per-member reason: a setter without a
+getter, `virtual`/`override`/`abstract`/interface, an explicit interface
+implementation, an `init` accessor, a host that is a `struct` or a generic type, a value type
+the shim assembly cannot see or cannot resolve, an auto-property initializer that
+creates an object or touches the host's own members, and a name the compiled assembly
+already declares as a field or an event. Edited callers are skipped too when they use a
+shape the accessor shim cannot carry: compound assignment or increment, an assignment
+whose value is consumed, a deconstruction target, an object initializer, a property
+pattern that matches the property, `nameof`, `ref`/`out`/`in`, and conditional access
+on the property itself.
+
+Types, events, and indexers are not reported per member — no `Skipped` row names them;
+at most they surface as outside-body drift in `Warnings`. Treat their silence
 as "not applied" and land them with `uloop compile`.
 
 Outside method bodies, only member additions (previous section) take effect.
@@ -166,7 +183,8 @@ and patch that body instead.
 
 `const` edits never take effect through hot reload: C# bakes const values into every
 call site at compile time. When you expect to tune a value while Play Mode is running
-(speeds, amplitudes, sensitivities), expose it as a static property getter instead:
+(speeds, amplitudes, sensitivities), expose it as a static property getter instead —
+adding one in the same edit works, so the getter does not have to exist yet:
 
     public static float HeightAmplitude => 5f;
 
@@ -197,9 +215,11 @@ the file is patched and a `Warnings` line reports the fallback; run `uloop compi
 to establish the baseline.
 
 Property getters with a body (including expression-bodied properties) are patched
-like ordinary methods. Setter, init, and indexer accessors with explicit bodies are
-reported per-accessor as `Skipped`, so an edited accessor never disappears from the
-response silently; with a verified baseline, accessors unchanged from it produce no row.
+like ordinary methods. Editing a compiled property's setter, init, or indexer accessor
+is reported per-accessor as `Skipped`, so an edited accessor never disappears from the
+response silently; with a verified baseline, accessors unchanged from it produce no
+row. A property *added* in this edit is different: both of its accessors apply (see
+"Added members" above).
 
 Subscribing to or unsubscribing from a field-like event (`+=`/`-=`) inside an edited
 body works, and so does raising or reading one (`E?.Invoke(x)`, `E(x)`,
@@ -225,7 +245,7 @@ stay `Skipped`.
 | Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 | A declared return or parameter type cannot be resolved (an uncompiled new type, a missing using, or a typo) | Skipped; add the missing type, add the required `using`, or fix the typo, then run `uloop compile` |
-| Property setter, init, or indexer accessor with an explicit body | Accessor patching covers getters only; `uloop compile` applies setter/init/indexer edits |
+| Edited setter, init, or indexer accessor of a *compiled* property | Accessor patching covers getters only; `uloop compile` applies these edits. Accessors of a property added in this edit are emitted instead |
 | Constructor (instance or static), operator, conversion operator, or explicit event accessor (add/remove) | Out of scope for v1; `uloop compile` applies these edits |
 | Method raises or reads a field-like event that has no reachable backing field | Custom `add`/`remove` accessors, an `abstract`/`extern`/interface event, a delegate type that is not visible outside the assembly, or an event added in this edit leave nothing for the shim's Harmony accessor to bind |
 | Method raises or reads a field-like event through a conditional receiver (`other?.E`) | The shim has no name for the conditional receiver to pass to the accessor call |

@@ -26,7 +26,9 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     internal readonly AccessorPlan _accessorPlan;
     internal readonly AddedMethodCatalog _addedMethodCatalog;
     internal readonly AddedFieldCatalog _addedFieldCatalog;
+    internal readonly AddedPropertyCatalog _addedPropertyCatalog;
     internal readonly AddedFieldShimRewrite AddedFields;
+    internal readonly AddedPropertyShimRewrite AddedProperties;
     internal readonly HarmonyAccessorShimRewrite HarmonyAccessors;
 
     public ShimBodyRewriter(
@@ -34,14 +36,17 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         INamedTypeSymbol targetType,
         AccessorPlan accessorPlan,
         AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog)
+        AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog = null)
     {
         _semanticModel = semanticModel;
         _targetType = targetType;
         _accessorPlan = accessorPlan;
         _addedMethodCatalog = addedMethodCatalog ?? new AddedMethodCatalog();
         _addedFieldCatalog = addedFieldCatalog ?? new AddedFieldCatalog();
+        _addedPropertyCatalog = addedPropertyCatalog ?? new AddedPropertyCatalog();
         AddedFields = new AddedFieldShimRewrite(this);
+        AddedProperties = new AddedPropertyShimRewrite(this);
         HarmonyAccessors = new HarmonyAccessorShimRewrite(this);
     }
 
@@ -298,6 +303,12 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return AddedFields.RewriteAddedFieldAssignment(node, assignedField);
         }
 
+        SyntaxNode addedPropertyWrite = AddedProperties.TryRewriteSimpleAssignment(node);
+        if (addedPropertyWrite != null)
+        {
+            return addedPropertyWrite;
+        }
+
         if (_accessorPlan == null)
         {
             return base.VisitAssignmentExpression(node);
@@ -386,6 +397,16 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             {
                 return addedFieldRead;
             }
+
+            SyntaxNode addedPropertyRead = AddedProperties.TryRewriteRead(
+                symbol,
+                node.Expression,
+                node.Name.Identifier.ValueText,
+                node);
+            if (addedPropertyRead != null)
+            {
+                return addedPropertyRead;
+            }
         }
 
         if (_accessorPlan == null)
@@ -434,6 +455,12 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         if (addedFieldRead != null)
         {
             return addedFieldRead;
+        }
+
+        SyntaxNode addedPropertyRead = AddedProperties.TryRewriteBareRead(node, symbol);
+        if (addedPropertyRead != null)
+        {
+            return addedPropertyRead;
         }
 
         // Local/anonymous functions are emitted into the shim assembly — keep bare calls.

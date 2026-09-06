@@ -1613,10 +1613,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: adding an auto-property does not emit the compiled property warning and
-        /// skips the getter with the added-property reason.
+        /// emits its getter as an added entry.
         /// </summary>
         [Test]
-        public async Task Classify_AddedProperty_SkipsGetterWithAddedPropertyReason()
+        public async Task Classify_AddedProperty_EmitsGetterWithoutCompiledKindWarning()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(
@@ -1629,7 +1629,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasNoCompiledKindChangeWarningForMember(result, "ExtraHp");
-            AssertHasSkip(result, "get_ExtraHp", "Added properties are out of scope");
+            Assert.That(FindEntry(result, "get_ExtraHp"), Is.Not.Null);
+            AssertHasNoSkipContaining(result, "get_ExtraHp");
         }
 
         /// <summary>

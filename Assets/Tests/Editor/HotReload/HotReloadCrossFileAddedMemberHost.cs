@@ -6,8 +6,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// Compiled host type for cross-file worker tests. Tests copy this source, add members to the
     /// copy, and expect a body edited in the sibling caller file to bind against them.
     /// </summary>
-    internal sealed class HotReloadCrossFileAddedMemberHost
+    // Why public: accessor-delegate plans compile in a separate shim assembly.
+    public sealed class HotReloadCrossFileAddedMemberHost
     {
+        private int _stored;
+
         public int Value()
         {
             return 1;

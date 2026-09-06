@@ -39,13 +39,20 @@ internal static class UnsupportedMemberSkipCollector
         Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap,
         Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
         Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap,
-        AddedMethodCatalog addedMethodCatalog)
+        AddedMethodCatalog addedMethodCatalog,
+        AddedPropertyCatalog addedPropertyCatalog)
     {
         int firstAppendedIndex = skipped.Count;
         foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
         {
             if (member is PropertyDeclarationSyntax propertyDeclaration)
             {
+                IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
+                if (addedPropertyCatalog.FindBySymbolOrNull(propertySymbol) != null)
+                {
+                    continue;
+                }
+
                 string propertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
                 // Why plainCurrentPropertyMap: annotated property nodes break AreEquivalent the
                 // same way annotated method bodies do; compare unannotated peers only.
@@ -64,7 +71,7 @@ internal static class UnsupportedMemberSkipCollector
 
                 AppendExplicitAccessorSkipsForProperty(
                     propertyDeclaration,
-                    semanticModel.GetDeclaredSymbol(propertyDeclaration),
+                    propertySymbol,
                     skipped,
                     typeMetadataNameFromSyntax,
                     snapshotPropertyMap,

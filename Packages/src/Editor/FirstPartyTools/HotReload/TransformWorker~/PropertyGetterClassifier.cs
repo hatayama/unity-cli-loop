@@ -55,40 +55,6 @@ internal static class PropertyGetterClassifier
         return false;
     }
 
-    internal static bool TrySkipAddedProperty(
-        string sourceProjectRelativePath,
-        bool hasBaseline,
-        Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
-        Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
-        string typeMetadataNameFromSyntax,
-        PropertyDeclarationSyntax propertyDeclaration,
-        IMethodSymbol getterSymbol,
-        List<WorkerSkipped> skipped,
-        AddedMethodCatalog addedMethodCatalog)
-    {
-        if (!hasBaseline
-            || snapshotPropertyMap == null
-            || plainCurrentPropertyMap == null)
-        {
-            return false;
-        }
-
-        string addedPropertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
-        if (snapshotPropertyMap.ContainsKey(addedPropertyKey))
-        {
-            return false;
-        }
-
-        skipped.Add(new WorkerSkipped
-        {
-            SourceProjectRelativePath = sourceProjectRelativePath,
-            Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
-            Reason = AddedMethodSkipReasons.AddedProperty
-        });
-        addedMethodCatalog.AddAddedPropertySyntaxKey(addedPropertyKey);
-        return true;
-    }
-
     internal static (bool SkipGetter, MethodTransformDecision Decision) TrySkipPropertyGetterByDecision(
         string sourceProjectRelativePath,
         TypeDeclarationSyntax typeDeclaration,
@@ -99,6 +65,7 @@ internal static class PropertyGetterClassifier
         INamedTypeSymbol compiledType,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog,
         List<WorkerSkipped> skipped)
     {
         MethodTransformDecision decision = MethodTransformDecider.DecideMethodTransform(
@@ -124,7 +91,9 @@ internal static class PropertyGetterClassifier
             getterBodyNode,
             semanticModel,
             addedMethodCatalog,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            addedPropertyCatalog,
+            typeSymbol);
         if (addedCallSiteSkip == null)
         {
             return (false, decision);

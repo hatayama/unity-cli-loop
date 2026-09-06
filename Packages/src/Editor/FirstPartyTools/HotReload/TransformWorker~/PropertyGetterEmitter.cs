@@ -21,6 +21,7 @@ internal static class PropertyGetterEmitter
         TypeEmitState typeState,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog,
         WorkerInput input,
         List<WorkerEntry> entries,
         List<WorkerSkipped> skipped,
@@ -36,6 +37,12 @@ internal static class PropertyGetterEmitter
         foreach (PropertyDeclarationSyntax propertyDeclaration in typeState.TypeDeclaration.Members
             .OfType<PropertyDeclarationSyntax>())
         {
+            IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
+            if (addedPropertyCatalog.FindBySymbolOrNull(propertySymbol) != null)
+            {
+                continue;
+            }
+
             if (typeState.TypeIsAbsentFromCompiledAssembly)
             {
                 PropertyGetterClassifier.SkipPropertyGetterOnUncompiledType(
@@ -69,7 +76,8 @@ internal static class PropertyGetterEmitter
                     typeState.CurrentShimType,
                     assemblyGlobalUsings,
                     addedMethodCatalog,
-                    addedFieldCatalog);
+                    addedFieldCatalog,
+                    addedPropertyCatalog);
             typeState.CurrentShimType = nextShimType;
             shimTypeCounter = nextShimTypeCounter;
             globalShimMethodCounter = nextGlobalShimMethodCounter;
@@ -102,10 +110,19 @@ internal static class PropertyGetterEmitter
             ShimTypeBuilder currentShimType,
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
             AddedMethodCatalog addedMethodCatalog,
-            AddedFieldCatalog addedFieldCatalog)
+            AddedFieldCatalog addedFieldCatalog,
+            AddedPropertyCatalog addedPropertyCatalog)
     {
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
+        {
+            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+        }
+
+        string propertyKey = AddedPropertyCatalog.FormatPropertyKey(
+            CecilTypeNames.ToMetadataName(typeSymbol),
+            propertySymbol.Name);
+        if (addedPropertyCatalog.IsClassifiedAdded(propertyKey))
         {
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
@@ -114,18 +131,6 @@ internal static class PropertyGetterEmitter
             PropertyGetterClassifier.TryGetPropertyGetterBody(propertyDeclaration);
         if (!hasGetterBody)
         {
-            // Why skip added auto-properties: Harmony looks up get_<Name> on the compiled type
-            // and fails when the member does not exist. An existing auto-property stays silent.
-            PropertyGetterClassifier.TrySkipAddedProperty(
-                sourceProjectRelativePath,
-                hasBaseline,
-                snapshotPropertyMap,
-                plainCurrentPropertyMap,
-                typeMetadataNameFromSyntax,
-                propertyDeclaration,
-                propertySymbol.GetMethod,
-                skipped,
-                addedMethodCatalog);
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
 
@@ -156,22 +161,6 @@ internal static class PropertyGetterEmitter
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
 
-        // Why skip newly added properties: Harmony looks up get_<Name> on the compiled type
-        // and fails with "No method 'get_X' ... was found" when the member does not exist.
-        if (PropertyGetterClassifier.TrySkipAddedProperty(
-            sourceProjectRelativePath,
-            hasBaseline,
-            snapshotPropertyMap,
-            plainCurrentPropertyMap,
-            typeMetadataNameFromSyntax,
-            propertyDeclaration,
-            getterSymbol,
-            skipped,
-            addedMethodCatalog))
-        {
-            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
-        }
-
         if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
         {
             skipped.Add(new WorkerSkipped
@@ -198,6 +187,7 @@ internal static class PropertyGetterEmitter
             compiledType,
             addedMethodCatalog,
             addedFieldCatalog,
+            addedPropertyCatalog,
             skipped);
         if (skipGetter)
         {
@@ -223,7 +213,8 @@ internal static class PropertyGetterEmitter
             currentShimType,
             assemblyGlobalUsings,
             addedMethodCatalog,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            addedPropertyCatalog);
     }
 
     internal static (ShimTypeBuilder CurrentShimType, int ShimTypeCounter, int GlobalShimMethodCounter)
@@ -246,7 +237,8 @@ internal static class PropertyGetterEmitter
             ShimTypeBuilder currentShimType,
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
             AddedMethodCatalog addedMethodCatalog,
-            AddedFieldCatalog addedFieldCatalog)
+            AddedFieldCatalog addedFieldCatalog,
+            AddedPropertyCatalog addedPropertyCatalog)
     {
         if (currentShimType == null)
         {
@@ -282,7 +274,8 @@ internal static class PropertyGetterEmitter
             semanticModel,
             rewritePlan,
             addedMethodCatalog,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            addedPropertyCatalog);
         currentShimType.AddMethod(rewrittenMethod, shimMethodName);
 
         entries.Add(new WorkerEntry
@@ -299,6 +292,7 @@ internal static class PropertyGetterEmitter
                 getterBodyNode,
                 semanticModel,
                 addedMethodCatalog,
+                addedPropertyCatalog,
                 methodKey),
             SourceStartLine = sourceStartLine,
             SourceEndLine = sourceEndLine,
@@ -317,14 +311,16 @@ internal static class PropertyGetterEmitter
         SemanticModel semanticModel,
         AccessorPlan accessorPlan,
         AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog)
+        AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog)
     {
         ShimBodyRewriter rewriter = new ShimBodyRewriter(
             semanticModel,
             targetType,
             accessorPlan,
             addedMethodCatalog,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            addedPropertyCatalog);
         SyntaxNode rewrittenBody = rewriter.Visit(getterBodyNode);
         // Why transfer: Visit may rebuild ArrowExpressionClause nodes and drop #line annotations.
         rewrittenBody = TransferUloopLineAnnotations(getterBodyNode, rewrittenBody);

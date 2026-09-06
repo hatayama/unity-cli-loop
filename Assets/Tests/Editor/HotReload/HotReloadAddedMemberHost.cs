@@ -338,6 +338,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Compiled generic host so an added property on a generic type can be classified against a
+    /// real compiled type. Static state on a generic type is per closed type, so one shim
+    /// identity and one store entry cannot stand for every instantiation.
+    /// </summary>
+    public class HotReloadAddedPropertyGenericHost<T>
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ExistingGenericValue()
+        {
+            return 1;
+        }
+    }
+
+    /// <summary>
     /// Partial host so worker tests can prove deleted-method signatures are omitted on partials.
     /// </summary>
     public partial class HotReloadAddedMemberPartialHost
