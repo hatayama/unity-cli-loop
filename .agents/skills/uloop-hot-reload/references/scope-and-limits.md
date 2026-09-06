@@ -76,9 +76,10 @@ Adding a type
 An added property applies unless its shape is listed below. A bodied getter or setter is
 emitted like an added method;
 an auto-property is emitted as a pair of accessors over the added-field store, so its
-value follows the same lifetime as an added field and appears in `--status` twice: an
-`Added` row per accessor (`Type::get_X()`, `Type::set_X()`) and an `AddedField` row for
-the value (`Type.X`). The added-fields lifetime warning covers it. Accessors are not
+value follows the same lifetime as an added field and appears in `--status` as one
+`Added` row per accessor plus one `AddedField` row for the value — three rows for a
+get/set auto-property, two for a getter-only one. The rows read
+`Ns.Type.get_X()`, `Ns.Type.set_X(System.Int32)`, and `Ns.Type.X`. The added-fields lifetime warning covers it. Accessors are not
 pause points, and the value never appears in `CapturedVariables`.
 
 These property shapes stay `Skipped` with a per-member reason: a setter without a
