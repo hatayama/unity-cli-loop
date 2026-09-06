@@ -831,6 +831,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: incrementing a member of an added value-type field skips, because the increment
+        /// would apply to the copy the store hands back and then be discarded.
+        /// </summary>
+        [Test]
+        public async Task Skip_ValueTypeAddedFieldMemberIncrement_UsesDedicatedReason()
+        {
+            await AssertValueTypeMemberWriteSkipAsync(
+                "AddedFieldValueTypeIncrement.cs",
+                "            AddedValue.Existing++;\n            return value;");
+        }
+
+        /// <summary>
+        /// What: a write reached through more than one member step still skips, because the copy
+        /// the store hands back is the root of that chain.
+        /// </summary>
+        [Test]
+        public async Task Skip_NestedValueTypeAddedFieldMemberWrite_UsesDedicatedReason()
+        {
+            await AssertValueTypeMemberWriteSkipAsync(
+                "AddedFieldNestedValueTypeWrite.cs",
+                "            AddedValue.Nested.Inner = value;\n            return value;");
+        }
+
+        /// <summary>
+        /// What: an indexer assignment on an added value-type field skips, because the indexer
+        /// writes into the copy rather than into the stored value.
+        /// </summary>
+        [Test]
+        public async Task Skip_ValueTypeAddedFieldIndexerWrite_UsesDedicatedReason()
+        {
+            await AssertValueTypeMemberWriteSkipAsync(
+                "AddedFieldValueTypeIndexerWrite.cs",
+                "            AddedValue[0] = value;\n            return value;");
+        }
+
+        /// <summary>
+        /// What: an instance call on a nested value-type member skips, because a mutating method
+        /// on that chain also only reaches the copy.
+        /// </summary>
+        [Test]
+        public async Task Skip_NestedValueTypeAddedFieldMutatingCall_UsesDedicatedReason()
+        {
+            await AssertValueTypeMemberWriteSkipAsync(
+                "AddedFieldNestedValueTypeCall.cs",
+                "            AddedValue.Nested.Bump();\n            return value;");
+        }
+
+        /// <summary>
         /// What: added fields on a compiled struct type skip referencing methods because the
         /// store cannot keep identity without boxing.
         /// </summary>
@@ -1943,6 +1991,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return paths;
+        }
+
+        /// <summary>
+        /// Runs the worker on a body that reaches an added value-type field through a receiver
+        /// chain and asserts the dedicated skip reason, so each write form is one test.
+        /// </summary>
+        private static async Task AssertValueTypeMemberWriteSkipAsync(
+            string editedFileName,
+            string callerBody)
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(onDisk, "public HotReloadAddedFieldStructHost AddedValue;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n" + callerBody + "\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited(editedFileName, edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingCaller), "value-type");
         }
 
         private static string WithHostMembers(string onDisk, string extraMembers)
