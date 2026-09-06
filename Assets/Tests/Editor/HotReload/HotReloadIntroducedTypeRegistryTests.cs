@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Threading;
+using System.Threading.Tasks;
 
 using NUnit.Framework;
 
@@ -510,6 +512,103 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 registry.TryFindActiveDescriptor(descriptor, out HotReloadIntroducedTypeArtifact found),
                 Is.False);
             Assert.That(found, Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies that resolving from another thread while prepared registrations and their
+        /// scopes change on this thread neither throws nor returns an unregistered assembly.
+        /// </summary>
+        [Test]
+        public async Task ResolveExact_ConcurrentWithPreparedRegistration_StaysConsistent()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeArtifact active = CreateArtifact("active");
+            registry.RegisterPrepared(active);
+            registry.Activate(active);
+            HotReloadIntroducedTypeArtifact prepared = CreateArtifactWithAssembly(
+                CreateDynamicAssembly("ConcurrentPrepared"),
+                CreateOtherDescriptor("prepared"));
+            using HotReloadIntroducedTypeAssemblyResolver resolver =
+                new HotReloadIntroducedTypeAssemblyResolver(registry);
+            using CancellationTokenSource cancellation = new CancellationTokenSource();
+            ResolutionTally tally = new ResolutionTally(prepared.Assembly, active.Assembly);
+
+            // A background reader is the only way to exercise the AssemblyResolve thread this
+            // resolver actually runs on; it touches no Unity API and ends before the test returns.
+            Task reader = Task.Run(() =>
+            {
+                while (!cancellation.IsCancellationRequested)
+                {
+                    tally.Record(resolver.ResolveExact(prepared.AssemblyFullName));
+                    tally.Record(resolver.ResolveExact(active.AssemblyFullName));
+                }
+            });
+
+            // Churn the prepared scope until the reader has observed the artifact both registered
+            // and absent, so the assertions below describe an interleaving that really happened.
+            // The iteration bound keeps the test finite if the reader never gets scheduled.
+            for (int iteration = 0; iteration < 200000 && !tally.SawBothPreparedStates; iteration++)
+            {
+                using (resolver.RegisterPrepared(prepared))
+                {
+                }
+            }
+
+            cancellation.Cancel();
+            Task completed = await Task.WhenAny(reader, Task.Delay(TimeSpan.FromSeconds(10)))
+                .ConfigureAwait(false);
+            Assert.That(completed, Is.SameAs(reader), "The background reader did not finish in time.");
+            await reader.ConfigureAwait(false);
+
+            Assert.That(tally.ResolveCount, Is.GreaterThan(0));
+            Assert.That(tally.UnexpectedCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Counts background resolutions without keeping one entry per call in memory.
+        /// </summary>
+        private sealed class ResolutionTally
+        {
+            private readonly Assembly preparedAssembly;
+            private readonly Assembly activeAssembly;
+            private int resolveCount;
+            private int unexpectedCount;
+            private int preparedHitCount;
+            private int preparedMissCount;
+
+            public int ResolveCount => Volatile.Read(ref resolveCount);
+
+            public int UnexpectedCount => Volatile.Read(ref unexpectedCount);
+
+            public bool SawBothPreparedStates =>
+                Volatile.Read(ref preparedHitCount) > 0 && Volatile.Read(ref preparedMissCount) > 0;
+
+            public ResolutionTally(Assembly preparedAssembly, Assembly activeAssembly)
+            {
+                this.preparedAssembly = preparedAssembly;
+                this.activeAssembly = activeAssembly;
+            }
+
+            public void Record(Assembly resolved)
+            {
+                Interlocked.Increment(ref resolveCount);
+                if (resolved == null)
+                {
+                    Interlocked.Increment(ref preparedMissCount);
+                    return;
+                }
+
+                if (ReferenceEquals(resolved, preparedAssembly))
+                {
+                    Interlocked.Increment(ref preparedHitCount);
+                    return;
+                }
+
+                if (!ReferenceEquals(resolved, activeAssembly))
+                {
+                    Interlocked.Increment(ref unexpectedCount);
+                }
+            }
         }
 
         private static Assembly CreateDynamicAssembly(string prefix)

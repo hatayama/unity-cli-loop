@@ -15,25 +15,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly HashSet<HotReloadIntroducedTypeArtifact> preparedArtifacts =
             new HashSet<HotReloadIntroducedTypeArtifact>();
 
-        public int ActiveCount => activeByAssemblyIdentity.Count;
+        // AppDomain.AssemblyResolve runs on whichever thread requested the failed bind, so the
+        // resolver reads this state off the main thread while activation mutates it on the main
+        // thread. Every access takes this gate, and the resolver takes the same one, so the two
+        // never see a dictionary mid-write.
+        private readonly object gate = new object();
 
-        public int PreparedCount => preparedArtifacts.Count;
+        internal object Gate => gate;
+
+        public int ActiveCount
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return activeByAssemblyIdentity.Count;
+                }
+            }
+        }
+
+        public int PreparedCount
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return preparedArtifacts.Count;
+                }
+            }
+        }
 
         public bool TryFindActive(
             IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors,
             out HotReloadIntroducedTypeArtifact artifact)
         {
             artifact = null;
-            if (descriptors == null || descriptors.Count == 0)
+            if (descriptors == null || descriptors.Count == 0 || descriptors[0] == null)
             {
                 return false;
             }
 
-            if (descriptors[0] == null
-                || !activeByTypeIdentity.TryGetValue(descriptors[0].BuildIdentity(), out artifact))
+            lock (gate)
             {
-                artifact = null;
-                return false;
+                if (!activeByTypeIdentity.TryGetValue(descriptors[0].BuildIdentity(), out artifact))
+                {
+                    artifact = null;
+                    return false;
+                }
             }
 
             if (artifact.MatchesDefinitionSet(descriptors))
@@ -50,10 +78,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             out HotReloadIntroducedTypeArtifact artifact)
         {
             artifact = null;
-            if (descriptor == null
-                || !activeByTypeIdentity.TryGetValue(descriptor.BuildIdentity(), out artifact))
+            if (descriptor == null)
             {
                 return false;
+            }
+
+            lock (gate)
+            {
+                if (!activeByTypeIdentity.TryGetValue(descriptor.BuildIdentity(), out artifact))
+                {
+                    return false;
+                }
             }
 
             if (artifact.MatchesDescriptor(descriptor))
@@ -72,15 +107,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(artifact));
             }
 
-            if (activeByAssemblyIdentity.TryGetValue(
-                artifact.AssemblyFullName,
-                out HotReloadIntroducedTypeArtifact activeArtifact)
-                && ReferenceEquals(activeArtifact, artifact))
+            lock (gate)
             {
-                throw new InvalidOperationException("An active introduced-type artifact cannot be prepared again.");
-            }
+                if (activeByAssemblyIdentity.TryGetValue(
+                    artifact.AssemblyFullName,
+                    out HotReloadIntroducedTypeArtifact activeArtifact)
+                    && ReferenceEquals(activeArtifact, artifact))
+                {
+                    throw new InvalidOperationException("An active introduced-type artifact cannot be prepared again.");
+                }
 
-            preparedArtifacts.Add(artifact);
+                preparedArtifacts.Add(artifact);
+            }
         }
 
         public void Activate(HotReloadIntroducedTypeArtifact artifact)
@@ -90,24 +128,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(artifact));
             }
 
-            if (!preparedArtifacts.Contains(artifact))
+            lock (gate)
             {
-                throw new InvalidOperationException("Only a prepared introduced-type artifact can be activated.");
-            }
+                if (!preparedArtifacts.Contains(artifact))
+                {
+                    throw new InvalidOperationException("Only a prepared introduced-type artifact can be activated.");
+                }
 
-            ValidateActivation(artifact);
-            activeByAssemblyIdentity.Add(artifact.AssemblyFullName, artifact);
-            foreach (HotReloadIntroducedTypeDescriptor descriptor in artifact.Descriptors)
-            {
-                activeByTypeIdentity.Add(descriptor.BuildIdentity(), artifact);
-            }
+                ValidateActivation(artifact);
+                activeByAssemblyIdentity.Add(artifact.AssemblyFullName, artifact);
+                foreach (HotReloadIntroducedTypeDescriptor descriptor in artifact.Descriptors)
+                {
+                    activeByTypeIdentity.Add(descriptor.BuildIdentity(), artifact);
+                }
 
-            preparedArtifacts.Remove(artifact);
+                preparedArtifacts.Remove(artifact);
+            }
         }
 
         public void DiscardPrepared(HotReloadIntroducedTypeArtifact artifact)
         {
-            if (artifact != null)
+            if (artifact == null)
+            {
+                return;
+            }
+
+            lock (gate)
             {
                 preparedArtifacts.Remove(artifact);
             }
@@ -115,7 +161,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public bool TryResolveActiveAssembly(string requestedAssemblyFullName, out HotReloadIntroducedTypeArtifact artifact)
         {
-            return activeByAssemblyIdentity.TryGetValue(requestedAssemblyFullName, out artifact);
+            lock (gate)
+            {
+                return activeByAssemblyIdentity.TryGetValue(requestedAssemblyFullName, out artifact);
+            }
         }
 
         private void ValidateActivation(HotReloadIntroducedTypeArtifact artifact)
