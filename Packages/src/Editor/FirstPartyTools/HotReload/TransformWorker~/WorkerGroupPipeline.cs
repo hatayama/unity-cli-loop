@@ -220,20 +220,34 @@ internal static class WorkerGroupPipeline
 
         List<UsingDirectiveSyntax> assemblyGlobalUsings =
             WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions, analyzableRoots);
+        // Planning decides a declaration is new by failing to find it in the target assembly, so
+        // an unresolved target symbol would make every type already in that assembly look newly
+        // introduced, and a reference that failed to parse would settle the supported-boundary
+        // questions against an incomplete picture. Neither may produce a descriptor; the file
+        // carries the reason instead.
+        bool hasCompleteCompilationInputs = targetAssembly != null && referenceParseErrors.Count == 0;
         WorkerFileOutput[] files = new WorkerFileOutput[units.Count];
         for (int index = 0; index < units.Count; index++)
         {
             WorkerSourceUnit unit = units[index];
             if (unit.SyntaxTree != null && unit.ParseErrors.Count == 0)
             {
-                unit.SemanticModel = compilation.GetSemanticModel(unit.SyntaxTree, ignoreAccessibility: false);
-                IntroducedTypePlanner.Plan(
-                    unit,
-                    targetAssembly,
-                    input.TargetAssemblyName,
-                    input.TargetAssemblyMvid,
-                    input.Defines,
-                    assemblyGlobalUsings);
+                if (hasCompleteCompilationInputs)
+                {
+                    unit.SemanticModel = compilation.GetSemanticModel(unit.SyntaxTree, ignoreAccessibility: false);
+                    IntroducedTypePlanner.Plan(
+                        unit,
+                        targetAssembly,
+                        input.TargetAssemblyName,
+                        input.TargetAssemblyMvid,
+                        input.Defines,
+                        assemblyGlobalUsings);
+                }
+                else
+                {
+                    unit.IntroducedTypeDiagnostics.Add(
+                        "Introduced types require a compile: the target assembly or its references could not be read.");
+                }
             }
 
             unit.ParseErrors.AddRange(referenceParseErrors);

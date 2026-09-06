@@ -543,6 +543,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return directory;
         }
 
+        /// <summary>
+        /// Verifies that no introduced type is reported when the target assembly cannot be read,
+        /// because every declaration would otherwise look absent from it and be treated as new.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_UnreadableTargetAssembly_ReportsNoIntroducedType()
+        {
+            string directory = CreateSourceDirectory("UnreadableTarget");
+            string sourcePath = Path.Combine(directory, "Edited.cs");
+            string targetAssemblyPath = Path.Combine(directory, "Unreadable.dll");
+            File.WriteAllText(targetAssemblyPath, "this is not an assembly");
+            File.WriteAllText(sourcePath, "namespace Example { public class Introduced { } }");
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                CreateConstDriftInput(sourcePath, targetAssemblyPath, Guid.NewGuid().ToString()),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
+            Assert.That(
+                result.Output.files[0].introducedTypeDiagnostics,
+                Has.Some.Contains("target assembly"));
+        }
+
         private static TransformWorkerInputDto CreateInput(string firstSourcePath, string secondSourcePath)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
