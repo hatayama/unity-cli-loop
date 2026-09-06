@@ -27,7 +27,7 @@ internal static class WorkerGroupPipeline
     {
         if (string.Equals(input.Operation, PrepareIntroducedTypesOperation, StringComparison.Ordinal))
         {
-            return PrepareIntroducedTypes(input);
+            return IntroducedTypePreparation.Prepare(input);
         }
 
         if (!string.IsNullOrEmpty(input.Operation))
@@ -184,100 +184,6 @@ internal static class WorkerGroupPipeline
             addedFieldCatalog);
     }
 
-    private static WorkerOutput PrepareIntroducedTypes(WorkerInput input)
-    {
-        CSharpParseOptions parseOptions = new CSharpParseOptions(
-            languageVersion: LanguageVersion.Latest,
-            preprocessorSymbols: input.Defines);
-        List<WorkerSourceUnit> units = new List<WorkerSourceUnit>(input.Sources.Length);
-        List<SyntaxTree> syntaxTrees = new List<SyntaxTree>(input.Sources.Length);
-        List<WorkerSourceUnit> analyzableUnits = new List<WorkerSourceUnit>(input.Sources.Length);
-        foreach (WorkerSourceInput source in input.Sources)
-        {
-            WorkerSourceUnit unit = WorkerSourceLoader.Load(source, parseOptions);
-            units.Add(unit);
-            if (unit.SyntaxTree != null && unit.ParseErrors.Count == 0)
-            {
-                syntaxTrees.Add(unit.SyntaxTree);
-                analyzableUnits.Add(unit);
-            }
-        }
-
-        List<string> referenceParseErrors = new List<string>();
-        (List<MetadataReference> references, MetadataReference targetTypesReference) =
-            CollectMetadataReferences(input, referenceParseErrors);
-        CSharpCompilation compilation = CSharpCompilation.Create(
-            assemblyName: "UloopHotReloadIntroducedTypePlanning",
-            syntaxTrees: syntaxTrees,
-            references: references,
-            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        IAssemblySymbol targetAssembly = ResolveTargetTypesAssemblySymbol(compilation, targetTypesReference);
-        List<CompilationUnitSyntax> analyzableRoots = new List<CompilationUnitSyntax>(analyzableUnits.Count);
-        foreach (WorkerSourceUnit analyzableUnit in analyzableUnits)
-        {
-            analyzableRoots.Add(analyzableUnit.Root);
-        }
-
-        List<UsingDirectiveSyntax> assemblyGlobalUsings =
-            WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions, analyzableRoots);
-        // Planning decides a declaration is new by failing to find it in the target assembly, so
-        // an unresolved target symbol would make every type already in that assembly look newly
-        // introduced, and a reference that failed to parse would settle the supported-boundary
-        // questions against an incomplete picture. Neither may produce a descriptor; the file
-        // carries the reason instead.
-        bool hasCompleteCompilationInputs = targetAssembly != null && referenceParseErrors.Count == 0;
-        WorkerFileOutput[] files = new WorkerFileOutput[units.Count];
-        for (int index = 0; index < units.Count; index++)
-        {
-            WorkerSourceUnit unit = units[index];
-            if (unit.SyntaxTree != null && unit.ParseErrors.Count == 0)
-            {
-                if (hasCompleteCompilationInputs)
-                {
-                    unit.SemanticModel = compilation.GetSemanticModel(unit.SyntaxTree, ignoreAccessibility: false);
-                    IntroducedTypePlanner.Plan(
-                        unit,
-                        targetAssembly,
-                        input.TargetAssemblyName,
-                        input.TargetAssemblyMvid,
-                        input.Defines,
-                        assemblyGlobalUsings);
-                }
-                else
-                {
-                    unit.IntroducedTypeDiagnostics.Add(
-                        "Introduced types require a compile: the target assembly or its references could not be read.");
-                }
-            }
-
-            unit.ParseErrors.AddRange(referenceParseErrors);
-            files[index] = new WorkerFileOutput
-            {
-                ProjectRelativePath = unit.Input.ProjectRelativePath,
-                SourceContentSha256 = unit.SourceContentSha256,
-                ParseErrors = unit.ParseErrors.ToArray(),
-                DeclarationDriftWarnings = Array.Empty<string>(),
-                RemovedMembers = Array.Empty<WorkerRemovedMember>(),
-                RemovedMethodSignatures = Array.Empty<WorkerRemovedMethodSignature>(),
-                AddedFieldNames = Array.Empty<string>(),
-                AddedConstNames = Array.Empty<string>(),
-                IntroducedTypes = unit.IntroducedTypes.ToArray(),
-                IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray()
-            };
-        }
-
-        return new WorkerOutput
-        {
-            ShimSource = string.Empty,
-            Entries = Array.Empty<WorkerEntry>(),
-            Skipped = Array.Empty<WorkerSkipped>(),
-            Files = files,
-            ParseErrors = Array.Empty<string>(),
-            SiblingConstDriftWarnings = Array.Empty<string>(),
-            UnchangedMethods = Array.Empty<WorkerUnchangedMethod>()
-        };
-    }
-
     private static WorkerOutput CreateRunFailureOutput(string parseError)
     {
         return new WorkerOutput
@@ -370,7 +276,7 @@ internal static class WorkerGroupPipeline
             unit.KindChangeSyntaxKeys.EventSyntaxKeys);
     }
 
-    private static (List<MetadataReference> References, MetadataReference TargetTypesReference)
+    internal static (List<MetadataReference> References, MetadataReference TargetTypesReference)
         CollectMetadataReferences(WorkerInput input, List<string> parseErrors)
     {
         string targetTypesFullPath =
@@ -409,8 +315,7 @@ internal static class WorkerGroupPipeline
 
         return (references, targetTypesReference);
     }
-
-    private static IAssemblySymbol ResolveTargetTypesAssemblySymbol(
+    internal static IAssemblySymbol ResolveTargetTypesAssemblySymbol(
         CSharpCompilation compilation,
         MetadataReference targetTypesReference)
     {

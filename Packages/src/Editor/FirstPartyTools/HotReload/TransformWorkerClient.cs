@@ -82,35 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string outputJson = File.ReadAllText(
                     outputJsonPath,
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                TransformWorkerOutputDto output = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(outputJson);
-                if (output == null)
-                {
-                    return TransformWorkerClientResult.Failure(
-                        "Failed to deserialize transform worker output JSON.");
-                }
-
-                if (!TryValidateRequiredPreparationOutput(input, output, out string preparationError))
-                {
-                    return TransformWorkerClientResult.Failure(preparationError);
-                }
-
-                CoalesceOutput(output);
-
-                // Why fail here: run-level parseErrors describe a failure that belongs to no
-                // single source, so there is no per-file row to carry it. Turning it into a
-                // client failure at the process boundary is what makes the per-file row count
-                // an invariant for every caller downstream.
-                if (output.parseErrors.Length > 0)
-                {
-                    return TransformWorkerClientResult.Failure(string.Join("\n", output.parseErrors));
-                }
-
-                if (!TryValidateOutput(input, output, out string validationError))
-                {
-                    return TransformWorkerClientResult.Failure(validationError);
-                }
-
-                return TransformWorkerClientResult.SuccessResult(output);
+                return InterpretOutputJson(input, outputJson);
             }
             finally
             {
@@ -119,6 +91,49 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Directory.Delete(tempDirectory, recursive: true);
                 }
             }
+        }
+
+        /// <summary>
+        /// Turns one worker output JSON document into the client result, applying the boundary
+        /// checks in the order the process path depends on.
+        /// </summary>
+        // Why internal and separate from RunAsync: the order matters as much as the checks. The
+        // required-output check has to see the omissions before coalescing replaces them with
+        // empty arrays, so a test that calls the checks directly cannot tell whether RunAsync
+        // still performs them at all.
+        internal static TransformWorkerClientResult InterpretOutputJson(
+            TransformWorkerInputDto input,
+            string outputJson)
+        {
+            TransformWorkerOutputDto output = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(outputJson);
+            if (output == null)
+            {
+                return TransformWorkerClientResult.Failure(
+                    "Failed to deserialize transform worker output JSON.");
+            }
+
+            if (!TryValidateRequiredPreparationOutput(input, output, out string preparationError))
+            {
+                return TransformWorkerClientResult.Failure(preparationError);
+            }
+
+            CoalesceOutput(output);
+
+            // Why fail here: run-level parseErrors describe a failure that belongs to no
+            // single source, so there is no per-file row to carry it. Turning it into a
+            // client failure at the process boundary is what makes the per-file row count
+            // an invariant for every caller downstream.
+            if (output.parseErrors.Length > 0)
+            {
+                return TransformWorkerClientResult.Failure(string.Join("\n", output.parseErrors));
+            }
+
+            if (!TryValidateOutput(input, output, out string validationError))
+            {
+                return TransformWorkerClientResult.Failure(validationError);
+            }
+
+            return TransformWorkerClientResult.SuccessResult(output);
         }
 
         // Why internal: tests must exercise this path instead of re-implementing ??=.
@@ -204,6 +219,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 errorMessage = string.Empty;
                 return true;
+            }
+
+            // The descriptors repeat the requested identity, so a request that carries none would
+            // produce descriptors that pass the "matches its input" check with an identity no
+            // retained artifact can be attributed to, and fail far from here when the descriptor
+            // is constructed.
+            if (string.IsNullOrWhiteSpace(input.targetAssemblyName)
+                || string.IsNullOrWhiteSpace(input.targetAssemblyMvid))
+            {
+                errorMessage = "Preparation input must name the target assembly and its module version id.";
+                return false;
             }
 
             if (output.files == null)

@@ -26,7 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// reaching downstream code that assumes one result per input source.
         /// </summary>
         [Test]
-        public void TryValidateOutput_MissingFileRow_ReturnsFailure()
+        public void InterpretOutputJson_MissingFileRow_ReturnsFailure()
         {
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
@@ -36,18 +36,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     new TransformWorkerSourceDto { projectRelativePath = "Assets/Two.cs" }
                 }
             };
-            TransformWorkerOutputDto output = new TransformWorkerOutputDto
-            {
-                files = new[]
-                {
-                    new TransformWorkerFileOutputDto { projectRelativePath = "Assets/One.cs" }
-                }
-            };
 
-            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+            // Goes through the same entry point the worker process path uses, so removing the
+            // check from that path fails here instead of only failing a helper nothing calls.
+            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+                input,
+                "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/One.cs\"}]}");
 
-            Assert.That(valid, Is.False);
-            Assert.That(errorMessage, Does.Contain("same count"));
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("same count"));
         }
 
         /// <summary>
@@ -2765,30 +2762,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// is rejected before optional transform fields are coalesced.
         /// </summary>
         [Test]
-        public void TryValidateOutput_PrepareArtifactsOmitted_ReturnsFailure()
+        public void InterpretOutputJson_PrepareArtifactsOmitted_ReturnsFailure()
         {
-            TransformWorkerInputDto input = new TransformWorkerInputDto
-            {
-                operation = "prepareIntroducedTypes",
-                targetAssemblyName = "Assembly",
-                targetAssemblyMvid = "mvid",
-                sources = new[]
-                {
-                    new TransformWorkerSourceDto { projectRelativePath = "Assets/Edited.cs" }
-                }
-            };
-            TransformWorkerOutputDto output = new TransformWorkerOutputDto
-            {
-                files = new[]
-                {
-                    new TransformWorkerFileOutputDto { projectRelativePath = "Assets/Edited.cs" }
-                }
-            };
+            TransformWorkerInputDto input = CreatePreparationValidationInput();
 
-            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+            // The omission has to be judged before coalescing turns it into an empty array, so
+            // the payload enters as JSON through the same entry point the process path uses.
+            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+                input,
+                "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\"}]}");
 
-            Assert.That(valid, Is.False);
-            Assert.That(errorMessage, Does.Contain("introducedTypes"));
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("introducedTypes"));
+        }
+
+        /// <summary>
+        /// Verifies that a preparation request without a target assembly name is rejected at the
+        /// client boundary rather than producing descriptors with an unattributable identity.
+        /// </summary>
+        [Test]
+        public void InterpretOutputJson_PrepareInputWithoutAssemblyName_ReturnsFailure()
+        {
+            TransformWorkerInputDto input = CreatePreparationValidationInput();
+            input.targetAssemblyName = string.Empty;
+
+            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+                input,
+                CreateMatchingPreparationOutputJson(string.Empty, "mvid"));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("target assembly"));
+        }
+
+        /// <summary>
+        /// Verifies that a preparation request without a target module version id is rejected at
+        /// the client boundary, independently of the assembly name being present.
+        /// </summary>
+        [Test]
+        public void InterpretOutputJson_PrepareInputWithoutAssemblyMvid_ReturnsFailure()
+        {
+            TransformWorkerInputDto input = CreatePreparationValidationInput();
+            input.targetAssemblyMvid = string.Empty;
+
+            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+                input,
+                CreateMatchingPreparationOutputJson("Assembly", string.Empty));
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("module version id"));
         }
 
         /// <summary>
@@ -2899,25 +2920,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// success-shaped response can reach artifact preparation.
         /// </summary>
         [Test]
-        public void TryValidateOutput_PrepareNullDescriptorJson_ReturnsFailure()
+        public void InterpretOutputJson_PrepareNullDescriptorJson_ReturnsFailure()
         {
-            TransformWorkerInputDto input = new TransformWorkerInputDto
-            {
-                operation = "prepareIntroducedTypes",
-                targetAssemblyName = "Assembly",
-                targetAssemblyMvid = "mvid",
-                sources = new[]
-                {
-                    new TransformWorkerSourceDto { projectRelativePath = "Assets/Edited.cs" }
-                }
-            };
-            TransformWorkerOutputDto output = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(
+            TransformWorkerInputDto input = CreatePreparationValidationInput();
+
+            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutputJson(
+                input,
                 "{\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\",\"introducedTypes\":[null],\"introducedTypeDiagnostics\":[]}]}");
 
-            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("null introduced type"));
+        }
 
-            Assert.That(valid, Is.False);
-            Assert.That(errorMessage, Does.Contain("null introduced type"));
+        private static string CreateMatchingPreparationOutputJson(string assemblyName, string assemblyMvid)
+        {
+            return JsonConvert.SerializeObject(
+                CreatePreparationValidationOutput(assemblyName, assemblyMvid, "Assets/Edited.cs"));
         }
 
         private static TransformWorkerInputDto CreatePreparationValidationInput()

@@ -567,6 +567,102 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Has.Some.Contains("target assembly"));
         }
 
+        /// <summary>
+        /// Verifies that no introduced type is reported when a reference other than the target
+        /// exists but is not readable metadata, because the boundary checks would then answer
+        /// from error types instead of the real base types and attributes.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_UnreadableReference_ReportsNoIntroducedType()
+        {
+            string directory = CreateSourceDirectory("UnreadableReference");
+            string sourcePath = Path.Combine(directory, "Edited.cs");
+            string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
+            string targetAssemblyMvid = CreateConstDriftTargetAssembly(targetAssemblyPath, 1);
+            string brokenReferencePath = Path.Combine(directory, "BrokenReference.dll");
+            File.WriteAllText(brokenReferencePath, "this is not an assembly");
+            File.WriteAllText(sourcePath, "namespace Example { public class Introduced { } }");
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                CreatePreparationInput(
+                    sourcePath,
+                    targetAssemblyPath,
+                    "ConstDriftTarget",
+                    targetAssemblyMvid,
+                    new[] { brokenReferencePath }),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
+            Assert.That(
+                result.Output.files[0].introducedTypeDiagnostics,
+                Has.Some.Contains("its references"));
+        }
+
+        /// <summary>
+        /// Verifies that no introduced type is reported when the request names a module version
+        /// id the analysed target assembly does not carry, because the descriptors would then
+        /// claim an assembly generation the planning never looked at.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_TargetAssemblyMvidMismatch_ReportsNoIntroducedType()
+        {
+            string directory = CreateSourceDirectory("TargetMvidMismatch");
+            string sourcePath = Path.Combine(directory, "Edited.cs");
+            string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
+            CreateConstDriftTargetAssembly(targetAssemblyPath, 1);
+            File.WriteAllText(sourcePath, "namespace Example { public class Introduced { } }");
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                CreateConstDriftInput(sourcePath, targetAssemblyPath, Guid.NewGuid().ToString()),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
+            Assert.That(
+                result.Output.files[0].introducedTypeDiagnostics,
+                Has.Some.Contains("identity does not match"));
+        }
+
+        /// <summary>
+        /// Verifies that a declaration whose metadata name already exists in a different
+        /// referenced assembly is still introduced, because only the target assembly decides
+        /// whether the type is already compiled.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_SameMetadataNameInOtherAssembly_IsStillIntroduced()
+        {
+            string directory = CreateSourceDirectory("SameNameOtherAssembly");
+            string sourcePath = Path.Combine(directory, "Edited.cs");
+            string targetAssemblyPath = Path.Combine(directory, "SameNameTarget.dll");
+            string otherAssemblyPath = Path.Combine(directory, "SameNameOther.dll");
+            string targetAssemblyMvid = CreateAssemblyWithType(
+                targetAssemblyPath,
+                "SameNameTarget",
+                "Example",
+                "Unrelated");
+            CreateAssemblyWithType(otherAssemblyPath, "SameNameOther", "Example", "Shared");
+            File.WriteAllText(sourcePath, "namespace Example { public class Shared { } }");
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                CreatePreparationInput(
+                    sourcePath,
+                    targetAssemblyPath,
+                    "SameNameTarget",
+                    targetAssemblyMvid,
+                    new[] { otherAssemblyPath }),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
+            Assert.That(
+                result.Output.files[0].introducedTypes[0].metadataName,
+                Is.EqualTo("Example.Shared"));
+            Assert.That(
+                result.Output.files[0].introducedTypes[0].originalAssemblyName,
+                Is.EqualTo("SameNameTarget"));
+        }
+
         private static TransformWorkerInputDto CreateInput(string firstSourcePath, string secondSourcePath)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -608,7 +704,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string targetAssemblyPath,
             string targetAssemblyMvid)
         {
+            return CreatePreparationInput(
+                sourcePath,
+                targetAssemblyPath,
+                "ConstDriftTarget",
+                targetAssemblyMvid,
+                Array.Empty<string>());
+        }
+
+        private static TransformWorkerInputDto CreatePreparationInput(
+            string sourcePath,
+            string targetAssemblyPath,
+            string targetAssemblyName,
+            string targetAssemblyMvid,
+            string[] extraReferencePaths)
+        {
             UnityEditor.Compilation.Assembly compilationAssembly = FindCompilationAssembly();
+            List<string> referencePaths = new List<string>(
+                BuildAbsoluteReferencePaths(compilationAssembly.allReferences, targetAssemblyPath));
+            foreach (string extraReferencePath in extraReferencePaths)
+            {
+                referencePaths.Add(Path.GetFullPath(extraReferencePath));
+            }
+
             return new TransformWorkerInputDto
             {
                 operation = "prepareIntroducedTypes",
@@ -621,13 +739,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 },
                 defines = compilationAssembly.defines ?? Array.Empty<string>(),
-                referencePaths = BuildAbsoluteReferencePaths(compilationAssembly.allReferences, targetAssemblyPath),
+                referencePaths = referencePaths.ToArray(),
                 targetTypesAssemblyPath = targetAssemblyPath,
-                targetAssemblyName = "ConstDriftTarget",
+                targetAssemblyName = targetAssemblyName,
                 targetAssemblyMvid = targetAssemblyMvid,
                 assemblySourcePaths = Array.Empty<string>(),
                 changedSiblingSourcePaths = Array.Empty<string>()
             };
+        }
+
+        private static string CreateAssemblyWithType(
+            string path,
+            string assemblyName,
+            string typeNamespace,
+            string typeName)
+        {
+            AssemblyNameDefinition assemblyNameDefinition = new AssemblyNameDefinition(
+                assemblyName,
+                new Version(1, 0, 0, 0));
+            using (AssemblyDefinition assembly = AssemblyDefinition.CreateAssembly(
+                assemblyNameDefinition,
+                assemblyName,
+                ModuleKind.Dll))
+            {
+                TypeDefinition type = new TypeDefinition(
+                    typeNamespace,
+                    typeName,
+                    CecilTypeAttributes.Public | CecilTypeAttributes.Class,
+                    assembly.MainModule.TypeSystem.Object);
+                assembly.MainModule.Types.Add(type);
+                assembly.Write(path);
+            }
+
+            using (ModuleDefinition module = ModuleDefinition.ReadModule(path))
+            {
+                return module.Mvid.ToString();
+            }
         }
 
         private static string CreateConstDriftTargetAssembly(string path, int constantValue)
