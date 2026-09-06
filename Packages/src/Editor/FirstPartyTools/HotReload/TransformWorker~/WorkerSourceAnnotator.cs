@@ -56,7 +56,7 @@ internal static class WorkerSourceAnnotator
         List<SyntaxNode> nodesToAnnotate = new List<SyntaxNode>();
         nodesToAnnotate.AddRange(root.DescendantNodes().OfType<MethodDeclarationSyntax>());
         nodesToAnnotate.AddRange(root.DescendantNodes().OfType<StatementSyntax>());
-        // Why property/accessor arrows: expression-bodied getters are rewritten into synthetic
+        // Why property/accessor arrows: expression-bodied accessors are rewritten into synthetic
         // MethodDeclarations that would otherwise carry no #line annotations into the shim.
         foreach (PropertyDeclarationSyntax propertyDeclaration in root.DescendantNodes()
             .OfType<PropertyDeclarationSyntax>())
@@ -70,7 +70,9 @@ internal static class WorkerSourceAnnotator
         foreach (AccessorDeclarationSyntax accessor in root.DescendantNodes()
             .OfType<AccessorDeclarationSyntax>())
         {
-            if (accessor.IsKind(SyntaxKind.GetAccessorDeclaration) && accessor.ExpressionBody != null)
+            if ((accessor.IsKind(SyntaxKind.GetAccessorDeclaration)
+                || accessor.IsKind(SyntaxKind.SetAccessorDeclaration))
+                && accessor.ExpressionBody != null)
             {
                 nodesToAnnotate.Add(accessor.ExpressionBody);
             }
