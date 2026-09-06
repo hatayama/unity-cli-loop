@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.2.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.2.0...uloop-project-runner-v3.2.1) (2026-09-06)
+
+
+### Bug Fixes
+
+* compile and run-tests now say how many hot-reload changes the domain reload dropped ([#2611](https://github.com/hatayama/unity-cli-loop/issues/2611)) ([66ab19c](https://github.com/hatayama/unity-cli-loop/commit/66ab19c3ab6dcb2ebab7d55995b177c3f4308c5a))
+* uloop --help and uloop list now read skill descriptions from packages referenced by a relative file: path ([#2644](https://github.com/hatayama/unity-cli-loop/issues/2644)) ([5787362](https://github.com/hatayama/unity-cli-loop/commit/57873627bda7250f711a23757255c52109843f72))
+
 ## [3.2.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.1.2...uloop-project-runner-v3.2.0) (2026-09-04)
 
 
