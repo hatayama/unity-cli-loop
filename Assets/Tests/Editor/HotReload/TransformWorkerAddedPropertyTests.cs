@@ -940,6 +940,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 null);
         }
 
+        /// <summary>
+        /// A conditional access whose receiver is a parenthesized ternary holding an added property
+        /// is skipped too: the walk stops at the first non-expression parent, so the ternary keeps
+        /// the reference on the receiver spine. Pins the current conservative behavior.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerConditionalAccessOnTernaryHoldingAddedProperty_SkipsCallerWithConditionalAccessReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyTernaryConditionalAccess.cs",
+                "public string Label { get { return \"x\"; } }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return (value > 0 ? Label : null)?.Length ?? 0;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(ConditionalAccessReason),
+                FormatSkipped(result.Output.skipped));
+        }
+
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(
             string fileName,
             string extraMembers,
