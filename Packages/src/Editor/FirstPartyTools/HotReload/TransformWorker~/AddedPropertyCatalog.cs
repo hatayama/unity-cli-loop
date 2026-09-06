@@ -22,8 +22,6 @@ internal sealed class AddedPropertyCatalog
 {
     private readonly Dictionary<string, AddedPropertyBinding> _byPropertyKey =
         new Dictionary<string, AddedPropertyBinding>(StringComparer.Ordinal);
-    private readonly Dictionary<string, AddedPropertyBinding> _byAccessorKey =
-        new Dictionary<string, AddedPropertyBinding>(StringComparer.Ordinal);
     private readonly HashSet<string> _classifiedAddedKeys = new HashSet<string>(StringComparer.Ordinal);
 
     public IEnumerable<AddedPropertyBinding> Bindings => _byPropertyKey.Values;
@@ -47,8 +45,6 @@ internal sealed class AddedPropertyCatalog
         Debug.Assert(!string.IsNullOrEmpty(binding.PropertyKey), "binding.PropertyKey must not be null or empty.");
         _byPropertyKey[binding.PropertyKey] = binding;
         MarkClassifiedAdded(binding.PropertyKey);
-        RegisterAccessor(binding.Getter, binding);
-        RegisterAccessor(binding.Setter, binding);
     }
 
     public AddedPropertyBinding FindOrNull(string propertyKey)
@@ -59,16 +55,6 @@ internal sealed class AddedPropertyCatalog
         }
 
         return _byPropertyKey.TryGetValue(propertyKey, out AddedPropertyBinding binding) ? binding : null;
-    }
-
-    public AddedPropertyBinding FindByAccessorKeyOrNull(string accessorKey)
-    {
-        if (accessorKey == null)
-        {
-            return null;
-        }
-
-        return _byAccessorKey.TryGetValue(accessorKey, out AddedPropertyBinding binding) ? binding : null;
     }
 
     public AddedPropertyBinding FindBySymbolOrNull(IPropertySymbol propertySymbol)
@@ -95,13 +81,5 @@ internal sealed class AddedPropertyCatalog
     public static string FormatPropertyKey(string typeMetadataName, string propertyName)
     {
         return typeMetadataName + TransformWorkerProgramMarker.AddedFieldKeySeparator + propertyName;
-    }
-
-    private void RegisterAccessor(AddedMethodBinding accessor, AddedPropertyBinding binding)
-    {
-        if (accessor != null && accessor.MethodKey != null)
-        {
-            _byAccessorKey[accessor.MethodKey] = binding;
-        }
     }
 }
