@@ -244,9 +244,16 @@ internal static class WorkerGroupPipeline
         Dictionary<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> retainedDeclarations =
             IntroducedTypeDeclarationVerifier.FindRetainedDeclarations(
                 loadedUnits, verificationCompilation, input, targetAssembly, artifactMap);
+        List<string> bindingParseErrors = new List<string>();
         foreach (KeyValuePair<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> entry in retainedDeclarations)
         {
-            IntroducedTypeBindingRewriter.RemoveRetainedDeclarations(entry.Key, entry.Value, parseOptions);
+            IntroducedTypeBindingRewriter.RemoveRetainedDeclarations(
+                entry.Key, entry.Value, parseOptions, bindingParseErrors);
+        }
+
+        if (bindingParseErrors.Count > 0)
+        {
+            return bindingParseErrors[0];
         }
 
         return null;

@@ -19,7 +19,8 @@ internal static class IntroducedTypeBindingRewriter
     internal static void RemoveRetainedDeclarations(
         WorkerSourceUnit unit,
         IReadOnlyList<BaseTypeDeclarationSyntax> declarations,
-        CSharpParseOptions parseOptions)
+        CSharpParseOptions parseOptions,
+        List<string> bindingParseErrors)
     {
         if (declarations.Count == 0)
         {
@@ -36,8 +37,11 @@ internal static class IntroducedTypeBindingRewriter
             builder.ToString(),
             parseOptions,
             unit.Input.SourcePath,
-            unit.ParseErrors);
-        if (bindingTree == null)
+            bindingParseErrors);
+        // A preprocessor region that starts outside the declaration and ends inside it leaves the
+        // blanked text unparseable. The run stops rather than transforming a file whose binding
+        // tree is a guess: the caller advances to revert and compile whenever a run succeeds.
+        if (bindingTree == null || bindingParseErrors.Count > 0)
         {
             return;
         }
