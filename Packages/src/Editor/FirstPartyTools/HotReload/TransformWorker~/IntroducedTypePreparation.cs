@@ -42,6 +42,8 @@ internal static class IntroducedTypePreparation
         List<string> referenceParseErrors = new List<string>();
         (List<MetadataReference> references, MetadataReference targetTypesReference) =
             WorkerGroupPipeline.CollectMetadataReferences(input, referenceParseErrors);
+        List<(WorkerIntroducedTypeArtifact Artifact, MetadataReference Reference)> artifactReferences =
+            CollectArtifactReferences(input, references, referenceParseErrors);
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: "UloopHotReloadIntroducedTypePlanning",
             syntaxTrees: syntaxTrees,
@@ -59,6 +61,12 @@ internal static class IntroducedTypePreparation
             WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions, analyzableRoots);
         string incompleteInputsDiagnostic =
             DescribeIncompleteCompilationInputs(input, targetAssembly, referenceParseErrors);
+        IntroducedTypeArtifactMap artifactMap = IntroducedTypeArtifactMap.Empty;
+        if (incompleteInputsDiagnostic == null
+            && !IntroducedTypeArtifactMap.TryBuild(compilation, artifactReferences, out artifactMap, out string artifactError))
+        {
+            incompleteInputsDiagnostic = "Introduced types require a compile: " + artifactError;
+        }
         WorkerFileOutput[] files = new WorkerFileOutput[units.Count];
         for (int index = 0; index < units.Count; index++)
         {
@@ -73,6 +81,7 @@ internal static class IntroducedTypePreparation
                         targetAssembly,
                         input.TargetAssemblyName,
                         input.TargetAssemblyMvid,
+                        artifactMap,
                         input.Defines,
                         assemblyGlobalUsings);
                 }
@@ -181,6 +190,40 @@ internal static class IntroducedTypePreparation
         {
             return Guid.Empty;
         }
+    }
+
+    // Adds each artifact assembly to the references the planning compilation binds against, so a
+    // declaration whose dependency now lives in a retained artifact still resolves. The reference
+    // is kept beside its record because normalization may only use a mapping whose file was
+    // confirmed to be the assembly the record claims.
+    private static List<(WorkerIntroducedTypeArtifact Artifact, MetadataReference Reference)>
+        CollectArtifactReferences(
+            WorkerInput input,
+            List<MetadataReference> references,
+            List<string> parseErrors)
+    {
+        List<(WorkerIntroducedTypeArtifact, MetadataReference)> artifactReferences =
+            new List<(WorkerIntroducedTypeArtifact, MetadataReference)>();
+        foreach (WorkerIntroducedTypeArtifact artifact in input.IntroducedTypeArtifacts)
+        {
+            if (artifact == null || string.IsNullOrEmpty(artifact.ReferencePath))
+            {
+                parseErrors.Add("Introduced-type artifact record must carry a reference path.");
+                continue;
+            }
+
+            if (!File.Exists(artifact.ReferencePath))
+            {
+                parseErrors.Add("Introduced-type artifact not found: " + artifact.ReferencePath);
+                continue;
+            }
+
+            MetadataReference reference = MetadataReference.CreateFromFile(artifact.ReferencePath);
+            references.Add(reference);
+            artifactReferences.Add((artifact, reference));
+        }
+
+        return artifactReferences;
     }
 
     // A reference file that exists but is not readable managed metadata never reaches the
