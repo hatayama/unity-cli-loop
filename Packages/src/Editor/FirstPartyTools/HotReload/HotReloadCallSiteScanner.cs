@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 
 using Mono.Cecil;
-using Mono.Cecil.Cil;
 
 using UnityEditor.Compilation;
 using UnityEngine;
@@ -136,35 +135,68 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 scanNames.Add(targetAssemblyName);
             }
-            foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
+            foreach (KeyValuePair<string, string[]> assembly in GetReferencedDllFileNamesByAssembly())
             {
-                if (targetAssemblyNames.Contains(assembly.name)
-                    || ReferencesAnyTargetDll(assembly, targetDllFileNames))
+                if (targetAssemblyNames.Contains(assembly.Key)
+                    || ReferencesAnyTargetDll(assembly.Value, targetDllFileNames))
                 {
-                    scanNames.Add(assembly.name);
+                    scanNames.Add(assembly.Key);
                 }
             }
 
             return scanNames;
         }
 
-        private static bool ReferencesAnyTargetDll(
-            UnityCompilationAssembly assembly,
-            HashSet<string> targetDllFileNames)
+        // Why cache per domain: CompilationPipeline.GetAssemblies() costs ~40 ms on a project with
+        // ~100 assemblies, and the reference graph can only change through an asmdef or package
+        // change, which recompiles and reloads the domain (resetting this field).
+        private static Dictionary<string, string[]> _referencedDllFileNamesByAssembly;
+
+        private static Dictionary<string, string[]> GetReferencedDllFileNamesByAssembly()
         {
-            if (assembly.allReferences == null)
+            if (_referencedDllFileNamesByAssembly != null)
             {
-                return false;
+                return _referencedDllFileNamesByAssembly;
             }
 
-            foreach (string reference in assembly.allReferences)
+            Dictionary<string, string[]> graph = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            foreach (UnityCompilationAssembly assembly in CompilationPipeline.GetAssemblies())
+            {
+                graph[assembly.name] = CollectReferenceFileNames(assembly.allReferences);
+            }
+
+            _referencedDllFileNamesByAssembly = graph;
+            return graph;
+        }
+
+        private static string[] CollectReferenceFileNames(string[] allReferences)
+        {
+            if (allReferences == null)
+            {
+                return Array.Empty<string>();
+            }
+
+            List<string> fileNames = new List<string>(allReferences.Length);
+            foreach (string reference in allReferences)
             {
                 if (string.IsNullOrEmpty(reference))
                 {
                     continue;
                 }
 
-                if (targetDllFileNames.Contains(Path.GetFileName(reference)))
+                fileNames.Add(Path.GetFileName(reference));
+            }
+
+            return fileNames.ToArray();
+        }
+
+        private static bool ReferencesAnyTargetDll(
+            string[] referencedDllFileNames,
+            HashSet<string> targetDllFileNames)
+        {
+            foreach (string fileName in referencedDllFileNames)
+            {
+                if (targetDllFileNames.Contains(fileName))
                 {
                     return true;
                 }
@@ -179,134 +211,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CompiledMethodIdentity[] targets,
             List<CallSiteHit> hits)
         {
-            // InMemory + no resolver: operand FullName comparison does not require type resolution.
-            ReaderParameters readerParameters = new ReaderParameters { InMemory = true };
-            using AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly(dllPath, readerParameters);
-            ModuleDefinition module = assemblyDefinition.MainModule;
-            Dictionary<string, MethodDefinition> logicalOwners = BuildLogicalOwnerIndex(module);
-
-            foreach (TypeDefinition type in module.GetTypes())
+            // Why cache: the dll only changes on a compile, which also reloads the domain, so
+            // across the runs in between the Cecil read and the instruction walk are pure repeat work.
+            HotReloadCompiledCallSiteCache.Entry compiled = HotReloadCompiledCallSiteCache.Shared.GetOrLoad(dllPath);
+            foreach (HotReloadCompiledCallSiteCache.CompiledCallSite callSite in compiled.CallSites)
             {
-                foreach (MethodDefinition method in type.Methods)
-                {
-                    CollectHitsFromMethod(assemblyName, module, method, targets, logicalOwners, hits);
-                }
+                CollectHitFromCallSite(assemblyName, compiled, callSite, targets, hits);
             }
         }
 
-        private static Dictionary<string, MethodDefinition> BuildLogicalOwnerIndex(ModuleDefinition module)
-        {
-            Dictionary<string, MethodDefinition> index = new Dictionary<string, MethodDefinition>();
-            foreach (TypeDefinition type in module.GetTypes())
-            {
-                foreach (MethodDefinition method in type.Methods)
-                {
-                    TryIndexStateMachineOwner(method, index);
-                }
-            }
-
-            return index;
-        }
-
-        private static void TryIndexStateMachineOwner(
-            MethodDefinition method,
-            Dictionary<string, MethodDefinition> index)
-        {
-            if (!method.HasCustomAttributes)
-            {
-                return;
-            }
-
-            foreach (CustomAttribute attribute in method.CustomAttributes)
-            {
-                string attributeName = attribute.AttributeType.Name;
-                if (attributeName != HotReloadConstants.AsyncStateMachineAttributeTypeName
-                    && attributeName != HotReloadConstants.IteratorStateMachineAttributeTypeName)
-                {
-                    continue;
-                }
-
-                if (!attribute.HasConstructorArguments || attribute.ConstructorArguments.Count == 0)
-                {
-                    continue;
-                }
-
-                TypeReference stateMachineType = attribute.ConstructorArguments[0].Value as TypeReference;
-                if (stateMachineType == null)
-                {
-                    continue;
-                }
-
-                index[stateMachineType.FullName] = method;
-            }
-        }
-
-        private static void CollectHitsFromMethod(
+        private static void CollectHitFromCallSite(
             string assemblyName,
-            ModuleDefinition module,
-            MethodDefinition method,
+            HotReloadCompiledCallSiteCache.Entry compiled,
+            HotReloadCompiledCallSiteCache.CompiledCallSite callSite,
             CompiledMethodIdentity[] targets,
-            Dictionary<string, MethodDefinition> logicalOwners,
             List<CallSiteHit> hits)
         {
-            if (!method.HasBody)
+            (bool matched, CompiledMethodIdentity target) = FindMatchingTarget(
+                callSite.Operand,
+                assemblyName,
+                compiled.Module,
+                targets);
+            if (!matched)
             {
                 return;
             }
 
-            foreach (Instruction instruction in method.Body.Instructions)
+            MethodDefinition reportedCaller = ResolveReportedCaller(callSite.Caller, compiled.LogicalOwners);
+
+            // Why resolve first: async/iterator self-recursion lives in MoveNext. Matching
+            // the physical caller would miss it, then reporting the logical owner would look
+            // like an external caller of the old method.
+            if (IsSelfCall(assemblyName, compiled.Module, reportedCaller, target))
             {
-                if (!IsCallSiteOpcode(instruction.OpCode))
-                {
-                    continue;
-                }
-
-                MethodReference operand = instruction.Operand as MethodReference;
-                if (operand == null)
-                {
-                    continue;
-                }
-
-                (bool matched, CompiledMethodIdentity target) = FindMatchingTarget(
-                    operand,
-                    assemblyName,
-                    module,
-                    targets);
-                if (!matched)
-                {
-                    continue;
-                }
-
-                MethodDefinition reportedCaller = ResolveReportedCaller(method, logicalOwners);
-
-                // Why resolve first: async/iterator self-recursion lives in MoveNext. Matching
-                // the physical caller would miss it, then reporting the logical owner would look
-                // like an external caller of the old method.
-                if (IsSelfCall(assemblyName, module, reportedCaller, target))
-                {
-                    continue;
-                }
-
-                hits.Add(
-                    CreateHit(
-                        assemblyName,
-                        reportedCaller,
-                        target,
-                        IsFunctionPointerLoadOpcode(instruction.OpCode)));
+                return;
             }
-        }
 
-        private static bool IsCallSiteOpcode(OpCode opCode)
-        {
-            return opCode == OpCodes.Call
-                || opCode == OpCodes.Callvirt
-                || opCode == OpCodes.Ldftn
-                || opCode == OpCodes.Ldvirtftn;
-        }
-
-        private static bool IsFunctionPointerLoadOpcode(OpCode opCode)
-        {
-            return opCode == OpCodes.Ldftn || opCode == OpCodes.Ldvirtftn;
+            hits.Add(
+                CreateHit(
+                    assemblyName,
+                    reportedCaller,
+                    target,
+                    callSite.IsFunctionPointerLoad));
         }
 
         private static (bool matched, CompiledMethodIdentity target) FindMatchingTarget(
