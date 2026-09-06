@@ -25,6 +25,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [SetUp]
         public void SetUp()
         {
+            // Why a fresh Scene: the discarder reports every dirty Scene that has no disk path, so an
+            // untitled Scene left dirty earlier in the run would be read as this fixture's own failure.
+            // Replacing the active Scene drops that dirtiness and starts every test from a known state.
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
             if (!AssetDatabase.IsValidFolder(TempFolder))
             {
                 AssetDatabase.CreateFolder("Assets", "UloopUnsavedChangesDiscarderTemp");
@@ -77,6 +82,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void DiscardUnsavedEditorChanges_WithDirtyPrefabStage_ReopensWithoutWritingFile()
         {
+            Assert.That(
+                SceneManager.GetActiveScene().isDirty,
+                Is.False,
+                "SetUp must leave a clean Scene so a Scene dirtied earlier in the run is not read as this test's failure");
             PrefabStage stage = OpenDirtyPrefabStage();
             DateTime mtimeBefore = File.GetLastWriteTimeUtc(TempPrefabPath);
 
