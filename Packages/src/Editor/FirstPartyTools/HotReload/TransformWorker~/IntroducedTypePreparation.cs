@@ -20,6 +20,33 @@ using Microsoft.CodeAnalysis.Text;
 // could not be read or describe a different assembly than the request named.
 internal static class IntroducedTypePreparation
 {
+    // The planning compilation itself when this run has no other edited file to read, so the
+    // common case does not pay for a second compilation.
+    private static CSharpCompilation CreateConstDriftCompilation(
+        WorkerInput input,
+        CSharpParseOptions parseOptions,
+        List<SyntaxTree> syntaxTrees,
+        List<MetadataReference> references,
+        CSharpCompilation planningCompilation)
+    {
+        List<SyntaxTree> siblingTrees = SiblingConstDriftCollector.ParseChangedSiblings(
+            input.ChangedSiblingSourcePaths,
+            parseOptions);
+        if (siblingTrees.Count == 0)
+        {
+            return planningCompilation;
+        }
+
+        List<SyntaxTree> allTrees = new List<SyntaxTree>(syntaxTrees.Count + siblingTrees.Count);
+        allTrees.AddRange(syntaxTrees);
+        allTrees.AddRange(siblingTrees);
+        return CSharpCompilation.Create(
+            assemblyName: "UloopHotReloadIntroducedTypeConstVerification",
+            syntaxTrees: allTrees,
+            references: references,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+    }
+
     internal static WorkerOutput Prepare(WorkerInput input)
     {
         CSharpParseOptions parseOptions = new CSharpParseOptions(
@@ -67,6 +94,17 @@ internal static class IntroducedTypePreparation
         {
             incompleteInputsDiagnostic = "Introduced types require a compile: " + artifactError;
         }
+        // Why a second compilation: a const declared in a file this run does not transform binds
+        // to the value the target assembly was compiled with, so its edited value is invisible in
+        // the planning compilation and a changed const would pass unnoticed. Planning itself stays
+        // on the compilation of the requested sources only, so which types are introduced does not
+        // depend on which other files happened to be edited.
+        CSharpCompilation constDriftCompilation = CreateConstDriftCompilation(
+            input,
+            parseOptions,
+            syntaxTrees,
+            references,
+            compilation);
         WorkerFileOutput[] files = new WorkerFileOutput[units.Count];
         for (int index = 0; index < units.Count; index++)
         {
@@ -76,6 +114,9 @@ internal static class IntroducedTypePreparation
                 if (incompleteInputsDiagnostic == null)
                 {
                     unit.SemanticModel = compilation.GetSemanticModel(unit.SyntaxTree, ignoreAccessibility: false);
+                    unit.ConstDriftSemanticModel = constDriftCompilation.GetSemanticModel(
+                        unit.SyntaxTree,
+                        ignoreAccessibility: false);
                     IntroducedTypePlanner.Plan(
                         unit,
                         targetAssembly,

@@ -36,13 +36,7 @@ internal static class SiblingConstDriftCollector
                 continue;
             }
 
-            string text = File.ReadAllText(
-                siblingPath,
-                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(
-                SourceText.From(text, Encoding.UTF8),
-                parseOptions,
-                path: siblingPath);
+            SyntaxTree syntaxTree = ParseSibling(siblingPath, parseOptions);
             CompilationUnitSyntax root = syntaxTree.GetCompilationUnitRoot();
             CSharpCompilation siblingCompilation = CSharpCompilation.Create(
                 assemblyName: "UloopHotReloadSiblingConstDriftCompilation",
@@ -60,5 +54,44 @@ internal static class SiblingConstDriftCollector
         }
 
         return warnings;
+    }
+
+    /// <summary>
+    /// Parses the changed sibling files that exist, so a caller can put them into a compilation
+    /// of its own.
+    /// </summary>
+    internal static List<SyntaxTree> ParseChangedSiblings(
+        string[] changedSiblingSourcePaths,
+        CSharpParseOptions parseOptions)
+    {
+        List<SyntaxTree> trees = new List<SyntaxTree>();
+        if (changedSiblingSourcePaths == null)
+        {
+            return trees;
+        }
+
+        for (int index = 0; index < changedSiblingSourcePaths.Length; index++)
+        {
+            string siblingPath = changedSiblingSourcePaths[index];
+            if (string.IsNullOrEmpty(siblingPath) || !File.Exists(siblingPath))
+            {
+                continue;
+            }
+
+            trees.Add(ParseSibling(siblingPath, parseOptions));
+        }
+
+        return trees;
+    }
+
+    private static SyntaxTree ParseSibling(string siblingPath, CSharpParseOptions parseOptions)
+    {
+        string text = File.ReadAllText(
+            siblingPath,
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        return CSharpSyntaxTree.ParseText(
+            SourceText.From(text, Encoding.UTF8),
+            parseOptions,
+            path: siblingPath);
     }
 }

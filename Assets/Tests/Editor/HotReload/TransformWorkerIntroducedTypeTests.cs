@@ -481,6 +481,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a const changed in another edited file, one this run does not transform,
+        /// still rejects the introduced type that reads it, because planning would otherwise fold
+        /// the value the target assembly was compiled with into the artifact.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_ChangedConstInAnotherFile_IsRejected()
+        {
+            string directory = CreateSourceDirectory("ChangedConstInAnotherFile");
+            string sourcePath = Path.Combine(directory, "Edited.cs");
+            string siblingPath = Path.Combine(directory, "Sibling.cs");
+            string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
+            string targetAssemblyMvid = CreateConstDriftTargetAssembly(targetAssemblyPath, 1);
+            File.WriteAllText(
+                sourcePath,
+                "namespace Example { public class Introduced { public int Get() { return Existing.Value; } } }");
+            File.WriteAllText(
+                siblingPath,
+                "namespace Example { public class Existing { public const int Value = 2; } }");
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                CreateConstDriftInputWithSiblings(
+                    sourcePath,
+                    targetAssemblyPath,
+                    targetAssemblyMvid,
+                    new[] { siblingPath }),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
+            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Existing.Value"));
+        }
+
+        /// <summary>
         /// Verifies that a changed const does not reject an introduced type that does not refer to it.
         /// </summary>
         [Test]
@@ -614,7 +647,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     targetAssemblyPath,
                     "ConstDriftTarget",
                     targetAssemblyMvid,
-                    new[] { brokenReferencePath }),
+                    new[] { brokenReferencePath },
+                    Array.Empty<string>()),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -675,7 +709,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     targetAssemblyPath,
                     "SameNameTarget",
                     targetAssemblyMvid,
-                    new[] { otherAssemblyPath }),
+                    new[] { otherAssemblyPath },
+                    Array.Empty<string>()),
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
@@ -734,7 +769,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 targetAssemblyPath,
                 "ConstDriftTarget",
                 targetAssemblyMvid,
+                Array.Empty<string>(),
                 Array.Empty<string>());
+        }
+
+        private static TransformWorkerInputDto CreateConstDriftInputWithSiblings(
+            string sourcePath,
+            string targetAssemblyPath,
+            string targetAssemblyMvid,
+            string[] changedSiblingSourcePaths)
+        {
+            return CreatePreparationInput(
+                sourcePath,
+                targetAssemblyPath,
+                "ConstDriftTarget",
+                targetAssemblyMvid,
+                Array.Empty<string>(),
+                changedSiblingSourcePaths);
         }
 
         private static TransformWorkerInputDto CreatePreparationInput(
@@ -742,7 +793,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string targetAssemblyPath,
             string targetAssemblyName,
             string targetAssemblyMvid,
-            string[] extraReferencePaths)
+            string[] extraReferencePaths,
+            string[] changedSiblingSourcePaths)
         {
             UnityEditor.Compilation.Assembly compilationAssembly = FindCompilationAssembly();
             List<string> referencePaths = new List<string>(
@@ -769,7 +821,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 targetAssemblyName = targetAssemblyName,
                 targetAssemblyMvid = targetAssemblyMvid,
                 assemblySourcePaths = Array.Empty<string>(),
-                changedSiblingSourcePaths = Array.Empty<string>()
+                changedSiblingSourcePaths = changedSiblingSourcePaths
             };
         }
 

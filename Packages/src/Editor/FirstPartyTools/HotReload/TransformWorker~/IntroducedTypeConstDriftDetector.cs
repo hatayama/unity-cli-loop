@@ -52,7 +52,7 @@ internal static class IntroducedTypeConstDriftDetector
                 continue;
             }
 
-            return !Equals(compiledField.ConstantValue, field.ConstantValue);
+            return !ConstDriftCollector.HasSameConstantValue(field.ConstantValue, compiledField.ConstantValue);
         }
 
         return false;

@@ -48,6 +48,12 @@ internal sealed class WorkerSourceUnit
     // Empty for every run that has no artifact.
     public IntroducedTypeArtifactMap ArtifactMap { get; set; } = IntroducedTypeArtifactMap.Empty;
 
+    // A model of the same tree from a compilation that also holds the files this run does not
+    // transform but that were edited too. Only const comparison may use it: a const declared in
+    // one of those files binds to the compiled metadata value in every other compilation, so its
+    // edited value would be invisible. Null until planning sets it.
+    public SemanticModel ConstDriftSemanticModel { get; set; }
+
     public BaselineSnapshotState Baseline { get; set; }
 
     public string SourceContentSha256 { get; set; }

@@ -67,7 +67,7 @@ internal static class IntroducedTypePlanner
             }
 
             string changedConst = IntroducedTypeConstDriftDetector.FindChangedReferencedConst(
-                declaration, unit.SemanticModel, targetAssembly);
+                declaration, unit.ConstDriftSemanticModel ?? unit.SemanticModel, targetAssembly);
             if (changedConst != null)
             {
                 unit.IntroducedTypeDiagnostics.Add(
