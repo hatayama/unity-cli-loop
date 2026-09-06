@@ -35,7 +35,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(request));
             }
 
-            ExternalCompilerPaths paths = await environment.ResolveCompilerPathsOnMainThreadAsync(ct);
+            ExternalCompilerPaths paths = await environment.ResolveCompilerPathsOnMainThreadAsync(ct)
+                .ConfigureAwait(false);
             if (paths == null)
             {
                 return HotReloadIntroducedTypeCompilerResult.Failure(
