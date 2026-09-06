@@ -243,10 +243,41 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .First();
         }
 
+        // Why the runtime may sit in either place: the newest editors ship no NetCoreRuntime at all and
+        // keep the host and the shared framework inside the same DotNetSdk root that holds Roslyn, so
+        // demanding NetCoreRuntime made a complete layout look like no layout and disabled the fast path.
         private static bool ContainsExternalCompilerLayout(string rootPath)
         {
-            return Directory.Exists(Path.Combine(rootPath, NetCoreRuntimeDirectoryName))
-                && !string.IsNullOrEmpty(ResolveCompilerDirectoryPath(rootPath));
+            string compilerDirectoryPath = ResolveCompilerDirectoryPath(rootPath);
+            if (string.IsNullOrEmpty(compilerDirectoryPath))
+            {
+                return false;
+            }
+
+            if (Directory.Exists(Path.Combine(rootPath, NetCoreRuntimeDirectoryName)))
+            {
+                return true;
+            }
+
+            return ContainsDotNetSdkSharedRuntime(compilerDirectoryPath);
+        }
+
+        /// <summary>
+        /// Reports whether the DotNetSdk root holding this compiler also holds the shared framework it needs.
+        /// </summary>
+        private static bool ContainsDotNetSdkSharedRuntime(string compilerDirectoryPath)
+        {
+            string dotNetSdkRootPath = FindDirectoryContainingSdk(compilerDirectoryPath);
+            if (string.IsNullOrEmpty(dotNetSdkRootPath))
+            {
+                return false;
+            }
+
+            return Directory.Exists(
+                Path.Combine(
+                    dotNetSdkRootPath,
+                    NetCoreRuntimeSharedDirectoryName,
+                    NetCoreRuntimeSharedFrameworkName));
         }
 
         internal static string ResolveCompilerDirectoryPath(string scriptingRootPath)
