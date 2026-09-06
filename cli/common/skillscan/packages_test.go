@@ -239,3 +239,75 @@ func writeManifest(t *testing.T, projectRoot string, content string) {
 		t.Fatalf("failed to write manifest: %v", err)
 	}
 }
+
+// Tests that a relative file: dependency resolves against the Packages folder, the way Unity reads it.
+func TestResolveLocalDependencyPathResolvesRelativePathsAgainstPackagesFolder(t *testing.T) {
+	projectRoot := filepath.Join(t.TempDir(), "workspace", "project")
+
+	resolved := resolveLocalDependencyPath("file:../../sibling/Packages/src", projectRoot)
+
+	expected := filepath.Clean(filepath.Join(projectRoot, "Packages", "..", "..", "sibling", "Packages", "src"))
+	if resolved != expected {
+		t.Fatalf("resolved path mismatch:\nactual:   %q\nexpected: %q", resolved, expected)
+	}
+}
+
+// Tests that a relative path: dependency uses the same Packages-relative base as file:.
+func TestResolveLocalDependencyPathResolvesRelativePathPrefixAgainstPackagesFolder(t *testing.T) {
+	projectRoot := filepath.Join(t.TempDir(), "workspace", "project")
+
+	resolved := resolveLocalDependencyPath("path:../sibling-package", projectRoot)
+
+	expected := filepath.Clean(filepath.Join(projectRoot, "Packages", "..", "sibling-package"))
+	if resolved != expected {
+		t.Fatalf("resolved path mismatch:\nactual:   %q\nexpected: %q", resolved, expected)
+	}
+}
+
+// Tests that an absolute dependency path is used as written, with no project directory prepended.
+func TestResolveLocalDependencyPathKeepsAbsolutePaths(t *testing.T) {
+	projectRoot := t.TempDir()
+	// Manifests spell paths with forward slashes on every platform, and an absolute path is
+	// meant to pass through untouched, so the written form is what must come back.
+	dependencyPath := filepath.ToSlash(filepath.Join(t.TempDir(), "absolute-package"))
+
+	resolved := resolveLocalDependencyPath("file:"+dependencyPath, projectRoot)
+
+	if resolved != dependencyPath {
+		t.Fatalf("resolved path mismatch:\nactual:   %q\nexpected: %q", resolved, dependencyPath)
+	}
+}
+
+// Tests that the file:// form keeps resolving to the absolute path that follows the slashes.
+func TestResolveLocalDependencyPathKeepsFileSchemeAbsolutePaths(t *testing.T) {
+	projectRoot := t.TempDir()
+	dependencyPath := filepath.ToSlash(filepath.Join(t.TempDir(), "scheme-package"))
+
+	resolved := resolveLocalDependencyPath("file://"+dependencyPath, projectRoot)
+
+	if resolved != dependencyPath {
+		t.Fatalf("resolved path mismatch:\nactual:   %q\nexpected: %q", resolved, dependencyPath)
+	}
+}
+
+// Tests that a package reached through a relative manifest entry is enumerated at its real location.
+func TestEnumeratePackageSearchResultsResolvesRelativeManifestDependency(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	projectRoot := filepath.Join(workspaceRoot, "project")
+	siblingPackageRoot := filepath.Join(workspaceRoot, "sibling", "Packages", "src")
+	if err := os.MkdirAll(siblingPackageRoot, 0o755); err != nil {
+		t.Fatalf("failed to create sibling package: %v", err)
+	}
+	writeManifest(
+		t,
+		projectRoot,
+		`{"dependencies":{"com.example.sibling":"file:../../sibling/Packages/src"}}`)
+
+	results := EnumeratePackageSearchResults(projectRoot)
+
+	actual := packageResultSummaries(results)
+	expected := []string{"com.example.sibling|" + filepath.Clean(siblingPackageRoot)}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("package results mismatch:\nactual:   %#v\nexpected: %#v", actual, expected)
+	}
+}

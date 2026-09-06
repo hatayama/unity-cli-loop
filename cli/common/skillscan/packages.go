@@ -300,7 +300,10 @@ func resolveLocalDependencyPath(dependencyValue string, projectRoot string) stri
 	if filepath.IsAbs(rawPath) {
 		return rawPath
 	}
-	return filepath.Join(projectRoot, rawPath)
+	// Why the Packages folder and not the project root: Unity resolves a relative file:/path:
+	// dependency against the folder holding manifest.json, so file:../../x names a sibling of
+	// the project. Joining onto the project root looked one level too high and found nothing.
+	return filepath.Join(projectRoot, "Packages", rawPath)
 }
 
 func isTargetPackageCacheDir(dirName string) bool {
