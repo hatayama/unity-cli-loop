@@ -243,11 +243,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<string> referencePaths,
             IReadOnlyList<string> defineSymbols)
         {
-            Sources = CopySources(sources);
+            IReadOnlyList<HotReloadIntroducedTypeSource> copiedSources = CopySources(sources);
+            IReadOnlyList<HotReloadIntroducedTypeDescriptor> copiedDescriptors = CopyDescriptors(descriptors);
+            ValidateSourceDescriptorPairing(copiedSources, copiedDescriptors);
+            Sources = copiedSources;
             DllPath = dllPath;
             PdbPath = pdbPath;
             ExpectedAssemblyFullName = expectedAssemblyFullName;
-            Descriptors = CopyDescriptors(descriptors);
+            Descriptors = copiedDescriptors;
             ReferencePaths = CopyStrings(referencePaths);
             DefineSymbols = CopyStrings(defineSymbols);
         }
@@ -277,6 +280,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 descriptors,
                 referencePaths,
                 defineSymbols);
+        }
+
+        // The compiler writes one source file per entry and then loads the produced assembly, so a
+        // count mismatch, a source paired with a different descriptor, or two descriptors sharing
+        // one identity has to be rejected here. Detecting it after the load would leave an
+        // unloadable assembly behind for an activation that can only be refused.
+        private static void ValidateSourceDescriptorPairing(
+            IReadOnlyList<HotReloadIntroducedTypeSource> sources,
+            IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors)
+        {
+            if (sources.Count != descriptors.Count)
+            {
+                throw new ArgumentException(
+                    "Introduced-type sources and descriptors must have the same count.",
+                    nameof(sources));
+            }
+
+            HashSet<string> identities = new HashSet<string>(StringComparer.Ordinal);
+            for (int index = 0; index < sources.Count; index++)
+            {
+                if (!ReferenceEquals(sources[index].Descriptor, descriptors[index]))
+                {
+                    throw new ArgumentException(
+                        "Each introduced-type source must carry the descriptor at the same position.",
+                        nameof(sources));
+                }
+
+                if (!identities.Add(descriptors[index].BuildIdentity()))
+                {
+                    throw new ArgumentException(
+                        "Introduced-type descriptors must have unique identities.",
+                        nameof(descriptors));
+                }
+            }
         }
 
         private static IReadOnlyList<HotReloadIntroducedTypeSource> CopySources(

@@ -318,6 +318,130 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a batch carrying two descriptors with one identity is rejected before any
+        /// source is written or any assembly is loaded.
+        /// </summary>
+        [Test]
+        public void CompilationRequest_DuplicateDescriptorIdentity_RejectsBeforeWrites()
+        {
+            HotReloadIntroducedTypeDescriptor first = CreateDescriptor("Example.Introduced", "Assets/Example.cs");
+            HotReloadIntroducedTypeDescriptor second = CreateDescriptor("Example.Introduced", "Assets/Other.cs");
+            FakeEnvironment environment = new FakeEnvironment();
+            HotReloadIntroducedTypeSource[] sources =
+            {
+                new HotReloadIntroducedTypeSource("first.cs", first),
+                new HotReloadIntroducedTypeSource("second.cs", second)
+            };
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(() => CreateRequestFrom(sources));
+
+            Assert.That(exception.ParamName, Is.EqualTo("descriptors"));
+            Assert.That(environment.WriteSourceCalls, Is.EqualTo(0));
+            Assert.That(environment.LoadCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that a descriptor list whose count differs from the source list is rejected,
+        /// so a source can never be compiled without the descriptor it belongs to.
+        /// </summary>
+        [Test]
+        public void CompilationRequest_DescriptorCountMismatch_RejectsBeforeWrites()
+        {
+            HotReloadIntroducedTypeDescriptor first = CreateDescriptor("Example.First", "Assets/First.cs");
+            HotReloadIntroducedTypeDescriptor second = CreateDescriptor("Example.Second", "Assets/Second.cs");
+            FakeEnvironment environment = new FakeEnvironment();
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(
+                () => new HotReloadIntroducedTypeCompilationRequest(
+                    new[] { new HotReloadIntroducedTypeSource("first.cs", first) },
+                    "artifact.dll",
+                    "artifact.pdb",
+                    typeof(HotReloadIntroducedTypeCompilerTests).Assembly.FullName,
+                    new[] { first, second },
+                    Array.Empty<string>(),
+                    Array.Empty<string>()));
+
+            Assert.That(exception.ParamName, Is.EqualTo("sources"));
+            Assert.That(environment.WriteSourceCalls, Is.EqualTo(0));
+            Assert.That(environment.LoadCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that a source paired with a descriptor at another position is rejected, so the
+        /// diagnostics that map a source path back to its owner cannot name the wrong file.
+        /// </summary>
+        [Test]
+        public void CompilationRequest_MisorderedDescriptors_RejectsBeforeWrites()
+        {
+            HotReloadIntroducedTypeDescriptor first = CreateDescriptor("Example.First", "Assets/First.cs");
+            HotReloadIntroducedTypeDescriptor second = CreateDescriptor("Example.Second", "Assets/Second.cs");
+            FakeEnvironment environment = new FakeEnvironment();
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(
+                () => new HotReloadIntroducedTypeCompilationRequest(
+                    new[]
+                    {
+                        new HotReloadIntroducedTypeSource("first.cs", first),
+                        new HotReloadIntroducedTypeSource("second.cs", second)
+                    },
+                    "artifact.dll",
+                    "artifact.pdb",
+                    typeof(HotReloadIntroducedTypeCompilerTests).Assembly.FullName,
+                    new[] { second, first },
+                    Array.Empty<string>(),
+                    Array.Empty<string>()));
+
+            Assert.That(exception.ParamName, Is.EqualTo("sources"));
+            Assert.That(environment.WriteSourceCalls, Is.EqualTo(0));
+            Assert.That(environment.LoadCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that a descriptor with an empty identity part is rejected at construction,
+        /// because BuildIdentity would otherwise collapse distinct declarations onto one key.
+        /// </summary>
+        [Test]
+        public void Descriptor_EmptyIdentityPart_IsRejected()
+        {
+            Assert.That(
+                Assert.Throws<ArgumentException>(() => new HotReloadIntroducedTypeDescriptor(
+                    string.Empty,
+                    "original-mvid",
+                    "Example.Introduced",
+                    "Assets/Example.cs",
+                    "fingerprint",
+                    "public class Introduced { }")).ParamName,
+                Is.EqualTo("originalAssemblyName"));
+            Assert.That(
+                Assert.Throws<ArgumentException>(() => new HotReloadIntroducedTypeDescriptor(
+                    "OriginalAssembly",
+                    null,
+                    "Example.Introduced",
+                    "Assets/Example.cs",
+                    "fingerprint",
+                    "public class Introduced { }")).ParamName,
+                Is.EqualTo("originalAssemblyMvid"));
+            Assert.That(
+                Assert.Throws<ArgumentException>(() => new HotReloadIntroducedTypeDescriptor(
+                    "OriginalAssembly",
+                    "original-mvid",
+                    "   ",
+                    "Assets/Example.cs",
+                    "fingerprint",
+                    "public class Introduced { }")).ParamName,
+                Is.EqualTo("metadataName"));
+            Assert.That(
+                Assert.Throws<ArgumentException>(() => new HotReloadIntroducedTypeDescriptor(
+                    "OriginalAssembly",
+                    "original-mvid",
+                    "Example.Introduced",
+                    "Assets/Example.cs",
+                    string.Empty,
+                    "public class Introduced { }")).ParamName,
+                Is.EqualTo("declarationFingerprint"));
+        }
+
+        /// <summary>
         /// Verifies that a request copies its source records so later caller mutations cannot
         /// change the batch that awaits compilation.
         /// </summary>
@@ -462,13 +586,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 request,
                 CancellationToken.None);
 
-            Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Artifact, Is.Not.Null);
-            Assert.That(File.Exists(paths.DllPath), Is.True);
-            Assert.That(File.Exists(paths.PdbPath), Is.True);
-            Assert.That(result.Artifact.Assembly.GetType("CompilerFixture.One.First"), Is.Not.Null);
-            Assert.That(result.Artifact.Assembly.GetType("CompilerFixture.Two.ISecond"), Is.Not.Null);
-            Assert.That(result.Artifact.Assembly.GetType("CompilerFixture.Initializer"), Is.Not.Null);
+            try
+            {
+                Assert.That(result.Success, Is.True, result.ErrorMessage);
+                Assert.That(result.Artifact, Is.Not.Null);
+                Assert.That(File.Exists(paths.DllPath), Is.True);
+                Assert.That(File.Exists(paths.PdbPath), Is.True);
+                Assert.That(result.Artifact.Assembly.GetType("CompilerFixture.One.First"), Is.Not.Null);
+                Assert.That(result.Artifact.Assembly.GetType("CompilerFixture.Two.ISecond"), Is.Not.Null);
+                Assert.That(result.Artifact.Assembly.GetType("CompilerFixture.Initializer"), Is.Not.Null);
+            }
+            finally
+            {
+                DeleteArtifactDirectory(paths.DllPath);
+            }
         }
 
         /// <summary>
@@ -504,9 +635,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 request,
                 CancellationToken.None);
 
-            Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Artifact, Is.Not.Null);
-            Assert.That(result.Artifact.Assembly.GetType("NestedFixture.Outer+Inner"), Is.Not.Null);
+            try
+            {
+                Assert.That(result.Success, Is.True, result.ErrorMessage);
+                Assert.That(result.Artifact, Is.Not.Null);
+                Assert.That(result.Artifact.Assembly.GetType("NestedFixture.Outer+Inner"), Is.Not.Null);
+            }
+            finally
+            {
+                DeleteArtifactDirectory(paths.DllPath);
+            }
+        }
+
+        // The artifact assembly is loaded from bytes rather than mapped from the file, so its
+        // directory can be removed as soon as the assertions have read the emitted DLL and PDB.
+        private static void DeleteArtifactDirectory(string dllPath)
+        {
+            string directory = Path.GetDirectoryName(dllPath);
+            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+            {
+                return;
+            }
+
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (IOException exception)
+            {
+                // A leftover artifact directory must not turn into a test failure of its own.
+                UnityEngine.Debug.Log("Artifact directory could not be removed: " + exception.Message);
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                UnityEngine.Debug.Log("Artifact directory could not be removed: " + exception.Message);
+            }
         }
 
         private static string[] CreateReferencePaths()

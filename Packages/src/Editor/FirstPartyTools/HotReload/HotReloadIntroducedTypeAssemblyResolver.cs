@@ -37,6 +37,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             lock (gate)
             {
+                // Dispose has already detached the handler, so an assembly registered afterwards
+                // would never be resolved and the caller would silently get an unresolvable type.
+                if (disposed)
+                {
+                    throw new ObjectDisposedException(nameof(HotReloadIntroducedTypeAssemblyResolver));
+                }
+
                 preparedAssemblies.Add(artifact.AssemblyFullName, artifact.Assembly);
             }
 
@@ -45,18 +52,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public void Dispose()
         {
-            if (disposed)
-            {
-                return;
-            }
-
-            AppDomain.CurrentDomain.AssemblyResolve -= Resolve;
             lock (gate)
             {
+                if (disposed)
+                {
+                    return;
+                }
+
+                disposed = true;
                 preparedAssemblies.Clear();
             }
 
-            disposed = true;
+            // Detaching outside the gate keeps the handler subscription change off the lock a
+            // resolve on another thread may already hold.
+            AppDomain.CurrentDomain.AssemblyResolve -= Resolve;
         }
 
         internal Assembly ResolveExact(string requestedAssemblyFullName)
@@ -93,6 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             private readonly object gate;
             private readonly Dictionary<string, Assembly> assemblies;
             private readonly string assemblyFullName;
+            private bool removed;
 
             public PreparedAssemblyScope(
                 object gate,
@@ -108,6 +118,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 lock (gate)
                 {
+                    // A second Dispose must not remove an entry a later RegisterPrepared re-added
+                    // under the same assembly identity.
+                    if (removed)
+                    {
+                        return;
+                    }
+
+                    removed = true;
                     assemblies.Remove(assemblyFullName);
                 }
             }

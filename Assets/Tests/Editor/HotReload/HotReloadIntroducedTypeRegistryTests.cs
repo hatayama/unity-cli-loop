@@ -515,6 +515,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that preparing the same artifact twice is rejected without changing state, so
+        /// one discard cannot revoke a membership another registration still relies on.
+        /// </summary>
+        [Test]
+        public void RegisterPrepared_SameArtifactTwice_RejectsWithoutStateChange()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeArtifact artifact = CreateArtifact("prepared");
+            registry.RegisterPrepared(artifact);
+
+            Assert.Throws<InvalidOperationException>(() => registry.RegisterPrepared(artifact));
+
+            Assert.That(registry.PreparedCount, Is.EqualTo(1));
+            Assert.That(registry.ActiveCount, Is.EqualTo(0));
+            registry.DiscardPrepared(artifact);
+            Assert.That(registry.PreparedCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// Verifies that a disposed resolver refuses a prepared registration, because its handler
+        /// is already detached and the assembly would never be resolved.
+        /// </summary>
+        [Test]
+        public void RegisterPrepared_AfterDispose_Throws()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeArtifact artifact = CreateArtifactWithAssembly(
+                CreateDynamicAssembly("DisposedResolver"),
+                CreateOtherDescriptor("prepared"));
+            HotReloadIntroducedTypeAssemblyResolver resolver =
+                new HotReloadIntroducedTypeAssemblyResolver(registry);
+            resolver.Dispose();
+
+            Assert.Throws<ObjectDisposedException>(() => resolver.RegisterPrepared(artifact));
+
+            Assert.That(resolver.ResolveExact(artifact.AssemblyFullName), Is.Null);
+        }
+
+        /// <summary>
         /// Verifies that resolving from another thread while prepared registrations and their
         /// scopes change on this thread neither throws nor returns an unregistered assembly.
         /// </summary>
@@ -531,7 +570,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using HotReloadIntroducedTypeAssemblyResolver resolver =
                 new HotReloadIntroducedTypeAssemblyResolver(registry);
             using CancellationTokenSource cancellation = new CancellationTokenSource();
-            ResolutionTally tally = new ResolutionTally(prepared.Assembly, active.Assembly);
+            ResolutionTally tally = new ResolutionTally(prepared, active);
 
             // A background reader is the only way to exercise the AssemblyResolve thread this
             // resolver actually runs on; it touches no Unity API and ends before the test returns.
@@ -539,8 +578,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 while (!cancellation.IsCancellationRequested)
                 {
-                    tally.Record(resolver.ResolveExact(prepared.AssemblyFullName));
-                    tally.Record(resolver.ResolveExact(active.AssemblyFullName));
+                    tally.Record(
+                        prepared.AssemblyFullName,
+                        resolver.ResolveExact(prepared.AssemblyFullName));
+                    tally.Record(
+                        active.AssemblyFullName,
+                        resolver.ResolveExact(active.AssemblyFullName));
                 }
             });
 
@@ -562,15 +605,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(tally.ResolveCount, Is.GreaterThan(0));
             Assert.That(tally.UnexpectedCount, Is.EqualTo(0));
+            // Without both states the run never interleaved, so a zero unexpected count would
+            // prove nothing about concurrent access.
+            Assert.That(
+                tally.SawBothPreparedStates,
+                Is.True,
+                "The reader never observed the prepared artifact both registered and absent.");
         }
 
         /// <summary>
-        /// Counts background resolutions without keeping one entry per call in memory.
+        /// Judges each background resolution against the identity that was requested, without
+        /// keeping one entry per call in memory.
         /// </summary>
         private sealed class ResolutionTally
         {
-            private readonly Assembly preparedAssembly;
-            private readonly Assembly activeAssembly;
+            private readonly HotReloadIntroducedTypeArtifact prepared;
+            private readonly HotReloadIntroducedTypeArtifact active;
             private int resolveCount;
             private int unexpectedCount;
             private int preparedHitCount;
@@ -583,31 +633,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             public bool SawBothPreparedStates =>
                 Volatile.Read(ref preparedHitCount) > 0 && Volatile.Read(ref preparedMissCount) > 0;
 
-            public ResolutionTally(Assembly preparedAssembly, Assembly activeAssembly)
+            public ResolutionTally(
+                HotReloadIntroducedTypeArtifact prepared,
+                HotReloadIntroducedTypeArtifact active)
             {
-                this.preparedAssembly = preparedAssembly;
-                this.activeAssembly = activeAssembly;
+                this.prepared = prepared;
+                this.active = active;
             }
 
-            public void Record(Assembly resolved)
+            public void Record(string requestedAssemblyFullName, Assembly resolved)
             {
                 Interlocked.Increment(ref resolveCount);
+                // The active artifact stays registered for the whole run, so only the prepared
+                // identity may legitimately answer null. Judging the two requests separately is
+                // what makes a resolver that always answers null fail here.
+                if (requestedAssemblyFullName == active.AssemblyFullName)
+                {
+                    if (!ReferenceEquals(resolved, active.Assembly))
+                    {
+                        Interlocked.Increment(ref unexpectedCount);
+                    }
+
+                    return;
+                }
+
+                if (requestedAssemblyFullName != prepared.AssemblyFullName)
+                {
+                    Interlocked.Increment(ref unexpectedCount);
+                    return;
+                }
+
                 if (resolved == null)
                 {
                     Interlocked.Increment(ref preparedMissCount);
                     return;
                 }
 
-                if (ReferenceEquals(resolved, preparedAssembly))
+                if (ReferenceEquals(resolved, prepared.Assembly))
                 {
                     Interlocked.Increment(ref preparedHitCount);
                     return;
                 }
 
-                if (!ReferenceEquals(resolved, activeAssembly))
-                {
-                    Interlocked.Increment(ref unexpectedCount);
-                }
+                Interlocked.Increment(ref unexpectedCount);
             }
         }
 

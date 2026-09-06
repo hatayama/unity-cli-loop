@@ -117,7 +117,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     throw new InvalidOperationException("An active introduced-type artifact cannot be prepared again.");
                 }
 
-                preparedArtifacts.Add(artifact);
+                // A second Prepared registration of the same artifact would make one
+                // DiscardPrepared drop the membership the other registration still relies on, so
+                // the later Activate would be rejected as never prepared.
+                if (!preparedArtifacts.Add(artifact))
+                {
+                    throw new InvalidOperationException("An introduced-type artifact is already prepared.");
+                }
             }
         }
 
