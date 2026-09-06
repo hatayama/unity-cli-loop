@@ -21,6 +21,7 @@ internal static class ShimMethodEmitter
         List<TypeEmitState> typeEmitStates,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog,
         WorkerInput input,
         List<WorkerEntry> entries,
         List<WorkerSkipped> skipped,
@@ -36,11 +37,19 @@ internal static class ShimMethodEmitter
                 typeState,
                 addedMethodCatalog,
                 addedFieldCatalog,
+                addedPropertyCatalog,
+                entries);
+            AddedPropertyEmitter.EmitAddedPropertyAccessors(
+                typeState,
+                addedPropertyCatalog,
+                addedMethodCatalog,
+                addedFieldCatalog,
                 entries);
             (shimTypeCounter, globalShimMethodCounter) = PropertyGetterEmitter.EmitPropertyGettersForType(
                 typeState,
                 addedMethodCatalog,
                 addedFieldCatalog,
+                addedPropertyCatalog,
                 input,
                 entries,
                 skipped,
@@ -58,6 +67,7 @@ internal static class ShimMethodEmitter
         TypeEmitState typeState,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog,
         List<WorkerEntry> entries)
     {
         SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
@@ -73,7 +83,8 @@ internal static class ShimMethodEmitter
                 semanticModel,
                 rewritePlan,
                 addedMethodCatalog,
-                addedFieldCatalog);
+                addedFieldCatalog,
+                addedPropertyCatalog);
             queued.ShimType.AddMethod(rewrittenMethod, queued.ShimMethodName);
 
             SyntaxNode bodyNode =
@@ -82,6 +93,7 @@ internal static class ShimMethodEmitter
                 bodyNode,
                 semanticModel,
                 addedMethodCatalog,
+                addedPropertyCatalog,
                 queued.MethodKey);
 
             entries.Add(new WorkerEntry
@@ -113,7 +125,8 @@ internal static class ShimMethodEmitter
         SemanticModel semanticModel,
         AccessorPlan accessorPlan,
         AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog)
+        AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog)
     {
         // Why a single rewriter: rewriting the tree invalidates SemanticModel for new nodes.
         // Qualify + accessor rewrite both classify symbols on the original tree in one Visit pass.
@@ -122,7 +135,8 @@ internal static class ShimMethodEmitter
             targetType,
             accessorPlan,
             addedMethodCatalog,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            addedPropertyCatalog);
         MethodDeclarationSyntax rewritten = (MethodDeclarationSyntax)rewriter.Visit(methodDeclaration);
         return ShimMethodFactory.ToShimMethod(rewritten, methodSymbol);
     }

@@ -90,6 +90,7 @@ internal static class WorkerGroupPipeline
         List<ShimTypeBuilder> shimTypes = new List<ShimTypeBuilder>();
         AddedMethodCatalog addedMethodCatalog = new AddedMethodCatalog();
         AddedFieldCatalog addedFieldCatalog = new AddedFieldCatalog();
+        AddedPropertyCatalog addedPropertyCatalog = new AddedPropertyCatalog();
         // Why counters run across units: shim type and method names must stay unique when two
         // files of the group declare types of the same name.
         int shimTypeCounter = 0;
@@ -105,6 +106,7 @@ internal static class WorkerGroupPipeline
                 shimTypes,
                 addedMethodCatalog,
                 addedFieldCatalog,
+                addedPropertyCatalog,
                 skipped,
                 unchangedMethods,
                 shimTypeCounter,
@@ -137,12 +139,14 @@ internal static class WorkerGroupPipeline
             allTypeEmitStates,
             addedMethodCatalog,
             addedFieldCatalog,
+            addedPropertyCatalog,
             skipped);
 
         ShimMethodEmitter.EmitQueuedMethodsAndPropertyGetters(
             allTypeEmitStates,
             addedMethodCatalog,
             addedFieldCatalog,
+            addedPropertyCatalog,
             input,
             entries,
             skipped,
@@ -178,6 +182,7 @@ internal static class WorkerGroupPipeline
         List<ShimTypeBuilder> shimTypes,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog,
         List<WorkerSkipped> skipped,
         List<WorkerUnchangedMethod> unchangedMethods,
         int shimTypeCounter,
@@ -210,6 +215,7 @@ internal static class WorkerGroupPipeline
                 shimTypes,
                 addedMethodCatalog,
                 addedFieldCatalog,
+                addedPropertyCatalog,
                 skipped,
                 unchangedMethods,
                 unit.DeclarationDriftWarnings,
