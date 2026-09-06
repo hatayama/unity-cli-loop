@@ -31,7 +31,7 @@ internal static class PropertyGetterEmitter
         int globalShimMethodCounter)
     {
         SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
-        CompilationUnitSyntax root = typeState.SourceUnit.Root;
+        CompilationUnitSyntax root = typeState.SourceUnit.BindingRoot;
         BaselineSnapshotState baseline = typeState.SourceUnit.Baseline;
         foreach (PropertyDeclarationSyntax propertyDeclaration in typeState.TypeDeclaration.Members
             .OfType<PropertyDeclarationSyntax>())

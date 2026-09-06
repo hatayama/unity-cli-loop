@@ -32,6 +32,15 @@ internal sealed class WorkerSourceUnit
     // Unannotated root. Baseline comparison must use it on both sides.
     public CompilationUnitSyntax PlainRoot { get; set; }
 
+    // The tree the transform compilation binds against: the annotated tree with the declarations
+    // that are already served from a retained artifact removed. Equal to SyntaxTree when the run
+    // has no such declaration. A SemanticModel only answers for nodes of the tree it came from,
+    // so every consumer that uses SemanticModel must read BindingRoot, never Root.
+    public SyntaxTree BindingSyntaxTree { get; set; }
+
+    // Root of BindingSyntaxTree.
+    public CompilationUnitSyntax BindingRoot { get; set; }
+
     public SemanticModel SemanticModel { get; set; }
 
     public BaselineSnapshotState Baseline { get; set; }

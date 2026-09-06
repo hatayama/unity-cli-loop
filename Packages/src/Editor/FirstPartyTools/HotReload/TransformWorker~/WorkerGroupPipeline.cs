@@ -81,7 +81,7 @@ internal static class WorkerGroupPipeline
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         foreach (WorkerSourceUnit unit in loadedUnits)
         {
-            unit.SemanticModel = compilation.GetSemanticModel(unit.SyntaxTree, ignoreAccessibility: true);
+            unit.SemanticModel = compilation.GetSemanticModel(unit.BindingSyntaxTree, ignoreAccessibility: true);
         }
 
         IAssemblySymbol targetTypesAssemblySymbol = ResolveTargetTypesAssemblySymbol(
@@ -216,14 +216,14 @@ internal static class WorkerGroupPipeline
     {
         unit.DeclarationDriftWarnings.AddRange(
             ConstDriftCollector.CollectConstDriftWarnings(
-                unit.Root,
+                unit.BindingRoot,
                 unit.SemanticModel,
                 targetTypesAssemblySymbol));
         // Why here: a compiled property/event can disappear or change kind with no
         // touched body, so the generic outside-body warning would bury the name.
         unit.KindChangeSyntaxKeys =
             CompiledMemberKindChangeWarnings.AppendCompiledPropertyOrEventKindChangeWarnings(
-                unit.Root,
+                unit.BindingRoot,
                 unit.SemanticModel,
                 targetTypesAssemblySymbol,
                 unit.DeclarationDriftWarnings);
