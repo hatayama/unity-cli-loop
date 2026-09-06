@@ -194,6 +194,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a record that lists no type fails the run inside the worker, because its
+        /// reference would enter the compilation while no declaration is taken out of the binding
+        /// tree and the type would bind from source again.
+        /// </summary>
+        [Test]
+        public async Task Transform_ArtifactWithoutTypes_FailsRunInsideTheWorker()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateAsync("WorkerWithoutTypes", EditedSource);
+            TransformWorkerIntroducedTypeArtifactDto typeless =
+                fixture.CreateRecordedArtifact(fixture.RetainedFingerprint);
+            typeless.types = Array.Empty<TransformWorkerIntroducedTypeArtifactTypeDto>();
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunWorkerAsync(
+                fixture.BuildTransformInput(new[] { typeless }),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Output, Is.Null.Or.Property("entries").Empty);
+        }
+
+        /// <summary>
+        /// What: a transform that carries records but does not name the assembly generation they
+        /// were planned against fails the run inside the worker, because the recorded identities
+        /// would be rebuilt from an empty identity and no declaration would match its record.
+        /// </summary>
+        [Test]
+        public async Task Transform_ArtifactsWithoutTargetIdentity_FailsRunInsideTheWorker()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateAsync("WorkerWithoutTargetIdentity", EditedSource);
+            TransformWorkerInputDto input =
+                fixture.BuildTransformInput(new[] { fixture.CreateRecordedArtifact(fixture.RetainedFingerprint) });
+            input.targetAssemblyName = string.Empty;
+            input.targetAssemblyMvid = string.Empty;
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunWorkerAsync(
+                input,
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Output, Is.Null.Or.Property("entries").Empty);
+        }
+
+        /// <summary>
         /// What: a preprocessor region that closes inside the retained declaration makes the
         /// blanked text unparseable, and the run fails instead of transforming the file against a
         /// tree the parser had to guess at.

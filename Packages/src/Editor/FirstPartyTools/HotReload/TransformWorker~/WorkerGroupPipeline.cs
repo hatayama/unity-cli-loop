@@ -232,6 +232,20 @@ internal static class WorkerGroupPipeline
             syntaxTrees: editedTrees,
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        IAssemblySymbol targetAssembly = ResolveTargetTypesAssemblySymbol(
+            verificationCompilation,
+            targetTypesReference);
+
+        // A record is only valid for the assembly generation it was planned against, and the
+        // recorded identities are what the fingerprint is rebuilt from. Binding against an
+        // assembly the request cannot name would rebuild them from an empty identity, no
+        // declaration would match its record, and every retained type would quietly bind from
+        // source again.
+        if (!IntroducedTypeTargetIdentity.MatchesRequest(input, targetAssembly))
+        {
+            return "Retained introduced types require the assembly identity the records were planned against.";
+        }
+
         if (!IntroducedTypeArtifactMap.TryBuild(
                 verificationCompilation, artifactReferences, out IntroducedTypeArtifactMap artifactMap, out string artifactError))
         {
@@ -242,10 +256,6 @@ internal static class WorkerGroupPipeline
         {
             loadedUnit.ArtifactMap = artifactMap;
         }
-
-        IAssemblySymbol targetAssembly = ResolveTargetTypesAssemblySymbol(
-            verificationCompilation,
-            targetTypesReference);
         Dictionary<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> retainedDeclarations =
             IntroducedTypeDeclarationVerifier.FindRetainedDeclarations(
                 loadedUnits, verificationCompilation, input, targetAssembly, artifactMap);

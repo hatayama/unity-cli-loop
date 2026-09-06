@@ -181,56 +181,12 @@ internal static class IntroducedTypePreparation
         // for the assembly generation it was planned against. Reading the identity back from the
         // file that was actually analysed is what stops a stale request from producing artifacts
         // that claim an assembly the planning never looked at.
-        if (!TargetAssemblyIdentityMatchesRequest(input, targetAssembly))
+        if (!IntroducedTypeTargetIdentity.MatchesRequest(input, targetAssembly))
         {
             return "Introduced types require a compile: the target assembly identity does not match the request.";
         }
 
         return null;
-    }
-
-    private static bool TargetAssemblyIdentityMatchesRequest(WorkerInput input, IAssemblySymbol targetAssembly)
-    {
-        // Assembly names are compared case-insensitively by the runtime, so a case difference in
-        // the request is the same assembly and must not reject the plan.
-        if (!string.Equals(
-                input.TargetAssemblyName,
-                targetAssembly.Identity.Name,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (!Guid.TryParse(input.TargetAssemblyMvid, out Guid requestedMvid) || requestedMvid == Guid.Empty)
-        {
-            return false;
-        }
-
-        return requestedMvid == ReadModuleVersionId(input.TargetTypesAssemblyPath);
-    }
-
-    private static Guid ReadModuleVersionId(string assemblyPath)
-    {
-        if (string.IsNullOrEmpty(assemblyPath))
-        {
-            return Guid.Empty;
-        }
-
-        try
-        {
-            using (ModuleMetadata metadata = ModuleMetadata.CreateFromFile(assemblyPath))
-            {
-                return metadata.GetModuleVersionId();
-            }
-        }
-        catch (BadImageFormatException)
-        {
-            return Guid.Empty;
-        }
-        catch (IOException)
-        {
-            return Guid.Empty;
-        }
     }
 
     // A reference file that exists but is not readable managed metadata never reaches the

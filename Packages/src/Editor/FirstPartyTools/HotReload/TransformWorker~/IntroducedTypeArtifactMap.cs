@@ -51,6 +51,16 @@ internal sealed class IntroducedTypeArtifactMap
                 return false;
             }
 
+            // A record that lists no type puts its reference into the compilation but takes no
+            // declaration out of the binding tree, so the type binds from source while the loaded
+            // assembly already holds it - the same silent fallback an incomplete record produces.
+            if (artifact.Types == null || artifact.Types.Length == 0)
+            {
+                map = null;
+                errorMessage = "Introduced-type artifact must list the types it holds.";
+                return false;
+            }
+
             foreach (WorkerIntroducedTypeArtifactType artifactType in artifact.Types)
             {
                 if (!TryAddArtifactType(assembly, artifactType, identities, normalizedTargets, out errorMessage))
