@@ -14,6 +14,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class TransformWorkerHostLifecycleTests
     {
         private const int ProcessExitWaitMilliseconds = 10_000;
+        private const int ExitPollIntervalMilliseconds = 50;
 
         /// <summary>
         /// What: after a real resident run, the reload callback kills the worker process and clears
@@ -34,10 +35,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 TransformWorkerHostLifecycle.ShutdownForReload();
 
-                Assert.That(worker.WaitForExit(ProcessExitWaitMilliseconds), Is.True);
+                Assert.That(await WaitForExitAsync(worker, ProcessExitWaitMilliseconds), Is.True);
             }
 
             Assert.That(TransformWorkerHost.Shared.CurrentProcessId, Is.Null);
+        }
+
+        // Why poll instead of Process.WaitForExit: an EditMode test that blocks the Editor's main
+        // thread on a child process stalls the whole run.
+        private static async Task<bool> WaitForExitAsync(Process process, int timeoutMilliseconds)
+        {
+            Stopwatch waited = Stopwatch.StartNew();
+            while (waited.ElapsedMilliseconds < timeoutMilliseconds)
+            {
+                if (process.HasExited)
+                {
+                    return true;
+                }
+
+                await Task.Delay(ExitPollIntervalMilliseconds);
+            }
+
+            return process.HasExited;
         }
     }
 }
