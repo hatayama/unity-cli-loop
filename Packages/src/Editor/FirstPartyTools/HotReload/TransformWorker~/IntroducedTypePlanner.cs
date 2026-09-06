@@ -411,9 +411,15 @@ internal static class IntroducedTypePlanner
         string targetAssemblyMvid,
         IntroducedTypeArtifactMap artifactMap)
     {
+        IntroducedTypeDependencyWalker walker = new IntroducedTypeDependencyWalker(
+            semanticModel.Compilation.Assembly,
+            targetAssembly,
+            targetAssemblyName,
+            targetAssemblyMvid,
+            artifactMap);
         List<string> positionedDependencies = new List<string>();
         HashSet<string> declaringDependency = new HashSet<string>(StringComparer.Ordinal);
-        AddDependency(typeSymbol, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, artifactMap, declaringDependency);
+        walker.AddDependencies(typeSymbol, declaringDependency);
         foreach (string identity in declaringDependency.OrderBy(identity => identity, StringComparer.Ordinal))
         {
             positionedDependencies.Add("self|" + identity);
@@ -424,15 +430,15 @@ internal static class IntroducedTypePlanner
         {
             HashSet<string> nodeDependencies = new HashSet<string>(StringComparer.Ordinal);
             SymbolInfo symbolInfo = semanticModel.GetSymbolInfo(node);
-            AddDependency(symbolInfo.Symbol, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, artifactMap, nodeDependencies);
+            walker.AddDependencies(symbolInfo.Symbol, nodeDependencies);
             foreach (ISymbol candidate in symbolInfo.CandidateSymbols)
             {
-                AddDependency(candidate, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, artifactMap, nodeDependencies);
+                walker.AddDependencies(candidate, nodeDependencies);
             }
 
             TypeInfo typeInfo = semanticModel.GetTypeInfo(node);
-            AddDependency(typeInfo.Type, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, artifactMap, nodeDependencies);
-            AddDependency(typeInfo.ConvertedType, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, artifactMap, nodeDependencies);
+            walker.AddDependencies(typeInfo.Type, nodeDependencies);
+            walker.AddDependencies(typeInfo.ConvertedType, nodeDependencies);
             foreach (string identity in nodeDependencies.OrderBy(identity => identity, StringComparer.Ordinal))
             {
                 positionedDependencies.Add(position.ToString(CultureInfo.InvariantCulture) + "|" + identity);
@@ -442,69 +448,5 @@ internal static class IntroducedTypePlanner
         }
 
         return positionedDependencies;
-    }
-
-    private static void AddDependency(
-        ISymbol symbol,
-        SemanticModel semanticModel,
-        IAssemblySymbol targetAssembly,
-        string targetAssemblyName,
-        string targetAssemblyMvid,
-        IntroducedTypeArtifactMap artifactMap,
-        HashSet<string> dependencies)
-    {
-        if (symbol == null)
-        {
-            return;
-        }
-
-        INamedTypeSymbol namedType = symbol as INamedTypeSymbol;
-        if (symbol is IMethodSymbol methodSymbol)
-        {
-            namedType = methodSymbol.ContainingType;
-        }
-        else if (symbol is IPropertySymbol propertySymbol)
-        {
-            namedType = propertySymbol.ContainingType;
-        }
-        else if (symbol is IFieldSymbol fieldSymbol)
-        {
-            namedType = fieldSymbol.ContainingType;
-        }
-
-        if (namedType == null)
-        {
-            return;
-        }
-
-        IAssemblySymbol containingAssembly = namedType.ContainingAssembly;
-        if (containingAssembly == null)
-        {
-            return;
-        }
-
-        string metadataName = CecilTypeNames.ToMetadataName(namedType.OriginalDefinition);
-
-        // A type that already lives in a retained artifact is the same definition it was when it
-        // was still a source declaration, so it has to fingerprint as the assembly its source
-        // belongs to. Binding through the artifact assembly identity instead would invalidate
-        // every dependent declaration the moment the type it depends on is introduced.
-        string normalizedIdentity = artifactMap.FindNormalizedIdentity(containingAssembly, metadataName);
-        if (normalizedIdentity != null)
-        {
-            dependencies.Add(normalizedIdentity);
-            return;
-        }
-
-        if (SymbolEqualityComparer.Default.Equals(containingAssembly, semanticModel.Compilation.Assembly)
-            || SymbolEqualityComparer.Default.Equals(containingAssembly, targetAssembly))
-        {
-            dependencies.Add((targetAssemblyName ?? string.Empty)
-                + "|" + (targetAssemblyMvid ?? string.Empty)
-                + "|" + metadataName);
-            return;
-        }
-
-        dependencies.Add(containingAssembly.Identity.GetDisplayName() + "|" + metadataName);
     }
 }

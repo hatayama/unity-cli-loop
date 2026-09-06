@@ -26,6 +26,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
 
+        private const string DirectDependentSource =
+            "namespace Example { public class Dependent { public int Read(Retained retained) { return retained.Value; } } }";
+
+        // Reaches the retained type without naming it: the only occurrence is inside the type
+        // returned by the member the declaration calls. A fingerprint that collapses a bound
+        // symbol to one type records the collection type and loses the retained type.
+        private const string IndirectDependentSource =
+            "using System.Collections.Generic; namespace Example { public static class Holder { public static List<Retained> All() { return null; } } public class Dependent { public int Count() { return Holder.All().Count; } } }";
+
         /// <summary>
         /// Verifies that the fingerprint of a type is unchanged when the type it depends on stops
         /// being a source declaration and is bound from a retained artifact assembly instead.
@@ -33,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_DependencyMovedToArtifact_KeepsFingerprint()
         {
-            BindingFixture fixture = CreateFixture("DependencyMovedToArtifact");
+            BindingFixture fixture = CreateFixture("DependencyMovedToArtifact", DirectDependentSource);
 
             TransformWorkerClientResult beforeSwitch = await TransformWorkerClient.RunAsync(
                 CreateInput(fixture, includeRetainedSource: true, Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
@@ -59,7 +68,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_UnrelatedArtifactAdded_KeepsFingerprint()
         {
-            BindingFixture fixture = CreateFixture("UnrelatedArtifactAdded");
+            BindingFixture fixture = CreateFixture("UnrelatedArtifactAdded", DirectDependentSource);
             string unrelatedPath = Path.Combine(fixture.Directory, "Unrelated.dll");
             CreateArtifactAssembly(unrelatedPath, "UnrelatedArtifact", "Example", "Unrelated");
             TransformWorkerIntroducedTypeArtifactDto unrelatedArtifact = new TransformWorkerIntroducedTypeArtifactDto
@@ -94,27 +103,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Verifies that a type bound from a retained artifact reports the artifact assembly as
-        /// its containing assembly, so the fingerprint match is not produced by the artifact
-        /// reference being ignored altogether.
+        /// Verifies that the retained type really binds against the artifact assembly and that the
+        /// record is what maps its identity back: referencing the same artifact without a record
+        /// leaves the artifact assembly identity in the fingerprint, so it stops matching the run
+        /// in which the type was still a source declaration.
         /// </summary>
         [Test]
-        public async Task PrepareIntroducedTypes_DependencyMovedToArtifact_BindsAgainstArtifactAssembly()
+        public async Task PrepareIntroducedTypes_ArtifactReferencedWithoutRecord_ChangesFingerprint()
         {
-            BindingFixture fixture = CreateFixture("BindsAgainstArtifact");
-            TransformWorkerIntroducedTypeArtifactDto artifact = CreateRetainedArtifact(fixture);
+            BindingFixture fixture = CreateFixture("ArtifactWithoutRecord", DirectDependentSource);
 
-            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
-                CreateInput(fixture, includeRetainedSource: false, new[] { artifact },
+            TransformWorkerClientResult sourceDeclared = await TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: true,
+                    Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
                     Array.Empty<string>()),
                 CancellationToken.None);
+            TransformWorkerClientResult recorded = await TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: false,
+                    new[] { CreateRetainedArtifact(fixture) },
+                    Array.Empty<string>()),
+                CancellationToken.None);
+            TransformWorkerClientResult unrecorded = await TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: false,
+                    Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
+                    new[] { fixture.RetainedArtifactPath }),
+                CancellationToken.None);
 
-            Assert.That(result.Success, Is.True, result.ErrorMessage);
-            // The dependent type only compiles when the retained member really resolved, so a
-            // source that uses the member proves the binding went through the artifact rather
-            // than through a leftover source declaration.
-            Assert.That(FindFingerprint(result, "Example.Dependent"), Is.Not.Null);
-            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Is.Empty);
+            Assert.That(sourceDeclared.Success, Is.True, sourceDeclared.ErrorMessage);
+            Assert.That(recorded.Success, Is.True, recorded.ErrorMessage);
+            Assert.That(unrecorded.Success, Is.True, unrecorded.ErrorMessage);
+            Assert.That(
+                FindFingerprint(recorded, "Example.Dependent"),
+                Is.EqualTo(FindFingerprint(sourceDeclared, "Example.Dependent")));
+            Assert.That(
+                FindFingerprint(unrecorded, "Example.Dependent"),
+                Is.Not.EqualTo(FindFingerprint(sourceDeclared, "Example.Dependent")),
+                "Without a record the artifact assembly identity must stay in the fingerprint.");
         }
 
         /// <summary>
@@ -125,7 +155,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_ArtifactOriginalIdentityChanged_ChangesFingerprint()
         {
-            BindingFixture fixture = CreateFixture("ArtifactOriginalIdentityChanged");
+            BindingFixture fixture = CreateFixture("ArtifactOriginalIdentityChanged", DirectDependentSource);
             TransformWorkerIntroducedTypeArtifactDto recorded = CreateRetainedArtifact(fixture);
             TransformWorkerIntroducedTypeArtifactDto reattributed = CreateRetainedArtifact(fixture);
             reattributed.types[0].originalAssemblyMvid = Guid.NewGuid().ToString();
@@ -151,7 +181,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_SameNameFromUnlistedAssembly_ChangesFingerprint()
         {
-            BindingFixture fixture = CreateFixture("SameNameFromUnlistedAssembly");
+            BindingFixture fixture = CreateFixture("SameNameFromUnlistedAssembly", DirectDependentSource);
             string foreignPath = Path.Combine(fixture.Directory, "ForeignRetained.dll");
             CreateRetainedArtifactAssembly(foreignPath, "ForeignRetained");
 
@@ -185,7 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_ArtifactIdentityMismatch_ReportsNoIntroducedType()
         {
-            BindingFixture fixture = CreateFixture("ArtifactIdentityMismatch");
+            BindingFixture fixture = CreateFixture("ArtifactIdentityMismatch", DirectDependentSource);
             TransformWorkerIntroducedTypeArtifactDto mismatched = CreateRetainedArtifact(fixture);
             mismatched.assemblyFullName = ReadAssemblyFullName(fixture.TargetAssemblyPath);
 
@@ -199,7 +229,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_ArtifactMissingMetadataName_ReportsNoIntroducedType()
         {
-            BindingFixture fixture = CreateFixture("ArtifactMissingMetadataName");
+            BindingFixture fixture = CreateFixture("ArtifactMissingMetadataName", DirectDependentSource);
             TransformWorkerIntroducedTypeArtifactDto missing = CreateRetainedArtifact(fixture);
             missing.types[0].metadataName = "Example.Absent";
 
@@ -213,7 +243,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task PrepareIntroducedTypes_TwoArtifactsNormalizeToSameType_ReportsNoIntroducedType()
         {
-            BindingFixture fixture = CreateFixture("TwoArtifactsNormalizeToSameType");
+            BindingFixture fixture = CreateFixture("TwoArtifactsNormalizeToSameType", DirectDependentSource);
             string secondPath = Path.Combine(fixture.Directory, "SecondRetained.dll");
             CreateRetainedArtifactAssembly(secondPath, "SecondRetained");
             TransformWorkerIntroducedTypeArtifactDto duplicate = new TransformWorkerIntroducedTypeArtifactDto
@@ -263,6 +293,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// Verifies that a declaration reaching the retained type only through a constructed
+        /// generic and an array keeps its fingerprint when that type moves into an artifact.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_IndirectDependencyMovedToArtifact_KeepsFingerprint()
+        {
+            BindingFixture fixture = CreateFixture("IndirectDependencyMoved", IndirectDependentSource);
+
+            TransformWorkerClientResult beforeSwitch = await TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: true,
+                    Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
+                    Array.Empty<string>()),
+                CancellationToken.None);
+            TransformWorkerClientResult afterSwitch = await TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: false,
+                    new[] { CreateRetainedArtifact(fixture) },
+                    Array.Empty<string>()),
+                CancellationToken.None);
+
+            Assert.That(beforeSwitch.Success, Is.True, beforeSwitch.ErrorMessage);
+            Assert.That(afterSwitch.Success, Is.True, afterSwitch.ErrorMessage);
+            Assert.That(
+                FindFingerprint(afterSwitch, "Example.Dependent"),
+                Is.EqualTo(FindFingerprint(beforeSwitch, "Example.Dependent")));
+        }
+
+        /// <summary>
+        /// Verifies that swapping the type behind a constructed generic and an array for a
+        /// same-named type in another assembly changes the fingerprint, so a dependency that only
+        /// appears inside a type argument or an element type is really recorded.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_IndirectDependencySwappedForForeignType_ChangesFingerprint()
+        {
+            BindingFixture fixture = CreateFixture("IndirectDependencySwapped", IndirectDependentSource);
+            string foreignPath = Path.Combine(fixture.Directory, "ForeignRetained.dll");
+            CreateRetainedArtifactAssembly(foreignPath, "ForeignRetained");
+
+            TransformWorkerClientResult sourceDeclared = await TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: true,
+                    Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
+                    Array.Empty<string>()),
+                CancellationToken.None);
+            TransformWorkerClientResult foreignBound = await TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: false,
+                    Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
+                    new[] { foreignPath }),
+                CancellationToken.None);
+
+            Assert.That(sourceDeclared.Success, Is.True, sourceDeclared.ErrorMessage);
+            Assert.That(foreignBound.Success, Is.True, foreignBound.ErrorMessage);
+            Assert.That(
+                FindFingerprint(foreignBound, "Example.Dependent"),
+                Is.Not.EqualTo(FindFingerprint(sourceDeclared, "Example.Dependent")));
+        }
+
         private static string FindFingerprint(TransformWorkerClientResult result, string metadataName)
         {
             foreach (TransformWorkerFileOutputDto file in result.Output.files)
@@ -280,7 +375,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return null;
         }
 
-        private static BindingFixture CreateFixture(string name)
+        private static BindingFixture CreateFixture(string name, string dependentSource)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string directory = Path.Combine(
@@ -293,9 +388,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(directory);
             string dependentSourcePath = Path.Combine(directory, "Dependent.cs");
             string retainedSourcePath = Path.Combine(directory, "Retained.cs");
-            File.WriteAllText(
-                dependentSourcePath,
-                "namespace Example { public class Dependent { public int Read(Retained retained) { return retained.Value; } } }");
+            File.WriteAllText(dependentSourcePath, dependentSource);
             File.WriteAllText(
                 retainedSourcePath,
                 "namespace Example { public class Retained { public int Value; } }");
