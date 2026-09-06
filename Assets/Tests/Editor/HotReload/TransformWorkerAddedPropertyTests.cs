@@ -740,6 +740,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(reason, Does.Not.Contain("not visible to the shim assembly"));
         }
 
+        /// <summary>
+        /// Replacing a compiled getter method with a property in the same edit reports the method as
+        /// removed and the property accessor as added, and rewrites the caller to the accessor shim.
+        /// </summary>
+        [Test]
+        public async Task Emit_ReplaceGetXWithProperty_ReportsRemovedMethodAndAddedGetter()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        private int PrivateCall()\n        {\n            return _privateSeed;\n        }\n\n",
+                string.Empty,
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            edited = WithHostMembers(edited, "public int PrivateCallValue => _privateSeed;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return PrivateCallValue + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                HotReloadTestSourceWriter.WriteEditedSource("ReplaceGetXWithProperty.cs", edited),
+                HostProjectRelativePath,
+                onDisk,
+                null);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(HasRemovedMethod(result, "PrivateCall"), Is.True, FormatSkipped(result.Output.skipped));
+            TransformWorkerEntryDto getter = FindEntry(result, "get_PrivateCallValue");
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(getter, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(getter.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(caller, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(result.Output.skipped, Is.Empty, FormatSkipped(result.Output.skipped));
+        }
+
+        private static bool HasRemovedMethod(TransformWorkerClientResult result, string memberName)
+        {
+            foreach (TransformWorkerRemovedMemberDto removed in result.Output.files[0].removedMembers)
+            {
+                if (removed.kind == "method" && removed.name == memberName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(
             string fileName,
             string extraMembers,
