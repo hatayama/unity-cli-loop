@@ -26,6 +26,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string RetainedProjectRelativePath = "Assets/Retained.cs";
 
+        private const string DependentProjectRelativePath = "Assets/Dependent.cs";
+
         // The records these tests use only have to be well formed; what they assert is the
         // fingerprint of a dependent type, never the removal of the retained declaration.
         private const string PlaceholderDeclarationFingerprint =
@@ -367,6 +369,101 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindFingerprint(foreignBound, "Example.Dependent"),
                 Is.Not.EqualTo(FindFingerprint(sourceDeclared, "Example.Dependent")));
+        }
+
+        /// <summary>
+        /// What: a declaration whose own record still matches is taken out of the binding tree
+        /// even though it reads a type that is now served from a retained artifact, because the
+        /// fingerprint is recomputed through the same normalization planning used. A tampered
+        /// fingerprint on the same run keeps the declaration, so the check is not vacuous.
+        /// </summary>
+        [Test]
+        public async Task Transform_DeclarationReadingRetainedType_StillMatchesItsRecord()
+        {
+            BindingFixture fixture = CreateFixture("DeclarationReadingRetainedType", DirectDependentSource);
+            TransformWorkerClientResult planned = await TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: true,
+                    Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
+                    Array.Empty<string>()),
+                CancellationToken.None);
+            Assert.That(planned.Success, Is.True, planned.ErrorMessage);
+            string dependentFingerprint = FindFingerprint(planned, "Example.Dependent");
+
+            TransformWorkerClientResult matched = await RunTransformAsync(fixture, dependentFingerprint);
+            TransformWorkerClientResult tampered = await RunTransformAsync(
+                fixture,
+                new string('0', 64));
+
+            Assert.That(matched.Success, Is.True, matched.ErrorMessage);
+            Assert.That(tampered.Success, Is.True, tampered.ErrorMessage);
+            Assert.That(CountRowsMentioning(tampered, "Read"), Is.GreaterThan(0));
+            Assert.That(CountRowsMentioning(matched, "Read"), Is.EqualTo(0));
+        }
+
+        private static async Task<TransformWorkerClientResult> RunTransformAsync(
+            BindingFixture fixture,
+            string dependentFingerprint)
+        {
+            TransformWorkerInputDto input = CreateInput(
+                fixture,
+                includeRetainedSource: false,
+                new[]
+                {
+                    CreateRetainedArtifact(fixture),
+                    CreateDependentArtifact(fixture, dependentFingerprint)
+                },
+                Array.Empty<string>());
+            // The declaration is only ever removed by a transform run; planning reports it.
+            input.operation = null;
+            return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+        }
+
+        private static TransformWorkerIntroducedTypeArtifactDto CreateDependentArtifact(
+            BindingFixture fixture,
+            string declarationFingerprint)
+        {
+            string artifactPath = Path.Combine(fixture.Directory, "DependentArtifact.dll");
+            CreateArtifactAssembly(artifactPath, "DependentArtifact", "Example", "Dependent");
+            return new TransformWorkerIntroducedTypeArtifactDto
+            {
+                assemblyFullName = ReadAssemblyFullName(artifactPath),
+                referencePath = artifactPath,
+                types = new[]
+                {
+                    new TransformWorkerIntroducedTypeArtifactTypeDto
+                    {
+                        metadataName = "Example.Dependent",
+                        originalAssemblyName = fixture.TargetAssemblyName,
+                        originalAssemblyMvid = fixture.TargetAssemblyMvid,
+                        ownerProjectRelativePath = DependentProjectRelativePath,
+                        declarationFingerprint = declarationFingerprint
+                    }
+                }
+            };
+        }
+
+        private static int CountRowsMentioning(TransformWorkerClientResult result, string memberName)
+        {
+            int count = 0;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == memberName)
+                {
+                    count++;
+                }
+            }
+
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null && skipped.method.Contains(memberName))
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static string FindFingerprint(TransformWorkerClientResult result, string metadataName)
