@@ -149,6 +149,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
+        /// Multi-source request writers reject source paths from different directories without writing either request file.
+        /// </summary>
+        [Test]
+        public void MultiSourceRequestWriters_DifferentSourceDirectories_RejectWithoutWritingFiles()
+        {
+            string rootDirectory = Path.Combine(Path.GetTempPath(), "roslyn-writer-directories-" + Path.GetRandomFileName());
+            string firstDirectory = Path.Combine(rootDirectory, "first");
+            string secondDirectory = Path.Combine(rootDirectory, "second");
+            Directory.CreateDirectory(firstDirectory);
+            Directory.CreateDirectory(secondDirectory);
+            string firstSourcePath = Path.Combine(firstDirectory, "first.cs");
+            string secondSourcePath = Path.Combine(secondDirectory, "second.cs");
+            string dllPath = Path.Combine(firstDirectory, "output.dll");
+            string workerRequestFilePath = Path.Combine(rootDirectory, "request.worker");
+            string responseFilePath = Path.Combine(rootDirectory, "request.rsp");
+            try
+            {
+                ArgumentException workerException = Assert.Throws<ArgumentException>(
+                    () => RoslynCompilerRequestFileWriter.WriteMultipleSourcesWorkerRequestFile(
+                        workerRequestFilePath,
+                        new[] { firstSourcePath, secondSourcePath },
+                        dllPath,
+                        new List<string>(),
+                        new List<string>(),
+                        allowUnsafeCode: false,
+                        emitDebugCode: false));
+                ArgumentException responseException = Assert.Throws<ArgumentException>(
+                    () => RoslynCompilerRequestFileWriter.WriteMultipleSourcesCompilerResponseFile(
+                        responseFilePath,
+                        new[] { firstSourcePath, secondSourcePath },
+                        dllPath,
+                        new List<string>(),
+                        new List<string>(),
+                        allowUnsafeCode: false,
+                        emitDebugCode: false));
+
+                Assert.That(workerException.ParamName, Is.EqualTo("sourcePaths"));
+                Assert.That(responseException.ParamName, Is.EqualTo("sourcePaths"));
+                Assert.That(File.Exists(workerRequestFilePath), Is.False);
+                Assert.That(File.Exists(responseFilePath), Is.False);
+            }
+            finally
+            {
+                if (Directory.Exists(rootDirectory))
+                {
+                    Directory.Delete(rootDirectory, recursive: true);
+                }
+            }
+        }
+
+        /// <summary>
         /// WriteWorkerRequestFile encodes emitDebugCode for the shared Roslyn worker.
         /// </summary>
         [Test]
@@ -284,7 +335,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies that the real shared Roslyn worker compiles independent UTF-8 CRLF sources
+        /// Verifies that sources from different directories are rejected before a build starts without request-file leftovers.
+        /// </summary>
+        [Test]
+        public async Task CompileMultipleSourcesAsync_DifferentSourceDirectories_RejectsBeforeStartingBuildWithoutRequestFileLeftovers()
+        {
+            ExternalCompilerPaths paths = ExternalCompilerPathResolver.Resolve();
+            Assert.That(paths, Is.Not.Null);
+            string rootDirectory = Path.Combine(Path.GetTempPath(), "roslyn-multiple-directories-" + Path.GetRandomFileName());
+            string firstDirectory = Path.Combine(rootDirectory, "first");
+            string secondDirectory = Path.Combine(rootDirectory, "second");
+            Directory.CreateDirectory(firstDirectory);
+            Directory.CreateDirectory(secondDirectory);
+            string firstSourcePath = Path.Combine(firstDirectory, "first.cs");
+            string secondSourcePath = Path.Combine(secondDirectory, "second.cs");
+            string dllPath = Path.Combine(firstDirectory, "output.dll");
+            File.WriteAllText(firstSourcePath, "public class First { }");
+            File.WriteAllText(secondSourcePath, "public class Second { }");
+            int buildCount = 0;
+            Func<ExternalCompilerPaths, string, string, string, UnityEditor.Compilation.CompilerMessage[]> previousWorker =
+                SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(
+                    (ExternalCompilerPaths _, string __, string ___, string ____) =>
+                        throw new AssertionException(
+                            "Worker assembly build must not start for sources in different directories."));
+            Func<System.Diagnostics.ProcessStartInfo, System.Diagnostics.Process> previousStarter =
+                RoslynCompilerBackend.SwapOneShotProcessStarterForTests(
+                    _ => throw new AssertionException(
+                        "One-shot compiler must not start for sources in different directories."));
+
+            SharedRoslynCompilerWorkerHost.ShutdownForTests();
+            DynamicCompilationHealthMonitor.ResetForTests();
+            try
+            {
+                ArgumentException captured = null;
+                try
+                {
+                    await RoslynCompilerBackend.CompileMultipleSourcesAsync(
+                        new[] { firstSourcePath, secondSourcePath },
+                        dllPath,
+                        new List<string>(),
+                        paths,
+                        new RoslynCompilerOptions(Array.Empty<string>(), false, emitDebugCode: false),
+                        CancellationToken.None,
+                        () => { },
+                        () => { },
+                        () => buildCount++);
+                }
+                catch (ArgumentException exception)
+                {
+                    captured = exception;
+                }
+
+                Assert.That(captured, Is.Not.Null);
+                Assert.That(captured.ParamName, Is.EqualTo("sourcePaths"));
+                Assert.That(buildCount, Is.Zero);
+                Assert.That(Directory.GetFiles(firstDirectory, "*.worker"), Is.Empty);
+                Assert.That(Directory.GetFiles(firstDirectory, "*.rsp"), Is.Empty);
+            }
+            finally
+            {
+                SharedRoslynCompilerWorkerHost.ShutdownForTests();
+                RoslynCompilerBackend.SwapOneShotProcessStarterForTests(previousStarter);
+                SharedRoslynCompilerWorkerHost.SwapWorkerAssemblyCompilerForTests(previousWorker);
+                if (Directory.Exists(rootDirectory))
+                {
+                    Directory.Delete(rootDirectory, recursive: true);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Verifies that the real shared Roslyn worker preserves per-source aliases in UTF-8 CRLF sources
         /// whose directory and file names contain spaces.
         /// </summary>
         [Test]
@@ -297,10 +418,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             string firstSourcePath = Path.Combine(directory, "First Source.cs");
             string secondSourcePath = Path.Combine(directory, "Second 日本語.cs");
             string dllPath = Path.Combine(directory, "output.dll");
-            File.WriteAllText(firstSourcePath, "public class SharedFirst { }\r\n");
+            File.WriteAllText(firstSourcePath, "using Alias = System.Int32;\r\npublic class SharedFirst { public Alias Value; }\r\n");
             File.WriteAllText(
                 secondSourcePath,
-                "public class SharedSecond { public string Value() { return \"日本語\"; } }\r\n");
+                "using Alias = System.String;\r\npublic class SharedSecond { public Alias Value; public string Text() { return \"日本語\"; } }\r\n");
             List<string> references = new DynamicReferenceSetBuilderService().BuildReferenceSet(
                 new List<string>(),
                 null,
@@ -325,8 +446,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 Assert.That(File.Exists(dllPath), Is.True);
                 Assert.That(File.Exists(Path.ChangeExtension(dllPath, ".pdb")), Is.True);
                 Assembly assembly = Assembly.Load(File.ReadAllBytes(dllPath));
-                Assert.That(assembly.GetType("SharedFirst"), Is.Not.Null);
-                Assert.That(assembly.GetType("SharedSecond"), Is.Not.Null);
+                Type firstType = assembly.GetType("SharedFirst");
+                Type secondType = assembly.GetType("SharedSecond");
+                Assert.That(firstType, Is.Not.Null);
+                Assert.That(secondType, Is.Not.Null);
+                FieldInfo firstField = firstType.GetField("Value");
+                FieldInfo secondField = secondType.GetField("Value");
+                Assert.That(firstField, Is.Not.Null);
+                Assert.That(secondField, Is.Not.Null);
+                Assert.That(firstField.FieldType, Is.EqualTo(typeof(int)));
+                Assert.That(secondField.FieldType, Is.EqualTo(typeof(string)));
             }
             finally
             {
@@ -339,7 +468,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         }
 
         /// <summary>
-        /// Verifies that a real one-shot compiler process handles multiple source trees when the
+        /// Verifies that a real one-shot compiler process preserves per-source aliases when the
         /// shared worker build is unavailable.
         /// </summary>
         [Test]
@@ -352,10 +481,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             string firstSourcePath = Path.Combine(directory, "First Source.cs");
             string secondSourcePath = Path.Combine(directory, "Second 日本語.cs");
             string dllPath = Path.Combine(directory, "output.dll");
-            File.WriteAllText(firstSourcePath, "public class OneShotFirst { }\r\n");
+            File.WriteAllText(firstSourcePath, "using Alias = System.Int32;\r\npublic class OneShotFirst { public Alias Value; }\r\n");
             File.WriteAllText(
                 secondSourcePath,
-                "public class OneShotSecond { public string Value() { return \"日本語\"; } }\r\n");
+                "using Alias = System.String;\r\npublic class OneShotSecond { public Alias Value; public string Text() { return \"日本語\"; } }\r\n");
             List<string> references = new DynamicReferenceSetBuilderService().BuildReferenceSet(
                 new List<string>(),
                 null,
@@ -399,8 +528,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 Assert.That(result.CompilerMessages, Is.Empty);
                 Assert.That(File.Exists(Path.ChangeExtension(dllPath, ".pdb")), Is.True);
                 Assembly assembly = Assembly.Load(File.ReadAllBytes(dllPath));
-                Assert.That(assembly.GetType("OneShotFirst"), Is.Not.Null);
-                Assert.That(assembly.GetType("OneShotSecond"), Is.Not.Null);
+                Type firstType = assembly.GetType("OneShotFirst");
+                Type secondType = assembly.GetType("OneShotSecond");
+                Assert.That(firstType, Is.Not.Null);
+                Assert.That(secondType, Is.Not.Null);
+                FieldInfo firstField = firstType.GetField("Value");
+                FieldInfo secondField = secondType.GetField("Value");
+                Assert.That(firstField, Is.Not.Null);
+                Assert.That(secondField, Is.Not.Null);
+                Assert.That(firstField.FieldType, Is.EqualTo(typeof(int)));
+                Assert.That(secondField.FieldType, Is.EqualTo(typeof(string)));
             }
             finally
             {

@@ -72,6 +72,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 allowAssemblyBuilderFallback: true).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Compiles source files that share one normalized parent directory.
+        /// </summary>
         public static async Task<DynamicCompilationBackendResult> CompileMultipleSourcesAsync(
             IReadOnlyList<string> sourcePaths,
             string dllPath,

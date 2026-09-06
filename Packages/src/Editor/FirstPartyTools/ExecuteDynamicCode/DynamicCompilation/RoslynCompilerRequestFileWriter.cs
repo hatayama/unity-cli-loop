@@ -100,11 +100,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HashSet<string> paths = new HashSet<string>(StringComparer.Ordinal);
+            string sourceDirectory = null;
             foreach (string sourcePath in sourcePaths)
             {
-                if (string.IsNullOrWhiteSpace(sourcePath) || !paths.Add(Path.GetFullPath(sourcePath)))
+                if (string.IsNullOrWhiteSpace(sourcePath))
                 {
                     throw new ArgumentException("Source paths must be non-empty and unique.", nameof(sourcePaths));
+                }
+
+                string fullPath = Path.GetFullPath(sourcePath);
+                if (!paths.Add(fullPath))
+                {
+                    throw new ArgumentException("Source paths must be non-empty and unique.", nameof(sourcePaths));
+                }
+
+                string currentDirectory = Path.GetDirectoryName(fullPath);
+                if (sourceDirectory == null)
+                {
+                    sourceDirectory = currentDirectory;
+                    continue;
+                }
+
+                // This request format emits a single source-directory mapping.
+                if (!string.Equals(sourceDirectory, currentDirectory, StringComparison.Ordinal))
+                {
+                    throw new ArgumentException(
+                        "Source paths must share one normalized parent directory.",
+                        nameof(sourcePaths));
                 }
             }
         }
