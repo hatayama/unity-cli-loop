@@ -50,6 +50,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             + "    }\n"
             + "}\n";
 
+        // The region opens above the retained declaration and closes inside it, so blanking the
+        // declaration takes the closing directive with it and leaves the text unparseable.
+        private const string UnbalancedRegionSource =
+            "namespace Example\n"
+            + "{\n"
+            + "#if UNITY_EDITOR\n"
+            + "    public class Retained\n"
+            + "    {\n"
+            + "        public static int Value = 1;\n"
+            + "#endif\n"
+            + "\n"
+            + "        public static int Twice()\n"
+            + "        {\n"
+            + "            return Value * 2;\n"
+            + "        }\n"
+            + "    }\n"
+            + "\n"
+            + "    public class Caller\n"
+            + "    {\n"
+            + "        public int Read()\n"
+            + "        {\n"
+            + "            return Retained.Value + 1;\n"
+            + "        }\n"
+            + "    }\n"
+            + "}\n";
+
         /// <summary>
         /// What: the shim reports the line the edited file really has for a method that follows a
         /// removed declaration, so taking the declaration out does not shift the mapping.
@@ -57,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Transform_RetainedDeclarationRemoved_KeepsSourceLineNumbers()
         {
-            RetainedFixture fixture = await CreateFixtureAsync("KeepsSourceLineNumbers");
+            RetainedFixture fixture = await CreateFixtureAsync("KeepsSourceLineNumbers", EditedSource);
 
             TransformWorkerClientResult withoutRecord = await RunAsync(fixture, Array.Empty<TransformWorkerIntroducedTypeArtifactDto>());
             TransformWorkerClientResult withRecord = await RunAsync(fixture, new[] { CreateRecordedArtifact(fixture, fixture.RetainedFingerprint) });
@@ -75,7 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Transform_RetainedDeclarationRemoved_ReportsNoRowsForRetainedType()
         {
-            RetainedFixture fixture = await CreateFixtureAsync("ReportsNoRows");
+            RetainedFixture fixture = await CreateFixtureAsync("ReportsNoRows", EditedSource);
 
             TransformWorkerClientResult withoutRecord = await RunAsync(fixture, Array.Empty<TransformWorkerIntroducedTypeArtifactDto>());
             TransformWorkerClientResult withRecord = await RunAsync(fixture, new[] { CreateRecordedArtifact(fixture, fixture.RetainedFingerprint) });
@@ -93,7 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Transform_RecordFingerprintDoesNotMatch_KeepsDeclarationInBinding()
         {
-            RetainedFixture fixture = await CreateFixtureAsync("FingerprintMismatch");
+            RetainedFixture fixture = await CreateFixtureAsync("FingerprintMismatch", EditedSource);
 
             TransformWorkerClientResult tampered = await RunAsync(
                 fixture,
@@ -110,12 +136,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task Transform_ArtifactIdentityMismatch_FailsRun()
         {
-            RetainedFixture fixture = await CreateFixtureAsync("IdentityMismatch");
+            RetainedFixture fixture = await CreateFixtureAsync("IdentityMismatch", EditedSource);
             TransformWorkerIntroducedTypeArtifactDto mismatched =
                 CreateRecordedArtifact(fixture, fixture.RetainedFingerprint);
             mismatched.assemblyFullName = ReadAssemblyFullName(fixture.TargetAssemblyPath);
 
             TransformWorkerClientResult result = await RunAsync(fixture, new[] { mismatched });
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Output, Is.Null.Or.Property("entries").Empty);
+        }
+
+        /// <summary>
+        /// What: a preprocessor region that closes inside the retained declaration makes the
+        /// blanked text unparseable, and the run fails instead of transforming the file against a
+        /// tree the parser had to guess at.
+        /// </summary>
+        [Test]
+        public async Task Transform_BlankedDeclarationLeavesUnbalancedRegion_FailsRun()
+        {
+            RetainedFixture fixture = await CreateFixtureAsync("UnbalancedRegion", UnbalancedRegionSource);
+
+            TransformWorkerClientResult result = await RunAsync(
+                fixture,
+                new[] { CreateRecordedArtifact(fixture, fixture.RetainedFingerprint) });
 
             Assert.That(result.Success, Is.False);
             Assert.That(result.Output, Is.Null.Or.Property("entries").Empty);
@@ -252,7 +296,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
         }
 
-        private static async Task<RetainedFixture> CreateFixtureAsync(string name)
+        private static async Task<RetainedFixture> CreateFixtureAsync(string name, string editedSource)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string directory = Path.Combine(
@@ -264,7 +308,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 name);
             Directory.CreateDirectory(directory);
             string sourcePath = Path.Combine(directory, "Edited.cs");
-            File.WriteAllText(sourcePath, EditedSource);
+            File.WriteAllText(sourcePath, editedSource);
             string targetAssemblyPath = Path.Combine(directory, "RetainedTarget.dll");
             string targetAssemblyMvid = CreateTargetAssembly(targetAssemblyPath);
             string artifactPath = Path.Combine(directory, "RetainedArtifact.dll");
