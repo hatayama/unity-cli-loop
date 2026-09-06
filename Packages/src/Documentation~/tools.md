@@ -121,11 +121,11 @@ Use `uloop set-game-view-size --width 1920 --height 1080` to pin a custom Game V
 ```
 
 ### 11. record-video - Record the Game View During Play Mode
-Use `uloop record-video` to record the Game View while Play Mode runs. Start returns immediately so other commands can run during capture; Stop finalizes an MP4 (WebM on Linux) under `.uloop/outputs/Videos/`:
+Use `uloop record-video` to record the Game View while Play Mode runs. `start` returns immediately so other commands can run during capture; `stop` finalizes an MP4 (WebM on Linux) under `.uloop/outputs/Videos/`:
 ```text
-uloop record-video --action Start
+uloop record-video --action start
 uloop simulate-keyboard --key W --duration 2
-uloop record-video --action Stop
+uloop record-video --action stop
 ```
 
 ### 12. control-play-mode - Control Play Mode

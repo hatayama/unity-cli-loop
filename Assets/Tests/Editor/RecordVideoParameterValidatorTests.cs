@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 outputPath,
                 isLinux,
                 1.0f,
-                RecordVideoQuality.Medium);
+                RecordVideoQuality.medium);
         }
 
         /// <summary>
@@ -182,7 +182,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs0_1_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.1f, RecordVideoQuality.Medium);
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.1f, RecordVideoQuality.medium);
 
             Assert.That(result.IsValid, Is.True);
         }
@@ -193,7 +193,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs1_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.0f, RecordVideoQuality.Medium);
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.0f, RecordVideoQuality.medium);
 
             Assert.That(result.IsValid, Is.True);
         }
@@ -205,7 +205,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Validate_WhenResolutionScaleIsNaN_IsInvalid()
         {
             ValidationResult result = RecordVideoParameterValidator.Validate(
-                30, 60, "", false, float.NaN, RecordVideoQuality.Medium);
+                30, 60, "", false, float.NaN, RecordVideoQuality.medium);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("ResolutionScale"));
@@ -230,7 +230,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs0_09_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.09f, RecordVideoQuality.Medium);
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.09f, RecordVideoQuality.medium);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(
@@ -244,7 +244,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs1_01_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.01f, RecordVideoQuality.Medium);
+            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.01f, RecordVideoQuality.medium);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(

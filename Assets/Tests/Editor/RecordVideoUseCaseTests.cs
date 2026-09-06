@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RecordVideoUseCase useCase = new RecordVideoUseCase();
             RecordVideoSchema parameters = new RecordVideoSchema
             {
-                Action = RecordVideoAction.Start
+                Action = RecordVideoAction.start
             };
 
             RecordVideoResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Success, Is.False);
             Assert.That(response.IsRecording, Is.False);
             Assert.That(response.Message, Is.EqualTo(PlayModeToolPreflightService.PlayModeNotActiveMessage));
-            Assert.That(response.Action, Is.EqualTo(RecordVideoAction.Start.ToString()));
+            Assert.That(response.Action, Is.EqualTo(RecordVideoAction.start.ToString()));
         }
 
         /// <summary>
@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RecordVideoUseCase useCase = new RecordVideoUseCase();
             RecordVideoSchema parameters = new RecordVideoSchema
             {
-                Action = RecordVideoAction.Status
+                Action = RecordVideoAction.status
             };
 
             RecordVideoResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.IsRecording, Is.False);
             Assert.That(response.OutputPath, Is.Null.Or.Empty);
             Assert.That(response.Message, Is.EqualTo(RecordVideoConstants.StatusIdleMessage));
-            Assert.That(response.Action, Is.EqualTo(RecordVideoAction.Status.ToString()));
+            Assert.That(response.Action, Is.EqualTo(RecordVideoAction.status.ToString()));
         }
 
         /// <summary>
@@ -73,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             RecordVideoUseCase useCase = new RecordVideoUseCase();
             RecordVideoSchema parameters = new RecordVideoSchema
             {
-                Action = RecordVideoAction.Stop
+                Action = RecordVideoAction.stop
             };
 
             RecordVideoResponse response = await useCase.ExecuteAsync(parameters, CancellationToken.None);
@@ -81,7 +81,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.Success, Is.False);
             Assert.That(response.IsRecording, Is.False);
             Assert.That(response.Message, Is.EqualTo(RecordVideoConstants.NoRecordingMessage));
-            Assert.That(response.Action, Is.EqualTo(RecordVideoAction.Stop.ToString()));
+            Assert.That(response.Action, Is.EqualTo(RecordVideoAction.stop.ToString()));
         }
 
         /// <summary>

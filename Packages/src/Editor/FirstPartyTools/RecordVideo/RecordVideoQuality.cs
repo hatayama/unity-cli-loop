@@ -5,8 +5,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public enum RecordVideoQuality
     {
-        Low = 0,
-        Medium = 1,
-        High = 2
+        low = 0,
+        medium = 1,
+        high = 2
     }
 }

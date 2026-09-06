@@ -29,7 +29,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 30,
                 60.0,
                 "/tmp/gameview.mp4",
-                RecordVideoQuality.Medium);
+                RecordVideoQuality.medium);
         }
 
         [TearDown]
@@ -125,7 +125,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 30,
                 1.0,
                 "/tmp/gameview.mp4",
-                RecordVideoQuality.Medium);
+                RecordVideoQuality.medium);
             _now = 1.0;
 
             _session.Tick();
@@ -164,9 +164,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 30,
                 60.0,
                 "/tmp/gameview.mp4",
-                RecordVideoQuality.High);
+                RecordVideoQuality.high);
 
-            Assert.That(_session.Snapshot().Quality, Is.EqualTo("High"));
+            Assert.That(_session.Snapshot().Quality, Is.EqualTo("high"));
         }
 
         /// <summary>

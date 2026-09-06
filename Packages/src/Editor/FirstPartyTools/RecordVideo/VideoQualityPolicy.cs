@@ -13,14 +13,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             switch (quality)
             {
-                case RecordVideoQuality.Low:
+                case RecordVideoQuality.low:
                     return VideoBitrateMode.Low;
-                case RecordVideoQuality.Medium:
+                case RecordVideoQuality.medium:
                     return VideoBitrateMode.Medium;
-                case RecordVideoQuality.High:
+                case RecordVideoQuality.high:
                     return VideoBitrateMode.High;
                 default:
-                    Debug.Assert(false, "RecordVideoQuality must be Low, Medium, or High.");
+                    Debug.Assert(false, "RecordVideoQuality must be low, medium, or high.");
                     return VideoBitrateMode.Medium;
             }
         }

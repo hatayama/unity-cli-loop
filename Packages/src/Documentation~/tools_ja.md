@@ -121,11 +121,11 @@ macOS / Windows Editor上で、Unity Editor ウィンドウを最前面に表示
 ```
 
 ### 11. record-video - Play Mode中のGame View録画
-`uloop record-video` でPlay Mode中のGame Viewを録画できます。Startはすぐ戻るので録画中に他コマンドを実行でき、Stopで `.uloop/outputs/Videos/` にMP4（LinuxではWebM）を確定します。
+`uloop record-video` でPlay Mode中のGame Viewを録画できます。`start` はすぐ戻るので録画中に他コマンドを実行でき、`stop` で `.uloop/outputs/Videos/` にMP4（LinuxではWebM）を確定します。
 ```text
-uloop record-video --action Start
+uloop record-video --action start
 uloop simulate-keyboard --key W --duration 2
-uloop record-video --action Stop
+uloop record-video --action stop
 ```
 
 ### 12. control-play-mode - Play Modeの制御

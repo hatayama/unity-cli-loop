@@ -7,7 +7,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public sealed class RecordVideoSchema : UnityCliLoopToolSchema
     {
-        public RecordVideoAction Action { get; set; } = RecordVideoAction.Start;
+        public RecordVideoAction Action { get; set; } = RecordVideoAction.start;
 
         public int FrameRate { get; set; } = 30;
 
@@ -17,6 +17,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public float ResolutionScale { get; set; } = 1.0f;
 
-        public RecordVideoQuality Quality { get; set; } = RecordVideoQuality.Medium;
+        public RecordVideoQuality Quality { get; set; } = RecordVideoQuality.medium;
     }
 }

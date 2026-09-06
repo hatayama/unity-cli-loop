@@ -24,12 +24,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             bool isLinux = Application.platform == RuntimePlatform.LinuxEditor;
-            if (parameters.Action == RecordVideoAction.Stop)
+            if (parameters.Action == RecordVideoAction.stop)
             {
                 return Task.FromResult(ExecuteStop());
             }
 
-            if (parameters.Action == RecordVideoAction.Status)
+            if (parameters.Action == RecordVideoAction.status)
             {
                 return Task.FromResult(ExecuteStatus());
             }
@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PlayModeToolPreflightResult preflight = PlayModeToolPreflightService.RequireActive();
             if (!preflight.IsValid)
             {
-                return CreateFailure(RecordVideoAction.Start, preflight.ErrorMessage);
+                return CreateFailure(RecordVideoAction.start, preflight.ErrorMessage);
             }
 
             if (RecordVideoService.IsRecording)
@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateResponse(
                     false,
                     RecordVideoConstants.AlreadyRecordingMessage,
-                    RecordVideoAction.Start,
+                    RecordVideoAction.start,
                     RecordVideoService.GetSnapshot());
             }
 
@@ -63,14 +63,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 parameters.Quality);
             if (!validation.IsValid)
             {
-                return CreateFailure(RecordVideoAction.Start, validation.ErrorMessage);
+                return CreateFailure(RecordVideoAction.start, validation.ErrorMessage);
             }
 
             RenderTexture renderTexture = GameViewBridge.GetRenderTexture();
             if (renderTexture == null)
             {
                 return CreateFailure(
-                    RecordVideoAction.Start,
+                    RecordVideoAction.start,
                     RecordVideoConstants.RenderTextureUnavailableMessage);
             }
 
@@ -82,7 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int height = size.height;
             if (width == 0 || height == 0)
             {
-                return CreateFailure(RecordVideoAction.Start, RecordVideoConstants.FrameSizeTooSmallMessage);
+                return CreateFailure(RecordVideoAction.start, RecordVideoConstants.FrameSizeTooSmallMessage);
             }
 
             string outputPath = RecordVideoOutputPathResolver.Resolve(
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return CreateResponse(
                 true,
                 RecordVideoConstants.StartedMessage,
-                RecordVideoAction.Start,
+                RecordVideoAction.start,
                 snapshot);
         }
 
@@ -115,7 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateResponse(
                     true,
                     RecordVideoConstants.StoppedMessage,
-                    RecordVideoAction.Stop,
+                    RecordVideoAction.stop,
                     stopped);
             }
 
@@ -126,11 +126,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateResponse(
                     true,
                     RecordVideoConstants.StoppedMessage,
-                    RecordVideoAction.Stop,
+                    RecordVideoAction.stop,
                     lastCompleted.Snapshot);
             }
 
-            return CreateFailure(RecordVideoAction.Stop, RecordVideoConstants.NoRecordingMessage);
+            return CreateFailure(RecordVideoAction.stop, RecordVideoConstants.NoRecordingMessage);
         }
 
         private static RecordVideoResponse ExecuteStatus()
@@ -140,7 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateResponse(
                     true,
                     RecordVideoConstants.StatusRecordingMessage,
-                    RecordVideoAction.Status,
+                    RecordVideoAction.status,
                     RecordVideoService.GetSnapshot());
             }
 
@@ -150,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return CreateResponse(
                     true,
                     RecordVideoConstants.StatusIdleMessage,
-                    RecordVideoAction.Status,
+                    RecordVideoAction.status,
                     lastCompleted.Snapshot);
             }
 
@@ -158,7 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Success = true,
                 Message = RecordVideoConstants.StatusIdleMessage,
-                Action = RecordVideoAction.Status.ToString(),
+                Action = RecordVideoAction.status.ToString(),
                 IsRecording = false
             };
         }

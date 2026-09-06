@@ -13,9 +13,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         /// <summary>
         /// What: each quality value maps to the matching VideoBitrateMode.
         /// </summary>
-        [TestCase(RecordVideoQuality.Low, VideoBitrateMode.Low)]
-        [TestCase(RecordVideoQuality.Medium, VideoBitrateMode.Medium)]
-        [TestCase(RecordVideoQuality.High, VideoBitrateMode.High)]
+        [TestCase(RecordVideoQuality.low, VideoBitrateMode.Low)]
+        [TestCase(RecordVideoQuality.medium, VideoBitrateMode.Medium)]
+        [TestCase(RecordVideoQuality.high, VideoBitrateMode.High)]
         public void ToBitrateMode_MapsEachQuality(RecordVideoQuality quality, VideoBitrateMode expected)
         {
             VideoBitrateMode mode = VideoQualityPolicy.ToBitrateMode(quality);
