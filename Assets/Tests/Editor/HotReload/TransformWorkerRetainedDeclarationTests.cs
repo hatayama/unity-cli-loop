@@ -148,6 +148,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an untrusted artifact takes the whole group down, so a run of two edited files
+        /// produces no entries and no shim for either of them instead of reporting the artifact as
+        /// one file's diagnostic while the other file is still transformed and applied.
+        /// </summary>
+        [Test]
+        public async Task Transform_ArtifactIdentityMismatchInGroup_FailsEveryFile()
+        {
+            HotReloadRetainedArtifactFixture fixture =
+                await HotReloadRetainedArtifactFixture.CreateAsync("GroupIdentityMismatch", EditedSource);
+            TransformWorkerIntroducedTypeArtifactDto mismatched =
+                fixture.CreateRecordedArtifact(fixture.RetainedFingerprint);
+            mismatched.assemblyFullName =
+                HotReloadRetainedArtifactFixture.ReadAssemblyFullName(fixture.TargetAssemblyPath);
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                fixture.BuildGroupTransformInput(new[] { mismatched }),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Output, Is.Null.Or.Property("entries").Empty);
+            Assert.That(result.Output, Is.Null.Or.Property("shimSource").Null.Or.Property("shimSource").Empty);
+        }
+
+        /// <summary>
         /// What: a preprocessor region that closes inside the retained declaration makes the
         /// blanked text unparseable, and the run fails instead of transforming the file against a
         /// tree the parser had to guess at.

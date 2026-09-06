@@ -28,9 +28,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
 
+        // A second edited file of the same group, so a test can show that a run-level failure
+        // takes the whole group down rather than reporting one file's diagnostics.
+        private const string SiblingSource =
+            "namespace Example { public class Sibling { public int Get() { return 3; } } }";
+
         private HotReloadRetainedArtifactFixture(
             string sourcePath,
             string projectRelativePath,
+            string siblingSourcePath,
+            string siblingProjectRelativePath,
             string targetAssemblyPath,
             string targetAssemblyName,
             string targetAssemblyMvid,
@@ -38,6 +45,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             SourcePath = sourcePath;
             ProjectRelativePath = projectRelativePath;
+            SiblingSourcePath = siblingSourcePath;
+            SiblingProjectRelativePath = siblingProjectRelativePath;
             TargetAssemblyPath = targetAssemblyPath;
             TargetAssemblyName = targetAssemblyName;
             TargetAssemblyMvid = targetAssemblyMvid;
@@ -57,6 +66,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         public string ArtifactPath { get; }
 
+        public string SiblingSourcePath { get; }
+
+        public string SiblingProjectRelativePath { get; }
+
         public string RetainedFingerprint { get; private set; }
 
         public static async Task<HotReloadRetainedArtifactFixture> CreateAsync(
@@ -74,6 +87,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Directory.CreateDirectory(directory);
             string sourcePath = Path.Combine(directory, "Edited.cs");
             File.WriteAllText(sourcePath, editedSource);
+            string siblingSourcePath = Path.Combine(directory, "Sibling.cs");
+            File.WriteAllText(siblingSourcePath, SiblingSource);
             string targetAssemblyPath = Path.Combine(directory, "RetainedTarget.dll");
             string targetAssemblyMvid = CreateTargetAssembly(targetAssemblyPath);
             string artifactPath = Path.Combine(directory, "RetainedArtifact.dll");
@@ -81,6 +96,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadRetainedArtifactFixture fixture = new HotReloadRetainedArtifactFixture(
                 sourcePath,
                 "Assets/RetainedDeclaration/" + name + "/Edited.cs",
+                siblingSourcePath,
+                "Assets/RetainedDeclaration/" + name + "/Sibling.cs",
                 targetAssemblyPath,
                 "RetainedTarget",
                 targetAssemblyMvid,
@@ -94,14 +111,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public TransformWorkerInputDto BuildTransformInput(
             TransformWorkerIntroducedTypeArtifactDto[] artifacts)
         {
-            return BuildInput(null, artifacts);
+            return BuildInput(null, artifacts, includeSibling: false);
+        }
+
+        /// <summary>
+        /// Builds a transform input for both edited files of the group, so a test can assert what
+        /// a run-level failure does to a group of more than one file.
+        /// </summary>
+        public TransformWorkerInputDto BuildGroupTransformInput(
+            TransformWorkerIntroducedTypeArtifactDto[] artifacts)
+        {
+            return BuildInput(null, artifacts, includeSibling: true);
         }
 
         public TransformWorkerInputDto BuildPrepareInput()
         {
             return BuildInput(
                 "prepareIntroducedTypes",
-                Array.Empty<TransformWorkerIntroducedTypeArtifactDto>());
+                Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
+                includeSibling: false);
         }
 
         public TransformWorkerIntroducedTypeArtifactDto CreateRecordedArtifact(
@@ -135,7 +163,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private TransformWorkerInputDto BuildInput(
             string operation,
-            TransformWorkerIntroducedTypeArtifactDto[] artifacts)
+            TransformWorkerIntroducedTypeArtifactDto[] artifacts,
+            bool includeSibling)
         {
             UnityEditor.Compilation.Assembly compilationAssembly = FindCompilationAssembly();
             List<string> referencePaths = new List<string>();
@@ -148,17 +177,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             referencePaths.Add(Path.GetFullPath(TargetAssemblyPath));
+            List<TransformWorkerSourceDto> sources = new List<TransformWorkerSourceDto>
+            {
+                new TransformWorkerSourceDto
+                {
+                    sourcePath = SourcePath,
+                    projectRelativePath = ProjectRelativePath
+                }
+            };
+            if (includeSibling)
+            {
+                sources.Add(
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = SiblingSourcePath,
+                        projectRelativePath = SiblingProjectRelativePath
+                    });
+            }
+
             return new TransformWorkerInputDto
             {
                 operation = operation,
-                sources = new[]
-                {
-                    new TransformWorkerSourceDto
-                    {
-                        sourcePath = SourcePath,
-                        projectRelativePath = ProjectRelativePath
-                    }
-                },
+                sources = sources.ToArray(),
                 defines = compilationAssembly.defines ?? Array.Empty<string>(),
                 referencePaths = referencePaths.ToArray(),
                 targetTypesAssemblyPath = TargetAssemblyPath,
