@@ -179,6 +179,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "ResolverFixtures",
                 Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
+            try
+            {
+                RunResolvedTypeShapeAssertions(directory);
+            }
+            finally
+            {
+                DeleteFixtureDirectory(directory);
+            }
+        }
+
+        // The fixture DLLs are loaded from bytes rather than from disk, so the directory can be
+        // removed even though the assemblies stay loaded for the rest of the session.
+        private static void DeleteFixtureDirectory(string directory)
+        {
+            if (!Directory.Exists(directory))
+            {
+                return;
+            }
+
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (IOException exception)
+            {
+                // A leftover fixture directory must not turn into a test failure of its own.
+                UnityEngine.Debug.Log("Resolver fixture directory could not be removed: " + exception.Message);
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                UnityEngine.Debug.Log("Resolver fixture directory could not be removed: " + exception.Message);
+            }
+        }
+
+        private static void RunResolvedTypeShapeAssertions(string directory)
+        {
             string dependencyName = "ResolverDependency" + Guid.NewGuid().ToString("N");
             string consumerName = "ResolverConsumer" + Guid.NewGuid().ToString("N");
             string dependencyPath = Path.Combine(directory, dependencyName + ".dll");

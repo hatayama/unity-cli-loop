@@ -297,6 +297,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that source-path uniqueness follows the platform's file-system case rules, so
+        /// two spellings Windows resolves to one file are rejected before either source is written.
+        /// </summary>
+        [Test]
+        public void CompilationRequest_CaseOnlyDuplicateSources_FollowsPlatformPathRules()
+        {
+            HotReloadIntroducedTypeDescriptor descriptor = CreateDescriptor("Example.Introduced", "Assets/Example.cs");
+            FakeEnvironment environment = new FakeEnvironment();
+            HotReloadIntroducedTypeSource[] sources =
+            {
+                new HotReloadIntroducedTypeSource("Duplicate.cs", descriptor),
+                new HotReloadIntroducedTypeSource("duplicate.cs", descriptor)
+            };
+
+            if (Path.DirectorySeparatorChar == '\\')
+            {
+                ArgumentException exception = Assert.Throws<ArgumentException>(() => CreateRequestFrom(sources));
+                Assert.That(exception.ParamName, Is.EqualTo("sources"));
+            }
+            else
+            {
+                Assert.DoesNotThrow(() => CreateRequestFrom(sources));
+            }
+
+            Assert.That(environment.WriteSourceCalls, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// Verifies that a request copies its source records so later caller mutations cannot
         /// change the batch that awaits compilation.
         /// </summary>
@@ -450,6 +478,44 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Artifact.Assembly.GetType("CompilerFixture.Initializer"), Is.Not.Null);
         }
 
+        /// <summary>
+        /// Verifies that emitted-type validation reads nested definitions in their Cecil metadata
+        /// form, so a descriptor is matched by the name the artifact actually defines.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_NestedDefinition_MatchesCecilMetadataName()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            HotReloadIntroducedTypeArtifactPaths paths =
+                new HotReloadIntroducedTypeArtifactPathFactory(projectRoot, "compiler-nested-tests").Create();
+            HotReloadIntroducedTypeDescriptor nested = new HotReloadIntroducedTypeDescriptor(
+                "OriginalAssembly",
+                "original-mvid",
+                "NestedFixture.Outer/Inner",
+                "Assets/Nested.cs",
+                "nested",
+                "namespace NestedFixture { public class Outer { public class Inner { } } }");
+            HotReloadIntroducedTypeCompilationRequest request =
+                new HotReloadIntroducedTypeCompilationRequest(
+                    new[] { new HotReloadIntroducedTypeSource(paths.CreateSourcePath(0), nested) },
+                    paths.DllPath,
+                    paths.PdbPath,
+                    paths.AssemblyFullName,
+                    new[] { nested },
+                    CreateReferencePaths(),
+                    Array.Empty<string>());
+            HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(
+                new HotReloadIntroducedTypeCompilerEnvironment());
+
+            HotReloadIntroducedTypeCompilerResult result = await compiler.CompileAsync(
+                request,
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Artifact, Is.Not.Null);
+            Assert.That(result.Artifact.Assembly.GetType("NestedFixture.Outer+Inner"), Is.Not.Null);
+        }
+
         private static string[] CreateReferencePaths()
         {
             UnityEditor.Compilation.Assembly targetAssembly = null;
@@ -484,6 +550,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return references.ToArray();
+        }
+
+        private static HotReloadIntroducedTypeCompilationRequest CreateRequestFrom(
+            IReadOnlyList<HotReloadIntroducedTypeSource> sources)
+        {
+            List<HotReloadIntroducedTypeDescriptor> descriptors =
+                new List<HotReloadIntroducedTypeDescriptor>();
+            foreach (HotReloadIntroducedTypeSource source in sources)
+            {
+                descriptors.Add(source.Descriptor);
+            }
+
+            return new HotReloadIntroducedTypeCompilationRequest(
+                sources,
+                "artifact.dll",
+                "artifact.pdb",
+                typeof(HotReloadIntroducedTypeCompilerTests).Assembly.FullName,
+                descriptors,
+                Array.Empty<string>(),
+                Array.Empty<string>());
         }
 
         private static HotReloadIntroducedTypeCompilationRequest CreateRequest()

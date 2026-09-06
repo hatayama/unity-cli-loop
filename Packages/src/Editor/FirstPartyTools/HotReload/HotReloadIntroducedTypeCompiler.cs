@@ -287,7 +287,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentException("Introduced-type sources must not be empty.", nameof(sources));
             }
 
-            HashSet<string> paths = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<string> paths = new HashSet<string>(RoslynCompilerRequestFileWriter.CreatePathComparer());
             List<HotReloadIntroducedTypeSource> copiedSources =
                 new List<HotReloadIntroducedTypeSource>(sources.Count);
             foreach (HotReloadIntroducedTypeSource source in sources)
@@ -402,11 +402,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             using AssemblyDefinition assembly = AssemblyDefinition.ReadAssembly(path);
             List<string> typeNames = new List<string>();
-            foreach (TypeDefinition type in assembly.MainModule.Types)
+            // GetTypes descends into nested types, and Cecil's FullName keeps the '/' metadata
+            // separator, so a descriptor naming a nested type is matched instead of missed.
+            foreach (TypeDefinition type in assembly.MainModule.GetTypes())
             {
                 if (type.Name != "<Module>")
                 {
-                    typeNames.Add(type.FullName.Replace('/', '.'));
+                    typeNames.Add(type.FullName);
                 }
             }
 
