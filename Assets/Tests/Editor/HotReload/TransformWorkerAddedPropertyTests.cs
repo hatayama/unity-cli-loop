@@ -29,6 +29,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string GenericHostCloseMarker =
             "        public int ExistingGenericValue()\n        {\n            return 1;\n        }\n    }";
 
+        private const string PropertyPatternReason =
+            "Property patterns that match an added property are skipped; a pattern member name cannot "
+            + "be replaced by an accessor shim call. Run 'uloop compile' to add it.";
+
         private const string GenericHostReason =
             "Added properties on generic types are skipped; one accessor identity and one store entry "
             + "cannot stand for every closed instantiation. Run 'uloop compile' to add them.";
@@ -958,6 +962,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
                 Is.EqualTo(ConditionalAccessReason),
+                FormatSkipped(result.Output.skipped));
+        }
+
+        /// <summary>
+        /// A property pattern that names an added property must not be rewritten into a shim call:
+        /// a pattern member name is not an expression, so the caller has to be skipped instead.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerMatchesAddedPropertyInPropertyPattern_SkipsCaller()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyPatternMatch.cs",
+                "public int Matched { get { return _privateSeed; } }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return this is { Matched: 7 } ? 1 : 0;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Not.Null,
                 FormatSkipped(result.Output.skipped));
         }
 

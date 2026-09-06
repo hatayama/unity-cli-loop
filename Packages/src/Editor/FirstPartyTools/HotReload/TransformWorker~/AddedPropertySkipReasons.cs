@@ -36,6 +36,10 @@ internal static class AddedPropertySkipReasons
         "Added properties with init accessors are skipped; the shim cannot preserve initialization-only assignment. "
         + "Run 'uloop compile' to add them.";
 
+    public const string PropertyPattern =
+        "Property patterns that match an added property are skipped; a pattern member name cannot "
+        + "be replaced by an accessor shim call. Run 'uloop compile' to add it.";
+
     public const string GenericHostType =
         "Added properties on generic types are skipped; one accessor identity and one store entry "
         + "cannot stand for every closed instantiation. Run 'uloop compile' to add them.";
