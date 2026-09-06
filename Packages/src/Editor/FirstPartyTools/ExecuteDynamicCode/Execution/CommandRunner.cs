@@ -150,9 +150,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             Undo.CollapseUndoOperations(undoGroup);
-            // Why increment: collapsing leaves the PropertyUndoManager in a "has recordings" state;
+            // Why increment: recordings made during the command leave the PropertyUndoManager in a
+            // "has recordings" state that CollapseUndoOperations does not clear;
             // DrivenRectTransformTracker then records RectTransforms during later layout rebuilds and
-            // dirties scenes the command never touched (issue #2626). Incrementing closes that state.
+            // dirties scenes the command never touched (issue #2626). IncrementCurrentGroup closes
+            // the group and clears that state.
             Undo.IncrementCurrentGroup();
         }
 
