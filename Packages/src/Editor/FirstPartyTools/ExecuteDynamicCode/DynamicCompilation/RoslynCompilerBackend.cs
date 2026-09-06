@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class RoslynCompilerBackend
     {
+        private static Func<ProcessStartInfo, Process> oneShotProcessStarter = ProcessStartHelper.TryStart;
         /// <summary>
         /// Carries the result data produced by One Shot Compile behavior.
         /// </summary>
@@ -58,16 +59,70 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action markBuildFinished,
             Action incrementBuildCount)
         {
-            string workerRequestFilePath = Path.ChangeExtension(sourcePath, ".worker");
+            return await CompileSourcesAsync(
+                new[] { sourcePath },
+                dllPath,
+                references,
+                externalCompilerPaths,
+                compilerOptions,
+                ct,
+                markBuildStarted,
+                markBuildFinished,
+                incrementBuildCount,
+                allowAssemblyBuilderFallback: true).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Compiles source files that share one normalized parent directory.
+        /// </summary>
+        public static async Task<DynamicCompilationBackendResult> CompileMultipleSourcesAsync(
+            IReadOnlyList<string> sourcePaths,
+            string dllPath,
+            List<string> references,
+            ExternalCompilerPaths externalCompilerPaths,
+            RoslynCompilerOptions compilerOptions,
+            CancellationToken ct,
+            Action markBuildStarted,
+            Action markBuildFinished,
+            Action incrementBuildCount)
+        {
+            return await CompileSourcesAsync(
+                sourcePaths,
+                dllPath,
+                references,
+                externalCompilerPaths,
+                compilerOptions,
+                ct,
+                markBuildStarted,
+                markBuildFinished,
+                incrementBuildCount,
+                allowAssemblyBuilderFallback: false).ConfigureAwait(false);
+        }
+
+        private static async Task<DynamicCompilationBackendResult> CompileSourcesAsync(
+            IReadOnlyList<string> sourcePaths,
+            string dllPath,
+            List<string> references,
+            ExternalCompilerPaths externalCompilerPaths,
+            RoslynCompilerOptions compilerOptions,
+            CancellationToken ct,
+            Action markBuildStarted,
+            Action markBuildFinished,
+            Action incrementBuildCount,
+            bool allowAssemblyBuilderFallback)
+        {
+            RoslynCompilerRequestFileWriter.ValidateSourcePaths(sourcePaths);
+            string sourcePath = sourcePaths[0];
+            string workerRequestFilePath = RoslynCompilerRequestFileWriter.CreateRequestFilePath(sourcePath, ".worker", sourcePaths.Count > 1);
             IReadOnlyCollection<string> defineSymbols = compilerOptions.DefineSymbols;
             bool allowUnsafeCode = compilerOptions.AllowUnsafeCode;
             bool emitDebugCode = compilerOptions.EmitDebugCode;
 
             try
             {
-                WriteWorkerRequestFile(
+                RoslynCompilerRequestFileWriter.WriteMultipleSourcesWorkerRequestFile(
                     workerRequestFilePath,
-                    sourcePath,
+                    sourcePaths,
                     dllPath,
                     references,
                     defineSymbols,
@@ -104,7 +159,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 ct.ThrowIfCancellationRequested();
                 OneShotCompileResult oneShotResult = await CompileWithOneShotAsync(
-                    sourcePath,
+                    sourcePaths,
                     dllPath,
                     references,
                     defineSymbols,
@@ -115,7 +170,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     markBuildStarted,
                     markBuildFinished,
                     incrementBuildCount).ConfigureAwait(false);
-                if (oneShotResult.ShouldFallback)
+                if (oneShotResult.ShouldFallback && allowAssemblyBuilderFallback)
                 {
                     return await AssemblyBuilderFallbackCompilerBackend.CompileAsync(
                         sourcePath,
@@ -125,6 +180,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         markBuildStarted,
                         markBuildFinished,
                         incrementBuildCount).ConfigureAwait(false);
+                }
+
+                if (oneShotResult.ShouldFallback)
+                {
+                    return new DynamicCompilationBackendResult(
+                        new[]
+                        {
+                            new CompilerMessage
+                            {
+                                type = CompilerMessageType.Error,
+                                message = "No supported Roslyn compiler backend is available for multiple sources."
+                            }
+                        },
+                        DynamicCompilationBackendKind.Unknown);
                 }
 
                 return oneShotResult.BackendResult;
@@ -139,7 +208,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         private static async Task<OneShotCompileResult> CompileWithOneShotAsync(
-            string sourcePath,
+            IReadOnlyList<string> sourcePaths,
             string dllPath,
             List<string> references,
             IReadOnlyCollection<string> defineSymbols,
@@ -151,10 +220,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action markBuildFinished,
             Action incrementBuildCount)
         {
-            string responseFilePath = Path.ChangeExtension(sourcePath, ".rsp");
-            WriteCompilerResponseFile(
+            string sourcePath = sourcePaths[0];
+            string responseFilePath = RoslynCompilerRequestFileWriter.CreateRequestFilePath(sourcePath, ".rsp", sourcePaths.Count > 1);
+            RoslynCompilerRequestFileWriter.WriteMultipleSourcesCompilerResponseFile(
                 responseFilePath,
-                sourcePath,
+                sourcePaths,
                 dllPath,
                 references,
                 defineSymbols,
@@ -182,7 +252,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 try
                 {
-                    using Process process = ProcessStartHelper.TryStart(startInfo);
+                    using Process process = oneShotProcessStarter(startInfo);
                     if (process == null)
                     {
                         DynamicCompilationHealthMonitor.ReportOneShotCompilerStartFailure(new
@@ -224,124 +294,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
-        internal static void WriteCompilerResponseFile(
-            string responseFilePath,
-            string sourcePath,
-            string dllPath,
-            IReadOnlyCollection<string> references,
-            IReadOnlyCollection<string> defineSymbols,
-            bool allowUnsafeCode,
-            bool emitDebugCode)
-        {
-            List<string> lines = new()
-            {
-                "-nologo",
-                // Diagnostics must be machine-readable by AI agents: English text, UTF-8 bytes.
-                "-preferreduilang:en-US",
-                "-utf8output",
-                "-nostdlib+",
-                "-target:library",
-                // Why -optimize- for emitDebugCode: hot-reload shims need locals in the PDB for
-                // pause-point capture; execute-dynamic-code keeps -optimize+.
-                emitDebugCode ? "-optimize-" : "-optimize+",
-                // Why portable: one-shot csc fallback must emit a PDB so Assembly.Load can map
-                // runtime exceptions back to user-snippet.cs lines (same as the shared worker).
-                "-debug:portable",
-                allowUnsafeCode ? "-unsafe+" : "-unsafe-",
-                QuoteResponseFileArgument("-out:", dllPath)
-            };
-
-            // Why pathmap: csc resolves relative #line document paths against the source file's
-            // directory and writes work-directory absolute URLs into the PDB; map the compile
-            // directory back to the project root so PDB documents point at the real project files
-            // (the shared worker's ParseText path leaves the literal as-is and needs no mapping).
-            // Why GetProjectRoot: it is the single source of truth; process CWD can be moved by
-            // external assets via Directory.SetCurrentDirectory.
-            string sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath));
-            lines.Add(QuoteResponseFileArgument("-pathmap:", sourceDirectory + "=" + UnityCliLoopPathResolver.GetProjectRoot()));
-
-            string defineOption = BuildDefineOption(defineSymbols);
-            if (!string.IsNullOrEmpty(defineOption))
-            {
-                lines.Add(defineOption);
-            }
-
-            foreach (string reference in references)
-            {
-                lines.Add(QuoteResponseFileArgument("-r:", reference));
-            }
-
-            lines.Add(QuoteResponseFilePath(sourcePath));
-            File.WriteAllLines(responseFilePath, lines);
-        }
-
-        internal static void WriteWorkerRequestFile(
-            string requestFilePath,
-            string sourcePath,
-            string dllPath,
-            IReadOnlyCollection<string> references,
-            IReadOnlyCollection<string> defineSymbols,
-            bool allowUnsafeCode,
-            bool emitDebugCode)
-        {
-            List<string> lines = new() { Path.GetFullPath(sourcePath), Path.GetFullPath(dllPath) };
-            lines.Add(allowUnsafeCode ? "unsafe:1" : "unsafe:0");
-            lines.Add(emitDebugCode ? "debugCode:1" : "debugCode:0");
-
-            string serializedDefines = SerializeDefineSymbols(defineSymbols);
-            if (!string.IsNullOrEmpty(serializedDefines))
-            {
-                lines.Add($"define:{serializedDefines}");
-            }
-
-            foreach (string reference in references)
-            {
-                lines.Add($"ref:{Path.GetFullPath(reference)}");
-            }
-
-            File.WriteAllLines(Path.GetFullPath(requestFilePath), lines);
-        }
-
-        private static string BuildDefineOption(IReadOnlyCollection<string> defineSymbols)
-        {
-            string serializedDefines = SerializeDefineSymbols(defineSymbols);
-            if (string.IsNullOrEmpty(serializedDefines))
-            {
-                return null;
-            }
-
-            return $"-define:{serializedDefines}";
-        }
-
-        private static string SerializeDefineSymbols(IReadOnlyCollection<string> defineSymbols)
-        {
-            if (defineSymbols == null || defineSymbols.Count == 0)
-            {
-                return string.Empty;
-            }
-
-            List<string> filteredDefines = new(defineSymbols.Count);
-            foreach (string defineSymbol in defineSymbols)
-            {
-                if (!string.IsNullOrWhiteSpace(defineSymbol))
-                {
-                    filteredDefines.Add(defineSymbol);
-                }
-            }
-
-            return filteredDefines.Count == 0 ? string.Empty : string.Join(";", filteredDefines);
-        }
-
-        private static string QuoteResponseFileArgument(string prefix, string value)
-        {
-            return $"{prefix}{QuoteResponseFilePath(value)}";
-        }
-
-        private static string QuoteResponseFilePath(string path)
-        {
-            return $"\"{path}\"";
-        }
-
         // Infrastructure-level failures (non-zero exit without file-specific diagnostics)
         // indicate the compiler itself broke, not the user's code.
         private static bool ShouldRetryWithAssemblyBuilder(
@@ -368,6 +320,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string QuoteCommandLineArgument(string value)
         {
             return $"\"{value}\"";
+        }
+
+        internal static Func<ProcessStartInfo, Process> SwapOneShotProcessStarterForTests(
+            Func<ProcessStartInfo, Process> replacement)
+        {
+            Func<ProcessStartInfo, Process> previous = oneShotProcessStarter;
+            oneShotProcessStarter = replacement ?? throw new ArgumentNullException(nameof(replacement));
+            return previous;
         }
 
         /// <summary>

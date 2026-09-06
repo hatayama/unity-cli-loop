@@ -17,6 +17,7 @@ public static class Program
     private const string DebugCodePrefix = "debugCode:";
     private const string DefinePrefix = "define:";
     private const string ReferencePrefix = "ref:";
+    private const string AdditionalSourcePrefix = "source-base64:";
     private static readonly object SyncRoot = new object();
     private static readonly Dictionary<string, CachedReference> Cache = new Dictionary<string, CachedReference>(StringComparer.OrdinalIgnoreCase);
 
@@ -169,11 +170,9 @@ public static class Program
         bool allowUnsafe = ParseAllowUnsafe(requestLines);
         bool emitDebugCode = ParseEmitDebugCode(requestLines);
         string[] defineSymbols = ParseDefineSymbols(requestLines);
-        string source = File.ReadAllText(sourcePath, Encoding.UTF8);
-        SourceText sourceText = SourceText.From(source, Encoding.UTF8);
-        SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(sourceText, CreateParseOptions(defineSymbols), sourcePath);
+        List<SyntaxTree> syntaxTrees = BuildSyntaxTrees(requestLines, defineSymbols);
         List<MetadataReference> references = BuildReferences(requestLines);
-        CSharpCompilation compilation = CSharpCompilation.Create(Path.GetFileNameWithoutExtension(dllPath), new[] { syntaxTree }, references, CreateCompilationOptions(allowUnsafe, emitDebugCode));
+        CSharpCompilation compilation = CSharpCompilation.Create(Path.GetFileNameWithoutExtension(dllPath), syntaxTrees, references, CreateCompilationOptions(allowUnsafe, emitDebugCode));
         // Why portable PDB: execute-dynamic-code loads these bytes so runtime exceptions can
         // surface user-snippet.cs line numbers from #line directives in the wrapper.
         string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
@@ -208,6 +207,32 @@ public static class Program
 
             return new CompileResponse(exitCode, diagnosticLines);
         }
+    }
+
+    private static List<SyntaxTree> BuildSyntaxTrees(string[] requestLines, string[] defineSymbols)
+    {
+        List<string> sourcePaths = new List<string> { requestLines[0] };
+        for (int i = 2; i < requestLines.Length; i++)
+        {
+            string line = requestLines[i];
+            if (!line.StartsWith(AdditionalSourcePrefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string encodedPath = line.Substring(AdditionalSourcePrefix.Length);
+            sourcePaths.Add(Encoding.UTF8.GetString(Convert.FromBase64String(encodedPath)));
+        }
+
+        List<SyntaxTree> syntaxTrees = new List<SyntaxTree>(sourcePaths.Count);
+        foreach (string sourcePath in sourcePaths)
+        {
+            string source = File.ReadAllText(sourcePath, Encoding.UTF8);
+            SourceText sourceText = SourceText.From(source, Encoding.UTF8);
+            syntaxTrees.Add(CSharpSyntaxTree.ParseText(sourceText, CreateParseOptions(defineSymbols), sourcePath));
+        }
+
+        return syntaxTrees;
     }
 
     private static CSharpParseOptions CreateParseOptions(string[] defineSymbols)
@@ -290,7 +315,8 @@ public static class Program
                 string referencePath = requestLines[i];
                 if (referencePath.StartsWith(UnsafePrefix, StringComparison.Ordinal)
                     || referencePath.StartsWith(DebugCodePrefix, StringComparison.Ordinal)
-                    || referencePath.StartsWith(DefinePrefix, StringComparison.Ordinal))
+                    || referencePath.StartsWith(DefinePrefix, StringComparison.Ordinal)
+                    || referencePath.StartsWith(AdditionalSourcePrefix, StringComparison.Ordinal))
                 {
                     continue;
                 }
