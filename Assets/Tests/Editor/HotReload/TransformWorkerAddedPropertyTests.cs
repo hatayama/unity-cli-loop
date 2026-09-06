@@ -26,6 +26,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostCloseMarker =
             "        public int ReadPrivateSeed()\n        {\n            return _privateSeed;\n        }\n    }";
 
+        private const string GenericHostCloseMarker =
+            "        public int ExistingGenericValue()\n        {\n            return 1;\n        }\n    }";
+
+        private const string GenericHostReason =
+            "Added properties on generic types are skipped; one accessor identity and one store entry "
+            + "cannot stand for every closed instantiation. Run 'uloop compile' to add them.";
+
         private const string ExistingCallerOriginal =
             "        public int ExistingCaller(int value)\n        {\n            return value;\n        }";
 
@@ -891,6 +898,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 caller.calledAddedMethodKeys,
                 Has.None.Contains("get_Stored"),
                 string.Join(", ", caller.calledAddedMethodKeys));
+        }
+
+        /// <summary>
+        /// A property added to a generic host is skipped: one accessor identity and one store
+        /// entry cannot stand for every closed instantiation of the type.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedPropertyOnGenericHost_ReportsGenericHostReason()
+        {
+            TransformWorkerClientResult result = await RunEditedGenericHostAsync(
+                "AddedPropertyGenericHost.cs",
+                "public static int Shared { get; set; }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindSkipReason(result, "get_Shared"),
+                Is.EqualTo(GenericHostReason),
+                FormatSkipped(result.Output.skipped));
+            Assert.That(FindEntry(result, "get_Shared"), Is.Null, FormatSkipped(result.Output.skipped));
+        }
+
+        private static async Task<TransformWorkerClientResult> RunEditedGenericHostAsync(
+            string fileName,
+            string extraMembers)
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            Assert.That(onDisk, Does.Contain(GenericHostCloseMarker));
+            string edited = onDisk.Replace(
+                GenericHostCloseMarker,
+                "        public int ExistingGenericValue()\n        {\n            return 1;\n        }\n\n        "
+                + extraMembers
+                + "\n    }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            return await RunWorkerOnSourceAsync(
+                HotReloadTestSourceWriter.WriteEditedSource(fileName, edited),
+                HostProjectRelativePath,
+                onDisk,
+                null);
         }
 
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(

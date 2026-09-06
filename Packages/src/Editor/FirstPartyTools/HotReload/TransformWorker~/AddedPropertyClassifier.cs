@@ -426,6 +426,14 @@ internal static class AddedPropertyClassifier
         PropertyDeclarationSyntax declaration,
         INamedTypeSymbol hostType)
     {
+        // Why generic hosts first: the CLR gives every closed instantiation its own statics, so a
+        // single accessor identity and a single store entry would let Host<int> and Host<string>
+        // read and write the same value.
+        if (hostType.IsGenericType)
+        {
+            return AddedPropertySkipReasons.GenericHostType;
+        }
+
         if (hostType.TypeKind == TypeKind.Struct)
         {
             return AddedPropertySkipReasons.StructHost;
