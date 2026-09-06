@@ -37,7 +37,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a resident run that completes returns success without starting a second process.
+        /// A resident run that completes returns success without starting a second process.
         /// </summary>
         [Test]
         public async Task RunAsync_ResidentCompletes_ReturnsSuccessWithoutOneShot()
@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a worker-reported failure is final for the caller; no one-shot runs and the resident
+        /// A worker-reported failure is final for the caller; no one-shot runs and the resident
         /// process stays alive for the next request.
         /// </summary>
         [Test]
@@ -71,7 +71,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: two broken conversations in a row fall back to a single one-shot worker process,
+        /// Two broken conversations in a row fall back to a single one-shot worker process,
         /// which serves the request from the real worker.
         /// </summary>
         [Test]
@@ -89,7 +89,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a worker that never answers ends the request as a failure instead of doubling the
+        /// A worker that never answers ends the request as a failure instead of doubling the
         /// wait with a one-shot retry.
         /// </summary>
         [Test]
@@ -107,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a bootstrap failure is reported as-is; no process is launched and no one-shot runs.
+        /// A bootstrap failure is reported as-is; no process is launched and no one-shot runs.
         /// </summary>
         [Test]
         public async Task RunAsync_ResidentBootstrapFailed_ReturnsFailureWithoutOneShot()

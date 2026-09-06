@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const int ExitPollIntervalMilliseconds = 50;
 
         /// <summary>
-        /// What: after a real resident run, the reload callback kills the worker process and clears
+        /// After a real resident run, the reload callback kills the worker process and clears
         /// the host's current process id.
         /// </summary>
         [Test]
