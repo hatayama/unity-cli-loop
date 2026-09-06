@@ -267,24 +267,26 @@ func TestResolveLocalDependencyPathResolvesRelativePathPrefixAgainstPackagesFold
 // Tests that an absolute dependency path is used as written, with no project directory prepended.
 func TestResolveLocalDependencyPathKeepsAbsolutePaths(t *testing.T) {
 	projectRoot := t.TempDir()
-	absolutePackageRoot := filepath.Join(t.TempDir(), "absolute-package")
+	// Manifests spell paths with forward slashes on every platform, and an absolute path is
+	// meant to pass through untouched, so the written form is what must come back.
+	dependencyPath := filepath.ToSlash(filepath.Join(t.TempDir(), "absolute-package"))
 
-	resolved := resolveLocalDependencyPath("file:"+filepath.ToSlash(absolutePackageRoot), projectRoot)
+	resolved := resolveLocalDependencyPath("file:"+dependencyPath, projectRoot)
 
-	if resolved != absolutePackageRoot {
-		t.Fatalf("resolved path mismatch:\nactual:   %q\nexpected: %q", resolved, absolutePackageRoot)
+	if resolved != dependencyPath {
+		t.Fatalf("resolved path mismatch:\nactual:   %q\nexpected: %q", resolved, dependencyPath)
 	}
 }
 
 // Tests that the file:// form keeps resolving to the absolute path that follows the slashes.
 func TestResolveLocalDependencyPathKeepsFileSchemeAbsolutePaths(t *testing.T) {
 	projectRoot := t.TempDir()
-	absolutePackageRoot := filepath.Join(t.TempDir(), "scheme-package")
+	dependencyPath := filepath.ToSlash(filepath.Join(t.TempDir(), "scheme-package"))
 
-	resolved := resolveLocalDependencyPath("file://"+filepath.ToSlash(absolutePackageRoot), projectRoot)
+	resolved := resolveLocalDependencyPath("file://"+dependencyPath, projectRoot)
 
-	if resolved != absolutePackageRoot {
-		t.Fatalf("resolved path mismatch:\nactual:   %q\nexpected: %q", resolved, absolutePackageRoot)
+	if resolved != dependencyPath {
+		t.Fatalf("resolved path mismatch:\nactual:   %q\nexpected: %q", resolved, dependencyPath)
 	}
 }
 
