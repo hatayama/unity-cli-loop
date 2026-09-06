@@ -136,25 +136,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: referencing an auto-property added in another file of the same reload fails
-        /// the caller with the skipped-member compile note that names the property.
+        /// What: an auto-property added in the host file is readable and writable from the caller
+        /// file's edited body within one reload, its backing value lives in the added-field store,
+        /// and the run reports that one added field once.
         /// </summary>
         [Test]
-        public async Task Run_CallerFileUsesAutoPropertyAddedInOtherFile_FailsWithSkippedPropertyNote()
+        public async Task Run_CallerFileUsesAutoPropertyAddedInOtherFile_AppliesAndRoundTripsValue()
         {
             HotReloadOrchestratorResult result = await RunPairAsync(
                 "CrossFileAddedAutoProperty",
-                InsertHostMember("        public bool HasTarget { get; private set; }\n\n"),
-                ReplaceCallerBody(CallerCallBodyAnchor, "return host.HasTarget ? 1 : 0;"));
+                InsertHostMember("        public int Count { get; set; }\n\n"),
+                ReplaceCallerBody(
+                    CallerCallBodyAnchor,
+                    "host.Count = 3;\n            return host.Count + 1;"));
 
-            HotReloadMethodOutcome failure = FindOutcome(result, HotReloadMethodOutcomeKind.Failed, "Call");
+            AssertNoFailure(result);
+            AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Call");
+            AssertKind(result, HotReloadMethodOutcomeKind.Added, "get_Count");
+            AssertKind(result, HotReloadMethodOutcomeKind.Added, "set_Count");
             Assert.That(
-                failure.Reason,
-                Does.Contain(string.Format(
-                    HotReloadConstants.SkippedMemberCompileFailureNoteFormat,
-                    "HasTarget",
-                    "Added properties are out of scope")));
-            Assert.That(failure.Reason, Does.Contain("Added properties are out of scope"));
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(4));
+            Assert.That(
+                HotReloadAddedFieldRegistry.GetFieldsForType(
+                    typeof(HotReloadCrossFileAddedMemberHost).FullName),
+                Is.EqualTo(new[] { "Count" }));
+            Assert.That(result.AddedFields, Has.Length.EqualTo(1));
+            Assert.That(result.AddedFields[0], Does.Contain("Count"));
+            Assert.That(CountAddedFieldsLifetimeWarnings(result), Is.EqualTo(1));
         }
 
         /// <summary>
