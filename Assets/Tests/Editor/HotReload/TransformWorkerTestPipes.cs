@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -62,6 +63,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Same wait off the calling thread, so an EditMode test can await a line instead of blocking
+        /// the Editor's main thread on it.
+        /// </summary>
+        public Task<string> ReadLineWithinAsync(int timeoutMilliseconds)
+        {
+            return Task.Run(() => ReadLineWithin(timeoutMilliseconds));
         }
     }
 

@@ -42,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// inside the diagnostics payload instead of on the protocol stream.
         /// </summary>
         [Test]
-        public void Run_TransformWritesMarkerLikeNoise_NoiseStaysInsideFrame()
+        public async Task Run_TransformWritesMarkerLikeNoise_NoiseStaysInsideFrame()
         {
             Task<int> loop = StartLoop((inputPath, outputPath) =>
             {
@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }, LongIdleTimeoutMilliseconds);
 
             _requests.Push(TransformWorkerServeProtocol.EncodeRequestLine("/in.json", "/out.json"));
-            (int exitCode, string diagnostics) = ReadFrame();
+            (int exitCode, string diagnostics) = await ReadFrameAsync();
 
             Assert.That(exitCode, Is.EqualTo(0));
             Assert.That(diagnostics, Does.Contain("noise before"));
@@ -62,8 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_responses.PendingLineCount, Is.EqualTo(0), "Only the two frame lines may reach the protocol stream.");
 
             _requests.Push(TransformWorkerServeProtocol.QuitCommand);
-            Assert.That(loop.Wait(FrameWaitMilliseconds), Is.True);
-            Assert.That(loop.Result, Is.EqualTo(0));
+            Assert.That(await AwaitLoopExitAsync(loop), Is.EqualTo(0));
         }
 
         /// <summary>
@@ -71,7 +70,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// exception text, the loop keeps serving, and Console.Out is restored afterwards.
         /// </summary>
         [Test]
-        public void Run_TransformThrows_ReportsExitOneAndKeepsServing()
+        public async Task Run_TransformThrows_ReportsExitOneAndKeepsServing()
         {
             TextWriter originalOut = Console.Out;
             int calls = 0;
@@ -87,9 +86,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }, LongIdleTimeoutMilliseconds);
 
             _requests.Push(TransformWorkerServeProtocol.EncodeRequestLine("/in.json", "/out.json"));
-            (int firstExit, string firstDiagnostics) = ReadFrame();
+            (int firstExit, string firstDiagnostics) = await ReadFrameAsync();
             _requests.Push(TransformWorkerServeProtocol.EncodeRequestLine("/in.json", "/out.json"));
-            (int secondExit, string _) = ReadFrame();
+            (int secondExit, string _) = await ReadFrameAsync();
 
             Assert.That(firstExit, Is.EqualTo(1));
             Assert.That(firstDiagnostics, Does.Contain("transform exploded"));
@@ -98,7 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(Console.Out, Is.SameAs(originalOut), "Console.Out must be restored between requests.");
 
             _requests.Complete();
-            Assert.That(loop.Wait(FrameWaitMilliseconds), Is.True);
+            await AwaitLoopExitAsync(loop);
         }
 
         /// <summary>
@@ -106,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// does not invoke the transform or end the loop.
         /// </summary>
         [Test]
-        public void Run_MalformedRequest_AnswersExitTwoWithoutInvokingTransform()
+        public async Task Run_MalformedRequest_AnswersExitTwoWithoutInvokingTransform()
         {
             int calls = 0;
             Task<int> loop = StartLoop((inputPath, outputPath) =>
@@ -116,29 +115,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }, LongIdleTimeoutMilliseconds);
 
             _requests.Push("run garbage");
-            (int exitCode, string diagnostics) = ReadFrame();
+            (int exitCode, string diagnostics) = await ReadFrameAsync();
 
             Assert.That(exitCode, Is.EqualTo(TransformWorkerServeProtocol.MalformedRequestExitCode));
             Assert.That(diagnostics, Does.Contain("malformed request line"));
             Assert.That(calls, Is.EqualTo(0));
 
             _requests.Push(TransformWorkerServeProtocol.QuitCommand);
-            Assert.That(loop.Wait(FrameWaitMilliseconds), Is.True);
-            Assert.That(loop.Result, Is.EqualTo(0));
+            Assert.That(await AwaitLoopExitAsync(loop), Is.EqualTo(0));
         }
 
         /// <summary>
         /// What: end of input (the host closed stdin) ends the loop with exit code 0 and no frame.
         /// </summary>
         [Test]
-        public void Run_EndOfInput_ReturnsZeroWithoutFrame()
+        public async Task Run_EndOfInput_ReturnsZeroWithoutFrame()
         {
             Task<int> loop = StartLoop((inputPath, outputPath) => 0, LongIdleTimeoutMilliseconds);
 
             _requests.Complete();
 
-            Assert.That(loop.Wait(FrameWaitMilliseconds), Is.True);
-            Assert.That(loop.Result, Is.EqualTo(0));
+            Assert.That(await AwaitLoopExitAsync(loop), Is.EqualTo(0));
             Assert.That(_responses.PendingLineCount, Is.EqualTo(0));
         }
 
@@ -148,7 +145,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// request arrives within the idle window.
         /// </summary>
         [Test]
-        public void Run_IdleTimeout_FiresOnlyBetweenRequests()
+        public async Task Run_IdleTimeout_FiresOnlyBetweenRequests()
         {
             const int idleTimeoutMilliseconds = 300;
             Task<int> loop = StartLoop((inputPath, outputPath) =>
@@ -158,11 +155,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }, idleTimeoutMilliseconds);
 
             _requests.Push(TransformWorkerServeProtocol.EncodeRequestLine("/in.json", "/out.json"));
-            (int exitCode, string _) = ReadFrame();
+            (int exitCode, string _) = await ReadFrameAsync();
 
             Assert.That(exitCode, Is.EqualTo(0), "The slow transform must be answered, not cut off by the idle timer.");
-            Assert.That(loop.Wait(FrameWaitMilliseconds), Is.True, "The loop must exit on its own once idle.");
-            Assert.That(loop.Result, Is.EqualTo(0));
+            Assert.That(await AwaitLoopExitAsync(loop), Is.EqualTo(0), "The loop must exit on its own once idle.");
             Assert.That(_requests.IsCompleted, Is.False, "The exit must come from the idle timer, not from end of input.");
         }
 
@@ -185,12 +181,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return Task.Run(() => TransformWorkerServeLoop.Run(_requests, _protocolOutput, handler, idleTimeoutMilliseconds));
         }
 
-        private (int exitCode, string diagnostics) ReadFrame()
+        // Why await instead of Task.Wait: blocking the Editor's main thread on the loop task
+        // deadlocks EditMode runs. Reading Result after the task completed does not block.
+        private static async Task<int> AwaitLoopExitAsync(Task<int> loop)
         {
-            string header = _responses.ReadLineWithin(FrameWaitMilliseconds);
+            Task completed = await Task.WhenAny(loop, Task.Delay(FrameWaitMilliseconds));
+            Assert.That(completed, Is.SameAs(loop), "The serve loop did not exit in time.");
+            return loop.Result;
+        }
+
+        private async Task<(int exitCode, string diagnostics)> ReadFrameAsync()
+        {
+            string header = await _responses.ReadLineWithinAsync(FrameWaitMilliseconds);
             Assert.That(header, Is.Not.Null, "No response header arrived.");
             Assert.That(TransformWorkerServeProtocol.TryParseResponseHeader(header, out int exitCode, out int byteCount), Is.True, "Bad header: " + header);
-            string payload = _responses.ReadLineWithin(FrameWaitMilliseconds);
+            string payload = await _responses.ReadLineWithinAsync(FrameWaitMilliseconds);
             Assert.That(payload, Is.Not.Null, "No diagnostics line arrived.");
             Assert.That(TransformWorkerServeProtocol.TryDecodeDiagnostics(payload, byteCount, out string diagnostics), Is.True);
             return (exitCode, diagnostics);

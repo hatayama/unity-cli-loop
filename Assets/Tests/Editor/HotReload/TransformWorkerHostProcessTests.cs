@@ -17,6 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class TransformWorkerHostProcessTests
     {
         private const int ExitWaitMilliseconds = 10_000;
+        private const int ExitPollIntervalMilliseconds = 50;
 
         private TransformWorkerHost _host;
 
@@ -73,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using (Process worker = Process.GetProcessById(firstPid))
             {
                 worker.Kill();
-                Assert.That(worker.WaitForExit(ExitWaitMilliseconds), Is.True, "The killed worker must exit.");
+                Assert.That(await WaitForExitAsync(worker, ExitWaitMilliseconds), Is.True, "The killed worker must exit.");
             }
 
             TransformWorkerHostResult second = await _host.RunAsync(input, CancellationToken.None);
@@ -98,7 +99,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 _host.Shutdown("test");
 
-                Assert.That(worker.WaitForExit(ExitWaitMilliseconds), Is.True, "The worker must exit after Shutdown.");
+                Assert.That(await WaitForExitAsync(worker, ExitWaitMilliseconds), Is.True, "The worker must exit after Shutdown.");
             }
 
             Assert.That(_host.CurrentProcessId, Is.Null);
@@ -128,6 +129,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(failed.ErrorMessage, Does.Contain("projectRelativePath"));
             Assert.That(next.Kind, Is.EqualTo(TransformWorkerHostResultKind.Completed), next.ErrorMessage);
             Assert.That(_host.LaunchCount, Is.EqualTo(1));
+        }
+
+        // Why poll instead of Process.WaitForExit: an EditMode test that blocks the Editor's main
+        // thread on a child process stalls the whole run.
+        private static async Task<bool> WaitForExitAsync(Process process, int timeoutMilliseconds)
+        {
+            Stopwatch waited = Stopwatch.StartNew();
+            while (waited.ElapsedMilliseconds < timeoutMilliseconds)
+            {
+                if (process.HasExited)
+                {
+                    return true;
+                }
+
+                await Task.Delay(ExitPollIntervalMilliseconds);
+            }
+
+            return process.HasExited;
         }
     }
 }
