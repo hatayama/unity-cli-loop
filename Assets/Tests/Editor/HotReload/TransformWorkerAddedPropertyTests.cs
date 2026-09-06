@@ -843,6 +843,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.Contain(getter.shimMethodName));
         }
 
+        /// <summary>
+        /// An added accessor whose closure body reaches a private compiled field is emitted through the
+        /// shim type's accessor plan, so the delegation path is shared with ordinary added methods.
+        /// </summary>
+        [Test]
+        public async Task Emit_AddedAccessorWithClosureOverPrivateField_EmitsWithoutSkip()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyClosurePrivateField.cs",
+                "public int Lazy\n        {\n            get\n            {\n"
+                + "                System.Func<int> read = () => _privateSeed + 1;\n"
+                + "                return read();\n            }\n        }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Lazy + value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindSkipReason(result, "get_Lazy"), Is.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(FindEntry(result, "get_Lazy"), Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Null,
+                FormatSkipped(result.Output.skipped));
+        }
+
+        /// <summary>
+        /// A caller that only writes an added property through a receiver must depend on the setter
+        /// alone; the bare name node under this.P must not pull the getter into its dependency set.
+        /// </summary>
+        [Test]
+        public async Task Emit_CallerOnlyWritesAddedPropertyThroughReceiver_DependsOnSetterOnly()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyQualifiedWriteOnly.cs",
+                "public int Stored { get { return _privateSeed; } set { _privateSeed = value; } }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            this.Stored = value;\n            return value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(caller, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(
+                caller.calledAddedMethodKeys,
+                Has.Some.Contains("set_Stored"),
+                string.Join(", ", caller.calledAddedMethodKeys));
+            Assert.That(
+                caller.calledAddedMethodKeys,
+                Has.None.Contains("get_Stored"),
+                string.Join(", ", caller.calledAddedMethodKeys));
+        }
+
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(
             string fileName,
             string extraMembers,

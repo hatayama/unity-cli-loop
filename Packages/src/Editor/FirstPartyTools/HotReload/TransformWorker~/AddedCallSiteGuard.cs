@@ -343,6 +343,14 @@ internal static class AddedCallSiteGuard
 
         foreach (ExpressionSyntax expression in bodyNode.DescendantNodesAndSelf().OfType<ExpressionSyntax>())
         {
+            // Why skip the name node: a qualified write such as this.P = v also yields the bare
+            // name as a child expression, which reads as a get and would pull the getter into the
+            // dependency set of a caller that only writes.
+            if (IsMemberAccessName(expression))
+            {
+                continue;
+            }
+
             IPropertySymbol propertySymbol = semanticModel.GetSymbolInfo(expression).Symbol as IPropertySymbol;
             AddedPropertyBinding binding = addedPropertyCatalog.FindBySymbolOrNull(propertySymbol);
             if (binding == null || binding.UnavailableReason != null)
@@ -358,6 +366,17 @@ internal static class AddedCallSiteGuard
                 keys.Add(accessor.MethodKey);
             }
         }
+    }
+
+    private static bool IsMemberAccessName(ExpressionSyntax expression)
+    {
+        if (expression.Parent is MemberAccessExpressionSyntax memberAccess)
+        {
+            return memberAccess.Name == expression;
+        }
+
+        return expression.Parent is MemberBindingExpressionSyntax memberBinding
+            && memberBinding.Name == expression;
     }
 
     private static bool IsPropertyWrite(ExpressionSyntax expression)
