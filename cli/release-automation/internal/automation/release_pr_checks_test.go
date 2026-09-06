@@ -228,8 +228,8 @@ func TestReleasePRChecksFailWhenWorkflowListIsBlank(t *testing.T) {
 	assertReleasePRCheckLogContains(t, result.stderr, "RELEASE_PR_CHECK_WORKFLOWS must list at least one workflow")
 }
 
-// Verifies that check runs watching different branch heads fail while leaving the PR drafted.
-func TestReleasePRChecksFailWhenRunsCheckDifferentHeads(t *testing.T) {
+// Verifies that a release PR whose dispatched checks ran on different heads is left in draft and the run exits 0, because the newer release-please run owns the re-check.
+func TestReleasePRChecksSkipWhenRunsCheckDifferentHeads(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
 		prListJSON:              `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
 		runListJSON:             `[{"databaseId":4242,"headSha":"abc123","createdAt":"2026-05-30T01:00:01Z","status":"queued","conclusion":"","url":"https://example.test/run/4242"}]`,
@@ -237,10 +237,13 @@ func TestReleasePRChecksFailWhenRunsCheckDifferentHeads(t *testing.T) {
 		runWatchStatus:          "0",
 	})
 
-	if result.exitCode != 1 {
-		t.Fatalf("expected exit code 1, got %d", result.exitCode)
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
 	}
-	assertReleasePRCheckLogContains(t, result.stderr, "release PR #1043 checks ran on different heads: build-and-test.yml checked abc123 but unity-compile-check-and-test-runner.yml checked def456")
+	assertReleasePRCheckLogContains(t, result.stdout, "Skipping release PR #1043: checks ran on different heads (build-and-test.yml checked abc123, unity-compile-check-and-test-runner.yml checked def456); the release-please run for the new head will re-dispatch the checks.")
+	if result.stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", result.stderr)
+	}
 	assertReleasePRCheckLogContains(t, result.ghLog, "pr ready 1043 --repo owner/repository --undo")
 	assertReleasePRCheckLogDoesNotContainLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
 }
@@ -385,8 +388,8 @@ func TestReleasePRChecksFailWhenWatchedRunFails(t *testing.T) {
 	assertReleasePRCheckLogDoesNotContainLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
 }
 
-// Verifies that a changed release PR head is not marked ready after stale checks pass.
-func TestReleasePRChecksFailWhenHeadChangesBeforeReady(t *testing.T) {
+// Verifies that a release PR whose head moved after the checks passed is left in draft and the run exits 0 instead of failing.
+func TestReleasePRChecksSkipWhenHeadChangesBeforeReady(t *testing.T) {
 	result := runReleasePRCheckCase(t, releasePRCheckCase{
 		prListJSON:           `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"abc123","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
 		prListJSONAfterWatch: `[{"number":1043,"headRefName":"release-please--branches--v3-beta","headRefOid":"def456","title":"chore: release v3-beta","url":"https://example.test/pr/1043"}]`,
@@ -394,10 +397,13 @@ func TestReleasePRChecksFailWhenHeadChangesBeforeReady(t *testing.T) {
 		runWatchStatus:       "0",
 	})
 
-	if result.exitCode != 1 {
-		t.Fatalf("expected exit code 1, got %d", result.exitCode)
+	if result.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", result.exitCode, result.stderr)
 	}
-	assertReleasePRCheckLogContains(t, result.stderr, "release PR #1043 head changed from abc123 to def456 before marking ready")
+	assertReleasePRCheckLogContains(t, result.stdout, "Skipping release PR #1043: head changed from abc123 to def456 after the checks ran; the release-please run for the new head will re-dispatch the checks.")
+	if result.stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", result.stderr)
+	}
 	assertReleasePRCheckLogContains(t, result.ghLog, "pr ready 1043 --repo owner/repository --undo")
 	assertReleasePRCheckLogDoesNotContainLine(t, result.ghLog, "pr ready 1043 --repo owner/repository")
 }
