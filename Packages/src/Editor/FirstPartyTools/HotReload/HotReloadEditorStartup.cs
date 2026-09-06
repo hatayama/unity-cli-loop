@@ -19,6 +19,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadSourceSnapshotter.CaptureAfterDomainReload();
             }
 
+            // The resolver subscribes to AppDomain.AssemblyResolve when it is built, and that
+            // subscription is lost on every domain reload, so the pair is rebuilt here rather than
+            // on first use.
+            HotReloadIntroducedTypeHolder.Initialize();
             EditorApplication.update += CaptureOnFirstUpdateTick;
             HotReloadPlayModeEntryDropRecorder.Initialize();
             HotReloadAutoRefreshHold.Initialize();
