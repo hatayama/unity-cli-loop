@@ -83,7 +83,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.CompilationAssembly,
                 context.TargetDllPath,
                 includeHarmonyReference,
-                includeAddedFieldStoreReference);
+                includeAddedFieldStoreReference,
+                context.WorkerInput.introducedTypeArtifacts);
             if (shimReferencePaths.ErrorMessage != null)
             {
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(
