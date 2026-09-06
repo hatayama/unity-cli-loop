@@ -80,6 +80,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string originalAssemblyName;
 
         public string originalAssemblyMvid;
+
+        // Project-relative forward-slash path of the source the retained type was planned from.
+        public string ownerProjectRelativePath;
+
+        // Fingerprint the retained type was planned with. A declaration may only be removed from
+        // the tree the transform binds against when the source still produces this value.
+        public string declarationFingerprint;
     }
 
     /// <summary>

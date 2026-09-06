@@ -37,4 +37,8 @@ internal sealed class WorkerIntroducedTypeArtifactType
     public string OriginalAssemblyName { get; set; }
 
     public string OriginalAssemblyMvid { get; set; }
+
+    public string OwnerProjectRelativePath { get; set; }
+
+    public string DeclarationFingerprint { get; set; }
 }

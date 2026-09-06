@@ -50,16 +50,12 @@ internal static class WorkerGroupPipeline
         }
 
         List<WorkerSourceUnit> loadedUnits = new List<WorkerSourceUnit>(units.Count);
-        List<SyntaxTree> syntaxTrees = new List<SyntaxTree>(units.Count);
         foreach (WorkerSourceUnit unit in units)
         {
-            if (unit.SyntaxTree == null)
+            if (unit.SyntaxTree != null)
             {
-                continue;
+                loadedUnits.Add(unit);
             }
-
-            loadedUnits.Add(unit);
-            syntaxTrees.Add(unit.SyntaxTree);
         }
 
         // Why every loaded unit reports it: a missing reference is a problem of the whole assembly,
@@ -74,9 +70,25 @@ internal static class WorkerGroupPipeline
             loadedUnit.ParseErrors.AddRange(referenceParseErrors);
         }
 
+        // Why a run-level failure and not a per-file diagnostic: the orchestrator advances to
+        // revert, gating and compile whenever the run succeeds, so a run that could not trust its
+        // retained artifacts has to stop the whole group rather than transform against a binding
+        // that is missing a type or attributing it to the wrong assembly.
+        string artifactFailure = PrepareBindingTrees(input, loadedUnits, references, targetTypesReference, parseOptions);
+        if (artifactFailure != null)
+        {
+            return CreateRunFailureOutput(artifactFailure);
+        }
+
+        List<SyntaxTree> bindingTrees = new List<SyntaxTree>(loadedUnits.Count);
+        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        {
+            bindingTrees.Add(loadedUnit.BindingSyntaxTree);
+        }
+
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: "UloopHotReloadTransformWorkerCompilation",
-            syntaxTrees: syntaxTrees,
+            syntaxTrees: bindingTrees,
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         foreach (WorkerSourceUnit unit in loadedUnits)
@@ -182,6 +194,62 @@ internal static class WorkerGroupPipeline
             unchangedMethods,
             siblingConstDriftWarnings,
             addedFieldCatalog);
+    }
+
+    // Removes from each unit's binding tree the declarations a retained artifact already serves,
+    // and reports why the artifacts could not be used at all. Returns null when the run has no
+    // artifact to bind against, which is every run until introduced types are in play.
+    private static string PrepareBindingTrees(
+        WorkerInput input,
+        List<WorkerSourceUnit> loadedUnits,
+        List<MetadataReference> references,
+        MetadataReference targetTypesReference,
+        CSharpParseOptions parseOptions)
+    {
+        if (input.IntroducedTypeArtifacts.Length == 0)
+        {
+            return null;
+        }
+
+        List<string> artifactErrors = new List<string>();
+        List<(WorkerIntroducedTypeArtifact Artifact, MetadataReference Reference)> artifactReferences =
+            IntroducedTypeArtifactReferences.Collect(input, references, artifactErrors);
+        if (artifactErrors.Count > 0)
+        {
+            return artifactErrors[0];
+        }
+
+        List<SyntaxTree> editedTrees = new List<SyntaxTree>(loadedUnits.Count);
+        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        {
+            editedTrees.Add(loadedUnit.SyntaxTree);
+        }
+
+        // The declarations are verified against the edited text, so this compilation binds the
+        // trees as written; the binding compilation is built from what survives the removal.
+        CSharpCompilation verificationCompilation = CSharpCompilation.Create(
+            assemblyName: "UloopHotReloadRetainedDeclarationVerification",
+            syntaxTrees: editedTrees,
+            references: references,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        if (!IntroducedTypeArtifactMap.TryBuild(
+                verificationCompilation, artifactReferences, out IntroducedTypeArtifactMap artifactMap, out string artifactError))
+        {
+            return artifactError;
+        }
+
+        IAssemblySymbol targetAssembly = ResolveTargetTypesAssemblySymbol(
+            verificationCompilation,
+            targetTypesReference);
+        Dictionary<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> retainedDeclarations =
+            IntroducedTypeDeclarationVerifier.FindRetainedDeclarations(
+                loadedUnits, verificationCompilation, input, targetAssembly, artifactMap);
+        foreach (KeyValuePair<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> entry in retainedDeclarations)
+        {
+            IntroducedTypeBindingRewriter.RemoveRetainedDeclarations(entry.Key, entry.Value, parseOptions);
+        }
+
+        return null;
     }
 
     private static WorkerOutput CreateRunFailureOutput(string parseError)
