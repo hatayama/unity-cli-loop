@@ -75,6 +75,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string TOOL_NAME_CLEAR_WATCH = "clear-watch";
         public const string TOOL_NAME_GET_WATCH_VALUES = "get-watch-values";
         public const string TOOL_NAME_HOT_RELOAD = "hot-reload";
+        public const string TOOL_NAME_RECORD_VIDEO = "record-video";
         public const string COMMAND_NAME_GET_TOOL_DETAILS = "get-tool-details";
         public const string COMMAND_NAME_GET_VERSION = "get-version";
         public const string COMMAND_NAME_GET_COMPILE_STATUS = "get-compile-status";
@@ -100,6 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
         public const string HIERARCHY_RESULTS_DIR = "HierarchyResults";
         public const string FIND_GAMEOBJECTS_RESULTS_DIR = "FindGameObjectsResults";
         public const string SCREENSHOTS_DIR = "Screenshots";
+        public const string VIDEOS_DIR = "Videos";
         public const string VIBE_LOGS_DIR = "VibeLogs";
 
         // Raycast tool constants

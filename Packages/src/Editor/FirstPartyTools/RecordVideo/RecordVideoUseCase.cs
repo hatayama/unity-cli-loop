@@ -1,0 +1,201 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.InternalAPIBridge;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// Executes Start, Stop, and Status for the record-video tool.
+    /// </summary>
+    public sealed class RecordVideoUseCase
+    {
+        public Task<RecordVideoResponse> ExecuteAsync(RecordVideoSchema parameters, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (!Enum.IsDefined(typeof(RecordVideoAction), parameters.Action))
+            {
+                return Task.FromResult(
+                    CreateFailure(parameters.Action, RecordVideoConstants.InvalidActionMessage));
+            }
+
+            bool isLinux = Application.platform == RuntimePlatform.LinuxEditor;
+            if (parameters.Action == RecordVideoAction.stop)
+            {
+                return Task.FromResult(ExecuteStop());
+            }
+
+            if (parameters.Action == RecordVideoAction.status)
+            {
+                return Task.FromResult(ExecuteStatus());
+            }
+
+            return Task.FromResult(ExecuteStart(parameters, isLinux));
+        }
+
+        private static RecordVideoResponse ExecuteStart(RecordVideoSchema parameters, bool isLinux)
+        {
+            PlayModeToolPreflightResult preflight = PlayModeToolPreflightService.RequireActive();
+            if (!preflight.IsValid)
+            {
+                return CreateFailure(RecordVideoAction.start, preflight.ErrorMessage);
+            }
+
+            if (RecordVideoService.IsRecording)
+            {
+                return CreateResponse(
+                    false,
+                    RecordVideoConstants.AlreadyRecordingMessage,
+                    RecordVideoAction.start,
+                    RecordVideoService.GetSnapshot());
+            }
+
+            ValidationResult validation = RecordVideoParameterValidator.Validate(
+                parameters.FrameRate,
+                parameters.MaxDurationSeconds,
+                parameters.OutputPath,
+                isLinux,
+                parameters.ResolutionScale,
+                parameters.Quality);
+            if (!validation.IsValid)
+            {
+                return CreateFailure(RecordVideoAction.start, validation.ErrorMessage);
+            }
+
+            RenderTexture renderTexture = GameViewBridge.GetRenderTexture();
+            if (renderTexture == null)
+            {
+                return CreateFailure(
+                    RecordVideoAction.start,
+                    RecordVideoConstants.RenderTextureUnavailableMessage);
+            }
+
+            (int width, int height) size = VideoFrameSizePolicy.Resolve(
+                renderTexture.width,
+                renderTexture.height,
+                parameters.ResolutionScale);
+            int width = size.width;
+            int height = size.height;
+            if (width == 0 || height == 0)
+            {
+                return CreateFailure(RecordVideoAction.start, RecordVideoConstants.FrameSizeTooSmallMessage);
+            }
+
+            string outputPath = RecordVideoOutputPathResolver.Resolve(
+                parameters.OutputPath,
+                UnityCliLoopPathResolver.GetProjectRoot(),
+                DateTime.Now,
+                isLinux);
+            bool usedDefaultOutputPath = string.IsNullOrEmpty(parameters.OutputPath);
+            VideoRecordingSnapshot snapshot = RecordVideoService.Start(
+                parameters.FrameRate,
+                parameters.MaxDurationSeconds,
+                outputPath,
+                usedDefaultOutputPath,
+                width,
+                height,
+                parameters.ResolutionScale,
+                parameters.Quality);
+            return CreateResponse(
+                true,
+                RecordVideoConstants.StartedMessage,
+                RecordVideoAction.start,
+                snapshot);
+        }
+
+        private static RecordVideoResponse ExecuteStop()
+        {
+            if (RecordVideoService.IsRecording)
+            {
+                VideoRecordingSnapshot stopped = RecordVideoService.Stop(RecordVideoConstants.StoppedByCli);
+                return CreateResponse(
+                    true,
+                    RecordVideoConstants.StoppedMessage,
+                    RecordVideoAction.stop,
+                    stopped);
+            }
+
+            LastCompletedRecording lastCompleted = LastCompletedRecordingStore.TryRead();
+            if (lastCompleted.HasValue && !lastCompleted.IsReported)
+            {
+                LastCompletedRecordingStore.MarkReported();
+                return CreateResponse(
+                    true,
+                    RecordVideoConstants.StoppedMessage,
+                    RecordVideoAction.stop,
+                    lastCompleted.Snapshot);
+            }
+
+            return CreateFailure(RecordVideoAction.stop, RecordVideoConstants.NoRecordingMessage);
+        }
+
+        private static RecordVideoResponse ExecuteStatus()
+        {
+            if (RecordVideoService.IsRecording)
+            {
+                return CreateResponse(
+                    true,
+                    RecordVideoConstants.StatusRecordingMessage,
+                    RecordVideoAction.status,
+                    RecordVideoService.GetSnapshot());
+            }
+
+            LastCompletedRecording lastCompleted = LastCompletedRecordingStore.TryRead();
+            if (lastCompleted.HasValue)
+            {
+                return CreateResponse(
+                    true,
+                    RecordVideoConstants.StatusIdleMessage,
+                    RecordVideoAction.status,
+                    lastCompleted.Snapshot);
+            }
+
+            return new RecordVideoResponse
+            {
+                Success = true,
+                Message = RecordVideoConstants.StatusIdleMessage,
+                Action = RecordVideoAction.status.ToString(),
+                IsRecording = false
+            };
+        }
+
+        private static RecordVideoResponse CreateFailure(RecordVideoAction action, string message)
+        {
+            return new RecordVideoResponse
+            {
+                Success = false,
+                Message = message,
+                Action = action.ToString(),
+                IsRecording = RecordVideoService.IsRecording
+            };
+        }
+
+        private static RecordVideoResponse CreateResponse(
+            bool success,
+            string message,
+            RecordVideoAction action,
+            VideoRecordingSnapshot snapshot)
+        {
+            return new RecordVideoResponse
+            {
+                Success = success,
+                Message = message,
+                Action = action.ToString(),
+                IsRecording = snapshot.IsRecording,
+                OutputPath = snapshot.OutputPath,
+                Width = snapshot.Width,
+                Height = snapshot.Height,
+                FrameRate = snapshot.FrameRate,
+                EncodedFrameCount = snapshot.EncodedFrameCount,
+                SkippedFrameCount = snapshot.SkippedFrameCount,
+                ElapsedSeconds = snapshot.ElapsedSeconds,
+                StoppedBy = snapshot.StoppedBy,
+                Quality = snapshot.Quality
+            };
+        }
+    }
+}
