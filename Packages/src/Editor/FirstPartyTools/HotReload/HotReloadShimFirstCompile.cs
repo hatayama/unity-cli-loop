@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
             if (!HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(context.Files))
             {
-                return HotReloadGroupCompileResult.NothingToApply();
+                return HotReloadGroupCompileResult.Failed();
             }
 
             if (gateResult.UsedWorkerRetry)
@@ -36,10 +36,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 AdoptRetryAddedMemberNames(context.Files, gateResult.Isolation.RetryFiles);
                 if (gateResult.Isolation.RetryEntries.Length == 0)
                 {
-                    return HotReloadGroupCompileResult.NothingToApply();
+                    return HotReloadGroupCompileResult.Failed();
                 }
 
-                return HotReloadGroupCompileResult.Apply(
+                return HotReloadGroupCompileResult.ReadyWithMethods(
                     gateResult.Isolation.RetryEntries,
                     gateResult.Isolation.RetryCompileResult);
             }
@@ -58,7 +58,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     HotReloadFileEntryApplier.ClearFileGeneration(context, file);
                 }
 
-                return HotReloadGroupCompileResult.NothingToApply();
+                return HotReloadGroupCompileResult.ReadyWithoutMethods();
             }
 
             return await CompileShimForGroupAsync(context, ct).ConfigureAwait(false);
@@ -91,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     context.Files,
                     "(file)",
                     shimReferencePaths.ErrorMessage);
-                return HotReloadGroupCompileResult.NothingToApply();
+                return HotReloadGroupCompileResult.Failed();
             }
 
             HotReloadShimCompileResult compileResult = await HotReloadShimCompiler.CompileAndLoadAsync(
@@ -103,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (compileResult.Success)
             {
                 AdoptFirstPassAddedMemberNames(context.Files);
-                return HotReloadGroupCompileResult.Apply(workerOutput.entries, compileResult);
+                return HotReloadGroupCompileResult.ReadyWithMethods(workerOutput.entries, compileResult);
             }
 
             HotReloadOrchestratorLog.LogHotReloadShimCompileFailed(
@@ -128,7 +128,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (isolation == null)
             {
                 AppendUnattributableCompileFailure(context, compileResult);
-                return HotReloadGroupCompileResult.NothingToApply();
+                return HotReloadGroupCompileResult.Failed();
             }
 
             context.Files[0].Sinks.SiblingDerivedWarnings.AddRange(isolation.SiblingConstDriftWarnings);
@@ -185,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadGroupOutcomeRouter.AppendByFilePath(
                     context.Files,
                     BuildAtomicFileSkipOutcomes(isolation.RetryEntries, context.GroupFilePaths));
-                return HotReloadGroupCompileResult.NothingToApply();
+                return HotReloadGroupCompileResult.Failed();
             }
 
             HotReloadGroupOutcomeRouter.AppendByFilePath(
@@ -203,10 +203,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AdoptRetryAddedMemberNames(context.Files, isolation.RetryFiles);
             if (isolation.RetryEntries.Length == 0)
             {
-                return HotReloadGroupCompileResult.NothingToApply();
+                return HotReloadGroupCompileResult.Failed();
             }
 
-            return HotReloadGroupCompileResult.Apply(isolation.RetryEntries, isolation.RetryCompileResult);
+            return HotReloadGroupCompileResult.ReadyWithMethods(isolation.RetryEntries, isolation.RetryCompileResult);
         }
 
         private static List<HotReloadMethodOutcome> BuildAtomicFileSkipOutcomes(

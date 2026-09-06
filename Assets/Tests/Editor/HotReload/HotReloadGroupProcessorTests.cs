@@ -405,7 +405,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateEmptyGateResult(),
                 CancellationToken.None);
 
-            Assert.That(result.HasEntriesToApply, Is.False);
+            Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.Failed));
             Assert.That(HotReloadAddedMemberRegistry.HasGeneration(file.ProjectRelativePath), Is.True);
             Assert.That(HotReloadAddedMemberRegistry.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.True);
             Assert.That(file.ClearedAddedFieldNames, Is.Null);
@@ -427,7 +427,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreateEmptyGateResult(),
                 CancellationToken.None);
 
-            Assert.That(result.HasEntriesToApply, Is.False);
+            Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
             Assert.That(HotReloadAddedMemberRegistry.HasGeneration(file.ProjectRelativePath), Is.True);
             Assert.That(HotReloadAddedMemberRegistry.IsActiveMember(file.ProjectRelativePath, PersistedAddedMemberKey), Is.False);
             Assert.That(file.ClearedAddedFieldNames, Is.Not.Null);
@@ -486,7 +486,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static HotReloadGroupCompileResult CreateCompile(params TransformWorkerEntryDto[] entries)
         {
-            return HotReloadGroupCompileResult.Apply(
+            return HotReloadGroupCompileResult.ReadyWithMethods(
                 entries,
                 HotReloadShimCompileResult.SuccessResult(
                     typeof(HotReloadGroupProcessorTests).Assembly,
