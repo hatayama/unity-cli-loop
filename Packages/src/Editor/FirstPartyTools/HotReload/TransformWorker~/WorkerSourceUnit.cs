@@ -47,6 +47,10 @@ internal sealed class WorkerSourceUnit
     public List<WorkerRemovedMethodSignature> RemovedMethodSignatures { get; } =
         new List<WorkerRemovedMethodSignature>();
 
+    public List<WorkerIntroducedType> IntroducedTypes { get; } = new List<WorkerIntroducedType>();
+
+    public List<string> IntroducedTypeDiagnostics { get; } = new List<string>();
+
     public CompiledMemberKindChangeWarnings.SyntaxKeys KindChangeSyntaxKeys { get; set; }
 
     public List<TypeEmitState> TypeEmitStates { get; set; } = new List<TypeEmitState>();

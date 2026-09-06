@@ -83,7 +83,7 @@ public static class TransformWorkerProgram
     {
         WorkerInput input = ReadInput(inputJsonPath);
         WorkerOutput invalidSources = TryCreateInvalidSourcesOutput(input);
-        WorkerOutput output = invalidSources ?? WorkerGroupPipeline.Transform(input);
+        WorkerOutput output = invalidSources ?? WorkerGroupPipeline.Run(input);
         WriteOutput(outputJsonPath, output);
         return 0;
     }

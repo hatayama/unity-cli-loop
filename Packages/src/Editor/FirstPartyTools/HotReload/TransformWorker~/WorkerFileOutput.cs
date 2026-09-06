@@ -38,4 +38,10 @@ internal sealed class WorkerFileOutput
     public string[] AddedFieldNames { get; set; }
 
     public string[] AddedConstNames { get; set; }
+
+    // Keep in sync with TransformWorkerDtos.cs TransformWorkerFileOutputDto.introducedTypes.
+    public WorkerIntroducedType[] IntroducedTypes { get; set; }
+
+    // Keep in sync with TransformWorkerDtos.cs TransformWorkerFileOutputDto.introducedTypeDiagnostics.
+    public string[] IntroducedTypeDiagnostics { get; set; }
 }

@@ -82,28 +82,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 string outputJson = File.ReadAllText(
                     outputJsonPath,
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                TransformWorkerOutputDto output = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(outputJson);
-                if (output == null)
-                {
-                    return TransformWorkerClientResult.Failure(
-                        "Failed to deserialize transform worker output JSON.");
-                }
-
-                CoalesceOutput(output);
-
-                // Why fail here: run-level parseErrors describe a failure that belongs to no
-                // single source, so there is no per-file row to carry it. Turning it into a
-                // client failure at the process boundary is what makes the per-file row count
-                // an invariant for every caller downstream.
-                if (output.parseErrors.Length > 0)
-                {
-                    return TransformWorkerClientResult.Failure(string.Join("\n", output.parseErrors));
-                }
-
-                Debug.Assert(
-                    output.files.Length == input.sources.Length,
-                    "A successful worker run must return one per-file output per source.");
-                return TransformWorkerClientResult.SuccessResult(output);
+                return InterpretOutputJson(input, outputJson);
             }
             finally
             {
@@ -112,6 +91,49 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Directory.Delete(tempDirectory, recursive: true);
                 }
             }
+        }
+
+        /// <summary>
+        /// Turns one worker output JSON document into the client result, applying the boundary
+        /// checks in the order the process path depends on.
+        /// </summary>
+        // Why internal and separate from RunAsync: the order matters as much as the checks. The
+        // required-output check has to see the omissions before coalescing replaces them with
+        // empty arrays, so a test that calls the checks directly cannot tell whether RunAsync
+        // still performs them at all.
+        internal static TransformWorkerClientResult InterpretOutputJson(
+            TransformWorkerInputDto input,
+            string outputJson)
+        {
+            TransformWorkerOutputDto output = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(outputJson);
+            if (output == null)
+            {
+                return TransformWorkerClientResult.Failure(
+                    "Failed to deserialize transform worker output JSON.");
+            }
+
+            if (!TryValidateRequiredPreparationOutput(input, output, out string preparationError))
+            {
+                return TransformWorkerClientResult.Failure(preparationError);
+            }
+
+            CoalesceOutput(output);
+
+            // Why fail here: run-level parseErrors describe a failure that belongs to no
+            // single source, so there is no per-file row to carry it. Turning it into a
+            // client failure at the process boundary is what makes the per-file row count
+            // an invariant for every caller downstream.
+            if (output.parseErrors.Length > 0)
+            {
+                return TransformWorkerClientResult.Failure(string.Join("\n", output.parseErrors));
+            }
+
+            if (!TryValidateOutput(input, output, out string validationError))
+            {
+                return TransformWorkerClientResult.Failure(validationError);
+            }
+
+            return TransformWorkerClientResult.SuccessResult(output);
         }
 
         // Why internal: tests must exercise this path instead of re-implementing ??=.
@@ -140,6 +162,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileOutput.removedMethodSignatures ??= Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
                 fileOutput.addedFieldNames ??= Array.Empty<string>();
                 fileOutput.addedConstNames ??= Array.Empty<string>();
+                fileOutput.introducedTypes ??= Array.Empty<TransformWorkerIntroducedTypeDto>();
+                fileOutput.introducedTypeDiagnostics ??= Array.Empty<string>();
             }
 
             foreach (TransformWorkerEntryDto entry in output.entries)
@@ -153,6 +177,138 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 entry.calledAddedMethodKeys ??= Array.Empty<string>();
                 entry.parameterTypeFullNames ??= Array.Empty<string>();
             }
+        }
+
+        internal static bool TryValidateOutput(
+            TransformWorkerInputDto input,
+            TransformWorkerOutputDto output,
+            out string errorMessage)
+        {
+            if (!TryValidateRequiredPreparationOutput(input, output, out errorMessage))
+            {
+                return false;
+            }
+
+            if (output.files == null || output.files.Length != input.sources.Length)
+            {
+                errorMessage = "Transform worker output files must have the same count as input sources.";
+                return false;
+            }
+
+            for (int index = 0; index < output.files.Length; index++)
+            {
+                TransformWorkerFileOutputDto file = output.files[index];
+                TransformWorkerSourceDto source = input.sources[index];
+                if (file == null || file.projectRelativePath != source.projectRelativePath)
+                {
+                    errorMessage = "Transform worker output files must preserve input source order.";
+                    return false;
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static bool TryValidateRequiredPreparationOutput(
+            TransformWorkerInputDto input,
+            TransformWorkerOutputDto output,
+            out string errorMessage)
+        {
+            if (!string.Equals(input.operation, "prepareIntroducedTypes", StringComparison.Ordinal))
+            {
+                errorMessage = string.Empty;
+                return true;
+            }
+
+            // The descriptors repeat the requested identity, so a request that carries none would
+            // produce descriptors that pass the "matches its input" check with an identity no
+            // retained artifact can be attributed to, and fail far from here when the descriptor
+            // is constructed.
+            if (string.IsNullOrWhiteSpace(input.targetAssemblyName)
+                || string.IsNullOrWhiteSpace(input.targetAssemblyMvid))
+            {
+                errorMessage = "Preparation input must name the target assembly and its module version id.";
+                return false;
+            }
+
+            if (output.files == null)
+            {
+                errorMessage = "Preparation output must contain files.";
+                return false;
+            }
+
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                if (!TryValidatePreparationFile(file, input, out errorMessage))
+                {
+                    return false;
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static bool TryValidatePreparationFile(
+            TransformWorkerFileOutputDto file,
+            TransformWorkerInputDto input,
+            out string errorMessage)
+        {
+            if (file == null || file.introducedTypes == null || file.introducedTypeDiagnostics == null)
+            {
+                errorMessage = "Preparation output must contain introducedTypes and introducedTypeDiagnostics.";
+                return false;
+            }
+
+            foreach (TransformWorkerIntroducedTypeDto introducedType in file.introducedTypes)
+            {
+                if (!TryValidatePreparationDescriptor(introducedType, file, input, out errorMessage))
+                {
+                    return false;
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static bool TryValidatePreparationDescriptor(
+            TransformWorkerIntroducedTypeDto introducedType,
+            TransformWorkerFileOutputDto file,
+            TransformWorkerInputDto input,
+            out string errorMessage)
+        {
+            if (introducedType == null)
+            {
+                errorMessage = "Preparation output must not contain a null introduced type descriptor.";
+                return false;
+            }
+
+            if (introducedType.ownerProjectRelativePath == null
+                || introducedType.ownerProjectRelativePath != file.projectRelativePath)
+            {
+                errorMessage = "Preparation descriptor owner must match its file output.";
+                return false;
+            }
+
+            if (introducedType.originalAssemblyName != input.targetAssemblyName
+                || introducedType.originalAssemblyMvid != input.targetAssemblyMvid)
+            {
+                errorMessage = "Preparation descriptor assembly identity must match its input.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(introducedType.metadataName)
+                || string.IsNullOrWhiteSpace(introducedType.declarationFingerprint)
+                || string.IsNullOrWhiteSpace(introducedType.source))
+            {
+                errorMessage = "Preparation descriptor metadataName, declarationFingerprint, and source are required.";
+                return false;
+            }
+
+            errorMessage = string.Empty;
+            return true;
         }
 
         private static void WriteUtf8NoBom(string path, string contents)

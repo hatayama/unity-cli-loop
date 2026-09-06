@@ -21,6 +21,23 @@ using Microsoft.CodeAnalysis.Text;
 // edited in one file call a member added in another.
 internal static class WorkerGroupPipeline
 {
+    internal const string PrepareIntroducedTypesOperation = "prepareIntroducedTypes";
+
+    internal static WorkerOutput Run(WorkerInput input)
+    {
+        if (string.Equals(input.Operation, PrepareIntroducedTypesOperation, StringComparison.Ordinal))
+        {
+            return IntroducedTypePreparation.Prepare(input);
+        }
+
+        if (!string.IsNullOrEmpty(input.Operation))
+        {
+            return CreateRunFailureOutput("Unknown worker operation: " + input.Operation);
+        }
+
+        return Transform(input);
+    }
+
     internal static WorkerOutput Transform(WorkerInput input)
     {
         CSharpParseOptions parseOptions = new CSharpParseOptions(
@@ -167,6 +184,20 @@ internal static class WorkerGroupPipeline
             addedFieldCatalog);
     }
 
+    private static WorkerOutput CreateRunFailureOutput(string parseError)
+    {
+        return new WorkerOutput
+        {
+            ShimSource = string.Empty,
+            Entries = Array.Empty<WorkerEntry>(),
+            Skipped = Array.Empty<WorkerSkipped>(),
+            Files = Array.Empty<WorkerFileOutput>(),
+            ParseErrors = new[] { parseError },
+            SiblingConstDriftWarnings = Array.Empty<string>(),
+            UnchangedMethods = Array.Empty<WorkerUnchangedMethod>()
+        };
+    }
+
     // Everything one unit contributes before the group-wide guard and emit: its drift warnings,
     // its baseline, and the queued shim methods of its types.
     private static (int ShimTypeCounter, int GlobalShimMethodCounter) QueueUnit(
@@ -245,7 +276,7 @@ internal static class WorkerGroupPipeline
             unit.KindChangeSyntaxKeys.EventSyntaxKeys);
     }
 
-    private static (List<MetadataReference> References, MetadataReference TargetTypesReference)
+    internal static (List<MetadataReference> References, MetadataReference TargetTypesReference)
         CollectMetadataReferences(WorkerInput input, List<string> parseErrors)
     {
         string targetTypesFullPath =
@@ -284,8 +315,7 @@ internal static class WorkerGroupPipeline
 
         return (references, targetTypesReference);
     }
-
-    private static IAssemblySymbol ResolveTargetTypesAssemblySymbol(
+    internal static IAssemblySymbol ResolveTargetTypesAssemblySymbol(
         CSharpCompilation compilation,
         MetadataReference targetTypesReference)
     {
@@ -358,7 +388,9 @@ internal static class WorkerGroupPipeline
             RemovedMembers = unit.RemovedMembers.ToArray(),
             RemovedMethodSignatures = unit.RemovedMethodSignatures.ToArray(),
             AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(projectRelativePath),
-            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath)
+            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath),
+            IntroducedTypes = unit.IntroducedTypes.ToArray(),
+            IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray()
         };
     }
 }
