@@ -33,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
+            Assert.That(result.Artifact, Is.Null);
             Assert.That(environment.CompileCalls, Is.EqualTo(0));
             Assert.That(environment.LoadCalls, Is.EqualTo(0));
             Assert.That(environment.WriteSourceCalls, Is.EqualTo(0));
@@ -55,6 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
+            Assert.That(result.Artifact, Is.Null);
             Assert.That(environment.LoadCalls, Is.EqualTo(0));
         }
 
@@ -82,6 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
+            Assert.That(result.Artifact, Is.Null);
             Assert.That(environment.LoadCalls, Is.EqualTo(0));
         }
 
@@ -99,6 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
+            Assert.That(result.Artifact, Is.Null);
             Assert.That(environment.LoadCalls, Is.EqualTo(0));
         }
 
@@ -116,6 +120,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
+            Assert.That(result.Artifact, Is.Null);
             Assert.That(environment.LoadCalls, Is.EqualTo(0));
         }
 
@@ -133,6 +138,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
+            Assert.That(result.Artifact, Is.Null);
             Assert.That(environment.LoadCalls, Is.EqualTo(0));
         }
 
@@ -195,6 +201,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
+            Assert.That(result.Artifact, Is.Null);
             Assert.That(result.Diagnostics, Has.Count.EqualTo(1));
             Assert.That(result.Diagnostics[0].OwnerProjectRelativePath, Is.EqualTo("Assets/Second.cs"));
             Assert.That(result.Diagnostics[0].Message, Is.EqualTo("second source error"));
@@ -246,6 +253,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
+            Assert.That(result.Artifact, Is.Null);
             Assert.That(result.Diagnostics, Has.Count.EqualTo(1));
             Assert.That(result.Diagnostics[0].OwnerProjectRelativePath, Is.EqualTo("Assets/Second.cs"));
             Assert.That(result.Diagnostics[0].Message, Does.Contain("MissingType"));
@@ -333,7 +341,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// call even when every emitted output validation would otherwise succeed.
         /// </summary>
         [Test]
-        public void CompileAsync_CancelledAfterBackend_DoesNotLoad()
+        public async Task CompileAsync_CancelledAfterBackend_DoesNotLoad()
         {
             CancellationTokenSource cancellation = new CancellationTokenSource();
             FakeEnvironment environment = new FakeEnvironment
@@ -342,10 +350,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
             HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
 
-            Assert.CatchAsync<OperationCanceledException>(async () => await compiler.CompileAsync(
-                CreateRequest(),
-                cancellation.Token));
+            bool cancelled = false;
+            try
+            {
+                await compiler.CompileAsync(CreateRequest(), cancellation.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
 
+            Assert.That(cancelled, Is.True);
             Assert.That(environment.LoadCalls, Is.EqualTo(0));
         }
 
@@ -354,7 +369,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// immediately before loading and cannot begin the irreversible loader operation.
         /// </summary>
         [Test]
-        public void CompileAsync_CancelledDuringByteReads_DoesNotLoad()
+        public async Task CompileAsync_CancelledDuringByteReads_DoesNotLoad()
         {
             CancellationTokenSource cancellation = new CancellationTokenSource();
             FakeEnvironment environment = new FakeEnvironment
@@ -363,10 +378,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
             HotReloadIntroducedTypeCompiler compiler = new HotReloadIntroducedTypeCompiler(environment);
 
-            Assert.CatchAsync<OperationCanceledException>(async () => await compiler.CompileAsync(
-                CreateRequest(),
-                cancellation.Token));
+            bool cancelled = false;
+            try
+            {
+                await compiler.CompileAsync(CreateRequest(), cancellation.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
 
+            Assert.That(cancelled, Is.True);
             Assert.That(environment.LoadCalls, Is.EqualTo(0));
         }
 

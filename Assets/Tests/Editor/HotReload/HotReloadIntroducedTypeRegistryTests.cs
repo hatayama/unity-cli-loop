@@ -422,6 +422,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(resolved, Is.SameAs(artifact));
         }
 
+        /// <summary>
+        /// Verifies that activating an artifact that was never prepared is rejected before any
+        /// mutation and leaves both lifecycle counts and the existing active mapping unchanged.
+        /// </summary>
+        [Test]
+        public void Activate_NeverPreparedArtifact_RejectsWithoutStateChange()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeArtifact active = CreateArtifact("active");
+            registry.RegisterPrepared(active);
+            registry.Activate(active);
+            HotReloadIntroducedTypeArtifact neverPrepared = CreateArtifactWithAssembly(
+                CreateDynamicAssembly("NeverPrepared"),
+                CreateOtherDescriptor("never-prepared"));
+
+            Assert.Throws<InvalidOperationException>(() => registry.Activate(neverPrepared));
+
+            Assert.That(registry.PreparedCount, Is.EqualTo(0));
+            Assert.That(registry.ActiveCount, Is.EqualTo(1));
+            Assert.That(
+                registry.TryResolveActiveAssembly(neverPrepared.AssemblyFullName, out HotReloadIntroducedTypeArtifact rejected),
+                Is.False);
+            Assert.That(rejected, Is.Null);
+            Assert.That(
+                registry.TryResolveActiveAssembly(active.AssemblyFullName, out HotReloadIntroducedTypeArtifact resolved),
+                Is.True);
+            Assert.That(resolved, Is.SameAs(active));
+        }
+
+        /// <summary>
+        /// Verifies that a discarded candidate loses its prepared membership, so a later
+        /// activation of the same artifact is rejected without publishing its type identity.
+        /// </summary>
+        [Test]
+        public void Activate_DiscardedPreparedArtifact_RejectsWithoutStateChange()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeDescriptor descriptor = CreateOtherDescriptor("discarded");
+            HotReloadIntroducedTypeArtifact candidate = CreateArtifactWithAssembly(
+                CreateDynamicAssembly("Discarded"),
+                descriptor);
+            registry.RegisterPrepared(candidate);
+            registry.DiscardPrepared(candidate);
+
+            Assert.Throws<InvalidOperationException>(() => registry.Activate(candidate));
+
+            Assert.That(registry.PreparedCount, Is.EqualTo(0));
+            Assert.That(registry.ActiveCount, Is.EqualTo(0));
+            Assert.That(
+                registry.TryFindActiveDescriptor(descriptor, out HotReloadIntroducedTypeArtifact found),
+                Is.False);
+            Assert.That(found, Is.Null);
+        }
+
         private static Assembly CreateDynamicAssembly(string prefix)
         {
             AssemblyName assemblyName = new AssemblyName(prefix + Guid.NewGuid().ToString("N"));
