@@ -592,7 +592,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(FindEntry(result, "get_PublicSeed"), Is.Null);
+            Assert.That(FindEntry(result, "set_PublicSeed"), Is.Null);
             Assert.That(FindSkipReason(result, "get_PublicSeed"), Is.EqualTo(CompiledMemberKindChangedReason));
+            Assert.That(FindSkipReason(result, "set_PublicSeed"), Is.EqualTo(CompiledMemberKindChangedReason));
         }
 
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(
