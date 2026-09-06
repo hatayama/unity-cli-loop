@@ -86,7 +86,6 @@ internal static class AddedPropertyAccessorGuard
         AddedFieldCatalog addedFieldCatalog,
         AddedPropertyCatalog addedPropertyCatalog)
     {
-        SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
         if (binding.Declaration.ExpressionBody != null)
         {
             return EvaluateAccessor(

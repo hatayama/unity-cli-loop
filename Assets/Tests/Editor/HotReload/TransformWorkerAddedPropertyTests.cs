@@ -337,7 +337,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             TransformWorkerEntryDto setter = FindEntry(result, "set_Stored");
             Assert.That(setter, Is.Not.Null, FormatSkipped(result.Output.skipped));
-            AssertLineDirectiveFollowsMethodName(result.Output.shimSource, setter.shimMethodName);
+            string setterShim = SliceSetterShimBeforeTrailingLineDefault(
+                result.Output.shimSource,
+                setter.shimMethodName);
+            Assert.That(setterShim, Does.Match("#line [0-9]+ \""));
         }
 
         /// <summary>
@@ -515,12 +518,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return -1;
         }
 
-        private static void AssertLineDirectiveFollowsMethodName(string shimSource, string shimMethodName)
+        private static string SliceSetterShimBeforeTrailingLineDefault(string shimSource, string shimMethodName)
         {
-            int methodNameIndex = shimSource.IndexOf(shimMethodName, StringComparison.Ordinal);
-            Assert.That(methodNameIndex, Is.GreaterThanOrEqualTo(0), "Shim method missing: " + shimMethodName);
-            int directiveIndex = shimSource.IndexOf("#line ", methodNameIndex, StringComparison.Ordinal);
-            Assert.That(directiveIndex, Is.GreaterThan(methodNameIndex));
+            string declaration = "public static void " + shimMethodName + "(";
+            int declarationStart = shimSource.IndexOf(declaration, StringComparison.Ordinal);
+            Assert.That(declarationStart, Is.GreaterThanOrEqualTo(0), "Setter shim missing: " + shimMethodName);
+            int defaultDirective = shimSource.IndexOf("#line default", declarationStart, StringComparison.Ordinal);
+            Assert.That(defaultDirective, Is.GreaterThan(declarationStart));
+            return shimSource.Substring(declarationStart, defaultDirective - declarationStart);
         }
 
         private static string WithHostMembers(string onDisk, string extraMembers)
