@@ -99,17 +99,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an auto-property present only in the edited source is skipped with the
-        /// added-property reason and does not fire the outside-body drift warning.
+        /// What: an auto-property present only in the edited source emits its accessors as
+        /// added members and does not fire the outside-body drift warning.
         /// </summary>
         [Test]
-        public async Task Classify_AddedAutoProperty_SkipsGetterWithAddedPropertyReason()
+        public async Task Classify_AddedAutoProperty_EmitsAccessorsWithoutDrift()
         {
-            const string expectedReason =
-                "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
-                + "For a computed value, add a same-file method instead (e.g. 'private T GetX()'), which applies "
-                + "through hot reload; for a constant, use a 'const' or a plain added field; otherwise run "
-                + "'uloop compile'.";
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = WithHostMembers(
                 onDisk,
@@ -124,9 +119,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(
                 FindEntry(result, "get_AddedAuto"),
-                Is.Null,
-                "Added auto-property getter must not be an entry.");
-            Assert.That(FindSkipReason(result, "get_AddedAuto"), Is.EqualTo(expectedReason));
+                Is.Not.Null,
+                "Added auto-property getter must be an added entry.");
+            Assert.That(FindSkipReason(result, "get_AddedAuto"), Is.Null);
             Assert.That(
                 result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),

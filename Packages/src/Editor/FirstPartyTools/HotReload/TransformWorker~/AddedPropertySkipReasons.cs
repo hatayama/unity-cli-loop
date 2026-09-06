@@ -71,6 +71,9 @@ internal static class AddedPropertySkipReasons
     public const string UnavailableAddedProperty =
         "Uses an added property that hot reload cannot emit. Run 'uloop compile'.";
 
+    public const string CompiledMemberKindChanged =
+        "Property '{0}' is declared as a field or an event in the compiled assembly. Run 'uloop compile'.";
+
     public const string InitializerNotEmittable =
         "Added property initializer cannot run in the shim lambda. Run 'uloop compile' to add it.";
 }

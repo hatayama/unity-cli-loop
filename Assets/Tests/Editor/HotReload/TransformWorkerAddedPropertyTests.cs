@@ -60,6 +60,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Added properties with only a setter are skipped; the shim requires a getter identity. "
             + "Run 'uloop compile' to add them.";
 
+        private const string StructHostReason =
+            "Added properties on struct types are skipped; the shim requires a reference-type instance. "
+            + "Run 'uloop compile' to add them.";
+
+        private const string CompiledMemberKindChangedReason =
+            "Property 'PublicSeed' is declared as a field or an event in the compiled assembly. "
+            + "Run 'uloop compile'.";
+
+        private const string InitializerNotEmittableReason =
+            "Added property initializer cannot run in the shim lambda. Run 'uloop compile' to add it.";
+
+        private const string HostStoreKeyPrefix =
+            "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadAddedMemberHost::";
+
         /// <summary>
         /// An expression-bodied property added to a compiled host emits an added getter
         /// and rewrites an edited caller to that getter shim.
@@ -401,6 +415,230 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
             Assert.That(warnings, Has.None.Contain("Edits outside method bodies"));
+        }
+
+        /// <summary>
+        /// An added auto-property emits store-backed accessor shims and reports its backing
+        /// value through the added-field rows so the Editor keeps the added-field lifetime.
+        /// </summary>
+        [Test]
+        public async Task Emit_AddedAutoProperty_EmitsStoreBackedAccessors()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedAutoProperty.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            Count = value;\n            return Count;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto getter = FindEntry(result, "get_Count");
+            TransformWorkerEntryDto setter = FindEntry(result, "set_Count");
+            Assert.That(getter, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(setter, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(getter.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            string getterShim = SliceShimMethod(result.Output.shimSource, getter.shimMethodName);
+            Assert.That(getterShim, Does.Contain("GetOrInit<"));
+            Assert.That(getterShim, Does.Contain(HostStoreKeyPrefix + "Count"));
+            string setterShim = SliceShimMethod(result.Output.shimSource, setter.shimMethodName);
+            Assert.That(setterShim, Does.Contain("Set<"));
+            Assert.That(setterShim, Does.Contain(HostStoreKeyPrefix + "Count"));
+            Assert.That(
+                result.Output.files[0].addedFieldNames,
+                Has.Some.Contains("HotReloadAddedMemberHost.Count"));
+            Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
+        }
+
+        /// <summary>
+        /// A literal initializer on an added auto-property becomes the store's static lambda so
+        /// the first read produces the declared value.
+        /// </summary>
+        [Test]
+        public async Task Emit_AddedAutoPropertyWithInitializer_UsesStaticLambda()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedAutoPropertyInitializer.cs",
+                "public int Base { get; } = 41;",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Base + value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto getter = FindEntry(result, "get_Base");
+            Assert.That(getter, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(
+                SliceShimMethod(result.Output.shimSource, getter.shimMethodName),
+                Does.Contain("static () => 41"));
+        }
+
+        /// <summary>
+        /// An object-creation initializer on an added auto-property is skipped for the same
+        /// reason as an added field, because the shim lambda cannot run the constructor.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedAutoPropertyObjectCreationInitializer_SkipsWithInitializerReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedAutoPropertyObjectCreationInitializer.cs",
+                "public System.Collections.Generic.List<int> Items { get; }"
+                + " = new System.Collections.Generic.List<int>();");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_Items"), Is.Null);
+            Assert.That(FindSkipReason(result, "get_Items"), Is.EqualTo(InitializerNotEmittableReason));
+        }
+
+        /// <summary>
+        /// A static added auto-property uses the static store entry points so no instance
+        /// receiver is required.
+        /// </summary>
+        [Test]
+        public async Task Emit_AddedStaticAutoProperty_UsesStaticStore()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedStaticAutoProperty.cs",
+                "public static int Total { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            Total = value;\n            return Total;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto getter = FindEntry(result, "get_Total");
+            TransformWorkerEntryDto setter = FindEntry(result, "set_Total");
+            Assert.That(getter, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(setter, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            string getterShim = SliceShimMethod(result.Output.shimSource, getter.shimMethodName);
+            Assert.That(getterShim, Does.Contain("GetOrInitStatic<"));
+            Assert.That(getterShim, Does.Not.Contain("GetOrInit<"));
+            Assert.That(
+                SliceShimMethod(result.Output.shimSource, setter.shimMethodName),
+                Does.Contain("SetStatic<"));
+        }
+
+        /// <summary>
+        /// An added auto-property on a struct host is skipped, because the store cannot keep
+        /// identity for a boxed value-type receiver.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedAutoPropertyOnStruct_SkipsWithStructHostReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int Existing;\n",
+                "        public int Existing;\n\n        public int Added { get; set; }\n",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                HotReloadTestSourceWriter.WriteEditedSource("AddedAutoPropertyStructHost.cs", edited),
+                HostProjectRelativePath,
+                onDisk,
+                null);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_Added"), Is.Null);
+            Assert.That(FindSkipReason(result, "get_Added"), Is.EqualTo(StructHostReason));
+        }
+
+        /// <summary>
+        /// An added auto-property initializer that calls a member of its own host is skipped,
+        /// because the store's static lambda cannot reach the compiled host's members.
+        /// Why not an instance member: a property initializer that reads instance state does not
+        /// compile, so the host's own static method is the reachable shape of the same rule.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedAutoPropertyInitializerReferencingHostMember_SkipsWithInitializerReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedAutoPropertyHostMemberInitializer.cs",
+                "public int Twice { get; } = PrivateStaticSeven();");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_Twice"), Is.Null);
+            Assert.That(FindSkipReason(result, "get_Twice"), Is.EqualTo(InitializerNotEmittableReason));
+        }
+
+        /// <summary>
+        /// An added auto-property with a baseline stays out of the outside-body drift warnings.
+        /// </summary>
+        [Test]
+        public async Task Drift_AddedAutoProperty_ProducesNoOutsideBodyWarning()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedAutoPropertyDrift.cs",
+                "public int DriftSafeAuto { get; set; }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
+            Assert.That(warnings, Has.None.Contain("Edits outside method bodies"));
+        }
+
+        /// <summary>
+        /// Turning a compiled field into a property is skipped rather than emitted, because the
+        /// compiled field keeps owning the value that unedited code reads and writes.
+        /// </summary>
+        [Test]
+        public async Task Skip_CompiledFieldReplacedByProperty_SkipsWithMemberKindReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PublicSeed = 3;",
+                "        public int PublicSeed { get; set; }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                HotReloadTestSourceWriter.WriteEditedSource("CompiledFieldToProperty.cs", edited),
+                HostProjectRelativePath,
+                onDisk,
+                null);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_PublicSeed"), Is.Null);
+            Assert.That(FindEntry(result, "set_PublicSeed"), Is.Null);
+            Assert.That(FindSkipReason(result, "get_PublicSeed"), Is.EqualTo(CompiledMemberKindChangedReason));
+            Assert.That(FindSkipReason(result, "set_PublicSeed"), Is.EqualTo(CompiledMemberKindChangedReason));
+        }
+
+        /// <summary>
+        /// Compound assignment to an added auto-property skips the caller, because the accessor
+        /// shims cannot carry an operation that reads and writes in one expression.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerCompoundAssignsAddedAutoProperty_SkipsCallerWithCompoundReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedAutoPropertyCompoundAssignment.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            Count += 1;\n            return value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(CompoundAssignmentReason));
+            Assert.That(FindEntry(result, "get_Count"), Is.Not.Null);
+            Assert.That(FindEntry(result, "set_Count"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// Incrementing an added auto-property skips the caller for the same reason as a
+        /// compound assignment; only plain reads and simple assignment have a rewrite shape.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerIncrementsAddedAutoProperty_SkipsCallerWithCompoundReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedAutoPropertyIncrement.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            Count++;\n            return value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(CompoundAssignmentReason));
+            Assert.That(FindEntry(result, "get_Count"), Is.Not.Null);
+            Assert.That(FindEntry(result, "set_Count"), Is.Not.Null);
         }
 
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(
