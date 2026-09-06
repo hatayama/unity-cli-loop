@@ -71,8 +71,9 @@ and a patched body that matches the baseline again is unpatched on that run.
 
 ## Scope in Brief
 
-- Patched: ordinary method bodies, property getters with a body, and added properties.
-- Added members: new methods, fields, and properties apply, visible to edited code in the same reload
+- Patched: ordinary method bodies, property getters with a body, and the accessors of a
+  property added in this edit (see the scope reference for the shapes still skipped).
+- Added members: new methods, fields, and supported properties apply, visible to edited code in the same reload
   within the same assembly (pass the declaring file and its callers together), and vanish
   on any compile or domain reload (an Editor-session illusion). New types, references
   from other assemblies or from files that are neither passed to the reload nor

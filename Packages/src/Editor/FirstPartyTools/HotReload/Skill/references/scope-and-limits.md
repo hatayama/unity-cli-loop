@@ -73,7 +73,8 @@ an edit before the first compile snapshot, still reports both accessors.
 Adding a type
 (`class`, `struct`, `enum`, `record`), an event, or an indexer is still out of scope.
 
-An added property applies. A bodied getter or setter is emitted like an added method;
+An added property applies unless its shape is listed below. A bodied getter or setter is
+emitted like an added method;
 an auto-property is emitted as a pair of accessors over the added-field store, so its
 value follows the same lifetime as an added field and appears in `--status` twice: an
 `Added` row per accessor (`Type::get_X()`, `Type::set_X()`) and an `AddedField` row for
@@ -82,7 +83,7 @@ pause points, and the value never appears in `CapturedVariables`.
 
 These property shapes stay `Skipped` with a per-member reason: a setter without a
 getter, `virtual`/`override`/`abstract`/interface, an explicit interface
-implementation, an `init` accessor, an indexer, a host that is a `struct`, a value type
+implementation, an `init` accessor, a host that is a `struct`, a value type
 the shim assembly cannot see or cannot resolve, an auto-property initializer that
 creates an object or touches the host's own members, and a name the compiled assembly
 already declares as a field or an event. Edited callers are skipped too when they use a

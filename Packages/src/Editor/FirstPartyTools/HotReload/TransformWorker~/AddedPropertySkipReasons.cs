@@ -36,9 +36,6 @@ internal static class AddedPropertySkipReasons
         "Added properties with init accessors are skipped; the shim cannot preserve initialization-only assignment. "
         + "Run 'uloop compile' to add them.";
 
-    public const string Indexer =
-        "Added indexers are skipped; the shim does not support indexer access. Run 'uloop compile' to add them.";
-
     public const string StructHost =
         "Added properties on struct types are skipped; the shim requires a reference-type instance. "
         + "Run 'uloop compile' to add them.";
