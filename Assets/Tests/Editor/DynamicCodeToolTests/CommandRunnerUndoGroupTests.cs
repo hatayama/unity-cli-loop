@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         public void TearDown()
         {
             UloopDynamicCodePartialResults.Clear();
+            DestroyRecordedObject();
         }
 
         /// <summary>
@@ -65,9 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         [Test]
         public async Task ExecuteAsync_WhenCommandRecordsNothing_LeavesNoPendingUndoRecording()
         {
-            MethodInfo hasUndoRecordObjects = typeof(DrivenRectTransformTracker)
-                .GetMethod("HasUndoRecordObjects", BindingFlags.NonPublic | BindingFlags.Static);
-            Assert.That(hasUndoRecordObjects, Is.Not.Null, "DrivenRectTransformTracker.HasUndoRecordObjects must exist");
+            MethodInfo hasUndoRecordObjects = GetHasUndoRecordObjectsMethod();
 
             // Why increment first: earlier tests or editor interaction may have left a group open,
             // and this test can only prove anything when it starts from a closed group.
@@ -81,6 +80,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
             Assert.That(result.Success, Is.True);
             Assert.That((bool)hasUndoRecordObjects.Invoke(null, null), Is.False);
+        }
+
+        /// <summary>
+        /// What: a command that does record through the Undo API still leaves no pending recording behind.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenCommandRecordsUndo_LeavesNoPendingUndoRecording()
+        {
+            MethodInfo hasUndoRecordObjects = GetHasUndoRecordObjectsMethod();
+
+            // Why increment first: earlier tests or editor interaction may have left a group open,
+            // and this test can only prove anything when it starts from a closed group.
+            Undo.IncrementCurrentGroup();
+            Assume.That((bool)hasUndoRecordObjects.Invoke(null, null), Is.False, "precondition");
+
+            WrappedDynamicCommandState.PrepareUndoRecordingCommand();
+            CommandRunner runner = new();
+
+            ExecutionResult result = await runner.ExecuteAsync(CreateContext());
+
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Result, Is.EqualTo("recorded"));
+            Assert.That(WrappedDynamicCommandState.RecordedObject, Is.Not.Null, "the command must have recorded");
+            Assert.That((bool)hasUndoRecordObjects.Invoke(null, null), Is.False);
+        }
+
+        private static void DestroyRecordedObject()
+        {
+            ScriptableObject recorded = WrappedDynamicCommandState.RecordedObject;
+            WrappedDynamicCommandState.ClearRecordedObject();
+            if (recorded == null)
+            {
+                return;
+            }
+
+            Undo.ClearUndo(recorded);
+            UnityEngine.Object.DestroyImmediate(recorded);
+        }
+
+        private static MethodInfo GetHasUndoRecordObjectsMethod()
+        {
+            MethodInfo hasUndoRecordObjects = typeof(DrivenRectTransformTracker)
+                .GetMethod("HasUndoRecordObjects", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(hasUndoRecordObjects, Is.Not.Null, "DrivenRectTransformTracker.HasUndoRecordObjects must exist");
+            return hasUndoRecordObjects;
         }
 
         private static CommandRunnerUndoHooks CreateRecordingHooks(List<string> calls)
