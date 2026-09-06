@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.3.0...dispatcher-v3.3.1) (2026-09-06)
+
+
+### Bug Fixes
+
+* uloop --help and uloop list now read skill descriptions from packages referenced by a relative file: path ([#2644](https://github.com/hatayama/unity-cli-loop/issues/2644)) ([5787362](https://github.com/hatayama/unity-cli-loop/commit/57873627bda7250f711a23757255c52109843f72))
+
 ## [3.3.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.2.2...dispatcher-v3.3.0) (2026-09-04)
 
 

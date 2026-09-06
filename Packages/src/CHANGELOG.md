@@ -1,5 +1,29 @@
 # Changelog
 
+## [3.4.0](https://github.com/hatayama/unity-cli-loop/compare/v3.3.0...v3.4.0) (2026-09-06)
+
+
+### Features
+
+* Hot reload now applies added properties instead of requiring a GetX() workaround ([#2631](https://github.com/hatayama/unity-cli-loop/issues/2631)) ([e5a774a](https://github.com/hatayama/unity-cli-loop/commit/e5a774aec764005234b47adfd0b8ec014f6cd919))
+* Hot reload now applies edits across several files of the same assembly, including members added in another edited file ([#2608](https://github.com/hatayama/unity-cli-loop/issues/2608)) ([09662d9](https://github.com/hatayama/unity-cli-loop/commit/09662d9a3de1c4d186db9c3af7782780a3195007))
+
+
+### Bug Fixes
+
+* compile and run-tests now say how many hot-reload changes the domain reload dropped ([#2611](https://github.com/hatayama/unity-cli-loop/issues/2611)) ([66ab19c](https://github.com/hatayama/unity-cli-loop/commit/66ab19c3ab6dcb2ebab7d55995b177c3f4308c5a))
+* Dynamic code execution keeps using the fast compiler on the newest editor releases ([#2639](https://github.com/hatayama/unity-cli-loop/issues/2639)) ([15d4a14](https://github.com/hatayama/unity-cli-loop/commit/15d4a14b7905f563bcc52d6213bb4b201cf59d63))
+* execute-dynamic-code no longer leaves an open Undo recording that dirties UI scenes ([#2632](https://github.com/hatayama/unity-cli-loop/issues/2632)) ([7b53b23](https://github.com/hatayama/unity-cli-loop/commit/7b53b23c003524426ae8c7995174432c81c62b31))
+* Hot reload binds added methods reached through compiled types and explains unresolved types ([#2613](https://github.com/hatayama/unity-cli-loop/issues/2613)) ([46d4a7d](https://github.com/hatayama/unity-cli-loop/commit/46d4a7d67fb1a3e889c613cfcd7c540a48f4ddde))
+* Hot reload folds line-count warnings of auto re-applied files into the continuing summary ([#2615](https://github.com/hatayama/unity-cli-loop/issues/2615)) ([23bb963](https://github.com/hatayama/unity-cli-loop/commit/23bb963fb401968bcda1abe6101ac121bc640921))
+* Hot reload keeps callers in other files bound to the newest added-member body ([#2612](https://github.com/hatayama/unity-cli-loop/issues/2612)) ([5faf240](https://github.com/hatayama/unity-cli-loop/commit/5faf240cae67fbc54988b7be29a3f2cd1639d7b6))
+* Hot reload lifecycle note now covers methods reached through intermediate calls from Awake or Start ([#2620](https://github.com/hatayama/unity-cli-loop/issues/2620)) ([3612dc0](https://github.com/hatayama/unity-cli-loop/commit/3612dc0836ee8390f83b504c3a8e606142b42e4e))
+* Hot reload now reports an added auto-property as out of scope instead of a generic outside-method-bodies warning ([#2616](https://github.com/hatayama/unity-cli-loop/issues/2616)) ([28ef1c2](https://github.com/hatayama/unity-cli-loop/commit/28ef1c28b8051d86bcf61eb9a5d26ea3e0ec9b31))
+* Hot reload now warns that an added test method stays invisible to the Test Runner until compile ([#2619](https://github.com/hatayama/unity-cli-loop/issues/2619)) ([1cc5eb7](https://github.com/hatayama/unity-cli-loop/commit/1cc5eb7f9fc75aa7ee497823f7ceb4960ac74315))
+* Pause-point warning no longer suggests execute-dynamic-code for hot-reload added fields ([#2614](https://github.com/hatayama/unity-cli-loop/issues/2614)) ([5a9887a](https://github.com/hatayama/unity-cli-loop/commit/5a9887ac368231f97881a03922c45fcef8ea46f7))
+* Prevent unsafe hot reload signature replacements ([#2624](https://github.com/hatayama/unity-cli-loop/issues/2624)) ([37463f4](https://github.com/hatayama/unity-cli-loop/commit/37463f43555370ef0986fa827edb40031bbe0c3e))
+* The dynamic compilation error now names the compiler files it could not find ([#2637](https://github.com/hatayama/unity-cli-loop/issues/2637)) ([155ba06](https://github.com/hatayama/unity-cli-loop/commit/155ba06658a8766d08e4749a6305e0f1f30cdbe8))
+
 ## [3.3.0](https://github.com/hatayama/unity-cli-loop/compare/v3.2.1...v3.3.0) (2026-09-04)
 
 
