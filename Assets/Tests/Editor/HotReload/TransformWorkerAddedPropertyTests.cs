@@ -597,6 +597,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(FindSkipReason(result, "set_PublicSeed"), Is.EqualTo(CompiledMemberKindChangedReason));
         }
 
+        /// <summary>
+        /// Compound assignment to an added auto-property skips the caller, because the accessor
+        /// shims cannot carry an operation that reads and writes in one expression.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerCompoundAssignsAddedAutoProperty_SkipsCallerWithCompoundReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedAutoPropertyCompoundAssignment.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            Count += 1;\n            return value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(CompoundAssignmentReason));
+            Assert.That(FindEntry(result, "get_Count"), Is.Not.Null);
+            Assert.That(FindEntry(result, "set_Count"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// Incrementing an added auto-property skips the caller for the same reason as a
+        /// compound assignment; only plain reads and simple assignment have a rewrite shape.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerIncrementsAddedAutoProperty_SkipsCallerWithCompoundReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedAutoPropertyIncrement.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            Count++;\n            return value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(CompoundAssignmentReason));
+            Assert.That(FindEntry(result, "get_Count"), Is.Not.Null);
+            Assert.That(FindEntry(result, "set_Count"), Is.Not.Null);
+        }
+
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(
             string fileName,
             string extraMembers,

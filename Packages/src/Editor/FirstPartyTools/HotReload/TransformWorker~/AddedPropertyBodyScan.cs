@@ -75,7 +75,7 @@ internal static class AddedPropertyBodyScan
                 semanticModel,
                 addedPropertyCatalog,
                 enclosingType);
-            if (binding != null && !binding.IsAuto)
+            if (binding != null)
             {
                 return AddedPropertySkipReasons.RefOutIn;
             }
@@ -95,7 +95,7 @@ internal static class AddedPropertyBodyScan
             semanticModel,
             addedPropertyCatalog,
             enclosingType);
-        if (binding == null || binding.IsAuto)
+        if (binding == null)
         {
             return null;
         }
