@@ -8,6 +8,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     [Serializable]
     internal sealed class TransformWorkerInputDto
     {
+        // Null/empty retains the existing transform operation for callers that predate planning.
+        public string operation;
+
         // Edited files this worker run must transform together. One or more; every source must
         // belong to the same compilation assembly so a single shim assembly can host them all.
         // Keep in sync with TransformWorker~/WorkerInput.cs.
@@ -16,6 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] defines;
         public string[] referencePaths;
         public string targetTypesAssemblyPath;
+        public string targetAssemblyName;
+        public string targetAssemblyMvid;
 
         // Method keys (see HotReloadMethodKeys.BuildMethodKey) already reported Failed from a
         // first compile round; the retry worker run drops these methods entirely.
@@ -92,6 +97,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Source-level names of added consts folded into edited bodies as literals.
         // Null/omitted deserializes as empty after client coalesce.
         public string[] addedConstNames;
+
+        public TransformWorkerIntroducedTypeDto[] introducedTypes;
+
+        public string[] introducedTypeDiagnostics;
+    }
+
+    /// <summary>
+    /// One top-level type declaration prepared by the transform worker for an artifact assembly.
+    /// </summary>
+    // Keep in sync with TransformWorker~/WorkerIntroducedType.cs.
+    [Serializable]
+    internal sealed class TransformWorkerIntroducedTypeDto
+    {
+        public string originalAssemblyName;
+        public string originalAssemblyMvid;
+        public string metadataName;
+        public string ownerProjectRelativePath;
+        public string declarationFingerprint;
+        public string source;
     }
 
     /// <summary>

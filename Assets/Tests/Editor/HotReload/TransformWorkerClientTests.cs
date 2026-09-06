@@ -21,6 +21,81 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class TransformWorkerClientTests
     {
+        /// <summary>
+        /// A success-shaped worker payload with a missing file row is rejected instead of
+        /// reaching downstream code that assumes one result per input source.
+        /// </summary>
+        [Test]
+        public void TryValidateOutput_MissingFileRow_ReturnsFailure()
+        {
+            TransformWorkerInputDto input = new TransformWorkerInputDto
+            {
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/One.cs" },
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/Two.cs" }
+                }
+            };
+            TransformWorkerOutputDto output = new TransformWorkerOutputDto
+            {
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto { projectRelativePath = "Assets/One.cs" }
+                }
+            };
+
+            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+
+            Assert.That(valid, Is.False);
+            Assert.That(errorMessage, Does.Contain("same count"));
+        }
+
+        /// <summary>
+        /// Worker output rows must retain source order, so a reordered row is not accepted
+        /// merely because the operation itself reported success.
+        /// </summary>
+        [Test]
+        public void TryValidateOutput_ReorderedFileRows_ReturnsFailure()
+        {
+            TransformWorkerInputDto input = new TransformWorkerInputDto
+            {
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/One.cs" },
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/Two.cs" }
+                }
+            };
+            TransformWorkerOutputDto output = new TransformWorkerOutputDto
+            {
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto { projectRelativePath = "Assets/Two.cs" },
+                    new TransformWorkerFileOutputDto { projectRelativePath = "Assets/One.cs" }
+                }
+            };
+
+            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+
+            Assert.That(valid, Is.False);
+            Assert.That(errorMessage, Does.Contain("source order"));
+        }
+
+        /// <summary>
+        /// Verifies that a non-empty unknown operation is rejected at the worker/client boundary
+        /// instead of silently running the legacy transform operation.
+        /// </summary>
+        [Test]
+        public async Task RunWorker_UnknownOperation_ReturnsFailure()
+        {
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                ResolveE2EFixturePath(),
+                ResolveE2EFixtureProjectRelativePath(),
+                operation: "unknownOperation");
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("Unknown worker operation"));
+        }
+
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
         private const string ExpectedListEnumeratorFullName =
             "System.Collections.Generic.List`1/Enumerator<System.Int32>";
@@ -2296,7 +2371,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string[] additionalAssemblySourcePaths = null,
             string[] changedSiblingSourcePaths = null,
             string secondSourcePath = null,
-            string secondProjectRelativePath = null)
+            string secondProjectRelativePath = null,
+            string operation = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -2358,6 +2434,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
+                operation = operation,
                 sources = sources.ToArray(),
                 defines = compilationAssembly.defines ?? System.Array.Empty<string>(),
                 referencePaths = referencePaths,
@@ -2681,6 +2758,210 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerOutputDto enabled =
                 JsonConvert.DeserializeObject<TransformWorkerOutputDto>(trueJson);
             Assert.That(enabled.hasAddedFieldRewrites, Is.True);
+        }
+
+        /// <summary>
+        /// Verifies that a success-shaped preparation response with omitted mandatory artifacts
+        /// is rejected before optional transform fields are coalesced.
+        /// </summary>
+        [Test]
+        public void TryValidateOutput_PrepareArtifactsOmitted_ReturnsFailure()
+        {
+            TransformWorkerInputDto input = new TransformWorkerInputDto
+            {
+                operation = "prepareIntroducedTypes",
+                targetAssemblyName = "Assembly",
+                targetAssemblyMvid = "mvid",
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/Edited.cs" }
+                }
+            };
+            TransformWorkerOutputDto output = new TransformWorkerOutputDto
+            {
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto { projectRelativePath = "Assets/Edited.cs" }
+                }
+            };
+
+            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+
+            Assert.That(valid, Is.False);
+            Assert.That(errorMessage, Does.Contain("introducedTypes"));
+        }
+
+        /// <summary>
+        /// Verifies that preparation rejects a descriptor whose owner does not match the input
+        /// source even when its compiled identity is otherwise correct.
+        /// </summary>
+        [Test]
+        public void TryValidateOutput_PrepareDescriptorOwnerMismatch_ReturnsFailure()
+        {
+            TransformWorkerInputDto input = new TransformWorkerInputDto
+            {
+                operation = "prepareIntroducedTypes",
+                targetAssemblyName = "Assembly",
+                targetAssemblyMvid = "mvid",
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/Edited.cs" }
+                }
+            };
+            TransformWorkerOutputDto output = new TransformWorkerOutputDto
+            {
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto
+                    {
+                        projectRelativePath = "Assets/Edited.cs",
+                        introducedTypes = new[]
+                        {
+                            new TransformWorkerIntroducedTypeDto
+                            {
+                                originalAssemblyName = "Assembly",
+                                originalAssemblyMvid = "mvid",
+                                metadataName = "Example.Introduced",
+                                ownerProjectRelativePath = "Assets/Other.cs",
+                                declarationFingerprint = "fingerprint",
+                                source = "public class Introduced { }"
+                            }
+                        },
+                        introducedTypeDiagnostics = Array.Empty<string>()
+                    }
+                }
+            };
+
+            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+
+            Assert.That(valid, Is.False);
+            Assert.That(errorMessage, Does.Contain("owner"));
+        }
+
+        /// <summary>
+        /// Verifies that preparation rejects a descriptor with a mismatched assembly name when
+        /// its owner and assembly MVID match the input row.
+        /// </summary>
+        [Test]
+        public void TryValidateOutput_PrepareDescriptorAssemblyNameMismatch_ReturnsFailure()
+        {
+            TransformWorkerInputDto input = CreatePreparationValidationInput();
+            TransformWorkerOutputDto output = CreatePreparationValidationOutput(
+                "OtherAssembly",
+                "mvid",
+                "Assets/Edited.cs");
+
+            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+
+            Assert.That(valid, Is.False);
+            Assert.That(errorMessage, Does.Contain("assembly identity"));
+        }
+
+        /// <summary>
+        /// Verifies that preparation rejects a descriptor with a mismatched assembly MVID when
+        /// its owner and assembly name match the input row.
+        /// </summary>
+        [Test]
+        public void TryValidateOutput_PrepareDescriptorAssemblyMvidMismatch_ReturnsFailure()
+        {
+            TransformWorkerInputDto input = CreatePreparationValidationInput();
+            TransformWorkerOutputDto output = CreatePreparationValidationOutput(
+                "Assembly",
+                "other-mvid",
+                "Assets/Edited.cs");
+
+            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+
+            Assert.That(valid, Is.False);
+            Assert.That(errorMessage, Does.Contain("assembly identity"));
+        }
+
+        /// <summary>
+        /// Verifies that preparation accepts a descriptor when its owner and complete assembly
+        /// identity match the input row.
+        /// </summary>
+        [Test]
+        public void TryValidateOutput_PrepareDescriptorMatchingOwnerAndIdentity_ReturnsSuccess()
+        {
+            TransformWorkerInputDto input = CreatePreparationValidationInput();
+            TransformWorkerOutputDto output = CreatePreparationValidationOutput(
+                "Assembly",
+                "mvid",
+                "Assets/Edited.cs");
+
+            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+
+            Assert.That(valid, Is.True, errorMessage);
+        }
+
+        /// <summary>
+        /// Verifies that JSON containing a null preparation descriptor is rejected before a
+        /// success-shaped response can reach artifact preparation.
+        /// </summary>
+        [Test]
+        public void TryValidateOutput_PrepareNullDescriptorJson_ReturnsFailure()
+        {
+            TransformWorkerInputDto input = new TransformWorkerInputDto
+            {
+                operation = "prepareIntroducedTypes",
+                targetAssemblyName = "Assembly",
+                targetAssemblyMvid = "mvid",
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/Edited.cs" }
+                }
+            };
+            TransformWorkerOutputDto output = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(
+                "{\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\",\"introducedTypes\":[null],\"introducedTypeDiagnostics\":[]}]}");
+
+            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+
+            Assert.That(valid, Is.False);
+            Assert.That(errorMessage, Does.Contain("null introduced type"));
+        }
+
+        private static TransformWorkerInputDto CreatePreparationValidationInput()
+        {
+            return new TransformWorkerInputDto
+            {
+                operation = "prepareIntroducedTypes",
+                targetAssemblyName = "Assembly",
+                targetAssemblyMvid = "mvid",
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/Edited.cs" }
+                }
+            };
+        }
+
+        private static TransformWorkerOutputDto CreatePreparationValidationOutput(
+            string assemblyName,
+            string assemblyMvid,
+            string ownerProjectRelativePath)
+        {
+            return new TransformWorkerOutputDto
+            {
+                files = new[]
+                {
+                    new TransformWorkerFileOutputDto
+                    {
+                        projectRelativePath = "Assets/Edited.cs",
+                        introducedTypes = new[]
+                        {
+                            new TransformWorkerIntroducedTypeDto
+                            {
+                                originalAssemblyName = assemblyName,
+                                originalAssemblyMvid = assemblyMvid,
+                                metadataName = "Example.Introduced",
+                                ownerProjectRelativePath = ownerProjectRelativePath,
+                                declarationFingerprint = "fingerprint",
+                                source = "public class Introduced { }"
+                            }
+                        },
+                        introducedTypeDiagnostics = Array.Empty<string>()
+                    }
+                }
+            };
         }
     }
 }

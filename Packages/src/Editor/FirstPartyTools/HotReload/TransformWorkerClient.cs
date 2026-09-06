@@ -89,6 +89,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "Failed to deserialize transform worker output JSON.");
                 }
 
+                if (!TryValidateRequiredPreparationOutput(input, output, out string preparationError))
+                {
+                    return TransformWorkerClientResult.Failure(preparationError);
+                }
+
                 CoalesceOutput(output);
 
                 // Why fail here: run-level parseErrors describe a failure that belongs to no
@@ -100,9 +105,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     return TransformWorkerClientResult.Failure(string.Join("\n", output.parseErrors));
                 }
 
-                Debug.Assert(
-                    output.files.Length == input.sources.Length,
-                    "A successful worker run must return one per-file output per source.");
+                if (!TryValidateOutput(input, output, out string validationError))
+                {
+                    return TransformWorkerClientResult.Failure(validationError);
+                }
+
                 return TransformWorkerClientResult.SuccessResult(output);
             }
             finally
@@ -140,6 +147,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileOutput.removedMethodSignatures ??= Array.Empty<TransformWorkerRemovedMethodSignatureDto>();
                 fileOutput.addedFieldNames ??= Array.Empty<string>();
                 fileOutput.addedConstNames ??= Array.Empty<string>();
+                fileOutput.introducedTypes ??= Array.Empty<TransformWorkerIntroducedTypeDto>();
+                fileOutput.introducedTypeDiagnostics ??= Array.Empty<string>();
             }
 
             foreach (TransformWorkerEntryDto entry in output.entries)
@@ -153,6 +162,127 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 entry.calledAddedMethodKeys ??= Array.Empty<string>();
                 entry.parameterTypeFullNames ??= Array.Empty<string>();
             }
+        }
+
+        internal static bool TryValidateOutput(
+            TransformWorkerInputDto input,
+            TransformWorkerOutputDto output,
+            out string errorMessage)
+        {
+            if (!TryValidateRequiredPreparationOutput(input, output, out errorMessage))
+            {
+                return false;
+            }
+
+            if (output.files == null || output.files.Length != input.sources.Length)
+            {
+                errorMessage = "Transform worker output files must have the same count as input sources.";
+                return false;
+            }
+
+            for (int index = 0; index < output.files.Length; index++)
+            {
+                TransformWorkerFileOutputDto file = output.files[index];
+                TransformWorkerSourceDto source = input.sources[index];
+                if (file == null || file.projectRelativePath != source.projectRelativePath)
+                {
+                    errorMessage = "Transform worker output files must preserve input source order.";
+                    return false;
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static bool TryValidateRequiredPreparationOutput(
+            TransformWorkerInputDto input,
+            TransformWorkerOutputDto output,
+            out string errorMessage)
+        {
+            if (!string.Equals(input.operation, "prepareIntroducedTypes", StringComparison.Ordinal))
+            {
+                errorMessage = string.Empty;
+                return true;
+            }
+
+            if (output.files == null)
+            {
+                errorMessage = "Preparation output must contain files.";
+                return false;
+            }
+
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                if (!TryValidatePreparationFile(file, input, out errorMessage))
+                {
+                    return false;
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static bool TryValidatePreparationFile(
+            TransformWorkerFileOutputDto file,
+            TransformWorkerInputDto input,
+            out string errorMessage)
+        {
+            if (file == null || file.introducedTypes == null || file.introducedTypeDiagnostics == null)
+            {
+                errorMessage = "Preparation output must contain introducedTypes and introducedTypeDiagnostics.";
+                return false;
+            }
+
+            foreach (TransformWorkerIntroducedTypeDto introducedType in file.introducedTypes)
+            {
+                if (!TryValidatePreparationDescriptor(introducedType, file, input, out errorMessage))
+                {
+                    return false;
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static bool TryValidatePreparationDescriptor(
+            TransformWorkerIntroducedTypeDto introducedType,
+            TransformWorkerFileOutputDto file,
+            TransformWorkerInputDto input,
+            out string errorMessage)
+        {
+            if (introducedType == null)
+            {
+                errorMessage = "Preparation output must not contain a null introduced type descriptor.";
+                return false;
+            }
+
+            if (introducedType.ownerProjectRelativePath == null
+                || introducedType.ownerProjectRelativePath != file.projectRelativePath)
+            {
+                errorMessage = "Preparation descriptor owner must match its file output.";
+                return false;
+            }
+
+            if (introducedType.originalAssemblyName != input.targetAssemblyName
+                || introducedType.originalAssemblyMvid != input.targetAssemblyMvid)
+            {
+                errorMessage = "Preparation descriptor assembly identity must match its input.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(introducedType.metadataName)
+                || string.IsNullOrWhiteSpace(introducedType.declarationFingerprint)
+                || string.IsNullOrWhiteSpace(introducedType.source))
+            {
+                errorMessage = "Preparation descriptor metadataName, declarationFingerprint, and source are required.";
+                return false;
+            }
+
+            errorMessage = string.Empty;
+            return true;
         }
 
         private static void WriteUtf8NoBom(string path, string contents)

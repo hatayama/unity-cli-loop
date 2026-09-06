@@ -21,6 +21,23 @@ using Microsoft.CodeAnalysis.Text;
 // edited in one file call a member added in another.
 internal static class WorkerGroupPipeline
 {
+    internal const string PrepareIntroducedTypesOperation = "prepareIntroducedTypes";
+
+    internal static WorkerOutput Run(WorkerInput input)
+    {
+        if (string.Equals(input.Operation, PrepareIntroducedTypesOperation, StringComparison.Ordinal))
+        {
+            return PrepareIntroducedTypes(input);
+        }
+
+        if (!string.IsNullOrEmpty(input.Operation))
+        {
+            return CreateRunFailureOutput("Unknown worker operation: " + input.Operation);
+        }
+
+        return Transform(input);
+    }
+
     internal static WorkerOutput Transform(WorkerInput input)
     {
         CSharpParseOptions parseOptions = new CSharpParseOptions(
@@ -165,6 +182,100 @@ internal static class WorkerGroupPipeline
             unchangedMethods,
             siblingConstDriftWarnings,
             addedFieldCatalog);
+    }
+
+    private static WorkerOutput PrepareIntroducedTypes(WorkerInput input)
+    {
+        CSharpParseOptions parseOptions = new CSharpParseOptions(
+            languageVersion: LanguageVersion.Latest,
+            preprocessorSymbols: input.Defines);
+        List<WorkerSourceUnit> units = new List<WorkerSourceUnit>(input.Sources.Length);
+        List<SyntaxTree> syntaxTrees = new List<SyntaxTree>(input.Sources.Length);
+        List<WorkerSourceUnit> analyzableUnits = new List<WorkerSourceUnit>(input.Sources.Length);
+        foreach (WorkerSourceInput source in input.Sources)
+        {
+            WorkerSourceUnit unit = WorkerSourceLoader.Load(source, parseOptions);
+            units.Add(unit);
+            if (unit.SyntaxTree != null && unit.ParseErrors.Count == 0)
+            {
+                syntaxTrees.Add(unit.SyntaxTree);
+                analyzableUnits.Add(unit);
+            }
+        }
+
+        List<string> referenceParseErrors = new List<string>();
+        (List<MetadataReference> references, MetadataReference targetTypesReference) =
+            CollectMetadataReferences(input, referenceParseErrors);
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            assemblyName: "UloopHotReloadIntroducedTypePlanning",
+            syntaxTrees: syntaxTrees,
+            references: references,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        IAssemblySymbol targetAssembly = ResolveTargetTypesAssemblySymbol(compilation, targetTypesReference);
+        List<CompilationUnitSyntax> analyzableRoots = new List<CompilationUnitSyntax>(analyzableUnits.Count);
+        foreach (WorkerSourceUnit analyzableUnit in analyzableUnits)
+        {
+            analyzableRoots.Add(analyzableUnit.Root);
+        }
+
+        List<UsingDirectiveSyntax> assemblyGlobalUsings =
+            WorkerUsingCollector.CollectAssemblyGlobalUsings(input, parseOptions, analyzableRoots);
+        WorkerFileOutput[] files = new WorkerFileOutput[units.Count];
+        for (int index = 0; index < units.Count; index++)
+        {
+            WorkerSourceUnit unit = units[index];
+            if (unit.SyntaxTree != null && unit.ParseErrors.Count == 0)
+            {
+                unit.SemanticModel = compilation.GetSemanticModel(unit.SyntaxTree, ignoreAccessibility: false);
+                IntroducedTypePlanner.Plan(
+                    unit,
+                    targetAssembly,
+                    input.TargetAssemblyName,
+                    input.TargetAssemblyMvid,
+                    input.Defines,
+                    assemblyGlobalUsings);
+            }
+
+            unit.ParseErrors.AddRange(referenceParseErrors);
+            files[index] = new WorkerFileOutput
+            {
+                ProjectRelativePath = unit.Input.ProjectRelativePath,
+                SourceContentSha256 = unit.SourceContentSha256,
+                ParseErrors = unit.ParseErrors.ToArray(),
+                DeclarationDriftWarnings = Array.Empty<string>(),
+                RemovedMembers = Array.Empty<WorkerRemovedMember>(),
+                RemovedMethodSignatures = Array.Empty<WorkerRemovedMethodSignature>(),
+                AddedFieldNames = Array.Empty<string>(),
+                AddedConstNames = Array.Empty<string>(),
+                IntroducedTypes = unit.IntroducedTypes.ToArray(),
+                IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray()
+            };
+        }
+
+        return new WorkerOutput
+        {
+            ShimSource = string.Empty,
+            Entries = Array.Empty<WorkerEntry>(),
+            Skipped = Array.Empty<WorkerSkipped>(),
+            Files = files,
+            ParseErrors = Array.Empty<string>(),
+            SiblingConstDriftWarnings = Array.Empty<string>(),
+            UnchangedMethods = Array.Empty<WorkerUnchangedMethod>()
+        };
+    }
+
+    private static WorkerOutput CreateRunFailureOutput(string parseError)
+    {
+        return new WorkerOutput
+        {
+            ShimSource = string.Empty,
+            Entries = Array.Empty<WorkerEntry>(),
+            Skipped = Array.Empty<WorkerSkipped>(),
+            Files = Array.Empty<WorkerFileOutput>(),
+            ParseErrors = new[] { parseError },
+            SiblingConstDriftWarnings = Array.Empty<string>(),
+            UnchangedMethods = Array.Empty<WorkerUnchangedMethod>()
+        };
     }
 
     // Everything one unit contributes before the group-wide guard and emit: its drift warnings,
@@ -358,7 +469,9 @@ internal static class WorkerGroupPipeline
             RemovedMembers = unit.RemovedMembers.ToArray(),
             RemovedMethodSignatures = unit.RemovedMethodSignatures.ToArray(),
             AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(projectRelativePath),
-            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath)
+            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath),
+            IntroducedTypes = unit.IntroducedTypes.ToArray(),
+            IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray()
         };
     }
 }
