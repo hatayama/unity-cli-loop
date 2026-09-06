@@ -71,6 +71,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string InitializerNotEmittableReason =
             "Added property initializer cannot run in the shim lambda. Run 'uloop compile' to add it.";
 
+        private const string ConditionalAccessReason =
+            "Conditional access to added properties is skipped; there is no rewrite shape. "
+            + "Run 'uloop compile' to add it.";
+
         private const string DeconstructionTargetReason =
             "Deconstruction assignment to an added property is skipped; the setter shim cannot stand as a "
             + "deconstruction target. Run 'uloop compile' to add it.";
@@ -667,6 +671,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(DeconstructionTargetReason));
             Assert.That(FindEntry(result, "get_Count"), Is.Not.Null);
             Assert.That(FindEntry(result, "set_Count"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// Reading an added property inside an argument of a conditional-access call is rewritten,
+        /// because only the conditional-access spine itself lacks a rewrite shape.
+        /// </summary>
+        [Test]
+        public async Task Emit_CallerReadsAddedPropertyInConditionalAccessArgument_RewritesWithoutSkip()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyConditionalAccessArgument.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            string text = value.ToString();\n"
+                + "            return text?.PadLeft(Count).Length ?? value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Null,
+                FormatSkipped(result.Output.skipped));
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            TransformWorkerEntryDto getter = FindEntry(result, "get_Count");
+            Assert.That(caller, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(getter, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(
+                SliceShimMethod(result.Output.shimSource, caller.shimMethodName),
+                Does.Contain(getter.shimMethodName));
+        }
+
+        /// <summary>
+        /// A conditional access whose receiver is an added property is still skipped, so limiting the
+        /// ancestor walk to the spine does not drop the guard.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerConditionalAccessOnAddedProperty_SkipsCallerWithConditionalAccessReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyConditionalAccessReceiver.cs",
+                "public string Label { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Label?.Length ?? value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(ConditionalAccessReason));
         }
 
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(

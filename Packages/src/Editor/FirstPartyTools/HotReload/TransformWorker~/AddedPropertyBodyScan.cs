@@ -226,6 +226,9 @@ internal static class AddedPropertyBodyScan
             identifier.Identifier.ValueText));
     }
 
+    // Why the walk needs no spine test: it stops as soon as a parent is not an expression, and
+    // every way into the when-not-null side (an argument, a bracketed index, an interpolation)
+    // passes through such a node. Only the receiver spine, as in Label?.Length, reaches here.
     private static bool IsConditionalAccess(ExpressionSyntax expression)
     {
         SyntaxNode current = expression;
