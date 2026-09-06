@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             string workerSourceDirectory = ResolveWorkerSourceDirectory();
-            string[] workerSourcePaths = EnumerateWorkerSourceFiles(workerSourceDirectory);
+            string[] workerSourcePaths = CollectWorkerSourcePaths(workerSourceDirectory);
             if (workerSourcePaths.Length == 0)
             {
                 return TransformWorkerBootstrapResult.Failure(
@@ -94,9 +94,39 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         internal static string ResolveWorkerSourceDirectory()
         {
+            return Path.Combine(ResolvePackageRoot(), HotReloadConstants.WorkerSourcePackageRelativePath);
+        }
+
+        private static string ResolvePackageRoot()
+        {
             PackageInfo packageInfo = PackageInfo.FindForAssembly(typeof(TransformWorkerBootstrap).Assembly);
             Debug.Assert(packageInfo != null, "PackageInfo must resolve for the HotReload assembly.");
-            return Path.Combine(packageInfo.resolvedPath, HotReloadConstants.WorkerSourcePackageRelativePath);
+            return packageInfo.resolvedPath;
+        }
+
+        /// <summary>
+        /// The tilde-directory sources plus the protocol sources shared with the Editor host.
+        /// The shared files are appended after the sorted directory listing, so the response
+        /// file and the cache key stay deterministic.
+        /// </summary>
+        internal static string[] CollectWorkerSourcePaths(string workerSourceDirectory)
+        {
+            string[] directorySources = EnumerateWorkerSourceFiles(workerSourceDirectory);
+            if (directorySources.Length == 0)
+            {
+                return directorySources;
+            }
+
+            List<string> all = new List<string>(directorySources);
+            string packageRoot = ResolvePackageRoot();
+            foreach (string relativePath in HotReloadConstants.WorkerSharedSourcePackageRelativePaths)
+            {
+                string sharedPath = Path.Combine(packageRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+                Debug.Assert(File.Exists(sharedPath), "Shared worker source missing: " + sharedPath);
+                all.Add(sharedPath);
+            }
+
+            return all.ToArray();
         }
 
         // why: Directory.GetFiles order is unspecified, so ordinal file-name sort keeps the

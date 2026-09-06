@@ -2369,6 +2369,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string secondSourcePath = null,
             string secondProjectRelativePath = null)
         {
+            TransformWorkerInputDto input = BuildInputForSource(
+                sourcePath,
+                projectRelativePath,
+                snapshotSource,
+                additionalAssemblySourcePaths,
+                changedSiblingSourcePaths,
+                secondSourcePath,
+                secondProjectRelativePath);
+            return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+        }
+
+        /// <summary>
+        /// Builds a worker input for the e2e fixture source with this test assembly as the target.
+        /// Shared with the resident-worker host tests so they exercise the real worker on the same input.
+        /// </summary>
+        internal static TransformWorkerInputDto BuildE2EFixtureInput()
+        {
+            return BuildInputForSource(ResolveE2EFixturePath(), ResolveE2EFixtureProjectRelativePath());
+        }
+
+        private static TransformWorkerInputDto BuildInputForSource(
+            string sourcePath,
+            string projectRelativePath,
+            string snapshotSource = null,
+            string[] additionalAssemblySourcePaths = null,
+            string[] changedSiblingSourcePaths = null,
+            string secondSourcePath = null,
+            string secondProjectRelativePath = null)
+        {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
                 projectRoot,
@@ -2437,7 +2466,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 changedSiblingSourcePaths = changedSiblingSourcePaths
             };
 
-            return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+            return input;
         }
 
         private static string[] BuildAbsoluteReferencePaths(

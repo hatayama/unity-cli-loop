@@ -21,6 +21,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 
 public static class TransformWorkerProgram
 {
@@ -39,12 +40,34 @@ public static class TransformWorkerProgram
 
     public static int Main(string[] args)
     {
-        if (args.Length != 2)
+        bool serve = args.Length == 1 && args[0] == TransformWorkerServeProtocol.ServeArgument;
+        if (!serve && args.Length != 2)
         {
-            Console.Error.WriteLine("usage: TransformWorker <input-json-path> <output-json-path>");
+            Console.Error.WriteLine("usage: TransformWorker <input-json-path> <output-json-path> | --serve");
             return 2;
         }
 
+        RegisterRoslynResolver();
+        if (!serve)
+        {
+            return RunTransform(args[0], args[1]);
+        }
+
+        // Resident mode: the host reads the response frames from stdout, so the loop redirects
+        // Console.Out during each transform and writes frames to the original writer captured here.
+        // Both ends declare UTF-8 so diagnostic text survives a non-UTF-8 default codepage on Windows.
+        Console.InputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        TextWriter protocolOutput = Console.Out;
+        return TransformWorkerServeLoop.Run(
+            Console.In,
+            protocolOutput,
+            RunTransform,
+            TransformWorkerServeProtocol.DefaultIdleTimeoutMilliseconds);
+    }
+
+    private static void RegisterRoslynResolver()
+    {
         string roslynDirectoryPath = ReadRoslynDirectorySidecar();
         AssemblyLoadContext.Default.Resolving += (context, assemblyName) =>
         {
@@ -56,8 +79,6 @@ public static class TransformWorkerProgram
 
             return null;
         };
-
-        return RunTransform(args[0], args[1]);
     }
 
     private static string ReadRoslynDirectorySidecar()
