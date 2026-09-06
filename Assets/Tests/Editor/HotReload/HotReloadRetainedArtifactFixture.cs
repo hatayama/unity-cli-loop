@@ -28,6 +28,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
 
+        // The restricted type has no declaration left in the edited source, so no fingerprint of
+        // it can ever match; the record only has to carry one for the request to be well formed.
+        private const string RestrictedDeclarationFingerprint =
+            "0000000000000000000000000000000000000000000000000000000000000000";
+
         // A second edited file of the same group, so a test can show that a run-level failure
         // takes the whole group down rather than reporting one file's diagnostics.
         private const string SiblingSource =
@@ -148,6 +153,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         originalAssemblyMvid = TargetAssemblyMvid,
                         ownerProjectRelativePath = ProjectRelativePath,
                         declarationFingerprint = declarationFingerprint
+                    },
+                    // The restricted type is part of the verified mapping too, so a test can
+                    // tell a constructor the mapping refuses from a type it never held.
+                    new TransformWorkerIntroducedTypeArtifactTypeDto
+                    {
+                        metadataName = "Example.RetainedRestricted",
+                        originalAssemblyName = TargetAssemblyName,
+                        originalAssemblyMvid = TargetAssemblyMvid,
+                        ownerProjectRelativePath = ProjectRelativePath,
+                        declarationFingerprint = RestrictedDeclarationFingerprint
                     }
                 }
             };
@@ -270,9 +285,81 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Mono.Cecil.FieldAttributes.Public | Mono.Cecil.FieldAttributes.Static,
                     assembly.MainModule.TypeSystem.Int32);
                 retained.Fields.Add(valueField);
+                AddConstructor(assembly, retained, CecilMethodAttributes.Public);
+                AddInstanceInt32Method(assembly, retained, "Compute");
+                AddInstanceInt32Property(assembly, retained, "Number");
                 assembly.MainModule.Types.Add(retained);
+
+                // A type whose only constructor is private is what a source class with a private
+                // constructor looks like once it is served from the artifact assembly instead.
+                TypeDefinition restricted = new TypeDefinition(
+                    "Example",
+                    "RetainedRestricted",
+                    CecilTypeAttributes.Public | CecilTypeAttributes.Class,
+                    assembly.MainModule.TypeSystem.Object);
+                AddConstructor(assembly, restricted, CecilMethodAttributes.Private);
+                assembly.MainModule.Types.Add(restricted);
                 assembly.Write(path);
             }
+        }
+
+        // The bodies are never executed: the artifact is only ever read as metadata, so a bare
+        // return is enough to give a member the signature the compiler binds against.
+        private static void AddConstructor(
+            AssemblyDefinition assembly,
+            TypeDefinition type,
+            CecilMethodAttributes accessibility)
+        {
+            MethodDefinition constructor = new MethodDefinition(
+                ".ctor",
+                accessibility
+                    | CecilMethodAttributes.HideBySig
+                    | CecilMethodAttributes.SpecialName
+                    | CecilMethodAttributes.RTSpecialName,
+                assembly.MainModule.TypeSystem.Void);
+            ILProcessor processor = constructor.Body.GetILProcessor();
+            processor.Append(processor.Create(OpCodes.Ret));
+            type.Methods.Add(constructor);
+        }
+
+        private static void AddInstanceInt32Method(
+            AssemblyDefinition assembly,
+            TypeDefinition type,
+            string name)
+        {
+            MethodDefinition method = new MethodDefinition(
+                name,
+                CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig,
+                assembly.MainModule.TypeSystem.Int32);
+            ILProcessor processor = method.Body.GetILProcessor();
+            processor.Append(processor.Create(OpCodes.Ldc_I4_0));
+            processor.Append(processor.Create(OpCodes.Ret));
+            type.Methods.Add(method);
+        }
+
+        private static void AddInstanceInt32Property(
+            AssemblyDefinition assembly,
+            TypeDefinition type,
+            string name)
+        {
+            MethodDefinition getter = new MethodDefinition(
+                "get_" + name,
+                CecilMethodAttributes.Public
+                    | CecilMethodAttributes.HideBySig
+                    | CecilMethodAttributes.SpecialName,
+                assembly.MainModule.TypeSystem.Int32);
+            ILProcessor processor = getter.Body.GetILProcessor();
+            processor.Append(processor.Create(OpCodes.Ldc_I4_0));
+            processor.Append(processor.Create(OpCodes.Ret));
+            type.Methods.Add(getter);
+            PropertyDefinition property = new PropertyDefinition(
+                name,
+                Mono.Cecil.PropertyAttributes.None,
+                assembly.MainModule.TypeSystem.Int32)
+            {
+                GetMethod = getter
+            };
+            type.Properties.Add(property);
         }
 
         public static UnityEditor.Compilation.Assembly FindCompilationAssembly()

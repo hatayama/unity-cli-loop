@@ -43,6 +43,11 @@ internal sealed class WorkerSourceUnit
 
     public SemanticModel SemanticModel { get; set; }
 
+    // The verified mapping the binding trees were built with, so the emit steps can ask whether a
+    // type is served from a retained artifact without threading it through every signature.
+    // Empty for every run that has no artifact.
+    public IntroducedTypeArtifactMap ArtifactMap { get; set; } = IntroducedTypeArtifactMap.Empty;
+
     public BaselineSnapshotState Baseline { get; set; }
 
     public string SourceContentSha256 { get; set; }

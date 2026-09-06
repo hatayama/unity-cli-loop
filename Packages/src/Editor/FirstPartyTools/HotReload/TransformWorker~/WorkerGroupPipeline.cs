@@ -238,6 +238,11 @@ internal static class WorkerGroupPipeline
             return artifactError;
         }
 
+        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        {
+            loadedUnit.ArtifactMap = artifactMap;
+        }
+
         IAssemblySymbol targetAssembly = ResolveTargetTypesAssemblySymbol(
             verificationCompilation,
             targetTypesReference);

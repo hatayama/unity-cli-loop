@@ -24,6 +24,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class TransformWorkerIntroducedTypeBindingTests
     {
+        private const string RetainedProjectRelativePath = "Assets/Retained.cs";
+
+        // The records these tests use only have to be well formed; what they assert is the
+        // fingerprint of a dependent type, never the removal of the retained declaration.
+        private const string PlaceholderDeclarationFingerprint =
+            "0000000000000000000000000000000000000000000000000000000000000000";
+
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
 
         private const string DirectDependentSource =
@@ -81,7 +88,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     {
                         metadataName = "Example.Unrelated",
                         originalAssemblyName = fixture.TargetAssemblyName,
-                        originalAssemblyMvid = fixture.TargetAssemblyMvid
+                        originalAssemblyMvid = fixture.TargetAssemblyMvid,
+                        ownerProjectRelativePath = RetainedProjectRelativePath,
+                        declarationFingerprint = PlaceholderDeclarationFingerprint
                     }
                 }
             };
@@ -256,7 +265,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     {
                         metadataName = "Example.Retained",
                         originalAssemblyName = fixture.TargetAssemblyName,
-                        originalAssemblyMvid = fixture.TargetAssemblyMvid
+                        originalAssemblyMvid = fixture.TargetAssemblyMvid,
+                        ownerProjectRelativePath = RetainedProjectRelativePath,
+                        declarationFingerprint = PlaceholderDeclarationFingerprint
                     }
                 }
             };
@@ -422,7 +433,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     {
                         metadataName = "Example.Retained",
                         originalAssemblyName = fixture.TargetAssemblyName,
-                        originalAssemblyMvid = fixture.TargetAssemblyMvid
+                        originalAssemblyMvid = fixture.TargetAssemblyMvid,
+                        ownerProjectRelativePath = RetainedProjectRelativePath,
+                        declarationFingerprint = PlaceholderDeclarationFingerprint
                     }
                 }
             };
