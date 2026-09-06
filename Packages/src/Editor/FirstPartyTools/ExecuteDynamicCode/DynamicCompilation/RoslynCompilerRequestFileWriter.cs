@@ -162,9 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        // Source-path uniqueness must follow the file system, not the string: Windows treats two
-        // spellings that differ only in case as one file, every other platform as two.
-        internal static StringComparer CreatePathComparer()
+        private static StringComparer CreatePathComparer()
         {
             return Path.DirectorySeparatorChar == '\\'
                 ? StringComparer.OrdinalIgnoreCase

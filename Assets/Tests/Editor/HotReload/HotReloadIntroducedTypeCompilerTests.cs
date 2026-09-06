@@ -297,11 +297,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Verifies that source-path uniqueness follows the platform's file-system case rules, so
-        /// two spellings Windows resolves to one file are rejected before either source is written.
+        /// Verifies that two source paths differing only in case are rejected before either is
+        /// written, because a case-insensitive volume resolves both spellings to one file.
         /// </summary>
         [Test]
-        public void CompilationRequest_CaseOnlyDuplicateSources_FollowsPlatformPathRules()
+        public void CompilationRequest_CaseOnlyDuplicateSources_RejectsBeforeWrites()
         {
             HotReloadIntroducedTypeDescriptor descriptor = CreateDescriptor("Example.Introduced", "Assets/Example.cs");
             FakeEnvironment environment = new FakeEnvironment();
@@ -311,16 +311,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new HotReloadIntroducedTypeSource("duplicate.cs", descriptor)
             };
 
-            if (Path.DirectorySeparatorChar == '\\')
-            {
-                ArgumentException exception = Assert.Throws<ArgumentException>(() => CreateRequestFrom(sources));
-                Assert.That(exception.ParamName, Is.EqualTo("sources"));
-            }
-            else
-            {
-                Assert.DoesNotThrow(() => CreateRequestFrom(sources));
-            }
+            ArgumentException exception = Assert.Throws<ArgumentException>(() => CreateRequestFrom(sources));
 
+            Assert.That(exception.ParamName, Is.EqualTo("sources"));
             Assert.That(environment.WriteSourceCalls, Is.EqualTo(0));
         }
 

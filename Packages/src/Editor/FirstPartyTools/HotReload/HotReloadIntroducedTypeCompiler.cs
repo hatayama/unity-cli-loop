@@ -287,7 +287,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentException("Introduced-type sources must not be empty.", nameof(sources));
             }
 
-            HashSet<string> paths = new HashSet<string>(RoslynCompilerRequestFileWriter.CreatePathComparer());
+            // Every introduced-type source path is generated with a distinct ordinal suffix, so two
+            // paths differing only in case are never legitimate here. Rejecting them regardless of
+            // platform matters because a case-insensitive volume (the macOS default, and Windows)
+            // resolves both spellings to one file, and the second write would silently replace the
+            // first descriptor's source before compilation.
+            HashSet<string> paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             List<HotReloadIntroducedTypeSource> copiedSources =
                 new List<HotReloadIntroducedTypeSource>(sources.Count);
             foreach (HotReloadIntroducedTypeSource source in sources)
