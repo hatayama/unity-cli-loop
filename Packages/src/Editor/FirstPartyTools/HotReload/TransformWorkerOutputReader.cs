@@ -15,13 +15,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static TransformWorkerOutputDto TryRead(string outputJsonPath, int expectedFileCount, out string error)
         {
             error = null;
-            if (!File.Exists(outputJsonPath))
+            // Why Directory.Exists too: a directory sitting at the output path is not a missing file,
+            // and reporting it as one would hide a real path collision behind the "no output" reason.
+            // Letting it fall through turns it into the read failure it actually is.
+            if (!File.Exists(outputJsonPath) && !Directory.Exists(outputJsonPath))
             {
                 error = "worker exited 0 but produced no output JSON file";
                 return null;
             }
 
-            string outputJson = File.ReadAllText(outputJsonPath, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            string outputJson;
+            try
+            {
+                outputJson = File.ReadAllText(outputJsonPath, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            }
+            catch (IOException ex)
+            {
+                error = "worker output JSON could not be read: " + ex.Message;
+                return null;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                // Why here and not at the call sites: without this the exception escapes both the
+                // host and the one-shot client, which have no other place to turn it into a result.
+                error = "worker output JSON could not be read: " + ex.Message;
+                return null;
+            }
+
             TransformWorkerOutputDto output;
             try
             {
