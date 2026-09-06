@@ -180,6 +180,60 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
             Assert.That(resolvedScriptingRootPath, Is.EqualTo(expectedScriptingRootPath));
         }
 
+        /// <summary>
+        /// What: an editor that ships no NetCoreRuntime, but whose DotNetSdk root carries the host
+        /// and the shared framework beside Roslyn, is still recognised as a compiler layout.
+        /// </summary>
+        [Test]
+        public void ResolveScriptingRootPath_WhenDotNetSdkRootCarriesTheRuntime_ShouldReturnContentsPath()
+        {
+            string contentsPath = CreateDirectory("Contents");
+            CreateFile(Path.Combine("Contents", "DotNetSdk", "dotnet"));
+            CreateDirectory(Path.Combine("Contents", "DotNetSdk", "shared", "Microsoft.NETCore.App", "10.0.9"));
+            CreateFile(Path.Combine("Contents", "DotNetSdk", "sdk", "10.0.301", "Roslyn", "bincore", "csc.dll"));
+
+            string resolvedScriptingRootPath = ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath);
+
+            Assert.That(resolvedScriptingRootPath, Is.EqualTo(contentsPath));
+        }
+
+        /// <summary>
+        /// What: a Roslyn directory with neither NetCoreRuntime nor a shared framework beside it is
+        /// not a usable layout, so nothing is reported as the scripting root.
+        /// </summary>
+        [Test]
+        public void ResolveScriptingRootPath_WhenNoRuntimeAccompaniesTheCompiler_ShouldReturnNull()
+        {
+            string contentsPath = CreateDirectory("Contents");
+            CreateFile(Path.Combine("Contents", "DotNetSdk", "dotnet"));
+            CreateFile(Path.Combine("Contents", "DotNetSdk", "sdk", "10.0.301", "Roslyn", "bincore", "csc.dll"));
+
+            string resolvedScriptingRootPath = ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath);
+
+            Assert.That(resolvedScriptingRootPath, Is.Null);
+        }
+
+        /// <summary>
+        /// What: the runtime-carrying DotNetSdk layout is classified as a contents-root DotNetSdk
+        /// layout rather than as a scanned or legacy one.
+        /// </summary>
+        [Test]
+        public void ResolveCompilerLayoutKind_WhenDotNetSdkRootCarriesTheRuntime_ShouldReturnContentsRootDotNetSdk()
+        {
+            string contentsPath = CreateDirectory("Contents");
+            CreateFile(Path.Combine("Contents", "DotNetSdk", "dotnet"));
+            CreateDirectory(Path.Combine("Contents", "DotNetSdk", "shared", "Microsoft.NETCore.App", "10.0.9"));
+            string compilerDirectoryPath = CreateDirectory(
+                Path.Combine("Contents", "DotNetSdk", "sdk", "10.0.301", "Roslyn", "bincore"));
+
+            ExternalCompilerLayoutKind layoutKind = ExternalCompilerPathResolver.ResolveCompilerLayoutKind(
+                contentsPath,
+                ExternalCompilerPathResolver.ResolveScriptingRootPath(contentsPath),
+                compilerDirectoryPath);
+
+            Assert.That(layoutKind, Is.EqualTo(ExternalCompilerLayoutKind.ContentsRootDotNetSdk));
+        }
+
         [Test]
         public void ResolveCompilerDirectoryPath_WhenLegacyLayoutExists_ShouldReturnDotNetSdkRoslynPath()
         {
