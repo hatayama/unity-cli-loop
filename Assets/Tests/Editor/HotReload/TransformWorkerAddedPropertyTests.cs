@@ -790,6 +790,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return false;
         }
 
+        /// <summary>
+        /// An added property nested inside a deconstruction target is skipped too, so the walk has to
+        /// keep climbing through enclosing tuples rather than test the immediate parent alone.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerDeconstructsIntoNestedTupleWithAddedProperty_SkipsCallerWithDeconstructionReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyNestedDeconstructionTarget.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            int first = 0;\n"
+                + "            int second = 0;\n"
+                + "            (first, (Count, second)) = (value, (value, value));\n"
+                + "            return first + second;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(DeconstructionTargetReason));
+            Assert.That(FindEntry(result, "get_Count"), Is.Not.Null);
+            Assert.That(FindEntry(result, "set_Count"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// A tuple that only carries the added property's value is rewritten, because reading into a
+        /// tuple is not a write and only an assignment target has no rewrite shape.
+        /// </summary>
+        [Test]
+        public async Task Emit_CallerPassesTupleContainingAddedProperty_RewritesWithoutSkip()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyTupleValue.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            (int, int) pair = (Count, value);\n"
+                + "            return pair.Item1 + pair.Item2;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Null,
+                FormatSkipped(result.Output.skipped));
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            TransformWorkerEntryDto getter = FindEntry(result, "get_Count");
+            Assert.That(caller, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(getter, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(
+                SliceShimMethod(result.Output.shimSource, caller.shimMethodName),
+                Does.Contain(getter.shimMethodName));
+        }
+
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(
             string fileName,
             string extraMembers,

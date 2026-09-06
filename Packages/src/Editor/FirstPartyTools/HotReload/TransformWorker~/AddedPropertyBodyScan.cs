@@ -170,11 +170,6 @@ internal static class AddedPropertyBodyScan
                 return true;
             }
 
-            if (tuple.Parent is ForEachVariableStatementSyntax forEachVariable && forEachVariable.Variable == tuple)
-            {
-                return true;
-            }
-
             current = tuple;
         }
 
