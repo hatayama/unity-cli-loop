@@ -454,6 +454,16 @@ internal static class AddedPropertyClassifier
             return AddedPropertySkipReasons.RefOutIn;
         }
 
+        // Why unresolved types before visibility: TypeKind.Error is not externally visible, so the
+        // shim-visibility reason would hide a missing using directive or a typo in the declaration.
+        if (AddedFieldClassifier.TryFindUnresolvedType(symbol.Type, out ITypeSymbol unresolvedType))
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                AddedPropertySkipReasons.ValueTypeUnresolvedFormat,
+                unresolvedType.ToDisplayString());
+        }
+
         if (!AccessibilityRules.IsExternallyVisibleType(symbol.Type))
         {
             return AddedPropertySkipReasons.ValueTypeNotExternallyVisible;

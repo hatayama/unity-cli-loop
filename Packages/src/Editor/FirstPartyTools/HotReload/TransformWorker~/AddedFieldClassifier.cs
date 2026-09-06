@@ -208,7 +208,11 @@ internal static class AddedFieldClassifier
 
     // Why recurse array elements and type arguments: List<Missing> and Missing[]
     // would otherwise keep the shim-visibility reason even though the inner type is unresolved.
-    private static bool TryFindUnresolvedType(ITypeSymbol typeSymbol, out ITypeSymbol unresolvedType)
+    /// <summary>
+    /// Finds the first type in a value type, its element type, or its type arguments that the
+    /// compilation could not resolve. Added properties reuse it to report the same cause.
+    /// </summary>
+    internal static bool TryFindUnresolvedType(ITypeSymbol typeSymbol, out ITypeSymbol unresolvedType)
     {
         unresolvedType = null;
         if (typeSymbol == null)

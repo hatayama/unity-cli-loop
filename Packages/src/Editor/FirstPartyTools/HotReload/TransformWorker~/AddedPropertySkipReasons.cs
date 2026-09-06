@@ -43,6 +43,10 @@ internal static class AddedPropertySkipReasons
         "Added properties on struct types are skipped; the shim requires a reference-type instance. "
         + "Run 'uloop compile' to add them.";
 
+    public const string ValueTypeUnresolvedFormat =
+        "Added property type '{0}' could not be resolved; check for a missing using directive or a typo, "
+        + "fix the declaration, and rerun. Run 'uloop compile' if the type is new.";
+
     public const string ValueTypeNotExternallyVisible =
         "Added property type is not visible to the shim assembly. Run 'uloop compile' to add it.";
 

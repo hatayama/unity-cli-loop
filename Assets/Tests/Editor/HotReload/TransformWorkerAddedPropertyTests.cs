@@ -721,6 +721,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(ConditionalAccessReason));
         }
 
+        /// <summary>
+        /// An added property whose type cannot be resolved is skipped with a reason that names the
+        /// type and points at the declaration, instead of blaming shim visibility.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedPropertyWithUnresolvedType_ReportsTypeNameAndUsingHint()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyUnresolvedType.cs",
+                "public NoSuchAddedPropertyType Thing { get; set; }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string reason = FindSkipReason(result, "get_Thing");
+            Assert.That(reason, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(reason, Does.Contain("NoSuchAddedPropertyType"));
+            Assert.That(reason, Does.Contain("missing using directive"));
+            Assert.That(reason, Does.Not.Contain("not visible to the shim assembly"));
+        }
+
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(
             string fileName,
             string extraMembers,
