@@ -120,6 +120,11 @@ internal static class AddedPropertyBodyScan
 
     private static string EvaluateWriteSkipReason(ExpressionSyntax expression)
     {
+        if (IsDeconstructionTarget(expression))
+        {
+            return AddedPropertySkipReasons.DeconstructionTarget;
+        }
+
         if (expression.Parent is AssignmentExpressionSyntax assignment && assignment.Left == expression)
         {
             if (assignment.Parent is InitializerExpressionSyntax)
@@ -151,6 +156,24 @@ internal static class AddedPropertyBodyScan
         }
 
         return null;
+    }
+
+    // Why a walk instead of a single parent test: deconstruction targets nest, so an added
+    // property can sit in an inner tuple such as (first, (Count, second)) = ...
+    private static bool IsDeconstructionTarget(ExpressionSyntax expression)
+    {
+        SyntaxNode current = expression;
+        while (current.Parent is ArgumentSyntax argument && argument.Parent is TupleExpressionSyntax tuple)
+        {
+            if (tuple.Parent is AssignmentExpressionSyntax assignment && assignment.Left == tuple)
+            {
+                return true;
+            }
+
+            current = tuple;
+        }
+
+        return false;
     }
 
     private static bool IsIncrementOrDecrement(SyntaxKind kind)
@@ -198,6 +221,9 @@ internal static class AddedPropertyBodyScan
             identifier.Identifier.ValueText));
     }
 
+    // Why the walk needs no spine test: it stops as soon as a parent is not an expression, and
+    // every way into the when-not-null side (an argument, a bracketed index, an interpolation)
+    // passes through such a node. Only the receiver spine, as in Label?.Length, reaches here.
     private static bool IsConditionalAccess(ExpressionSyntax expression)
     {
         SyntaxNode current = expression;

@@ -36,12 +36,13 @@ internal static class AddedPropertySkipReasons
         "Added properties with init accessors are skipped; the shim cannot preserve initialization-only assignment. "
         + "Run 'uloop compile' to add them.";
 
-    public const string Indexer =
-        "Added indexers are skipped; the shim does not support indexer access. Run 'uloop compile' to add them.";
-
     public const string StructHost =
         "Added properties on struct types are skipped; the shim requires a reference-type instance. "
         + "Run 'uloop compile' to add them.";
+
+    public const string ValueTypeUnresolvedFormat =
+        "Added property type '{0}' could not be resolved; check for a missing using directive or a typo, "
+        + "fix the declaration, and rerun. Run 'uloop compile' if the type is new.";
 
     public const string ValueTypeNotExternallyVisible =
         "Added property type is not visible to the shim assembly. Run 'uloop compile' to add it.";
@@ -61,6 +62,10 @@ internal static class AddedPropertySkipReasons
     public const string ObjectInitializer =
         "Object initializers that assign added properties are skipped; the setter shim cannot rewrite the initializer. "
         + "Run 'uloop compile' to add it.";
+
+    public const string DeconstructionTarget =
+        "Deconstruction assignment to an added property is skipped; the setter shim cannot stand as a "
+        + "deconstruction target. Run 'uloop compile' to add it.";
 
     public const string ConditionalAccess =
         "Conditional access to added properties is skipped; there is no rewrite shape. Run 'uloop compile' to add it.";

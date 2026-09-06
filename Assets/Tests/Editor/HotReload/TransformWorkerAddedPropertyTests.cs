@@ -71,6 +71,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string InitializerNotEmittableReason =
             "Added property initializer cannot run in the shim lambda. Run 'uloop compile' to add it.";
 
+        private const string ConditionalAccessReason =
+            "Conditional access to added properties is skipped; there is no rewrite shape. "
+            + "Run 'uloop compile' to add it.";
+
+        private const string DeconstructionTargetReason =
+            "Deconstruction assignment to an added property is skipped; the setter shim cannot stand as a "
+            + "deconstruction target. Run 'uloop compile' to add it.";
+
         private const string HostStoreKeyPrefix =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadAddedMemberHost::";
 
@@ -639,6 +647,200 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(CompoundAssignmentReason));
             Assert.That(FindEntry(result, "get_Count"), Is.Not.Null);
             Assert.That(FindEntry(result, "set_Count"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// A deconstruction assignment that targets an added property skips the caller, because the
+        /// setter shim is a call expression and cannot stand as a deconstruction target.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerDeconstructsIntoAddedProperty_SkipsCallerWithDeconstructionReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyDeconstructionTarget.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            int other = 0;\n"
+                + "            (Count, other) = (value, value);\n"
+                + "            return other;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(DeconstructionTargetReason));
+            Assert.That(FindEntry(result, "get_Count"), Is.Not.Null);
+            Assert.That(FindEntry(result, "set_Count"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// Reading an added property inside an argument of a conditional-access call is rewritten,
+        /// because only the conditional-access spine itself lacks a rewrite shape.
+        /// </summary>
+        [Test]
+        public async Task Emit_CallerReadsAddedPropertyInConditionalAccessArgument_RewritesWithoutSkip()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyConditionalAccessArgument.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            string text = value.ToString();\n"
+                + "            return text?.PadLeft(Count).Length ?? value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Null,
+                FormatSkipped(result.Output.skipped));
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            TransformWorkerEntryDto getter = FindEntry(result, "get_Count");
+            Assert.That(caller, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(getter, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(
+                SliceShimMethod(result.Output.shimSource, caller.shimMethodName),
+                Does.Contain(getter.shimMethodName));
+        }
+
+        /// <summary>
+        /// A conditional access whose receiver is an added property is still skipped, so limiting the
+        /// ancestor walk to the spine does not drop the guard.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerConditionalAccessOnAddedProperty_SkipsCallerWithConditionalAccessReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyConditionalAccessReceiver.cs",
+                "public string Label { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return Label?.Length ?? value;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(ConditionalAccessReason));
+        }
+
+        /// <summary>
+        /// An added property whose type cannot be resolved is skipped with a reason that names the
+        /// type and points at the declaration, instead of blaming shim visibility.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedPropertyWithUnresolvedType_ReportsTypeNameAndUsingHint()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyUnresolvedType.cs",
+                "public NoSuchAddedPropertyType Thing { get; set; }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string reason = FindSkipReason(result, "get_Thing");
+            Assert.That(reason, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(reason, Does.Contain("NoSuchAddedPropertyType"));
+            Assert.That(reason, Does.Contain("missing using directive"));
+            Assert.That(reason, Does.Not.Contain("not visible to the shim assembly"));
+        }
+
+        /// <summary>
+        /// Replacing a compiled getter method with a property in the same edit reports the method as
+        /// removed and the property accessor as added, and rewrites the caller to the accessor shim.
+        /// </summary>
+        [Test]
+        public async Task Emit_ReplaceGetXWithProperty_ReportsRemovedMethodAndAddedGetter()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        private int PrivateCall()\n        {\n            return _privateSeed;\n        }\n\n",
+                string.Empty,
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+            edited = WithHostMembers(edited, "public int PrivateCallValue => _privateSeed;");
+            edited = edited.Replace(
+                ExistingCallerOriginal,
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            return PrivateCallValue + value;\n        }",
+                StringComparison.Ordinal);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                HotReloadTestSourceWriter.WriteEditedSource("ReplaceGetXWithProperty.cs", edited),
+                HostProjectRelativePath,
+                onDisk,
+                null);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(HasRemovedMethod(result, "PrivateCall"), Is.True, FormatSkipped(result.Output.skipped));
+            TransformWorkerEntryDto getter = FindEntry(result, "get_PrivateCallValue");
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            Assert.That(getter, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(getter.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(caller, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(result.Output.skipped, Is.Empty, FormatSkipped(result.Output.skipped));
+        }
+
+        private static bool HasRemovedMethod(TransformWorkerClientResult result, string memberName)
+        {
+            foreach (TransformWorkerRemovedMemberDto removed in result.Output.files[0].removedMembers)
+            {
+                if (removed.kind == "method" && removed.name == memberName)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// An added property nested inside a deconstruction target is skipped too, so the walk has to
+        /// keep climbing through enclosing tuples rather than test the immediate parent alone.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerDeconstructsIntoNestedTupleWithAddedProperty_SkipsCallerWithDeconstructionReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyNestedDeconstructionTarget.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            int first = 0;\n"
+                + "            int second = 0;\n"
+                + "            (first, (Count, second)) = (value, (value, value));\n"
+                + "            return first + second;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(DeconstructionTargetReason));
+            Assert.That(FindEntry(result, "get_Count"), Is.Not.Null);
+            Assert.That(FindEntry(result, "set_Count"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// A tuple that only carries the added property's value is rewritten, because reading into a
+        /// tuple is not a write and only an assignment target has no rewrite shape.
+        /// </summary>
+        [Test]
+        public async Task Emit_CallerPassesTupleContainingAddedProperty_RewritesWithoutSkip()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyTupleValue.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            (int, int) pair = (Count, value);\n"
+                + "            return pair.Item1 + pair.Item2;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.Null,
+                FormatSkipped(result.Output.skipped));
+            TransformWorkerEntryDto caller = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
+            TransformWorkerEntryDto getter = FindEntry(result, "get_Count");
+            Assert.That(caller, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(getter, Is.Not.Null, FormatSkipped(result.Output.skipped));
+            Assert.That(
+                SliceShimMethod(result.Output.shimSource, caller.shimMethodName),
+                Does.Contain(getter.shimMethodName));
         }
 
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(
