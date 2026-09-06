@@ -2,6 +2,13 @@ name: Unity EditMode Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      inspect-layout-only:
+        description: >-
+          Print the 6000.7 editor's compiler layout and skip the test run.
+          Temporary; removed once the resolver probes that layout.
+        type: boolean
+        default: false
   schedule:
     - cron: '0 18 * * *'
 
@@ -13,6 +20,7 @@ jobs:
   concurrency-unit-tests:
     name: Concurrency Unit Tests
     runs-on: ubuntu-latest
+    if: ${{ !inputs.inspect-layout-only }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -31,6 +39,7 @@ jobs:
   editmode-tests:
     name: EditMode Tests (${{ matrix.unity-version }})
     runs-on: ubuntu-latest
+    if: ${{ !inputs.inspect-layout-only }}
     strategy:
       fail-fast: false
       matrix:
@@ -260,6 +269,30 @@ jobs:
           echo "Installed Unity $UNITY_VERSION at $UNITY_EDITOR"
           df -h
 
+      # Temporary: prints where this editor keeps the external compiler so the
+      # resolver's probe list can be extended. Removed once the probe lands.
+      - name: Inspect editor compiler layout
+        if: env.HAS_UNITY_LICENSE == 'true' && inputs.inspect-layout-only
+        run: |
+          set -eu
+          EDITOR_DATA=$(dirname "$UNITY_EDITOR")/Data
+          echo "::group::Editor/Data"
+          ls -1 "$EDITOR_DATA"
+          echo "::endgroup::"
+          echo "::group::Editor/Data/Resources/Scripting"
+          ls -1 "$EDITOR_DATA/Resources/Scripting" || echo "(absent)"
+          echo "::endgroup::"
+          echo "::group::compiler components"
+          find "$EDITOR_DATA" \
+            \( -name csc.dll \
+            -o -name csc.runtimeconfig.json \
+            -o -name csc.deps.json \
+            -o -name 'Microsoft.CodeAnalysis*.dll' \
+            -o -name dotnet -type f \
+            -o -name Microsoft.NETCore.App \) \
+            -printf '%P\n' | sort
+          echo "::endgroup::"
+
       - name: Cache Library folder
         if: env.HAS_UNITY_LICENSE == 'true'
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
@@ -270,7 +303,7 @@ jobs:
             Library-${{ env.UNITY_VERSION }}-debug-
 
       - name: Activate Unity license and run EditMode tests
-        if: env.HAS_UNITY_LICENSE == 'true'
+        if: env.HAS_UNITY_LICENSE == 'true' && !inputs.inspect-layout-only
         timeout-minutes: 60
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -342,7 +375,7 @@ jobs:
 
       - name: Upload latest 6000.7 test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always() && env.HAS_UNITY_LICENSE == 'true'
+        if: always() && env.HAS_UNITY_LICENSE == 'true' && !inputs.inspect-layout-only
         with:
           name: Unity test results (latest 6000.7)
           path: artifacts
