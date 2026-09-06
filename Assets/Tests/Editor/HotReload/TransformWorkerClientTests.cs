@@ -2938,6 +2938,117 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CreatePreparationValidationOutput(assemblyName, assemblyMvid, "Assets/Edited.cs"));
         }
 
+        /// <summary>
+        /// What: a retained-artifact record without the owner and fingerprint the worker needs to
+        /// re-verify it is refused before the worker runs, because such a record still builds a
+        /// valid mapping and would silently bind the retained type back to its source.
+        /// </summary>
+        [Test]
+        public async Task RunAsync_ArtifactTypeWithoutOwner_IsRejectedBeforeTheWorkerRuns()
+        {
+            TransformWorkerInputDto input = CreateArtifactValidationInput();
+            input.introducedTypeArtifacts[0].types[0].ownerProjectRelativePath = string.Empty;
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                input,
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("owner"));
+        }
+
+        /// <summary>
+        /// What: two retained artifacts claiming one assembly identity are refused, because both
+        /// would enter the compilation under that identity and one of them would resolve to
+        /// nothing, turning a sound artifact into an untrusted one.
+        /// </summary>
+        [Test]
+        public async Task RunAsync_TwoArtifactsClaimingOneAssembly_IsRejected()
+        {
+            TransformWorkerInputDto input = CreateArtifactValidationInput();
+            input.introducedTypeArtifacts = new[]
+            {
+                input.introducedTypeArtifacts[0],
+                CreateArtifactValidationInput().introducedTypeArtifacts[0]
+            };
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                input,
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("assembly identity"));
+        }
+
+        /// <summary>
+        /// What: one artifact listing a type twice is refused, so no run depends on which of the
+        /// two records the worker happened to read first.
+        /// </summary>
+        [Test]
+        public async Task RunAsync_ArtifactListingOneTypeTwice_IsRejected()
+        {
+            TransformWorkerInputDto input = CreateArtifactValidationInput();
+            TransformWorkerIntroducedTypeArtifactDto artifact = input.introducedTypeArtifacts[0];
+            artifact.types = new[] { artifact.types[0], artifact.types[0] };
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                input,
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("more than once"));
+        }
+
+        /// <summary>
+        /// What: a run that carries retained artifacts but names no target assembly is refused,
+        /// because the identity the records normalize back to is the one this run targets.
+        /// </summary>
+        [Test]
+        public async Task RunAsync_ArtifactsWithoutTargetIdentity_IsRejected()
+        {
+            TransformWorkerInputDto input = CreateArtifactValidationInput();
+            input.targetAssemblyMvid = string.Empty;
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                input,
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("module version id"));
+        }
+
+        private static TransformWorkerInputDto CreateArtifactValidationInput()
+        {
+            return new TransformWorkerInputDto
+            {
+                targetAssemblyName = "Assembly",
+                targetAssemblyMvid = "mvid",
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/Edited.cs" }
+                },
+                introducedTypeArtifacts = new[]
+                {
+                    new TransformWorkerIntroducedTypeArtifactDto
+                    {
+                        assemblyFullName = "Artifact, Version=1.0.0.0",
+                        referencePath = "Artifact.dll",
+                        types = new[]
+                        {
+                            new TransformWorkerIntroducedTypeArtifactTypeDto
+                            {
+                                metadataName = "Example.Retained",
+                                originalAssemblyName = "Assembly",
+                                originalAssemblyMvid = "mvid",
+                                ownerProjectRelativePath = "Assets/Edited.cs",
+                                declarationFingerprint = "fingerprint"
+                            }
+                        }
+                    }
+                }
+            };
+        }
+
         private static TransformWorkerInputDto CreatePreparationValidationInput()
         {
             return new TransformWorkerInputDto

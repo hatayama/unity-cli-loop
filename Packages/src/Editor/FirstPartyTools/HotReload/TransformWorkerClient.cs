@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -28,6 +29,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(input != null, "input must not be null.");
             Debug.Assert(input.sources != null, "sources must not be null.");
             Debug.Assert(input.sources.Length > 0, "sources must not be empty.");
+
+            // Why before the worker runs: a record the worker cannot act on does not always fail
+            // there. A record missing its owner or its fingerprint still builds a valid mapping,
+            // and the run then silently binds the retained type back to its source.
+            if (!TryValidateIntroducedTypeArtifacts(input, out string artifactError))
+            {
+                return TransformWorkerClientResult.Failure(artifactError);
+            }
 
             TransformWorkerBootstrapResult bootstrapResult =
                 await TransformWorkerBootstrap.EnsureWorkerAsync(ct).ConfigureAwait(false);
@@ -91,6 +100,94 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Directory.Delete(tempDirectory, recursive: true);
                 }
             }
+        }
+
+        /// <summary>
+        /// Rejects retained-artifact records the worker could not act on faithfully: an incomplete
+        /// record, a run that names no target assembly to normalize back to, or two records that
+        /// claim the same assembly identity or the same type inside it.
+        /// </summary>
+        internal static bool TryValidateIntroducedTypeArtifacts(
+            TransformWorkerInputDto input,
+            out string errorMessage)
+        {
+            if (input.introducedTypeArtifacts == null || input.introducedTypeArtifacts.Length == 0)
+            {
+                errorMessage = string.Empty;
+                return true;
+            }
+
+            // The records normalize a retained type back to the assembly its source belongs to,
+            // and that is the assembly this run targets.
+            if (string.IsNullOrWhiteSpace(input.targetAssemblyName)
+                || string.IsNullOrWhiteSpace(input.targetAssemblyMvid))
+            {
+                errorMessage = "A run that carries retained artifacts must name the target assembly and its module version id.";
+                return false;
+            }
+
+            HashSet<string> assemblyFullNames = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<string> typeKeys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (TransformWorkerIntroducedTypeArtifactDto artifact in input.introducedTypeArtifacts)
+            {
+                if (artifact == null
+                    || string.IsNullOrWhiteSpace(artifact.assemblyFullName)
+                    || string.IsNullOrWhiteSpace(artifact.referencePath)
+                    || artifact.types == null
+                    || artifact.types.Length == 0)
+                {
+                    errorMessage = "A retained artifact must name its assembly, its reference path and at least one type.";
+                    return false;
+                }
+
+                // Two records claiming one identity would put the same assembly into the
+                // compilation twice, and the worker would then resolve one of them to nothing.
+                if (!assemblyFullNames.Add(artifact.assemblyFullName))
+                {
+                    errorMessage = "Two retained artifacts claim the assembly identity " + artifact.assemblyFullName + ".";
+                    return false;
+                }
+
+                if (!TryValidateIntroducedTypeArtifactTypes(artifact, typeKeys, out errorMessage))
+                {
+                    return false;
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static bool TryValidateIntroducedTypeArtifactTypes(
+            TransformWorkerIntroducedTypeArtifactDto artifact,
+            HashSet<string> typeKeys,
+            out string errorMessage)
+        {
+            foreach (TransformWorkerIntroducedTypeArtifactTypeDto artifactType in artifact.types)
+            {
+                // Without the owner and the fingerprint the worker cannot tell whether the edited
+                // source still produces the declaration the artifact holds, so it would leave the
+                // declaration in place and bind the type from source after all.
+                if (artifactType == null
+                    || string.IsNullOrWhiteSpace(artifactType.metadataName)
+                    || string.IsNullOrWhiteSpace(artifactType.originalAssemblyName)
+                    || string.IsNullOrWhiteSpace(artifactType.originalAssemblyMvid)
+                    || string.IsNullOrWhiteSpace(artifactType.ownerProjectRelativePath)
+                    || string.IsNullOrWhiteSpace(artifactType.declarationFingerprint))
+                {
+                    errorMessage = "A retained type must carry its metadata name, its original identity, its owner and its fingerprint.";
+                    return false;
+                }
+
+                if (!typeKeys.Add(artifact.assemblyFullName + "|" + artifactType.metadataName))
+                {
+                    errorMessage = "A retained artifact lists " + artifactType.metadataName + " more than once.";
+                    return false;
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
         }
 
         /// <summary>
