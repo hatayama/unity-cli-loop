@@ -48,6 +48,17 @@ internal static class IntroducedTypePlanner
                 continue;
             }
 
+            // Nested declarations are excluded unconditionally, so an outer type that contains one
+            // has to be refused as well. Emitting it would either drop the nested implementation
+            // its members rely on or retain a type this stage cannot manage the lifetime of.
+            if (TryFindNestedDeclaration(declaration, out string nestedName))
+            {
+                unit.IntroducedTypeDiagnostics.Add(
+                    "Nested declaration inside an introduced type requires a compile: "
+                    + CecilTypeNames.ToMetadataName(typeSymbol) + "/" + nestedName);
+                continue;
+            }
+
             if (!IsSupported(typeSymbol, declaration, unit.SemanticModel, out string reason))
             {
                 unit.IntroducedTypeDiagnostics.Add(reason + ": " + CecilTypeNames.ToMetadataName(typeSymbol));
@@ -85,6 +96,27 @@ internal static class IntroducedTypePlanner
             unit.IntroducedTypeDiagnostics.Add(
                 "Delegate introduced type requires a compile: " + CecilTypeNames.ToMetadataName(delegateSymbol));
         }
+    }
+
+    private static bool TryFindNestedDeclaration(BaseTypeDeclarationSyntax declaration, out string nestedName)
+    {
+        foreach (SyntaxNode node in declaration.DescendantNodes())
+        {
+            if (node is BaseTypeDeclarationSyntax nestedType)
+            {
+                nestedName = nestedType.Identifier.Text;
+                return true;
+            }
+
+            if (node is DelegateDeclarationSyntax nestedDelegate)
+            {
+                nestedName = nestedDelegate.Identifier.Text;
+                return true;
+            }
+        }
+
+        nestedName = string.Empty;
+        return false;
     }
 
     private static bool IsSupported(
@@ -351,6 +383,11 @@ internal static class IntroducedTypePlanner
         builder.Append('\n');
     }
 
+    // Records each dependency against the ordinal position of the declaration node that binds it.
+    // An unordered set cannot tell two aliases apart when they exchange the types they bind to:
+    // the tokens are identical and the set of referenced types is the same, so the fingerprint
+    // would stay equal while the definition changed. The position is a traversal ordinal rather
+    // than an absolute span, so it survives trivia edits and unrelated using directives.
     private static IReadOnlyList<string> CollectDependencyIdentities(
         BaseTypeDeclarationSyntax declaration,
         INamedTypeSymbol typeSymbol,
@@ -359,23 +396,37 @@ internal static class IntroducedTypePlanner
         string targetAssemblyName,
         string targetAssemblyMvid)
     {
-        HashSet<string> dependencies = new HashSet<string>(StringComparer.Ordinal);
-        AddDependency(typeSymbol, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, dependencies);
+        List<string> positionedDependencies = new List<string>();
+        HashSet<string> declaringDependency = new HashSet<string>(StringComparer.Ordinal);
+        AddDependency(typeSymbol, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, declaringDependency);
+        foreach (string identity in declaringDependency.OrderBy(identity => identity, StringComparer.Ordinal))
+        {
+            positionedDependencies.Add("self|" + identity);
+        }
+
+        int position = 0;
         foreach (SyntaxNode node in declaration.DescendantNodesAndSelf())
         {
+            HashSet<string> nodeDependencies = new HashSet<string>(StringComparer.Ordinal);
             SymbolInfo symbolInfo = semanticModel.GetSymbolInfo(node);
-            AddDependency(symbolInfo.Symbol, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, dependencies);
+            AddDependency(symbolInfo.Symbol, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, nodeDependencies);
             foreach (ISymbol candidate in symbolInfo.CandidateSymbols)
             {
-                AddDependency(candidate, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, dependencies);
+                AddDependency(candidate, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, nodeDependencies);
             }
 
             TypeInfo typeInfo = semanticModel.GetTypeInfo(node);
-            AddDependency(typeInfo.Type, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, dependencies);
-            AddDependency(typeInfo.ConvertedType, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, dependencies);
+            AddDependency(typeInfo.Type, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, nodeDependencies);
+            AddDependency(typeInfo.ConvertedType, semanticModel, targetAssembly, targetAssemblyName, targetAssemblyMvid, nodeDependencies);
+            foreach (string identity in nodeDependencies.OrderBy(identity => identity, StringComparer.Ordinal))
+            {
+                positionedDependencies.Add(position.ToString(CultureInfo.InvariantCulture) + "|" + identity);
+            }
+
+            position++;
         }
 
-        return dependencies.OrderBy(identity => identity, StringComparer.Ordinal).ToArray();
+        return positionedDependencies;
     }
 
     private static void AddDependency(

@@ -245,11 +245,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 input,
                 CancellationToken.None);
 
-            Assert.That(workerResult.Success, Is.True, workerResult.ErrorMessage);
-            Assert.That(workerResult.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
-            Assert.That(workerResult.Output.files[0].introducedTypes[0].metadataName, Is.EqualTo("Example.Safe"));
-            Assert.That(workerResult.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Nested"));
-
             List<HotReloadIntroducedTypeDescriptor> descriptors = CreateDescriptors(workerResult.Output.files);
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             HotReloadIntroducedTypeCompilationRequest request =
@@ -323,6 +318,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult workerResult = await TransformWorkerClient.RunAsync(
                 input,
                 CancellationToken.None);
+
+            // The rejection has to be observable in the worker output before any artifact is
+            // compiled, otherwise a later assertion about the assembly could pass for the wrong
+            // reason - because compilation happened to drop the type rather than because the
+            // outer declaration was refused.
+            Assert.That(workerResult.Success, Is.True, workerResult.ErrorMessage);
+            Assert.That(workerResult.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
+            Assert.That(workerResult.Output.files[0].introducedTypes[0].metadataName, Is.EqualTo("Example.Safe"));
+            Assert.That(workerResult.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Nested"));
+
             List<HotReloadIntroducedTypeDescriptor> descriptors = CreateDescriptors(workerResult.Output.files);
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             HotReloadIntroducedTypeCompilationRequest request =
