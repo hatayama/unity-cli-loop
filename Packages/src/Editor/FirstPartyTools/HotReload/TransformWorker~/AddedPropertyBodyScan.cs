@@ -120,6 +120,11 @@ internal static class AddedPropertyBodyScan
 
     private static string EvaluateWriteSkipReason(ExpressionSyntax expression)
     {
+        if (IsDeconstructionTarget(expression))
+        {
+            return AddedPropertySkipReasons.DeconstructionTarget;
+        }
+
         if (expression.Parent is AssignmentExpressionSyntax assignment && assignment.Left == expression)
         {
             if (assignment.Parent is InitializerExpressionSyntax)
@@ -151,6 +156,29 @@ internal static class AddedPropertyBodyScan
         }
 
         return null;
+    }
+
+    // Why a walk instead of a single parent test: deconstruction targets nest, so an added
+    // property can sit in an inner tuple such as (first, (Count, second)) = ...
+    private static bool IsDeconstructionTarget(ExpressionSyntax expression)
+    {
+        SyntaxNode current = expression;
+        while (current.Parent is ArgumentSyntax argument && argument.Parent is TupleExpressionSyntax tuple)
+        {
+            if (tuple.Parent is AssignmentExpressionSyntax assignment && assignment.Left == tuple)
+            {
+                return true;
+            }
+
+            if (tuple.Parent is ForEachVariableStatementSyntax forEachVariable && forEachVariable.Variable == tuple)
+            {
+                return true;
+            }
+
+            current = tuple;
+        }
+
+        return false;
     }
 
     private static bool IsIncrementOrDecrement(SyntaxKind kind)

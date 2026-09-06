@@ -71,6 +71,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string InitializerNotEmittableReason =
             "Added property initializer cannot run in the shim lambda. Run 'uloop compile' to add it.";
 
+        private const string DeconstructionTargetReason =
+            "Deconstruction assignment to an added property is skipped; the setter shim cannot stand as a "
+            + "deconstruction target. Run 'uloop compile' to add it.";
+
         private const string HostStoreKeyPrefix =
             "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadAddedMemberHost::";
 
@@ -637,6 +641,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
                 Is.EqualTo(CompoundAssignmentReason));
+            Assert.That(FindEntry(result, "get_Count"), Is.Not.Null);
+            Assert.That(FindEntry(result, "set_Count"), Is.Not.Null);
+        }
+
+        /// <summary>
+        /// A deconstruction assignment that targets an added property skips the caller, because the
+        /// setter shim is a call expression and cannot stand as a deconstruction target.
+        /// </summary>
+        [Test]
+        public async Task Skip_CallerDeconstructsIntoAddedProperty_SkipsCallerWithDeconstructionReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyDeconstructionTarget.cs",
+                "public int Count { get; set; }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            int other = 0;\n"
+                + "            (Count, other) = (value, value);\n"
+                + "            return other;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+            Assert.That(
+                FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
+                Is.EqualTo(DeconstructionTargetReason));
             Assert.That(FindEntry(result, "get_Count"), Is.Not.Null);
             Assert.That(FindEntry(result, "set_Count"), Is.Not.Null);
         }

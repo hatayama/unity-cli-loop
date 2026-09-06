@@ -62,6 +62,10 @@ internal static class AddedPropertySkipReasons
         "Object initializers that assign added properties are skipped; the setter shim cannot rewrite the initializer. "
         + "Run 'uloop compile' to add it.";
 
+    public const string DeconstructionTarget =
+        "Deconstruction assignment to an added property is skipped; the setter shim cannot stand as a "
+        + "deconstruction target. Run 'uloop compile' to add it.";
+
     public const string ConditionalAccess =
         "Conditional access to added properties is skipped; there is no rewrite shape. Run 'uloop compile' to add it.";
 
