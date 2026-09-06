@@ -1013,22 +1013,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(foundCompute, Is.True, "Body edit must still emit a Patched ComputeWithPrivate entry.");
         }
 
-        private const string ExpectedAddedPropertySkipReason =
-            "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
-            + "For a computed value, add a same-file method instead (e.g. 'private T GetX()'), which applies "
-            + "through hot reload; for a constant, use a 'const' or a plain added field; otherwise run "
-            + "'uloop compile'.";
-
         private const string ExpectedExplicitAccessorSkipReason =
             "Property setter, init, or indexer accessors are out of scope for v1; "
             + "run 'uloop compile' to apply accessor edits.";
 
+        private const string ExpectedSetOnlyPropertySkipReason =
+            "Added properties with only a setter are skipped; the shim requires a getter identity. "
+            + "Run 'uloop compile' to add them.";
+
         /// <summary>
-        /// What: adding a get-accessor property plus a method-body edit skips the getter with
-        /// the added-property reason and does not emit the outside-body drift warning.
+        /// What: adding an expression-bodied property plus a method-body edit emits the getter
+        /// as an added member and does not emit the outside-body drift warning.
         /// </summary>
         [Test]
-        public async Task Run_AddedExpressionBodiedPropertyPlusBodyEdit_SkipsGetterWithoutOutsideBodyWarning()
+        public async Task Run_AddedExpressionBodiedPropertyPlusBodyEdit_EmitsGetterWithoutOutsideBodyWarning()
         {
             const string fileName = "AddedExpressionBodiedPropertyDrift.cs";
             TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
@@ -1045,14 +1043,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         StringComparison.Ordinal);
                 });
 
-            AssertSkippedContains(result, "get_AddedProbe", ExpectedAddedPropertySkipReason);
+            AssertEmittedWithoutSkip(result, "get_AddedProbe");
             AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
             AssertPatchedComputeWithPrivate(result);
         }
 
         /// <summary>
-        /// What: adding a setter-only property plus a method-body edit skips the setter with
-        /// the explicit-accessor reason and does not emit the outside-body drift warning.
+        /// What: adding a setter-only property plus a method-body edit skips the setter, because
+        /// an added property needs a getter identity, and does not emit the outside-body warning.
         /// </summary>
         [Test]
         public async Task Run_AddedSetterOnlyPropertyPlusBodyEdit_SkipsSetterWithoutOutsideBodyWarning()
@@ -1072,17 +1070,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         StringComparison.Ordinal);
                 });
 
-            AssertSkippedContains(result, "set_AddedSetterOnly", ExpectedExplicitAccessorSkipReason);
+            AssertSkippedContains(result, "set_AddedSetterOnly", ExpectedSetOnlyPropertySkipReason);
             AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
             AssertPatchedComputeWithPrivate(result);
         }
 
         /// <summary>
-        /// What: adding an auto-property plus a method-body edit skips the getter with the
-        /// added-property reason and does not emit the outside-body drift warning.
+        /// What: adding an auto-property plus a method-body edit emits both accessors as added
+        /// members and does not emit the outside-body drift warning.
         /// </summary>
         [Test]
-        public async Task Run_AddedAutoPropertyPlusBodyEdit_SkipsGetterWithoutOutsideBodyWarning()
+        public async Task Run_AddedAutoPropertyPlusBodyEdit_EmitsAccessorsWithoutOutsideBodyWarning()
         {
             const string fileName = "AddedAutoPropertyDrift.cs";
             TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
@@ -1099,7 +1097,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         StringComparison.Ordinal);
                 });
 
-            AssertSkippedContains(result, "get_AddedAuto", ExpectedAddedPropertySkipReason);
+            AssertEmittedWithoutSkip(result, "get_AddedAuto");
+            AssertEmittedWithoutSkip(result, "set_AddedAuto");
             AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
             AssertPatchedComputeWithPrivate(result);
         }
@@ -2189,6 +2188,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Does.Contain(expectedWarning),
                 "Declaration-only unsupported-kind edits must emit the outside-body warning.\n"
                 + string.Join("\n", warnings));
+        }
+
+        private static void AssertEmittedWithoutSkip(
+            TransformWorkerClientResult result,
+            string methodName)
+        {
+            bool found = false;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == methodName)
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            Assert.That(found, Is.True, "Expected an entry for '" + methodName + "'.");
+            AssertSkippedDoesNotContain(result, methodName);
         }
 
         private static void AssertSkippedContains(
