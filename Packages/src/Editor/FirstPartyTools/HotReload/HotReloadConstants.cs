@@ -35,6 +35,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string WorkerSourcePackageRelativePath =
             "Editor/FirstPartyTools/HotReload/TransformWorker~";
 
+        // Package-relative sources compiled into the worker in addition to the tilde directory.
+        // Why: the resident-mode line protocol is shared verbatim between the Editor host and the
+        // worker so the two ends cannot drift apart.
+        public static readonly string[] WorkerSharedSourcePackageRelativePaths =
+        {
+            "Editor/FirstPartyTools/HotReload/TransformWorkerServeProtocol.cs"
+        };
+
         public const string WorkerDllFileName = "worker.dll";
         public const string WorkerRuntimeConfigFileName = "worker.runtimeconfig.json";
         public const string WorkerRoslynDirectorySidecarFileName = "roslyn-directory.txt";
@@ -290,6 +298,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: skipped method identity, then the reason it could not be patched.
         public const string SkippedMethodWarningFormat = "Skipped {0}: {1}";
 
+        public const string VibeLogWorkerHostStarted = "hot_reload_worker_started";
+        public const string VibeLogWorkerHostRestarted = "hot_reload_worker_restarted";
+        public const string VibeLogWorkerHostShutdown = "hot_reload_worker_shutdown";
+        public const string VibeLogWorkerHostLifecycleClosed = "hot_reload_worker_lifecycle_closed";
+        public const string VibeLogWorkerHostBrokenConversation = "hot_reload_worker_broken_conversation";
         public const string VibeLogFileStart = "hot_reload_file_start";
         public const string VibeLogWorkerResult = "hot_reload_worker_result";
         public const string VibeLogShimCompileFailed = "hot_reload_shim_compile_failed";
