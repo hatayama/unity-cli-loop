@@ -514,6 +514,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a const changed in another edited file does not reject an introduced type
+        /// that only names it inside nameof, because nameof yields the identifier and never folds
+        /// the value into the artifact.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_ChangedConstNamedOnlyInNameof_IsNotRejected()
+        {
+            string directory = CreateSourceDirectory("ChangedConstNamedOnlyInNameof");
+            string sourcePath = Path.Combine(directory, "Edited.cs");
+            string siblingPath = Path.Combine(directory, "Sibling.cs");
+            string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
+            string targetAssemblyMvid = CreateConstDriftTargetAssembly(targetAssemblyPath, 1);
+            File.WriteAllText(
+                sourcePath,
+                "namespace Example { public class Introduced { public string Get() { return nameof(Existing.Value); } } }");
+            File.WriteAllText(
+                siblingPath,
+                "namespace Example { public class Existing { public const int Value = 2; } }");
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                CreateConstDriftInputWithSiblings(
+                    sourcePath,
+                    targetAssemblyPath,
+                    targetAssemblyMvid,
+                    new[] { siblingPath }),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.files[0].introducedTypes, Has.Length.EqualTo(1));
+            Assert.That(result.Output.files[0].introducedTypes[0].metadataName, Is.EqualTo("Example.Introduced"));
+            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Is.Empty);
+        }
+
+        /// <summary>
         /// Verifies that a const in another edited file whose value cannot be read at all rejects
         /// the introduced type that reads it, because the artifact compile does not see that file
         /// and would succeed against the value still in the target assembly.

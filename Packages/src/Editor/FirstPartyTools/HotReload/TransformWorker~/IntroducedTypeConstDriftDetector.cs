@@ -23,6 +23,13 @@ internal static class IntroducedTypeConstDriftDetector
     {
         foreach (SyntaxNode node in declaration.DescendantNodesAndSelf())
         {
+            // nameof yields the identifier, never the value, so a const named inside one is not
+            // folded into the artifact and its value cannot go stale there.
+            if (NameofRules.IsInsideNameofArgument(node))
+            {
+                continue;
+            }
+
             IFieldSymbol field = semanticModel.GetSymbolInfo(node).Symbol as IFieldSymbol;
             if (field == null || !field.IsConst)
             {
