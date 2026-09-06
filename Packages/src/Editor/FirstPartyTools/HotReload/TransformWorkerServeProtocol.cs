@@ -162,7 +162,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            return value.Length > 0;
+            if (value.Length == 0)
+            {
+                value = null;
+                return false;
+            }
+
+            return true;
         }
     }
 

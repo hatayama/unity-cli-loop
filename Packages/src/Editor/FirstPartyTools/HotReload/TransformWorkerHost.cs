@@ -153,11 +153,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            // Why read the id first: the channel is disposed by TerminateChannel and a disposed
+            // process no longer exposes its id.
+            int processId = channel.Id;
             TerminateChannel(channel);
             VibeLogger.LogInfo(
                 HotReloadConstants.VibeLogWorkerHostShutdown,
                 "Resident transform worker stopped.",
-                new { trigger, processId = channel.Id });
+                new { trigger, processId });
         }
 
         private async Task<TransformWorkerHostResult> RunConversationsAsync(
