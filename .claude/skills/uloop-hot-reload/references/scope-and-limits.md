@@ -84,13 +84,14 @@ pause points, and the value never appears in `CapturedVariables`.
 
 These property shapes stay `Skipped` with a per-member reason: a setter without a
 getter, `virtual`/`override`/`abstract`/interface, an explicit interface
-implementation, an `init` accessor, a host that is a `struct`, a value type
+implementation, an `init` accessor, a host that is a `struct` or a generic type, a value type
 the shim assembly cannot see or cannot resolve, an auto-property initializer that
 creates an object or touches the host's own members, and a name the compiled assembly
 already declares as a field or an event. Edited callers are skipped too when they use a
 shape the accessor shim cannot carry: compound assignment or increment, an assignment
-whose value is consumed, a deconstruction target, an object initializer, `nameof`,
-`ref`/`out`/`in`, and conditional access on the property itself.
+whose value is consumed, a deconstruction target, an object initializer, a property
+pattern that matches the property, `nameof`, `ref`/`out`/`in`, and conditional access
+on the property itself.
 
 Types, events, and indexers are not reported per member — no `Skipped` row names them;
 at most they surface as outside-body drift in `Warnings`. Treat their silence

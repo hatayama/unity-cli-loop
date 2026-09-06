@@ -85,8 +85,8 @@ and a patched body that matches the baseline again is unpatched on that run.
   change is not gated: it follows the delete rules — the old signature is reported removed,
   and a `Warnings` entry names each compiled call site left on the old behavior until
   `uloop compile`.
-- Constructors, operators, setter/init/indexer accessors, and event accessors are
-  `Skipped`; finalizers and interface members are silently not applied. `const` and
+- Constructors, operators, compiled setter/init/indexer accessors, and event accessors
+  are `Skipped`; finalizers and interface members are silently not applied. `const` and
   other outside-body edits never change runtime behavior (drift is warned where
   detectable).
 - A reload applies each file all-or-nothing: any `Failed` method leaves that file
