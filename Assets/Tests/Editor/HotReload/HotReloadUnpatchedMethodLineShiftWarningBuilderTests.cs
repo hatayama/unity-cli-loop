@@ -127,7 +127,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 warnings,
                 methods,
                 file => "line1\nline2\nline3",
-                file => "line1\nline2");
+                file => "line1\nline2",
+                Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(
@@ -160,7 +161,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 warnings,
                 methods,
                 file => "line1\nline2\nline3",
-                file => "line1\nline2");
+                file => "line1\nline2",
+                Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(
@@ -190,7 +192,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     : "same\ncount",
                 file => file.IndexOf("Player", StringComparison.Ordinal) >= 0
                     ? "line1\nline2"
-                    : "same\ncount");
+                    : "same\ncount",
+                Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(
@@ -220,7 +223,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     : "a\nb\nc\nd",
                 file => file.IndexOf("Player", StringComparison.Ordinal) >= 0
                     ? "line1\nline2"
-                    : "a\nb");
+                    : "a\nb",
+                Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(2));
             Assert.That(
@@ -251,7 +255,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 warnings,
                 methods,
                 file => "line1\nline2\nline3",
-                file => "line1\nline2");
+                file => "line1\nline2",
+                Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(1));
             Assert.That(
@@ -281,7 +286,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 warnings,
                 methods,
                 file => "line1\nline2\nline3",
-                file => "line1\nline2");
+                file => "line1\nline2",
+                Array.Empty<string>());
 
             Assert.That(warnings.Count, Is.EqualTo(2));
             Assert.That(
@@ -295,6 +301,95 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         HotReloadConstants.ContinuingLineShiftWarningFormat,
                         1,
                         "Assets/Scripts/Enemy.cs")));
+        }
+
+        /// <summary>
+        /// What: a Patched sibling pulled in by auto re-apply folds into the continuing
+        /// line-shift summary instead of reprinting the full per-file warning.
+        /// </summary>
+        [Test]
+        public void Append_WhenReappliedSiblingHasPatchedOutcome_AddsOneContinuingWarning()
+        {
+            List<string> warnings = new List<string>();
+            List<HotReloadMethodOutcome> methods = new List<HotReloadMethodOutcome>
+            {
+                HotReloadMethodOutcome.Patched("Enemy.Idle", "Assets/Scripts/Enemy.cs")
+            };
+
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                methods,
+                file => "line1\nline2\nline3",
+                file => "line1\nline2",
+                new[] { "Assets/Scripts/Enemy.cs" });
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    string.Format(
+                        HotReloadConstants.ContinuingLineShiftWarningFormat,
+                        1,
+                        "Assets/Scripts/Enemy.cs")));
+            Assert.That(warnings[0], Does.Not.Contain("line count differs from the last compiled source"));
+        }
+
+        /// <summary>
+        /// What: a Failed sibling pulled in by auto re-apply still folds into the continuing
+        /// line-shift summary; outcome Kind does not restore the full per-file warning.
+        /// </summary>
+        [Test]
+        public void Append_WhenReappliedSiblingHasFailedOutcome_AddsOneContinuingWarning()
+        {
+            List<string> warnings = new List<string>();
+            List<HotReloadMethodOutcome> methods = new List<HotReloadMethodOutcome>
+            {
+                HotReloadMethodOutcome.Failed("Enemy.Idle", "shim compile failed", "Assets/Scripts/Enemy.cs")
+            };
+
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                methods,
+                file => "line1\nline2\nline3",
+                file => "line1\nline2",
+                new[] { "Assets/Scripts/Enemy.cs" });
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    string.Format(
+                        HotReloadConstants.ContinuingLineShiftWarningFormat,
+                        1,
+                        "Assets/Scripts/Enemy.cs")));
+            Assert.That(warnings[0], Does.Not.Contain("line count differs from the last compiled source"));
+        }
+
+        /// <summary>
+        /// What: a Patched file passed in --files still gets the full per-file line-count
+        /// warning when it is not an auto-reapplied sibling.
+        /// </summary>
+        [Test]
+        public void Append_WhenRequestedFileHasPatchedOutcome_AddsFullLineCountWarning()
+        {
+            List<string> warnings = new List<string>();
+            List<HotReloadMethodOutcome> methods = new List<HotReloadMethodOutcome>
+            {
+                HotReloadMethodOutcome.Patched("Player.Jump", "Assets/Scripts/Player.cs")
+            };
+
+            HotReloadUnpatchedMethodLineShiftWarningBuilder.Append(
+                warnings,
+                methods,
+                file => "line1\nline2\nline3",
+                file => "line1\nline2",
+                Array.Empty<string>());
+
+            Assert.That(warnings.Count, Is.EqualTo(1));
+            Assert.That(
+                warnings[0],
+                Is.EqualTo(
+                    "Assets/Scripts/Player.cs: line count differs from the last compiled source (edited 3 lines vs compiled 2). This matters for 'enable-pause-point --line' targeting: methods NOT patched in this run still resolve against the last compiled source; patched methods with debug symbols resolve against the edited file. To pin the target, pass --method together with --line."));
         }
 
         /// <summary>
@@ -339,6 +434,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. "
                         + "2 warning(s). See Warnings. "
                         + "A single 'uloop compile' clears all of them at once."));
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = previousLoader;
+                if (File.Exists(absolutePath))
+                {
+                    File.Delete(absolutePath);
+                }
+            }
+        }
+
+        /// <summary>
+        /// What: a Patched file listed in ReappliedSiblingPaths emits the continuing line-shift
+        /// summary on the apply response, not the full per-file "line count differs" warning.
+        /// </summary>
+        [Test]
+        public void BuildApplyResponse_WhenReappliedSiblingLineShift_AddsContinuingWarningWithoutFullText()
+        {
+            string relativePath = "Library/UloopHotReload/TestSources/sibling-line-shift-warning-probe.cs";
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            string absolutePath = Path.Combine(
+                projectRoot,
+                relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(absolutePath));
+            File.WriteAllText(absolutePath, "line1\nline2\nline3");
+
+            Func<string, string> previousLoader =
+                HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile;
+            HotReloadPausePointCoordination.GetVerifiedSnapshotSourceForFile = _ => "line1\nline2";
+            try
+            {
+                HotReloadResponse response = HotReloadTool.BuildApplyResponse(
+                    new HotReloadOrchestratorResult(
+                        new List<HotReloadMethodOutcome>
+                        {
+                            HotReloadMethodOutcome.Patched("Probe.M", relativePath)
+                        },
+                        new List<string>(),
+                        patchedTotal: 1,
+                        activePatchTotal: 1,
+                        reappliedSiblingPaths: new[] { relativePath }));
+
+                Assert.That(response.Warnings.Count, Is.EqualTo(1));
+                Assert.That(response.Warnings[0], Does.Contain("Continuing from earlier runs:"));
+                Assert.That(response.Warnings[0], Does.Contain(relativePath));
+                Assert.That(
+                    response.Warnings[0],
+                    Does.Not.Contain("line count differs from the last compiled source"));
             }
             finally
             {

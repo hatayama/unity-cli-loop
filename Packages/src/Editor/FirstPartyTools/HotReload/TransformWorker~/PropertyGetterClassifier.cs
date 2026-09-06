@@ -18,6 +18,7 @@ using Microsoft.CodeAnalysis.Text;
 internal static class PropertyGetterClassifier
 {
     internal static bool TryRecordUnchangedPropertyGetter(
+        string sourceProjectRelativePath,
         bool hasBaseline,
         Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
         Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
@@ -42,6 +43,7 @@ internal static class PropertyGetterClassifier
         {
             unchangedMethods.Add(new WorkerUnchangedMethod
             {
+                SourceProjectRelativePath = sourceProjectRelativePath,
                 TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
                 MethodName = getterSymbol.Name,
                 ParameterTypeFullNames = parameterTypeFullNames,
@@ -53,39 +55,8 @@ internal static class PropertyGetterClassifier
         return false;
     }
 
-    internal static bool TrySkipAddedProperty(
-        bool hasBaseline,
-        Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
-        Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
-        string typeMetadataNameFromSyntax,
-        PropertyDeclarationSyntax propertyDeclaration,
-        IMethodSymbol getterSymbol,
-        List<WorkerSkipped> skipped,
-        AddedMethodCatalog addedMethodCatalog)
-    {
-        if (!hasBaseline
-            || snapshotPropertyMap == null
-            || plainCurrentPropertyMap == null)
-        {
-            return false;
-        }
-
-        string addedPropertyKey = WorkerSyntaxIndex.BuildSyntaxPropertyKey(typeMetadataNameFromSyntax, propertyDeclaration);
-        if (snapshotPropertyMap.ContainsKey(addedPropertyKey))
-        {
-            return false;
-        }
-
-        skipped.Add(new WorkerSkipped
-        {
-            Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
-            Reason = AddedMethodSkipReasons.AddedProperty
-        });
-        addedMethodCatalog.AddAddedPropertySyntaxKey(addedPropertyKey);
-        return true;
-    }
-
     internal static (bool SkipGetter, MethodTransformDecision Decision) TrySkipPropertyGetterByDecision(
+        string sourceProjectRelativePath,
         TypeDeclarationSyntax typeDeclaration,
         INamedTypeSymbol typeSymbol,
         IMethodSymbol getterSymbol,
@@ -94,6 +65,7 @@ internal static class PropertyGetterClassifier
         INamedTypeSymbol compiledType,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog,
         List<WorkerSkipped> skipped)
     {
         MethodTransformDecision decision = MethodTransformDecider.DecideMethodTransform(
@@ -108,6 +80,7 @@ internal static class PropertyGetterClassifier
         {
             skipped.Add(new WorkerSkipped
             {
+                SourceProjectRelativePath = sourceProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
                 Reason = decision.SkipReason
             });
@@ -118,7 +91,9 @@ internal static class PropertyGetterClassifier
             getterBodyNode,
             semanticModel,
             addedMethodCatalog,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            addedPropertyCatalog,
+            typeSymbol);
         if (addedCallSiteSkip == null)
         {
             return (false, decision);
@@ -126,6 +101,7 @@ internal static class PropertyGetterClassifier
 
         skipped.Add(new WorkerSkipped
         {
+            SourceProjectRelativePath = sourceProjectRelativePath,
             Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
             Reason = addedCallSiteSkip,
             CalledAddedMethodKey = calledAddedMethodKey,
@@ -206,6 +182,7 @@ internal static class PropertyGetterClassifier
     }
 
     internal static void SkipPropertyGetterOnUncompiledType(
+        string sourceProjectRelativePath,
         PropertyDeclarationSyntax propertyDeclaration,
         SemanticModel semanticModel,
         List<WorkerSkipped> skipped)
@@ -225,6 +202,7 @@ internal static class PropertyGetterClassifier
 
         skipped.Add(new WorkerSkipped
         {
+            SourceProjectRelativePath = sourceProjectRelativePath,
             Method = WorkerMethodKeys.FormatMethodLabel(propertySymbol.GetMethod),
             Reason = AddedMethodSkipReasons.NewTypeOutOfScope
         });

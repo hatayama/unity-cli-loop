@@ -29,6 +29,12 @@ winget receives stable dispatcher releases only. Prereleases are not submitted.
 - When `WINGET_PKGS_TOKEN` is unset, the winget update command logs an explicit
   skip and exits 0. It also skips prereleases, versions that already exist
   upstream, and versions with an open submission pull request.
+- Automation submits version updates only. While `manifests/h/hatayama/uloop`
+  does not exist upstream, the command logs a skip and exits 0 instead of opening
+  a `New package:` pull request: the initial submission needs the CLA, moderator
+  review, and possibly manifest fixes, and resubmitting on every release stacked
+  duplicate New-Package pull requests while the first one sat in moderation. Open
+  the initial submission by hand; automation resumes once it merges.
 - New winget-pkgs pull requests must pass the upstream bot validation and human
   moderation. Moderation commonly takes several days and can take up to two
   weeks.

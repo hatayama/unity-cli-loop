@@ -14,18 +14,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadEntryResolution
     {
+        // Why bindFailures is passed in: one shim assembly serves every file of a group, so its
+        // accessor binders run once for the group instead of once per file.
         internal static Result ResolveEntries(
             string assemblyName,
             string filePath,
             Assembly shimAssembly,
-            TransformWorkerEntryDto[] entriesToPatch)
+            TransformWorkerEntryDto[] entriesToPatch,
+            Dictionary<string, string> bindFailures)
         {
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
             Debug.Assert(!string.IsNullOrEmpty(filePath), "filePath must not be empty.");
             Debug.Assert(shimAssembly != null, "shimAssembly must not be null.");
             Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
+            Debug.Assert(bindFailures != null, "bindFailures must not be null.");
 
-            Dictionary<string, string> bindFailures = HotReloadEntryApplier.BindShimAccessors(shimAssembly);
             List<ResolvedEntry> resolvedEntries = new List<ResolvedEntry>();
             for (int index = 0; index < entriesToPatch.Length; index++)
             {
@@ -180,7 +183,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return (null, HotReloadMethodOutcome.Failed(methodLabel, matchResult.ErrorMessage, filePath));
             }
 
-            methodLabel = HotReloadPatcher.FormatMethodKey(matchResult.Method);
+            methodLabel = HotReloadMethodKeys.FormatMethodLabel(matchResult.Method);
             (MethodInfo shimMethod, string shimError) = FindShimMethod(shimAssembly, entry);
             if (shimMethod == null)
             {
@@ -259,7 +262,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static string FormatEntryLabel(TransformWorkerEntryDto entry)
         {
-            return HotReloadPatcher.FormatMethodKeyParts(
+            return HotReloadMethodKeys.FormatMethodLabelParts(
                 entry.typeMetadataName,
                 entry.methodName,
                 entry.parameterTypeFullNames ?? Array.Empty<string>(),

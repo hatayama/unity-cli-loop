@@ -38,13 +38,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         projectRoot,
                         "Asm-mvid",
                         new[] { editedRelative, siblingRelative },
-                        editedRelative);
+                        new[] { editedRelative });
 
                 Assert.That(result.ChangedSiblingAbsolutePaths, Has.Length.EqualTo(1));
                 Assert.That(
                     result.ChangedSiblingAbsolutePaths[0],
                     Is.EqualTo(AbsoluteProjectPath(projectRoot, siblingRelative)));
                 Assert.That(result.ScanLimitWarning, Is.EqualTo(string.Empty));
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
+        /// <summary>
+        /// What: every file edited in the same run is excluded, so a file transformed together
+        /// with its group is not also reported as a drifted sibling.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectory_WhenTwoFilesAreEdited_ExcludesBothOfThem()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string firstEditedRelative = "Assets/FirstEdited.cs";
+                string secondEditedRelative = "Assets/SecondEdited.cs";
+                string siblingRelative = "Assets/Sibling.cs";
+                WriteProjectFile(projectRoot, firstEditedRelative, "first-disk");
+                WriteProjectFile(projectRoot, secondEditedRelative, "second-disk");
+                WriteProjectFile(projectRoot, siblingRelative, "sibling-disk");
+                WriteSnapshot(projectRoot, "Asm-mvid", firstEditedRelative, "first-snapshot");
+                WriteSnapshot(projectRoot, "Asm-mvid", secondEditedRelative, "second-snapshot");
+                WriteSnapshot(projectRoot, "Asm-mvid", siblingRelative, "sibling-snapshot");
+
+                HotReloadChangedSiblingScanResult result =
+                    HotReloadChangedSiblingSourceDetector.DetectFromSnapshotDirectory(
+                        projectRoot,
+                        "Asm-mvid",
+                        new[] { firstEditedRelative, secondEditedRelative, siblingRelative },
+                        new[] { firstEditedRelative, secondEditedRelative });
+
+                Assert.That(result.ChangedSiblingAbsolutePaths, Has.Length.EqualTo(1));
+                Assert.That(
+                    result.ChangedSiblingAbsolutePaths[0],
+                    Is.EqualTo(AbsoluteProjectPath(projectRoot, siblingRelative)));
             }
             finally
             {
@@ -71,7 +109,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         projectRoot,
                         "Asm-mvid",
                         new[] { editedRelative, siblingRelative },
-                        editedRelative);
+                        new[] { editedRelative });
 
                 Assert.That(result.ChangedSiblingAbsolutePaths, Is.Empty);
                 Assert.That(result.ScanLimitWarning, Is.EqualTo(string.Empty));
@@ -96,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "Asm",
                     Path.Combine(projectRoot, "missing.dll"),
                     new[] { "Assets/Edited.cs", "Assets/Sibling.cs" },
-                    "Assets/Edited.cs");
+                    new[] { "Assets/Edited.cs" });
 
                 Assert.That(result.ChangedSiblingAbsolutePaths, Is.Empty);
                 Assert.That(result.ScanLimitWarning, Is.EqualTo(string.Empty));
@@ -131,7 +169,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         projectRoot,
                         "Asm-mvid",
                         new[] { editedRelative, changedRelative, identicalRelative },
-                        editedRelative);
+                        new[] { editedRelative });
 
                 Assert.That(result.ChangedSiblingAbsolutePaths, Has.Length.EqualTo(1));
                 Assert.That(
@@ -177,7 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         projectRoot,
                         "Asm-mvid",
                         sourceFiles,
-                        editedRelative);
+                        new[] { editedRelative });
 
                 Assert.That(result.ChangedSiblingAbsolutePaths, Has.Length.EqualTo(50));
                 Assert.That(

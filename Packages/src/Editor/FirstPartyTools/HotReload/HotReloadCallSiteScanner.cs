@@ -510,9 +510,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string typeMetadataName = caller.DeclaringType.FullName;
 
-            // Keep in sync with TransformWorkerProgram.BuildMethodKey (out-of-process worker)
-            // and HotReloadWireMethodKeys.BuildMethodKey (Unity package side).
-            // Why arity suffix: Caller(int) and Caller<T>(int) must not share a wire key.
             return new CallSiteHit
             {
                 CallerAssemblyName = assemblyName,
@@ -520,34 +517,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 CallerMethodName = caller.Name,
                 CallerParameterTypeFullNames = parameterTypeFullNames,
                 CallerGenericArity = caller.GenericParameters.Count,
-                CallerMethodKey = FormatWireMethodKey(
+                CallerMethodKey = HotReloadMethodKeys.BuildMethodKeyParts(
                     typeMetadataName,
                     caller.Name,
                     parameterTypeFullNames,
                     caller.GenericParameters.Count),
-                TargetMethodKey = FormatWireMethodKey(
+                TargetMethodKey = HotReloadMethodKeys.BuildMethodKeyParts(
                     target.TypeMetadataName,
                     target.MethodName,
                     target.ParameterTypeFullNames,
                     target.GenericArity),
                 IsFunctionPointerLoad = isFunctionPointerLoad
             };
-        }
-
-        private static string FormatWireMethodKey(
-            string typeMetadataName,
-            string methodName,
-            string[] parameterTypeFullNames,
-            int genericArity)
-        {
-            string nameWithArity = methodName;
-            if (genericArity > 0)
-            {
-                nameWithArity = methodName + "`" + genericArity.ToString();
-            }
-
-            return typeMetadataName + "::" + nameWithArity + "("
-                + string.Join(",", parameterTypeFullNames) + ")";
         }
     }
 }

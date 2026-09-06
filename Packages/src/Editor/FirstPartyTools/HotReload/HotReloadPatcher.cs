@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
-using System.Text;
 
 using HarmonyLib;
 
@@ -10,8 +9,6 @@ using UnityEditor.Compilation;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.ToolContracts;
-
-using ReflectionParameterInfo = System.Reflection.ParameterInfo;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -145,7 +142,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 FilePathByMethod.Remove(method);
                 TransplantLocalsByMethod.Remove(method);
                 TransplantPreambleLengthByMethod.Remove(method);
-                HotReloadInvocationRegistry.Remove(FormatMethodKey(method));
+                HotReloadInvocationRegistry.Remove(HotReloadMethodKeys.FormatMethodLabel(method));
                 HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
                 // Mirror the ledger removal: if the re-Patch below fails, its contained Unpatch
                 // rebuilds with markers restored (ledger empty), and RevertAll can never reach
@@ -188,7 +185,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 // a later failure; rebuild must not see an active shim (same as re-apply path).
                 ShimByMethod.Remove(method);
                 FilePathByMethod.Remove(method);
-                HotReloadInvocationRegistry.Remove(FormatMethodKey(method));
+                HotReloadInvocationRegistry.Remove(HotReloadMethodKeys.FormatMethodLabel(method));
                 // User-approved exception to the no-try-catch policy: Harmony emit/JIT
                 // failures cannot be pre-validated (the IL shape is only known inside
                 // Harmony), and an escaping exception would abort the whole run while
@@ -239,8 +236,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<MethodBase> revertedMethods = new List<MethodBase>(ShimByMethod.Keys);
             ShimByMethod.Clear();
             FilePathByMethod.Clear();
-            HotReloadShimRegistry.Clear();
-            HotReloadAddedMemberRegistry.Clear();
+            HotReloadFileGenerations.ClearAll();
             HotReloadAddedFieldStore.Clear();
             HotReloadAddedFieldRegistry.ClearAll();
             TransplantLocalsByMethod.Clear();
@@ -278,7 +274,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadShimRegistry.RemoveMethod(method);
             TransplantLocalsByMethod.Remove(method);
             TransplantPreambleLengthByMethod.Remove(method);
-            string methodKey = FormatMethodKey(method);
+            string methodKey = HotReloadMethodKeys.FormatMethodLabel(method);
             HotReloadInvocationRegistry.Remove(methodKey);
             // Why here, not only RevertAll: RevertUnchangedPatches uses this path, and a
             // later apply of the same compiled key must not inherit a stale superseded Reason.
@@ -310,7 +306,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new List<HotReloadActivePatchInfo>(ShimByMethod.Count);
             foreach (KeyValuePair<MethodBase, MethodInfo> pair in ShimByMethod)
             {
-                string methodKey = FormatMethodKey(pair.Key);
+                string methodKey = HotReloadMethodKeys.FormatMethodLabel(pair.Key);
                 string filePath = string.Empty;
                 if (FilePathByMethod.TryGetValue(pair.Key, out string recordedPath))
                 {
@@ -338,90 +334,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                keys.Add(FormatMethodKey(pair.Key));
+                keys.Add(HotReloadMethodKeys.FormatMethodLabel(pair.Key));
             }
 
             return keys;
         }
 
-        // What: status / counter key from a resolved MethodBase (apply outcomes use the same
-        // helper after Resolve so --status rows match Patched Methods[].Method).
-        // Why parameter ToString (+ generic arity): MethodBase ledger entries distinguish
-        // overloads, so a name-only key would merge counts and let Revert of one overload
-        // zero the other's counter. FullName embeds assembly Version/PublicKeyToken for
-        // constructed generics (List`1[[Int32, mscorlib, ...]]), which bloated labels.
-        internal static string FormatMethodKey(MethodBase method)
+        public static IReadOnlyList<string> ListActiveFilePaths()
         {
-            Debug.Assert(method != null, "method must not be null.");
-            Debug.Assert(method.DeclaringType != null, "Patched methods must have a declaring type.");
-
-            // Why alias: ToolContracts.ParameterInfo also exists in this file's usings.
-            ReflectionParameterInfo[] parameters = method.GetParameters();
-            string[] parameterTypeFullNames = new string[parameters.Length];
-            for (int index = 0; index < parameters.Length; index++)
+            HashSet<string> paths = new HashSet<string>(StringComparer.Ordinal);
+            foreach (KeyValuePair<MethodBase, string> pair in FilePathByMethod)
             {
-                parameterTypeFullNames[index] = parameters[index].ParameterType.ToString();
-            }
-
-            int genericArity = 0;
-            if (method.IsGenericMethodDefinition || method.IsGenericMethod)
-            {
-                genericArity = method.GetGenericArguments().Length;
-            }
-
-            return FormatMethodKeyParts(
-                method.DeclaringType.FullName,
-                method.Name,
-                parameterTypeFullNames,
-                genericArity);
-        }
-
-        // What: Method label from worker DTO fields (pre-Resolve failures) using the same shape
-        // as FormatMethodKey. Cecil nested separators ('/') are normalized to reflection ('+').
-        internal static string FormatMethodKeyParts(
-            string typeMetadataName,
-            string methodName,
-            string[] parameterTypeFullNames,
-            int genericArity)
-        {
-            Debug.Assert(!string.IsNullOrEmpty(typeMetadataName), "typeMetadataName must not be null or empty.");
-            Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be null or empty.");
-            Debug.Assert(parameterTypeFullNames != null, "parameterTypeFullNames must not be null.");
-            Debug.Assert(genericArity >= 0, "genericArity must not be negative.");
-
-            StringBuilder builder = new StringBuilder();
-            builder.Append(NormalizeNestedTypeSeparators(typeMetadataName));
-            builder.Append('.');
-            builder.Append(methodName);
-            if (genericArity > 0)
-            {
-                builder.Append('`');
-                builder.Append(genericArity);
-            }
-
-            builder.Append('(');
-            for (int index = 0; index < parameterTypeFullNames.Length; index++)
-            {
-                if (index > 0)
+                if (string.IsNullOrEmpty(pair.Value))
                 {
-                    builder.Append(',');
+                    continue;
                 }
 
-                string parameterTypeFullName = parameterTypeFullNames[index];
-                Debug.Assert(
-                    !string.IsNullOrEmpty(parameterTypeFullName),
-                    "parameterTypeFullNames entries must not be null or empty.");
-                builder.Append(NormalizeNestedTypeSeparators(parameterTypeFullName));
+                paths.Add(pair.Value);
             }
 
-            builder.Append(')');
-            return builder.ToString();
-        }
-
-        // Why: Cecil metadata names use '/' for nested types; Type.FullName uses '+'.
-        private static string NormalizeNestedTypeSeparators(string metadataName)
-        {
-            return metadataName.Replace('/', '+');
+            return new List<string>(paths);
         }
 
         private static IEnumerable<CodeInstruction> ReplaceWithTransplantSourceTranspiler(
@@ -484,7 +416,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             MethodBase original)
         {
             Debug.Assert(IncrementInvocationMethodInfo != null, "Increment method must resolve.");
-            CodeInstruction loadKey = new CodeInstruction(OpCodes.Ldstr, FormatMethodKey(original));
+            CodeInstruction loadKey = new CodeInstruction(OpCodes.Ldstr, HotReloadMethodKeys.FormatMethodLabel(original));
             CodeInstruction increment = new CodeInstruction(OpCodes.Call, IncrementInvocationMethodInfo);
             if (instructions.Count > 0 && instructions[0].labels.Count > 0)
             {

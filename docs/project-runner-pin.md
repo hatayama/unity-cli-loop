@@ -14,7 +14,7 @@ for cross-component version requirements. Its required fields:
 - `dispatcherReleaseTag` and `dispatcherArchiveManifest` — the provenance-pinned dispatcher
   release used for first installation and its verified asset hashes. Stamped by automation
   against a published release: publishing a **stable** dispatcher release makes the
-  `dispatcher-publish` workflow open a pull request that carries the new stamp (pre-releases are
+  `dispatcher-publish` workflow push the new stamp straight to `main` (pre-releases are
   never stamped on `main`), and CI on `main` fails through `check-dispatcher-pin-freshness` for as
   long as `dispatcherReleaseTag` lags the newest published stable dispatcher release. Never edit by hand — `VerifyDispatcherPinSubjects` requires the
   manifest to match the published release's verified subjects exactly, so a hand-written value

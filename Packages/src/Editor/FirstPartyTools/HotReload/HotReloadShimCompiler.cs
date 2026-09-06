@@ -30,13 +30,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string shimSource,
             IReadOnlyList<string> referencePaths,
             IReadOnlyList<string> defineSymbols,
-            string projectRelativePath,
+            IReadOnlyCollection<string> projectRelativePaths,
             CancellationToken ct)
         {
             Debug.Assert(!string.IsNullOrEmpty(shimSource), "shimSource must not be empty.");
             Debug.Assert(referencePaths != null, "referencePaths must not be null.");
             Debug.Assert(defineSymbols != null, "defineSymbols must not be null.");
-            Debug.Assert(projectRelativePath != null, "projectRelativePath must not be null.");
+            Debug.Assert(projectRelativePaths != null, "projectRelativePaths must not be null.");
 
             // Resolver and Application.dataPath (CreateWorkDirectory) need the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
@@ -87,7 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     {
                         // Why only user-file mapped lines: scaffold diagnostics (temp HotReloadShim.cs)
                         // must not grow a fake "(line N)" that looks like the edited source.
-                        errorMessages.Add(FormatErrorMessageWithMappedLine(error, projectRelativePath));
+                        errorMessages.Add(FormatErrorMessageWithMappedLine(error, projectRelativePaths));
                     }
 
                     return HotReloadShimCompileResult.Failure(
@@ -148,13 +148,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         private static string FormatErrorMessageWithMappedLine(
             HotReloadShimCompileError error,
-            string projectRelativePath)
+            IReadOnlyCollection<string> projectRelativePaths)
         {
-            if (error.Line > 0
-                && !string.IsNullOrEmpty(error.File)
-                && HotReloadSourcePathNormalizer.PathsReferToSameFile(error.File, projectRelativePath))
+            if (error.Line <= 0 || string.IsNullOrEmpty(error.File))
             {
-                return error.Message + " (line " + error.Line + ")";
+                return error.Message;
+            }
+
+            // Why any file of the group: one shim assembly hosts the bodies of every edited file
+            // of the group, so a mapped line belongs to whichever of them the directive names.
+            foreach (string projectRelativePath in projectRelativePaths)
+            {
+                if (HotReloadSourcePathNormalizer.PathsReferToSameFile(error.File, projectRelativePath))
+                {
+                    return error.Message + " (line " + error.Line + ")";
+                }
             }
 
             return error.Message;

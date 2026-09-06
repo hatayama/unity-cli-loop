@@ -1,0 +1,34 @@
+{
+  "allowedReferences": [
+    {
+      "from": "UnityCLILoop.FirstPartyTools.HotReload.Editor",
+      "to": "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor",
+      "reason": "Hot reload reuses the external compiler path resolver and the compiled assembly loader. Resolution: promote those two pieces to a FirstPartyTools.Common.DynamicCompilation assembly; ExecuteDynamicCode then depends on it as well."
+    },
+    {
+      "from": "UnityCLILoop.FirstPartyTools.Watch.Editor",
+      "to": "UnityCLILoop.FirstPartyTools.ExecuteDynamicCode.Editor",
+      "reason": "Watch evaluates expressions with DynamicCodeCompiler and reports CompilationError. The compiler is a shared foundation, not a tool feature. Resolution: move dynamic compilation into FirstPartyTools.Common.DynamicCompilation (same target as the HotReload entry)."
+    },
+    {
+      "from": "UnityCLILoop.FirstPartyTools.Watch.Editor",
+      "to": "UnityCLILoop.FirstPartyTools.PausePoint.Editor",
+      "reason": "Watch history formats captured variables with SourcePausePointVariableFormatter and SourcePausePointConstants. Resolution: promote the formatter and constants to a FirstPartyTools.Common assembly shared by both tools."
+    },
+    {
+      "from": "UnityCLILoop.FirstPartyTools.Compile.Editor",
+      "to": "UnityCLILoop.FirstPartyTools.ControlPlayMode.Editor",
+      "reason": "Compile stops Play Mode before compiling and records the stop reason in PlayModeStopReasonSessionStore. Resolution: expose Play Mode stop-reason recording as a port in ToolContracts implemented by ControlPlayMode and wired in CompositionRoot (dependency inversion), or promote the store to a FirstPartyTools.Common assembly."
+    },
+    {
+      "from": "UnityCLILoop.FirstPartyTools.RunTests.TestFramework.Editor",
+      "to": "UnityCLILoop.FirstPartyTools.ControlPlayMode.Editor",
+      "reason": "Test cancellation restores Play Mode state through PlayModeStopReasonSessionStore. Resolution: same as the Compile entry; both edges disappear together."
+    },
+    {
+      "from": "UnityCLILoop.FirstPartyTools.Common.InputSystem.Editor",
+      "to": "UnityCLILoop.Application",
+      "reason": "Input System frame waiters depend on Application-layer editor state services. Resolution: move the frame waiters that need Application into the tools that use them, or invert the dependency through a ToolContracts port so Common stays below Application."
+    }
+  ]
+}

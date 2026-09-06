@@ -10,6 +10,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public static class DynamicCompilationHealthMonitor
     {
+        private const string MissingComponentSeparator = " | ";
+        private const string NoMissingComponentsText = "(none collected)";
+
         private static readonly object ReportedIssueLock = new();
         private static readonly HashSet<string> ReportedIssues = new(System.StringComparer.Ordinal);
 
@@ -23,12 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 issueKey,
                 "dynamic_code_fast_path_unavailable",
                 "execute-dynamic-code fast Roslyn path is unavailable; AssemblyBuilder fallback will be used",
-                new
-                {
-                    editor_path = editorPath,
-                    editor_contents_path = contentsPath,
-                    missing_components = missingComponents
-                },
+                BuildFastPathUnavailableContext(editorPath, contentsPath, missingComponents),
                 "Fast dynamic compilation path is unavailable in this Unity installation.",
                 "Check Unity version layout changes and external compiler path resolution assumptions.");
         }
@@ -79,6 +77,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context,
                 "One-shot Roslyn compiler could not be started.",
                 "Investigate Unity-bundled dotnet/csc availability and process launch assumptions.");
+        }
+
+        // Why the paths are joined here: the console report renders the context with ToString, and a
+        // collection answers that with its type name, which hid every path this report exists to name.
+        internal static object BuildFastPathUnavailableContext(
+            string editorPath,
+            string contentsPath,
+            IReadOnlyCollection<string> missingComponents)
+        {
+            return new
+            {
+                editor_path = editorPath,
+                editor_contents_path = contentsPath,
+                missing_components = FormatMissingComponents(missingComponents)
+            };
+        }
+
+        /// <summary>
+        /// Renders the paths a resolver could not find as one line a reader can act on.
+        /// </summary>
+        internal static string FormatMissingComponents(IReadOnlyCollection<string> missingComponents)
+        {
+            if (missingComponents == null || missingComponents.Count == 0)
+            {
+                return NoMissingComponentsText;
+            }
+
+            return string.Join(MissingComponentSeparator, missingComponents);
         }
 
         private static void LogErrorOnce(

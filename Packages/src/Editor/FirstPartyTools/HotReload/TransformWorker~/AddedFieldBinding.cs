@@ -20,6 +20,10 @@ using Microsoft.CodeAnalysis.Text;
 /// </summary>
 internal sealed class AddedFieldBinding
 {
+    // The edited file that declared this field. A group run classifies fields from several
+    // files into one catalog, and each file reports only its own added names.
+    public string SourceProjectRelativePath { get; set; }
+
     public string FieldKey { get; set; }
 
     public string SyntaxKey { get; set; }

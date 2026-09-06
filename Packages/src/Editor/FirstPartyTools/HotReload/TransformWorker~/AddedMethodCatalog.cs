@@ -98,6 +98,39 @@ internal sealed class AddedMethodCatalog
         return _byKey.TryGetValue(methodKey, out AddedMethodBinding binding) ? binding : null;
     }
 
+    // A metadata receiver cannot bind to a source-only added method, so the rewriter
+    // matches on type name, method name, and argument count when GetSymbolInfo is unbound.
+    public AddedMethodBinding FindUniqueByReceiverOrNull(
+        string typeMetadataName,
+        string methodName,
+        int argumentCount)
+    {
+        Debug.Assert(typeMetadataName != null, "typeMetadataName");
+        Debug.Assert(methodName != null, "methodName");
+
+        string prefix = typeMetadataName + "::" + methodName + "(";
+        AddedMethodBinding unique = null;
+        int matches = 0;
+        foreach (AddedMethodBinding binding in _byKey.Values)
+        {
+            if (binding.MethodKey == null
+                || !binding.MethodKey.StartsWith(prefix, StringComparison.Ordinal)
+                || binding.ParameterCount != argumentCount)
+            {
+                continue;
+            }
+
+            matches++;
+            unique = binding;
+            if (matches > 1)
+            {
+                return null;
+            }
+        }
+
+        return matches == 1 ? unique : null;
+    }
+
     public void Unregister(string methodKey)
     {
         if (methodKey != null)

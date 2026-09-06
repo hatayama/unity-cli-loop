@@ -4,16 +4,22 @@ using System.Collections.Generic;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Records superseded compiled signatures from a worker output so --status can explain
-    /// leftover Active rows after a return-type change.
+    /// Records superseded compiled signatures from the entries a file actually applied, so
+    /// --status can explain leftover Active rows after a return-type change.
     /// </summary>
     internal static class HotReloadSupersededSignatureRecorder
     {
-        public static void RecordFromWorkerOutput(
-            TransformWorkerOutputDto workerOutput,
+        /// <remarks>
+        /// Why the applied entries (not the run's whole output): a group can apply one file while
+        /// isolation drops another, and a replacement that was never patched must not claim the
+        /// compiled signature it would have superseded.
+        /// </remarks>
+        public static void RecordFromAppliedEntries(
+            IReadOnlyList<TransformWorkerEntryDto> appliedEntries,
+            IReadOnlyList<TransformWorkerRemovedMethodSignatureDto> removedMethodSignatures,
             IReadOnlyCollection<string> gatedReplacementMethodKeys)
         {
-            if (workerOutput?.removedMethodSignatures == null)
+            if (appliedEntries == null || removedMethodSignatures == null)
             {
                 return;
             }
@@ -22,9 +28,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 gatedReplacementMethodKeys ?? Array.Empty<string>(),
                 StringComparer.Ordinal);
             IReadOnlyDictionary<string, TransformWorkerEntryDto> replacementsByWireKey =
-                HotReloadReplacedCompiledMethodEntries.IndexByReplacedWireKey(workerOutput.entries);
+                HotReloadReplacedCompiledMethodEntries.IndexByReplacedWireKey(appliedEntries);
 
-            foreach (TransformWorkerRemovedMethodSignatureDto signature in workerOutput.removedMethodSignatures)
+            foreach (TransformWorkerRemovedMethodSignatureDto signature in removedMethodSignatures)
             {
                 if (signature == null || string.IsNullOrEmpty(signature.methodName))
                 {
@@ -33,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 string[] parameterTypeFullNames =
                     signature.parameterTypeFullNames ?? Array.Empty<string>();
-                string wireKey = HotReloadWireMethodKeys.BuildMethodKeyParts(
+                string wireKey = HotReloadMethodKeys.BuildMethodKeyParts(
                     signature.typeMetadataName,
                     signature.methodName,
                     parameterTypeFullNames,
@@ -48,12 +54,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string oldKey = HotReloadPatcher.FormatMethodKeyParts(
+                string oldKey = HotReloadMethodKeys.FormatMethodLabelParts(
                     signature.typeMetadataName,
                     signature.methodName,
                     parameterTypeFullNames,
                     signature.genericArity);
-                string newDisplayName = HotReloadPatcher.FormatMethodKeyParts(
+                string newDisplayName = HotReloadMethodKeys.FormatMethodLabelParts(
                     replacement.typeMetadataName,
                     replacement.methodName,
                     replacement.parameterTypeFullNames ?? Array.Empty<string>(),

@@ -29,7 +29,7 @@ func runTestsWithImplicitCompile(
 ) int {
 	remainingArgs, skipCompile := extractRunTestsSkipCompileFlag(commandArgs)
 	if skipCompile {
-		return runDynamicProjectToolWithCompileNote(ctx, connection, clicore.RunTestsCommandName, remainingArgs, startPath, stdout, stderr, false)
+		return runDynamicProjectToolWithCompileNote(ctx, connection, clicore.RunTestsCommandName, remainingArgs, startPath, stdout, stderr, false, "")
 	}
 
 	compileResult := runTestsImplicitCompile(ctx, connection, stderr)
@@ -37,7 +37,16 @@ func runTestsWithImplicitCompile(
 		return writeCompileExecutionResult(stdout, compileResult)
 	}
 
-	return runDynamicProjectToolWithCompileNote(ctx, connection, clicore.RunTestsCommandName, remainingArgs, startPath, stdout, stderr, true)
+	return runDynamicProjectToolWithCompileNote(
+		ctx,
+		connection,
+		clicore.RunTestsCommandName,
+		remainingArgs,
+		startPath,
+		stdout,
+		stderr,
+		true,
+		extractCompileWarning(compileResult.result))
 }
 
 func runTestsImplicitCompileDefault(
@@ -66,7 +75,23 @@ func extractRunTestsSkipCompileFlag(args []string) ([]string, bool) {
 	return remaining, skipCompile
 }
 
-func injectRunTestsCompileNote(raw []byte) ([]byte, error) {
+func extractCompileWarning(raw json.RawMessage) string {
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return ""
+	}
+	warningRaw, ok := fields["Warning"]
+	if !ok {
+		return ""
+	}
+	warning := ""
+	if err := json.Unmarshal(warningRaw, &warning); err != nil {
+		return ""
+	}
+	return warning
+}
+
+func injectRunTestsCompileNote(raw []byte, compileWarning string) ([]byte, error) {
 	fields := map[string]json.RawMessage{}
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, err
@@ -74,7 +99,11 @@ func injectRunTestsCompileNote(raw []byte) ([]byte, error) {
 	if fields == nil {
 		return nil, errors.New("run-tests response must be a JSON object")
 	}
-	note, err := json.Marshal(runTestsCompileNote)
+	noteText := runTestsCompileNote
+	if compileWarning != "" {
+		noteText = runTestsCompileNote + " " + compileWarning
+	}
+	note, err := json.Marshal(noteText)
 	if err != nil {
 		return nil, err
 	}

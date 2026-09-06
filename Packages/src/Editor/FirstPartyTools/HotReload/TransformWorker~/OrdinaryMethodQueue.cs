@@ -112,6 +112,7 @@ internal static class OrdinaryMethodQueue
         {
             skipped.Add(new WorkerSkipped
             {
+                SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
                 Reason = decision.SkipReason
             });
@@ -232,6 +233,7 @@ internal static class OrdinaryMethodQueue
 
         skipped.Add(new WorkerSkipped
         {
+            SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
             Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
             Reason = AddedMethodSkipReasons.InterfaceMember
         });
@@ -272,6 +274,7 @@ internal static class OrdinaryMethodQueue
         {
             unchangedMethods.Add(new WorkerUnchangedMethod
             {
+                SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                 TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
                 MethodName = methodSymbol.Name,
                 ParameterTypeFullNames = parameterTypeFullNames,
@@ -387,7 +390,8 @@ internal static class OrdinaryMethodQueue
                     ShimTypeName = shimType.ShimTypeName,
                     ShimMethodName = shimMethodName,
                     NamespaceName = shimType.NamespaceName,
-                    IsStatic = methodSymbol.IsStatic
+                    IsStatic = methodSymbol.IsStatic,
+                    ParameterCount = methodSymbol.Parameters.Length
                 });
             RemovedMemberCollector.RecordHandledAddedMethodSyntaxKey(
                 addedMethodCatalog,
@@ -396,6 +400,11 @@ internal static class OrdinaryMethodQueue
                 snapshotMethodMap,
                 plainCurrentMethodMap);
             AppendUnityMessageWarningIfNeeded(
+                typeState.TypeSymbol,
+                methodSymbol,
+                declarationDriftWarnings);
+            TestAttributeNames.AppendAddedTestMethodWarningIfNeeded(
+                methodDeclaration,
                 typeState.TypeSymbol,
                 methodSymbol,
                 declarationDriftWarnings);
@@ -425,7 +434,8 @@ internal static class OrdinaryMethodQueue
         typeState.CurrentShimType = new ShimTypeBuilder(
             shimTypeName,
             namespaceName,
-            WorkerUsingCollector.CollectUsingsForType(root, typeState.TypeDeclaration, assemblyGlobalUsings));
+            WorkerUsingCollector.CollectUsingsForType(root, typeState.TypeDeclaration, assemblyGlobalUsings),
+            typeState.SourceUnit.Input.ProjectRelativePath);
         shimTypes.Add(typeState.CurrentShimType);
         return (typeState.CurrentShimType, shimTypeCounter);
     }
@@ -449,6 +459,7 @@ internal static class OrdinaryMethodQueue
 
             skipped.Add(new WorkerSkipped
             {
+                SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(methodSymbol),
                 Reason = AddedMethodSkipReasons.NewTypeOutOfScope
             });

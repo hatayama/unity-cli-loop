@@ -17,6 +17,10 @@ using Microsoft.CodeAnalysis.Text;
 
 internal sealed class WorkerEntry
 {
+    // Project-relative forward-slash path of the file this row was produced from.
+    // Keep in sync with TransformWorkerEntryDto.sourceProjectRelativePath.
+    public string SourceProjectRelativePath { get; set; }
+
     public string TypeMetadataName { get; set; }
 
     public string MethodName { get; set; }

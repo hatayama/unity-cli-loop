@@ -19,21 +19,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadPatchTargetSupport
     {
-        // Why a helper: ProcessFileAsync's pre-worker fail chain (assembly / DLL / MVID /
-        // unchanged short-circuit) is one resolve stage and kept the method over CA1502.
+        // Why a helper: ProcessFileAsync's pre-worker fail chain (assembly / DLL / MVID)
+        // is one resolve stage and kept the method over CA1502. Unchanged-source
+        // short-circuit is decided here but applied by the orchestrator so a changed
+        // sibling in the same assembly can still pull the file into the group.
         internal static (
             HotReloadFileProcessResult EarlyResult,
             string ProjectRelativePath,
             string AssemblyName,
             UnityCompilationAssembly CompilationAssembly,
             string TargetDllPath,
-            string ProjectRoot) ResolvePatchTarget(
+            string ProjectRoot,
+            HotReloadUnchangedSourceDecision UnchangedDecision) ResolvePatchTarget(
             string assemblyResolvePath,
             string workerSourcePath,
             List<HotReloadMethodOutcome> outcomes,
             List<string> warnings,
-            string correlationId)
+            string correlationId,
+            List<HotReloadMethodOutcome> alreadyActiveOutcomes)
         {
+            Debug.Assert(alreadyActiveOutcomes != null, "alreadyActiveOutcomes must not be null.");
+
             // CompilationPipeline.GetAssemblyNameFromScriptPath expects a project-relative path
             // (Assets/... or Packages/...) and returns a file name that already includes ".dll".
             string projectRelativePath = ToProjectRelativeScriptPath(assemblyResolvePath);
@@ -46,7 +52,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "Script path is not part of any compiled assembly (Assets/Packages paths only): "
                         + assemblyResolvePath,
                         assemblyResolvePath));
-                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+                return (
+                    new HotReloadFileProcessResult(outcomes, warnings, 0),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    HotReloadUnchangedSourceDecision.NotUnchanged);
             }
 
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
@@ -70,7 +83,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "(file)",
                         resolutionFailureReason,
                         assemblyResolvePath));
-                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+                return (
+                    new HotReloadFileProcessResult(outcomes, warnings, 0),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    HotReloadUnchangedSourceDecision.NotUnchanged);
             }
 
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -86,27 +106,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "(file)",
                         "Compiled assembly not found at '" + targetDllPath + "'. Compile the project first.",
                         assemblyResolvePath));
-                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+                return (
+                    new HotReloadFileProcessResult(outcomes, warnings, 0),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    HotReloadUnchangedSourceDecision.NotUnchanged);
             }
 
             string mvidGuardError = CheckMvidGuard(assemblyName, targetDllPath);
             if (mvidGuardError != null)
             {
                 outcomes.Add(HotReloadMethodOutcome.Failed("(file)", mvidGuardError, assemblyResolvePath));
-                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
+                return (
+                    new HotReloadFileProcessResult(outcomes, warnings, 0),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    HotReloadUnchangedSourceDecision.NotUnchanged);
             }
 
             HotReloadUnchangedSourceDecision unchangedDecision = HotReloadAppliedSourceLifecycle.TryShortCircuitUnchangedAppliedSource(
                 workerSourcePath,
                 projectRelativePath,
                 assemblyResolvePath,
-                outcomes);
+                alreadyActiveOutcomes);
             HotReloadOrchestratorLog.LogHotReloadFileStart(projectRelativePath, unchangedDecision, correlationId);
-            if (unchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
-            {
-                return (new HotReloadFileProcessResult(outcomes, warnings, 0), null, null, null, null, null);
-            }
-
             if (unchangedDecision == HotReloadUnchangedSourceDecision.ReapplyNonBaseline)
             {
                 warnings.Add(
@@ -115,7 +144,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         projectRelativePath));
             }
 
-            return (null, projectRelativePath, assemblyName, compilationAssembly, targetDllPath, projectRoot);
+            return (
+                null,
+                projectRelativePath,
+                assemblyName,
+                compilationAssembly,
+                targetDllPath,
+                projectRoot,
+                unchangedDecision);
         }
 
         private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)

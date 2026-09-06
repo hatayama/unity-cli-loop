@@ -17,7 +17,9 @@ using Microsoft.CodeAnalysis.Text;
 
 internal sealed class WorkerInput
 {
-    public string SourcePath { get; set; }
+    // Edited files this run transforms together; all belong to the same compilation assembly.
+    // Keep in sync with TransformWorkerDtos.cs TransformWorkerInputDto.sources.
+    public WorkerSourceInput[] Sources { get; set; }
 
     public string[] Defines { get; set; }
 
@@ -33,14 +35,6 @@ internal sealed class WorkerInput
     // Added-method keys whose shim bodies failed the first compile. Distinct from
     // ExcludedMethodKeys so a healthy added shim is not dropped when an existing method fails.
     public string[] ExcludedAddedMethodKeys { get; set; }
-
-    // Verified snapshot text for edited-method detection. Null = no baseline, patch all methods.
-    // Why pass text (not a path): avoids an IO race between orchestrator verification and worker
-    // read that would crash the whole file under the no-try-catch policy.
-    public string SnapshotSource { get; set; }
-
-    // Project-relative forward-slash path embedded in #line document names.
-    public string ProjectRelativePath { get; set; }
 
     // Absolute paths of every source file in the edited file's compilation assembly.
     // Null/omitted is treated as empty (no sibling global usings collected).

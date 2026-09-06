@@ -40,16 +40,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Ends the execution slot even when undo collapse throws.
-        /// Why nested finally: collapse can throw on a torn-down editor; the running flag must clear.
+        /// Ends the execution slot even when the undo finish (collapse + increment) throws.
+        /// Why nested finally: the undo finish can throw on a torn-down editor; the running flag must clear.
         /// </summary>
-        public void End(int undoGroup, Action<int> collapseUndoGroup)
+        public void End(int undoGroup, Action<int> finishUndoGroup)
         {
-            System.Diagnostics.Debug.Assert(collapseUndoGroup != null, "collapseUndoGroup must not be null");
+            System.Diagnostics.Debug.Assert(finishUndoGroup != null, "finishUndoGroup must not be null");
 
             try
             {
-                collapseUndoGroup(undoGroup);
+                finishUndoGroup(undoGroup);
             }
             finally
             {

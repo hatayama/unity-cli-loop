@@ -19,7 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
-                activePausePointCount: 3);
+                activePausePointCount: 3,
+                activeHotReloadChangeCount: 0);
 
             Assert.That(warning, Is.Null);
         }
@@ -32,7 +33,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: true,
-                activePausePointCount: 0);
+                activePausePointCount: 0,
+                activeHotReloadChangeCount: 0);
 
             Assert.That(
                 warning,
@@ -48,12 +50,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: true,
-                activePausePointCount: 2);
+                activePausePointCount: 2,
+                activeHotReloadChangeCount: 0);
 
             Assert.That(
                 warning,
                 Is.EqualTo(
                     "Play Mode was active with 2 enabled pause point(s). The compile stops Play Mode and the domain reload discards the Play session state and all pause point patches — re-enable pause points after the compile completes."));
+        }
+
+        /// <summary>
+        /// What: not playing with active hot-reload changes warns only about the domain reload dropping those patches.
+        /// </summary>
+        [Test]
+        public void BuildWarning_WhenNotPlayingAndHotReloadChangesActive_ReturnsHotReloadDropWarning()
+        {
+            string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                activePausePointCount: 0,
+                activeHotReloadChangeCount: 3);
+
+            Assert.That(warning, Does.Contain("3 active hot-reload change(s)"));
+            Assert.That(warning, Does.Not.Contain("Play Mode"));
+        }
+
+        /// <summary>
+        /// What: Play plus active hot-reload changes keeps the Play sentence and appends the drop sentence.
+        /// </summary>
+        [Test]
+        public void BuildWarning_WhenPlayingAndHotReloadChangesActive_ReturnsBothSentences()
+        {
+            string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: true,
+                activePausePointCount: 0,
+                activeHotReloadChangeCount: 2);
+
+            Assert.That(warning, Does.Contain("Play Mode was active"));
+            Assert.That(warning, Does.Contain("2 active hot-reload change(s)"));
+        }
+
+        /// <summary>
+        /// What: no Play and no hot-reload changes produces no Warning.
+        /// </summary>
+        [Test]
+        public void BuildWarning_WhenNothingActive_ReturnsNull()
+        {
+            string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                activePausePointCount: 0,
+                activeHotReloadChangeCount: 0);
+
+            Assert.That(warning, Is.Null);
         }
     }
 }

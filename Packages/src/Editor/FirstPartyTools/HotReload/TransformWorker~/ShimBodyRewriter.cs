@@ -26,7 +26,9 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
     internal readonly AccessorPlan _accessorPlan;
     internal readonly AddedMethodCatalog _addedMethodCatalog;
     internal readonly AddedFieldCatalog _addedFieldCatalog;
+    internal readonly AddedPropertyCatalog _addedPropertyCatalog;
     internal readonly AddedFieldShimRewrite AddedFields;
+    internal readonly AddedPropertyShimRewrite AddedProperties;
     internal readonly HarmonyAccessorShimRewrite HarmonyAccessors;
 
     public ShimBodyRewriter(
@@ -34,14 +36,17 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         INamedTypeSymbol targetType,
         AccessorPlan accessorPlan,
         AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog)
+        AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog = null)
     {
         _semanticModel = semanticModel;
         _targetType = targetType;
         _accessorPlan = accessorPlan;
         _addedMethodCatalog = addedMethodCatalog ?? new AddedMethodCatalog();
         _addedFieldCatalog = addedFieldCatalog ?? new AddedFieldCatalog();
+        _addedPropertyCatalog = addedPropertyCatalog ?? new AddedPropertyCatalog();
         AddedFields = new AddedFieldShimRewrite(this);
+        AddedProperties = new AddedPropertyShimRewrite(this);
         HarmonyAccessors = new HarmonyAccessorShimRewrite(this);
     }
 
@@ -140,14 +145,14 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return base.VisitInvocationExpression(node);
         }
 
-        if (invokedSymbol is IMethodSymbol addedMethod
-            && addedMethod.MethodKind == MethodKind.Ordinary)
+        AddedMethodBinding binding = AddedMethodCallResolver.ResolveBindingOrNull(
+            node,
+            _semanticModel,
+            _addedMethodCatalog,
+            out bool isStaticCall);
+        if (binding != null)
         {
-            AddedMethodBinding binding = _addedMethodCatalog.FindOrNull(BuildAddedMethodKey(addedMethod));
-            if (binding != null)
-            {
-                return RewriteAddedMethodInvocation(node, addedMethod, binding);
-            }
+            return RewriteAddedMethodInvocation(node, isStaticCall, binding);
         }
 
         if (_accessorPlan == null)
@@ -234,12 +239,15 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
 
     private SyntaxNode RewriteAddedMethodInvocation(
         InvocationExpressionSyntax node,
-        IMethodSymbol addedMethod,
+        bool isStaticCall,
         AddedMethodBinding binding)
     {
-        string qualifiedShimType = string.IsNullOrEmpty(binding.NamespaceName)
-            ? "global::" + binding.ShimTypeName
-            : "global::" + binding.NamespaceName + "." + binding.ShimTypeName;
+        // Why the resolved namespace: a type from the global namespace gets a synthesized one,
+        // so naming the shim without it would not compile.
+        string qualifiedShimType = "global::"
+            + ShimNamespaceNames.ResolveShimNamespaceName(binding.NamespaceName)
+            + "."
+            + binding.ShimTypeName;
         ExpressionSyntax shimTypeExpression = SyntaxFactory.ParseTypeName(qualifiedShimType);
         ExpressionSyntax shimAccess = SyntaxFactory.MemberAccessExpression(
             SyntaxKind.SimpleMemberAccessExpression,
@@ -247,7 +255,7 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             SyntaxFactory.IdentifierName(binding.ShimMethodName));
 
         List<ArgumentSyntax> arguments = new List<ArgumentSyntax>();
-        if (!addedMethod.IsStatic)
+        if (!isStaticCall)
         {
             ExpressionSyntax receiver = ExtractReceiver(node.Expression);
             arguments.Add(SyntaxFactory.Argument(VisitReceiver(receiver)));
@@ -293,6 +301,12 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         if (assignedField != null)
         {
             return AddedFields.RewriteAddedFieldAssignment(node, assignedField);
+        }
+
+        SyntaxNode addedPropertyWrite = AddedProperties.TryRewriteSimpleAssignment(node);
+        if (addedPropertyWrite != null)
+        {
+            return addedPropertyWrite;
         }
 
         if (_accessorPlan == null)
@@ -383,6 +397,16 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             {
                 return addedFieldRead;
             }
+
+            SyntaxNode addedPropertyRead = AddedProperties.TryRewriteRead(
+                symbol,
+                node.Expression,
+                node.Name.Identifier.ValueText,
+                node);
+            if (addedPropertyRead != null)
+            {
+                return addedPropertyRead;
+            }
         }
 
         if (_accessorPlan == null)
@@ -420,7 +444,8 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
             return original;
         }
 
-        ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol;
+        ISymbol symbol = _semanticModel.GetSymbolInfo(node).Symbol
+            ?? UnboundOwnedCallQualifier.ResolveOwnedMethodOrNull(node, _semanticModel, _targetType);
         if (symbol == null)
         {
             return original;
@@ -430,6 +455,12 @@ internal sealed class ShimBodyRewriter : CSharpSyntaxRewriter
         if (addedFieldRead != null)
         {
             return addedFieldRead;
+        }
+
+        SyntaxNode addedPropertyRead = AddedProperties.TryRewriteBareRead(node, symbol);
+        if (addedPropertyRead != null)
+        {
+            return addedPropertyRead;
         }
 
         // Local/anonymous functions are emitted into the shim assembly — keep bare calls.

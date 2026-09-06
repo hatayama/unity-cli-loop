@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class TransformWorkerClientTests
     {
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
+        private const int SelfSnapshotConcurrency = 4;
         private const string ExpectedListEnumeratorFullName =
             "System.Collections.Generic.List`1/Enumerator<System.Int32>";
 
@@ -32,6 +33,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static readonly string[] SelfSnapshotMethodlessTypeAllowList =
         {
             "HotReloadSiblingConstDefinitions.cs",
+            "HotReloadCrossFileAddedMemberHolder.cs",
         };
 
         /// <summary>
@@ -513,74 +515,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string[] sourcePaths = Directory.GetFiles(directory, "*.cs", SearchOption.TopDirectoryOnly);
             Assert.That(sourcePaths.Length, Is.GreaterThan(0), "Expected at least one HotReload test .cs file.");
 
-            List<string> failures = new List<string>();
+            // Why warm up first: EnsureWorkerAsync compiles into a shared cache directory on a
+            // miss, and concurrent first-time misses would race on the same output files.
+            TransformWorkerBootstrapResult bootstrap =
+                await TransformWorkerBootstrap.EnsureWorkerAsync(CancellationToken.None);
+            Assert.That(bootstrap.Success, Is.True, "Worker bootstrap failed: " + bootstrap.ErrorMessage);
+
+            // Why bounded concurrency: each file costs one ~0.4 s worker process spawn, and with
+            // ~100 files the sequential version alone took 50 s of the suite. Four in flight keeps
+            // the wall time near 1/4 without starving the Editor main thread, which every run
+            // still hops through for CompilationPipeline and compiler-path lookups.
+            using SemaphoreSlim slots = new SemaphoreSlim(SelfSnapshotConcurrency, SelfSnapshotConcurrency);
+            List<Task<string>> fileChecks = new List<Task<string>>(sourcePaths.Length);
             foreach (string sourcePath in sourcePaths)
             {
-                string fullPath = Path.GetFullPath(sourcePath);
-                string projectRelativePath =
-                    "Assets/Tests/Editor/HotReload/" + Path.GetFileName(fullPath);
-                string onDisk = File.ReadAllText(fullPath);
-                // Why skip: a global-using-only file has no methods to mark unchanged; the worker
-                // correctly emits empty entries/skipped/unchanged for it.
-                if (!ContainsTypeDeclaration(onDisk))
+                fileChecks.Add(CheckSelfSnapshotTreatsFileUnchangedAsync(Path.GetFullPath(sourcePath), slots));
+            }
+
+            string[] fileOutcomes = await Task.WhenAll(fileChecks);
+
+            // Why keep source order: the report must list files the same way the sequential loop
+            // did, independent of which worker process happened to finish first.
+            List<string> failures = new List<string>();
+            foreach (string fileOutcome in fileOutcomes)
+            {
+                if (fileOutcome != null)
                 {
-                    continue;
-                }
-
-                bool isMethodlessTypeAllowListed =
-                    IsSelfSnapshotMethodlessTypeAllowListed(Path.GetFileName(fullPath));
-
-                TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
-                    fullPath,
-                    projectRelativePath,
-                    snapshotSource: onDisk);
-
-                List<string> fileFailures = new List<string>();
-                if (!result.Success)
-                {
-                    fileFailures.Add("Success=false: " + result.ErrorMessage);
-                }
-
-                if (result.Output == null)
-                {
-                    fileFailures.Add("Output is null");
-                    failures.Add(projectRelativePath + " -> " + string.Join("; ", fileFailures));
-                    continue;
-                }
-
-                if (result.Output.parseErrors != null && result.Output.parseErrors.Length > 0)
-                {
-                    fileFailures.Add(
-                        "parseErrors=[" + string.Join(" | ", result.Output.parseErrors) + "]");
-                }
-
-                if (result.Output.entries != null && result.Output.entries.Length > 0)
-                {
-                    fileFailures.Add(
-                        "entries=[" + FormatEntryMethodNames(result.Output.entries) + "]");
-                }
-
-                int unchangedCount =
-                    result.Output.unchangedMethods != null ? result.Output.unchangedMethods.Length : 0;
-                int skippedCount = result.Output.skipped != null ? result.Output.skipped.Length : 0;
-                if (!isMethodlessTypeAllowListed && unchangedCount + skippedCount < 1)
-                {
-                    fileFailures.Add(
-                        "unchangedMethods+skipped < 1 (unchanged="
-                        + unchangedCount + ", skipped=" + skippedCount + ")");
-                }
-
-                if (result.Output.declarationDriftWarnings != null
-                    && result.Output.declarationDriftWarnings.Length > 0)
-                {
-                    fileFailures.Add(
-                        "declarationDriftWarnings=["
-                        + string.Join(" | ", result.Output.declarationDriftWarnings) + "]");
-                }
-
-                if (fileFailures.Count > 0)
-                {
-                    failures.Add(projectRelativePath + " -> " + string.Join("; ", fileFailures));
+                    failures.Add(fileOutcome);
                 }
             }
 
@@ -589,6 +550,100 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Empty,
                 "Self-snapshot must treat every HotReload test source as unchanged:\n"
                 + string.Join("\n", failures));
+        }
+
+        /// <summary>
+        /// Runs the worker on one HotReload test source with itself as the snapshot and returns
+        /// the per-file failure line ("path -> reason; reason"), or null when the file passes or
+        /// has no type declaration.
+        /// </summary>
+        private static async Task<string> CheckSelfSnapshotTreatsFileUnchangedAsync(
+            string fullPath,
+            SemaphoreSlim slots)
+        {
+            string projectRelativePath =
+                "Assets/Tests/Editor/HotReload/" + Path.GetFileName(fullPath);
+            string onDisk = File.ReadAllText(fullPath);
+            // Why skip: a global-using-only file has no methods to mark unchanged; the worker
+            // correctly emits empty entries/skipped/unchanged for it.
+            if (!ContainsTypeDeclaration(onDisk))
+            {
+                return null;
+            }
+
+            bool isMethodlessTypeAllowListed =
+                IsSelfSnapshotMethodlessTypeAllowListed(Path.GetFileName(fullPath));
+
+            await slots.WaitAsync();
+            TransformWorkerClientResult result;
+            try
+            {
+                result = await RunWorkerOnSourceAsync(
+                    fullPath,
+                    projectRelativePath,
+                    snapshotSource: onDisk);
+            }
+            finally
+            {
+                slots.Release();
+            }
+
+            List<string> fileFailures = DescribeSelfSnapshotFailures(result, isMethodlessTypeAllowListed);
+            if (fileFailures.Count == 0)
+            {
+                return null;
+            }
+
+            return projectRelativePath + " -> " + string.Join("; ", fileFailures);
+        }
+
+        private static List<string> DescribeSelfSnapshotFailures(
+            TransformWorkerClientResult result,
+            bool isMethodlessTypeAllowListed)
+        {
+            List<string> fileFailures = new List<string>();
+            if (!result.Success)
+            {
+                fileFailures.Add("Success=false: " + result.ErrorMessage);
+            }
+
+            if (result.Output == null)
+            {
+                fileFailures.Add("Output is null");
+                return fileFailures;
+            }
+
+            if (result.Output.files[0].parseErrors != null && result.Output.files[0].parseErrors.Length > 0)
+            {
+                fileFailures.Add(
+                    "parseErrors=[" + string.Join(" | ", result.Output.files[0].parseErrors) + "]");
+            }
+
+            if (result.Output.entries != null && result.Output.entries.Length > 0)
+            {
+                fileFailures.Add(
+                    "entries=[" + FormatEntryMethodNames(result.Output.entries) + "]");
+            }
+
+            int unchangedCount =
+                result.Output.unchangedMethods != null ? result.Output.unchangedMethods.Length : 0;
+            int skippedCount = result.Output.skipped != null ? result.Output.skipped.Length : 0;
+            if (!isMethodlessTypeAllowListed && unchangedCount + skippedCount < 1)
+            {
+                fileFailures.Add(
+                    "unchangedMethods+skipped < 1 (unchanged="
+                    + unchangedCount + ", skipped=" + skippedCount + ")");
+            }
+
+            if (result.Output.files[0].declarationDriftWarnings != null
+                && result.Output.files[0].declarationDriftWarnings.Length > 0)
+            {
+                fileFailures.Add(
+                    "declarationDriftWarnings=["
+                    + string.Join(" | ", result.Output.files[0].declarationDriftWarnings) + "]");
+            }
+
+            return fileFailures;
         }
 
         /// <summary>
@@ -655,7 +710,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.unchangedMethods, Is.Not.Null);
             Assert.That(result.Output.unchangedMethods.Length, Is.GreaterThan(0));
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Method-body-only edits must not emit the outside-method-body drift warning.");
 
@@ -683,6 +738,69 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         Does.Not.Contain(nameof(HotReloadE2EFixture.QueryPrivate)),
                         "Unedited QueryPrivate must not appear in skipped.");
                 }
+            }
+        }
+
+        /// <summary>
+        /// What: every entry, skipped and unchangedMethod row the worker returns carries the
+        /// projectRelativePath of the file the run was given.
+        /// </summary>
+        [Test]
+        public async Task Run_OnE2EFixture_StampsEveryRowWithTheSourceProjectRelativePath()
+        {
+            string expectedPath = ResolveE2EFixtureProjectRelativePath();
+
+            // Why two runs: a baseline-less run is the only one that produces skipped rows, and a
+            // run against a partly matching snapshot is the only one that produces unchanged rows.
+            // The snapshot below need not isolate a single method — any edit that leaves some
+            // methods matching gives this test both entries and unchanged rows.
+            TransformWorkerClientResult withoutSnapshot = await RunWorkerOnE2EFixtureAsync();
+            Assert.That(withoutSnapshot.Success, Is.True, withoutSnapshot.ErrorMessage);
+            Assert.That(withoutSnapshot.Output.entries, Is.Not.Empty);
+            Assert.That(withoutSnapshot.Output.skipped, Is.Not.Empty);
+            AssertRowsCarrySourcePath(withoutSnapshot, expectedPath);
+
+            string onDisk = File.ReadAllText(ResolveE2EFixturePath());
+            string snapshotSource = onDisk.Replace(
+                "return _secret + delta;",
+                "return _secret + delta + 999;",
+                StringComparison.Ordinal);
+            Assert.That(snapshotSource, Is.Not.EqualTo(onDisk), "Precondition: snapshot must differ.");
+
+            TransformWorkerClientResult withSnapshot = await RunWorkerOnE2EFixtureAsync(snapshotSource);
+            Assert.That(withSnapshot.Success, Is.True, withSnapshot.ErrorMessage);
+            Assert.That(withSnapshot.Output.entries, Is.Not.Empty);
+            Assert.That(withSnapshot.Output.unchangedMethods, Is.Not.Empty);
+            AssertRowsCarrySourcePath(withSnapshot, expectedPath);
+        }
+
+        /// <summary>
+        /// What: asserts every worker row of a result names <paramref name="expectedPath"/> as its source file.
+        /// </summary>
+        private static void AssertRowsCarrySourcePath(TransformWorkerClientResult result, string expectedPath)
+        {
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                Assert.That(
+                    entry.sourceProjectRelativePath,
+                    Is.EqualTo(expectedPath),
+                    "entry " + entry.methodName + " must name the edited file.");
+            }
+
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                Assert.That(
+                    skipped.sourceProjectRelativePath,
+                    Is.EqualTo(expectedPath),
+                    "skipped " + skipped.method + " must name the edited file.");
+            }
+
+            foreach (TransformWorkerUnchangedMethodDto unchanged in result.Output.unchangedMethods)
+            {
+                Assert.That(
+                    unchanged.sourceProjectRelativePath,
+                    Is.EqualTo(expectedPath),
+                    "unchangedMethod " + unchanged.methodName + " must name the edited file.");
             }
         }
 
@@ -722,7 +840,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "EOL-only snapshot must list ComputeWithPrivate in unchangedMethods.");
             Assert.That(result.Output.skipped, Is.Empty);
-            Assert.That(result.Output.declarationDriftWarnings, Is.Empty);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Empty);
         }
 
         /// <summary>
@@ -740,9 +858,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             TransformWorkerClientResult result = await RunWorkerOnE2EFixtureAsync(snapshotSource);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Not.Null);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("Edits outside method bodies in HotReloadE2EFixtures.cs"));
         }
 
@@ -772,14 +890,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Not.Null);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("TuningConst").And.Contain("is 4 in the edited source but 3"),
                 "Const-only edits must keep the dedicated const-drift warning.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings));
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Const-only edits must not also emit the generic outside-body warning.");
         }
@@ -822,7 +940,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Sibling const drift must use the same warning text as an edited-file const drift.\n"
                 + string.Join("\n", result.Output.siblingConstDriftWarnings));
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.EqualTo(
                     "const io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload.HotReloadSiblingConstDefinitions.SiblingTuning is 7 in the edited source but 6 in the compiled assembly; edits outside method bodies never take effect through hot reload - a method body patched in the same run still compiles against the compiled assembly and keeps the old value. Run 'uloop compile' to apply this change."),
                 "Sibling const-drift warnings must stay on siblingConstDriftWarnings, not declarationDriftWarnings.");
@@ -854,14 +972,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Not.Null);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("HotReloadE2EMode.Active").And.Contain("is 2 in the edited source but 1"),
                 "Enum-member-only edits must keep the dedicated const-drift warning.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings));
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Enum-member-only edits must not also emit the generic outside-body warning.");
         }
@@ -892,13 +1010,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(result.Output.files[0].declarationDriftWarnings, Is.Not.Null);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("Edits outside method bodies"),
                 "Non-const field initializer edits must still emit the outside-body warning.");
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
                     "Edits outside method bodies in NonConstFieldInitializerDrift.cs (field initializer: _secret) are not applied by hot reload; run uloop compile to pick them up."));
         }
@@ -949,22 +1067,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(foundCompute, Is.True, "Body edit must still emit a Patched ComputeWithPrivate entry.");
         }
 
-        private const string ExpectedAddedPropertySkipReason =
-            "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
-            + "For a computed value, add a same-file method instead (e.g. 'private T GetX()'), which applies "
-            + "through hot reload; for a constant, use a 'const' or a plain added field; otherwise run "
-            + "'uloop compile'.";
-
         private const string ExpectedExplicitAccessorSkipReason =
             "Property setter, init, or indexer accessors are out of scope for v1; "
             + "run 'uloop compile' to apply accessor edits.";
 
+        private const string ExpectedSetOnlyPropertySkipReason =
+            "Added properties with only a setter are skipped; the shim requires a getter identity. "
+            + "Run 'uloop compile' to add them.";
+
         /// <summary>
-        /// What: adding a get-accessor property plus a method-body edit skips the getter with
-        /// the added-property reason and does not emit the outside-body drift warning.
+        /// What: adding an expression-bodied property plus a method-body edit emits the getter
+        /// as an added member and does not emit the outside-body drift warning.
         /// </summary>
         [Test]
-        public async Task Run_AddedExpressionBodiedPropertyPlusBodyEdit_SkipsGetterWithoutOutsideBodyWarning()
+        public async Task Run_AddedExpressionBodiedPropertyPlusBodyEdit_EmitsGetterWithoutOutsideBodyWarning()
         {
             const string fileName = "AddedExpressionBodiedPropertyDrift.cs";
             TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
@@ -981,14 +1097,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         StringComparison.Ordinal);
                 });
 
-            AssertSkippedContains(result, "get_AddedProbe", ExpectedAddedPropertySkipReason);
+            AssertEmittedWithoutSkip(result, "get_AddedProbe");
             AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
             AssertPatchedComputeWithPrivate(result);
         }
 
         /// <summary>
-        /// What: adding a setter-only property plus a method-body edit skips the setter with
-        /// the explicit-accessor reason and does not emit the outside-body drift warning.
+        /// What: adding a setter-only property plus a method-body edit skips the setter, because
+        /// an added property needs a getter identity, and does not emit the outside-body warning.
         /// </summary>
         [Test]
         public async Task Run_AddedSetterOnlyPropertyPlusBodyEdit_SkipsSetterWithoutOutsideBodyWarning()
@@ -1008,17 +1124,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         StringComparison.Ordinal);
                 });
 
-            AssertSkippedContains(result, "set_AddedSetterOnly", ExpectedExplicitAccessorSkipReason);
+            AssertSkippedContains(result, "set_AddedSetterOnly", ExpectedSetOnlyPropertySkipReason);
             AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
             AssertPatchedComputeWithPrivate(result);
         }
 
         /// <summary>
-        /// What: adding an auto-property emits no skip row, so the outside-body drift warning
-        /// remains the only signal that the new member was not applied.
+        /// What: adding an auto-property plus a method-body edit emits both accessors as added
+        /// members and does not emit the outside-body drift warning.
         /// </summary>
         [Test]
-        public async Task Run_AddedAutoPropertyPlusBodyEdit_EmitsOutsideBodyWarningWithoutSkipRow()
+        public async Task Run_AddedAutoPropertyPlusBodyEdit_EmitsAccessorsWithoutOutsideBodyWarning()
         {
             const string fileName = "AddedAutoPropertyDrift.cs";
             TransformWorkerClientResult result = await RunWorkerOnEditedE2ECopyAsync(
@@ -1035,8 +1151,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         StringComparison.Ordinal);
                 });
 
-            AssertSkippedDoesNotContain(result, "AddedAuto");
-            AssertContainsOutsideMethodBodyDriftWarning(result, fileName);
+            AssertEmittedWithoutSkip(result, "get_AddedAuto");
+            AssertEmittedWithoutSkip(result, "set_AddedAuto");
+            AssertDoesNotContainOutsideMethodBodyDriftWarning(result, fileName);
             AssertPatchedComputeWithPrivate(result);
         }
 
@@ -1138,7 +1255,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.True,
                 "Duplicate-key fallback must not report unchanged methods.");
             Assert.That(
-                withCollision.Output.baselineDisabledByDuplicateKeys,
+                withCollision.Output.files[0].baselineDisabledByDuplicateKeys,
                 Is.True,
                 "Duplicate-key fallback must set baselineDisabledByDuplicateKeys.");
 
@@ -1164,7 +1281,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.baselineDisabledByDuplicateKeys, Is.False);
+            Assert.That(result.Output.files[0].baselineDisabledByDuplicateKeys, Is.False);
             Assert.That(
                 result.Output.entries,
                 Is.Empty,
@@ -1208,7 +1325,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.baselineDisabledByDuplicateKeys, Is.False);
+            Assert.That(result.Output.files[0].baselineDisabledByDuplicateKeys, Is.False);
             Assert.That(
                 result.Output.entries,
                 Is.Empty,
@@ -1409,7 +1526,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "; skipped="
                 + FormatSkippedMethodNames(result.Output.skipped));
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Getter-body-only edits must not emit the outside-method-body drift warning.");
         }
@@ -1436,7 +1553,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Block getter-body-only edits must not emit outside-method-body drift.");
 
@@ -1496,7 +1613,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 additionalAssemblySourcePaths: new[] { globalPath });
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.parseErrors, Is.Empty);
+            Assert.That(result.Output.files[0].parseErrors, Is.Empty);
             Assert.That(
                 result.Output.shimSource,
                 Does.Contain("using AliasProbe = System.Text.StringBuilder"));
@@ -1922,7 +2039,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        public HotReloadUnsupportedKindCtorFixture() : this(0)\n        {");
 
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
                     "Edits outside method bodies in UnsupportedKindCtorInitializerDrift.cs (constructor: .ctor) are not applied by hot reload; run uloop compile to pick them up."));
         }
@@ -1941,7 +2058,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        [Obsolete]\n        public static HotReloadUnsupportedKindOperatorFixture operator +(");
 
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
                     "Edits outside method bodies in UnsupportedKindOperatorAttributeDrift.cs (operator: +) are not applied by hot reload; run uloop compile to pick them up."));
         }
@@ -1960,7 +2077,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        [Obsolete]\n        public static implicit operator int(HotReloadUnsupportedKindConversionFixture value)");
 
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
                     "Edits outside method bodies in UnsupportedKindConversionAttributeDrift.cs (conversion: implicit->int) are not applied by hot reload; run uloop compile to pick them up."));
         }
@@ -1979,7 +2096,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "        [Obsolete]\n        public event Action Edited");
 
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Does.Contain(
                     "Edits outside method bodies in UnsupportedKindEventAttributeDrift.cs (event: Edited) are not applied by hot reload; run uloop compile to pick them up."));
         }
@@ -2106,7 +2223,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fileName)
         {
             string expectedWarning = string.Format(OutsideMethodBodyDriftWarningFormat, fileName);
-            string[] warnings = result.Output.declarationDriftWarnings ?? Array.Empty<string>();
+            string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
             Assert.That(
                 warnings,
                 Does.Not.Contain(expectedWarning),
@@ -2119,12 +2236,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string fileName)
         {
             string expectedWarning = string.Format(OutsideMethodBodyDriftWarningFormat, fileName);
-            string[] warnings = result.Output.declarationDriftWarnings ?? Array.Empty<string>();
+            string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
             Assert.That(
                 warnings,
                 Does.Contain(expectedWarning),
                 "Declaration-only unsupported-kind edits must emit the outside-body warning.\n"
                 + string.Join("\n", warnings));
+        }
+
+        private static void AssertEmittedWithoutSkip(
+            TransformWorkerClientResult result,
+            string methodName)
+        {
+            bool found = false;
+            foreach (TransformWorkerEntryDto entry in result.Output.entries)
+            {
+                if (entry.methodName == methodName)
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            Assert.That(found, Is.True, "Expected an entry for '" + methodName + "'.");
+            AssertSkippedDoesNotContain(result, methodName);
         }
 
         private static void AssertSkippedContains(
@@ -2230,7 +2365,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string projectRelativePath,
             string snapshotSource = null,
             string[] additionalAssemblySourcePaths = null,
-            string[] changedSiblingSourcePaths = null)
+            string[] changedSiblingSourcePaths = null,
+            string secondSourcePath = null,
+            string secondProjectRelativePath = null)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string targetDllPath = Path.Combine(
@@ -2272,14 +2409,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 assemblySourcePaths = merged.ToArray();
             }
 
+            List<TransformWorkerSourceDto> sources = new List<TransformWorkerSourceDto>
+            {
+                new TransformWorkerSourceDto
+                {
+                    sourcePath = sourcePath,
+                    projectRelativePath = projectRelativePath,
+                    snapshotSource = snapshotSource
+                }
+            };
+            if (secondSourcePath != null)
+            {
+                sources.Add(new TransformWorkerSourceDto
+                {
+                    sourcePath = secondSourcePath,
+                    projectRelativePath = secondProjectRelativePath
+                });
+            }
+
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
-                sourcePath = sourcePath,
+                sources = sources.ToArray(),
                 defines = compilationAssembly.defines ?? System.Array.Empty<string>(),
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = targetDllPath,
-                snapshotSource = snapshotSource,
-                projectRelativePath = projectRelativePath,
                 assemblySourcePaths = assemblySourcePaths,
                 changedSiblingSourcePaths = changedSiblingSourcePaths
             };
@@ -2465,36 +2618,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void Deserialize_RemovedMembersAndCalledAddedMethodKeys_NullAndEmptyRoundTrip()
         {
             string omittedJson =
-                "{\"shimSource\":\"\",\"entries\":[{\"methodName\":\"Caller\"}],\"skipped\":[],\"parseErrors\":[]}";
+                "{\"shimSource\":\"\",\"entries\":[{\"methodName\":\"Caller\"}],\"skipped\":[],"
+                + "\"parseErrors\":[],\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\"}]}";
             TransformWorkerOutputDto omitted =
                 JsonConvert.DeserializeObject<TransformWorkerOutputDto>(omittedJson);
-            Assert.That(omitted.removedMembers, Is.Null, "Omitted removedMembers must deserialize as null.");
-            Assert.That(omitted.addedFieldNames, Is.Null, "Omitted addedFieldNames must deserialize as null.");
-            Assert.That(omitted.addedConstNames, Is.Null, "Omitted addedConstNames must deserialize as null.");
+            Assert.That(omitted.files[0].removedMembers, Is.Null, "Omitted removedMembers must deserialize as null.");
+            Assert.That(omitted.files[0].addedFieldNames, Is.Null, "Omitted addedFieldNames must deserialize as null.");
+            Assert.That(omitted.files[0].addedConstNames, Is.Null, "Omitted addedConstNames must deserialize as null.");
             Assert.That(
                 omitted.entries[0].calledAddedMethodKeys,
                 Is.Null,
                 "Omitted calledAddedMethodKeys must deserialize as null.");
 
             TransformWorkerClient.CoalesceOutput(omitted);
-            Assert.That(omitted.removedMembers, Is.Not.Null);
-            Assert.That(omitted.removedMembers, Is.Empty);
-            Assert.That(omitted.removedMethodSignatures, Is.Not.Null);
-            Assert.That(omitted.removedMethodSignatures, Is.Empty);
-            Assert.That(omitted.addedFieldNames, Is.Not.Null);
-            Assert.That(omitted.addedFieldNames, Is.Empty);
-            Assert.That(omitted.addedConstNames, Is.Not.Null);
-            Assert.That(omitted.addedConstNames, Is.Empty);
-            string nullNamesJson = "{\"shimSource\":\"\",\"addedFieldNames\":null}";
+            Assert.That(omitted.files[0].removedMembers, Is.Not.Null);
+            Assert.That(omitted.files[0].removedMembers, Is.Empty);
+            Assert.That(omitted.files[0].removedMethodSignatures, Is.Not.Null);
+            Assert.That(omitted.files[0].removedMethodSignatures, Is.Empty);
+            Assert.That(omitted.files[0].addedFieldNames, Is.Not.Null);
+            Assert.That(omitted.files[0].addedFieldNames, Is.Empty);
+            Assert.That(omitted.files[0].addedConstNames, Is.Not.Null);
+            Assert.That(omitted.files[0].addedConstNames, Is.Empty);
+            string nullNamesJson =
+                "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\","
+                + "\"addedFieldNames\":null}]}";
             TransformWorkerOutputDto nullNames =
                 JsonConvert.DeserializeObject<TransformWorkerOutputDto>(nullNamesJson);
-            Assert.That(nullNames.addedFieldNames, Is.Null);
+            Assert.That(nullNames.files[0].addedFieldNames, Is.Null);
             TransformWorkerClient.CoalesceOutput(nullNames);
-            Assert.That(nullNames.addedFieldNames, Is.Not.Null);
-            Assert.That(nullNames.addedFieldNames, Is.Empty);
+            Assert.That(nullNames.files[0].addedFieldNames, Is.Not.Null);
+            Assert.That(nullNames.files[0].addedFieldNames, Is.Empty);
             Assert.That(omitted.entries[0].calledAddedMethodKeys, Is.Not.Null);
             Assert.That(omitted.entries[0].calledAddedMethodKeys, Is.Empty);
-            Assert.That(omitted.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(omitted.files[0].declarationDriftWarnings, Is.Not.Null);
             Assert.That(omitted.siblingConstDriftWarnings, Is.Not.Null);
             Assert.That(omitted.unchangedMethods, Is.Not.Null);
             Assert.That(omitted.parseErrors, Is.Not.Null);
@@ -2504,21 +2660,78 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             string emptyJson =
                 "{\"shimSource\":\"\",\"entries\":[{\"methodName\":\"Caller\",\"calledAddedMethodKeys\":[]}],"
-                + "\"removedMembers\":[]}";
+                + "\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\",\"removedMembers\":[]}]}";
             TransformWorkerOutputDto empty = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(emptyJson);
-            Assert.That(empty.removedMembers, Is.Not.Null);
-            Assert.That(empty.removedMembers.Length, Is.EqualTo(0));
+            Assert.That(empty.files[0].removedMembers, Is.Not.Null);
+            Assert.That(empty.files[0].removedMembers.Length, Is.EqualTo(0));
             Assert.That(empty.entries[0].calledAddedMethodKeys, Is.Not.Null);
             Assert.That(empty.entries[0].calledAddedMethodKeys.Length, Is.EqualTo(0));
 
             string nestedJson =
-                "{\"removedMembers\":[{\"kind\":\"method\",\"name\":\"Gone\"}],"
+                "{\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\","
+                + "\"removedMembers\":[{\"kind\":\"method\",\"name\":\"Gone\"}]}],"
                 + "\"entries\":[{\"methodName\":\"Caller\",\"calledAddedMethodKeys\":[\"T::Added()\"]}]}";
             TransformWorkerOutputDto nested = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(nestedJson);
-            Assert.That(nested.removedMembers.Length, Is.EqualTo(1));
-            Assert.That(nested.removedMembers[0].kind, Is.EqualTo("method"));
-            Assert.That(nested.removedMembers[0].name, Is.EqualTo("Gone"));
+            Assert.That(nested.files[0].removedMembers.Length, Is.EqualTo(1));
+            Assert.That(nested.files[0].removedMembers[0].kind, Is.EqualTo("method"));
+            Assert.That(nested.files[0].removedMembers[0].name, Is.EqualTo("Gone"));
             Assert.That(nested.entries[0].calledAddedMethodKeys, Is.EqualTo(new[] { "T::Added()" }));
+        }
+
+        /// <summary>
+        /// What: a run whose sources repeat one projectRelativePath is a run-level failure, so
+        /// the client reports it as a failed result instead of a success with ambiguous rows.
+        /// </summary>
+        [Test]
+        public async Task BootstrapAndRun_TwoSourcesOfTheSameFile_FailsWithRunLevelError()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string fixtureProjectRelativePath = ResolveE2EFixtureProjectRelativePath();
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                fixturePath,
+                fixtureProjectRelativePath,
+                secondSourcePath: fixturePath,
+                secondProjectRelativePath: fixtureProjectRelativePath);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("repeat a projectRelativePath"));
+        }
+
+        /// <summary>
+        /// What: an omitted files array coalesces to empty, and every array and the sha256 string
+        /// omitted inside one files entry coalesces to non-null, so per-file readers never see null.
+        /// </summary>
+        [Test]
+        public void CoalesceOutput_OmittedFilesAndPerFileFields_BecomeNonNull()
+        {
+            TransformWorkerOutputDto withoutFiles =
+                JsonConvert.DeserializeObject<TransformWorkerOutputDto>("{\"shimSource\":\"\"}");
+            Assert.That(withoutFiles.files, Is.Null, "Omitted files must deserialize as null.");
+            TransformWorkerClient.CoalesceOutput(withoutFiles);
+            Assert.That(withoutFiles.files, Is.Not.Null);
+            Assert.That(withoutFiles.files, Is.Empty);
+
+            TransformWorkerOutputDto withBareFile = JsonConvert.DeserializeObject<TransformWorkerOutputDto>(
+                "{\"shimSource\":\"\",\"files\":[{\"projectRelativePath\":\"Assets/Edited.cs\"}]}");
+            Assert.That(withBareFile.files[0].sourceContentSha256, Is.Null);
+            TransformWorkerClient.CoalesceOutput(withBareFile);
+            TransformWorkerFileOutputDto coalesced = withBareFile.files[0];
+            Assert.That(coalesced.projectRelativePath, Is.EqualTo("Assets/Edited.cs"));
+            Assert.That(coalesced.sourceContentSha256, Is.EqualTo(string.Empty));
+            Assert.That(coalesced.parseErrors, Is.Not.Null);
+            Assert.That(coalesced.parseErrors, Is.Empty);
+            Assert.That(coalesced.declarationDriftWarnings, Is.Not.Null);
+            Assert.That(coalesced.declarationDriftWarnings, Is.Empty);
+            Assert.That(coalesced.removedMembers, Is.Not.Null);
+            Assert.That(coalesced.removedMembers, Is.Empty);
+            Assert.That(coalesced.removedMethodSignatures, Is.Not.Null);
+            Assert.That(coalesced.removedMethodSignatures, Is.Empty);
+            Assert.That(coalesced.addedFieldNames, Is.Not.Null);
+            Assert.That(coalesced.addedFieldNames, Is.Empty);
+            Assert.That(coalesced.addedConstNames, Is.Not.Null);
+            Assert.That(coalesced.addedConstNames, Is.Empty);
+            Assert.That(coalesced.baselineDisabledByDuplicateKeys, Is.False);
         }
 
         /// <summary>

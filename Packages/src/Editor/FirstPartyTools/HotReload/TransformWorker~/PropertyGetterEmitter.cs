@@ -19,12 +19,10 @@ internal static class PropertyGetterEmitter
 {
     internal static (int ShimTypeCounter, int GlobalShimMethodCounter) EmitPropertyGettersForType(
         TypeEmitState typeState,
-        SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
-        CompilationUnitSyntax root,
+        AddedPropertyCatalog addedPropertyCatalog,
         WorkerInput input,
-        BaselineSnapshotState baseline,
         List<WorkerEntry> entries,
         List<WorkerSkipped> skipped,
         List<WorkerUnchangedMethod> unchangedMethods,
@@ -33,12 +31,22 @@ internal static class PropertyGetterEmitter
         int shimTypeCounter,
         int globalShimMethodCounter)
     {
+        SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
+        CompilationUnitSyntax root = typeState.SourceUnit.Root;
+        BaselineSnapshotState baseline = typeState.SourceUnit.Baseline;
         foreach (PropertyDeclarationSyntax propertyDeclaration in typeState.TypeDeclaration.Members
             .OfType<PropertyDeclarationSyntax>())
         {
+            IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
+            if (addedPropertyCatalog.FindBySymbolOrNull(propertySymbol) != null)
+            {
+                continue;
+            }
+
             if (typeState.TypeIsAbsentFromCompiledAssembly)
             {
                 PropertyGetterClassifier.SkipPropertyGetterOnUncompiledType(
+                    typeState.SourceUnit.Input.ProjectRelativePath,
                     propertyDeclaration,
                     semanticModel,
                     skipped);
@@ -54,6 +62,7 @@ internal static class PropertyGetterEmitter
                     typeState.TypeMetadataNameFromSyntax,
                     semanticModel,
                     root,
+                    typeState.SourceUnit.Input.ProjectRelativePath,
                     input,
                     baseline.HasBaseline,
                     baseline.SnapshotPropertyMap,
@@ -67,7 +76,8 @@ internal static class PropertyGetterEmitter
                     typeState.CurrentShimType,
                     assemblyGlobalUsings,
                     addedMethodCatalog,
-                    addedFieldCatalog);
+                    addedFieldCatalog,
+                    addedPropertyCatalog);
             typeState.CurrentShimType = nextShimType;
             shimTypeCounter = nextShimTypeCounter;
             globalShimMethodCounter = nextGlobalShimMethodCounter;
@@ -86,6 +96,7 @@ internal static class PropertyGetterEmitter
             string typeMetadataNameFromSyntax,
             SemanticModel semanticModel,
             CompilationUnitSyntax root,
+            string sourceProjectRelativePath,
             WorkerInput input,
             bool hasBaseline,
             Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
@@ -99,10 +110,19 @@ internal static class PropertyGetterEmitter
             ShimTypeBuilder currentShimType,
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
             AddedMethodCatalog addedMethodCatalog,
-            AddedFieldCatalog addedFieldCatalog)
+            AddedFieldCatalog addedFieldCatalog,
+            AddedPropertyCatalog addedPropertyCatalog)
     {
         IPropertySymbol propertySymbol = semanticModel.GetDeclaredSymbol(propertyDeclaration);
         if (propertySymbol == null || propertySymbol.GetMethod == null)
+        {
+            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
+        }
+
+        string propertyKey = AddedPropertyCatalog.FormatPropertyKey(
+            CecilTypeNames.ToMetadataName(typeSymbol),
+            propertySymbol.Name);
+        if (addedPropertyCatalog.IsClassifiedAdded(propertyKey))
         {
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
@@ -111,7 +131,6 @@ internal static class PropertyGetterEmitter
             PropertyGetterClassifier.TryGetPropertyGetterBody(propertyDeclaration);
         if (!hasGetterBody)
         {
-            // Auto-property / setter-only: not a patch candidate (no Skipped row either).
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
 
@@ -128,6 +147,7 @@ internal static class PropertyGetterEmitter
         }
 
         if (PropertyGetterClassifier.TryRecordUnchangedPropertyGetter(
+            sourceProjectRelativePath,
             hasBaseline,
             snapshotPropertyMap,
             plainCurrentPropertyMap,
@@ -141,25 +161,11 @@ internal static class PropertyGetterEmitter
             return (currentShimType, shimTypeCounter, globalShimMethodCounter);
         }
 
-        // Why skip newly added properties: Harmony looks up get_<Name> on the compiled type
-        // and fails with "No method 'get_X' ... was found" when the member does not exist.
-        if (PropertyGetterClassifier.TrySkipAddedProperty(
-            hasBaseline,
-            snapshotPropertyMap,
-            plainCurrentPropertyMap,
-            typeMetadataNameFromSyntax,
-            propertyDeclaration,
-            getterSymbol,
-            skipped,
-            addedMethodCatalog))
-        {
-            return (currentShimType, shimTypeCounter, globalShimMethodCounter);
-        }
-
         if (propertyDeclaration.ExplicitInterfaceSpecifier != null)
         {
             skipped.Add(new WorkerSkipped
             {
+                SourceProjectRelativePath = sourceProjectRelativePath,
                 Method = WorkerMethodKeys.FormatMethodLabel(getterSymbol),
                 Reason = "Explicit interface implementations are skipped in v1."
             });
@@ -172,6 +178,7 @@ internal static class PropertyGetterEmitter
             ?? (SyntaxNode)getAccessor.Body
             ?? getAccessor.ExpressionBody;
         (bool skipGetter, MethodTransformDecision decision) = PropertyGetterClassifier.TrySkipPropertyGetterByDecision(
+            sourceProjectRelativePath,
             typeDeclaration,
             typeSymbol,
             getterSymbol,
@@ -180,6 +187,7 @@ internal static class PropertyGetterEmitter
             compiledType,
             addedMethodCatalog,
             addedFieldCatalog,
+            addedPropertyCatalog,
             skipped);
         if (skipGetter)
         {
@@ -197,6 +205,7 @@ internal static class PropertyGetterEmitter
             parameterTypeFullNames,
             semanticModel,
             root,
+            sourceProjectRelativePath,
             entries,
             shimTypes,
             shimTypeCounter,
@@ -204,7 +213,8 @@ internal static class PropertyGetterEmitter
             currentShimType,
             assemblyGlobalUsings,
             addedMethodCatalog,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            addedPropertyCatalog);
     }
 
     internal static (ShimTypeBuilder CurrentShimType, int ShimTypeCounter, int GlobalShimMethodCounter)
@@ -219,6 +229,7 @@ internal static class PropertyGetterEmitter
             string[] parameterTypeFullNames,
             SemanticModel semanticModel,
             CompilationUnitSyntax root,
+            string sourceProjectRelativePath,
             List<WorkerEntry> entries,
             List<ShimTypeBuilder> shimTypes,
             int shimTypeCounter,
@@ -226,7 +237,8 @@ internal static class PropertyGetterEmitter
             ShimTypeBuilder currentShimType,
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
             AddedMethodCatalog addedMethodCatalog,
-            AddedFieldCatalog addedFieldCatalog)
+            AddedFieldCatalog addedFieldCatalog,
+            AddedPropertyCatalog addedPropertyCatalog)
     {
         if (currentShimType == null)
         {
@@ -239,7 +251,8 @@ internal static class PropertyGetterEmitter
             currentShimType = new ShimTypeBuilder(
                 shimTypeName,
                 namespaceName,
-                WorkerUsingCollector.CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings));
+                WorkerUsingCollector.CollectUsingsForType(root, typeDeclaration, assemblyGlobalUsings),
+                sourceProjectRelativePath);
             shimTypes.Add(currentShimType);
         }
 
@@ -261,11 +274,13 @@ internal static class PropertyGetterEmitter
             semanticModel,
             rewritePlan,
             addedMethodCatalog,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            addedPropertyCatalog);
         currentShimType.AddMethod(rewrittenMethod, shimMethodName);
 
         entries.Add(new WorkerEntry
         {
+            SourceProjectRelativePath = sourceProjectRelativePath,
             TypeMetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
             MethodName = getterSymbol.Name,
             ParameterTypeFullNames = parameterTypeFullNames,
@@ -277,6 +292,7 @@ internal static class PropertyGetterEmitter
                 getterBodyNode,
                 semanticModel,
                 addedMethodCatalog,
+                addedPropertyCatalog,
                 methodKey),
             SourceStartLine = sourceStartLine,
             SourceEndLine = sourceEndLine,
@@ -295,14 +311,16 @@ internal static class PropertyGetterEmitter
         SemanticModel semanticModel,
         AccessorPlan accessorPlan,
         AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog)
+        AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog)
     {
         ShimBodyRewriter rewriter = new ShimBodyRewriter(
             semanticModel,
             targetType,
             accessorPlan,
             addedMethodCatalog,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            addedPropertyCatalog);
         SyntaxNode rewrittenBody = rewriter.Visit(getterBodyNode);
         // Why transfer: Visit may rebuild ArrowExpressionClause nodes and drop #line annotations.
         rewrittenBody = TransferUloopLineAnnotations(getterBodyNode, rewrittenBody);

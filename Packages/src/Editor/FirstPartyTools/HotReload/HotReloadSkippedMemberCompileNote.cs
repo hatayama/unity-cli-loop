@@ -60,7 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 string simpleName = ExtractSimpleMethodName(row.method);
-                if (string.Equals(simpleName, unresolvedName, StringComparison.Ordinal))
+                if (MatchesUnresolvedName(simpleName, unresolvedName))
                 {
                     return row.reason;
                 }
@@ -128,6 +128,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return error.Substring(nameStart, nameEnd - nameStart);
+        }
+
+        private static bool MatchesUnresolvedName(string simpleName, string unresolvedName)
+        {
+            if (string.Equals(simpleName, unresolvedName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            // Why get_/set_ only: CS1061 names the property, while the skipped row labels
+            // the accessor (get_X / set_X). Get_X and getX are not accessors.
+            if (simpleName.StartsWith("get_", StringComparison.Ordinal)
+                || simpleName.StartsWith("set_", StringComparison.Ordinal))
+            {
+                return string.Equals(simpleName.Substring(4), unresolvedName, StringComparison.Ordinal);
+            }
+
+            return false;
         }
 
         private static string ExtractSimpleMethodName(string methodLabel)

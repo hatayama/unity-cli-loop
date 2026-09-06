@@ -74,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 sawSignature = true;
-                string signatureKey = HotReloadWireMethodKeys.BuildMethodKeyParts(
+                string signatureKey = HotReloadMethodKeys.BuildMethodKeyParts(
                     signature.typeMetadataName,
                     signature.methodName,
                     signature.parameterTypeFullNames,

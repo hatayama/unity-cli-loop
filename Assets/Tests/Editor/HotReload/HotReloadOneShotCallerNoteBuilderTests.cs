@@ -354,6 +354,374 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a compiled two-step Awake chain still produces the indirect lifecycle note.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_CompiledChainedAwakeOnlyCaller_AddsIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
+                "OneShotCallerScannerFixture.ChainedAwakeOnlyTarget()",
+                "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateScannerFixtureCandidate("ChainedAwakeOnlyTarget", outcome)
+                };
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                projectRoot,
+                outcomes,
+                candidates,
+                (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
+
+            Assert.That(
+                outcomes[0].LifecycleNote,
+                Is.EqualTo(
+                    "OneShotCallerScannerFixture.ChainedAwakeOnlyTarget() is called only from one-shot "
+                    + "lifecycle method(s) (Awake) in the compiled assemblies; objects that already ran them "
+                    + "will not run the patched body. It takes effect only for newly created objects, or run "
+                    + "`uloop compile` and re-enter Play Mode."));
+        }
+
+        /// <summary>
+        /// What: a compiled Awake chain through a non-MonoBehaviour instance still produces the note.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_CompiledNonMonoBehaviourChain_AddsIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
+                "OneShotCallerChainHelper.ConfigureTarget()",
+                "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateScannerCandidateForType(typeof(OneShotCallerChainHelper), "ConfigureTarget", outcome)
+                };
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                projectRoot,
+                outcomes,
+                candidates,
+                (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
+
+            Assert.That(
+                outcomes[0].LifecycleNote,
+                Is.EqualTo(
+                    "OneShotCallerChainHelper.ConfigureTarget() is called only from one-shot lifecycle "
+                    + "method(s) (Awake) in the compiled assemblies; objects that already ran them will not run "
+                    + "the patched body. It takes effect only for newly created objects, or run `uloop compile` "
+                    + "and re-enter Play Mode."));
+        }
+
+        /// <summary>
+        /// What: a compiled chain that also has a non-lifecycle root suppresses the note.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_CompiledMixedChain_SuppressesIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
+                "OneShotCallerScannerFixture.MixedChainTarget()",
+                "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateScannerFixtureCandidate("MixedChainTarget", outcome)
+                };
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                projectRoot,
+                outcomes,
+                candidates,
+                (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
+
+            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a compiled chain whose intermediate is loaded as a function pointer suppresses the note.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_CompiledDelegateChain_SuppressesIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
+                "OneShotCallerScannerFixture.DelegateChainTarget()",
+                "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateScannerFixtureCandidate("DelegateChainTarget", outcome)
+                };
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                projectRoot,
+                outcomes,
+                candidates,
+                (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
+
+            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a compiled chain that stops at an uncalled intermediate suppresses the note.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_CompiledDeadEndChain_SuppressesIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
+                "OneShotCallerScannerFixture.DeadEndTarget()",
+                "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateScannerFixtureCandidate("DeadEndTarget", outcome)
+                };
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                projectRoot,
+                outcomes,
+                candidates,
+                (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
+
+            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a compiled chain deeper than MaxCallerDepth suppresses the note.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_CompiledDeepChain_SuppressesIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched(
+                "OneShotCallerScannerFixture.DeepTarget()",
+                "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateScannerFixtureCandidate("DeepTarget", outcome)
+                };
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                projectRoot,
+                outcomes,
+                candidates,
+                (assemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
+
+            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: a cycle between the target and an intermediate still keeps a proven Awake root.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_CycleThroughIntermediate_AddsIndirectLifecycleNote()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            string assemblyName = typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name;
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateCandidate(assemblyName, outcome)
+                };
+            const string intermediateType = "Ns.Mid";
+            const string intermediateName = "Run";
+            string targetKey = HotReloadMethodKeys.BuildMethodKeyParts(
+                "Type",
+                "SetUp",
+                Array.Empty<string>(),
+                0);
+            string intermediateKey = HotReloadMethodKeys.BuildMethodKeyParts(
+                intermediateType,
+                intermediateName,
+                Array.Empty<string>(),
+                0);
+            HotReloadCallSiteScanner.CallSiteHit midToTarget = CreateKeyedHit(
+                assemblyName,
+                intermediateType,
+                intermediateName,
+                targetKey);
+            HotReloadCallSiteScanner.CallSiteHit awakeToMid = CreateKeyedHit(
+                assemblyName,
+                typeof(ValidLifecycleFixture).FullName,
+                "Awake",
+                intermediateKey);
+            HotReloadCallSiteScanner.CallSiteHit targetToMid = CreateKeyedHit(
+                assemblyName,
+                "Type",
+                "SetUp",
+                intermediateKey);
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                "project",
+                outcomes,
+                candidates,
+                (scannedAssembly, identities) =>
+                {
+                    if (identities.Length == 1 && identities[0].MethodName == intermediateName)
+                    {
+                        return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                            new List<HotReloadCallSiteScanner.CallSiteHit> { awakeToMid, targetToMid },
+                            new List<string>());
+                    }
+
+                    return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                        new List<HotReloadCallSiteScanner.CallSiteHit> { midToTarget },
+                        new List<string>());
+                });
+
+            Assert.That(
+                outcomes[0].LifecycleNote,
+                Is.EqualTo(
+                    "Type.SetUp is called only from one-shot lifecycle method(s) (Awake) in the compiled "
+                    + "assemblies; objects that already ran them will not run the patched body. It takes "
+                    + "effect only for newly created objects, or run `uloop compile` and re-enter Play Mode."));
+        }
+
+        /// <summary>
+        /// What: a missing scan assembly at depth two suppresses the note.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_MissingScanAssemblyAtDepthTwo_SuppressesNotes()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            string assemblyName = typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name;
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateCandidate(assemblyName, outcome)
+                };
+            const string intermediateType = "Ns.Mid";
+            const string intermediateName = "Run";
+            string targetKey = HotReloadMethodKeys.BuildMethodKeyParts(
+                "Type",
+                "SetUp",
+                Array.Empty<string>(),
+                0);
+            HotReloadCallSiteScanner.CallSiteHit midToTarget = CreateKeyedHit(
+                assemblyName,
+                intermediateType,
+                intermediateName,
+                targetKey);
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                "project",
+                outcomes,
+                candidates,
+                (scannedAssembly, identities) =>
+                {
+                    if (identities.Length == 1 && identities[0].MethodName == intermediateName)
+                    {
+                        return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                            new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                            new List<string> { scannedAssembly });
+                    }
+
+                    return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                        new List<HotReloadCallSiteScanner.CallSiteHit> { midToTarget },
+                        new List<string>());
+                });
+
+            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+        }
+
+        /// <summary>
+        /// What: identical caller keys in different assemblies stay distinct so a dead end is not dropped.
+        /// </summary>
+        [Test]
+        public void ApplyNotes_SameCallerKeyDifferentAssemblies_SuppressesNoteAndScansEachAssembly()
+        {
+            HotReloadMethodOutcome outcome = HotReloadMethodOutcome.Patched("Type.SetUp", "Assets/Test.cs");
+            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome> { outcome };
+            const string targetAssembly = "TargetAsm";
+            List<HotReloadOneShotCallerNoteEnricher.Candidate> candidates =
+                new List<HotReloadOneShotCallerNoteEnricher.Candidate>
+                {
+                    CreateCandidate(targetAssembly, outcome)
+                };
+            const string helperType = "Ns.Helper";
+            const string helperMethod = "Build";
+            const string assemblyX = "AsmX";
+            const string assemblyY = "AsmY";
+            string helperKey = HotReloadMethodKeys.BuildMethodKeyParts(
+                helperType,
+                helperMethod,
+                Array.Empty<string>(),
+                0);
+            string targetKey = HotReloadMethodKeys.BuildMethodKeyParts(
+                "Type",
+                "SetUp",
+                Array.Empty<string>(),
+                0);
+            HotReloadCallSiteScanner.CallSiteHit assemblyXHit = CreateKeyedHit(
+                assemblyX,
+                helperType,
+                helperMethod,
+                targetKey);
+            HotReloadCallSiteScanner.CallSiteHit assemblyYHit = CreateKeyedHit(
+                assemblyY,
+                helperType,
+                helperMethod,
+                targetKey);
+            List<HotReloadCallSiteScanner.CompiledMethodIdentity[]> calls =
+                new List<HotReloadCallSiteScanner.CompiledMethodIdentity[]>();
+
+            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
+                "project",
+                outcomes,
+                candidates,
+                (scannedAssembly, identities) =>
+                {
+                    calls.Add(identities);
+                    if (scannedAssembly == assemblyX)
+                    {
+                        return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                            new List<HotReloadCallSiteScanner.CallSiteHit>
+                            {
+                                CreateKeyedHit(
+                                    typeof(HotReloadOneShotCallerNoteBuilderTests).Assembly.GetName().Name,
+                                    typeof(ValidLifecycleFixture).FullName,
+                                    "Awake",
+                                    helperKey)
+                            },
+                            new List<string>());
+                    }
+
+                    if (scannedAssembly == assemblyY)
+                    {
+                        return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                            new List<HotReloadCallSiteScanner.CallSiteHit>(),
+                            new List<string>());
+                    }
+
+                    return new HotReloadCallSiteScanner.HotReloadCallSiteScanResult(
+                        new List<HotReloadCallSiteScanner.CallSiteHit> { assemblyXHit, assemblyYHit },
+                        new List<string>());
+                });
+
+            Assert.That(outcomes[0].LifecycleNote, Is.Empty);
+            Assert.That(calls.Count, Is.EqualTo(3));
+            Assert.That(calls[1].Length, Is.EqualTo(1));
+            Assert.That(calls[2].Length, Is.EqualTo(1));
+            Assert.That(calls[1][0].AssemblyName, Is.Not.EqualTo(calls[2][0].AssemblyName));
+            Assert.That(
+                new[] { calls[1][0].AssemblyName, calls[2][0].AssemblyName },
+                Is.EquivalentTo(new[] { assemblyX, assemblyY }));
+        }
+
+        /// <summary>
         /// What: a handler assigned as a delegate in Awake suppresses the indirect note because
         /// event-driven calls are not proven to be one-shot.
         /// </summary>
@@ -509,17 +877,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string methodName,
             HotReloadMethodOutcome outcome)
         {
+            return CreateScannerCandidateForType(typeof(OneShotCallerScannerFixture), methodName, outcome);
+        }
+
+        private static HotReloadOneShotCallerNoteEnricher.Candidate CreateScannerCandidateForType(
+            Type type,
+            string methodName,
+            HotReloadMethodOutcome outcome)
+        {
             string rawAssemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(
                 "Assets/Tests/Editor/HotReload/HotReloadCallSiteScannerFixture.cs");
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
             HotReloadCallSiteScanner.CompiledMethodIdentity identity =
                 new HotReloadCallSiteScanner.CompiledMethodIdentity(
                     assemblyName,
-                    typeof(OneShotCallerScannerFixture).FullName,
+                    type.FullName,
                     methodName,
                     Array.Empty<string>(),
                     0);
             return new HotReloadOneShotCallerNoteEnricher.Candidate(identity, outcome);
+        }
+
+        private static HotReloadCallSiteScanner.CallSiteHit CreateKeyedHit(
+            string assemblyName,
+            string typeMetadataName,
+            string methodName,
+            string targetMethodKey)
+        {
+            return new HotReloadCallSiteScanner.CallSiteHit
+            {
+                CallerAssemblyName = assemblyName,
+                CallerTypeMetadataName = typeMetadataName,
+                CallerMethodName = methodName,
+                CallerParameterTypeFullNames = Array.Empty<string>(),
+                CallerGenericArity = 0,
+                CallerMethodKey = HotReloadMethodKeys.BuildMethodKeyParts(
+                    typeMetadataName,
+                    methodName,
+                    Array.Empty<string>(),
+                    0),
+                TargetMethodKey = targetMethodKey
+            };
         }
 
         private sealed class ValidLifecycleFixture : MonoBehaviour

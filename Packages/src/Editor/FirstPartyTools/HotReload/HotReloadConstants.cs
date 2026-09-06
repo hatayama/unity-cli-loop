@@ -49,11 +49,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string AsyncStateMachineAttributeTypeName = "AsyncStateMachineAttribute";
         public const string IteratorStateMachineAttributeTypeName = "IteratorStateMachineAttribute";
 
-        // Why not "applied": this sentence is the cross-file / unsupported-kind hint appended
-        // to NewMember compile failures. Same-file added methods are applied through the shim.
+        // Why not "applied": this sentence is the out-of-reload / unsupported-kind hint appended
+        // to NewMember compile failures. Added members declared in any file of this reload's
+        // assembly group are applied through that group's shim assembly.
         public const string NewMemberCompileHint =
-            "Same-file added methods are applied through the shim assembly. Cross-file references "
-            + "and unsupported member kinds still require a real compile (uloop compile).";
+            "Added members declared in the edited files of the same assembly are applied through "
+            + "the shim assembly. Members referenced from other assemblies, or from files that are "
+            + "neither passed to this reload nor already hot-reloaded, still require a real compile "
+            + "(uloop compile).";
+
+        public const string ActiveSiblingsRebindWarningFormat =
+            "Also re-applied {0} unchanged file(s) with active patches in assembly '{1}' so their "
+            + "patches bind to this reload's shim: {2}.";
+
+        public const string ActiveSiblingChangedSinceApplyWarningFormat =
+            "'{0}' has active patches but its source changed since they were applied, so it was "
+            + "not re-applied; pass it to hot-reload to update it.";
+
+        public const string ActiveSiblingRebindFailedWarningFormat =
+            "'{0}' was pulled in to re-bind its active patches but this reload failed for it; "
+            + "see its rows for which patches changed and run uloop compile to clear the run.";
 
         // Wire value for TransformWorkerEntryDto.patchKind when the worker emits a shim for a
         // method that exists only in the edited source. Keep in sync with PatchKinds.AddedMethod

@@ -499,12 +499,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
-                sourcePath = sourcePath,
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = sourcePath,
+                        projectRelativePath = projectRelativePath,
+                        snapshotSource = snapshotSource
+                    }
+                },
                 defines = compilationAssembly.defines ?? Array.Empty<string>(),
                 referencePaths = BuildAbsoluteReferencePaths(compilationAssembly.allReferences, targetDllPath),
                 targetTypesAssemblyPath = targetDllPath,
-                snapshotSource = snapshotSource,
-                projectRelativePath = projectRelativePath,
                 assemblySourcePaths = BuildAbsoluteAssemblySourcePaths(compilationAssembly.sourceFiles),
                 excludedMethodKeys = Array.Empty<string>(),
                 excludedAddedMethodKeys = Array.Empty<string>()

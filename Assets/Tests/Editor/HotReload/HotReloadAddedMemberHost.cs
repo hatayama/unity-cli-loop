@@ -326,7 +326,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
-    /// Nested interface host so skip labels can pin FormatMethodKeyParts for nested + generic
+    /// Nested interface host so skip labels can pin FormatMethodLabelParts for nested + generic
     /// + multi-parameter methods.
     /// </summary>
     public class HotReloadMethodLabelNestedHost
@@ -334,6 +334,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public interface INestedGeneric
         {
             int GenericPing<T>(int left, string right) => 1;
+        }
+    }
+
+    /// <summary>
+    /// Compiled generic host so an added property on a generic type can be classified against a
+    /// real compiled type. Static state on a generic type is per closed type, so one shim
+    /// identity and one store entry cannot stand for every instantiation.
+    /// </summary>
+    public class HotReloadAddedPropertyGenericHost<T>
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public int ExistingGenericValue()
+        {
+            return 1;
         }
     }
 

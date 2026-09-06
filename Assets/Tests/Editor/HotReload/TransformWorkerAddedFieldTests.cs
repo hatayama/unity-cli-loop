@@ -105,7 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
 
             bool foundRemoved = false;
-            foreach (TransformWorkerRemovedMemberDto removed in result.Output.removedMembers)
+            foreach (TransformWorkerRemovedMemberDto removed in result.Output.files[0].removedMembers)
             {
                 if (removed.kind == HotReloadConstants.RemovedMemberKindField
                     && removed.name == nameof(HotReloadAddedMemberHost.Inner))
@@ -146,7 +146,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.addedFieldNames, Is.EqualTo(expectedNames));
+            Assert.That(result.Output.files[0].addedFieldNames, Is.EqualTo(expectedNames));
         }
 
         /// <summary>
@@ -170,8 +170,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Not.Null);
-            Assert.That(result.Output.addedFieldNames, Is.Not.Null);
-            Assert.That(result.Output.addedFieldNames, Is.Empty);
+            Assert.That(result.Output.files[0].addedFieldNames, Is.Not.Null);
+            Assert.That(result.Output.files[0].addedFieldNames, Is.Empty);
         }
 
         /// <summary>
@@ -196,8 +196,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.addedFieldNames, Is.Not.Null);
-            Assert.That(result.Output.addedFieldNames, Is.Empty);
+            Assert.That(result.Output.files[0].addedFieldNames, Is.Not.Null);
+            Assert.That(result.Output.files[0].addedFieldNames, Is.Empty);
         }
 
         /// <summary>
@@ -221,7 +221,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.addedFieldNames, Is.EqualTo(new[] { expectedName }));
+            Assert.That(result.Output.files[0].addedFieldNames, Is.EqualTo(new[] { expectedName }));
         }
 
         /// <summary>
@@ -252,9 +252,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(slice, Does.Not.Contain("HotReloadAddedFieldStore"));
             Assert.That(slice, Does.Not.Contain("AddedConst"));
             Assert.That(result.Output.hasAddedFieldRewrites, Is.False);
-            Assert.That(result.Output.addedFieldNames, Is.Empty);
+            Assert.That(result.Output.files[0].addedFieldNames, Is.Empty);
             Assert.That(
-                result.Output.addedConstNames,
+                result.Output.files[0].addedConstNames,
                 Is.EqualTo(new[] { typeof(HotReloadAddedMemberHost).FullName + ".AddedConst" }));
         }
 
@@ -491,17 +491,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadConstants.AddedFieldsLifetimeWarningFormat,
                 typeof(HotReloadAddedMemberHost).FullName + ".AddedCount");
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Does.Not.Contain(unexpectedLifetimeWarning),
                 "Worker must not emit the added-fields lifetime warning; the orchestrator owns it.");
             string expectedOutsideBodyWarning = string.Format(
                 OutsideMethodBodyDriftWarningFormat,
                 "AddedFieldNoDrift.cs");
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Does.Not.Contain(expectedOutsideBodyWarning),
                 "Handled added-field declarations must not fire the outside-body warning.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings));
 
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
         }
@@ -616,7 +616,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Lazy initialization inside the body must not skip the method. Skipped="
                 + FormatSkipped(result.Output.skipped));
             Assert.That(
-                result.Output.addedFieldNames,
+                result.Output.files[0].addedFieldNames,
                 Is.EqualTo(new[] { typeof(HotReloadAddedMemberHost).FullName + ".AddedLazyMap" }));
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
         }
@@ -1073,7 +1073,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
 
             bool foundDrift = false;
-            foreach (string warning in result.Output.declarationDriftWarnings)
+            foreach (string warning in result.Output.files[0].declarationDriftWarnings)
             {
                 if (warning != null && warning.Contains("Edits outside method bodies"))
                 {
@@ -1106,7 +1106,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Is.EqualTo(
                     new[]
                     {
@@ -1135,7 +1135,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Is.EqualTo(
                     new[]
                     {
@@ -1162,7 +1162,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Is.EqualTo(
                     new[]
                     {
@@ -1188,7 +1188,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Is.EqualTo(
                     new[]
                     {
@@ -1214,7 +1214,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Is.EqualTo(
                     new[]
                     {
@@ -1244,7 +1244,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: snapshotSource);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Is.EqualTo(
                     new[]
                     {
@@ -1308,7 +1308,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Output.hasAddedFieldRewrites, Is.True);
 
             bool foundWarning = false;
-            foreach (string warning in result.Output.declarationDriftWarnings)
+            foreach (string warning in result.Output.files[0].declarationDriftWarnings)
             {
                 if (warning != null
                     && warning.Contains("AddedSerialized")
@@ -1462,7 +1462,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Is.EqualTo(
                     new[]
                     {
@@ -1488,7 +1488,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Is.EqualTo(
                     new[]
                     {
@@ -1518,7 +1518,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Is.EqualTo(
                     new[]
                     {
@@ -1549,7 +1549,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Is.EqualTo(
                     new[]
                     {
@@ -1612,11 +1612,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: adding a property does not emit the compiled property warning and does
-        /// not add an individual Skipped row for that property (SKILL discrepancy kept).
+        /// What: adding an auto-property does not emit the compiled property warning and
+        /// emits its getter as an added entry.
         /// </summary>
         [Test]
-        public async Task Classify_AddedProperty_DoesNotWarnOrSkipTheProperty()
+        public async Task Classify_AddedProperty_EmitsGetterWithoutCompiledKindWarning()
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(
@@ -1629,7 +1629,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasNoCompiledKindChangeWarningForMember(result, "ExtraHp");
-            AssertHasNoSkipContaining(result, "ExtraHp");
+            Assert.That(FindEntry(result, "get_ExtraHp"), Is.Not.Null);
+            AssertHasNoSkipContaining(result, "get_ExtraHp");
         }
 
         /// <summary>
@@ -1784,7 +1785,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult result,
             string expectedWarning)
         {
-            string[] warnings = result.Output.declarationDriftWarnings ?? Array.Empty<string>();
+            string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
             foreach (string warning in warnings)
             {
                 if (warning == expectedWarning)
@@ -1802,7 +1803,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerClientResult result,
             string memberName)
         {
-            string[] warnings = result.Output.declarationDriftWarnings ?? Array.Empty<string>();
+            string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
             foreach (string warning in warnings)
             {
                 if (warning == null)
@@ -1867,14 +1868,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
-                sourcePath = sourcePath,
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = sourcePath,
+                        projectRelativePath = projectRelativePath,
+                        snapshotSource = snapshotSource
+                    }
+                },
                 defines = compilationAssembly.defines ?? Array.Empty<string>(),
                 referencePaths = BuildAbsoluteReferencePaths(
                     compilationAssembly.allReferences,
                     targetDllPath),
                 targetTypesAssemblyPath = targetDllPath,
-                snapshotSource = snapshotSource,
-                projectRelativePath = projectRelativePath,
                 assemblySourcePaths = BuildAbsoluteAssemblySourcePaths(compilationAssembly.sourceFiles),
                 excludedMethodKeys = Array.Empty<string>(),
                 excludedAddedMethodKeys = Array.Empty<string>()
@@ -1987,14 +1994,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static void AssertHasNoAddedFieldSerializeWarning(TransformWorkerClientResult result)
         {
-            foreach (string warning in result.Output.declarationDriftWarnings)
+            foreach (string warning in result.Output.files[0].declarationDriftWarnings)
             {
                 if (warning != null && warning.Contains("will not appear in the Inspector"))
                 {
                     Assert.Fail(
                         "Declaration-changed compiled fields must not emit the added-field "
                         + "Inspector warning. Warnings="
-                        + string.Join("\n", result.Output.declarationDriftWarnings));
+                        + string.Join("\n", result.Output.files[0].declarationDriftWarnings));
                 }
             }
         }

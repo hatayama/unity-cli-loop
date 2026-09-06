@@ -140,6 +140,65 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a skipped get_X or set_X label matches unresolved property name X.
+        /// </summary>
+        [Test]
+        public void FindSkippedMemberNote_WhenAccessorPrefixMatchesPropertyName_ReturnsReason()
+        {
+            const string reason =
+                "Added properties with only a setter are skipped; the shim requires a getter identity. "
+                + "Run 'uloop compile' to add them.";
+            TransformWorkerSkippedDto[] getterSkipped =
+            {
+                new TransformWorkerSkippedDto
+                {
+                    method = "Ns.Type.get_HasTarget",
+                    reason = reason
+                }
+            };
+            TransformWorkerSkippedDto[] setterSkipped =
+            {
+                new TransformWorkerSkippedDto
+                {
+                    method = "Ns.Type.set_HasTarget",
+                    reason = reason
+                }
+            };
+
+            Assert.That(
+                HotReloadSkippedMemberCompileNote.FindSkippedMemberNote("HasTarget", getterSkipped),
+                Is.EqualTo(reason));
+            Assert.That(
+                HotReloadSkippedMemberCompileNote.FindSkippedMemberNote("HasTarget", setterSkipped),
+                Is.EqualTo(reason));
+        }
+
+        /// <summary>
+        /// What: Get_X and getX (not the get_/set_ accessor prefixes) do not match X.
+        /// </summary>
+        [Test]
+        public void FindSkippedMemberNote_WhenAccessorPrefixIsNotExact_ReturnsNull()
+        {
+            TransformWorkerSkippedDto[] skipped =
+            {
+                new TransformWorkerSkippedDto
+                {
+                    method = "Ns.Type.Get_HasTarget",
+                    reason = "wrong-case get_"
+                },
+                new TransformWorkerSkippedDto
+                {
+                    method = "Ns.Type.getHasTarget",
+                    reason = "missing underscore"
+                }
+            };
+
+            Assert.That(
+                HotReloadSkippedMemberCompileNote.FindSkippedMemberNote("HasTarget", skipped),
+                Is.Null);
+        }
+
+        /// <summary>
         /// What: a skipped label whose parameter type contains dots still matches the simple name.
         /// </summary>
         [Test]

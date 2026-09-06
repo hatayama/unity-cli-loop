@@ -277,7 +277,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
             MethodInfo shim = AccessTools.Method(
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
-            string methodKey = HotReloadPatcher.FormatMethodKey(original);
+            string methodKey = HotReloadMethodKeys.FormatMethodLabel(original);
 
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
             Assert.That(
@@ -322,7 +322,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
             MethodInfo shim1 = AccessTools.Method(
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim1));
-            string methodKey = HotReloadPatcher.FormatMethodKey(original);
+            string methodKey = HotReloadMethodKeys.FormatMethodLabel(original);
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(
@@ -359,8 +359,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(HotReloadOverloadKeyFixture.Compute),
                 new[] { typeof(string) });
 
-            string intKey = HotReloadPatcher.FormatMethodKey(intOverload);
-            string stringKey = HotReloadPatcher.FormatMethodKey(stringOverload);
+            string intKey = HotReloadMethodKeys.FormatMethodLabel(intOverload);
+            string stringKey = HotReloadMethodKeys.FormatMethodLabel(stringOverload);
 
             Assert.That(intKey, Is.Not.EqualTo(stringKey));
             Assert.That(intKey, Does.Contain("System.Int32"));
@@ -377,7 +377,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo take = AccessTools.Method(
                 typeof(HotReloadGenericKeyFixture),
                 nameof(HotReloadGenericKeyFixture.Take));
-            string key = HotReloadPatcher.FormatMethodKey(take);
+            string key = HotReloadMethodKeys.FormatMethodLabel(take);
 
             Assert.That(key, Does.Contain("System.Collections.Generic.List`1[System.Int32]"));
             Assert.That(key, Does.Contain("System.Collections.Generic.Dictionary`2[System.String,System.Int32]"));
@@ -388,17 +388,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: worker-shaped FormatMethodKeyParts matches FormatMethodKey(MethodBase) so apply
+        /// What: worker-shaped FormatMethodLabelParts matches FormatMethodLabel(MethodBase) so apply
         /// Methods[].Method and --status Active rows use the same label (including '()' and
         /// Cecil '/' → reflection '+' nested separators).
         /// </summary>
         [Test]
-        public void FormatMethodKeyParts_MatchesFormatMethodKey_IncludingNestedCecilSeparators()
+        public void FormatMethodLabelParts_MatchesFormatMethodLabel_IncludingNestedCecilSeparators()
         {
             MethodInfo original = AccessTools.Method(
                 typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
-            string fromMethod = HotReloadPatcher.FormatMethodKey(original);
-            string fromParts = HotReloadPatcher.FormatMethodKeyParts(
+            string fromMethod = HotReloadMethodKeys.FormatMethodLabel(original);
+            string fromParts = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadCoreFixture).FullName,
                 nameof(HotReloadCoreFixture.ReplaceableCompute),
                 new[] { typeof(int).ToString() },
@@ -410,9 +410,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             MethodInfo nested = AccessTools.Method(
                 typeof(HotReloadNestedKeyFixture.Inner),
                 nameof(HotReloadNestedKeyFixture.Inner.Ping));
-            string nestedFromMethod = HotReloadPatcher.FormatMethodKey(nested);
+            string nestedFromMethod = HotReloadMethodKeys.FormatMethodLabel(nested);
             string cecilStyleTypeName = typeof(HotReloadNestedKeyFixture.Inner).FullName.Replace('+', '/');
-            string nestedFromParts = HotReloadPatcher.FormatMethodKeyParts(
+            string nestedFromParts = HotReloadMethodKeys.FormatMethodLabelParts(
                 cecilStyleTypeName,
                 nameof(HotReloadNestedKeyFixture.Inner.Ping),
                 System.Array.Empty<string>(),
@@ -433,7 +433,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
             MethodInfo shim = AccessTools.Method(
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
-            string methodKey = HotReloadPatcher.FormatMethodKey(original);
+            string methodKey = HotReloadMethodKeys.FormatMethodLabel(original);
 
             HotReloadCoreFixture fixture = new HotReloadCoreFixture();
             Assert.That(

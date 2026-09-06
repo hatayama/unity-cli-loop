@@ -59,9 +59,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             TransformWorkerEntryDto existing = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue));
             Assert.That(existing, Is.Null, "Unedited ExistingValue must not be an entry when snapshot matches.");
 
-            Assert.That(result.Output.removedMembers, Is.Not.Null);
+            Assert.That(result.Output.files[0].removedMembers, Is.Not.Null);
             bool foundRemoved = false;
-            foreach (TransformWorkerRemovedMemberDto removed in result.Output.removedMembers)
+            foreach (TransformWorkerRemovedMemberDto removed in result.Output.files[0].removedMembers)
             {
                 if (removed.kind == HotReloadConstants.RemovedMemberKindMethod
                     && removed.name == nameof(HotReloadAddedMemberHost.ExistingFail))
@@ -74,17 +74,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an expression-bodied property present only in the edited source is skipped with
-        /// the added-property reason and does not become a getter entry.
+        /// An expression-bodied property present only in the edited source is emitted as
+        /// an added getter entry instead of a skipped property.
         /// </summary>
         [Test]
-        public async Task Classify_AddedExpressionBodiedProperty_SkipsGetterWithAddedPropertyReason()
+        public async Task Emit_AddedExpressionBodiedProperty_RegistersAddedGetter()
         {
-            const string expectedReason =
-                "Added properties are out of scope for hot reload; the compiled assembly has no such member. "
-                + "For a computed value, add a same-file method instead (e.g. 'private T GetX()'), which applies "
-                + "through hot reload; for a constant, use a 'const' or a plain added field; otherwise run "
-                + "'uloop compile'.";
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = WithHostMembers(
                 onDisk,
@@ -97,11 +92,66 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
 
+            TransformWorkerEntryDto getter = FindEntry(result, "get_AddedAmplitude");
+            Assert.That(getter, Is.Not.Null, "Added property getter must be an entry.");
+            Assert.That(getter.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(FindSkipReason(result, "get_AddedAmplitude"), Is.Null);
+        }
+
+        /// <summary>
+        /// What: an auto-property present only in the edited source emits its accessors as
+        /// added members and does not fire the outside-body drift warning.
+        /// </summary>
+        [Test]
+        public async Task Classify_AddedAutoProperty_EmitsAccessorsWithoutDrift()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public int AddedAuto { get; private set; }");
+            string sourcePath = WriteEdited("ClassifyAddedAutoProperty.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
             Assert.That(
-                FindEntry(result, "get_AddedAmplitude"),
+                FindEntry(result, "get_AddedAuto"),
+                Is.Not.Null,
+                "Added auto-property getter must be an added entry.");
+            Assert.That(FindSkipReason(result, "get_AddedAuto"), Is.Null);
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.None.Contain("Edits outside method bodies"),
+                "Added auto-property must not fire outside-body drift.\n"
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
+        }
+
+        /// <summary>
+        /// What: an auto-property already present in the baseline snapshot stays silent
+        /// (no Skipped row and no unchanged row) when the declaration is unchanged.
+        /// </summary>
+        [Test]
+        public async Task Classify_ExistingUnchangedAutoProperty_DoesNotSkip()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string withExistingAuto = WithHostMembers(
+                onDisk,
+                "public int ExistingAuto { get; private set; }");
+            string sourcePath = WriteEdited("ClassifyExistingAutoProperty.cs", withExistingAuto);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: withExistingAuto);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                FindSkipReason(result, "get_ExistingAuto"),
                 Is.Null,
-                "Added property getter must not be an entry.");
-            Assert.That(FindSkipReason(result, "get_AddedAmplitude"), Is.EqualTo(expectedReason));
+                "Unchanged baseline auto-property must not emit a Skipped row.");
+            Assert.That(FindEntry(result, "get_ExistingAuto"), Is.Null);
         }
 
         /// <summary>
@@ -295,6 +345,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an added method whose return type cannot be resolved reports that the type
+        /// could not be resolved, not that it is invisible (condition c).
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodReturningUnresolvedType_WithPrivateAccess_ReportsUnresolvedTypeNotVisibility()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "private MissingReturnType _missingReturn;\n"
+                + "        public MissingReturnType AddedUnresolved()\n        {\n"
+                + "            return _missingReturn;\n        }");
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string reason = FindSkipReason(result, "AddedUnresolved");
+            Assert.That(reason, Is.Not.Null, "Expected a skip for AddedUnresolved.");
+            Assert.That(reason, Does.Contain("could not be resolved"));
+            Assert.That(reason, Does.Not.Contain("condition c"));
+        }
+
+        /// <summary>
+        /// What: an added method whose return type is a generic wrapping an unresolved type
+        /// still reports that the type could not be resolved, not condition c.
+        /// </summary>
+        [Test]
+        public async Task Run_AddedMethodReturningListOfUnresolvedType_ReportsUnresolvedTypeNotVisibility()
+        {
+            TransformWorkerClientResult result = await RunHostWithAddedMembersAsync(
+                "private System.Collections.Generic.List<MissingType> _missingList;\n"
+                + "        public System.Collections.Generic.List<MissingType> AddedUnresolvedList()\n        {\n"
+                + "            return _missingList;\n        }");
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            string reason = FindSkipReason(result, "AddedUnresolvedList");
+            Assert.That(reason, Is.Not.Null, "Expected a skip for AddedUnresolvedList.");
+            Assert.That(reason, Does.Contain("could not be resolved"));
+            Assert.That(reason, Does.Not.Contain("condition c"));
+        }
+
+        /// <summary>
         /// What: an added method whose private access has no accessor rewrite is Skipped
         /// with the added-method prefix plus the eligibility reason.
         /// </summary>
@@ -383,8 +469,140 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(added, Is.Not.Null, "Added Update must still be an entry.");
             Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("Update").And.Contain("uloop compile"));
+        }
+
+        /// <summary>
+        /// What: an added [Test] method stays Success/addedMethod and emits exactly one
+        /// Unity Test Runner visibility warning naming that method.
+        /// </summary>
+        [Test]
+        public async Task Warn_AddedTestMethod_KeepsEntryAndEmitsWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "[Test]\n        public void AddedProbe()\n        {\n        }");
+            string sourcePath = WriteEdited("AddedTestMethod.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+
+            TransformWorkerEntryDto added = FindEntry(result, "AddedProbe");
+            Assert.That(added, Is.Not.Null, "AddedProbe must still be an entry.");
+            Assert.That(added.patchKind, Is.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(
+                CountWarningsContaining(result, "Unity Test Runner"),
+                Is.EqualTo(1),
+                FormatWarnings(result));
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.Some.Contain("AddedProbe").And.Contain("Unity Test Runner"));
+        }
+
+        /// <summary>
+        /// What: added methods with a qualified [TestCase], [global::NUnit.Framework.Test],
+        /// [UnityTest], or [SetUp] each produce a Unity Test Runner warning that names that method.
+        /// </summary>
+        [Test]
+        public async Task Warn_AddedTestAttributes_QualifiedUnityTestAndSetUp_EmitWarningPerMethod()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "[NUnit.Framework.TestCase(1)]\n        public void AddedCaseProbe(int value)\n        {\n        }\n\n"
+                + "        [global::NUnit.Framework.Test]\n        public void AddedGlobalProbe()\n        {\n        }\n\n"
+                + "        [UnityTest]\n        public System.Collections.IEnumerator AddedUnityProbe()\n        {\n"
+                + "            yield break;\n        }\n\n"
+                + "        [SetUp]\n        public void AddedSetUpProbe()\n        {\n        }");
+            string sourcePath = WriteEdited("AddedTestAttributeShapes.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.Some.Contain("AddedCaseProbe").And.Contain("Unity Test Runner"),
+                FormatWarnings(result));
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.Some.Contain("AddedGlobalProbe").And.Contain("Unity Test Runner"),
+                FormatWarnings(result));
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.Some.Contain("AddedUnityProbe").And.Contain("Unity Test Runner"),
+                FormatWarnings(result));
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.Some.Contain("AddedSetUpProbe").And.Contain("Unity Test Runner"),
+                FormatWarnings(result));
+        }
+
+        /// <summary>
+        /// What: an added method with no test attribute, or only [System.Obsolete], does not
+        /// emit a Unity Test Runner warning.
+        /// </summary>
+        [Test]
+        public async Task Warn_AddedMethodWithoutTestAttribute_DoesNotEmitTestRunnerWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public void AddedPlainProbe()\n        {\n        }\n\n"
+                + "        [System.Obsolete]\n        public void AddedObsoleteProbe()\n        {\n        }");
+            string sourcePath = WriteEdited("AddedNonTestMethod.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "AddedPlainProbe"), Is.Not.Null);
+            Assert.That(FindEntry(result, "AddedObsoleteProbe"), Is.Not.Null);
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.None.Contain("Unity Test Runner"),
+                FormatWarnings(result));
+        }
+
+        /// <summary>
+        /// What: editing only the body of a baseline [Test] method (Patched) does not emit
+        /// a Unity Test Runner warning.
+        /// </summary>
+        [Test]
+        public async Task Warn_PatchedExistingTestMethod_DoesNotEmitTestRunnerWarning()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            const string originalExistingValue =
+                "        public int ExistingValue()\n        {\n            return 1;\n        }";
+            string snapshot = onDisk.Replace(
+                originalExistingValue,
+                "        [Test]\n        public int ExistingValue()\n        {\n            return 1;\n        }",
+                StringComparison.Ordinal);
+            string edited = onDisk.Replace(
+                originalExistingValue,
+                "        [Test]\n        public int ExistingValue()\n        {\n            return 99;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("PatchedExistingTestMethod.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: snapshot);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            TransformWorkerEntryDto entry = FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue));
+            Assert.That(entry, Is.Not.Null);
+            Assert.That(entry.patchKind, Is.Not.EqualTo(HotReloadConstants.PatchKindAddedMethod));
+            Assert.That(
+                result.Output.files[0].declarationDriftWarnings,
+                Has.None.Contain("Unity Test Runner"),
+                FormatWarnings(result));
         }
 
         /// <summary>
@@ -404,10 +622,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(addedResult.Success, Is.True, addedResult.ErrorMessage);
             Assert.That(
-                addedResult.Output.declarationDriftWarnings,
+                addedResult.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Handled method addition must not fire outside-body drift.\n"
-                + string.Join("\n", addedResult.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", addedResult.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
 
             string removedOnly = onDisk.Replace(
                 "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
@@ -420,10 +638,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(removedResult.Success, Is.True, removedResult.ErrorMessage);
             Assert.That(
-                removedResult.Output.declarationDriftWarnings,
+                removedResult.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Handled method removal must not fire outside-body drift.\n"
-                + string.Join("\n", removedResult.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", removedResult.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
 
             string fieldAndAdded = addedOnly.Replace(
                 "public int PublicSeed = 3;",
@@ -435,7 +653,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(fieldResult.Success, Is.True, fieldResult.ErrorMessage);
             Assert.That(
-                fieldResult.Output.declarationDriftWarnings,
+                fieldResult.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("Edits outside method bodies"),
                 "Field initializer drift must still fire after handled method additions are stripped.");
         }
@@ -455,10 +673,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Handled return-type change must not fire outside-body drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -476,10 +694,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: null);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "No-snapshot return-type change must not fire outside-body drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -501,7 +719,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("Edits outside method bodies"),
                 "Field initializer drift must still fire after a handled return-type change is stripped.");
         }
@@ -525,7 +743,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.Some.Contain("Edits outside method bodies"),
                 "Attribute drift must still fire after a handled return-type change.");
         }
@@ -992,10 +1210,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(result, "HotReloadBrandNewType.Fresh", "New types are out of scope");
             Assert.That(FindEntry(result, "Fresh"), Is.Null);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Skipped new-type declarations must not fire fields/initializers drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -1021,10 +1239,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(result, "IHotReloadBrandNewInterface.Fresh", "New types are out of scope");
             Assert.That(FindEntry(result, "Fresh"), Is.Null);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Skipped new-interface declarations must not fire fields/initializers drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -1047,7 +1265,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, "ExistingDefault", "Interface members are not patchable");
             Assert.That(FindEntry(result, "ExistingDefault"), Is.Null);
-            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(IHotReloadAddedMemberDefault).FullName,
                 "ExistingDefault",
                 Array.Empty<string>(),
@@ -1055,15 +1273,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindSkipMethod(result, "ExistingDefault"),
                 Is.EqualTo(expectedLabel),
-                "Skipped Methods[].Method must use the FormatMethodKeyParts label.");
+                "Skipped Methods[].Method must use the FormatMethodLabelParts label.");
         }
 
         /// <summary>
         /// What: a worker skip on a nested generic multi-parameter method uses the same
-        /// Methods[].Method label as FormatMethodKeyParts.
+        /// Methods[].Method label as FormatMethodLabelParts.
         /// </summary>
         [Test]
-        public async Task Skip_NestedGenericMultiArg_UsesFormatMethodKeyPartsLabel()
+        public async Task Skip_NestedGenericMultiArg_UsesFormatMethodLabelPartsLabel()
         {
             const string projectRelativePath =
                 "Assets/Tests/Editor/HotReload/HotReloadAddedMemberHost.cs";
@@ -1078,7 +1296,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 projectRelativePath,
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            string expectedLabel = HotReloadPatcher.FormatMethodKeyParts(
+            string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
                 typeof(HotReloadMethodLabelNestedHost.INestedGeneric).FullName,
                 "GenericPing",
                 new[] { "System.Int32", "System.String" },
@@ -1086,7 +1304,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 FindSkipMethod(result, "GenericPing"),
                 Is.EqualTo(expectedLabel),
-                "Nested generic multi-arg skip labels must match FormatMethodKeyParts.");
+                "Nested generic multi-arg skip labels must match FormatMethodLabelParts.");
             AssertHasSkip(result, "GenericPing", "Interface members are not patchable");
         }
 
@@ -1111,10 +1329,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasSkip(result, "Extra", "Interface members are not patchable");
             Assert.That(FindEntry(result, "Extra"), Is.Null);
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Added compiled-interface members must surface as Skipped, not drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -1268,10 +1486,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, "AddedVirtual", "vtable slot");
             Assert.That(
-                result.Output.declarationDriftWarnings,
+                result.Output.files[0].declarationDriftWarnings,
                 Has.None.Contain("Edits outside method bodies"),
                 "Skipped added declarations must not fire fields/initializers drift.\n"
-                + string.Join("\n", result.Output.declarationDriftWarnings ?? Array.Empty<string>()));
+                + string.Join("\n", result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>()));
         }
 
         /// <summary>
@@ -1292,8 +1510,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HostProjectRelativePath,
                 snapshotSource: null);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
-            Assert.That(result.Output.removedMembers, Is.Not.Null);
-            Assert.That(result.Output.removedMembers, Is.Empty);
+            Assert.That(result.Output.files[0].removedMembers, Is.Not.Null);
+            Assert.That(result.Output.files[0].removedMembers, Is.Empty);
         }
 
         /// <summary>
@@ -1324,10 +1542,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasRemovedMemberName(result, nameof(HotReloadAddedMemberHost.ExistingValue));
             Assert.That(
                 HasRemovedSignature(
-                    result.Output,
+                    result.Output.files[0],
                     typeof(HotReloadAddedMemberHost).FullName,
                     nameof(HotReloadAddedMemberHost.ExistingValue)),
                 Is.True);
+        }
+
+        /// <summary>
+        /// A return-type replacement skipped by the added-call guard keeps its removed signature
+        /// and reports the replacement wire key.
+        /// </summary>
+        [Test]
+        public async Task Classify_ReturnTypeChangeSkippedByAddedCallGuard_ReportsRemovedSignatureAndMethodKey()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = WithHostMembers(
+                onDisk,
+                "public virtual int AddedVirtual(int value)\n        {\n            return value;\n        }");
+            edited = edited.Replace(
+                "        public int ExistingValue()\n        {\n            return 1;\n        }",
+                "        public long ExistingValue()\n        {\n            return AddedVirtual(1);\n        }",
+                StringComparison.Ordinal);
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                WriteEdited("ReturnTypeGuardSkip.cs", edited),
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue)), Is.Null);
+            Assert.That(
+                HasRemovedSignature(
+                    result.Output.files[0],
+                    typeof(HotReloadAddedMemberHost).FullName,
+                    nameof(HotReloadAddedMemberHost.ExistingValue)),
+                Is.True);
+
+            TransformWorkerSkippedDto skippedReplacement = null;
+            foreach (TransformWorkerSkippedDto skipped in result.Output.skipped)
+            {
+                if (skipped.method != null
+                    && skipped.method.Contains(nameof(HotReloadAddedMemberHost.ExistingValue)))
+                {
+                    skippedReplacement = skipped;
+                    break;
+                }
+            }
+
+            Assert.That(skippedReplacement, Is.Not.Null);
+            Assert.That(
+                skippedReplacement.methodKey,
+                Is.EqualTo(BuildHostMethodKey(nameof(HotReloadAddedMemberHost.ExistingValue))));
         }
 
         /// <summary>
@@ -1351,8 +1614,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasSkip(result, nameof(HotReloadAddedMemberHost.ExistingValue), "vtable slot");
             Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingValue)), Is.Null);
-            Assert.That(result.Output.removedMembers, Is.Empty);
-            Assert.That(result.Output.removedMethodSignatures, Is.Empty);
+            Assert.That(result.Output.files[0].removedMembers, Is.Empty);
+            Assert.That(result.Output.files[0].removedMethodSignatures, Is.Empty);
         }
 
         /// <summary>
@@ -1403,7 +1666,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertHasRemovedMemberName(result, nameof(HotReloadAddedMemberHost.ExistingCaller));
             Assert.That(
                 HasRemovedSignature(
-                    result.Output,
+                    result.Output.files[0],
                     typeof(HotReloadAddedMemberHost).FullName,
                     nameof(HotReloadAddedMemberHost.ExistingCaller),
                     "System.Int32"),
@@ -1430,8 +1693,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 snapshotSource: onDisk);
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             AssertHasRemovedMemberName(result, nameof(HotReloadAddedMemberPartialHost.PartialRemoved));
-            Assert.That(result.Output.removedMethodSignatures, Is.Not.Null);
-            Assert.That(result.Output.removedMethodSignatures, Is.Empty);
+            Assert.That(result.Output.files[0].removedMethodSignatures, Is.Not.Null);
+            Assert.That(result.Output.files[0].removedMethodSignatures, Is.Empty);
+        }
+
+        /// <summary>
+        /// An added bodied property on a partial host is skipped before accessor shims are emitted.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedBodiedPropertyOnPartialHost_SkipsAccessors()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PartialKept()\n        {\n            return 1;\n        }",
+                "        public int AddedPartial { get => 1; set { } }\n\n"
+                + "        public int PartialKept()\n        {\n            return 1;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("AddedPartialProperty.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_AddedPartial"), Is.Null);
+            Assert.That(FindEntry(result, "set_AddedPartial"), Is.Null);
+            Assert.That(FindSkipReason(result, "get_AddedPartial"), Does.Contain("Partial types are skipped"));
+            Assert.That(FindSkipReason(result, "set_AddedPartial"), Does.Contain("Partial types are skipped"));
         }
 
         /// <summary>
@@ -1513,8 +1802,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static void AssertHasRemovedMemberName(TransformWorkerClientResult result, string name)
         {
-            Assert.That(result.Output.removedMembers, Is.Not.Null);
-            foreach (TransformWorkerRemovedMemberDto removed in result.Output.removedMembers)
+            Assert.That(result.Output.files[0].removedMembers, Is.Not.Null);
+            foreach (TransformWorkerRemovedMemberDto removed in result.Output.files[0].removedMembers)
             {
                 if (removed.kind == HotReloadConstants.RemovedMemberKindMethod && removed.name == name)
                 {
@@ -1526,17 +1815,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private static bool HasRemovedSignature(
-            TransformWorkerOutputDto output,
+            TransformWorkerFileOutputDto fileOutput,
             string typeMetadataName,
             string methodName,
             params string[] parameterTypeFullNames)
         {
-            if (output.removedMethodSignatures == null)
+            if (fileOutput.removedMethodSignatures == null)
             {
                 return false;
             }
 
-            foreach (TransformWorkerRemovedMethodSignatureDto signature in output.removedMethodSignatures)
+            foreach (TransformWorkerRemovedMethodSignatureDto signature in fileOutput.removedMethodSignatures)
             {
                 if (signature.typeMetadataName != typeMetadataName || signature.methodName != methodName)
                 {
@@ -1618,6 +1907,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return null;
+        }
+
+        private static int CountWarningsContaining(TransformWorkerClientResult result, string fragment)
+        {
+            string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
+            int count = 0;
+            foreach (string warning in warnings)
+            {
+                if (warning.Contains(fragment, StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static string FormatWarnings(TransformWorkerClientResult result)
+        {
+            string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
+            if (warnings.Length == 0)
+            {
+                return "declarationDriftWarnings=(none)";
+            }
+
+            return "declarationDriftWarnings=\n" + string.Join("\n", warnings);
         }
 
         private static string FormatSkipped(TransformWorkerSkippedDto[] skipped)
@@ -1720,12 +2035,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
-                sourcePath = sourcePath,
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto
+                    {
+                        sourcePath = sourcePath,
+                        projectRelativePath = projectRelativePath,
+                        snapshotSource = snapshotSource
+                    }
+                },
                 defines = compilationAssembly.defines ?? Array.Empty<string>(),
                 referencePaths = referencePaths,
                 targetTypesAssemblyPath = targetDllPath,
-                snapshotSource = snapshotSource,
-                projectRelativePath = projectRelativePath,
                 assemblySourcePaths = assemblySourcePaths,
                 excludedMethodKeys = excludedMethodKeys ?? Array.Empty<string>(),
                 excludedAddedMethodKeys = excludedAddedMethodKeys ?? Array.Empty<string>()

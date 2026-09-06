@@ -48,17 +48,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<string> warnings,
             IReadOnlyList<HotReloadMethodOutcome> methods,
             Func<string, string> readEditedSource,
-            Func<string, string> readCompiledSource)
+            Func<string, string> readCompiledSource,
+            IReadOnlyCollection<string> reappliedSiblingPaths)
         {
             Debug.Assert(warnings != null, "warnings must not be null.");
             Debug.Assert(methods != null, "methods must not be null.");
             Debug.Assert(readEditedSource != null, "readEditedSource must not be null.");
             Debug.Assert(readCompiledSource != null, "readCompiledSource must not be null.");
+            Debug.Assert(reappliedSiblingPaths != null, "reappliedSiblingPaths must not be null.");
 
             StringComparer fileComparer = Application.platform == RuntimePlatform.WindowsEditor
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal;
-            List<LineShiftFileBucket> buckets = CollectUniqueFileBuckets(methods, fileComparer);
+            List<LineShiftFileBucket> buckets = CollectUniqueFileBuckets(
+                methods,
+                reappliedSiblingPaths,
+                fileComparer);
             List<string> continuingFiles = new List<string>();
             for (int index = 0; index < buckets.Count; index++)
             {
@@ -92,10 +97,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static List<LineShiftFileBucket> CollectUniqueFileBuckets(
             IReadOnlyList<HotReloadMethodOutcome> methods,
+            IReadOnlyCollection<string> reappliedSiblingPaths,
             StringComparer fileComparer)
         {
             List<LineShiftFileBucket> buckets = new List<LineShiftFileBucket>();
             Dictionary<string, LineShiftFileBucket> byFile = new Dictionary<string, LineShiftFileBucket>(fileComparer);
+            HashSet<string> siblingKeys = BuildReappliedSiblingKeys(reappliedSiblingPaths, fileComparer);
             for (int index = 0; index < methods.Count; index++)
             {
                 string filePath = methods[index].FilePath;
@@ -112,13 +119,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     buckets.Add(bucket);
                 }
 
-                if (methods[index].Kind != HotReloadMethodOutcomeKind.AlreadyActive)
+                // Auto-reapplied siblings come back as Patched/Added, so Kind alone would
+                // reprint the full warning every run. extraResults paths are the only signal.
+                if (methods[index].Kind != HotReloadMethodOutcomeKind.AlreadyActive
+                    && !siblingKeys.Contains(canonicalFile))
                 {
                     bucket.TouchedThisRun = true;
                 }
             }
 
             return buckets;
+        }
+
+        private static HashSet<string> BuildReappliedSiblingKeys(
+            IReadOnlyCollection<string> reappliedSiblingPaths,
+            StringComparer fileComparer)
+        {
+            HashSet<string> keys = new HashSet<string>(fileComparer);
+            foreach (string path in reappliedSiblingPaths)
+            {
+                if (string.IsNullOrEmpty(path))
+                {
+                    continue;
+                }
+
+                keys.Add(HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(path));
+            }
+
+            return keys;
         }
 
         private static void AppendContinuingWarning(List<string> warnings, List<string> continuingFiles)

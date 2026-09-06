@@ -90,6 +90,7 @@ internal static class AddedFieldClassifier
 
         AddedFieldBinding binding = new AddedFieldBinding
         {
+            SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
             FieldKey = fieldKey,
             SyntaxKey = syntaxKey,
             FieldName = fieldSymbol.Name,
@@ -153,6 +154,25 @@ internal static class AddedFieldClassifier
 
         // Why after const: added consts on struct hosts still fold to literals; the store
         // identity problem only applies to instance/static storage.
+        return EvaluateStoreAvailability(
+            hostType,
+            semanticModel,
+            targetTypesAssemblySymbol,
+            fieldSymbol.Type,
+            binding.Initializer);
+    }
+
+    /// <summary>
+    /// Reports why a value cannot live in the added-field store, for any member backed by it.
+    /// Added auto-properties reuse this so their backing store follows the same rules as fields.
+    /// </summary>
+    internal static string EvaluateStoreAvailability(
+        INamedTypeSymbol hostType,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetTypesAssemblySymbol,
+        ITypeSymbol valueType,
+        ExpressionSyntax initializer)
+    {
         if (hostType.TypeKind == TypeKind.Struct)
         {
             return AddedFieldSkipReasons.StructHost;
@@ -160,7 +180,7 @@ internal static class AddedFieldClassifier
 
         // Why unresolved types before visibility: TypeKind.Error is not externally
         // visible, so the shim-visibility reason would hide a missing using or typo.
-        if (TryFindUnresolvedType(fieldSymbol.Type, out ITypeSymbol unresolvedType))
+        if (TryFindUnresolvedType(valueType, out ITypeSymbol unresolvedType))
         {
             return string.Format(
                 CultureInfo.InvariantCulture,
@@ -168,14 +188,14 @@ internal static class AddedFieldClassifier
                 unresolvedType.ToDisplayString());
         }
 
-        if (!AccessibilityRules.IsExternallyVisibleType(fieldSymbol.Type))
+        if (!AccessibilityRules.IsExternallyVisibleType(valueType))
         {
             return AddedFieldSkipReasons.FieldTypeNotExternallyVisible;
         }
 
-        if (binding.Initializer != null
+        if (initializer != null
             && InitializerCannotEmitInShimLambda(
-                binding.Initializer,
+                initializer,
                 semanticModel,
                 hostType,
                 targetTypesAssemblySymbol))
@@ -188,7 +208,11 @@ internal static class AddedFieldClassifier
 
     // Why recurse array elements and type arguments: List<Missing> and Missing[]
     // would otherwise keep the shim-visibility reason even though the inner type is unresolved.
-    private static bool TryFindUnresolvedType(ITypeSymbol typeSymbol, out ITypeSymbol unresolvedType)
+    /// <summary>
+    /// Finds the first type in a value type, its element type, or its type arguments that the
+    /// compilation could not resolve. Added properties reuse it to report the same cause.
+    /// </summary>
+    internal static bool TryFindUnresolvedType(ITypeSymbol typeSymbol, out ITypeSymbol unresolvedType)
     {
         unresolvedType = null;
         if (typeSymbol == null)

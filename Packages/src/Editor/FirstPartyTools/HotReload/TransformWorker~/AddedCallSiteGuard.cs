@@ -19,17 +19,30 @@ internal static class AddedCallSiteGuard
 {
     internal static void SkipBodiesThatCannotUseAddedMethods(
         List<TypeEmitState> typeEmitStates,
-        SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog,
         List<WorkerSkipped> skipped)
     {
         bool progressed;
         do
         {
             progressed = false;
+            if (AddedPropertyAccessorGuard.SkipUnavailableAccessors(
+                typeEmitStates,
+                addedPropertyCatalog,
+                addedMethodCatalog,
+                addedFieldCatalog,
+                skipped))
+            {
+                progressed = true;
+            }
+
             foreach (TypeEmitState typeState in typeEmitStates)
             {
+                // Why per state (not one model for the run): the states of a group run come from
+                // several trees, and a SemanticModel only answers for the tree it was built from.
+                SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
                 List<QueuedShimMethod> remaining = new List<QueuedShimMethod>();
                 foreach (QueuedShimMethod queued in typeState.QueuedMethods)
                 {
@@ -41,11 +54,14 @@ internal static class AddedCallSiteGuard
                         bodyNode,
                         semanticModel,
                         addedMethodCatalog,
-                        addedFieldCatalog);
+                        addedFieldCatalog,
+                        addedPropertyCatalog,
+                        typeState.TypeSymbol);
                     if (skipReason != null)
                     {
                         skipped.Add(new WorkerSkipped
                         {
+                            SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                             Method = WorkerMethodKeys.FormatMethodLabel(queued.MethodSymbol),
                             Reason = skipReason,
                             CalledAddedMethodKey = calledAddedMethodKey,
@@ -74,7 +90,9 @@ internal static class AddedCallSiteGuard
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog)
+        AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog = null,
+        INamedTypeSymbol enclosingType = null)
     {
         if (bodyNode == null)
         {
@@ -114,6 +132,16 @@ internal static class AddedCallSiteGuard
         if (BodyReferencesAddedMethodGroup(bodyNode, semanticModel, addedMethodCatalog))
         {
             return (AddedMethodSkipReasons.MethodGroupReference, null);
+        }
+
+        string propertyReason = AddedPropertyBodyScan.EvaluateAddedPropertySkipReason(
+            bodyNode,
+            semanticModel,
+            addedPropertyCatalog,
+            enclosingType);
+        if (propertyReason != null)
+        {
+            return (propertyReason, null);
         }
 
         return (AddedFieldClassifier.EvaluateAddedFieldSkipReason(bodyNode, semanticModel, addedFieldCatalog), null);
@@ -254,6 +282,7 @@ internal static class AddedCallSiteGuard
         SyntaxNode bodyNode,
         SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
+        AddedPropertyCatalog addedPropertyCatalog,
         string selfMethodKey)
     {
         if (bodyNode == null)
@@ -270,23 +299,25 @@ internal static class AddedCallSiteGuard
                 continue;
             }
 
-            ISymbol symbol = semanticModel.GetSymbolInfo(invocation).Symbol;
-            if (symbol is not IMethodSymbol methodSymbol)
+            AddedMethodBinding binding = AddedMethodCallResolver.ResolveBindingOrNull(
+                invocation,
+                semanticModel,
+                addedMethodCatalog,
+                out _);
+            if (binding == null || binding.MethodKey == selfMethodKey)
             {
                 continue;
             }
 
-            string calledKey = WorkerMethodKeys.BuildMethodKeyFromSymbol(methodSymbol);
-            if (calledKey == selfMethodKey)
-            {
-                continue;
-            }
-
-            if (addedMethodCatalog.Contains(calledKey))
-            {
-                keys.Add(calledKey);
-            }
+            keys.Add(binding.MethodKey);
         }
+
+        CollectReferencedAddedPropertyAccessorKeys(
+            bodyNode,
+            semanticModel,
+            addedPropertyCatalog,
+            selfMethodKey,
+            keys);
 
         if (keys.Count == 0)
         {
@@ -296,5 +327,61 @@ internal static class AddedCallSiteGuard
         string[] result = new string[keys.Count];
         keys.CopyTo(result);
         return result;
+    }
+
+    private static void CollectReferencedAddedPropertyAccessorKeys(
+        SyntaxNode bodyNode,
+        SemanticModel semanticModel,
+        AddedPropertyCatalog addedPropertyCatalog,
+        string selfMethodKey,
+        HashSet<string> keys)
+    {
+        if (addedPropertyCatalog == null)
+        {
+            return;
+        }
+
+        foreach (ExpressionSyntax expression in bodyNode.DescendantNodesAndSelf().OfType<ExpressionSyntax>())
+        {
+            // Why skip the name node: a qualified write such as this.P = v also yields the bare
+            // name as a child expression, which reads as a get and would pull the getter into the
+            // dependency set of a caller that only writes.
+            if (IsMemberAccessName(expression))
+            {
+                continue;
+            }
+
+            IPropertySymbol propertySymbol = semanticModel.GetSymbolInfo(expression).Symbol as IPropertySymbol;
+            AddedPropertyBinding binding = addedPropertyCatalog.FindBySymbolOrNull(propertySymbol);
+            if (binding == null || binding.UnavailableReason != null)
+            {
+                continue;
+            }
+
+            AddedMethodBinding accessor = IsPropertyWrite(expression)
+                ? binding.Setter
+                : binding.Getter;
+            if (accessor != null && accessor.MethodKey != selfMethodKey)
+            {
+                keys.Add(accessor.MethodKey);
+            }
+        }
+    }
+
+    private static bool IsMemberAccessName(ExpressionSyntax expression)
+    {
+        if (expression.Parent is MemberAccessExpressionSyntax memberAccess)
+        {
+            return memberAccess.Name == expression;
+        }
+
+        return expression.Parent is MemberBindingExpressionSyntax memberBinding
+            && memberBinding.Name == expression;
+    }
+
+    private static bool IsPropertyWrite(ExpressionSyntax expression)
+    {
+        return expression.Parent is AssignmentExpressionSyntax assignment
+            && assignment.Left == expression;
     }
 }

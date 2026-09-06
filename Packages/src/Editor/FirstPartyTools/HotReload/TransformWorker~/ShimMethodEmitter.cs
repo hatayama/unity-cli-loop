@@ -19,12 +19,10 @@ internal static class ShimMethodEmitter
 {
     internal static (int ShimTypeCounter, int GlobalShimMethodCounter) EmitQueuedMethodsAndPropertyGetters(
         List<TypeEmitState> typeEmitStates,
-        SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
-        CompilationUnitSyntax root,
+        AddedPropertyCatalog addedPropertyCatalog,
         WorkerInput input,
-        BaselineSnapshotState baseline,
         List<WorkerEntry> entries,
         List<WorkerSkipped> skipped,
         List<WorkerUnchangedMethod> unchangedMethods,
@@ -37,18 +35,22 @@ internal static class ShimMethodEmitter
         {
             EmitQueuedMethods(
                 typeState,
-                semanticModel,
+                addedMethodCatalog,
+                addedFieldCatalog,
+                addedPropertyCatalog,
+                entries);
+            AddedPropertyEmitter.EmitAddedPropertyAccessors(
+                typeState,
+                addedPropertyCatalog,
                 addedMethodCatalog,
                 addedFieldCatalog,
                 entries);
             (shimTypeCounter, globalShimMethodCounter) = PropertyGetterEmitter.EmitPropertyGettersForType(
                 typeState,
-                semanticModel,
                 addedMethodCatalog,
                 addedFieldCatalog,
-                root,
+                addedPropertyCatalog,
                 input,
-                baseline,
                 entries,
                 skipped,
                 unchangedMethods,
@@ -63,11 +65,12 @@ internal static class ShimMethodEmitter
 
     internal static void EmitQueuedMethods(
         TypeEmitState typeState,
-        SemanticModel semanticModel,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog,
         List<WorkerEntry> entries)
     {
+        SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
         foreach (QueuedShimMethod queued in typeState.QueuedMethods)
         {
             AccessorPlan rewritePlan = queued.Decision.UsesDelegation
@@ -80,7 +83,8 @@ internal static class ShimMethodEmitter
                 semanticModel,
                 rewritePlan,
                 addedMethodCatalog,
-                addedFieldCatalog);
+                addedFieldCatalog,
+                addedPropertyCatalog);
             queued.ShimType.AddMethod(rewrittenMethod, queued.ShimMethodName);
 
             SyntaxNode bodyNode =
@@ -89,10 +93,12 @@ internal static class ShimMethodEmitter
                 bodyNode,
                 semanticModel,
                 addedMethodCatalog,
+                addedPropertyCatalog,
                 queued.MethodKey);
 
             entries.Add(new WorkerEntry
             {
+                SourceProjectRelativePath = typeState.SourceUnit.Input.ProjectRelativePath,
                 TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
                 MethodName = queued.MethodSymbol.Name,
                 ParameterTypeFullNames = queued.ParameterTypeFullNames,
@@ -119,7 +125,8 @@ internal static class ShimMethodEmitter
         SemanticModel semanticModel,
         AccessorPlan accessorPlan,
         AddedMethodCatalog addedMethodCatalog,
-        AddedFieldCatalog addedFieldCatalog)
+        AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog)
     {
         // Why a single rewriter: rewriting the tree invalidates SemanticModel for new nodes.
         // Qualify + accessor rewrite both classify symbols on the original tree in one Visit pass.
@@ -128,7 +135,8 @@ internal static class ShimMethodEmitter
             targetType,
             accessorPlan,
             addedMethodCatalog,
-            addedFieldCatalog);
+            addedFieldCatalog,
+            addedPropertyCatalog);
         MethodDeclarationSyntax rewritten = (MethodDeclarationSyntax)rewriter.Visit(methodDeclaration);
         return ShimMethodFactory.ToShimMethod(rewritten, methodSymbol);
     }

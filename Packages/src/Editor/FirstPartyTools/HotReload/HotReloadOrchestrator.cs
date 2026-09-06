@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,7 +13,8 @@ using UnityCompilationAssembly = UnityEditor.Compilation.Assembly;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// End-to-end hot-reload pipeline: resolve assembly → worker → shim compile → match → patch.
+    /// End-to-end hot-reload pipeline: resolve every file's assembly, group the files of one
+    /// assembly, run each group, and merge the per-file results in input order.
     /// </summary>
     internal static class HotReloadOrchestrator
     {
@@ -23,535 +23,525 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <paramref name="contentPathOverride"/> is test-only: when set, the worker reads that
         /// path while assembly resolution still uses <paramref name="files"/> (so edited copies
         /// can live under <c>Library/UloopHotReload/TestSources/</c> without provoking AssetDatabase).
-        /// <paramref name="contentPathOverrides"/> is the per-file form of that hook.
+        /// <paramref name="contentPathOverrideByFile"/> is the per-file form of that hook, keyed by
+        /// the entry in <paramref name="files"/>; it wins over the single override.
         /// </summary>
         public static async Task<HotReloadOrchestratorResult> RunAsync(
             IReadOnlyList<string> files,
             string contentPathOverride,
             CancellationToken ct,
-            IReadOnlyList<string> contentPathOverrides = null)
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile = null)
         {
             Debug.Assert(files != null, "files must not be null.");
             Debug.Assert(files.Count > 0, "files must not be empty.");
 
             string correlationId = VibeLogger.GenerateCorrelationId();
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
-            List<string> warnings = new List<string>();
-            List<string> suppressedPausePointIds = new List<string>();
-            List<string> retargetedPausePointIds = new List<string>();
-            List<string> inlineRiskMethodLabels = new List<string>();
-            List<string> addedFields = new List<string>();
-            List<string> addedConsts = new List<string>();
-            List<string> siblingDerivedWarnings = new List<string>();
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates =
-                new List<HotReloadOneShotCallerNoteEnricher.Candidate>();
-            int patchedTotal = 0;
-            int unchangedTotal = 0;
-            int revertedUnchangedTotal = 0;
-            // Why after the file loop (not inside ProcessFileAsync): duplicate paths in one
-            // run must still apply twice; recording mid-run would short-circuit the second copy.
-            Dictionary<string, (string Hash, bool IsFullyApplied)> appliedSourceHashByPath =
-                new Dictionary<string, (string Hash, bool IsFullyApplied)>(StringComparer.Ordinal);
+            HotReloadRunAccumulator run = new HotReloadRunAccumulator();
 
+            // CompilationPipeline / Application.dataPath require the Unity main thread, and the
+            // groups cannot be planned before every file knows which assembly it compiles into.
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            HotReloadFileProcessResult[] resultSlots = new HotReloadFileProcessResult[files.Count];
+            string[] resultPaths = new string[files.Count];
+            HotReloadGroupFile[] groupFiles = new HotReloadGroupFile[files.Count];
+            List<HotReloadMethodOutcome>[] deferredAlreadyActive = new List<HotReloadMethodOutcome>[files.Count];
+            List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput =
+                new List<(int InputIndex, string AssemblyName, string ProjectRelativePath)>();
             for (int index = 0; index < files.Count; index++)
             {
                 ct.ThrowIfCancellationRequested();
-                string filePath = files[index];
-                string workerSourcePath = ResolveWorkerSourcePath(
-                    filePath,
+                ResolveInputFile(
+                    files[index],
+                    index,
                     contentPathOverride,
-                    contentPathOverrides,
-                    index);
-
-                // Why ConfigureAwait(false): UnityCliLoopTool forbids capturing Unity's
-                // SynchronizationContext across awaits — while Play Mode is paused that context
-                // does not run continuations, so a true resume would hang the tool forever.
-                // ProcessFileAsync switches back via MainThreadSwitcher (EditorApplication.update
-                // queue) before any main-thread-only editor API or Harmony patch.
-                HotReloadFileProcessResult fileResult = await ProcessFileAsync(
-                    filePath,
-                    workerSourcePath,
+                    contentPathOverrideByFile,
                     correlationId,
-                    siblingDerivedWarnings,
-                    oneShotCallerNoteCandidates,
-                    ct).ConfigureAwait(false);
-
-                outcomes.AddRange(fileResult.Outcomes);
-                warnings.AddRange(fileResult.Warnings);
-                HotReloadOutcomeAggregation.AppendDistinct(suppressedPausePointIds, fileResult.SuppressedPausePointIds);
-                HotReloadOutcomeAggregation.AppendDistinct(retargetedPausePointIds, fileResult.RetargetedPausePointIds);
-                HotReloadOutcomeAggregation.AppendDistinct(inlineRiskMethodLabels, fileResult.InlineRiskMethodLabels);
-                patchedTotal += fileResult.PatchedCount;
-                unchangedTotal += fileResult.UnchangedMethodCount;
-                revertedUnchangedTotal += fileResult.RevertedUnchangedCount;
-                addedFields.AddRange(fileResult.AddedFieldNames);
-                addedConsts.AddRange(fileResult.AddedConstNames);
-                HotReloadAppliedSourceLifecycle.StageAppliedSourceHash(
-                    appliedSourceHashByPath,
-                    HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath),
-                    fileResult.SourceContentSha256,
-                    fileResult.Outcomes);
+                    run,
+                    resultSlots,
+                    resultPaths,
+                    groupFiles,
+                    plannerInput,
+                    deferredAlreadyActive);
             }
 
-            foreach (KeyValuePair<string, (string Hash, bool IsFullyApplied)> pair in appliedSourceHashByPath)
+            IReadOnlyList<HotReloadFileGroupPlan> plans = HotReloadFileGroupPlanner.Plan(plannerInput);
+            HashSet<string> pathsInRun = new HashSet<string>(
+                HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
+            for (int pathIndex = 0; pathIndex < resultPaths.Length; pathIndex++)
             {
-                HotReloadAppliedSourceLedger.Record(pair.Key, pair.Value.Hash, pair.Value.IsFullyApplied);
+                if (!string.IsNullOrEmpty(resultPaths[pathIndex]))
+                {
+                    pathsInRun.Add(resultPaths[pathIndex]);
+                }
             }
+
+            bool[] allDeferred = ClassifyAllDeferredPlans(plans, deferredAlreadyActive);
+
+            List<(string Path, HotReloadFileProcessResult Result)> extraResults =
+                new List<(string Path, HotReloadFileProcessResult Result)>();
+            for (int planIndex = 0; planIndex < plans.Count; planIndex++)
+            {
+                ct.ThrowIfCancellationRequested();
+                HotReloadFileGroupPlan plan = plans[planIndex];
+                if (allDeferred[planIndex])
+                {
+                    continue;
+                }
+
+                bool isLastChangedGroup = IsLastChangedPlanForAssembly(plans, allDeferred, planIndex);
+                List<int> inputIndexes = new List<int>(plan.InputIndexes);
+                if (isLastChangedGroup)
+                {
+                    AppendUniqueDeferredInputIndexes(
+                        plans,
+                        allDeferred,
+                        planIndex,
+                        groupFiles,
+                        inputIndexes);
+                }
+
+                await ProcessPlannedGroupAsync(
+                        inputIndexes,
+                        groupFiles,
+                        resultSlots,
+                        correlationId,
+                        ct,
+                        pathsInRun,
+                        contentPathOverrideByFile,
+                        isLastChangedGroup,
+                        extraResults,
+                        run)
+                    .ConfigureAwait(false);
+            }
+
+            // Why after every changed plan: an earlier all-deferred plan must not fill its
+            // slots before the last changed group can absorb its unique callers.
+            for (int planIndex = 0; planIndex < plans.Count; planIndex++)
+            {
+                if (allDeferred[planIndex])
+                {
+                    ApplyDeferredAlreadyActive(
+                        plans[planIndex],
+                        groupFiles,
+                        resultSlots,
+                        deferredAlreadyActive);
+                }
+            }
+
+            for (int index = 0; index < files.Count; index++)
+            {
+                run.Add(resultPaths[index], resultSlots[index]);
+            }
+
+            for (int extraIndex = 0; extraIndex < extraResults.Count; extraIndex++)
+            {
+                run.AddReappliedSibling(extraResults[extraIndex].Path, extraResults[extraIndex].Result);
+            }
+
+            run.RecordAppliedSourceHashes();
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            HotReloadOneShotCallerNoteEnricher.ApplyNotes(
-                projectRoot,
-                outcomes,
-                oneShotCallerNoteCandidates,
-                (ignoredAssemblyName, identities) => HotReloadCallSiteScanner.FindCallSites(projectRoot, identities));
-
-            if (inlineRiskMethodLabels.Count > 0)
-            {
-                warnings.Add(
-                    HotReloadOutcomeAggregation.FormatInlineRiskAggregatedWarning(
-                        inlineRiskMethodLabels.Count,
-                        patchedTotal,
-                        inlineRiskMethodLabels));
-            }
+            run.ApplyOneShotCallerNotes(projectRoot);
 
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            addedFields.Sort(StringComparer.Ordinal);
-            addedConsts.Sort(StringComparer.Ordinal);
-            if (addedFields.Count > 0)
-            {
-                // Why from this list: AddedFields and the lifetime warning must name the same
-                // applied fields. Worker-side classified sets include unused and unavailable
-                // declarations, and retry overwrites names without replacing first-pass warnings.
-                warnings.Add(
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        HotReloadConstants.AddedFieldsLifetimeWarningFormat,
-                        string.Join(", ", addedFields)));
-            }
-
-            (int patchedCount, int failedCount, int skippedCount, int alreadyActiveCount, int addedCount, int staleCount) =
-                HotReloadOutcomeAggregation.CountMethodOutcomeKinds(outcomes);
-            HotReloadOrchestratorLog.LogHotReloadApplySummary(
-                patchedCount,
-                failedCount,
-                skippedCount,
-                alreadyActiveCount,
-                addedCount,
-                staleCount,
-                failedCount == 0,
-                correlationId);
-            HotReloadOutcomeAggregation.AppendSiblingDerivedWarnings(warnings, siblingDerivedWarnings);
-            HotReloadAutoRefreshHoldSyncResult autoRefreshHold =
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
-            return new HotReloadOrchestratorResult(
-                outcomes,
-                warnings,
-                patchedTotal,
-                HotReloadPatcher.ActiveChangeCount,
-                suppressedPausePointIds,
-                unchangedTotal,
-                retargetedPausePointIds,
-                addedFields.ToArray(),
-                addedConsts.ToArray(),
-                revertedUnchangedTotal,
-                autoRefreshHold);
+            return run.BuildResult(correlationId);
         }
 
-        private static async Task<HotReloadFileProcessResult> ProcessFileAsync(
-            string assemblyResolvePath,
-            string workerSourcePath,
+        // Resolves one input path's patch target and either records its early result or enrolls
+        // it in the group plan.
+        private static void ResolveInputFile(
+            string filePath,
+            int index,
+            string contentPathOverride,
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile,
             string correlationId,
-            List<string> siblingDerivedWarnings,
-            List<HotReloadOneShotCallerNoteEnricher.Candidate> oneShotCallerNoteCandidates,
-            CancellationToken ct)
+            HotReloadRunAccumulator run,
+            HotReloadFileProcessResult[] resultSlots,
+            string[] resultPaths,
+            HotReloadGroupFile[] groupFiles,
+            List<(int InputIndex, string AssemblyName, string ProjectRelativePath)> plannerInput,
+            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
         {
-            Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
-            List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
-            List<string> warnings = new List<string>();
-            List<string> suppressedPausePointIds = new List<string>();
-            List<string> retargetedPausePointIds = new List<string>();
-
-            // CompilationPipeline / Application.dataPath require the Unity main thread.
-            await MainThreadSwitcher.SwitchToMainThread(ct);
+            string workerSourcePath = ResolveWorkerSourcePath(
+                filePath,
+                contentPathOverride,
+                contentPathOverrideByFile);
+            HotReloadFileSinks sinks = new HotReloadFileSinks(
+                run.SiblingDerivedWarnings,
+                run.OneShotCallerNoteCandidates);
+            List<HotReloadMethodOutcome> alreadyActiveOutcomes = new List<HotReloadMethodOutcome>();
 
             (HotReloadFileProcessResult earlyResolve,
                 string projectRelativePath,
                 string assemblyName,
                 UnityCompilationAssembly compilationAssembly,
                 string targetDllPath,
-                string projectRoot) = HotReloadPatchTargetSupport.ResolvePatchTarget(
-                assemblyResolvePath,
+                string projectRoot,
+                HotReloadUnchangedSourceDecision unchangedDecision) = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                filePath,
                 workerSourcePath,
-                outcomes,
-                warnings,
-                correlationId);
+                sinks.Outcomes,
+                sinks.Warnings,
+                correlationId,
+                alreadyActiveOutcomes);
             if (earlyResolve != null)
             {
-                return earlyResolve;
-            }
-
-            // Why snapshot at this file's apply entry: multi-file runs process files
-            // sequentially, and RevertUnchangedPatches / BeginFileGeneration mutate ledgers
-            // after the worker. The worker itself does not.
-            HashSet<string> snapshotLabels = HotReloadAppliedSourceLifecycle.CollectActiveLabelsForFile(projectRelativePath);
-            HashSet<string> snapshotAddedLabels = new HashSet<string>(
-                HotReloadAddedMemberRegistry.ListActiveMethodKeys(projectRelativePath),
-                StringComparer.Ordinal);
-
-            string[] defines = compilationAssembly.defines ?? Array.Empty<string>();
-            string[] referencePaths = HotReloadShimReferenceBuilder.BuildWorkerReferencePaths(compilationAssembly, targetDllPath);
-
-            // Why projectRelativePath (not workerSourcePath): contentPathOverride E2E copies live
-            // under Library/UloopHotReload/TestSources/ and are absent from the PDB document list.
-            // Assembly resolution already computed the on-disk Assets/Packages path above.
-            string snapshotSource = HotReloadSourceBaseline.LoadVerifiedSnapshotSource(
-                projectRelativePath,
-                targetDllPath);
-
-            HotReloadChangedSiblingScanResult siblingScan = HotReloadChangedSiblingSourceDetector.Detect(
-                projectRoot,
-                assemblyName,
-                targetDllPath,
-                compilationAssembly.sourceFiles,
-                projectRelativePath);
-            if (!string.IsNullOrEmpty(siblingScan.ScanLimitWarning))
-            {
-                siblingDerivedWarnings.Add(siblingScan.ScanLimitWarning);
-            }
-
-            TransformWorkerInputDto workerInput = new TransformWorkerInputDto
-            {
-                sourcePath = Path.GetFullPath(workerSourcePath),
-                defines = defines,
-                referencePaths = referencePaths,
-                targetTypesAssemblyPath = Path.GetFullPath(targetDllPath),
-                snapshotSource = snapshotSource,
-                projectRelativePath = projectRelativePath,
-                assemblySourcePaths = HotReloadPatchTargetSupport.BuildAssemblySourcePaths(projectRoot, compilationAssembly.sourceFiles),
-                changedSiblingSourcePaths = siblingScan.ChangedSiblingAbsolutePaths
-            };
-
-            TransformWorkerClientResult workerResult =
-                await TransformWorkerClient.RunAsync(workerInput, ct).ConfigureAwait(false);
-            HotReloadOrchestratorLog.LogHotReloadWorkerResult(workerResult, correlationId);
-            if (!workerResult.Success)
-            {
-                outcomes.Add(
-                    HotReloadMethodOutcome.Failed("(file)", workerResult.ErrorMessage, assemblyResolvePath));
-                return new HotReloadFileProcessResult(outcomes, warnings, 0);
-            }
-
-            TransformWorkerOutputDto workerOutput = workerResult.Output;
-            string[] addedFieldNames = workerOutput.addedFieldNames;
-            AppendWorkerNotices(
-                workerOutput,
-                snapshotSource,
-                projectRelativePath,
-                assemblyName,
-                assemblyResolvePath,
-                outcomes,
-                warnings,
-                siblingDerivedWarnings);
-
-            TransformWorkerUnchangedMethodDto[] unchangedMethods =
-                workerOutput.unchangedMethods ?? Array.Empty<TransformWorkerUnchangedMethodDto>();
-            int unchangedMethodCount = unchangedMethods.Length;
-
-            // Why before the empty-entries return: all-unchanged runs exit there, and those are
-            // exactly the runs that must peel leftover patches so behavior converges to compiled IL.
-            await MainThreadSwitcher.SwitchToMainThread(ct);
-            int revertedUnchangedCount = HotReloadEntryApplier.RevertUnchangedPatches(
-                assemblyName,
-                unchangedMethods);
-
-            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = await HotReloadSignatureChangeGate.TryApplySignatureChangeGateAsync(
-                projectRoot,
-                assemblyName,
-                workerInput,
-                workerOutput,
-                compilationAssembly,
-                targetDllPath,
-                defines,
-                assemblyResolvePath,
-                projectRelativePath,
-                correlationId,
-                ct).ConfigureAwait(false);
-            AppendRetrySiblingConstDriftWarnings(siblingDerivedWarnings, gateResult.Isolation);
-            // Why after the gate: a gated replacement is not applied, so listing it under
-            // "Removed members stay present... edited bodies no longer call them" is false.
-            string removedMembersWarning = HotReloadRemovedMembersWarning.FormatRemovedMembersWarning(
-                workerOutput.removedMembers,
-                workerOutput.removedMethodSignatures,
-                gateResult.GatedReplacementMethodKeys);
-            if (removedMembersWarning != null)
-            {
-                warnings.Add(removedMembersWarning);
-            }
-
-            HotReloadStalePatchOutcomes.Append(
-                outcomes,
-                workerOutput,
-                gateResult.GatedReplacementMethodKeys,
-                projectRelativePath,
-                assemblyResolvePath);
-
-            if (gateResult.FileFailed)
-            {
-                // Why not apply first-pass entries: a gate retry null means the replacement was
-                // not isolated. Falling through would apply the unguarded return-type change.
-                outcomes.Add(
-                    HotReloadMethodOutcome.Failed(
-                        "(signature-change-gate)",
-                        gateResult.FailureMessage,
-                        assemblyResolvePath));
-                return new HotReloadFileProcessResult(
-                    outcomes,
-                    warnings,
-                    0,
-                    unchangedMethodCount: unchangedMethodCount,
-                    sourceContentSha256: workerOutput.sourceContentSha256,
-                    revertedUnchangedCount: revertedUnchangedCount);
-            }
-
-            outcomes.AddRange(gateResult.SkippedOutcomes);
-            warnings.AddRange(gateResult.Warnings);
-
-            (HotReloadFileProcessResult earlyEntries,
-                TransformWorkerEntryDto[] entriesToPatch,
-                HotReloadShimCompileResult compileResult,
-                string[] resolvedAddedFieldNames,
-                string[] resolvedAddedConstNames) = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
-                gateResult,
-                workerInput,
-                workerOutput,
-                compilationAssembly,
-                targetDllPath,
-                defines,
-                assemblyResolvePath,
-                projectRelativePath,
-                correlationId,
-                addedFieldNames,
-                snapshotLabels,
-                snapshotAddedLabels,
-                outcomes,
-                warnings,
-                suppressedPausePointIds,
-                retargetedPausePointIds,
-                unchangedMethodCount,
-                siblingDerivedWarnings,
-                revertedUnchangedCount,
-                ct).ConfigureAwait(false);
-            if (earlyEntries != null)
-            {
-                return earlyEntries;
-            }
-
-            addedFieldNames = resolvedAddedFieldNames;
-
-            if (gateResult.DidScan)
-            {
-                // Why after entriesToPatch is final and before Harmony: isolation or a gate
-                // retry can drop a covering caller without dropping the replacement. A third
-                // worker run is not allowed (max two); fail the file instead of applying.
-                List<string> lostReplacementKeys = HotReloadSignatureChangeCoverage.FindSignatureChangeCoverageLosses(
-                    entriesToPatch,
-                    gateResult.Hits,
-                    gateResult.ScanTargetKeys);
-                if (lostReplacementKeys.Count > 0)
-                {
-                    outcomes.Add(
-                        HotReloadMethodOutcome.Failed(
-                            "(signature-change-gate)",
-                            string.Format(
-                                HotReloadConstants.SignatureChangeCoverageLostFailureFormat,
-                                string.Join(", ", lostReplacementKeys)),
-                            assemblyResolvePath));
-                    return new HotReloadFileProcessResult(
-                        outcomes,
-                        warnings,
-                        0,
-                        unchangedMethodCount: unchangedMethodCount,
-                        sourceContentSha256: workerOutput.sourceContentSha256,
-                        revertedUnchangedCount: revertedUnchangedCount);
-                }
-
-                HotReloadSignatureChangeCoverage.AppendSignatureChangeCallersRepatchedWarnings(
-                    warnings,
-                    entriesToPatch,
-                    gateResult.Hits,
-                    snapshotLabels);
-            }
-
-            // Harmony Patch/Unpatch and method resolution against loaded modules require main thread.
-            await MainThreadSwitcher.SwitchToMainThread(ct);
-            HotReloadFileProcessResult applied = HotReloadEntryApplier.ApplyEntriesAndBuildResult(
-                assemblyName,
-                assemblyResolvePath,
-                projectRelativePath,
-                compileResult,
-                entriesToPatch,
-                addedFieldNames,
-                resolvedAddedConstNames,
-                workerOutput,
-                snapshotLabels,
-                snapshotAddedLabels,
-                outcomes,
-                warnings,
-                suppressedPausePointIds,
-                retargetedPausePointIds,
-                unchangedMethodCount,
-                oneShotCallerNoteCandidates,
-                revertedUnchangedCount);
-            // Why after apply: earlier returns (gate fail, shim compile, coverage loss)
-            // never applied the replacement, so leftover Active rows must not claim they
-            // were superseded.
-            RecordSupersededSignaturesAfterApply(
-                applied,
-                workerOutput,
-                gateResult.GatedReplacementMethodKeys);
-            return applied;
-        }
-
-        private static void RecordSupersededSignaturesAfterApply(
-            HotReloadFileProcessResult applied,
-            TransformWorkerOutputDto workerOutput,
-            IReadOnlyCollection<string> gatedReplacementMethodKeys)
-        {
-            if (!HasAppliedChange(applied.Outcomes))
-            {
+                resultSlots[index] = earlyResolve;
+                resultPaths[index] = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath);
                 return;
             }
 
-            HotReloadSupersededSignatureRecorder.RecordFromWorkerOutput(
-                workerOutput,
-                gatedReplacementMethodKeys);
+            if (unchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
+            {
+                deferredAlreadyActive[index] = alreadyActiveOutcomes;
+            }
+
+            groupFiles[index] = new HotReloadGroupFile(
+                filePath,
+                workerSourcePath,
+                projectRelativePath,
+                assemblyName,
+                compilationAssembly,
+                targetDllPath,
+                projectRoot,
+                sinks);
+            resultPaths[index] = projectRelativePath;
+            plannerInput.Add((index, assemblyName, projectRelativePath));
         }
 
-        private static bool HasAppliedChange(IReadOnlyList<HotReloadMethodOutcome> outcomes)
+        private static bool[] ClassifyAllDeferredPlans(
+            IReadOnlyList<HotReloadFileGroupPlan> plans,
+            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
         {
-            for (int index = 0; index < outcomes.Count; index++)
+            Debug.Assert(plans != null, "plans must not be null.");
+            Debug.Assert(deferredAlreadyActive != null, "deferredAlreadyActive must not be null.");
+
+            bool[] allDeferred = new bool[plans.Count];
+            for (int planIndex = 0; planIndex < plans.Count; planIndex++)
             {
-                HotReloadMethodOutcomeKind kind = outcomes[index].Kind;
-                if (kind == HotReloadMethodOutcomeKind.Patched
-                    || kind == HotReloadMethodOutcomeKind.Added)
+                allDeferred[planIndex] = AreAllInputsDeferredAlreadyActive(
+                    plans[planIndex],
+                    deferredAlreadyActive);
+            }
+
+            return allDeferred;
+        }
+
+        private static bool AreAllInputsDeferredAlreadyActive(
+            HotReloadFileGroupPlan plan,
+            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
+        {
+            foreach (int inputIndex in plan.InputIndexes)
+            {
+                if (deferredAlreadyActive[inputIndex] == null)
                 {
-                    return true;
+                    return false;
                 }
             }
 
-            return false;
+            return true;
         }
 
-        // Why after the worker: const-only / empty files have no patch candidates, so the
-        // missing-baseline warning was pure noise (FB E). Emit only when the worker saw at
-        // least one method or accessor row.
-        private static void AppendWorkerNotices(
-            TransformWorkerOutputDto workerOutput,
-            string snapshotSource,
+        // Why every all-deferred plan of the assembly: a repeated path can open an
+        // all-deferred plan before the last changed group, and that plan can hold a
+        // caller that sibling auto-include cannot add because it is already in pathsInRun.
+        private static void AppendUniqueDeferredInputIndexes(
+            IReadOnlyList<HotReloadFileGroupPlan> plans,
+            bool[] allDeferred,
+            int currentPlanIndex,
+            HotReloadGroupFile[] groupFiles,
+            List<int> inputIndexes)
+        {
+            Debug.Assert(plans != null, "plans must not be null.");
+            Debug.Assert(allDeferred != null, "allDeferred must not be null.");
+            Debug.Assert(groupFiles != null, "groupFiles must not be null.");
+            Debug.Assert(inputIndexes != null, "inputIndexes must not be null.");
+
+            string assemblyName = plans[currentPlanIndex].AssemblyName;
+            HashSet<string> pathsInGroup = new HashSet<string>(
+                HotReloadSourcePathNormalizer.ProjectRelativePathComparer());
+            for (int position = 0; position < inputIndexes.Count; position++)
+            {
+                pathsInGroup.Add(groupFiles[inputIndexes[position]].ProjectRelativePath);
+            }
+
+            for (int planIndex = 0; planIndex < plans.Count; planIndex++)
+            {
+                if (planIndex == currentPlanIndex
+                    || !allDeferred[planIndex]
+                    || !string.Equals(
+                        plans[planIndex].AssemblyName,
+                        assemblyName,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                IReadOnlyList<int> deferredIndexes = plans[planIndex].InputIndexes;
+                for (int deferredPosition = 0; deferredPosition < deferredIndexes.Count; deferredPosition++)
+                {
+                    int inputIndex = deferredIndexes[deferredPosition];
+                    string path = groupFiles[inputIndex].ProjectRelativePath;
+                    if (pathsInGroup.Add(path))
+                    {
+                        inputIndexes.Add(inputIndex);
+                    }
+                }
+            }
+        }
+
+        private static void ApplyDeferredAlreadyActive(
+            HotReloadFileGroupPlan plan,
+            HotReloadGroupFile[] groupFiles,
+            HotReloadFileProcessResult[] resultSlots,
+            List<HotReloadMethodOutcome>[] deferredAlreadyActive)
+        {
+            foreach (int inputIndex in plan.InputIndexes)
+            {
+                if (resultSlots[inputIndex] != null)
+                {
+                    continue;
+                }
+
+                Debug.Assert(
+                    deferredAlreadyActive[inputIndex] != null,
+                    "An unfilled deferred slot must have AlreadyActive rows.");
+                groupFiles[inputIndex].Sinks.Outcomes.AddRange(deferredAlreadyActive[inputIndex]);
+                resultSlots[inputIndex] = new HotReloadFileProcessResult(
+                    groupFiles[inputIndex].Sinks.Outcomes,
+                    groupFiles[inputIndex].Sinks.Warnings,
+                    0);
+            }
+        }
+
+        private static async Task ProcessPlannedGroupAsync(
+            IReadOnlyList<int> inputIndexes,
+            HotReloadGroupFile[] groupFiles,
+            HotReloadFileProcessResult[] resultSlots,
+            string correlationId,
+            CancellationToken ct,
+            HashSet<string> pathsInRun,
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile,
+            bool isLastGroupOfAssembly,
+            List<(string Path, HotReloadFileProcessResult Result)> extraResults,
+            HotReloadRunAccumulator run)
+        {
+            Debug.Assert(inputIndexes != null && inputIndexes.Count > 0, "A group must hold a file.");
+            List<HotReloadGroupFile> filesOfGroup = new List<HotReloadGroupFile>(inputIndexes.Count);
+            foreach (int inputIndex in inputIndexes)
+            {
+                filesOfGroup.Add(groupFiles[inputIndex]);
+            }
+
+            int inputCount = inputIndexes.Count;
+            if (isLastGroupOfAssembly)
+            {
+                AppendActiveSiblingsToGroup(filesOfGroup, pathsInRun, contentPathOverrideByFile, run);
+            }
+
+            // Why ConfigureAwait(false): UnityCliLoopTool forbids capturing Unity's
+            // SynchronizationContext across awaits — while Play Mode is paused that context
+            // does not run continuations, so a true resume would hang the tool forever.
+            // ProcessGroupAsync switches back via MainThreadSwitcher (EditorApplication.update
+            // queue) before any main-thread-only editor API or Harmony patch.
+            IReadOnlyList<HotReloadFileProcessResult> groupResults =
+                await HotReloadGroupProcessor.ProcessGroupAsync(filesOfGroup, correlationId, ct)
+                    .ConfigureAwait(false);
+            Debug.Assert(
+                groupResults.Count == filesOfGroup.Count,
+                "A group must report one result per file, including re-applied siblings.");
+            for (int position = 0; position < inputIndexes.Count; position++)
+            {
+                resultSlots[inputIndexes[position]] = groupResults[position];
+            }
+
+            for (int position = inputCount; position < filesOfGroup.Count; position++)
+            {
+                extraResults.Add((filesOfGroup[position].ProjectRelativePath, groupResults[position]));
+            }
+
+            if (isLastGroupOfAssembly)
+            {
+                AddSiblingRebindResultWarnings(filesOfGroup, inputCount, groupResults);
+            }
+        }
+
+        private static void AppendActiveSiblingsToGroup(
+            List<HotReloadGroupFile> filesOfGroup,
+            HashSet<string> pathsInRun,
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile,
+            HotReloadRunAccumulator run)
+        {
+            HotReloadGroupFile firstFile = filesOfGroup[0];
+            HotReloadActiveSiblingRebindPlan rebind = HotReloadActiveSiblingRebindPlanner.Plan(
+                firstFile.AssemblyName,
+                firstFile.CompilationAssembly.sourceFiles,
+                pathsInRun,
+                path => ResolveSiblingWorkerSourcePath(
+                    path,
+                    firstFile.ProjectRoot,
+                    contentPathOverrideByFile));
+            IReadOnlyList<(string ProjectRelativePath, string WorkerSourcePath)> filesToInclude =
+                rebind.FilesToInclude;
+            for (int index = 0; index < filesToInclude.Count; index++)
+            {
+                filesOfGroup.Add(
+                    HotReloadGroupFile.ForActiveSibling(
+                        firstFile,
+                        filesToInclude[index].ProjectRelativePath,
+                        filesToInclude[index].WorkerSourcePath,
+                        new HotReloadFileSinks(run.SiblingDerivedWarnings, run.OneShotCallerNoteCandidates)));
+            }
+
+            AddChangedSinceApplyWarnings(firstFile, rebind);
+        }
+
+        private static void AddChangedSinceApplyWarnings(
+            HotReloadGroupFile firstFile,
+            HotReloadActiveSiblingRebindPlan rebind)
+        {
+            IReadOnlyList<string> changedSinceApplyPaths = rebind.ChangedSinceApplyPaths;
+            for (int index = 0; index < changedSinceApplyPaths.Count; index++)
+            {
+                firstFile.Sinks.Warnings.Add(
+                    string.Format(
+                        HotReloadConstants.ActiveSiblingChangedSinceApplyWarningFormat,
+                        changedSinceApplyPaths[index]));
+            }
+        }
+
+        private static void AddSiblingRebindResultWarnings(
+            List<HotReloadGroupFile> filesOfGroup,
+            int inputCount,
+            IReadOnlyList<HotReloadFileProcessResult> groupResults)
+        {
+            Debug.Assert(filesOfGroup != null, "filesOfGroup must not be null.");
+            Debug.Assert(groupResults != null, "groupResults must not be null.");
+            Debug.Assert(
+                groupResults.Count == filesOfGroup.Count,
+                "Rebind warnings need one result per group file.");
+            Debug.Assert(groupResults.Count > 0, "A processed group must have a result.");
+
+            List<string> reappliedPaths = new List<string>();
+            for (int position = inputCount; position < filesOfGroup.Count; position++)
+            {
+                string path = filesOfGroup[position].ProjectRelativePath;
+                if (ShouldDescribeSiblingAsReapplied(groupResults[position]))
+                {
+                    reappliedPaths.Add(path);
+                }
+                else
+                {
+                    groupResults[0].Warnings.Add(
+                        string.Format(
+                            HotReloadConstants.ActiveSiblingRebindFailedWarningFormat,
+                            path));
+                }
+            }
+
+            if (reappliedPaths.Count > 0)
+            {
+                groupResults[0].Warnings.Add(
+                    string.Format(
+                        HotReloadConstants.ActiveSiblingsRebindWarningFormat,
+                        reappliedPaths.Count,
+                        filesOfGroup[0].AssemblyName,
+                        string.Join(", ", reappliedPaths)));
+            }
+        }
+
+        // Why not "no Failed row": isolation leaves a sibling as Skipped when its added-method
+        // callee failed to compile, and claiming that file was re-applied would be false.
+        private static bool ShouldDescribeSiblingAsReapplied(HotReloadFileProcessResult result)
+        {
+            Debug.Assert(result != null, "result must not be null.");
+            bool sawApplied = false;
+            foreach (HotReloadMethodOutcome outcome in result.Outcomes)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed)
+                {
+                    return false;
+                }
+
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Patched
+                    || outcome.Kind == HotReloadMethodOutcomeKind.Added)
+                {
+                    sawApplied = true;
+                }
+            }
+
+            return sawApplied;
+        }
+
+        // Why changed groups only: a trailing all-deferred plan is not the shim that carries
+        // this run's host edits, so auto-include and absorbed callers belong on the last
+        // changed group.
+        private static bool IsLastChangedPlanForAssembly(
+            IReadOnlyList<HotReloadFileGroupPlan> plans,
+            bool[] allDeferred,
+            int planIndex)
+        {
+            Debug.Assert(plans != null, "plans must not be null.");
+            Debug.Assert(allDeferred != null, "allDeferred must not be null.");
+            Debug.Assert(allDeferred.Length == plans.Count, "allDeferred must match plans.");
+            Debug.Assert(planIndex >= 0 && planIndex < plans.Count, "planIndex must be in range.");
+            Debug.Assert(!allDeferred[planIndex], "Last-changed lookup is only for a changed group.");
+
+            string assemblyName = plans[planIndex].AssemblyName;
+            for (int index = planIndex + 1; index < plans.Count; index++)
+            {
+                if (allDeferred[index])
+                {
+                    continue;
+                }
+
+                if (string.Equals(plans[index].AssemblyName, assemblyName, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static string ResolveSiblingWorkerSourcePath(
             string projectRelativePath,
-            string assemblyName,
-            string assemblyResolvePath,
-            List<HotReloadMethodOutcome> outcomes,
-            List<string> warnings,
-            List<string> siblingDerivedWarnings)
+            string projectRoot,
+            IReadOnlyDictionary<string, string> overrideByFile)
         {
-            Debug.Assert(siblingDerivedWarnings != null, "siblingDerivedWarnings must not be null.");
-            if (snapshotSource == null
-                && CountPatchCandidateRows(workerOutput) >= 1)
+            if (overrideByFile != null)
             {
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.NoVerifiedSourceSnapshotWarningFormat,
-                        Path.GetFileName(projectRelativePath),
-                        assemblyName));
-            }
-
-            if (workerOutput.baselineDisabledByDuplicateKeys)
-            {
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.BaselineDisabledByDuplicateKeysWarningFormat,
-                        Path.GetFileName(projectRelativePath),
-                        assemblyName));
-            }
-
-            if (workerOutput.parseErrors != null)
-            {
-                foreach (string parseError in workerOutput.parseErrors)
+                StringComparer comparer = HotReloadSourcePathNormalizer.ProjectRelativePathComparer();
+                foreach (KeyValuePair<string, string> pair in overrideByFile)
                 {
-                    warnings.Add(parseError);
+                    string keyRelative = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(pair.Key);
+                    if (comparer.Equals(keyRelative, projectRelativePath))
+                    {
+                        return Path.GetFullPath(pair.Value);
+                    }
                 }
             }
 
-            if (workerOutput.skipped != null)
-            {
-                foreach (TransformWorkerSkippedDto skipped in workerOutput.skipped)
-                {
-                    outcomes.Add(
-                        HotReloadMethodOutcome.Skipped(
-                            skipped.method ?? "(unknown)",
-                            skipped.reason ?? string.Empty,
-                            assemblyResolvePath));
-                }
-            }
-
-            if (workerOutput.declarationDriftWarnings != null)
-            {
-                // Surfaced before the empty-entries early return so const drift still reaches
-                // the response when every method in the file is skipped or unchanged.
-                foreach (string driftWarning in workerOutput.declarationDriftWarnings)
-                {
-                    warnings.Add(driftWarning);
-                }
-            }
-
-            if (workerOutput.siblingConstDriftWarnings != null)
-            {
-                foreach (string siblingWarning in workerOutput.siblingConstDriftWarnings)
-                {
-                    siblingDerivedWarnings.Add(siblingWarning);
-                }
-            }
+            return Path.GetFullPath(
+                Path.Combine(
+                    projectRoot,
+                    projectRelativePath.Replace('/', Path.DirectorySeparatorChar)));
         }
 
-        private static void AppendRetrySiblingConstDriftWarnings(
-            List<string> siblingDerivedWarnings,
-            HotReloadShimIsolation.HotReloadShimIsolationResult isolation)
-        {
-            if (isolation == null || isolation.SiblingConstDriftWarnings == null)
-            {
-                return;
-            }
-
-            foreach (string siblingWarning in isolation.SiblingConstDriftWarnings)
-            {
-                siblingDerivedWarnings.Add(siblingWarning);
-            }
-        }
-
-        private static int CountPatchCandidateRows(TransformWorkerOutputDto workerOutput)
-        {
-            int entryCount = workerOutput.entries != null ? workerOutput.entries.Length : 0;
-            int skippedCount = workerOutput.skipped != null ? workerOutput.skipped.Length : 0;
-            int unchangedCount =
-                workerOutput.unchangedMethods != null ? workerOutput.unchangedMethods.Length : 0;
-            return entryCount + skippedCount + unchangedCount;
-        }
-
-        // Why a list hook: one contentPathOverride cannot feed two edited copies, and
-        // AddRange+Sort across files is otherwise untestable.
+        // Why keyed by path (not by index): one contentPathOverride cannot feed two edited
+        // copies, and a positional list would silently misalign once files are grouped or
+        // reordered before the worker runs.
         private static string ResolveWorkerSourcePath(
             string filePath,
             string contentPathOverride,
-            IReadOnlyList<string> contentPathOverrides,
-            int index)
+            IReadOnlyDictionary<string, string> contentPathOverrideByFile)
         {
-            if (contentPathOverrides != null
-                && index < contentPathOverrides.Count
-                && !string.IsNullOrEmpty(contentPathOverrides[index]))
+            if (contentPathOverrideByFile != null
+                && contentPathOverrideByFile.TryGetValue(filePath, out string perFileOverride)
+                && !string.IsNullOrEmpty(perFileOverride))
             {
-                return contentPathOverrides[index];
+                return perFileOverride;
             }
 
             if (string.IsNullOrEmpty(contentPathOverride))

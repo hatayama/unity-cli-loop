@@ -2,6 +2,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -274,6 +276,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         private static string _returnValue = "";
         private static bool _shouldComplete;
         private static bool _shouldThrow;
+        private static bool _shouldRecordUndo;
+        private static ScriptableObject _recordedObject;
         private static bool _runCancelledRequestThenNextRequestSequence;
         private static int _sequenceInvocationCount;
         private static string _partialResultName = string.Empty;
@@ -295,6 +299,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
 
         public static Task StartedTask => _startedCompletionSource.Task;
 
+        /// <summary>
+        /// The object the undo-recording command registered, so a fixture can clear and destroy it.
+        /// </summary>
+        public static ScriptableObject RecordedObject => _recordedObject;
+
         public static Task CancelledRequestStartedTask => _cancelledRequestStartedCompletionSource.Task;
 
         public static Task NextRequestStartedTask => _nextRequestStartedCompletionSource.Task;
@@ -305,6 +314,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             _shouldComplete = false;
             _shouldThrow = false;
+            _shouldRecordUndo = false;
             _runCancelledRequestThenNextRequestSequence = false;
             _returnValue = "";
             _partialResultName = "phase";
@@ -319,6 +329,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             _shouldComplete = true;
             _shouldThrow = false;
+            _shouldRecordUndo = false;
             _runCancelledRequestThenNextRequestSequence = false;
             _returnValue = returnValue;
             _partialResultName = string.Empty;
@@ -334,6 +345,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             _shouldComplete = true;
             _shouldThrow = false;
+            _shouldRecordUndo = false;
             _runCancelledRequestThenNextRequestSequence = false;
             _returnValue = returnValue;
             _partialResultName = partialResultName;
@@ -346,6 +358,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
         {
             _shouldComplete = false;
             _shouldThrow = true;
+            _shouldRecordUndo = false;
             _runCancelledRequestThenNextRequestSequence = false;
             _returnValue = string.Empty;
             _partialResultName = partialResultName;
@@ -354,10 +367,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
+        public static void PrepareUndoRecordingCommand()
+        {
+            _shouldComplete = false;
+            _shouldThrow = false;
+            _shouldRecordUndo = true;
+            _runCancelledRequestThenNextRequestSequence = false;
+            _returnValue = string.Empty;
+            _partialResultName = string.Empty;
+            _partialResultValue = null;
+            _startedCompletionSource = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        public static void ClearRecordedObject()
+        {
+            _recordedObject = null;
+        }
+
         public static void PrepareCancelledRequestThenNextRequestSequence()
         {
             _shouldComplete = false;
             _shouldThrow = false;
+            _shouldRecordUndo = false;
             _runCancelledRequestThenNextRequestSequence = true;
             _sequenceInvocationCount = 0;
             _returnValue = string.Empty;
@@ -409,12 +441,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.DynamicCodeToolTests
                 throw new InvalidOperationException("planned failure");
             }
 
+            if (_shouldRecordUndo)
+            {
+                return Task.FromResult<object>(RecordThroughUndoApi());
+            }
+
             if (_shouldComplete)
             {
                 return Task.FromResult<object>(_returnValue);
             }
 
             return _blockingCompletionSource.Task;
+        }
+
+        /// <summary>
+        /// Registers a real Undo recording so a fixture can observe the recording state the runner leaves.
+        /// Why a ScriptableObject: recording a scene object would dirty the open scene and mask the check.
+        /// </summary>
+        private static string RecordThroughUndoApi()
+        {
+            _recordedObject = ScriptableObject.CreateInstance<ScriptableObject>();
+            Undo.RecordObject(_recordedObject, "Probe");
+            _recordedObject.name = "recorded probe";
+            return "recorded";
         }
 
         private static async Task<object> ExecuteCancelledRequestThenNextRequestSequenceAsync()

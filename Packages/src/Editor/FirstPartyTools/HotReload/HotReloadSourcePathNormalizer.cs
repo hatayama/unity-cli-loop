@@ -17,6 +17,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return path.Replace('\\', '/');
         }
 
+        /// <summary>
+        /// The comparer for project-relative script paths on this platform: two spellings that
+        /// differ only in case name the same file on Windows and different files elsewhere.
+        /// </summary>
+        public static StringComparer ProjectRelativePathComparer()
+        {
+            return Path.DirectorySeparatorChar == '\\'
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
+        }
+
         public static bool PathsReferToSameFile(string documentUrl, string projectRelativePath)
         {
             Debug.Assert(documentUrl != null, "documentUrl must not be null.");

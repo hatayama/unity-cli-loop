@@ -123,6 +123,28 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     }
 
     /// <summary>
+    /// Supplies a public target with same-key callers compiled into two different assemblies.
+    /// </summary>
+    public static class HotReloadQualifiedCallerIdentityTarget
+    {
+        public static int Called()
+        {
+            return 9;
+        }
+    }
+
+    /// <summary>
+    /// Supplies the main-assembly side of a same-metadata-name internal caller pair.
+    /// </summary>
+    internal static class HotReloadQualifiedCallerIdentityCaller
+    {
+        internal static int Call()
+        {
+            return HotReloadQualifiedCallerIdentityTarget.Called();
+        }
+    }
+
+    /// <summary>
     /// Open generic host so call sites go through a constructed <c>GenericHost&lt;int&gt;</c>.
     /// </summary>
     public class GenericHost<T>
@@ -145,6 +167,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AwakeOnlyTarget();
             MixedTarget();
             RepeatedEvent += DelegateAssignedTarget;
+            ChainStep();
+            new OneShotCallerChainHelper().Build();
+            MixedChainStep();
+            RepeatedEvent += DelegateChainStep;
+        }
+
+        private void Start()
+        {
+            DeepStep1();
         }
 
         private void Update()
@@ -167,6 +198,91 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void OrdinaryCaller()
         {
             MixedTarget();
+        }
+
+        private void ChainStep()
+        {
+            ChainedAwakeOnlyTarget();
+        }
+
+        private void ChainedAwakeOnlyTarget()
+        {
+        }
+
+        private void MixedChainStep()
+        {
+            MixedChainTarget();
+        }
+
+        public void OrdinaryChainCaller()
+        {
+            MixedChainStep();
+        }
+
+        private void MixedChainTarget()
+        {
+        }
+
+        private void DelegateChainStep()
+        {
+            DelegateChainTarget();
+        }
+
+        private void DelegateChainTarget()
+        {
+        }
+
+        private void DeadEndStep()
+        {
+            DeadEndTarget();
+        }
+
+        private void DeadEndTarget()
+        {
+        }
+
+        private void DeepStep1()
+        {
+            DeepStep2();
+        }
+
+        private void DeepStep2()
+        {
+            DeepStep3();
+        }
+
+        private void DeepStep3()
+        {
+            DeepStep4();
+        }
+
+        private void DeepStep4()
+        {
+            DeepStep5();
+        }
+
+        private void DeepStep5()
+        {
+            DeepTarget();
+        }
+
+        private void DeepTarget()
+        {
+        }
+    }
+
+    /// <summary>
+    /// Non-MonoBehaviour intermediate so a compiled Awake chain can leave the fixture type.
+    /// </summary>
+    public sealed class OneShotCallerChainHelper
+    {
+        public void Build()
+        {
+            ConfigureTarget();
+        }
+
+        public void ConfigureTarget()
+        {
         }
     }
 }

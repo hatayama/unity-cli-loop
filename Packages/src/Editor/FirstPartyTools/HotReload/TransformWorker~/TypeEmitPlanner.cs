@@ -19,15 +19,14 @@ internal static class TypeEmitPlanner
 {
     internal static (List<TypeEmitState> TypeEmitStates, int ShimTypeCounter, int GlobalShimMethodCounter)
         QueueAllTypeEmitStates(
-            CompilationUnitSyntax root,
-            SemanticModel semanticModel,
+            WorkerSourceUnit sourceUnit,
             IAssemblySymbol targetTypesAssemblySymbol,
             WorkerInput input,
-            BaselineSnapshotState baseline,
             List<UsingDirectiveSyntax> assemblyGlobalUsings,
             List<ShimTypeBuilder> shimTypes,
             AddedMethodCatalog addedMethodCatalog,
             AddedFieldCatalog addedFieldCatalog,
+            AddedPropertyCatalog addedPropertyCatalog,
             List<WorkerSkipped> skipped,
             List<WorkerUnchangedMethod> unchangedMethods,
             List<string> declarationDriftWarnings,
@@ -36,6 +35,9 @@ internal static class TypeEmitPlanner
             int shimTypeCounter,
             int globalShimMethodCounter)
     {
+        CompilationUnitSyntax root = sourceUnit.Root;
+        SemanticModel semanticModel = sourceUnit.SemanticModel;
+        BaselineSnapshotState baseline = sourceUnit.Baseline;
         List<TypeEmitState> typeEmitStates = new List<TypeEmitState>();
         foreach (TypeDeclarationSyntax typeDeclaration in TransformWorkerProgram.EnumerateTypeDeclarations(root))
         {
@@ -47,14 +49,38 @@ internal static class TypeEmitPlanner
 
             string typeMetadataNameFromSyntax = WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration);
 
-            // Property setters/init and all indexer accessors with bodies stay Skipped.
-            // Property getters are patched below (not reported here).
+            TypeEmitState typeState = new TypeEmitState
+            {
+                SourceUnit = sourceUnit,
+                TypeDeclaration = typeDeclaration,
+                TypeSymbol = typeSymbol,
+                TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax
+            };
+            (shimTypeCounter, globalShimMethodCounter) = AddedPropertyClassifier.ClassifyAddedProperties(
+                typeState,
+                semanticModel,
+                targetTypesAssemblySymbol,
+                input,
+                baseline,
+                root,
+                assemblyGlobalUsings,
+                shimTypes,
+                addedPropertyCatalog,
+                addedMethodCatalog,
+                addedFieldCatalog,
+                skipped,
+                shimTypeCounter,
+                globalShimMethodCounter);
+
+            // Existing property setters/init and all indexer accessors with bodies stay Skipped.
+            // Added properties were classified above and must not receive duplicate skip rows.
             (Dictionary<string, PropertyDeclarationSyntax> snapshotPropertyMap,
                 Dictionary<string, IndexerDeclarationSyntax> snapshotIndexerMap,
                 Dictionary<string, PropertyDeclarationSyntax> plainCurrentPropertyMap,
                 Dictionary<string, IndexerDeclarationSyntax> plainCurrentIndexerMap) =
                 baseline.GetAccessorBaselineMaps();
             UnsupportedMemberSkipCollector.AppendExplicitAccessorSkips(
+                sourceUnit.Input.ProjectRelativePath,
                 typeDeclaration,
                 typeMetadataNameFromSyntax,
                 semanticModel,
@@ -63,7 +89,8 @@ internal static class TypeEmitPlanner
                 snapshotIndexerMap,
                 plainCurrentPropertyMap,
                 plainCurrentIndexerMap,
-                addedMethodCatalog);
+                addedMethodCatalog,
+                addedPropertyCatalog);
             (Dictionary<string, ConstructorDeclarationSyntax> snapshotConstructorMap,
                 Dictionary<string, MemberDeclarationSyntax> snapshotOperatorMap,
                 Dictionary<string, EventDeclarationSyntax> snapshotEventMap,
@@ -72,6 +99,7 @@ internal static class TypeEmitPlanner
                 Dictionary<string, EventDeclarationSyntax> plainCurrentEventMap) =
                 baseline.GetUnsupportedMemberBaselineMaps();
             UnsupportedMemberSkipCollector.AppendUnsupportedMemberKindSkips(
+                sourceUnit.Input.ProjectRelativePath,
                 typeDeclaration,
                 typeMetadataNameFromSyntax,
                 semanticModel,
@@ -83,12 +111,6 @@ internal static class TypeEmitPlanner
                 plainCurrentOperatorMap,
                 plainCurrentEventMap);
 
-            TypeEmitState typeState = new TypeEmitState
-            {
-                TypeDeclaration = typeDeclaration,
-                TypeSymbol = typeSymbol,
-                TypeMetadataNameFromSyntax = typeMetadataNameFromSyntax
-            };
             (int nextShimTypeCounter, int nextGlobalShimMethodCounter) = QueueTypeMethods(
                 typeState,
                 semanticModel,
