@@ -166,8 +166,7 @@ internal static class AddedPropertyBodyScan
         SyntaxKind kind = argument.RefKindKeyword.Kind();
         return kind == SyntaxKind.RefKeyword
             || kind == SyntaxKind.OutKeyword
-            || kind == SyntaxKind.InKeyword
-            || argument.ToString().StartsWith("in ", StringComparison.Ordinal);
+            || kind == SyntaxKind.InKeyword;
     }
 
     private static AddedPropertyBinding FindBinding(
@@ -184,7 +183,7 @@ internal static class AddedPropertyBodyScan
         }
 
         AddedPropertyBinding binding = addedPropertyCatalog.FindBySymbolOrNull(propertySymbol);
-        if (binding != null || propertySymbol != null || enclosingType == null)
+        if (binding != null || symbol != null || enclosingType == null)
         {
             return binding;
         }

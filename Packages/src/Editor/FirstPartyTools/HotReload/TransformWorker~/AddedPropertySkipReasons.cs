@@ -20,6 +20,10 @@ using Microsoft.CodeAnalysis.Text;
 /// </summary>
 internal static class AddedPropertySkipReasons
 {
+    public const string SetOnly =
+        "Added properties with only a setter are skipped; the shim requires a getter identity. "
+        + "Run 'uloop compile' to add them.";
+
     public const string VirtualOrAbstract =
         "Added virtual, override, abstract, or interface properties are skipped; the compiled type has no vtable slot. "
         + "Run 'uloop compile' to add them.";

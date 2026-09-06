@@ -43,7 +43,7 @@ internal static class AddedPropertyAccessorGuard
 
             string reason = FindAccessorSkipReason(
                 binding,
-                typeState.SourceUnit.SemanticModel,
+                typeState,
                 addedMethodCatalog,
                 addedFieldCatalog,
                 addedPropertyCatalog);
@@ -69,7 +69,8 @@ internal static class AddedPropertyAccessorGuard
     {
         foreach (TypeEmitState typeState in typeEmitStates)
         {
-            if (typeState.SourceUnit.SyntaxTree == binding.Declaration.SyntaxTree)
+            if (typeState.SourceUnit.SyntaxTree == binding.Declaration.SyntaxTree
+                && SymbolEqualityComparer.Default.Equals(typeState.TypeSymbol, binding.HostType))
             {
                 return typeState;
             }
@@ -80,40 +81,109 @@ internal static class AddedPropertyAccessorGuard
 
     private static string FindAccessorSkipReason(
         AddedPropertyBinding binding,
-        SemanticModel semanticModel,
+        TypeEmitState typeState,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog,
         AddedPropertyCatalog addedPropertyCatalog)
     {
+        SemanticModel semanticModel = typeState.SourceUnit.SemanticModel;
+        if (binding.Declaration.ExpressionBody != null)
+        {
+            return EvaluateAccessor(
+                binding,
+                binding.Getter,
+                binding.Symbol.GetMethod,
+                binding.Declaration.ExpressionBody,
+                typeState,
+                addedMethodCatalog,
+                addedFieldCatalog,
+                addedPropertyCatalog);
+        }
+
         foreach (AccessorDeclarationSyntax accessor in GetAccessors(binding.Declaration))
         {
             SyntaxNode bodyNode = (SyntaxNode)accessor.Body ?? accessor.ExpressionBody;
-            (string reason, _) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(
+            bool isGetter = accessor.IsKind(SyntaxKind.GetAccessorDeclaration);
+            string reason = EvaluateAccessor(
+                binding,
+                isGetter ? binding.Getter : binding.Setter,
+                isGetter ? binding.Symbol.GetMethod : binding.Symbol.SetMethod,
                 bodyNode,
-                semanticModel,
+                typeState,
                 addedMethodCatalog,
                 addedFieldCatalog,
-                addedPropertyCatalog,
-                binding.HostType);
+                addedPropertyCatalog);
             if (reason != null)
             {
                 return reason;
             }
         }
 
-        if (binding.Declaration.ExpressionBody == null)
+        return null;
+    }
+
+    private static string EvaluateAccessor(
+        AddedPropertyBinding binding,
+        AddedMethodBinding accessorBinding,
+        IMethodSymbol accessorSymbol,
+        SyntaxNode bodyNode,
+        TypeEmitState typeState,
+        AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog,
+        AddedPropertyCatalog addedPropertyCatalog)
+    {
+        if (accessorBinding == null || accessorSymbol == null || bodyNode == null)
         {
             return null;
         }
 
-        (string expressionReason, _) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(
-            binding.Declaration.ExpressionBody,
-            semanticModel,
+        MethodTransformDecision decision = MethodTransformDecider.DecideMethodTransform(
+            typeState.TypeDeclaration,
+            typeState.TypeSymbol,
+            methodDeclaration: null,
+            accessorSymbol,
+            bodyNode,
+            typeState.SourceUnit.SemanticModel,
+            typeState.CompiledType);
+        if (decision.SkipReason != null)
+        {
+            return decision.SkipReason;
+        }
+
+        decision = MethodTransformDecider.DecideAddedMethodAccessors(
+            accessorSymbol,
+            typeState.TypeSymbol,
+            bodyNode,
+            typeState.SourceUnit.SemanticModel,
+            decision);
+        if (decision.SkipReason != null)
+        {
+            return decision.SkipReason;
+        }
+
+        SetAccessorDecision(binding, accessorBinding, decision);
+        (string callSiteReason, _) = AddedCallSiteGuard.EvaluateAddedCallSiteSkipReason(
+            bodyNode,
+            typeState.SourceUnit.SemanticModel,
             addedMethodCatalog,
             addedFieldCatalog,
             addedPropertyCatalog,
             binding.HostType);
-        return expressionReason;
+        return callSiteReason;
+    }
+
+    private static void SetAccessorDecision(
+        AddedPropertyBinding binding,
+        AddedMethodBinding accessorBinding,
+        MethodTransformDecision decision)
+    {
+        if (accessorBinding == binding.Getter)
+        {
+            binding.GetterDecision = decision;
+            return;
+        }
+
+        binding.SetterDecision = decision;
     }
 
     private static IEnumerable<AccessorDeclarationSyntax> GetAccessors(PropertyDeclarationSyntax declaration)

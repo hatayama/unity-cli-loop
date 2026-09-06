@@ -1703,6 +1703,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// An added bodied property on a partial host is skipped before accessor shims are emitted.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedBodiedPropertyOnPartialHost_SkipsAccessors()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PartialKept()\n        {\n            return 1;\n        }",
+                "        public int AddedPartial { get => 1; set { } }\n\n"
+                + "        public int PartialKept()\n        {\n            return 1;\n        }",
+                StringComparison.Ordinal);
+            string sourcePath = WriteEdited("AddedPartialProperty.cs", edited);
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                sourcePath,
+                HostProjectRelativePath,
+                snapshotSource: onDisk);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_AddedPartial"), Is.Null);
+            Assert.That(FindEntry(result, "set_AddedPartial"), Is.Null);
+            Assert.That(FindSkipReason(result, "get_AddedPartial"), Does.Contain("Partial types are skipped"));
+            Assert.That(FindSkipReason(result, "set_AddedPartial"), Does.Contain("Partial types are skipped"));
+        }
+
+        /// <summary>
         /// What: an existing method whose return type is unchanged stays a normal edit
         /// (not an addedMethod replacement).
         /// </summary>

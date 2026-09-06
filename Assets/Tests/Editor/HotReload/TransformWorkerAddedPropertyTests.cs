@@ -56,6 +56,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string RefOutInReason =
             "Added properties cannot be passed by ref, out, or in. Run 'uloop compile' to add them.";
 
+        private const string SetOnlyReason =
+            "Added properties with only a setter are skipped; the shim requires a getter identity. "
+            + "Run 'uloop compile' to add them.";
+
         /// <summary>
         /// An expression-bodied property added to a compiled host emits an added getter
         /// and rewrites an edited caller to that getter shim.
@@ -107,6 +111,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string callerShim = SliceShimMethod(result.Output.shimSource, caller.shimMethodName);
             Assert.That(callerShim, Does.Contain(getter.shimMethodName));
             Assert.That(callerShim, Does.Contain(setter.shimMethodName));
+            Assert.That(
+                SliceShimMethod(result.Output.shimSource, getter.shimMethodName),
+                Does.Not.Contain("__uloopInstance._privateSeed"));
+            Assert.That(
+                SliceShimMethod(result.Output.shimSource, setter.shimMethodName),
+                Does.Not.Contain("__uloopInstance._privateSeed"));
         }
 
         /// <summary>
@@ -266,6 +276,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// A set-only property is skipped without attempting to construct a missing getter binding.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedSetOnlyProperty_SkipsWithSetOnlyReason()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedSetOnlyProperty.cs",
+                "public int Sink { set => _privateSeed = value; }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "set_Sink"), Is.Null);
+            Assert.That(FindSkipReason(result, "set_Sink"), Is.EqualTo(SetOnlyReason));
+        }
+
+        /// <summary>
+        /// A same-named local remains a local and does not trigger added-property shape guards.
+        /// </summary>
+        [Test]
+        public async Task Keep_SameNamedLocal_EmitsCaller()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "SameNamedLocal.cs",
+                "public int Stored { get { return _privateSeed; } set { _privateSeed = value; } }",
+                "        public int ExistingCaller(int value)\n        {\n"
+                + "            int Stored = value;\n            Stored++;\n            return Stored;\n        }");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Not.Null);
+            Assert.That(FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
+        }
+
+        /// <summary>
+        /// A base receiver in an added accessor is skipped before a static shim is emitted.
+        /// </summary>
+        [Test]
+        public async Task Skip_AddedPropertyBaseReceiver_SkipsAccessor()
+        {
+            TransformWorkerClientResult result = await RunEditedHostAsync(
+                "AddedPropertyBaseReceiver.cs",
+                "public int BaseValue => base.GetHashCode();");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_BaseValue"), Is.Null);
+            Assert.That(
+                FindSkipReason(result, "get_BaseValue"),
+                Does.Contain("base. members are skipped"));
+        }
+
+        /// <summary>
         /// An expression-bodied added setter preserves its original source line in the emitted shim.
         /// </summary>
         [Test]
@@ -278,9 +337,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             TransformWorkerEntryDto setter = FindEntry(result, "set_Stored");
             Assert.That(setter, Is.Not.Null, FormatSkipped(result.Output.skipped));
-            Assert.That(
-                SliceShimMethodDeclaration(result.Output.shimSource, setter.shimMethodName),
-                Does.Contain("#line "));
+            AssertLineDirectiveFollowsMethodName(result.Output.shimSource, setter.shimMethodName);
         }
 
         /// <summary>
@@ -298,6 +355,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(FindEntry(result, "get_Doubled"), Is.Null);
+            Assert.That(FindEntry(result, nameof(HotReloadAddedMemberHost.ExistingCaller)), Is.Null);
             Assert.That(
                 FindSkipReason(result, nameof(HotReloadAddedMemberHost.ExistingCaller)),
                 Does.Contain("Uses an added property that hot reload cannot emit."));
@@ -408,10 +466,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private static string SliceShimMethod(string shimSource, string shimMethodName)
         {
-            int nameIndex = shimSource.IndexOf(shimMethodName, StringComparison.Ordinal);
-            Assert.That(nameIndex, Is.GreaterThanOrEqualTo(0), "Shim method missing: " + shimMethodName);
-            int declarationStart = shimSource.LastIndexOf("public static", nameIndex, StringComparison.Ordinal);
-            int openBrace = shimSource.IndexOf('{', nameIndex);
+            int declarationStart = FindShimMethodDeclarationStart(shimSource, shimMethodName);
+            int openBrace = shimSource.IndexOf('{', declarationStart);
             Assert.That(openBrace, Is.GreaterThan(0));
             int depth = 0;
             for (int index = openBrace; index < shimSource.Length; index++)
@@ -434,16 +490,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return string.Empty;
         }
 
-        private static string SliceShimMethodDeclaration(string shimSource, string shimMethodName)
+        private static int FindShimMethodDeclarationStart(string shimSource, string shimMethodName)
         {
-            int nameIndex = shimSource.IndexOf(shimMethodName, StringComparison.Ordinal);
-            Assert.That(nameIndex, Is.GreaterThanOrEqualTo(0), "Shim method missing: " + shimMethodName);
-            int declarationStart = shimSource.LastIndexOf("#line", nameIndex, StringComparison.Ordinal);
-            int declarationEnd = shimSource.IndexOf(';', nameIndex);
-            Assert.That(declarationEnd, Is.GreaterThan(nameIndex));
-            return declarationStart >= 0
-                ? shimSource.Substring(declarationStart, declarationEnd - declarationStart + 1)
-                : shimSource.Substring(nameIndex, declarationEnd - nameIndex + 1);
+            int searchStart = 0;
+            while (searchStart < shimSource.Length)
+            {
+                int declarationStart = shimSource.IndexOf("public static", searchStart, StringComparison.Ordinal);
+                if (declarationStart < 0)
+                {
+                    break;
+                }
+
+                int openBrace = shimSource.IndexOf('{', declarationStart);
+                int nameIndex = shimSource.IndexOf(shimMethodName, declarationStart, StringComparison.Ordinal);
+                if (nameIndex >= declarationStart && nameIndex < openBrace)
+                {
+                    return declarationStart;
+                }
+
+                searchStart = declarationStart + 1;
+            }
+
+            Assert.Fail("Shim method missing: " + shimMethodName);
+            return -1;
+        }
+
+        private static void AssertLineDirectiveFollowsMethodName(string shimSource, string shimMethodName)
+        {
+            int methodNameIndex = shimSource.IndexOf(shimMethodName, StringComparison.Ordinal);
+            Assert.That(methodNameIndex, Is.GreaterThanOrEqualTo(0), "Shim method missing: " + shimMethodName);
+            int directiveIndex = shimSource.IndexOf("#line ", methodNameIndex, StringComparison.Ordinal);
+            Assert.That(directiveIndex, Is.GreaterThan(methodNameIndex));
         }
 
         private static string WithHostMembers(string onDisk, string extraMembers)

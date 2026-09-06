@@ -158,6 +158,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// A bodied property added in the host file is callable from the patched sibling and
+        /// reaches the host's compiled private state through accessor delegates.
+        /// </summary>
+        [Test]
+        public async Task Run_CallerFileUsesBodiedPropertyAddedInOtherFile_AppliesAndRoundTripsValue()
+        {
+            HotReloadOrchestratorResult result = await RunPairAsync(
+                "CrossFileAddedBodiedProperty",
+                InsertHostMember(
+                    "        public int Stored\n        {\n            get => _stored;\n"
+                    + "            set => _stored = value;\n        }\n\n"),
+                ReplaceCallerBody(
+                    CallerCallBodyAnchor,
+                    "host.Stored = 3;\n            return host.Stored + 1;"));
+
+            AssertNoFailure(result);
+            AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Call");
+            AssertKind(result, HotReloadMethodOutcomeKind.Added, "get_Stored");
+            AssertKind(result, HotReloadMethodOutcomeKind.Added, "set_Stored");
+            Assert.That(
+                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                Is.EqualTo(4));
+        }
+
+        /// <summary>
         /// What: a compile error in one file of the group takes down only that file — its other
         /// edited method reports the file-atomic skip and it starts no generation — while the
         /// healthy sibling file is applied and its runtime is updated.

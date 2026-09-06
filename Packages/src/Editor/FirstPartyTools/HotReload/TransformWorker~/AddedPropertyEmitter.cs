@@ -30,6 +30,7 @@ internal static class AddedPropertyEmitter
         foreach (AddedPropertyBinding binding in addedPropertyCatalog.Bindings)
         {
             if (!SymbolEqualityComparer.Default.Equals(binding.HostType, typeState.TypeSymbol)
+                || binding.Declaration.SyntaxTree != typeState.SourceUnit.SyntaxTree
                 || binding.UnavailableReason != null
                 || binding.IsAuto)
             {
@@ -53,16 +54,23 @@ internal static class AddedPropertyEmitter
         AddedFieldCatalog addedFieldCatalog,
         List<WorkerEntry> entries)
     {
-        SyntaxNode body = GetAccessorBody(binding.Declaration, accessor.MethodKey == binding.Getter.MethodKey);
+        bool isGetter = accessor.MethodKey == binding.Getter.MethodKey;
+        SyntaxNode body = GetAccessorBody(binding.Declaration, isGetter);
         if (body == null)
         {
             return;
         }
 
+        MethodTransformDecision decision = isGetter
+            ? binding.GetterDecision
+            : binding.SetterDecision;
+        Debug.Assert(decision != null, "Each emitted added accessor must keep its transform decision.");
+
         MethodDeclarationSyntax shimMethod = BuildAccessorShim(
             binding,
             accessor,
             body,
+            decision,
             typeState,
             addedPropertyCatalog,
             addedMethodCatalog,
@@ -100,15 +108,21 @@ internal static class AddedPropertyEmitter
         AddedPropertyBinding binding,
         AddedMethodBinding accessor,
         SyntaxNode body,
+        MethodTransformDecision decision,
         TypeEmitState typeState,
         AddedPropertyCatalog addedPropertyCatalog,
         AddedMethodCatalog addedMethodCatalog,
         AddedFieldCatalog addedFieldCatalog)
     {
+        // The guard decides this before caller rewrites; emission must retain the same plan so
+        // private compiled members are not emitted as illegal direct shim access.
+        AccessorPlan accessorPlan = decision.UsesDelegation
+            ? typeState.CurrentShimType.AccessorPlan
+            : null;
         ShimBodyRewriter rewriter = new ShimBodyRewriter(
             typeState.SourceUnit.SemanticModel,
             typeState.TypeSymbol,
-            null,
+            accessorPlan,
             addedMethodCatalog,
             addedFieldCatalog,
             addedPropertyCatalog);

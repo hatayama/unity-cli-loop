@@ -167,7 +167,9 @@ internal static class AddedPropertyClassifier
         bool isAuto = IsAutoProperty(declaration);
         string getterKey = BuildGetterKey(typeState.TypeSymbol, symbol);
         string setterKey = BuildSetterKey(typeState.TypeSymbol, symbol);
-        string reason = EvaluateDeclarationSkipReason(symbol, declaration, typeState.TypeSymbol);
+        string reason = symbol.GetMethod == null
+            ? AddedPropertySkipReasons.SetOnly
+            : EvaluateDeclarationSkipReason(symbol, declaration, typeState.TypeSymbol);
         if (isAuto && reason == null)
         {
             reason = AddedMethodSkipReasons.AddedProperty;
@@ -256,7 +258,11 @@ internal static class AddedPropertyClassifier
         AddedPropertyCandidate candidate,
         AddedMethodCatalog addedMethodCatalog)
     {
-        addedMethodCatalog.MarkClassifiedAdded(candidate.GetterKey);
+        if (candidate.GetterKey != null)
+        {
+            addedMethodCatalog.MarkClassifiedAdded(candidate.GetterKey);
+        }
+
         if (candidate.SetterKey != null)
         {
             addedMethodCatalog.MarkClassifiedAdded(candidate.SetterKey);
@@ -265,6 +271,11 @@ internal static class AddedPropertyClassifier
 
     private static string BuildGetterKey(INamedTypeSymbol hostType, IPropertySymbol symbol)
     {
+        if (symbol.GetMethod == null)
+        {
+            return null;
+        }
+
         return WorkerMethodKeys.BuildMethodKey(
             CecilTypeNames.ToMetadataName(hostType),
             symbol.GetMethod.Name,
@@ -364,21 +375,29 @@ internal static class AddedPropertyClassifier
 
     private static void AppendSkippedAccessors(AddedPropertyBinding binding, List<WorkerSkipped> skipped)
     {
+        AppendSkippedAccessor(binding, binding.Symbol.GetMethod, skipped);
+        if (binding.Symbol.SetMethod != null)
+        {
+            AppendSkippedAccessor(binding, binding.Symbol.SetMethod, skipped);
+        }
+    }
+
+    private static void AppendSkippedAccessor(
+        AddedPropertyBinding binding,
+        IMethodSymbol accessorSymbol,
+        List<WorkerSkipped> skipped)
+    {
+        if (accessorSymbol == null)
+        {
+            return;
+        }
+
         skipped.Add(new WorkerSkipped
         {
             SourceProjectRelativePath = binding.SourceProjectRelativePath,
-            Method = WorkerMethodKeys.FormatMethodLabel(binding.Symbol.GetMethod),
+            Method = WorkerMethodKeys.FormatMethodLabel(accessorSymbol),
             Reason = binding.UnavailableReason
         });
-        if (binding.Symbol.SetMethod != null)
-        {
-            skipped.Add(new WorkerSkipped
-            {
-                SourceProjectRelativePath = binding.SourceProjectRelativePath,
-                Method = WorkerMethodKeys.FormatMethodLabel(binding.Symbol.SetMethod),
-                Reason = binding.UnavailableReason
-            });
-        }
     }
 
     private sealed class AddedPropertyCandidate
