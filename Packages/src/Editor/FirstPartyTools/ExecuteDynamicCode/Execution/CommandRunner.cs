@@ -118,7 +118,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private void EndExecution(int undoGroup)
         {
-            _executionSlot.End(undoGroup, CollapseUndoGroup);
+            _executionSlot.End(undoGroup, FinishUndoGroup);
         }
 
         private int BeginUndoGroup()
@@ -126,31 +126,36 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (_undoHooks != null)
             {
                 System.Diagnostics.Debug.Assert(_undoHooks.GetCurrentGroup != null, "GetCurrentGroup must be set");
-                System.Diagnostics.Debug.Assert(
-                    _undoHooks.SetCurrentGroupName != null,
-                    "SetCurrentGroupName must be set");
-                int hookedGroup = _undoHooks.GetCurrentGroup();
-                _undoHooks.SetCurrentGroupName("ExecuteDynamicCode");
-                return hookedGroup;
+                return _undoHooks.GetCurrentGroup();
             }
 
-            int undoGroup = Undo.GetCurrentGroup();
-            Undo.SetCurrentGroupName("ExecuteDynamicCode");
-            return undoGroup;
+            // Why no SetCurrentGroupName: naming the group appends an empty history entry for every
+            // read-only command and opens a PropertyUndoManager recording that outlives the command.
+            return Undo.GetCurrentGroup();
         }
 
-        private void CollapseUndoGroup(int undoGroup)
+        private void FinishUndoGroup(int undoGroup)
         {
             if (_undoHooks != null)
             {
                 System.Diagnostics.Debug.Assert(
                     _undoHooks.CollapseUndoOperations != null,
                     "CollapseUndoOperations must be set");
+                System.Diagnostics.Debug.Assert(
+                    _undoHooks.IncrementCurrentGroup != null,
+                    "IncrementCurrentGroup must be set");
                 _undoHooks.CollapseUndoOperations(undoGroup);
+                _undoHooks.IncrementCurrentGroup();
                 return;
             }
 
             Undo.CollapseUndoOperations(undoGroup);
+            // Why increment: recordings made during the command leave the PropertyUndoManager in a
+            // "has recordings" state that CollapseUndoOperations does not clear;
+            // DrivenRectTransformTracker then records RectTransforms during later layout rebuilds and
+            // dirties scenes the command never touched (issue #2626). IncrementCurrentGroup closes
+            // the group and clears that state.
+            Undo.IncrementCurrentGroup();
         }
 
         private static ExecutionResult CreateErrorResult(string errorMessage, List<string> logs = null)
