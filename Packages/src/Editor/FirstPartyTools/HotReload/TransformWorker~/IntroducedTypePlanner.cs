@@ -66,12 +66,15 @@ internal static class IntroducedTypePlanner
                 continue;
             }
 
-            string changedConst = IntroducedTypeConstDriftDetector.FindChangedReferencedConst(
-                declaration, unit.ConstDriftSemanticModel ?? unit.SemanticModel, targetAssembly);
-            if (changedConst != null)
+            if (IntroducedTypeConstDriftDetector.TryFindUnusableReferencedConst(
+                    declaration,
+                    unit.ConstDriftSemanticModel ?? unit.SemanticModel,
+                    targetAssembly,
+                    out string unusableConst,
+                    out string unusableConstReason))
             {
                 unit.IntroducedTypeDiagnostics.Add(
-                    "Changed const requires a compile: " + changedConst
+                    unusableConstReason + ": " + unusableConst
                     + " referenced by " + CecilTypeNames.ToMetadataName(typeSymbol));
                 continue;
             }

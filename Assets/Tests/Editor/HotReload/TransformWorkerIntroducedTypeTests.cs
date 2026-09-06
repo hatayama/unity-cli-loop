@@ -514,6 +514,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a const in another edited file whose value cannot be read at all rejects
+        /// the introduced type that reads it, because the artifact compile does not see that file
+        /// and would succeed against the value still in the target assembly.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_UnreadableConstInAnotherFile_IsRejected()
+        {
+            string directory = CreateSourceDirectory("UnreadableConstInAnotherFile");
+            string sourcePath = Path.Combine(directory, "Edited.cs");
+            string siblingPath = Path.Combine(directory, "Sibling.cs");
+            string targetAssemblyPath = Path.Combine(directory, "ConstDriftTarget.dll");
+            string targetAssemblyMvid = CreateConstDriftTargetAssembly(targetAssemblyPath, 1);
+            File.WriteAllText(
+                sourcePath,
+                "namespace Example { public class Introduced { public int Get() { return Existing.Value; } } }");
+            File.WriteAllText(
+                siblingPath,
+                "namespace Example { public class Existing { public const int Value = ; } }");
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                CreateConstDriftInputWithSiblings(
+                    sourcePath,
+                    targetAssemblyPath,
+                    targetAssemblyMvid,
+                    new[] { siblingPath }),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.Output.files[0].introducedTypes, Is.Empty);
+            Assert.That(result.Output.files[0].introducedTypeDiagnostics, Has.Some.Contains("Existing.Value"));
+        }
+
+        /// <summary>
         /// Verifies that a changed const does not reject an introduced type that does not refer to it.
         /// </summary>
         [Test]
