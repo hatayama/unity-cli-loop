@@ -22,6 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class TransformWorkerClientTests
     {
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
+        private const int SelfSnapshotConcurrency = 4;
         private const string ExpectedListEnumeratorFullName =
             "System.Collections.Generic.List`1/Enumerator<System.Int32>";
 
@@ -514,74 +515,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string[] sourcePaths = Directory.GetFiles(directory, "*.cs", SearchOption.TopDirectoryOnly);
             Assert.That(sourcePaths.Length, Is.GreaterThan(0), "Expected at least one HotReload test .cs file.");
 
-            List<string> failures = new List<string>();
+            // Why warm up first: EnsureWorkerAsync compiles into a shared cache directory on a
+            // miss, and concurrent first-time misses would race on the same output files.
+            TransformWorkerBootstrapResult bootstrap =
+                await TransformWorkerBootstrap.EnsureWorkerAsync(CancellationToken.None);
+            Assert.That(bootstrap.Success, Is.True, "Worker bootstrap failed: " + bootstrap.ErrorMessage);
+
+            // Why bounded concurrency: each file costs one ~0.4 s worker process spawn, and with
+            // ~100 files the sequential version alone took 50 s of the suite. Four in flight keeps
+            // the wall time near 1/4 without starving the Editor main thread, which every run
+            // still hops through for CompilationPipeline and compiler-path lookups.
+            using SemaphoreSlim slots = new SemaphoreSlim(SelfSnapshotConcurrency, SelfSnapshotConcurrency);
+            List<Task<string>> fileChecks = new List<Task<string>>(sourcePaths.Length);
             foreach (string sourcePath in sourcePaths)
             {
-                string fullPath = Path.GetFullPath(sourcePath);
-                string projectRelativePath =
-                    "Assets/Tests/Editor/HotReload/" + Path.GetFileName(fullPath);
-                string onDisk = File.ReadAllText(fullPath);
-                // Why skip: a global-using-only file has no methods to mark unchanged; the worker
-                // correctly emits empty entries/skipped/unchanged for it.
-                if (!ContainsTypeDeclaration(onDisk))
+                fileChecks.Add(CheckSelfSnapshotTreatsFileUnchangedAsync(Path.GetFullPath(sourcePath), slots));
+            }
+
+            string[] fileOutcomes = await Task.WhenAll(fileChecks);
+
+            // Why keep source order: the report must list files the same way the sequential loop
+            // did, independent of which worker process happened to finish first.
+            List<string> failures = new List<string>();
+            foreach (string fileOutcome in fileOutcomes)
+            {
+                if (fileOutcome != null)
                 {
-                    continue;
-                }
-
-                bool isMethodlessTypeAllowListed =
-                    IsSelfSnapshotMethodlessTypeAllowListed(Path.GetFileName(fullPath));
-
-                TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
-                    fullPath,
-                    projectRelativePath,
-                    snapshotSource: onDisk);
-
-                List<string> fileFailures = new List<string>();
-                if (!result.Success)
-                {
-                    fileFailures.Add("Success=false: " + result.ErrorMessage);
-                }
-
-                if (result.Output == null)
-                {
-                    fileFailures.Add("Output is null");
-                    failures.Add(projectRelativePath + " -> " + string.Join("; ", fileFailures));
-                    continue;
-                }
-
-                if (result.Output.files[0].parseErrors != null && result.Output.files[0].parseErrors.Length > 0)
-                {
-                    fileFailures.Add(
-                        "parseErrors=[" + string.Join(" | ", result.Output.files[0].parseErrors) + "]");
-                }
-
-                if (result.Output.entries != null && result.Output.entries.Length > 0)
-                {
-                    fileFailures.Add(
-                        "entries=[" + FormatEntryMethodNames(result.Output.entries) + "]");
-                }
-
-                int unchangedCount =
-                    result.Output.unchangedMethods != null ? result.Output.unchangedMethods.Length : 0;
-                int skippedCount = result.Output.skipped != null ? result.Output.skipped.Length : 0;
-                if (!isMethodlessTypeAllowListed && unchangedCount + skippedCount < 1)
-                {
-                    fileFailures.Add(
-                        "unchangedMethods+skipped < 1 (unchanged="
-                        + unchangedCount + ", skipped=" + skippedCount + ")");
-                }
-
-                if (result.Output.files[0].declarationDriftWarnings != null
-                    && result.Output.files[0].declarationDriftWarnings.Length > 0)
-                {
-                    fileFailures.Add(
-                        "declarationDriftWarnings=["
-                        + string.Join(" | ", result.Output.files[0].declarationDriftWarnings) + "]");
-                }
-
-                if (fileFailures.Count > 0)
-                {
-                    failures.Add(projectRelativePath + " -> " + string.Join("; ", fileFailures));
+                    failures.Add(fileOutcome);
                 }
             }
 
@@ -590,6 +550,100 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Empty,
                 "Self-snapshot must treat every HotReload test source as unchanged:\n"
                 + string.Join("\n", failures));
+        }
+
+        /// <summary>
+        /// Runs the worker on one HotReload test source with itself as the snapshot and returns
+        /// the per-file failure line ("path -> reason; reason"), or null when the file passes or
+        /// has no type declaration.
+        /// </summary>
+        private static async Task<string> CheckSelfSnapshotTreatsFileUnchangedAsync(
+            string fullPath,
+            SemaphoreSlim slots)
+        {
+            string projectRelativePath =
+                "Assets/Tests/Editor/HotReload/" + Path.GetFileName(fullPath);
+            string onDisk = File.ReadAllText(fullPath);
+            // Why skip: a global-using-only file has no methods to mark unchanged; the worker
+            // correctly emits empty entries/skipped/unchanged for it.
+            if (!ContainsTypeDeclaration(onDisk))
+            {
+                return null;
+            }
+
+            bool isMethodlessTypeAllowListed =
+                IsSelfSnapshotMethodlessTypeAllowListed(Path.GetFileName(fullPath));
+
+            await slots.WaitAsync();
+            TransformWorkerClientResult result;
+            try
+            {
+                result = await RunWorkerOnSourceAsync(
+                    fullPath,
+                    projectRelativePath,
+                    snapshotSource: onDisk);
+            }
+            finally
+            {
+                slots.Release();
+            }
+
+            List<string> fileFailures = DescribeSelfSnapshotFailures(result, isMethodlessTypeAllowListed);
+            if (fileFailures.Count == 0)
+            {
+                return null;
+            }
+
+            return projectRelativePath + " -> " + string.Join("; ", fileFailures);
+        }
+
+        private static List<string> DescribeSelfSnapshotFailures(
+            TransformWorkerClientResult result,
+            bool isMethodlessTypeAllowListed)
+        {
+            List<string> fileFailures = new List<string>();
+            if (!result.Success)
+            {
+                fileFailures.Add("Success=false: " + result.ErrorMessage);
+            }
+
+            if (result.Output == null)
+            {
+                fileFailures.Add("Output is null");
+                return fileFailures;
+            }
+
+            if (result.Output.files[0].parseErrors != null && result.Output.files[0].parseErrors.Length > 0)
+            {
+                fileFailures.Add(
+                    "parseErrors=[" + string.Join(" | ", result.Output.files[0].parseErrors) + "]");
+            }
+
+            if (result.Output.entries != null && result.Output.entries.Length > 0)
+            {
+                fileFailures.Add(
+                    "entries=[" + FormatEntryMethodNames(result.Output.entries) + "]");
+            }
+
+            int unchangedCount =
+                result.Output.unchangedMethods != null ? result.Output.unchangedMethods.Length : 0;
+            int skippedCount = result.Output.skipped != null ? result.Output.skipped.Length : 0;
+            if (!isMethodlessTypeAllowListed && unchangedCount + skippedCount < 1)
+            {
+                fileFailures.Add(
+                    "unchangedMethods+skipped < 1 (unchanged="
+                    + unchangedCount + ", skipped=" + skippedCount + ")");
+            }
+
+            if (result.Output.files[0].declarationDriftWarnings != null
+                && result.Output.files[0].declarationDriftWarnings.Length > 0)
+            {
+                fileFailures.Add(
+                    "declarationDriftWarnings=["
+                    + string.Join(" | ", result.Output.files[0].declarationDriftWarnings) + "]");
+            }
+
+            return fileFailures;
         }
 
         /// <summary>
