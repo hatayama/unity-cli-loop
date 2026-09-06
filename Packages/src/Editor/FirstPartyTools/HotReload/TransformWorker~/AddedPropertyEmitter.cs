@@ -31,9 +31,19 @@ internal static class AddedPropertyEmitter
         {
             if (!SymbolEqualityComparer.Default.Equals(binding.HostType, typeState.TypeSymbol)
                 || binding.Declaration.SyntaxTree != typeState.SourceUnit.SyntaxTree
-                || binding.UnavailableReason != null
-                || binding.IsAuto)
+                || binding.UnavailableReason != null)
             {
+                continue;
+            }
+
+            if (binding.IsAuto)
+            {
+                EmitStoreBackedAccessor(typeState, binding, binding.Getter, entries);
+                if (binding.Setter != null)
+                {
+                    EmitStoreBackedAccessor(typeState, binding, binding.Setter, entries);
+                }
+
                 continue;
             }
 
@@ -43,6 +53,87 @@ internal static class AddedPropertyEmitter
                 EmitAccessor(typeState, binding, binding.Setter, addedPropertyCatalog, addedMethodCatalog, addedFieldCatalog, entries);
             }
         }
+    }
+
+    // Why synthesized instead of rewritten: an auto-property has no user body, so the accessor
+    // is built directly against the added-field store rather than visited by the body rewriter.
+    private static void EmitStoreBackedAccessor(
+        TypeEmitState typeState,
+        AddedPropertyBinding binding,
+        AddedMethodBinding accessor,
+        List<WorkerEntry> entries)
+    {
+        bool isGetter = accessor.MethodKey == binding.Getter.MethodKey;
+        MethodDeclarationSyntax method = isGetter
+            ? BuildStoreGetter(binding, accessor)
+            : BuildStoreSetter(binding, accessor);
+        method = ShimMethodFactory.ToShimMethod(
+            method,
+            isGetter ? binding.Symbol.GetMethod : binding.Symbol.SetMethod);
+        typeState.CurrentShimType.AddMethod(method, accessor.ShimMethodName);
+        entries.Add(CreateAccessorEntry(typeState, binding, accessor, Array.Empty<string>()));
+    }
+
+    private static MethodDeclarationSyntax BuildStoreGetter(
+        AddedPropertyBinding binding,
+        AddedMethodBinding accessor)
+    {
+        List<ArgumentSyntax> arguments = CreateStoreArguments(binding);
+        arguments.Add(SyntaxFactory.Argument(CreateStoreInitializer(binding)));
+        InvocationExpressionSyntax invocation = AddedFieldShimRewrite.CreateAddedFieldStoreInvocation(
+            binding.IsStatic
+                ? TransformWorkerProgramMarker.AddedFieldGetOrInitStaticMethodName
+                : TransformWorkerProgramMarker.AddedFieldGetOrInitMethodName,
+            binding.ValueType,
+            arguments);
+        // Why a block and not an arrow: a synthesized accessor carries no source line, so a
+        // braced body keeps every emitted store accessor delimited in the shim source.
+        return SyntaxFactory.MethodDeclaration(binding.Declaration.Type.WithoutTrivia(), accessor.ShimMethodName)
+            .WithParameterList(SyntaxFactory.ParameterList())
+            .WithBody(SyntaxFactory.Block(SyntaxFactory.ReturnStatement(invocation)));
+    }
+
+    private static MethodDeclarationSyntax BuildStoreSetter(
+        AddedPropertyBinding binding,
+        AddedMethodBinding accessor)
+    {
+        List<ArgumentSyntax> arguments = CreateStoreArguments(binding);
+        arguments.Add(SyntaxFactory.Argument(SyntaxFactory.IdentifierName("value")));
+        InvocationExpressionSyntax invocation = AddedFieldShimRewrite.CreateAddedFieldStoreInvocation(
+            binding.IsStatic
+                ? TransformWorkerProgramMarker.AddedFieldSetStaticMethodName
+                : TransformWorkerProgramMarker.AddedFieldSetMethodName,
+            binding.ValueType,
+            arguments);
+        return SyntaxFactory.MethodDeclaration(
+                SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.VoidKeyword)),
+                accessor.ShimMethodName)
+            .WithParameterList(CreateSetterParameterList(binding))
+            .WithBody(SyntaxFactory.Block(SyntaxFactory.ExpressionStatement(invocation)));
+    }
+
+    private static List<ArgumentSyntax> CreateStoreArguments(AddedPropertyBinding binding)
+    {
+        List<ArgumentSyntax> arguments = new List<ArgumentSyntax>();
+        if (!binding.IsStatic)
+        {
+            arguments.Add(SyntaxFactory.Argument(
+                SyntaxFactory.IdentifierName(TransformWorkerProgramMarker.InstanceParameterName)));
+        }
+
+        arguments.Add(SyntaxFactory.Argument(
+            SyntaxFactory.LiteralExpression(
+                SyntaxKind.StringLiteralExpression,
+                SyntaxFactory.Literal(binding.StoreFieldKey))));
+        return arguments;
+    }
+
+    private static ExpressionSyntax CreateStoreInitializer(AddedPropertyBinding binding)
+    {
+        return AddedFieldShimRewrite.CreateAddedFieldInitializer(new AddedFieldBinding
+        {
+            Initializer = binding.Initializer
+        });
     }
 
     private static void EmitAccessor(
@@ -76,32 +167,43 @@ internal static class AddedPropertyEmitter
             addedMethodCatalog,
             addedFieldCatalog);
         typeState.CurrentShimType.AddMethod(shimMethod, accessor.ShimMethodName);
+        entries.Add(CreateAccessorEntry(
+            typeState,
+            binding,
+            accessor,
+            AddedCallSiteGuard.CollectCalledAddedMethodKeys(
+                body,
+                typeState.SourceUnit.SemanticModel,
+                addedMethodCatalog,
+                addedPropertyCatalog,
+                accessor.MethodKey)));
+    }
 
+    private static WorkerEntry CreateAccessorEntry(
+        TypeEmitState typeState,
+        AddedPropertyBinding binding,
+        AddedMethodBinding accessor,
+        string[] calledAddedMethodKeys)
+    {
+        bool isGetter = accessor.MethodKey == binding.Getter.MethodKey;
         FileLinePositionSpan span = binding.Declaration.GetLocation().GetLineSpan();
-        entries.Add(new WorkerEntry
+        return new WorkerEntry
         {
             SourceProjectRelativePath = binding.SourceProjectRelativePath,
             TypeMetadataName = CecilTypeNames.ToMetadataName(typeState.TypeSymbol),
-            MethodName = accessor.MethodKey == binding.Getter.MethodKey
-                ? binding.Symbol.GetMethod.Name
-                : binding.Symbol.SetMethod.Name,
-            ParameterTypeFullNames = accessor.MethodKey == binding.Getter.MethodKey
+            MethodName = isGetter ? binding.Symbol.GetMethod.Name : binding.Symbol.SetMethod.Name,
+            ParameterTypeFullNames = isGetter
                 ? Array.Empty<string>()
                 : new[] { CecilTypeNames.ToCecilFullName(binding.ValueType) },
             GenericArity = 0,
             ShimTypeName = accessor.ShimTypeName,
             ShimMethodName = accessor.ShimMethodName,
             PatchKind = PatchKinds.AddedMethod,
-            CalledAddedMethodKeys = AddedCallSiteGuard.CollectCalledAddedMethodKeys(
-                body,
-                typeState.SourceUnit.SemanticModel,
-                addedMethodCatalog,
-                addedPropertyCatalog,
-                accessor.MethodKey),
+            CalledAddedMethodKeys = calledAddedMethodKeys,
             SourceStartLine = span.StartLinePosition.Line + 1,
             SourceEndLine = span.EndLinePosition.Line + 1,
             LifecycleNote = null
-        });
+        };
     }
 
     private static MethodDeclarationSyntax BuildAccessorShim(

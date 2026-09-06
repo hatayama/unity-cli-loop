@@ -31,6 +31,7 @@ internal static class AddedPropertyClassifier
         List<ShimTypeBuilder> shimTypes,
         AddedPropertyCatalog addedPropertyCatalog,
         AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog,
         List<WorkerSkipped> skipped,
         int shimTypeCounter,
         int globalShimMethodCounter)
@@ -52,6 +53,7 @@ internal static class AddedPropertyClassifier
                 typeState,
                 compiledType,
                 semanticModel,
+                targetTypesAssemblySymbol,
                 input,
                 baseline,
                 root,
@@ -59,6 +61,7 @@ internal static class AddedPropertyClassifier
                 shimTypes,
                 addedPropertyCatalog,
                 addedMethodCatalog,
+                addedFieldCatalog,
                 skipped,
                 shimTypeCounter,
                 globalShimMethodCounter);
@@ -72,6 +75,7 @@ internal static class AddedPropertyClassifier
         TypeEmitState typeState,
         INamedTypeSymbol compiledType,
         SemanticModel semanticModel,
+        IAssemblySymbol targetTypesAssemblySymbol,
         WorkerInput input,
         BaselineSnapshotState baseline,
         CompilationUnitSyntax root,
@@ -79,6 +83,7 @@ internal static class AddedPropertyClassifier
         List<ShimTypeBuilder> shimTypes,
         AddedPropertyCatalog addedPropertyCatalog,
         AddedMethodCatalog addedMethodCatalog,
+        AddedFieldCatalog addedFieldCatalog,
         List<WorkerSkipped> skipped,
         int shimTypeCounter,
         int globalShimMethodCounter)
@@ -88,6 +93,7 @@ internal static class AddedPropertyClassifier
             typeState,
             compiledType,
             semanticModel,
+            targetTypesAssemblySymbol,
             baseline,
             addedMethodCatalog);
         if (candidate == null)
@@ -103,6 +109,11 @@ internal static class AddedPropertyClassifier
             addedPropertyCatalog.Register(candidate.Binding);
             AppendSkippedAccessors(candidate.Binding, skipped);
             return (shimTypeCounter, globalShimMethodCounter);
+        }
+
+        if (candidate.Binding.IsAuto)
+        {
+            RegisterAutoPropertyStore(candidate.Binding, addedFieldCatalog);
         }
 
         (ShimTypeBuilder shimType, int nextShimTypeCounter) = OrdinaryMethodQueue.EnsureShimType(
@@ -142,6 +153,7 @@ internal static class AddedPropertyClassifier
         TypeEmitState typeState,
         INamedTypeSymbol compiledType,
         SemanticModel semanticModel,
+        IAssemblySymbol targetTypesAssemblySymbol,
         BaselineSnapshotState baseline,
         AddedMethodCatalog addedMethodCatalog)
     {
@@ -172,7 +184,12 @@ internal static class AddedPropertyClassifier
             : EvaluateDeclarationSkipReason(symbol, declaration, typeState.TypeSymbol);
         if (isAuto && reason == null)
         {
-            reason = AddedMethodSkipReasons.AddedProperty;
+            reason = EvaluateAutoPropertyStoreSkipReason(
+                declaration,
+                symbol,
+                typeState.TypeSymbol,
+                semanticModel,
+                targetTypesAssemblySymbol);
         }
 
         AddedPropertyBinding binding = new AddedPropertyBinding
@@ -312,6 +329,70 @@ internal static class AddedPropertyClassifier
             IsStatic = accessorSymbol.IsStatic,
             ParameterCount = accessorSymbol.Parameters.Length
         };
+    }
+
+    // Why the shared store rules: an auto-property's backing value lives in the same
+    // side table as an added field, so it must be rejected on exactly the same grounds.
+    private static string EvaluateAutoPropertyStoreSkipReason(
+        PropertyDeclarationSyntax declaration,
+        IPropertySymbol symbol,
+        INamedTypeSymbol hostType,
+        SemanticModel semanticModel,
+        IAssemblySymbol targetTypesAssemblySymbol)
+    {
+        string storeReason = AddedFieldClassifier.EvaluateStoreAvailability(
+            hostType,
+            semanticModel,
+            targetTypesAssemblySymbol,
+            symbol.Type,
+            declaration.Initializer?.Value);
+        if (storeReason == null)
+        {
+            return null;
+        }
+
+        if (string.Equals(storeReason, AddedFieldSkipReasons.StructHost, StringComparison.Ordinal))
+        {
+            return AddedPropertySkipReasons.StructHost;
+        }
+
+        if (string.Equals(
+                storeReason,
+                AddedFieldSkipReasons.InitializerNotLiteralOrExternalStatic,
+                StringComparison.Ordinal))
+        {
+            return AddedPropertySkipReasons.InitializerNotEmittable;
+        }
+
+        // The declaration check already rejects unresolved and non-visible value types, so
+        // anything left names a type the shim assembly cannot see.
+        return AddedPropertySkipReasons.ValueTypeNotExternallyVisible;
+    }
+
+    // Why register here and not at rewrite time: the accessor shims themselves read and write
+    // the store, so an emitted auto-property always rewrites, unlike an added field that a body
+    // may never touch.
+    private static void RegisterAutoPropertyStore(
+        AddedPropertyBinding binding,
+        AddedFieldCatalog addedFieldCatalog)
+    {
+        binding.StoreFieldKey = binding.PropertyKey;
+        binding.Initializer = binding.Declaration.Initializer?.Value;
+
+        // Why not AddAddedSyntaxKey: the field syntax-key set drives field drift stripping,
+        // while the property declaration is already registered as an added property key.
+        addedFieldCatalog.RegisterStore(new AddedFieldBinding
+        {
+            SourceProjectRelativePath = binding.SourceProjectRelativePath,
+            FieldKey = binding.PropertyKey,
+            SyntaxKey = binding.SyntaxKey,
+            FieldName = binding.Name,
+            FieldType = binding.ValueType,
+            IsStatic = binding.IsStatic,
+            IsConst = false,
+            Initializer = binding.Initializer
+        });
+        addedFieldCatalog.MarkStoreRewrite(binding.PropertyKey);
     }
 
     private static string EvaluateDeclarationSkipReason(

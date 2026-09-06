@@ -67,6 +67,7 @@ internal static class TypeEmitPlanner
                 shimTypes,
                 addedPropertyCatalog,
                 addedMethodCatalog,
+                addedFieldCatalog,
                 skipped,
                 shimTypeCounter,
                 globalShimMethodCounter);
