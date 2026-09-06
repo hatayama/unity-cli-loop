@@ -1,7 +1,7 @@
 # Hot Reload Scope and Limits
 
-Ordinary method declarations, property getters with a body, and properties added to a
-compiled type are patched.
+Only ordinary method declarations and property getters with a body are patched. A
+property added to a compiled type applies as an added member instead (see below).
 Constructors, operators, and explicit event accessors are reported as `Skipped`
 when edited (with a verified baseline, unchanged members of those kinds produce
 no row). Finalizers and `interface` members (including default interface
