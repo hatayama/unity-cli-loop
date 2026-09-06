@@ -64,6 +64,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Added properties on struct types are skipped; the shim requires a reference-type instance. "
             + "Run 'uloop compile' to add them.";
 
+        private const string CompiledMemberKindChangedReason =
+            "Property 'PublicSeed' is declared as a field or an event in the compiled assembly. "
+            + "Run 'uloop compile'.";
+
         private const string InitializerNotEmittableReason =
             "Added property initializer cannot run in the shim lambda. Run 'uloop compile' to add it.";
 
@@ -564,6 +568,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(result.Success, Is.True, result.ErrorMessage);
             string[] warnings = result.Output.files[0].declarationDriftWarnings ?? Array.Empty<string>();
             Assert.That(warnings, Has.None.Contain("Edits outside method bodies"));
+        }
+
+        /// <summary>
+        /// Turning a compiled field into a property is skipped rather than emitted, because the
+        /// compiled field keeps owning the value that unedited code reads and writes.
+        /// </summary>
+        [Test]
+        public async Task Skip_CompiledFieldReplacedByProperty_SkipsWithMemberKindReason()
+        {
+            string onDisk = File.ReadAllText(ResolveHostPath());
+            string edited = onDisk.Replace(
+                "        public int PublicSeed = 3;",
+                "        public int PublicSeed { get; set; }",
+                StringComparison.Ordinal);
+            Assert.That(edited, Is.Not.EqualTo(onDisk));
+
+            TransformWorkerClientResult result = await RunWorkerOnSourceAsync(
+                HotReloadTestSourceWriter.WriteEditedSource("CompiledFieldToProperty.cs", edited),
+                HostProjectRelativePath,
+                onDisk,
+                null);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(FindEntry(result, "get_PublicSeed"), Is.Null);
+            Assert.That(FindSkipReason(result, "get_PublicSeed"), Is.EqualTo(CompiledMemberKindChangedReason));
         }
 
         private static async Task<TransformWorkerClientResult> RunEditedHostAsync(

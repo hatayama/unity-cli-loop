@@ -179,9 +179,14 @@ internal static class AddedPropertyClassifier
         bool isAuto = IsAutoProperty(declaration);
         string getterKey = BuildGetterKey(typeState.TypeSymbol, symbol);
         string setterKey = BuildSetterKey(typeState.TypeSymbol, symbol);
-        string reason = symbol.GetMethod == null
-            ? AddedPropertySkipReasons.SetOnly
-            : EvaluateDeclarationSkipReason(symbol, declaration, typeState.TypeSymbol);
+        string reason = EvaluateCompiledMemberKindChangeReason(compiledType, symbol.Name);
+        if (reason == null)
+        {
+            reason = symbol.GetMethod == null
+                ? AddedPropertySkipReasons.SetOnly
+                : EvaluateDeclarationSkipReason(symbol, declaration, typeState.TypeSymbol);
+        }
+
         if (isAuto && reason == null)
         {
             reason = EvaluateAutoPropertyStoreSkipReason(
@@ -214,6 +219,27 @@ internal static class AddedPropertyClassifier
             SetterKey = setterKey,
             Reason = reason
         };
+    }
+
+    // Why before every other rule: a compiled field or event of the same name still owns the
+    // member, so emitting accessors would leave compiled code on the old storage while edited
+    // code reads a side table that never sees the compiled value.
+    private static string EvaluateCompiledMemberKindChangeReason(
+        INamedTypeSymbol compiledType,
+        string propertyName)
+    {
+        foreach (ISymbol member in compiledType.GetMembers(propertyName))
+        {
+            if (member is IFieldSymbol || member is IEventSymbol)
+            {
+                return string.Format(
+                    CultureInfo.InvariantCulture,
+                    AddedPropertySkipReasons.CompiledMemberKindChanged,
+                    propertyName);
+            }
+        }
+
+        return null;
     }
 
     private static bool HasCompiledProperty(INamedTypeSymbol compiledType, string propertyName)

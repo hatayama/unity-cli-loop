@@ -137,8 +137,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: an auto-property added in the host file is readable and writable from the caller
-        /// file's edited body within one reload, its backing value lives in the added-field store,
-        /// and the run reports that one added field once.
+        /// file's edited body within one reload, its backing value survives across calls because
+        /// it lives in the added-field store, and the run reports that one added field once.
         /// </summary>
         [Test]
         public async Task Run_CallerFileUsesAutoPropertyAddedInOtherFile_AppliesAndRoundTripsValue()
@@ -148,15 +148,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 InsertHostMember("        public int Count { get; set; }\n\n"),
                 ReplaceCallerBody(
                     CallerCallBodyAnchor,
-                    "host.Count = 3;\n            return host.Count + 1;"));
+                    "host.Count = host.Count + 1;\n            return host.Count + 40;"));
 
             AssertNoFailure(result);
             AssertKind(result, HotReloadMethodOutcomeKind.Patched, "Call");
             AssertKind(result, HotReloadMethodOutcomeKind.Added, "get_Count");
             AssertKind(result, HotReloadMethodOutcomeKind.Added, "set_Count");
-            Assert.That(
-                new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
-                Is.EqualTo(4));
+            HotReloadCrossFileAddedMemberCaller caller = new HotReloadCrossFileAddedMemberCaller();
+            HotReloadCrossFileAddedMemberHost host = new HotReloadCrossFileAddedMemberHost();
+
+            // Why two calls on the same host: only a value that outlives the call proves the
+            // accessors read and write the store rather than transient state.
+            Assert.That(caller.Call(host), Is.EqualTo(41));
+            Assert.That(caller.Call(host), Is.EqualTo(42));
             Assert.That(
                 HotReloadAddedFieldRegistry.GetFieldsForType(
                     typeof(HotReloadCrossFileAddedMemberHost).FullName),
