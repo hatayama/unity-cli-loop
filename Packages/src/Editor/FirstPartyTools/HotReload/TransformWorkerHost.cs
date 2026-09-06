@@ -539,11 +539,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             catch (InvalidOperationException)
             {
-                // The process exited on its own first.
+                // The race was lost to the exit itself, which is the outcome the host wanted.
+                // A live process that still refused the kill is a real problem.
+                if (!channel.HasExited)
+                {
+                    throw;
+                }
             }
             catch (System.ComponentModel.Win32Exception)
             {
-                // The OS refused the kill because the process is already gone.
+                // Same race, reported by the OS instead of the runtime.
+                if (!channel.HasExited)
+                {
+                    throw;
+                }
             }
         }
 
