@@ -199,15 +199,15 @@
           },
           "SearchMode": {
             "type": "string",
-            "description": "Search mode: Exact, Path, Regex, Contains, Selected",
+            "description": "Search mode: exact, path, regex, contains, selected",
             "enum": [
-              "Exact",
-              "Path",
-              "Regex",
-              "Contains",
-              "Selected"
+              "exact",
+              "path",
+              "regex",
+              "contains",
+              "selected"
             ],
-            "default": "Exact"
+            "default": "exact"
           },
           "RequiredComponents": {
             "type": "array",
@@ -696,12 +696,12 @@
           "Action": {
             "type": "string",
             "enum": [
-              "Start",
-              "Stop",
-              "Status"
+              "start",
+              "stop",
+              "status"
             ],
-            "description": "Start - begin replaying, Stop - stop mid-way, Status - check progress",
-            "default": "Start"
+            "description": "start - begin replaying, stop - stop mid-way, status - check progress",
+            "default": "start"
           },
           "InputPath": {
             "type": "string",

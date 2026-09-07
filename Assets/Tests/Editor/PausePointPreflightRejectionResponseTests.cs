@@ -121,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             // Verifies replay-input's preflight rejection response sets the flag and names the marker.
             ReplayInputResponse response = ReplayInputResponseFactory.PreflightRejectedResult(
-                ReplayInputAction.Start,
+                ReplayInputAction.start,
                 PlayModeToolPreflightResult.FailureRejectedByPausePoint("PlayMode is paused.", "marker"));
 
             Assert.That(response.RejectedBeforeExecution, Is.True);
@@ -178,7 +178,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // ExecuteStart is private, so Start is driven through the public ReplayInputAsync.
             ReplayInputResponse response = RunToCompletion(
                 new ReplayInputUseCase().ReplayInputAsync(
-                    new ReplayInputSchema { Action = ReplayInputAction.Start },
+                    new ReplayInputSchema { Action = ReplayInputAction.start },
                     CancellationToken.None));
 
             Assert.That(response.Success, Is.False);

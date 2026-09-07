@@ -10,7 +10,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         // Search criteria
         public string NamePattern { get; set; } = "";
-        public SearchMode SearchMode { get; set; } = SearchMode.Exact;
+        public SearchMode SearchMode { get; set; } = SearchMode.exact;
         public string[] RequiredComponents { get; set; } = new string[0];
         public string Tag { get; set; } = "";
         public int? Layer { get; set; } = null;

@@ -16,17 +16,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 
             switch (searchMode)
             {
-                case SearchMode.Exact:
+                case SearchMode.exact:
                     return gameObject.name == pattern;
                     
-                case SearchMode.Path:
+                case SearchMode.path:
                     // Path search is handled separately in GameObjectFinderService
                     return false;
                     
-                case SearchMode.Regex:
+                case SearchMode.regex:
                     return Regex.IsMatch(gameObject.name, pattern);
                     
-                case SearchMode.Contains:
+                case SearchMode.contains:
                     return gameObject.name.Contains(pattern);
                     
                 default:

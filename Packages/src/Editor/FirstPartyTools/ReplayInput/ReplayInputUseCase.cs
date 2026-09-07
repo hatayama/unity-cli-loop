@@ -55,15 +55,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             switch (request.Action)
             {
-                case ReplayInputAction.Start:
+                case ReplayInputAction.start:
                     response = ExecuteStart(request);
                     break;
 
-                case ReplayInputAction.Stop:
+                case ReplayInputAction.stop:
                     response = ExecuteStop();
                     break;
 
-                case ReplayInputAction.Status:
+                case ReplayInputAction.status:
                     response = ExecuteStatus();
                     break;
 
@@ -97,7 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PlayModeToolPreflightResult preflight = PlayModeToolPreflightService.RequireActiveAndNotPaused(PausedActionDescription);
             if (!preflight.IsValid)
             {
-                return ReplayInputResponseFactory.PreflightRejectedResult(ReplayInputAction.Start, preflight);
+                return ReplayInputResponseFactory.PreflightRejectedResult(ReplayInputAction.start, preflight);
             }
 
             if (InputReplayer.IsReplaying)
@@ -106,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = "Already replaying. Stop the current replay first.",
-                    Action = ReplayInputAction.Start.ToString()
+                    Action = ReplayInputAction.start.ToString()
                 };
             }
 
@@ -116,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = "Cannot replay while recording. Stop the recording first.",
-                    Action = ReplayInputAction.Start.ToString()
+                    Action = ReplayInputAction.start.ToString()
                 };
             }
 
@@ -127,7 +127,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = $"No recording files found in {RecordInputConstants.DEFAULT_OUTPUT_DIR}/",
-                    Action = ReplayInputAction.Start.ToString()
+                    Action = ReplayInputAction.start.ToString()
                 };
             }
 
@@ -137,7 +137,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = $"Recording file not found: {inputPath}",
-                    Action = ReplayInputAction.Start.ToString()
+                    Action = ReplayInputAction.start.ToString()
                 };
             }
 
@@ -149,7 +149,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = $"Failed to parse recording file: {inputPath}",
-                    Action = ReplayInputAction.Start.ToString()
+                    Action = ReplayInputAction.start.ToString()
                 };
             }
 
@@ -164,7 +164,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Success = true,
                 Message = $"Replay started: {eventCount} events across {data.Metadata.TotalFrames} frames" +
                           (request.Loop ? " (looping)" : ""),
-                Action = ReplayInputAction.Start.ToString(),
+                Action = ReplayInputAction.start.ToString(),
                 InputPath = inputPath,
                 TotalFrames = data.Metadata.TotalFrames,
                 IsReplaying = true
@@ -179,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = false,
                     Message = "Not currently replaying.",
-                    Action = ReplayInputAction.Stop.ToString()
+                    Action = ReplayInputAction.stop.ToString()
                 };
             }
 
@@ -191,7 +191,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Success = true,
                 Message = $"Replay stopped at frame {stoppedFrame}/{totalFrames}",
-                Action = ReplayInputAction.Stop.ToString(),
+                Action = ReplayInputAction.stop.ToString(),
                 CurrentFrame = stoppedFrame,
                 TotalFrames = totalFrames,
                 IsReplaying = false
@@ -206,7 +206,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     Success = true,
                     Message = "Not replaying.",
-                    Action = ReplayInputAction.Status.ToString(),
+                    Action = ReplayInputAction.status.ToString(),
                     IsReplaying = false
                 };
             }
@@ -215,7 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 Success = true,
                 Message = $"Replaying: frame {InputReplayer.CurrentFrame}/{InputReplayer.TotalFrames} ({InputReplayer.Progress:P0})",
-                Action = ReplayInputAction.Status.ToString(),
+                Action = ReplayInputAction.status.ToString(),
                 CurrentFrame = InputReplayer.CurrentFrame,
                 TotalFrames = InputReplayer.TotalFrames,
                 Progress = InputReplayer.Progress,

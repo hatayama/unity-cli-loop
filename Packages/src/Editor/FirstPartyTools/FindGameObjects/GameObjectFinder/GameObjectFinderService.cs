@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             List<GameObjectDetails> results = new();
             
             // Handle hierarchy path search separately
-            if (options.SearchMode == SearchMode.Path && !string.IsNullOrEmpty(options.NamePattern))
+            if (options.SearchMode == SearchMode.path && !string.IsNullOrEmpty(options.NamePattern))
             {
                 GameObject found = FindGameObjectByPath(options.NamePattern);
                 if (found != null)

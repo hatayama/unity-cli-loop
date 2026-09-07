@@ -32,7 +32,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             CancellationToken ct)
         {
             // Handle Selected mode separately
-            if (parameters.SearchMode == SearchMode.Selected)
+            if (parameters.SearchMode == SearchMode.selected)
             {
                 return Task.FromResult(ExecuteSelectedMode(parameters, ct));
             }
@@ -141,7 +141,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string BuildZeroHitExactModeHint(FindGameObjectsSchema parameters, int totalFound)
         {
             if (totalFound != 0 ||
-                parameters.SearchMode != SearchMode.Exact ||
+                parameters.SearchMode != SearchMode.exact ||
                 string.IsNullOrEmpty(parameters.NamePattern))
             {
                 return null;

@@ -2,10 +2,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     public enum SearchMode
     {
-        Exact = 0,
-        Path = 1,
-        Regex = 2,
-        Contains = 3,
-        Selected = 4
+        exact = 0,
+        path = 1,
+        regex = 2,
+        contains = 3,
+        selected = 4
     }
 }

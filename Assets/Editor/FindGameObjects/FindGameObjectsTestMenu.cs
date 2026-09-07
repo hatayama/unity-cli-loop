@@ -62,7 +62,7 @@ namespace io.github.hatayama.UnityCliLoop.Dev
             // Search for Main Camera by path
             JObject parameters = new()            {
                 ["NamePattern"] = "Main Camera",
-                ["SearchMode"] = "Path",
+                ["SearchMode"] = "path",
                 ["MaxCount"] = 1
             };
             

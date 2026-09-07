@@ -8,7 +8,7 @@ description: "Get the Unity scene hierarchy as a structured tree. Use for parent
 
 Get Unity Hierarchy structure from the whole scene, a root path, or selected Hierarchy objects.
 
-Use this for hierarchy structure, especially descendants under the current selection. Use `find-game-objects --search-mode Selected` when you need selected object details or component properties.
+Use this for hierarchy structure, especially descendants under the current selection. Use `find-game-objects --search-mode selected` when you need selected object details or component properties.
 
 ## Usage
 

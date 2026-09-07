@@ -8,7 +8,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class ReplayInputSchema : UnityCliLoopToolSchema
     {
-        public ReplayInputAction Action { get; set; } = ReplayInputAction.Start;
+        public ReplayInputAction Action { get; set; } = ReplayInputAction.start;
         public string InputPath { get; set; } = "";
         public bool ShowOverlay { get; set; } = true;
         public bool Loop { get; set; } = false;

@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Arrange
             JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject",
-                ["SearchMode"] = "Contains"
+                ["SearchMode"] = "contains"
             };
             
             // Act
@@ -97,7 +97,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Contains/Regex, since Exact is the default and silently misses partial matches.
             JObject paramsJson = new()            {
                 ["NamePattern"] = "Camera",
-                ["SearchMode"] = "Exact"
+                ["SearchMode"] = "exact"
             };
 
             UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
@@ -117,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // already support partial matching and have no equivalent trap to warn about.
             JObject paramsJson = new()            {
                 ["NamePattern"] = "NoSuchObjectNameAtAll",
-                ["SearchMode"] = "Contains"
+                ["SearchMode"] = "contains"
             };
 
             UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
@@ -134,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Verifies the hint only appears on a zero-hit result, not alongside real matches.
             JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject1",
-                ["SearchMode"] = "Exact"
+                ["SearchMode"] = "exact"
             };
 
             UnityCliLoopToolResponse baseResponse = await tool.ExecuteAsync(paramsJson, System.Threading.CancellationToken.None);
@@ -212,7 +212,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject|AnotherObject",
-                ["SearchMode"] = "Regex",
+                ["SearchMode"] = "regex",
                 ["Tag"] = "Untagged"
             };
             
@@ -279,7 +279,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             JObject paramsJson = new()            {
                 ["NamePattern"] = "Enemy\\d+",
-                ["SearchMode"] = "Regex"
+                ["SearchMode"] = "regex"
             };
             
             try
@@ -316,7 +316,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             JObject paramsJson = new()            {
                 ["NamePattern"] = "Object",
-                ["SearchMode"] = "Contains",
+                ["SearchMode"] = "contains",
                 ["IncludeInactive"] = true
             };
             
@@ -344,7 +344,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             JObject paramsJson = new()            {
                 ["NamePattern"] = "Object",
-                ["SearchMode"] = "Contains",
+                ["SearchMode"] = "contains",
                 ["IncludeInactive"] = false
             };
             
@@ -371,7 +371,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             JObject paramsJson = new()            {
                 ["NamePattern"] = "Object",
-                ["SearchMode"] = "Contains",
+                ["SearchMode"] = "contains",
                 ["RequiredComponents"] = new JArray { "BoxCollider" },
                 ["Layer"] = 8
             };
@@ -404,7 +404,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             JObject paramsJson = new()            {
                 ["NamePattern"] = "ManyObject",
-                ["SearchMode"] = "Contains",
+                ["SearchMode"] = "contains",
                 ["MaxCount"] = 5
             };
             
@@ -447,7 +447,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             JObject paramsJson = new()            {
                 ["NamePattern"] = "Parent/Child/Grandchild",
-                ["SearchMode"] = "Path"
+                ["SearchMode"] = "path"
             };
             
             try
@@ -479,7 +479,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             
             JObject paramsJson = new()            {
                 ["NamePattern"] = "ExactName",
-                ["SearchMode"] = "Exact"
+                ["SearchMode"] = "exact"
             };
             
             try
@@ -512,7 +512,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject",
-                ["SearchMode"] = "Contains"
+                ["SearchMode"] = "contains"
             };
 
             try
@@ -546,7 +546,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Selection.objects = new Object[0];
 
             JObject paramsJson = new()            {
-                ["SearchMode"] = "Selected"
+                ["SearchMode"] = "selected"
             };
 
             // Act
@@ -568,7 +568,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Selection.objects = new Object[] { testObject1 };
 
             JObject paramsJson = new()            {
-                ["SearchMode"] = "Selected"
+                ["SearchMode"] = "selected"
             };
 
             try
@@ -598,7 +598,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Selection.objects = new Object[] { testObject1, testObject2 };
 
             JObject paramsJson = new()            {
-                ["SearchMode"] = "Selected"
+                ["SearchMode"] = "selected"
             };
 
             try
@@ -639,7 +639,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Selection.objects = new Object[] { testObject1, testObject2 };
 
             JObject paramsJson = new()            {
-                ["SearchMode"] = "Selected",
+                ["SearchMode"] = "selected",
                 ["IncludeInactive"] = false
             };
 
@@ -674,7 +674,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject1",
-                ["SearchMode"] = "Exact"
+                ["SearchMode"] = "exact"
             };
 
             try
@@ -718,7 +718,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             JObject paramsJson = new()            {
                 ["NamePattern"] = "TestObject1",
-                ["SearchMode"] = "Exact"
+                ["SearchMode"] = "exact"
             };
 
             // Act
@@ -764,7 +764,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Selection.objects = new Object[] { testObject1, testObject2 };
 
             JObject paramsJson = new()            {
-                ["SearchMode"] = "Selected",
+                ["SearchMode"] = "selected",
                 ["IncludeInactive"] = true
             };
 

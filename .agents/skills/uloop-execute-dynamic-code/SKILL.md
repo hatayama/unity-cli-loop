@@ -8,7 +8,7 @@ description: "Execute C# with Unity APIs when existing uloop tools cannot inspec
 
 Run focused C# snippets in the active Unity Editor with `uloop execute-dynamic-code`.
 
-For basic selected GameObject discovery or property inspection, use `find-game-objects --search-mode Selected` before this tool. Use this tool after the built-in inspection tools are not enough or when you need to modify Unity state.
+For basic selected GameObject discovery or property inspection, use `find-game-objects --search-mode selected` before this tool. Use this tool after the built-in inspection tools are not enough or when you need to modify Unity state.
 
 This tool can inspect reachable Unity state — GameObjects, components, public properties, static values, method results — but it cannot read local variables or intermediate calculations inside an already-running method. When those values matter, follow the `uloop-pause-point` skill: a pause point's `CapturedVariables` carries the locals, parameters, and instance fields at that line with no code edit or recompile, and while Unity stays paused `UloopPausePoint.TryGetCapturedValue(name)` gives this tool live captured references. That skill also covers the reverse combination — registering an `EditorApplication.update` watcher from this tool that freezes Unity on the first frame a runtime condition holds. Never poll or sleep inside a snippet; the body runs synchronously on the main thread.
 

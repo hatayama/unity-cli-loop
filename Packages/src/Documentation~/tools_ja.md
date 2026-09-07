@@ -86,7 +86,7 @@ log検索時、ノイズのとなるlogをクリアする事ができます。
 → find-game-objects (RequiredComponents: ["Camera"])
 → Cameraコンポーネントのパラメータを調査
 
-→ find-game-objects (SearchMode: "Selected")
+→ find-game-objects (SearchMode: "selected")
 → Unity Editorで選択中のGameObjectの詳細情報を取得（複数選択対応）
 ```
 
@@ -206,10 +206,10 @@ Input System経由でPlayMode中のキーボード入力をシミュレーショ
 記録されたキーボード・マウス入力をPlayMode中に再生します。JSON記録を読み込み、Input System経由でフレーム単位で入力を注入します。ループ再生と進捗モニタリングに対応しています。このツールは Input System パッケージ導入時のみ利用可能です。記録ファイルは、まず Unity Editor の **Window > Unity CLI Loop > Recordings** で **Start Recording** と **Stop Recording** を使って作成します。CLI に記録コマンドはありません。
 
 ```text
-→ replay-input (Action: Start)
-→ replay-input (Action: Start, InputPath: "scripts/my-play.json", Loop: true)
-→ replay-input (Action: Status)
-→ replay-input (Action: Stop)
+→ replay-input (Action: start)
+→ replay-input (Action: start, InputPath: "scripts/my-play.json", Loop: true)
+→ replay-input (Action: status)
+→ replay-input (Action: stop)
 ```
 
 terminal から uloop コマンドを実行するE2Eは、shell 系統ごとに1つのrunnerから実行します:

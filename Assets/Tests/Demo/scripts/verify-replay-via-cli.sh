@@ -197,14 +197,14 @@ wait_for_unity
 echo "[7/8] Activating controller + starting replay via CLI..."
 activate_for_replay
 echo "  Starting replay of the latest Recordings window file..."
-REPLAY_RESULT=$(run_uloop replay-input --action Start 2>&1) || true
+REPLAY_RESULT=$(run_uloop replay-input --action start 2>&1) || true
 echo "  $REPLAY_RESULT"
 
 echo "  Waiting for replay to finish..."
 sleep 2
 waited=0
 while [ $waited -lt 60 ]; do
-    STATUS_RESULT=$(run_uloop replay-input --action Status 2>&1) || true
+    STATUS_RESULT=$(run_uloop replay-input --action status 2>&1) || true
     playing=$(echo "$STATUS_RESULT" | grep -o '"IsReplaying": *[a-z]*' | sed 's/.*: *//')
     if [ "$playing" = "false" ]; then
         echo "  Replay completed."
