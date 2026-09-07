@@ -36,7 +36,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public class HotReloadIntroducedTypeResult
     {
-        /// <summary>"Introduced", "AlreadyActive", or "Active" on --status.</summary>
+        /// <summary>
+        /// "Introduced", "AlreadyActive" or "Failed" on an apply run; "Active" on --status.
+        /// </summary>
         public string Kind { get; set; } = string.Empty;
 
         public string TypeName { get; set; } = string.Empty;
