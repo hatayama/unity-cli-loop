@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
@@ -16,7 +17,20 @@ func defaultSkillTargets() []skillTarget {
 }
 
 func shouldSkipSkillFile(name string) bool {
-	return name == ".DS_Store" || strings.HasSuffix(name, ".meta")
+	return name == ".DS_Store" || name == ".gitkeep" || strings.HasSuffix(name, ".meta")
+}
+
+// isComparableSkillFile reports whether a file inside a skill directory takes part in the
+// installed-vs-source comparison. Files in subdirectories are always compared because the skill
+// ships them itself; at the directory root only Markdown files are compared, because other
+// tools may place their own metadata files there (a package manager manifest, for example)
+// and those must not make an up-to-date skill report as outdated. The Editor applies the same
+// rule in SkillInstallLayout.IsComparableSkillFile.
+func isComparableSkillFile(relativePath string) bool {
+	if filepath.Dir(relativePath) != "." {
+		return true
+	}
+	return strings.EqualFold(filepath.Ext(relativePath), ".md")
 }
 
 func isSafeSkillName(name string) bool {

@@ -177,7 +177,7 @@ func collectComparableSkillFiles(root string) map[string][]byte {
 			return nil
 		}
 		relativePath, err := filepath.Rel(root, path)
-		if err != nil || relativePath == skillscan.SkillFileName {
+		if err != nil || relativePath == skillscan.SkillFileName || !isComparableSkillFile(relativePath) {
 			return nil
 		}
 		content, err := os.ReadFile(path)

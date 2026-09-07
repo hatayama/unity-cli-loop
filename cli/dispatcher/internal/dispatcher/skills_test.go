@@ -383,6 +383,76 @@ func TestSkillStatusIgnoresCRLFLineEndings(t *testing.T) {
 	}
 }
 
+// Tests that a root-level non-Markdown file placed by another tool does not mark an installed skill outdated.
+func TestSkillStatusIgnoresRootLevelNonMarkdownFiles(t *testing.T) {
+	baseDir, skill, installedDir := setUpInstalledSampleSkill(t)
+	writeSkillDirectoryFile(t, installedDir, "apm.yml", "name: sample\n")
+
+	assertSkillStatus(t, baseDir, skill, "installed")
+}
+
+// Tests that an extra root-level Markdown file still marks the skill outdated, matching the Editor-side rule.
+func TestSkillStatusDetectsExtraRootLevelMarkdownFile(t *testing.T) {
+	baseDir, skill, installedDir := setUpInstalledSampleSkill(t)
+	writeSkillDirectoryFile(t, installedDir, "EXTRA.md", "extra\n")
+
+	assertSkillStatus(t, baseDir, skill, "outdated")
+}
+
+// Tests that a .gitkeep file inside an installed skill directory is ignored, matching the Editor-side exclusion list.
+func TestSkillStatusIgnoresGitkeepFiles(t *testing.T) {
+	baseDir, skill, installedDir := setUpInstalledSampleSkill(t)
+	writeSkillDirectoryFile(t, installedDir, filepath.Join("references", ".gitkeep"), "")
+
+	assertSkillStatus(t, baseDir, skill, "installed")
+}
+
+// setUpInstalledSampleSkill writes a sample skill to a temporary source directory and an
+// identical installed copy, so each caller only has to add the one file under test.
+func setUpInstalledSampleSkill(t *testing.T) (string, skillDefinition, string) {
+	t.Helper()
+	const skillFileContent = "---\nname: uloop-sample\n---\n\n# sample\n"
+	projectRoot := t.TempDir()
+	sourceDir := filepath.Join(projectRoot, "source", "Skill")
+	writeSkillFile(t, sourceDir, skillFileContent)
+	writeSkillDirectoryFile(t, sourceDir, filepath.Join("references", "note.md"), "note\n")
+
+	skill := skillDefinition{
+		name:            "uloop-sample",
+		content:         []byte(skillFileContent),
+		sourceDirectory: sourceDir,
+	}
+	baseDir := filepath.Join(projectRoot, ".claude", "skills")
+	installedDir := getPreferredSkillDir(baseDir, skill.name, true)
+	writeRawSkillFile(t, installedDir, skillFileContent)
+	writeSkillDirectoryFile(t, installedDir, filepath.Join("references", "note.md"), "note\n")
+	return baseDir, skill, installedDir
+}
+
+// writeSkillDirectoryFile writes one file inside a skill directory, creating parent directories.
+func writeSkillDirectoryFile(t *testing.T, skillDir string, relativePath string, content string) {
+	t.Helper()
+	fullPath := filepath.Join(skillDir, relativePath)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		t.Fatalf("failed to create directory for %s: %v", relativePath, err)
+	}
+	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write %s: %v", relativePath, err)
+	}
+}
+
+// assertSkillStatus fails when the target-mode status of the skill differs from the expected one.
+func assertSkillStatus(t *testing.T, baseDir string, skill skillDefinition, expectedStatus string) {
+	t.Helper()
+	status, err := getSkillStatus(baseDir, skill, true)
+	if err != nil {
+		t.Fatalf("getSkillStatus failed: %v", err)
+	}
+	if status != expectedStatus {
+		t.Fatalf("status mismatch: %s", status)
+	}
+}
+
 // Tests that status checks surface inaccessible installed skill directories.
 func TestSkillStatusReturnsStatErrors(t *testing.T) {
 	projectRoot := t.TempDir()
