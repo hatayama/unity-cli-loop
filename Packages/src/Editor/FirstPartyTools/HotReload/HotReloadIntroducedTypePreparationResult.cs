@@ -96,8 +96,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// The preparation ran and refused one or more declarations. Overloads are forbidden, so
         /// the two failure kinds are separate names rather than one name with two shapes.
         /// </summary>
+        /// <remarks>
+        /// Why a refusal still carries the other findings: one preparation covers every
+        /// declaration of the group, so the reuses and notices it collected describe declarations
+        /// the refusal says nothing about, and dropping them would hide them until a compile.
+        /// </remarks>
         public static HotReloadIntroducedTypePreparationResult TypeFailures(
-            IReadOnlyList<HotReloadIntroducedTypeOutcome> failures)
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> failures,
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> alreadyActiveTypes = null,
+            IReadOnlyList<HotReloadIntroducedTypeNotice> notices = null)
         {
             if (failures == null || failures.Count == 0)
             {
@@ -105,7 +112,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new HotReloadIntroducedTypePreparationResult(
-                false, null, string.Empty, null, failures, null);
+                false, null, string.Empty, alreadyActiveTypes, failures, notices);
         }
     }
 }

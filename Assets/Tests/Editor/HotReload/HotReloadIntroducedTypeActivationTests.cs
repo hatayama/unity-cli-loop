@@ -611,6 +611,73 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a type declared by three files of one group is refused against all three,
+        /// instead of naming only the first pair and hiding the third file.
+        /// </summary>
+        [Test]
+        public async Task Run_SameTypeDeclaredByThreeFilesOfAGroup_ReportsEveryOwner()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+            string holderPath = FixturePath("HotReloadCrossFileAddedMemberHolder.cs");
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { hostPath, callerPath, holderPath },
+                    contentPathOverride: null,
+                    CancellationToken.None,
+                    CreateTripleDeclaringEdits(hostPath, callerPath, holderPath));
+
+                Assert.That(
+                    CountTypeFailures(result, "more than one file"),
+                    Is.EqualTo(3),
+                    "Every file that declares the type must report the refusal. "
+                        + DescribeOutcomes(result));
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    Is.EqualTo(0),
+                    "A refused group must activate no type.");
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a group double-declaring two types reports every refused declaration,
+        /// instead of stopping at the first repeated one and leaving the second unreported.
+        /// </summary>
+        [Test]
+        public async Task Run_TwoTypesEachDeclaredByTwoFilesOfAGroup_ReportsEveryRefusal()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { hostPath, callerPath },
+                    contentPathOverride: null,
+                    CancellationToken.None,
+                    CreateTwiceDoubleDeclaringEdits(hostPath, callerPath));
+
+                Assert.That(
+                    CountTypeFailures(result, "more than one file"),
+                    Is.EqualTo(4),
+                    "Both files must report the refusal of both types. " + DescribeOutcomes(result));
+                Assert.That(
+                    CountTypeFailures(result, "HotReloadCrossFileDoubleDeclaredSecond"),
+                    Is.EqualTo(2),
+                    "The second double-declared type must be named as well. "
+                        + DescribeOutcomes(result));
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    Is.EqualTo(0),
+                    "A refused group must activate no type.");
+            }
+        }
+
+        /// <summary>
         /// Verifies that an Editor that becomes busy after the shim compile stops the run at the
         /// commit boundary, leaving no type active and no patch applied.
         /// </summary>
@@ -1442,6 +1509,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string CallerBodyAnchor = "return host.Value();";
 
+        private const string HolderTypeAnchor =
+            "    internal sealed class HotReloadCrossFileAddedMemberHolder";
+
         private const string CallerTypeAnchor =
             "    internal sealed class HotReloadCrossFileAddedMemberCaller";
 
@@ -1651,6 +1721,79 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // Both files of the group declare the same type, which is what makes the group offer the
         // artifact batch two records of one identity.
+        private static Dictionary<string, string> CreateTripleDeclaringEdits(
+            string hostPath,
+            string callerPath,
+            string holderPath)
+        {
+            string introduced = BuildDoubleDeclaredSource("HotReloadCrossFileTripleDeclared");
+            string hostSource = File.ReadAllText(hostPath);
+            string callerSource = File.ReadAllText(callerPath);
+            string holderSource = File.ReadAllText(holderPath);
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            Assert.That(
+                callerSource,
+                Does.Contain(CallerTypeAnchor),
+                "Precondition: caller type anchor must exist.");
+            Assert.That(
+                holderSource,
+                Does.Contain(HolderTypeAnchor),
+                "Precondition: holder type anchor must exist.");
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeTripleDeclaredHost.cs",
+                    hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeTripleDeclaredCaller.cs",
+                    callerSource.Replace(
+                        CallerTypeAnchor, introduced + CallerTypeAnchor, StringComparison.Ordinal)),
+                [holderPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeTripleDeclaredHolder.cs",
+                    holderSource.Replace(
+                        HolderTypeAnchor, introduced + HolderTypeAnchor, StringComparison.Ordinal))
+            };
+        }
+
+        // Why two duplicated types and not a third file: the group only has to hold more than one
+        // repeated identity for a collector that stops at the first one to lose the rest.
+        private static Dictionary<string, string> CreateTwiceDoubleDeclaringEdits(
+            string hostPath,
+            string callerPath)
+        {
+            string callerSource = File.ReadAllText(callerPath);
+            Assert.That(
+                callerSource,
+                Does.Contain(CallerTypeAnchor),
+                "Precondition: caller type anchor must exist.");
+            string hostSource = File.ReadAllText(hostPath);
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            string introduced = BuildDoubleDeclaredSource("HotReloadCrossFileDoubleDeclaredFirst")
+                + BuildDoubleDeclaredSource("HotReloadCrossFileDoubleDeclaredSecond");
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeTwiceDoubleDeclaredHost.cs",
+                    hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeTwiceDoubleDeclaredCaller.cs",
+                    callerSource.Replace(
+                        CallerTypeAnchor, introduced + CallerTypeAnchor, StringComparison.Ordinal))
+            };
+        }
+
+        private static string BuildDoubleDeclaredSource(string typeName)
+        {
+            return "    public sealed class " + typeName + "\n"
+                + "    {\n"
+                + "        public int Read()\n"
+                + "        {\n"
+                + "            return 7;\n"
+                + "        }\n"
+                + "    }\n"
+                + "\n";
+        }
+
         private static Dictionary<string, string> CreateDoubleDeclaringEdits(
             string hostPath,
             string callerPath)

@@ -59,6 +59,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .Current
                 .PrepareIntroducedTypes(files, workerInput, ct)
                 .ConfigureAwait(false);
+            // Why before the failure branch and only here: one preparation covers every
+            // declaration of the group, so a declaration bound from a retained artifact and a
+            // non-fatal notice are true whether or not another declaration was refused. A
+            // declaration bound from a retained artifact introduces nothing, so no artifact of
+            // this run publishes it and a run whose only change is such a declaration never
+            // reaches an activation at all.
+            HotReloadIntroducedTypeOutcomeSink.Append(files, preparation.AlreadyActiveTypes);
+            HotReloadIntroducedTypeOutcomeSink.AppendNotices(files, preparation.Notices);
+
             if (!preparation.Success)
             {
                 // Why the two failures part ways here: a refused declaration is reported as the
@@ -75,12 +84,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
             }
-
-            // Why here and not at the commit boundary: a declaration bound from a retained
-            // artifact introduces nothing, so no artifact of this run publishes it, and a run
-            // whose only change is such a declaration never reaches an activation at all.
-            HotReloadIntroducedTypeOutcomeSink.Append(files, preparation.AlreadyActiveTypes);
-            HotReloadIntroducedTypeOutcomeSink.AppendNotices(files, preparation.Notices);
 
             if (preparation.Prepared == null)
             {

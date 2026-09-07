@@ -374,6 +374,57 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a refused declaration does not take the reload's other findings with it:
+        /// the declarations bound from a retained assembly and the non-fatal notices of the same
+        /// preparation are still reported beside the refusal.
+        /// </summary>
+        [Test]
+        public async Task Build_TypeFailureBesideOtherFindings_KeepsTheReusesAndNotices()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreatePreparationDependencies(
+                        HotReloadIntroducedTypePreparationResult.TypeFailures(
+                            new[]
+                            {
+                                HotReloadIntroducedTypeOutcome.Failed(
+                                    IntroducedTypeMetadataName,
+                                    "SomeAssembly",
+                                    "Assets/Example.cs",
+                                    InjectedTypeFailureReason)
+                            },
+                            new[]
+                            {
+                                HotReloadIntroducedTypeOutcome.AlreadyActive(
+                                    "Example.RetainedType",
+                                    "SomeAssembly",
+                                    "Assets/Example.cs")
+                            },
+                            new[]
+                            {
+                                new HotReloadIntroducedTypeNotice(
+                                    "Assets/Example.cs",
+                                    InjectedNoticeText)
+                            }))))
+                {
+                    HotReloadResponse response = await RunAgainstTheHostAsync();
+
+                    Assert.That(response.Success, Is.False, "A refused declaration must fail the run.");
+                    Assert.That(
+                        CountTypeRows(response, "AlreadyActive"),
+                        Is.EqualTo(1),
+                        "A declaration bound from a retained assembly is still bound.");
+                    Assert.That(
+                        FindWarning(response, InjectedNoticeText),
+                        Is.Not.Null,
+                        "A notice of the same preparation must still reach the caller.");
+                }
+            }
+        }
+
+        /// <summary>
         /// Verifies that a preparation worker that fails to run is reported as the run-level
         /// failure it is, not as a type outcome: the preparation runs for every reload, including
         /// the ones that declare no type at all.
@@ -429,6 +480,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return HotReloadApplyResponseBuilder.Build(result, null);
         }
 
+        private static int CountTypeRows(HotReloadResponse response, string kind)
+        {
+            int count = 0;
+            foreach (HotReloadIntroducedTypeResult row in response.IntroducedTypes)
+            {
+                if (string.Equals(row.Kind, kind, StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         private static int CountMethodFailures(HotReloadResponse response, string reasonFragment)
         {
             int count = 0;
@@ -443,6 +508,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             return count;
         }
+
+        private const string InjectedNoticeText =
+            "This declaration will keep not working until the next compile.";
 
         private const string InjectedTypeFailureReason =
             "The introduced type artifact could not be compiled.";
