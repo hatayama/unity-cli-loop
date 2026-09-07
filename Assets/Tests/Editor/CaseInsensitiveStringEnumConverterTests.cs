@@ -21,6 +21,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(schema.Action, Is.EqualTo(PlayModeAction.Play));
         }
 
+        // Locks the legacy PascalCase spelling for enums whose members are now lowercase, so scripts
+        // written against the old documented form keep working (ADR 0006).
+        [Test]
+        public void Deserialize_SearchMode_AcceptsLegacyPascalCaseValue()
+        {
+            JObject token = JObject.Parse("{\"searchMode\":\"Contains\"}");
+
+            FindGameObjectsSchema schema = token.ToObject<FindGameObjectsSchema>(
+                UnityCliLoopToolParameterSerializer.CamelCaseSerializer);
+
+            Assert.That(schema.SearchMode, Is.EqualTo(SearchMode.contains));
+        }
+
         // Verifies invalid enum values surface the allowed action names in the error.
         [Test]
         public void Deserialize_PlayModeAction_InvalidValue_ListsValidValues()
