@@ -25,6 +25,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     {
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
 
+        // Reopens a type the target assembly already holds, so the nested declaration is the only
+        // thing this file introduces and the outer declaration is never refused.
+        private const string CompiledOuterWithNestedSource =
+            "namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload { internal sealed "
+            + "class HotReloadCrossFileAddedMemberHolder { public class NestedProbe { } } }";
+
         /// <summary>
         /// Verifies that preparation preserves input file order, emits supported top-level types,
         /// and reports unsupported declarations on their owning file.
@@ -72,6 +78,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 result.Output.files[1].introducedTypeDiagnostics,
                 Has.Some.Contains("Nested"));
+        }
+
+        /// <summary>
+        /// Verifies that a nested declaration inside a type this run introduces is reported once,
+        /// by the outer declaration that is refused because of it, rather than a second time on
+        /// its own account.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_NestedInsideAnIntroducedType_ReportsOnlyTheOuterRefusal()
+        {
+            string directory = CreateSourceDirectory("NestedDiagnostics");
+            string introducedOuterPath = Path.Combine(directory, "IntroducedOuter.cs");
+            string compiledOuterPath = Path.Combine(directory, "CompiledOuter.cs");
+            File.WriteAllText(
+                introducedOuterPath,
+                "namespace Example { public class OuterIntroduced { public class NestedProbe { } } }");
+            File.WriteAllText(compiledOuterPath, CompiledOuterWithNestedSource);
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                CreateInput(introducedOuterPath, compiledOuterPath),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.files[0].introducedTypeDiagnostics,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Nested declaration inside an introduced type requires a compile: "
+                        + "Example.OuterIntroduced/NestedProbe"
+                    }));
+        }
+
+        /// <summary>
+        /// Verifies that a nested declaration added to a type the target assembly already holds
+        /// is still reported on its own, because no outer refusal covers it.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_NestedInsideACompiledType_ReportsTheNestedRefusal()
+        {
+            string directory = CreateSourceDirectory("NestedDiagnostics");
+            string introducedOuterPath = Path.Combine(directory, "IntroducedOuter.cs");
+            string compiledOuterPath = Path.Combine(directory, "CompiledOuter.cs");
+            File.WriteAllText(
+                introducedOuterPath,
+                "namespace Example { public class OuterIntroduced { public class NestedProbe { } } }");
+            File.WriteAllText(compiledOuterPath, CompiledOuterWithNestedSource);
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                CreateInput(introducedOuterPath, compiledOuterPath),
+                CancellationToken.None);
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                result.Output.files[1].introducedTypeDiagnostics,
+                Is.EqualTo(
+                    new[]
+                    {
+                        "Nested type requires a compile: "
+                        + "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload."
+                        + "HotReloadCrossFileAddedMemberHolder/NestedProbe"
+                    }));
         }
 
         /// <summary>
