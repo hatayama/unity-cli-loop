@@ -44,6 +44,14 @@ internal static class IntroducedTypePlanner
 
             if (typeSymbol.ContainingType != null)
             {
+                // Why silent when the outer type is not compiled either: that outer declaration
+                // is refused on its own, and its diagnostic already names this nested one as the
+                // reason. Reporting both turns a single refusal into two lines about one type.
+                if (CompiledMemberMatcher.FindCompiledType(typeSymbol.ContainingType, targetAssembly) == null)
+                {
+                    continue;
+                }
+
                 unit.IntroducedTypeDiagnostics.Add(
                     "Nested type requires a compile: " + CecilTypeNames.ToMetadataName(typeSymbol));
                 continue;

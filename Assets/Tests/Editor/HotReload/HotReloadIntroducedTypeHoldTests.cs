@@ -135,6 +135,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a run that starts with the hold released reports the hold as newly armed even
+        /// when the periodic reconcile armed it mid-run, because the suffix promises "the first
+        /// apply that arms the hold" and the run is the one that made the type active.
+        /// </summary>
+        [Test]
+        public void BuildResult_WhenTheReconcileArmsTheHoldMidRun_StillReportsTheRunAsNewlyArmed()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadRunAccumulator run = new HotReloadRunAccumulator(
+                    autoRefreshHeldAtStart: HotReloadAutoRefreshHold.IsHeld);
+
+                Assert.That(
+                    HotReloadAutoRefreshHold.IsHeld,
+                    Is.False,
+                    "Arrange: the run must start with the hold released.");
+
+                ActivateArtifactWithOneType();
+                // The 0.5s reconcile firing between the type becoming active and the run building
+                // its result: the hold is already armed by the time the run syncs it.
+                HotReloadAutoRefreshHold.ReconcileForTesting();
+
+                HotReloadOrchestratorResult result = run.BuildResult("correlation-newly-armed");
+
+                Assert.That(result.AutoRefreshHeld, Is.True);
+                Assert.That(
+                    result.AutoRefreshHoldNewlyArmed,
+                    Is.True,
+                    "A run that found Auto Refresh allowed and left it held is the run that armed it.");
+            }
+        }
+
+        /// <summary>
+        /// What: a run that was already holding Auto Refresh before it started does not report the
+        /// hold as newly armed, so the suffix does not repeat on every later apply.
+        /// </summary>
+        [Test]
+        public void BuildResult_WhenTheHoldWasAlreadyArmedBeforeTheRun_DoesNotReportItAsNewlyArmed()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                ActivateArtifactWithOneType();
+                HotReloadAutoRefreshHold.ReconcileForTesting();
+
+                Assert.That(
+                    HotReloadAutoRefreshHold.IsHeld,
+                    Is.True,
+                    "Arrange: the hold must already be armed when the run starts.");
+
+                HotReloadRunAccumulator run = new HotReloadRunAccumulator(
+                    autoRefreshHeldAtStart: HotReloadAutoRefreshHold.IsHeld);
+
+                HotReloadOrchestratorResult result = run.BuildResult("correlation-already-armed");
+
+                Assert.That(result.AutoRefreshHeld, Is.True);
+                Assert.That(
+                    result.AutoRefreshHoldNewlyArmed,
+                    Is.False,
+                    "Repeating the suffix on every apply would tell the caller a hold was just armed.");
+            }
+        }
+
+        /// <summary>
         /// What: an introduced type is not counted as a patch — the reported active patch total
         /// does not move when a type becomes active.
         /// </summary>

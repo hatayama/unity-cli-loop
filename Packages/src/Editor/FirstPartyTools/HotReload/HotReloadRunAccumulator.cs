@@ -33,9 +33,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // twice; recording mid-run would short-circuit the second copy.
         private readonly Dictionary<string, (string Hash, bool IsFullyApplied)> _appliedSourceHashByPath =
             new Dictionary<string, (string Hash, bool IsFullyApplied)>(StringComparer.Ordinal);
+        // Why captured at construction: the 0.5s Auto Refresh reconcile can arm the hold while the
+        // run is still awaited, so the sync at the end of the run cannot tell a run that armed the
+        // hold from one that merely found it armed. What the caller promised is "the first apply
+        // that arms the hold", which only the state before the run answers.
+        private readonly bool _autoRefreshHeldAtStart;
         private int _patchedTotal;
         private int _unchangedTotal;
         private int _revertedUnchangedTotal;
+
+        /// <param name="autoRefreshHeldAtStart">
+        /// Whether the Auto Refresh hold was already armed when the run started. Read on the Unity
+        /// main thread, because the flag lives in SessionState.
+        /// </param>
+        public HotReloadRunAccumulator(bool autoRefreshHeldAtStart)
+        {
+            _autoRefreshHeldAtStart = autoRefreshHeldAtStart;
+        }
 
         /// <summary>Warning sink shared with the per-file stage for sibling-derived notices.</summary>
         public List<string> SiblingDerivedWarnings => _siblingDerivedWarnings;
@@ -118,6 +132,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadOutcomeAggregation.AppendSiblingDerivedWarnings(_warnings, _siblingDerivedWarnings);
             HotReloadAutoRefreshHoldSyncResult autoRefreshHold =
                 HotReloadAutoRefreshHold.SyncToActiveChanges();
+            // Why not autoRefreshHold.NewlyArmed: that reports whether this one Sync call armed
+            // the hold, which the periodic reconcile can win. The run armed it whenever it started
+            // with Auto Refresh allowed and ended with it held.
+            bool newlyArmed = autoRefreshHold.Held && !_autoRefreshHeldAtStart;
             return new HotReloadOrchestratorResult(
                 _outcomes,
                 _warnings,
@@ -131,7 +149,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _revertedUnchangedTotal,
                 autoRefreshHold,
                 _reappliedSiblingPaths.ToArray(),
-                _introducedTypes);
+                _introducedTypes,
+                newlyArmed);
         }
 
         private void AppendInlineRiskWarning()

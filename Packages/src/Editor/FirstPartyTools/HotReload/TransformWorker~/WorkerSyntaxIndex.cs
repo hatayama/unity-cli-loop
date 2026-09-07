@@ -106,6 +106,27 @@ internal static class WorkerSyntaxIndex
         return namespaceName + "." + typeMetadataName;
     }
 
+    // What: the same syntax-only metadata name for an enum, which is a type declaration the
+    // rewriters key by but not a TypeDeclarationSyntax, so it cannot go through the method above.
+    // An enum takes no type parameters, so there is no arity suffix to build.
+
+    internal static string BuildEnumMetadataNameFromSyntax(EnumDeclarationSyntax enumDeclaration)
+    {
+        string simpleName = enumDeclaration.Identifier.Text;
+        if (enumDeclaration.Parent is TypeDeclarationSyntax containingType)
+        {
+            return BuildTypeMetadataNameFromSyntax(containingType) + "+" + simpleName;
+        }
+
+        string namespaceName = GetContainingNamespaceName(enumDeclaration);
+        if (string.IsNullOrEmpty(namespaceName))
+        {
+            return simpleName;
+        }
+
+        return namespaceName + "." + simpleName;
+    }
+
     // What: dotted namespace path including all ancestor namespaces (not only the innermost).
 
     internal static string GetContainingNamespaceName(SyntaxNode node)

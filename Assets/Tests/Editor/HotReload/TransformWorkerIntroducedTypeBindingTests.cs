@@ -41,6 +41,24 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Reaches the retained type without naming it: the only occurrence is inside the type
         // returned by the member the declaration calls. A fingerprint that collapses a bound
         // symbol to one type records the collection type and loses the retained type.
+        // The compiled baseline of the edited file: the type the target assembly already holds,
+        // and nothing else.
+        private const string CompiledDependentSnapshotSource =
+            "namespace Example { public class Dependent { public int Value() { return 1; } } }";
+
+        // The same file after an edit that changes a method body and introduces an enum beside
+        // the compiled type. An enum is a supported introduced type but not a class declaration,
+        // and the two travel through different syntax nodes.
+        private const string EditedSourceIntroducingAnEnum =
+            "namespace Example { public class Dependent { public int Value() { return 2; } } "
+            + "public enum IntroducedChoice { First } }";
+
+        // The same file after an edit that changes a method body and introduces a type beside
+        // the compiled one.
+        private const string EditedSourceIntroducingAType =
+            "namespace Example { public class Dependent { public int Value() { return 2; } } "
+            + "public class Introduced { } }";
+
         private const string IndirectDependentSource =
             "using System.Collections.Generic; namespace Example { public static class Holder { public static List<Retained> All() { return null; } } public class Dependent { public int Count() { return Holder.All().Count; } } }";
 
@@ -283,6 +301,140 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             AssertPreparationWasRefused(result);
+        }
+
+        /// <summary>
+        /// What: a type this reload introduced from an edited compiled file is not reported as an
+        /// edit outside a method body. The reload did apply the declaration - it lives in the
+        /// artifact assembly the run compiled - so telling the caller to run a compile for it
+        /// would name work that is already done.
+        /// </summary>
+        [Test]
+        public async Task Transform_WhenTheEditIntroducesAType_DoesNotWarnAboutEditsOutsideMethodBodies()
+        {
+            BindingFixture fixture = CreateFixture(
+                "IntroducedTypeDrift",
+                EditedSourceIntroducingAType,
+                includeCompiledDependent: true);
+
+            TransformWorkerClientResult result = await RunTransformAfterIntroducingAsync(
+                fixture,
+                CompiledDependentSnapshotSource,
+                "Example.Introduced");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                CollectDriftWarnings(result),
+                Is.Empty,
+                "The reload applied the introduced type, so nothing about it requires a compile.");
+        }
+
+        /// <summary>
+        /// What: an enum this reload introduced into an edited compiled file is not reported as an
+        /// edit outside a method body either. An enum is a supported introduced type, and it
+        /// reaches the drift check through a declaration node no type-declaration rewrite visits.
+        /// </summary>
+        [Test]
+        public async Task Transform_WhenTheEditIntroducesAnEnum_DoesNotWarnAboutEditsOutsideMethodBodies()
+        {
+            BindingFixture fixture = CreateFixture(
+                "IntroducedEnumDrift",
+                EditedSourceIntroducingAnEnum,
+                includeCompiledDependent: true);
+
+            TransformWorkerClientResult result = await RunTransformAfterIntroducingAsync(
+                fixture,
+                CompiledDependentSnapshotSource,
+                "Example.IntroducedChoice");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                CollectDriftWarnings(result),
+                Is.Empty,
+                "The reload applied the introduced enum, so nothing about it requires a compile.");
+        }
+
+        // The production two-step: one run plans the new type and reports the fingerprint the
+        // compile stamps into the artifact record, and the next run transforms the same file with
+        // that record in hand. Planning first is what makes the record acceptable.
+        private static async Task<TransformWorkerClientResult> RunTransformAfterIntroducingAsync(
+            BindingFixture fixture,
+            string snapshotSource,
+            string introducedMetadataName)
+        {
+            TransformWorkerClientResult planned = await TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: false,
+                    Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
+                    Array.Empty<string>()),
+                CancellationToken.None);
+            Assert.That(planned.Success, Is.True, planned.ErrorMessage);
+
+            TransformWorkerInputDto input = CreateInput(
+                fixture,
+                includeRetainedSource: false,
+                new[]
+                {
+                    CreateIntroducedArtifact(
+                        fixture,
+                        introducedMetadataName,
+                        FindFingerprint(planned, introducedMetadataName))
+                },
+                Array.Empty<string>(),
+                snapshotSource);
+            // The declaration is only ever removed by a transform run; planning reports it.
+            input.operation = null;
+            return await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+        }
+
+        // The record the reload writes after compiling the planned type into its own assembly:
+        // same owner file, same metadata name, and the fingerprint the planning run reported.
+        private static TransformWorkerIntroducedTypeArtifactDto CreateIntroducedArtifact(
+            BindingFixture fixture,
+            string metadataName,
+            string declarationFingerprint)
+        {
+            int separator = metadataName.LastIndexOf('.');
+            string artifactPath = Path.Combine(fixture.Directory, "IntroducedArtifact.dll");
+            CreateArtifactAssembly(
+                artifactPath,
+                "IntroducedArtifact",
+                metadataName.Substring(0, separator),
+                metadataName.Substring(separator + 1));
+            return new TransformWorkerIntroducedTypeArtifactDto
+            {
+                assemblyFullName = ReadAssemblyFullName(artifactPath),
+                referencePath = artifactPath,
+                types = new[]
+                {
+                    new TransformWorkerIntroducedTypeArtifactTypeDto
+                    {
+                        metadataName = metadataName,
+                        originalAssemblyName = fixture.TargetAssemblyName,
+                        originalAssemblyMvid = fixture.TargetAssemblyMvid,
+                        ownerProjectRelativePath = DependentProjectRelativePath,
+                        declarationFingerprint = declarationFingerprint
+                    }
+                }
+            };
+        }
+
+        private static List<string> CollectDriftWarnings(TransformWorkerClientResult result)
+        {
+            List<string> warnings = new List<string>();
+            foreach (TransformWorkerFileOutputDto file in result.Output.files)
+            {
+                foreach (string warning in file.declarationDriftWarnings ?? Array.Empty<string>())
+                {
+                    if (warning != null && warning.Contains("Edits outside method bodies"))
+                    {
+                        warnings.Add(warning);
+                    }
+                }
+            }
+
+            return warnings;
         }
 
         private static async Task AssertArtifactIsRejected(
@@ -560,7 +712,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return null;
         }
 
-        private static BindingFixture CreateFixture(string name, string dependentSource)
+        private static BindingFixture CreateFixture(
+            string name,
+            string dependentSource,
+            bool includeCompiledDependent = false)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string directory = Path.Combine(
@@ -578,11 +733,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 retainedSourcePath,
                 "namespace Example { public class Retained { public int Value; } }");
             string targetAssemblyPath = Path.Combine(directory, "BindingTarget.dll");
-            string targetAssemblyMvid = CreateArtifactAssembly(
-                targetAssemblyPath,
-                "BindingTarget",
-                "Example",
-                "Unrelated");
+            string targetAssemblyMvid = includeCompiledDependent
+                ? CreateTargetAssemblyWithCompiledDependent(targetAssemblyPath, "BindingTarget")
+                : CreateArtifactAssembly(
+                    targetAssemblyPath,
+                    "BindingTarget",
+                    "Example",
+                    "Unrelated");
             string retainedArtifactPath = Path.Combine(directory, "RetainedArtifact.dll");
             CreateRetainedArtifactAssembly(retainedArtifactPath, "RetainedArtifact");
             return new BindingFixture(
@@ -619,7 +776,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             BindingFixture fixture,
             bool includeRetainedSource,
             TransformWorkerIntroducedTypeArtifactDto[] artifacts,
-            string[] extraReferencePaths)
+            string[] extraReferencePaths,
+            string dependentSnapshotSource = null)
         {
             UnityEditor.Compilation.Assembly compilationAssembly = FindCompilationAssembly();
             List<TransformWorkerSourceDto> sources = new List<TransformWorkerSourceDto>
@@ -627,7 +785,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new TransformWorkerSourceDto
                 {
                     sourcePath = fixture.DependentSourcePath,
-                    projectRelativePath = "Assets/Dependent.cs"
+                    projectRelativePath = "Assets/Dependent.cs",
+                    // Without a snapshot the unit has no baseline, and the outside-method-body
+                    // drift check the introduced type has to survive never runs at all.
+                    snapshotSource = dependentSnapshotSource
                 }
             };
             if (includeRetainedSource)
@@ -690,6 +851,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CecilTypeAttributes.Public | CecilTypeAttributes.Class,
                     assembly.MainModule.TypeSystem.Object);
                 assembly.MainModule.Types.Add(type);
+                assembly.Write(path);
+            }
+
+            using (ModuleDefinition module = ModuleDefinition.ReadModule(path))
+            {
+                return module.Mvid.ToString();
+            }
+        }
+
+        // A target assembly that already holds the edited file's type, so the file reads as
+        // compiled and the only new type is the one the edit introduces.
+        private static string CreateTargetAssemblyWithCompiledDependent(string path, string assemblyName)
+        {
+            AssemblyNameDefinition assemblyNameDefinition = new AssemblyNameDefinition(
+                assemblyName,
+                new Version(1, 0, 0, 0));
+            using (AssemblyDefinition assembly = AssemblyDefinition.CreateAssembly(
+                assemblyNameDefinition,
+                assemblyName,
+                ModuleKind.Dll))
+            {
+                TypeDefinition dependentType = new TypeDefinition(
+                    "Example",
+                    "Dependent",
+                    CecilTypeAttributes.Public | CecilTypeAttributes.Class,
+                    assembly.MainModule.TypeSystem.Object);
+                MethodDefinition valueMethod = new MethodDefinition(
+                    "Value",
+                    Mono.Cecil.MethodAttributes.Public | Mono.Cecil.MethodAttributes.HideBySig,
+                    assembly.MainModule.TypeSystem.Int32);
+                Mono.Cecil.Cil.ILProcessor il = valueMethod.Body.GetILProcessor();
+                il.Append(il.Create(Mono.Cecil.Cil.OpCodes.Ldc_I4_0));
+                il.Append(il.Create(Mono.Cecil.Cil.OpCodes.Ret));
+                dependentType.Methods.Add(valueMethod);
+                assembly.MainModule.Types.Add(dependentType);
                 assembly.Write(path);
             }
 

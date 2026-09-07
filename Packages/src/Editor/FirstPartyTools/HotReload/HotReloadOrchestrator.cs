@@ -36,11 +36,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(files.Count > 0, "files must not be empty.");
 
             string correlationId = VibeLogger.GenerateCorrelationId();
-            HotReloadRunAccumulator run = new HotReloadRunAccumulator();
 
             // CompilationPipeline / Application.dataPath require the Unity main thread, and the
             // groups cannot be planned before every file knows which assembly it compiles into.
             await MainThreadSwitcher.SwitchToMainThread(ct);
+            // Why after the switch: the accumulator has to read the Auto Refresh hold flag out of
+            // SessionState, which is a main-thread API.
+            HotReloadRunAccumulator run =
+                new HotReloadRunAccumulator(HotReloadAutoRefreshHold.IsHeld);
             HotReloadFileProcessResult[] resultSlots = new HotReloadFileProcessResult[files.Count];
             string[] resultPaths = new string[files.Count];
             HotReloadGroupFile[] groupFiles = new HotReloadGroupFile[files.Count];
@@ -432,6 +435,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (ShouldDescribeSiblingAsReapplied(groupResults[position]))
                 {
                     reappliedPaths.Add(path);
+                }
+                else if (groupResults[position].Outcomes.Count == 0)
+                {
+                    // A run stopped before it applied anything wrote no row for this file, so
+                    // the failed-rebind sentence would send the reader looking for rows that
+                    // were never written.
+                    groupResults[0].Warnings.Add(
+                        string.Format(
+                            HotReloadConstants.ActiveSiblingRebindSkippedWarningFormat,
+                            path));
                 }
                 else
                 {

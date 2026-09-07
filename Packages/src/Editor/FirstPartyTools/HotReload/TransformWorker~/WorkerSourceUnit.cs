@@ -74,6 +74,12 @@ internal sealed class WorkerSourceUnit
     public List<WorkerIntroducedTypeReuse> IntroducedTypeReuses { get; } =
         new List<WorkerIntroducedTypeReuse>();
 
+    // Metadata names of the top-level declarations in this file that a verified artifact record
+    // already serves. The drift check reads the unmodified edited root, where such a declaration
+    // is still present even though the reload did apply it, so it needs this list to tell an
+    // introduced type from an edit that really requires a compile.
+    public List<string> RetainedIntroducedTypeMetadataNames { get; } = new List<string>();
+
     public CompiledMemberKindChangeWarnings.SyntaxKeys KindChangeSyntaxKeys { get; set; }
 
     public List<TypeEmitState> TypeEmitStates { get; set; } = new List<TypeEmitState>();

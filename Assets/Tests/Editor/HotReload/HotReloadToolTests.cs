@@ -967,7 +967,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new List<string>(),
                 patchedTotal: 1,
                 activePatchTotal: 1,
-                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(true, true, false));
+                autoRefreshHold: new HotReloadAutoRefreshHoldSyncResult(true, true, false),
+                autoRefreshHoldNewlyArmed: true);
 
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 

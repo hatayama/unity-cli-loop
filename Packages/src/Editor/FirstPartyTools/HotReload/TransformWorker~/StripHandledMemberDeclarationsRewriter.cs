@@ -75,6 +75,19 @@ internal sealed class StripHandledMemberDeclarationsRewriter : CSharpSyntaxRewri
         return base.VisitInterfaceDeclaration(node);
     }
 
+    public override SyntaxNode VisitEnumDeclaration(EnumDeclarationSyntax node)
+    {
+        // Why its own check: ShouldStripType takes a TypeDeclarationSyntax, which an enum
+        // declaration is not, so an enum the reload already applied would stay in the tree and
+        // read as an edit outside a method body.
+        if (_typeSyntaxKeysToStrip.Contains(WorkerSyntaxIndex.BuildEnumMetadataNameFromSyntax(node)))
+        {
+            return null;
+        }
+
+        return base.VisitEnumDeclaration(node);
+    }
+
     private bool ShouldStripType(TypeDeclarationSyntax node)
     {
         return _typeSyntaxKeysToStrip.Contains(WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(node));
