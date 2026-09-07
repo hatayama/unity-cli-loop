@@ -631,6 +631,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 return "batch parseErrors=[" + string.Join(" | ", result.Output.parseErrors) + "]";
             }
 
+            // Why judge entries for the whole batch rather than per file: every source in the batch
+            // is its own snapshot, so the run must emit no entry at all. Attributing entries by
+            // sourceProjectRelativePath instead would let an entry carrying an unexpected path shape
+            // belong to no file and slip past the "identical source never false-patches" guard.
+            if (result.Output.entries != null && result.Output.entries.Length > 0)
+            {
+                return "batch entries=[" + FormatEntryMethodNames(result.Output.entries) + "]";
+            }
+
             if (result.Output.files == null || result.Output.files.Length != batch.Count)
             {
                 int fileCount = result.Output.files != null ? result.Output.files.Length : 0;
@@ -650,12 +659,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             if (file.parseErrors != null && file.parseErrors.Length > 0)
             {
                 fileFailures.Add("parseErrors=[" + string.Join(" | ", file.parseErrors) + "]");
-            }
-
-            TransformWorkerEntryDto[] entries = SelectEntriesForSource(output.entries, source);
-            if (entries.Length > 0)
-            {
-                fileFailures.Add("entries=[" + FormatEntryMethodNames(entries) + "]");
             }
 
             int unchangedCount = CountUnchangedMethodsForSource(output.unchangedMethods, source);
@@ -682,27 +685,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return fileFailures;
-        }
-
-        private static TransformWorkerEntryDto[] SelectEntriesForSource(
-            TransformWorkerEntryDto[] entries,
-            SelfSnapshotSource source)
-        {
-            if (entries == null || entries.Length == 0)
-            {
-                return Array.Empty<TransformWorkerEntryDto>();
-            }
-
-            List<TransformWorkerEntryDto> selected = new List<TransformWorkerEntryDto>();
-            foreach (TransformWorkerEntryDto entry in entries)
-            {
-                if (IsRowForSource(entry.sourceProjectRelativePath, source))
-                {
-                    selected.Add(entry);
-                }
-            }
-
-            return selected.ToArray();
         }
 
         private static int CountUnchangedMethodsForSource(
