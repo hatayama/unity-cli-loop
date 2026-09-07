@@ -210,6 +210,109 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a run whose only failure is a refused declaration says so in the message,
+        /// instead of reporting a method failure the response has no row for.
+        /// </summary>
+        [Test]
+        public async Task Build_OnlyATypeFailed_SaysTheDeclarationsWereRefused()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreatePreparationDependencies(
+                        HotReloadIntroducedTypePreparationResult.TypeFailures(
+                            new[] { CreateInjectedTypeFailure() }))))
+                {
+                    HotReloadResponse response = await RunAgainstTheHostAsync();
+
+                    Assert.That(
+                        response.Message,
+                        Does.StartWith(HotReloadConstants.IntroducedTypeFailureApplyMessage),
+                        "A refusal is the whole failure of this run.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a run that failed both a declaration and a method points at both sections,
+        /// so neither failure is left out of the message.
+        /// </summary>
+        [Test]
+        public async Task Build_ATypeAndAMethodFailed_PointsAtBothSections()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateTypeFailingApplyDependencies(failTheMethod: true)))
+                {
+                    HotReloadResponse response = await RunEditingOnlyABodyAsync();
+
+                    Assert.That(
+                        response.Message,
+                        Does.StartWith(HotReloadConstants.IntroducedTypeAndMethodFailureApplyMessage),
+                        "Both sections carry a failure of this run.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a refused declaration beside a patched method still reports the refusal as
+        /// the failure of the run, rather than the success message the methods alone would give.
+        /// </summary>
+        [Test]
+        public async Task Build_ATypeFailedBesideAPatchedMethod_StillReportsTheRefusal()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateTypeFailingApplyDependencies(failTheMethod: false)))
+                {
+                    HotReloadResponse response = await RunEditingOnlyABodyAsync();
+
+                    Assert.That(
+                        response.PatchedTotal,
+                        Is.EqualTo(1),
+                        "Precondition: the edited body has to be patched for real. " + response.Message);
+                    Assert.That(
+                        response.Message,
+                        Does.StartWith(HotReloadConstants.IntroducedTypeFailureApplyMessage),
+                        "A refused declaration is a failure whatever the methods did.");
+                    Assert.That(
+                        response.RecommendedNextAction,
+                        Is.EqualTo(HotReloadConstants.PartialApplyRecommendedNextAction),
+                        "A patched method is part of what was asked.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a run that both patched a method and introduced a type reports the type
+        /// rows alongside the method summary, instead of reporting only half of what it did.
+        /// </summary>
+        [Test]
+        public async Task Build_RunPatchesAMethodAndIntroducesAType_ReportsBothInTheMessage()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadResponse response = await RunIntroducingATypeAndEditingABodyAsync();
+
+                Assert.That(response.Success, Is.True, response.Message);
+                Assert.That(
+                    response.PatchedTotal,
+                    Is.EqualTo(1),
+                    "Precondition: the edited body has to be patched for real. " + response.Message);
+                Assert.That(
+                    response.Message,
+                    Does.Contain("IntroducedTypes=1"),
+                    "A message the methods decided must still point at the type rows.");
+            }
+        }
+
+        /// <summary>
         /// Verifies that a reload which introduces no type keeps both type fields off the wire, so
         /// the response shape of the vast majority of reloads does not change.
         /// </summary>
@@ -251,6 +354,50 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     EditTheScaledBody(InsertIntroducedType(File.ReadAllText(hostPath)))),
                 CancellationToken.None);
             return HotReloadApplyResponseBuilder.Build(result, null);
+        }
+
+        private static HotReloadIntroducedTypeOutcome CreateInjectedTypeFailure()
+        {
+            return HotReloadIntroducedTypeOutcome.Failed(
+                IntroducedTypeMetadataName,
+                "SomeAssembly",
+                "Assets/Example.cs",
+                InjectedTypeFailureReason);
+        }
+
+        // The production pipeline with the apply stage adding a refused declaration to the file's
+        // own buffer, which is the carrier the response is built from, so the refusal reaches the
+        // response beside whatever the methods did.
+        private static HotReloadGroupProcessorDependencies CreateTypeFailingApplyDependencies(
+            bool failTheMethod)
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                HotReloadIntroducedTypePreparation.PrepareAsync,
+                TransformWorkerClient.RunAsync,
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                (context, compile, preparedFiles) =>
+                {
+                    foreach (HotReloadGroupFile file in context.Files)
+                    {
+                        file.Sinks.IntroducedTypes.Add(CreateInjectedTypeFailure());
+                        if (!failTheMethod)
+                        {
+                            continue;
+                        }
+
+                        file.Sinks.Outcomes.Add(
+                            HotReloadMethodOutcome.Failed(
+                                "InjectedMethod",
+                                "The injected apply stage failed this method.",
+                                file.ProjectRelativePath));
+                    }
+
+                    return failTheMethod
+                        ? HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files)
+                        : HotReloadEntryApplier.ApplyPreparedEntries(context, compile, preparedFiles);
+                });
         }
 
         // A run that reaches the apply stage without introducing a type of its own.
