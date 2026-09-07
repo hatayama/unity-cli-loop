@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 )
 
 func responseWith(status int, headers map[string]string) *http.Response {
@@ -186,5 +188,68 @@ func TestRateLimitErrorMessageIncludesResetDate(t *testing.T) {
 	message := RateLimitError{ResetAt: time.Date(2026, 9, 3, 0, 15, 0, 0, time.Local)}.Error()
 	if !strings.Contains(message, "2026-09-03 00:15") {
 		t.Fatalf("expected dated reset time, got: %s", message)
+	}
+}
+
+// Verifies an anonymous exhaustion classifies into an envelope that keeps the token guidance and the reset detail.
+func TestRateLimitErrorToCLIErrorAnonymousExplainsToken(t *testing.T) {
+	resetAt := time.Date(2026, 9, 7, 1, 29, 0, 0, time.UTC)
+	rateLimit := RateLimitError{ResetAt: resetAt}
+
+	cliError := rateLimit.ToCLIError(clierrors.ErrorContext{Command: "update"})
+
+	if cliError.ErrorCode != clierrors.ErrorCodeInternalError {
+		t.Fatalf("error code mismatch: got %q", cliError.ErrorCode)
+	}
+	if cliError.Phase != clierrors.ErrorPhaseExecution {
+		t.Fatalf("phase mismatch: got %q", cliError.Phase)
+	}
+	if cliError.Command != "update" {
+		t.Fatalf("command mismatch: got %q", cliError.Command)
+	}
+	if !cliError.Retryable || !cliError.SafeToRetry {
+		t.Fatalf("a refused GET should be retryable and safe to retry: %+v", cliError)
+	}
+	if !strings.Contains(cliError.Message, "rate limit exhausted") {
+		t.Fatalf("message should name the rate limit, got: %s", cliError.Message)
+	}
+	expectedActions := rateLimit.NextActions()
+	if len(cliError.NextActions) != len(expectedActions) {
+		t.Fatalf("next actions mismatch: got %v want %v", cliError.NextActions, expectedActions)
+	}
+	for index, action := range expectedActions {
+		if cliError.NextActions[index] != action {
+			t.Fatalf("next action %d mismatch: got %q want %q", index, cliError.NextActions[index], action)
+		}
+	}
+	if len(cliError.NextActions) != 2 || !strings.Contains(cliError.NextActions[0], "GH_TOKEN") {
+		t.Fatalf("anonymous guidance should lead with the token hint: %v", cliError.NextActions)
+	}
+	if cliError.Details["GitHubRateLimitResetAt"] != resetAt.Format(time.RFC3339) {
+		t.Fatalf("reset detail mismatch: got %v", cliError.Details["GitHubRateLimitResetAt"])
+	}
+}
+
+// Verifies an authenticated exhaustion classifies without the token hint, since a token is already in use.
+func TestRateLimitErrorToCLIErrorAuthenticatedSkipsTokenHint(t *testing.T) {
+	cliError := RateLimitError{
+		ResetAt:       time.Date(2026, 9, 7, 1, 29, 0, 0, time.UTC),
+		Authenticated: true,
+	}.ToCLIError(clierrors.ErrorContext{Command: "update"})
+
+	if len(cliError.NextActions) != 1 {
+		t.Fatalf("expected a single next action, got %v", cliError.NextActions)
+	}
+	if strings.Contains(cliError.NextActions[0], "GH_TOKEN") {
+		t.Fatalf("authenticated guidance should not suggest a token: %v", cliError.NextActions)
+	}
+}
+
+// Verifies an unknown reset time leaves the reset detail out of the envelope instead of reporting a zero time.
+func TestRateLimitErrorToCLIErrorWithoutResetOmitsDetail(t *testing.T) {
+	cliError := RateLimitError{}.ToCLIError(clierrors.ErrorContext{Command: "update"})
+
+	if _, ok := cliError.Details["GitHubRateLimitResetAt"]; ok {
+		t.Fatalf("reset detail should be absent, got %v", cliError.Details)
 	}
 }

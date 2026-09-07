@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,9 +14,12 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hatayama/unity-cli-loop/common/clicore"
+	clierrors "github.com/hatayama/unity-cli-loop/common/errors"
 	"github.com/hatayama/unity-cli-loop/dispatcher/dispatchercontract"
+	"github.com/hatayama/unity-cli-loop/dispatcher/internal/githubapi"
 	"github.com/hatayama/unity-cli-loop/dispatcher/internal/update"
 )
 
@@ -400,6 +404,47 @@ func TestTryHandleUpdateRequestSkipsInstallerWhenResolvedTargetIsCurrent(t *test
 	expected := "uloop dispatcher is already up to date (" + dispatcherVersion + ")."
 	if !strings.Contains(stdout.String(), expected) {
 		t.Fatalf("update output mismatch: %s", stdout.String())
+	}
+}
+
+func TestTryHandleUpdateRequestExplainsRateLimit(t *testing.T) {
+	// Verifies a rate-limited release lookup reports the token and reset-time guidance instead of generic advice.
+	previousRunner := updateRunCommand
+	previousResolver := resolveUpdateTargetVersionFunc
+	previousExecutablePath := resolveUpdateExecutablePathFunc
+	defer func() {
+		updateRunCommand = previousRunner
+		resolveUpdateTargetVersionFunc = previousResolver
+		resolveUpdateExecutablePathFunc = previousExecutablePath
+	}()
+	updateRunCommand = func(context.Context, update.Command, io.Writer, io.Writer) error {
+		t.Fatal("updateRunCommand must not run when the release lookup failed")
+		return nil
+	}
+	resetAt := time.Date(2026, 9, 7, 1, 29, 0, 0, time.UTC)
+	resolveUpdateTargetVersionFunc = func(_ context.Context, _ update.Options) (update.Options, error) {
+		return update.Options{}, fmt.Errorf("list releases: %w", githubapi.RateLimitError{ResetAt: resetAt})
+	}
+	resolveUpdateExecutablePathFunc = func() (string, error) {
+		return "/tmp/uloop", nil
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code := tryHandleUpdateRequest(context.Background(), []string{clicore.UpdateCommandName}, &stdout, &stderr)
+
+	if !handled || code != 1 {
+		t.Fatalf("update result mismatch: handled=%t code=%d stderr=%s", handled, code, stderr.String())
+	}
+	var envelope clierrors.CLIErrorEnvelope
+	if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+		t.Fatalf("could not decode error envelope: %v (stderr=%s)", err, stderr.String())
+	}
+	if len(envelope.Error.NextActions) == 0 || !strings.Contains(envelope.Error.NextActions[0], "GH_TOKEN") {
+		t.Fatalf("expected token guidance, got %v", envelope.Error.NextActions)
+	}
+	if envelope.Error.Details["GitHubRateLimitResetAt"] != resetAt.Format(time.RFC3339) {
+		t.Fatalf("reset detail mismatch: got %v", envelope.Error.Details["GitHubRateLimitResetAt"])
 	}
 }
 
