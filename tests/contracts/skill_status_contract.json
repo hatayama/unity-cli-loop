@@ -1,5 +1,5 @@
 {
-  "comment": "Defines which files inside an installed skill directory take part in the installed-vs-source comparison, and the resulting status. Files in subdirectories are always compared; at the skill directory root only Markdown files are compared, so metadata files placed there by other tools never make an up-to-date skill report as outdated. SKILL.md is always compared. Both the Go dispatcher (target mode) and the Unity Editor derive the same status from these cases. Directory layout is out of scope: each side asks its own layout function where the installed skill lives.",
+  "comment": "Defines which files inside an installed skill directory take part in the installed-vs-source comparison, and the resulting status. Files in subdirectories are always compared, except for the names excluded everywhere (.meta, .DS_Store, .gitkeep); at the skill directory root only Markdown files are compared, matched case-insensitively, so metadata files placed there by other tools never make an up-to-date skill report as outdated. SKILL.md is always compared. Content is compared after line-ending normalization, so a CRLF copy of an LF source is not outdated. Both the Go dispatcher (target mode) and the Unity Editor derive the same status from these cases. Directory layout is out of scope: each side asks its own layout function where the installed skill lives.",
   "cases": [
     {
       "id": "identical-copy",
@@ -49,6 +49,19 @@
         "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
         "references/note.md": "note\n",
         "EXTRA.md": "extra\n"
+      },
+      "expected": "outdated"
+    },
+    {
+      "id": "extra-root-level-markdown-file-with-uppercase-extension-is-outdated",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "installed": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n",
+        "EXTRA.MD": "extra\n"
       },
       "expected": "outdated"
     },
@@ -124,6 +137,18 @@
         "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
         "references/note.md": "note\n",
         "references/.gitkeep": ""
+      },
+      "expected": "installed"
+    },
+    {
+      "id": "crlf-line-endings-are-equivalent",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "installed": {
+        "SKILL.md": "---\r\nname: uloop-sample\r\n---\r\n\r\n# sample\r\n",
+        "references/note.md": "note\r\n"
       },
       "expected": "installed"
     }
