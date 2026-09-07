@@ -92,6 +92,181 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a run whose only change is a new type says so, instead of reporting the
+        /// unchanged methods of the file as "nothing to patch": the reload did change something.
+        /// </summary>
+        [Test]
+        public async Task Build_RunIntroducesATypeBesideUnchangedMethods_ReportsTheTypeInTheMessage()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadResponse response = await RunIntroducingOnlyATypeAsync();
+
+                Assert.That(
+                    response.UnchangedTotal,
+                    Is.GreaterThan(0),
+                    "Precondition: the owner must hold methods this run left unchanged.");
+                Assert.That(response.Message, Does.Contain("introduced 1 type"));
+                Assert.That(response.Message, Does.Not.Contain("nothing to patch"));
+                Assert.That(response.Message, Does.Not.Contain("nothing was changed"));
+                Assert.That(
+                    response.RecommendedNextAction,
+                    Is.Empty,
+                    "A successful reload recommends nothing, and introducing a type is a success.");
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a reload which only binds types this domain already holds does not claim
+        /// to have introduced them.
+        /// </summary>
+        [Test]
+        public async Task Build_RunOnlyBindsTypesTheDomainHolds_SaysItBoundThemInsteadOfIntroducing()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                await RunIntroducingOnlyATypeAsync();
+                HotReloadResponse second = await RunIntroducingOnlyATypeAsync();
+
+                Assert.That(
+                    second.IntroducedTypes.Count,
+                    Is.EqualTo(1),
+                    "Precondition: the second run had to bind the active type. "
+                        + second.Message);
+                Assert.That(second.IntroducedTypes[0].Kind, Is.EqualTo("AlreadyActive"));
+                Assert.That(second.Message, Does.Contain("bound 1 introduced type"));
+                Assert.That(
+                    second.Message,
+                    Does.Not.Contain("introduced 1 type"),
+                    "A type the domain already holds was not introduced by this run.");
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a method failure after the types became active is recommended as a
+        /// partial apply, because the types stay loaded whatever the methods did.
+        /// </summary>
+        [Test]
+        public async Task Build_MethodFailsAfterTheTypesBecameActive_RecommendsAPartialApply()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateFailingApplyDependencies()))
+                {
+                    HotReloadResponse response = await RunIntroducingATypeAndEditingABodyAsync();
+
+                    Assert.That(response.Success, Is.False);
+                    Assert.That(
+                        response.PatchedTotal,
+                        Is.EqualTo(0),
+                        "Precondition: no method was patched, which is what makes the type count decide.");
+                    Assert.That(
+                        response.IntroducedTypes.Count,
+                        Is.EqualTo(1),
+                        "Precondition: the commit boundary had to activate the type. " + response.Message);
+                    Assert.That(
+                        response.RecommendedNextAction,
+                        Is.EqualTo(HotReloadConstants.PartialApplyRecommendedNextAction),
+                        "A run that left types active applied part of what was asked.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a reload which introduces no type keeps both type fields off the wire, so
+        /// the response shape of the vast majority of reloads does not change.
+        /// </summary>
+        [Test]
+        public async Task Build_RunIntroducesNoType_OmitsBothTypeFieldsFromTheWire()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                string callerPath = FixturePath(CallerFileName);
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { callerPath },
+                    HotReloadTestSourceWriter.WriteEditedSource(
+                        "IntroducedTypeAbsentCaller.cs",
+                        EditTheCallerBody(File.ReadAllText(callerPath))),
+                    CancellationToken.None);
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(result, null);
+
+                Assert.That(
+                    response.ShouldSerializeIntroducedTypes(),
+                    Is.False,
+                    "A reload with no type row must not serialize an empty list.");
+                Assert.That(
+                    response.ShouldSerializeActiveIntroducedTypeTotal(),
+                    Is.False,
+                    "A domain holding no introduced type must not serialize a zero total.");
+            }
+        }
+
+        // A run the apply stage is reached by: the type gives the commit boundary something to
+        // activate, and the edited body gives the group an entry to resolve.
+        private static async Task<HotReloadResponse> RunIntroducingATypeAndEditingABodyAsync()
+        {
+            string hostPath = FixturePath(HostFileName);
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeAndBodyHost.cs",
+                    EditTheScaledBody(InsertIntroducedType(File.ReadAllText(hostPath)))),
+                CancellationToken.None);
+            return HotReloadApplyResponseBuilder.Build(result, null);
+        }
+
+        private static string EditTheScaledBody(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(ScaledBodyAnchor), "Precondition: scaled body anchor must exist.");
+            return hostSource.Replace(ScaledBodyAnchor, "return factor * 4;", StringComparison.Ordinal);
+        }
+
+        // The production pipeline with only the apply stage replaced, so the commit boundary runs
+        // for real and the failure lands after the types became active.
+        private static HotReloadGroupProcessorDependencies CreateFailingApplyDependencies()
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                HotReloadIntroducedTypePreparation.PrepareAsync,
+                TransformWorkerClient.RunAsync,
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                (context, compile, preparedFiles) =>
+                {
+                    foreach (HotReloadGroupFile file in context.Files)
+                    {
+                        file.Sinks.Outcomes.Add(
+                            HotReloadMethodOutcome.Failed(
+                                "InjectedMethod",
+                                "The injected apply stage failed this method.",
+                                file.ProjectRelativePath));
+                    }
+
+                    return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                });
+        }
+
+        private static string EditTheCallerBody(string callerSource)
+        {
+            Assert.That(callerSource, Does.Contain(CallerBodyAnchor), "Precondition: caller body anchor must exist.");
+            return callerSource.Replace(
+                CallerBodyAnchor,
+                "return host.Value() + 3;",
+                StringComparison.Ordinal);
+        }
+
+        private const string CallerFileName = "HotReloadCrossFileAddedMemberCaller.cs";
+
+        private const string CallerBodyAnchor = "return host.Value();";
+
+        private const string ScaledBodyAnchor = "return factor;";
+
+        /// <summary>
         /// Verifies that a declaration this stage cannot introduce is reported as a warning of the
         /// file that declares it and leaves the run successful, because the declaration stays in
         /// the source and only a compile can make it available.

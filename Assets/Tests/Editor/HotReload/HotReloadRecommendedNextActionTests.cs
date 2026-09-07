@@ -19,7 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string action = HotReloadRecommendedNextAction.Resolve(
                 hasFailure: true,
                 patchedTotal: 1,
-                addedCount: 0);
+                addedCount: 0,
+                committedTypeCount: 0);
 
             Assert.That(
                 action,
@@ -36,7 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string action = HotReloadRecommendedNextAction.Resolve(
                 hasFailure: true,
                 patchedTotal: 0,
-                addedCount: 1);
+                addedCount: 1,
+                committedTypeCount: 0);
 
             Assert.That(
                 action,
@@ -53,11 +55,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string action = HotReloadRecommendedNextAction.Resolve(
                 hasFailure: true,
                 patchedTotal: 0,
-                addedCount: 0);
+                addedCount: 0,
+                committedTypeCount: 0);
 
             Assert.That(
                 action,
                 Is.EqualTo("Fix the failed methods and rerun, or run 'uloop compile'."));
+        }
+
+        /// <summary>
+        /// What: a Failed run whose only applied change is an active introduced type is still
+        /// treated as a partial apply, because that type stays loaded until a Domain Reload.
+        /// </summary>
+        [Test]
+        public void Resolve_WhenFailureWithCommittedTypesOnly_ReturnsPartialApplyAction()
+        {
+            string action = HotReloadRecommendedNextAction.Resolve(
+                hasFailure: true,
+                patchedTotal: 0,
+                addedCount: 0,
+                committedTypeCount: 1);
+
+            Assert.That(
+                action,
+                Is.EqualTo(
+                    "Partially applied. Fix the failed methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches."));
         }
 
         /// <summary>
@@ -69,7 +91,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string action = HotReloadRecommendedNextAction.Resolve(
                 hasFailure: false,
                 patchedTotal: 1,
-                addedCount: 1);
+                addedCount: 1,
+                committedTypeCount: 0);
 
             Assert.That(action, Is.EqualTo(string.Empty));
         }

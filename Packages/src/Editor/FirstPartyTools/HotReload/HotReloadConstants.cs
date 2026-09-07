@@ -252,6 +252,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Source is unchanged since the last applied hot reload; the existing patch stays active "
             + "and keeps its InvocationCount. Edit and reload again to apply new changes.";
 
+        // Format: how many types this run introduced.
+        public const string IntroducedTypesOnlyApplyMessageFormat =
+            "Hot reload introduced {0} type(s); no method body needed patching.";
+
+        // Format: how many declarations this run bound from an assembly it already retained.
+        public const string AlreadyActiveIntroducedTypesOnlyApplyMessageFormat =
+            "Hot reload bound {0} introduced type(s) this domain already holds; no method body "
+            + "needed patching.";
+
+        // Format: how many type rows the response carries. Appended to a message that already
+        // reports what the methods did.
+        public const string IntroducedTypesApplyMessageSuffixFormat = " IntroducedTypes={0}.";
+
+        public const string IntroducedTypeFailureApplyMessage =
+            "Hot reload refused one or more type declarations. See IntroducedTypes.";
+
+        public const string IntroducedTypeAndMethodFailureApplyMessage =
+            "Hot reload finished with one or more Failed outcomes. See Methods and IntroducedTypes.";
+
         public const string AlreadyActiveIntroducedTypeReason =
             "This declaration is bound from an assembly an earlier hot reload retained, so this "
             + "reload introduced nothing for it. It stays loaded until the next Domain Reload.";
