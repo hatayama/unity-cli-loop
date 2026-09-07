@@ -22,7 +22,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     public class TransformWorkerClientTests
     {
         private const string TestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
-        private const int SelfSnapshotConcurrency = 4;
+        private const int SelfSnapshotBatchSize = 16;
         private const string ExpectedListEnumeratorFullName =
             "System.Collections.Generic.List`1/Enumerator<System.Int32>";
 
@@ -498,10 +498,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: a self-snapshot of every .cs file under Assets/Tests/Editor/HotReload/ yields
-        /// Success, empty parseErrors/entries/declarationDriftWarnings, and at least one
-        /// unchanged or skipped method (proves the worker recognized the file), except
-        /// global-using-only files and the reviewed method-less allow-list. Permanent guard
-        /// that identical source never false-patches after the unannotated-baseline fix.
+        /// Success, empty parseErrors/entries/declarationDriftWarnings, no duplicate-key baseline
+        /// fallback, and at least one unchanged or skipped method (proves the worker recognized the
+        /// file), except global-using-only files and the reviewed method-less allow-list. Permanent
+        /// guard that identical source never false-patches after the unannotated-baseline fix.
         /// </summary>
         [Test]
         public async Task Run_WithSelfSnapshotOnHotReloadTestSources_TreatsAllMethodsUnchanged()
@@ -516,33 +516,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(sourcePaths.Length, Is.GreaterThan(0), "Expected at least one HotReload test .cs file.");
 
             // Why warm up first: EnsureWorkerAsync compiles into a shared cache directory on a
-            // miss, and concurrent first-time misses would race on the same output files.
+            // miss, and a first-time miss inside the measured loop would charge the first batch.
             TransformWorkerBootstrapResult bootstrap =
                 await TransformWorkerBootstrap.EnsureWorkerAsync(CancellationToken.None);
             Assert.That(bootstrap.Success, Is.True, "Worker bootstrap failed: " + bootstrap.ErrorMessage);
 
-            // Why bounded concurrency: each file costs one ~0.4 s worker process spawn, and with
-            // ~100 files the sequential version alone took 50 s of the suite. Four in flight keeps
-            // the wall time near 1/4 without starving the Editor main thread, which every run
-            // still hops through for CompilationPipeline and compiler-path lookups.
-            using SemaphoreSlim slots = new SemaphoreSlim(SelfSnapshotConcurrency, SelfSnapshotConcurrency);
-            List<Task<string>> fileChecks = new List<Task<string>>(sourcePaths.Length);
-            foreach (string sourcePath in sourcePaths)
-            {
-                fileChecks.Add(CheckSelfSnapshotTreatsFileUnchangedAsync(Path.GetFullPath(sourcePath), slots));
-            }
+            List<SelfSnapshotSource> sources = CollectSelfSnapshotSources(sourcePaths);
 
-            string[] fileOutcomes = await Task.WhenAll(fileChecks);
-
-            // Why keep source order: the report must list files the same way the sequential loop
-            // did, independent of which worker process happened to finish first.
+            // Why batch, and why sequentially: the worker input carries many sources at once as long
+            // as they share one compiled assembly, which every HotReload test source does. The
+            // resident worker host serializes requests, so only cutting the request count speeds the
+            // run up; running the batches in order also keeps the failure report easy to read.
             List<string> failures = new List<string>();
-            foreach (string fileOutcome in fileOutcomes)
+            for (int start = 0; start < sources.Count; start += SelfSnapshotBatchSize)
             {
-                if (fileOutcome != null)
-                {
-                    failures.Add(fileOutcome);
-                }
+                int batchLength = Math.Min(SelfSnapshotBatchSize, sources.Count - start);
+                List<SelfSnapshotSource> batch = sources.GetRange(start, batchLength);
+                TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(
+                    BuildInputForSelfSnapshotSources(batch),
+                    CancellationToken.None);
+                failures.AddRange(DescribeSelfSnapshotBatchFailures(batch, result));
             }
 
             Assert.That(
@@ -553,97 +546,236 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// Runs the worker on one HotReload test source with itself as the snapshot and returns
-        /// the per-file failure line ("path -> reason; reason"), or null when the file passes or
-        /// has no type declaration.
+        /// Reads every candidate self-snapshot source in directory order, dropping the files that
+        /// declare no type. Why drop them: a global-using-only file has no methods to mark
+        /// unchanged, so the worker correctly emits empty entries/skipped/unchanged for it.
         /// </summary>
-        private static async Task<string> CheckSelfSnapshotTreatsFileUnchangedAsync(
-            string fullPath,
-            SemaphoreSlim slots)
+        private static List<SelfSnapshotSource> CollectSelfSnapshotSources(string[] sourcePaths)
         {
-            string projectRelativePath =
-                "Assets/Tests/Editor/HotReload/" + Path.GetFileName(fullPath);
-            string onDisk = File.ReadAllText(fullPath);
-            // Why skip: a global-using-only file has no methods to mark unchanged; the worker
-            // correctly emits empty entries/skipped/unchanged for it.
-            if (!ContainsTypeDeclaration(onDisk))
+            List<SelfSnapshotSource> sources = new List<SelfSnapshotSource>(sourcePaths.Length);
+            foreach (string sourcePath in sourcePaths)
             {
-                return null;
-            }
+                string fullPath = Path.GetFullPath(sourcePath);
+                string onDisk = File.ReadAllText(fullPath);
+                if (!ContainsTypeDeclaration(onDisk))
+                {
+                    continue;
+                }
 
-            bool isMethodlessTypeAllowListed =
-                IsSelfSnapshotMethodlessTypeAllowListed(Path.GetFileName(fullPath));
-
-            await slots.WaitAsync();
-            TransformWorkerClientResult result;
-            try
-            {
-                result = await RunWorkerOnSourceAsync(
+                string fileName = Path.GetFileName(fullPath);
+                sources.Add(new SelfSnapshotSource(
                     fullPath,
-                    projectRelativePath,
-                    snapshotSource: onDisk);
-            }
-            finally
-            {
-                slots.Release();
+                    "Assets/Tests/Editor/HotReload/" + fileName,
+                    onDisk,
+                    IsSelfSnapshotMethodlessTypeAllowListed(fileName)));
             }
 
-            List<string> fileFailures = DescribeSelfSnapshotFailures(result, isMethodlessTypeAllowListed);
-            if (fileFailures.Count == 0)
-            {
-                return null;
-            }
-
-            return projectRelativePath + " -> " + string.Join("; ", fileFailures);
+            return sources;
         }
 
-        private static List<string> DescribeSelfSnapshotFailures(
-            TransformWorkerClientResult result,
-            bool isMethodlessTypeAllowListed)
+        /// <summary>
+        /// Turns one batch result into per-file failure lines ("path -> reason; reason") in source
+        /// order. A failure that cannot be attributed to a single source fails every file in the
+        /// batch, so a broken run is never reported as a clean one.
+        /// </summary>
+        private static List<string> DescribeSelfSnapshotBatchFailures(
+            List<SelfSnapshotSource> batch,
+            TransformWorkerClientResult result)
         {
-            List<string> fileFailures = new List<string>();
+            List<string> failures = new List<string>();
+            string batchFailure = DescribeSelfSnapshotBatchLevelFailure(batch, result);
+            if (batchFailure != null)
+            {
+                foreach (SelfSnapshotSource source in batch)
+                {
+                    failures.Add(source.ProjectRelativePath + " -> " + batchFailure);
+                }
+
+                return failures;
+            }
+
+            for (int index = 0; index < batch.Count; index++)
+            {
+                List<string> fileFailures =
+                    DescribeSelfSnapshotFailures(batch[index], result.Output, index);
+                if (fileFailures.Count == 0)
+                {
+                    continue;
+                }
+
+                failures.Add(batch[index].ProjectRelativePath + " -> " + string.Join("; ", fileFailures));
+            }
+
+            return failures;
+        }
+
+        /// <summary>
+        /// Returns the reason a whole batch failed, or null when the result can be read per file.
+        /// </summary>
+        private static string DescribeSelfSnapshotBatchLevelFailure(
+            List<SelfSnapshotSource> batch,
+            TransformWorkerClientResult result)
+        {
             if (!result.Success)
             {
-                fileFailures.Add("Success=false: " + result.ErrorMessage);
+                return "batch Success=false: " + result.ErrorMessage;
             }
 
             if (result.Output == null)
             {
-                fileFailures.Add("Output is null");
-                return fileFailures;
+                return "batch Output is null";
             }
 
-            if (result.Output.files[0].parseErrors != null && result.Output.files[0].parseErrors.Length > 0)
+            if (result.Output.parseErrors != null && result.Output.parseErrors.Length > 0)
             {
-                fileFailures.Add(
-                    "parseErrors=[" + string.Join(" | ", result.Output.files[0].parseErrors) + "]");
+                return "batch parseErrors=[" + string.Join(" | ", result.Output.parseErrors) + "]";
             }
 
-            if (result.Output.entries != null && result.Output.entries.Length > 0)
+            if (result.Output.files == null || result.Output.files.Length != batch.Count)
             {
-                fileFailures.Add(
-                    "entries=[" + FormatEntryMethodNames(result.Output.entries) + "]");
+                int fileCount = result.Output.files != null ? result.Output.files.Length : 0;
+                return "batch files count mismatch (expected " + batch.Count + ", got " + fileCount + ")";
             }
 
-            int unchangedCount =
-                result.Output.unchangedMethods != null ? result.Output.unchangedMethods.Length : 0;
-            int skippedCount = result.Output.skipped != null ? result.Output.skipped.Length : 0;
-            if (!isMethodlessTypeAllowListed && unchangedCount + skippedCount < 1)
+            return null;
+        }
+
+        private static List<string> DescribeSelfSnapshotFailures(
+            SelfSnapshotSource source,
+            TransformWorkerOutputDto output,
+            int fileIndex)
+        {
+            List<string> fileFailures = new List<string>();
+            TransformWorkerFileOutputDto file = output.files[fileIndex];
+            if (file.parseErrors != null && file.parseErrors.Length > 0)
+            {
+                fileFailures.Add("parseErrors=[" + string.Join(" | ", file.parseErrors) + "]");
+            }
+
+            TransformWorkerEntryDto[] entries = SelectEntriesForSource(output.entries, source);
+            if (entries.Length > 0)
+            {
+                fileFailures.Add("entries=[" + FormatEntryMethodNames(entries) + "]");
+            }
+
+            int unchangedCount = CountUnchangedMethodsForSource(output.unchangedMethods, source);
+            int skippedCount = CountSkippedForSource(output.skipped, source);
+            if (!source.IsMethodlessTypeAllowListed && unchangedCount + skippedCount < 1)
             {
                 fileFailures.Add(
                     "unchangedMethods+skipped < 1 (unchanged="
                     + unchangedCount + ", skipped=" + skippedCount + ")");
             }
 
-            if (result.Output.files[0].declarationDriftWarnings != null
-                && result.Output.files[0].declarationDriftWarnings.Length > 0)
+            if (file.declarationDriftWarnings != null && file.declarationDriftWarnings.Length > 0)
             {
                 fileFailures.Add(
                     "declarationDriftWarnings=["
-                    + string.Join(" | ", result.Output.files[0].declarationDriftWarnings) + "]");
+                    + string.Join(" | ", file.declarationDriftWarnings) + "]");
+            }
+
+            // Why check this here: a duplicate syntax-method key silently disables the baseline and
+            // turns the run into patch-all, which would make an "entries empty" pass meaningless.
+            if (file.baselineDisabledByDuplicateKeys)
+            {
+                fileFailures.Add("baselineDisabledByDuplicateKeys=true");
             }
 
             return fileFailures;
+        }
+
+        private static TransformWorkerEntryDto[] SelectEntriesForSource(
+            TransformWorkerEntryDto[] entries,
+            SelfSnapshotSource source)
+        {
+            if (entries == null || entries.Length == 0)
+            {
+                return Array.Empty<TransformWorkerEntryDto>();
+            }
+
+            List<TransformWorkerEntryDto> selected = new List<TransformWorkerEntryDto>();
+            foreach (TransformWorkerEntryDto entry in entries)
+            {
+                if (IsRowForSource(entry.sourceProjectRelativePath, source))
+                {
+                    selected.Add(entry);
+                }
+            }
+
+            return selected.ToArray();
+        }
+
+        private static int CountUnchangedMethodsForSource(
+            TransformWorkerUnchangedMethodDto[] unchangedMethods,
+            SelfSnapshotSource source)
+        {
+            if (unchangedMethods == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            foreach (TransformWorkerUnchangedMethodDto unchanged in unchangedMethods)
+            {
+                if (IsRowForSource(unchanged.sourceProjectRelativePath, source))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static int CountSkippedForSource(
+            TransformWorkerSkippedDto[] skipped,
+            SelfSnapshotSource source)
+        {
+            if (skipped == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            foreach (TransformWorkerSkippedDto skippedMethod in skipped)
+            {
+                if (IsRowForSource(skippedMethod.sourceProjectRelativePath, source))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static bool IsRowForSource(string sourceProjectRelativePath, SelfSnapshotSource source)
+        {
+            return string.Equals(
+                sourceProjectRelativePath,
+                source.ProjectRelativePath,
+                StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// One HotReload test source checked against itself as its own snapshot.
+        /// </summary>
+        private sealed class SelfSnapshotSource
+        {
+            internal SelfSnapshotSource(
+                string fullPath,
+                string projectRelativePath,
+                string onDiskText,
+                bool isMethodlessTypeAllowListed)
+            {
+                FullPath = fullPath;
+                ProjectRelativePath = projectRelativePath;
+                OnDiskText = onDiskText;
+                IsMethodlessTypeAllowListed = isMethodlessTypeAllowListed;
+            }
+
+            internal string FullPath { get; }
+            internal string ProjectRelativePath { get; }
+            internal string OnDiskText { get; }
+            internal bool IsMethodlessTypeAllowListed { get; }
         }
 
         /// <summary>
@@ -2466,6 +2598,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 changedSiblingSourcePaths = changedSiblingSourcePaths
             };
 
+            return input;
+        }
+
+        /// <summary>
+        /// Builds one worker input covering a whole batch of self-snapshot sources. Valid because
+        /// every HotReload test source compiles into the same test assembly, which is what the
+        /// target dll, references and defines are resolved from.
+        /// </summary>
+        private static TransformWorkerInputDto BuildInputForSelfSnapshotSources(
+            List<SelfSnapshotSource> batchSources)
+        {
+            TransformWorkerInputDto input = BuildInputForSource(
+                batchSources[0].FullPath,
+                batchSources[0].ProjectRelativePath,
+                batchSources[0].OnDiskText);
+
+            TransformWorkerSourceDto[] sources = new TransformWorkerSourceDto[batchSources.Count];
+            for (int index = 0; index < batchSources.Count; index++)
+            {
+                sources[index] = new TransformWorkerSourceDto
+                {
+                    sourcePath = batchSources[index].FullPath,
+                    projectRelativePath = batchSources[index].ProjectRelativePath,
+                    snapshotSource = batchSources[index].OnDiskText
+                };
+            }
+
+            input.sources = sources;
             return input;
         }
 
