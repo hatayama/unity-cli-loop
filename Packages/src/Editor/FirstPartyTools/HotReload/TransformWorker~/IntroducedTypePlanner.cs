@@ -42,29 +42,8 @@ internal static class IntroducedTypePlanner
                 continue;
             }
 
-            if (typeSymbol.ContainingType != null)
+            if (IsRefusedForNesting(unit, typeSymbol, declaration, targetAssembly))
             {
-                // Why silent when the outer type is not compiled either: that outer declaration
-                // is refused on its own, and its diagnostic already names this nested one as the
-                // reason. Reporting both turns a single refusal into two lines about one type.
-                if (CompiledMemberMatcher.FindCompiledType(typeSymbol.ContainingType, targetAssembly) == null)
-                {
-                    continue;
-                }
-
-                unit.IntroducedTypeDiagnostics.Add(
-                    "Nested type requires a compile: " + CecilTypeNames.ToMetadataName(typeSymbol));
-                continue;
-            }
-
-            // Nested declarations are excluded unconditionally, so an outer type that contains one
-            // has to be refused as well. Emitting it would either drop the nested implementation
-            // its members rely on or retain a type this stage cannot manage the lifetime of.
-            if (TryFindNestedDeclaration(declaration, out string nestedName))
-            {
-                unit.IntroducedTypeDiagnostics.Add(
-                    "Nested declaration inside an introduced type requires a compile: "
-                    + CecilTypeNames.ToMetadataName(typeSymbol) + "/" + nestedName);
                 continue;
             }
 
@@ -132,6 +111,44 @@ internal static class IntroducedTypePlanner
             unit.IntroducedTypeDiagnostics.Add(
                 "Delegate introduced type requires a compile: " + CecilTypeNames.ToMetadataName(delegateSymbol));
         }
+    }
+
+    // Whether nesting alone settles this declaration, either because it is nested in a type the
+    // assembly already holds or because it declares a nested type of its own. Both cases end the
+    // declaration's planning, so the caller only has to know that it was handled.
+    private static bool IsRefusedForNesting(
+        WorkerSourceUnit unit,
+        INamedTypeSymbol typeSymbol,
+        BaseTypeDeclarationSyntax declaration,
+        IAssemblySymbol targetAssembly)
+    {
+        if (typeSymbol.ContainingType != null)
+        {
+            // Why silent when the outer type is not compiled either: that outer declaration
+            // is refused on its own, and its diagnostic already names this nested one as the
+            // reason. Reporting both turns a single refusal into two lines about one type.
+            if (CompiledMemberMatcher.FindCompiledType(typeSymbol.ContainingType, targetAssembly) == null)
+            {
+                return true;
+            }
+
+            unit.IntroducedTypeDiagnostics.Add(
+                "Nested type requires a compile: " + CecilTypeNames.ToMetadataName(typeSymbol));
+            return true;
+        }
+
+        // Nested declarations are excluded unconditionally, so an outer type that contains one
+        // has to be refused as well. Emitting it would either drop the nested implementation
+        // its members rely on or retain a type this stage cannot manage the lifetime of.
+        if (TryFindNestedDeclaration(declaration, out string nestedName))
+        {
+            unit.IntroducedTypeDiagnostics.Add(
+                "Nested declaration inside an introduced type requires a compile: "
+                + CecilTypeNames.ToMetadataName(typeSymbol) + "/" + nestedName);
+            return true;
+        }
+
+        return false;
     }
 
     // Whether this domain already retains an assembly for the declaration. Introducing it again
