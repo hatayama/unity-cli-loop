@@ -31,7 +31,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadGroupFile firstFile = files[0];
             // Application.dataPath and the ledgers require the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            if (!TryAppendNewSourceMembershipFailure(files))
+            if (!HotReloadGroupProcessorDependencies.Current.ValidateNewSourceMembership(files))
             {
                 return BuildUnappliedResults(files);
             }

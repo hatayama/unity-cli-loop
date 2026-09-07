@@ -1957,6 +1957,74 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an unchanged re-request against an assembly that owns an introduced type still
+        /// enters group processing through the production entry instead of short-circuiting.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedSourceWithActiveIntroducedType_StillEntersGroupProcessing()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "UnchangedSourceWithActiveIntroducedType.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            int membershipValidations = 0;
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                ActivateIntroducedTypeForFixtureAssembly(fixturePath);
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    HotReloadGroupProcessorDependencies.Create(
+                        files =>
+                        {
+                            membershipValidations++;
+                            return HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(files);
+                        })))
+                {
+                    await HotReloadOrchestrator.RunAsync(
+                        new[] { fixturePath },
+                        editedPath,
+                        CancellationToken.None);
+                }
+            }
+
+            Assert.That(
+                membershipValidations,
+                Is.GreaterThanOrEqualTo(1),
+                "An assembly that owns an introduced type must reach group processing even when its source is unchanged.");
+        }
+
+        private static void ActivateIntroducedTypeForFixtureAssembly(string fixturePath)
+        {
+            string projectRelativePath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(fixturePath);
+            string assemblyName = Path.GetFileNameWithoutExtension(
+                UnityEditor.Compilation.CompilationPipeline.GetAssemblyNameFromScriptPath(projectRelativePath));
+            HotReloadIntroducedTypeDescriptor descriptor = new HotReloadIntroducedTypeDescriptor(
+                assemblyName,
+                "original-mvid",
+                "Example.Introduced",
+                projectRelativePath,
+                "fingerprint",
+                "public class Introduced { }");
+            HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
+                typeof(HotReloadOrchestratorTests).Assembly,
+                "artifact.dll",
+                "artifact.pdb",
+                new List<HotReloadIntroducedTypeDescriptor> { descriptor });
+            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
+            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+        }
+
+        /// <summary>
         /// What: reloading the same edited source a second time reports AlreadyActive and
         /// leaves the existing Harmony patch in place so InvocationCount is preserved.
         /// </summary>

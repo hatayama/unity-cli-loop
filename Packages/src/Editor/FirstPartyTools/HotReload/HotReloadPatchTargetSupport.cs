@@ -182,11 +182,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
             }
 
-            HotReloadUnchangedSourceDecision unchangedDecision = HotReloadAppliedSourceLifecycle.TryShortCircuitUnchangedAppliedSource(
-                workerSourcePath,
-                projectRelativePath,
-                assemblyResolvePath,
-                alreadyActiveOutcomes);
+            // Why the call is skipped rather than its result discarded: the short-circuit clears
+            // the applied-source ledger on its miss paths. A type this domain introduced lives in
+            // an artifact assembly whose owner declaration still has to be verified, so an
+            // unchanged source must reach that verification with its ledger entry intact.
+            HotReloadUnchangedSourceDecision unchangedDecision = HotReloadUnchangedSourceDecision.NotUnchanged;
+            if (!HotReloadIntroducedTypeHolder.Registry.HasActiveTypesForOriginalAssembly(assemblyName))
+            {
+                unchangedDecision = HotReloadAppliedSourceLifecycle.TryShortCircuitUnchangedAppliedSource(
+                    workerSourcePath,
+                    projectRelativePath,
+                    assemblyResolvePath,
+                    alreadyActiveOutcomes);
+            }
             HotReloadOrchestratorLog.LogHotReloadFileStart(projectRelativePath, unchangedDecision, correlationId);
             if (unchangedDecision == HotReloadUnchangedSourceDecision.ReapplyNonBaseline)
             {

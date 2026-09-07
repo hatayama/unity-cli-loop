@@ -17,6 +17,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Assets/Tests/Editor/HotReload/UncompiledNewScript.cs";
         private const string MissingPredefinedScriptPath =
             "Assets/Util/UncompiledNewPredefinedScript.cs";
+        private const string ExistingScriptPath =
+            "Assets/Tests/Editor/HotReload/HotReloadNewSourceMembershipTests.cs";
 
         private Func<HotReloadEditorStateSnapshot> _previousSnapshotProvider;
 
@@ -110,6 +112,83 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(projectRoot, Is.Not.Null.And.Not.Empty);
             Assert.That(unchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
             Assert.That(newSourceMembershipEvidence, Is.Not.Null);
+        }
+
+        /// <summary>
+        /// An assembly that still owns an introduced type keeps its applied-source ledger entry,
+        /// because the unchanged-source short-circuit is not called for it at all.
+        /// </summary>
+        [Test]
+        public void ResolvePatchTarget_WhenAssemblyOwnsAnActiveIntroducedType_KeepsTheLedgerEntry()
+        {
+            string existingScriptPath = ExistingScriptPath;
+            HotReloadAppliedSourceLedger.Clear(existingScriptPath);
+            HotReloadAppliedSourceLedger.Record(existingScriptPath, "stale-hash", true);
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                ActivateIntroducedTypeFor(existingScriptPath);
+
+                ResolveExistingScript("introduced-type-active");
+            }
+
+            Assert.That(HotReloadAppliedSourceLedger.TryGet(existingScriptPath), Is.Not.Null);
+            HotReloadAppliedSourceLedger.Clear(existingScriptPath);
+        }
+
+        /// <summary>
+        /// An assembly without an introduced type still runs the unchanged-source short-circuit,
+        /// which clears a ledger entry that no longer matches the file.
+        /// </summary>
+        [Test]
+        public void ResolvePatchTarget_WhenAssemblyOwnsNoIntroducedType_RunsTheShortCircuit()
+        {
+            string existingScriptPath = ExistingScriptPath;
+            HotReloadAppliedSourceLedger.Clear(existingScriptPath);
+            HotReloadAppliedSourceLedger.Record(existingScriptPath, "stale-hash", true);
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+
+                ResolveExistingScript("introduced-type-absent");
+            }
+
+            Assert.That(HotReloadAppliedSourceLedger.TryGet(existingScriptPath), Is.Null);
+        }
+
+        private static void ResolveExistingScript(string correlationId)
+        {
+            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
+                new HotReloadEditorStateSnapshot(false, false, false);
+            HotReloadPatchTargetSupport.ResolvePatchTarget(
+                ExistingScriptPath,
+                ExistingScriptPath,
+                new List<HotReloadMethodOutcome>(),
+                new List<string>(),
+                correlationId,
+                new List<HotReloadMethodOutcome>());
+        }
+
+        private static void ActivateIntroducedTypeFor(string projectRelativeScriptPath)
+        {
+            string assemblyName = System.IO.Path.GetFileNameWithoutExtension(
+                UnityEditor.Compilation.CompilationPipeline.GetAssemblyNameFromScriptPath(projectRelativeScriptPath));
+            HotReloadIntroducedTypeDescriptor descriptor = new HotReloadIntroducedTypeDescriptor(
+                assemblyName,
+                "original-mvid",
+                "Example.Introduced",
+                projectRelativeScriptPath,
+                "fingerprint",
+                "public class Introduced { }");
+            HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
+                typeof(HotReloadNewSourceMembershipTests).Assembly,
+                "artifact.dll",
+                "artifact.pdb",
+                new List<HotReloadIntroducedTypeDescriptor> { descriptor });
+            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
+            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
         }
 
         /// <summary>

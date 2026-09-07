@@ -165,6 +165,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        /// <summary>
+        /// Answers whether a compiled assembly still owns a type this domain introduced.
+        /// </summary>
+        public bool HasActiveTypesForOriginalAssembly(string originalAssemblyName)
+        {
+            if (string.IsNullOrEmpty(originalAssemblyName))
+            {
+                return false;
+            }
+
+            lock (gate)
+            {
+                foreach (HotReloadIntroducedTypeArtifact artifact in activeByAssemblyIdentity.Values)
+                {
+                    foreach (HotReloadIntroducedTypeDescriptor descriptor in artifact.Descriptors)
+                    {
+                        if (string.Equals(descriptor.OriginalAssemblyName, originalAssemblyName, StringComparison.Ordinal))
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
+        }
+
         public bool TryResolveActiveAssembly(string requestedAssemblyFullName, out HotReloadIntroducedTypeArtifact artifact)
         {
             lock (gate)
