@@ -499,6 +499,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a reload whose introduced type derives from a type an earlier reload
+        /// introduced compiles its artifact against the active artifact: the base type lives in
+        /// neither the compiled assembly nor this run's sources, so only the record of the
+        /// retained assembly can supply it.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypeDerivesFromAnActiveOne_CompilesAgainstTheActiveArtifact()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadOrchestratorResult baseRun = await HotReloadOrchestrator.RunAsync(
+                    new[] { hostPath },
+                    WriteBaseTypeSource(hostPath),
+                    CancellationToken.None);
+
+                Assert.That(
+                    FindFailureReason(baseRun, string.Empty),
+                    Is.Null,
+                    "Precondition: the base type had to be introduced. " + DescribeOutcomes(baseRun));
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    Is.EqualTo(1),
+                    "Precondition: the base type had to become active.");
+
+                HotReloadOrchestratorResult derivedRun = await HotReloadOrchestrator.RunAsync(
+                    new[] { callerPath },
+                    WriteDerivedTypeSource(callerPath),
+                    CancellationToken.None);
+
+                Assert.That(
+                    FindFailureReason(derivedRun, string.Empty),
+                    Is.Null,
+                    "A declaration deriving from an active introduced type must compile. "
+                        + DescribeOutcomes(derivedRun));
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    Is.EqualTo(2),
+                    "The derived type must become active alongside the base it was compiled against.");
+                Assert.That(
+                    new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                    Is.EqualTo(IntroducedValueThroughDerivedType),
+                    "The patched caller must read its value through the derived introduced type.");
+            }
+        }
+
+        /// <summary>
         /// Verifies that an Editor that becomes busy after the shim compile stops the run at the
         /// commit boundary, leaving no type active and no patch applied.
         /// </summary>
@@ -794,6 +844,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // value shifts by one while the type it reads through must stay the one already active.
         private const int IntroducedValueThroughReintroducedCaller = 9;
 
+        // The derived introduced type doubles the base's value, and the edited caller adds
+        // the compiled host's value to it.
+        private const int IntroducedValueThroughDerivedType = 15;
+
         private const string ValidateStage = "validate-membership";
 
         private const string PrepareStage = "prepare-introduced-types";
@@ -1088,6 +1142,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         private const string CallerBodyAnchor = "return host.Value();";
 
+        private const string CallerTypeAnchor =
+            "    internal sealed class HotReloadCrossFileAddedMemberCaller";
+
         private static void AssertArtifactRecordReachedTheTransformRun(
             TransformWorkerInputDto transformInput,
             HotReloadIntroducedTypeArtifact preparedArtifact)
@@ -1237,6 +1294,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         "return new HotReloadCrossFileIntroducedValue().Read() + host.Value() + 1;",
                         StringComparison.Ordinal))
             };
+        }
+
+        // The base of the two-reload chain: unsealed, so the later reload's declaration can
+        // derive from the assembly this reload retains.
+        private static string WriteBaseTypeSource(string hostPath)
+        {
+            string hostSource = File.ReadAllText(hostPath);
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            string introduced =
+                "    public class HotReloadCrossFileIntroducedBase\n"
+                + "    {\n"
+                + "        public int Read()\n"
+                + "        {\n"
+                + "            return 7;\n"
+                + "        }\n"
+                + "    }\n"
+                + "\n";
+            return HotReloadTestSourceWriter.WriteEditedSource(
+                "IntroducedTypeBaseHost.cs",
+                hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal));
+        }
+
+        // The later reload's declaration, which names a base only the active artifact assembly
+        // holds, plus the caller body that reads a value through it.
+        private static string WriteDerivedTypeSource(string callerPath)
+        {
+            string callerSource = File.ReadAllText(callerPath);
+            Assert.That(
+                callerSource,
+                Does.Contain(CallerTypeAnchor),
+                "Precondition: caller type anchor must exist.");
+            Assert.That(
+                callerSource,
+                Does.Contain(CallerBodyAnchor),
+                "Precondition: caller body anchor must exist.");
+            string introduced =
+                "    public sealed class HotReloadCrossFileIntroducedDerived"
+                + " : HotReloadCrossFileIntroducedBase\n"
+                + "    {\n"
+                + "        public int Doubled()\n"
+                + "        {\n"
+                + "            return Read() * 2;\n"
+                + "        }\n"
+                + "    }\n"
+                + "\n";
+            return HotReloadTestSourceWriter.WriteEditedSource(
+                "IntroducedTypeDerivedCaller.cs",
+                callerSource
+                    .Replace(CallerTypeAnchor, introduced + CallerTypeAnchor, StringComparison.Ordinal)
+                    .Replace(
+                        CallerBodyAnchor,
+                        "return new HotReloadCrossFileIntroducedDerived().Doubled() + host.Value();",
+                        StringComparison.Ordinal));
         }
 
         private static string CallIntroducedType(string callerSource)

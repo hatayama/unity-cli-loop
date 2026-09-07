@@ -54,7 +54,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         HotReloadIntroducedTypeCompilationRequest.CreateBatch(
                             paths,
                             descriptors,
-                            transformInput.referencePaths,
+                            BuildArtifactReferencePaths(transformInput),
                             transformInput.defines),
                         ct)
                     .ConfigureAwait(false);
@@ -68,6 +68,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HotReloadPreparedIntroducedTypes(
                     compileResult.Artifact,
                     CollectOwnerSourceHashes(prepareResult.Output, descriptors)));
+        }
+
+        // Why the active artifacts as well: a declaration this run introduces may name a type an
+        // earlier reload introduced, which lives in neither the compiled assembly nor the sources
+        // of this run. Only the assemblies those reloads retained can supply it.
+        private static List<string> BuildArtifactReferencePaths(TransformWorkerInputDto transformInput)
+        {
+            List<string> referencePaths = new List<string>(transformInput.referencePaths);
+            HotReloadShimReferenceBuilder.AppendIntroducedTypeArtifactReferences(
+                referencePaths,
+                transformInput.introducedTypeArtifacts);
+            return referencePaths;
         }
 
         // Why the same sources and references: preparation asks the worker which declarations of
