@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPatcher.RevertAll();
             HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
             HotReloadAutoRefreshHoldSyncResult hold =
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
             List<string> warnings = new List<string>();
             HotReloadAutoRefreshHoldResponseEnricher.AppendDeferredWarning(
                 warnings,
@@ -110,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadAutoRefreshHoldSyncResult hold =
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
             List<string> warnings = new List<string>();
             HotReloadAutoRefreshHoldResponseEnricher.AppendDeferredWarning(
                 warnings,

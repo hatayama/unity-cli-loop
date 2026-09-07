@@ -11,5 +11,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadActiveChangeCounts
     {
         internal static int IntroducedTypeCount => HotReloadIntroducedTypeHolder.Registry.ActiveTypeCount;
+
+        /// <summary>
+        /// How many hot-reload changes the next Domain Reload discards: patched methods, added
+        /// members, and the types this domain introduced.
+        /// </summary>
+        /// <remarks>
+        /// Why the types belong here: they live in artifact assemblies the reload retained, so a
+        /// Domain Reload unloads them exactly as it unloads a patch. A run that patched no method
+        /// still has something to lose, and every decision about what a reload would lose reads
+        /// this total rather than counting for itself.
+        /// </remarks>
+        internal static int RuntimeChangeTotal => HotReloadPatcher.ActiveChangeCount + IntroducedTypeCount;
     }
 }

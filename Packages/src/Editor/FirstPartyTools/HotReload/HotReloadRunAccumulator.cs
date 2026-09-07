@@ -117,7 +117,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             LogSummary(correlationId);
             HotReloadOutcomeAggregation.AppendSiblingDerivedWarnings(_warnings, _siblingDerivedWarnings);
             HotReloadAutoRefreshHoldSyncResult autoRefreshHold =
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
             return new HotReloadOrchestratorResult(
                 _outcomes,
                 _warnings,
