@@ -406,9 +406,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
+            // Why the keys are built once for the whole output and not per file: a reuse may only
+            // name a type a retained artifact of this very run holds, and the same reuse must not
+            // be reported twice across the run, which no single file can see on its own.
+            HashSet<string> retainedTypeKeys = CollectRetainedTypeKeys(input);
+            HashSet<string> reportedReuseKeys = new HashSet<string>(StringComparer.Ordinal);
             foreach (TransformWorkerFileOutputDto file in output.files)
             {
-                if (!TryValidatePreparationFile(file, input, out errorMessage))
+                if (!TryValidatePreparationFile(
+                        file,
+                        input,
+                        retainedTypeKeys,
+                        reportedReuseKeys,
+                        out errorMessage))
                 {
                     return false;
                 }
@@ -418,9 +428,52 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        private static HashSet<string> CollectRetainedTypeKeys(TransformWorkerInputDto input)
+        {
+            HashSet<string> keys = new HashSet<string>(StringComparer.Ordinal);
+            if (input.introducedTypeArtifacts == null)
+            {
+                return keys;
+            }
+
+            foreach (TransformWorkerIntroducedTypeArtifactDto artifact in input.introducedTypeArtifacts)
+            {
+                if (artifact?.types == null)
+                {
+                    continue;
+                }
+
+                foreach (TransformWorkerIntroducedTypeArtifactTypeDto type in artifact.types)
+                {
+                    if (type == null)
+                    {
+                        continue;
+                    }
+
+                    keys.Add(
+                        BuildRetainedTypeKey(
+                            type.metadataName,
+                            type.originalAssemblyName,
+                            type.originalAssemblyMvid));
+                }
+            }
+
+            return keys;
+        }
+
+        private static string BuildRetainedTypeKey(
+            string metadataName,
+            string originalAssemblyName,
+            string originalAssemblyMvid)
+        {
+            return metadataName + "|" + originalAssemblyName + "|" + originalAssemblyMvid;
+        }
+
         private static bool TryValidatePreparationFile(
             TransformWorkerFileOutputDto file,
             TransformWorkerInputDto input,
+            HashSet<string> retainedTypeKeys,
+            HashSet<string> reportedReuseKeys,
             out string errorMessage)
         {
             if (file == null || file.introducedTypes == null || file.introducedTypeDiagnostics == null)
@@ -448,7 +501,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             foreach (TransformWorkerIntroducedTypeReuseDto reuse in file.introducedTypeReuses)
             {
-                if (!TryValidatePreparationReuse(reuse, input, out errorMessage))
+                if (!TryValidatePreparationReuse(
+                        reuse,
+                        input,
+                        retainedTypeKeys,
+                        reportedReuseKeys,
+                        out errorMessage))
                 {
                     return false;
                 }
@@ -458,9 +516,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return true;
         }
 
+        // Why a reuse is refused unless a retained artifact of this run holds the type: a reuse row
+        // becomes an AlreadyActive row of the response and takes the declaration out of the tree
+        // the transform binds against, so a name the run cannot account for would report a binding
+        // against an assembly this domain never retained.
         private static bool TryValidatePreparationReuse(
             TransformWorkerIntroducedTypeReuseDto reuse,
             TransformWorkerInputDto input,
+            HashSet<string> retainedTypeKeys,
+            HashSet<string> reportedReuseKeys,
             out string errorMessage)
         {
             if (reuse == null)
@@ -479,6 +543,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 || reuse.originalAssemblyMvid != input.targetAssemblyMvid)
             {
                 errorMessage = "Preparation reuse assembly identity must match its input.";
+                return false;
+            }
+
+            string key = BuildRetainedTypeKey(
+                reuse.metadataName,
+                reuse.originalAssemblyName,
+                reuse.originalAssemblyMvid);
+            if (!retainedTypeKeys.Contains(key))
+            {
+                errorMessage = "Preparation reuse must name a type a retained artifact of this run holds.";
+                return false;
+            }
+
+            if (!reportedReuseKeys.Add(key))
+            {
+                errorMessage = "Preparation output must not report the same reuse more than once.";
                 return false;
             }
 
