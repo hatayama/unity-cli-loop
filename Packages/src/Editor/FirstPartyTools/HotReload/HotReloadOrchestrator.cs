@@ -436,6 +436,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     reappliedPaths.Add(path);
                 }
+                else if (groupResults[position].Outcomes.Count == 0)
+                {
+                    // A run stopped before it applied anything wrote no row for this file, so
+                    // the failed-rebind sentence would send the reader looking for rows that
+                    // were never written.
+                    groupResults[0].Warnings.Add(
+                        string.Format(
+                            HotReloadConstants.ActiveSiblingRebindSkippedWarningFormat,
+                            path));
+                }
                 else
                 {
                     groupResults[0].Warnings.Add(

@@ -81,6 +81,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "'{0}' has active patches but its source changed since they were applied, so it was "
             + "not re-applied; pass it to hot-reload to update it.";
 
+        // Why a second wording: the failed-rebind sentence sends the reader to the sibling's own
+        // rows, and a reload that stopped before re-applying anything wrote none. Pointing at
+        // rows that do not exist reads as a lost report rather than as a run that changed nothing.
+        public const string ActiveSiblingRebindSkippedWarningFormat =
+            "'{0}' was pulled in to re-bind its active patches, but this reload stopped before "
+            + "re-applying them, so its active patches are unchanged. Fix the refused declaration "
+            + "and rerun, or run uloop compile to clear the run.";
+
         public const string ActiveSiblingRebindFailedWarningFormat =
             "'{0}' was pulled in to re-bind its active patches but this reload failed for it; "
             + "see its rows for which patches changed and run uloop compile to clear the run.";
