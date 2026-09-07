@@ -79,23 +79,36 @@ internal static class IntroducedTypePlanner
                 continue;
             }
 
+            string metadataName = CecilTypeNames.ToMetadataName(typeSymbol);
+            string declarationFingerprint = IntroducedTypeFingerprint.Compute(
+                unit.Root,
+                declaration,
+                defineSymbols,
+                typeSymbol,
+                unit.SemanticModel,
+                targetAssembly,
+                targetAssemblyName,
+                targetAssemblyMvid,
+                artifactMap);
+            if (IsAlreadyIntroduced(
+                    unit,
+                    artifactMap,
+                    targetAssemblyName,
+                    targetAssemblyMvid,
+                    metadataName,
+                    declarationFingerprint))
+            {
+                continue;
+            }
+
             unit.IntroducedTypes.Add(
                 new WorkerIntroducedType
                 {
                     OriginalAssemblyName = targetAssemblyName ?? string.Empty,
                     OriginalAssemblyMvid = targetAssemblyMvid ?? string.Empty,
-                    MetadataName = CecilTypeNames.ToMetadataName(typeSymbol),
+                    MetadataName = metadataName,
                     OwnerProjectRelativePath = unit.Input.ProjectRelativePath,
-                    DeclarationFingerprint = IntroducedTypeFingerprint.Compute(
-                        unit.Root,
-                        declaration,
-                        defineSymbols,
-                        typeSymbol,
-                        unit.SemanticModel,
-                        targetAssembly,
-                        targetAssemblyName,
-                        targetAssemblyMvid,
-                        artifactMap),
+                    DeclarationFingerprint = declarationFingerprint,
                     Source = BuildTypeSource(unit.Root, typeSymbol, declaration, assemblyGlobalUsings)
                 });
         }
@@ -111,6 +124,38 @@ internal static class IntroducedTypePlanner
             unit.IntroducedTypeDiagnostics.Add(
                 "Delegate introduced type requires a compile: " + CecilTypeNames.ToMetadataName(delegateSymbol));
         }
+    }
+
+    // Whether this domain already retains an assembly for the declaration. Introducing it again
+    // would compile a second artifact for the same original type, and the transform run would
+    // then be offered two records normalizing to it, which it refuses. The unchanged declaration
+    // binds from the active record instead, so this run introduces nothing.
+    private static bool IsAlreadyIntroduced(
+        WorkerSourceUnit unit,
+        IntroducedTypeArtifactMap artifactMap,
+        string targetAssemblyName,
+        string targetAssemblyMvid,
+        string metadataName,
+        string declarationFingerprint)
+    {
+        string activeFingerprint = artifactMap.FindActiveDeclarationFingerprint(
+            targetAssemblyName,
+            targetAssemblyMvid,
+            metadataName);
+        if (activeFingerprint == null)
+        {
+            return false;
+        }
+
+        // Replacing the retained assembly a live type was loaded from is outside what a reload
+        // can do, so a redefined introduced type is reported instead of being introduced again.
+        if (!string.Equals(activeFingerprint, declarationFingerprint, StringComparison.Ordinal))
+        {
+            unit.IntroducedTypeDiagnostics.Add(
+                "Changed introduced type requires a compile: " + metadataName);
+        }
+
+        return true;
     }
 
     private static bool TryFindNestedDeclaration(BaseTypeDeclarationSyntax declaration, out string nestedName)

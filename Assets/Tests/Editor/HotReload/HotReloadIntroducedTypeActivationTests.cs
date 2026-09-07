@@ -293,6 +293,139 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a later reload which declares a type this domain already introduced
+        /// reuses the active type instead of introducing it again: the run succeeds, no second
+        /// artifact becomes active, and the caller it patches still reads through the one type.
+        /// </summary>
+        [Test]
+        public async Task Run_SameTypeDeclaredAgainByALaterReload_ReusesTheActiveTypeWithoutIntroducingItAgain()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+            HotReloadIntroducedTypeArtifact firstArtifact = null;
+            List<int> preparedDescriptorCounts = new List<int>();
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreatePreparationCountingDependencies(
+                        preparedDescriptorCounts,
+                        artifact =>
+                        {
+                            if (firstArtifact == null)
+                            {
+                                firstArtifact = artifact;
+                            }
+                        })))
+                {
+                    HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateIntroducedTypeEdits(hostPath, callerPath, "FirstIntroduction"));
+
+                    AssertCallerIsPatched(first);
+                    Assert.That(firstArtifact, Is.Not.Null, "The first run had to prepare the introduced type.");
+
+                    HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateReintroducingEdits(hostPath, callerPath));
+
+                    Assert.That(
+                        FindFailureReason(second, string.Empty),
+                        Is.Null,
+                        "A reload that declares an already introduced type must not fail.");
+                    AssertCallerIsPatched(second);
+                }
+
+                Assert.That(
+                    preparedDescriptorCounts,
+                    Is.EqualTo(new[] { 1, 0 }),
+                    "The second run must introduce no type, because the one it declares is active.");
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    Is.EqualTo(1),
+                    "A re-declared type must not add a second active artifact.");
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.TryFindActive(
+                        firstArtifact.Descriptors,
+                        out HotReloadIntroducedTypeArtifact activeArtifact),
+                    Is.True);
+                Assert.That(activeArtifact, Is.SameAs(firstArtifact));
+                Assert.That(
+                    new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                    Is.EqualTo(IntroducedValueThroughReintroducedCaller),
+                    "The caller the second run patched must read through the active type.");
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a later reload which redefines a type this domain already introduced is
+        /// refused instead of binding the caller against the stale retained definition: stage one
+        /// cannot replace an artifact assembly a live type was loaded from.
+        /// </summary>
+        [Test]
+        public async Task Run_ActiveIntroducedTypeRedefined_FailsAndLeavesTheActiveTypeInPlace()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+            HotReloadIntroducedTypeArtifact firstArtifact = null;
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateArtifactCapturingDependencies(artifact =>
+                    {
+                        if (artifact != null)
+                        {
+                            firstArtifact = artifact;
+                        }
+                    })))
+                {
+                    HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateIntroducedTypeEdits(hostPath, callerPath, "BeforeRedefinition"));
+
+                    AssertCallerIsPatched(first);
+                    Assert.That(firstArtifact, Is.Not.Null, "The first run had to prepare the introduced type.");
+
+                    HotReloadOrchestratorResult second = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateRedefiningEdits(hostPath, callerPath));
+
+                    Assert.That(
+                        FindFailureReason(second, "requires a compile"),
+                        Is.Not.Null,
+                        "A redefined introduced type must fail the reload with a compile hint.\n"
+                        + DescribeOutcomes(second));
+                }
+
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    Is.EqualTo(1),
+                    "A refused redefinition must leave the already active type in place.");
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    Is.EqualTo(0),
+                    "A refused redefinition must leave no prepared membership behind.");
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.TryFindActive(
+                        firstArtifact.Descriptors,
+                        out HotReloadIntroducedTypeArtifact activeArtifact),
+                    Is.True);
+                Assert.That(activeArtifact, Is.SameAs(firstArtifact));
+            }
+        }
+
+        /// <summary>
         /// Verifies that a reload whose only change is a new type declaration still reaches the
         /// commit boundary and activates the type, instead of ending unapplied because the run
         /// has no method to patch.
@@ -454,6 +587,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "A run stopped at the commit boundary must apply no patch.");
         }
 
+        private static string DescribeOutcomes(HotReloadOrchestratorResult result)
+        {
+            System.Text.StringBuilder description = new System.Text.StringBuilder();
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                description.Append(outcome.Kind).Append(' ').Append(outcome.Method)
+                    .Append(" :: ").Append(outcome.Reason).Append('\n');
+            }
+
+            return description.ToString();
+        }
+
         private static string FindFailureReason(HotReloadOrchestratorResult result, string reasonFragment)
         {
             foreach (HotReloadMethodOutcome outcome in result.Methods)
@@ -467,6 +612,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return null;
+        }
+
+        // Records how many introduced-type descriptors each run of a scope prepared, which is how
+        // a run that reuses an already active type is told from one that introduces it again.
+        private static HotReloadGroupProcessorDependencies CreatePreparationCountingDependencies(
+            List<int> preparedDescriptorCounts,
+            Action<HotReloadIntroducedTypeArtifact> captureArtifact)
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                async (files, input, ct) =>
+                {
+                    HotReloadIntroducedTypePreparationResult preparation =
+                        await HotReloadIntroducedTypePreparation.PrepareAsync(files, input, ct);
+                    HotReloadIntroducedTypeArtifact artifact = preparation.Prepared?.Artifact;
+                    preparedDescriptorCounts.Add(artifact == null ? 0 : artifact.Descriptors.Count);
+                    if (artifact != null)
+                    {
+                        captureArtifact(artifact);
+                    }
+
+                    return preparation;
+                },
+                TransformWorkerClient.RunAsync,
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadEntryApplier.ApplyPreparedEntries);
         }
 
         private static HotReloadGroupProcessorDependencies CreateArtifactCapturingDependencies(
@@ -527,6 +699,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // The edited caller returns the introduced type's value plus the compiled host's value.
         private const int IntroducedValueThroughCaller = 8;
+
+        // The second reload keeps the same introduced type and edits only the caller, so its
+        // value shifts by one while the type it reads through must stay the one already active.
+        private const int IntroducedValueThroughReintroducedCaller = 9;
 
         private const string ValidateStage = "validate-membership";
 
@@ -935,6 +1111,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 + "    }\n"
                 + "\n";
             return hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal);
+        }
+
+        // The introduced type redefined with a different body, which is what makes its
+        // declaration fingerprint differ from the one the retained assembly was compiled from.
+        private static Dictionary<string, string> CreateRedefiningEdits(string hostPath, string callerPath)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeRedefinitionHost.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath)).Replace(
+                        "            return 7;",
+                        "            return 70;",
+                        StringComparison.Ordinal)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeRedefinitionCaller.cs",
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
+        // The same introduced declaration as the first reload, with a caller edited differently so
+        // the reload is not short-circuited as unchanged.
+        private static Dictionary<string, string> CreateReintroducingEdits(string hostPath, string callerPath)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeReintroductionHost.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath))),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeReintroductionCaller.cs",
+                    File.ReadAllText(callerPath).Replace(
+                        CallerBodyAnchor,
+                        "return new HotReloadCrossFileIntroducedValue().Read() + host.Value() + 1;",
+                        StringComparison.Ordinal))
+            };
         }
 
         private static string CallIntroducedType(string callerSource)

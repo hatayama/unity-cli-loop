@@ -66,6 +66,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "neither passed to this reload nor already hot-reloaded, still require a real compile "
             + "(uloop compile).";
 
+        // Keep in sync with IntroducedTypePlanner.IsAlreadyIntroduced in the transform worker,
+        // which emits the diagnostic this prefix identifies. The preparation stage turns that one
+        // diagnostic into a run failure, because proceeding would bind callers against the
+        // retained definition the source no longer declares.
+        public const string ChangedIntroducedTypeDiagnosticPrefix =
+            "Changed introduced type requires a compile: ";
+
         public const string ActiveSiblingsRebindWarningFormat =
             "Also re-applied {0} unchanged file(s) with active patches in assembly '{1}' so their "
             + "patches bind to this reload's shim: {2}.";

@@ -22,14 +22,20 @@ using Microsoft.CodeAnalysis.Text;
 internal sealed class IntroducedTypeArtifactMap
 {
     private readonly Dictionary<string, string> normalizedIdentities;
+    private readonly Dictionary<string, string> fingerprintsByNormalizedIdentity;
 
-    private IntroducedTypeArtifactMap(Dictionary<string, string> normalizedIdentities)
+    private IntroducedTypeArtifactMap(
+        Dictionary<string, string> normalizedIdentities,
+        Dictionary<string, string> fingerprintsByNormalizedIdentity)
     {
         this.normalizedIdentities = normalizedIdentities;
+        this.fingerprintsByNormalizedIdentity = fingerprintsByNormalizedIdentity;
     }
 
     internal static IntroducedTypeArtifactMap Empty { get; } =
-        new IntroducedTypeArtifactMap(new Dictionary<string, string>(StringComparer.Ordinal));
+        new IntroducedTypeArtifactMap(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal));
 
     // Builds the mapping, or reports why the records cannot be trusted. A record is only usable
     // when the assembly resolved from its own reference path reports the identity the record
@@ -42,7 +48,7 @@ internal sealed class IntroducedTypeArtifactMap
         out string errorMessage)
     {
         Dictionary<string, string> identities = new Dictionary<string, string>(StringComparer.Ordinal);
-        HashSet<string> normalizedTargets = new HashSet<string>(StringComparer.Ordinal);
+        Dictionary<string, string> fingerprints = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach ((WorkerIntroducedTypeArtifact artifact, MetadataReference reference) in artifactReferences)
         {
             if (!TryResolveArtifactAssembly(compilation, artifact, reference, out IAssemblySymbol assembly, out errorMessage))
@@ -63,7 +69,7 @@ internal sealed class IntroducedTypeArtifactMap
 
             foreach (WorkerIntroducedTypeArtifactType artifactType in artifact.Types)
             {
-                if (!TryAddArtifactType(assembly, artifactType, identities, normalizedTargets, out errorMessage))
+                if (!TryAddArtifactType(assembly, artifactType, identities, fingerprints, out errorMessage))
                 {
                     map = null;
                     return false;
@@ -71,7 +77,7 @@ internal sealed class IntroducedTypeArtifactMap
             }
         }
 
-        map = new IntroducedTypeArtifactMap(identities);
+        map = new IntroducedTypeArtifactMap(identities, fingerprints);
         errorMessage = null;
         return true;
     }
@@ -87,6 +93,25 @@ internal sealed class IntroducedTypeArtifactMap
 
         return normalizedIdentities.TryGetValue(BuildKey(containingAssembly, metadataName), out string identity)
             ? identity
+            : null;
+    }
+
+    // The fingerprint the retained assembly of this type was compiled from, or null when no
+    // record holds the type. A declaration whose fingerprint matches is already introduced, so
+    // planning it again would produce a second record normalizing to the same original type.
+    internal string FindActiveDeclarationFingerprint(
+        string originalAssemblyName,
+        string originalAssemblyMvid,
+        string metadataName)
+    {
+        if (originalAssemblyName == null || originalAssemblyMvid == null || metadataName == null)
+        {
+            return null;
+        }
+
+        string normalizedIdentity = originalAssemblyName + "|" + originalAssemblyMvid + "|" + metadataName;
+        return fingerprintsByNormalizedIdentity.TryGetValue(normalizedIdentity, out string fingerprint)
+            ? fingerprint
             : null;
     }
 
@@ -121,7 +146,7 @@ internal sealed class IntroducedTypeArtifactMap
         IAssemblySymbol assembly,
         WorkerIntroducedTypeArtifactType artifactType,
         Dictionary<string, string> identities,
-        HashSet<string> normalizedTargets,
+        Dictionary<string, string> fingerprintsByNormalizedIdentity,
         out string errorMessage)
     {
         if (artifactType == null
@@ -160,7 +185,7 @@ internal sealed class IntroducedTypeArtifactMap
 
         // Two artifacts normalizing to the same original type would leave the fingerprint
         // depending on which record happened to be consulted first.
-        if (!normalizedTargets.Add(normalizedIdentity))
+        if (!fingerprintsByNormalizedIdentity.TryAdd(normalizedIdentity, artifactType.DeclarationFingerprint))
         {
             errorMessage = "Two introduced-type artifacts normalize to " + artifactType.MetadataName + ".";
             return false;

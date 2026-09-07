@@ -34,6 +34,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Introduced-type preparation failed: " + prepareResult.ErrorMessage);
             }
 
+            string refusedDeclaration = FindChangedIntroducedTypeDiagnostic(prepareResult.Output);
+            if (refusedDeclaration != null)
+            {
+                return HotReloadIntroducedTypePreparationResult.Failure(refusedDeclaration);
+            }
+
             List<HotReloadIntroducedTypeDescriptor> descriptors = CollectDescriptors(prepareResult.Output);
             if (descriptors.Count == 0)
             {
@@ -113,6 +119,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hashesByOwnerPath.Count == ownerPaths.Count,
                 "Every owner of an introduced type must have a row in the preparation output.");
             return hashesByOwnerPath;
+        }
+
+        // Why this one diagnostic fails the run: every other unsupported declaration simply is not
+        // introduced, and the source that declares it stays in the tree. A declaration this domain
+        // already retains an assembly for is taken out of the tree either way, so continuing would
+        // bind callers against the retained definition the edited source no longer declares.
+        private static string FindChangedIntroducedTypeDiagnostic(TransformWorkerOutputDto output)
+        {
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                foreach (string diagnostic in file.introducedTypeDiagnostics)
+                {
+                    if (diagnostic != null
+                        && diagnostic.StartsWith(
+                            HotReloadConstants.ChangedIntroducedTypeDiagnosticPrefix,
+                            StringComparison.Ordinal))
+                    {
+                        return diagnostic;
+                    }
+                }
+            }
+
+            return null;
         }
 
         private static List<HotReloadIntroducedTypeDescriptor> CollectDescriptors(
