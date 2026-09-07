@@ -80,13 +80,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         // Peels leftover Harmony patches when the source again matches the verified baseline.
         // Resolve failures are silent: unchanged identities already matched compile-time IL.
+        // A method Harmony could not restore becomes that method's Failed outcome instead of
+        // aborting the peel, so the remaining unchanged methods still get reverted.
         // Returns how many Revert calls actually removed a live patch.
         internal static int RevertUnchangedPatches(
             string assemblyName,
-            TransformWorkerUnchangedMethodDto[] unchangedMethods)
+            TransformWorkerUnchangedMethodDto[] unchangedMethods,
+            List<HotReloadMethodOutcome> outcomes,
+            string assemblyResolvePath)
         {
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be null or empty.");
             Debug.Assert(unchangedMethods != null, "unchangedMethods must not be null.");
+            Debug.Assert(outcomes != null, "outcomes must not be null.");
 
             int revertedCount = 0;
             for (int index = 0; index < unchangedMethods.Length; index++)
@@ -114,9 +119,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                if (HotReloadPatcher.Revert(matchResult.Method))
+                HotReloadRevertOutcome revertOutcome = HotReloadPatcher.Revert(
+                    matchResult.Method,
+                    out string revertFailureReason);
+                if (revertOutcome == HotReloadRevertOutcome.Reverted)
                 {
                     revertedCount++;
+                    continue;
+                }
+
+                if (revertOutcome == HotReloadRevertOutcome.UnpatchFailed)
+                {
+                    outcomes.Add(
+                        HotReloadMethodOutcome.Failed(
+                            HotReloadMethodKeys.FormatMethodLabel(matchResult.Method),
+                            revertFailureReason,
+                            assemblyResolvePath));
                 }
             }
 

@@ -97,8 +97,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "Precondition: Replace of `return _secret + delta;` must patch ComputeWithPrivate " +
                 "plus at least one sibling so revert cannot clear the whole file lookup.");
 
-            bool reverted = HotReloadPatcher.Revert(computeMethod);
-            Assert.That(reverted, Is.True);
+            HotReloadRevertOutcome reverted = HotReloadPatcher.Revert(computeMethod, out string _);
+            Assert.That(reverted, Is.EqualTo(HotReloadRevertOutcome.Reverted));
 
             HotReloadShimFileLookup lookup =
                 HotReloadPausePointCoordination.GetShimLookupForFile?.Invoke(FixtureProjectRelativePath);

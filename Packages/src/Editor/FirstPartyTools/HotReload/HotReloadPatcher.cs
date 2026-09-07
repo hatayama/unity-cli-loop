@@ -253,17 +253,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        // Set by tests only. A Harmony rebuild failure cannot be provoked from outside, and the
+        // contained-failure contract of Revert has to be pinned by a test. Production leaves it
+        // null and reverts through Harmony.
+        internal static Action<MethodBase> UnpatchForTesting;
+
         /// <summary>
         /// Removes the hot-reload patch on <paramref name="method"/> when one is recorded.
-        /// Returns false when the method was not patched.
         /// </summary>
-        public static bool Revert(MethodBase method)
+        public static HotReloadRevertOutcome Revert(MethodBase method, out string failureReason)
         {
             Debug.Assert(method != null, "method must not be null.");
 
+            failureReason = null;
             if (!ShimByMethod.Remove(method))
             {
-                return false;
+                return HotReloadRevertOutcome.NotPatched;
             }
 
             // Why Remove before Unpatch: Harmony rebuilds the method during Unpatch, and the
@@ -279,9 +284,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why here, not only RevertAll: RevertUnchangedPatches uses this path, and a
             // later apply of the same compiled key must not inherit a stale superseded Reason.
             HotReloadSupersededSignatureRegistry.Remove(methodKey);
-            HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+            try
+            {
+                Unpatch(method);
+            }
+            catch (Exception exception)
+            {
+                // Same approved exception as the apply path: a Harmony rebuild failure cannot be
+                // pre-validated, and an escaping exception would abort the run while leaving the
+                // other methods of the group unreverted. The ledger entry is already gone, which
+                // is the asymmetry the apply path's failure contract has as well.
+                failureReason = "Reverting '" + methodKey + "' failed: " + exception.Message;
+                HotReloadOrchestratorLog.LogHotReloadRevertFailed(methodKey, exception);
+                HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
+                return HotReloadRevertOutcome.UnpatchFailed;
+            }
+
             HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
-            return true;
+            return HotReloadRevertOutcome.Reverted;
+        }
+
+        private static void Unpatch(MethodBase method)
+        {
+            if (UnpatchForTesting != null)
+            {
+                UnpatchForTesting(method);
+                return;
+            }
+
+            HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
         }
 
         /// <summary>

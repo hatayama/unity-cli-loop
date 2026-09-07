@@ -375,7 +375,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 file.RevertedUnchangedCount = HotReloadEntryApplier.RevertUnchangedPatches(
                     file.AssemblyName,
-                    unchangedMethods);
+                    unchangedMethods,
+                    file.Sinks.Outcomes,
+                    file.AssemblyResolvePath);
             }
         }
 

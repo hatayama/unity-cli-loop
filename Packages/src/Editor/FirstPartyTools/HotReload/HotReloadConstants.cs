@@ -295,6 +295,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogShimCompileFailed = "hot_reload_shim_compile_failed";
         public const string VibeLogIsolationRetry = "hot_reload_isolation_retry";
         public const string VibeLogEmptyEntriesClear = "hot_reload_empty_entries_clear";
+        public const string VibeLogRevertFailed = "hot_reload_revert_failed";
         public const string VibeLogApplySummary = "hot_reload_apply_summary";
         public const string VibeLogShimCompileStageFirstPass = "first_pass";
         public const string VibeLogShimCompileStageRetry = "retry";

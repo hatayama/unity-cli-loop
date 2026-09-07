@@ -349,7 +349,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     nameof(HotReloadCoreFixture.ReplaceableCompute),
                     BindingFlags.Instance | BindingFlags.Public);
                 Assert.That(original, Is.Not.Null);
-                Assert.That(HotReloadPatcher.Revert(original), Is.True);
+                Assert.That(
+                    HotReloadPatcher.Revert(original, out string _),
+                    Is.EqualTo(HotReloadRevertOutcome.Reverted));
 
                 bool found = HotReloadSupersededSignatureRegistry.TryGetReplacement(
                     methodKey,
