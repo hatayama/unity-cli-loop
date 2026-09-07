@@ -52,10 +52,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             using (HotReloadIntroducedTypeHolder.BeginReplacement())
             {
                 HotReloadIntroducedTypeHolder.Initialize();
-                await RunIntroducingOnlyATypeAsync();
+                HotReloadOrchestratorResult result = await RunIntroducingOnlyATypeAsync();
 
+                // Why the result and not the live flag: the 0.5s reconcile can fire while the run
+                // is awaited, which would arm the hold even for a run that never synced one.
                 Assert.That(
-                    HotReloadAutoRefreshHold.IsHeld,
+                    result.AutoRefreshHeld,
                     Is.True,
                     "The run that introduced the type must arm the hold.");
 
@@ -77,6 +79,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.True,
                     "A revert cannot unload the artifact assembly, so it must keep the hold.");
                 Assert.That(revert.Message, Does.Contain("Domain Reload"));
+                Assert.That(
+                    HotReloadAutoRefreshHoldConstants.NewlyArmedMessageSuffix,
+                    Does.Not.Contain("or '--revert-all' to release it"),
+                    "A revert that keeps the hold must not be offered as a way to release it.");
             }
         }
 
@@ -99,14 +105,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "Arrange: an active introduced type must arm the hold.");
             }
 
-            // Leaving the replacement is what a Domain Reload does to the registry: the types of
-            // the previous domain are gone with the assembly that carried them.
-            HotReloadAutoRefreshHold.ReconcileForTesting();
+            // A second replacement is what a Domain Reload leaves behind: an empty registry. Why
+            // not the registry the scope above restored: that is the live one of this Editor
+            // session, which may hold types a developer reloaded before running the tests.
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
 
-            Assert.That(
-                HotReloadAutoRefreshHold.IsHeld,
-                Is.False,
-                "A domain that holds no introduced type must let Auto Refresh run again.");
+                Assert.That(
+                    HotReloadActiveChangeCounts.IntroducedTypeCount,
+                    Is.EqualTo(0),
+                    "Arrange: the reloaded domain must hold no introduced type.");
+
+                HotReloadAutoRefreshHold.ReconcileForTesting();
+
+                Assert.That(
+                    HotReloadAutoRefreshHold.IsHeld,
+                    Is.False,
+                    "A domain that holds no introduced type must let Auto Refresh run again.");
+            }
         }
 
         /// <summary>
@@ -177,6 +194,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     reader(),
                     Is.EqualTo(1),
                     "A type the reload introduced is discarded by the next Domain Reload too.");
+
+                Assert.That(
+                    ReadTotalOfAnArtifactCarryingTwoTypes(),
+                    Is.EqualTo(2),
+                    "Every discarded change is counted, so the total is a sum and not a maximum.");
             }
         }
 
@@ -189,7 +211,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         // The production route of an apply run: the orchestrator run, then the accumulator's
         // result build, which is where the run syncs the hold.
-        private static async Task RunIntroducingOnlyATypeAsync()
+        private static async Task<HotReloadOrchestratorResult> RunIntroducingOnlyATypeAsync()
         {
             string hostPath = FixturePath(HostFileName);
             HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
@@ -207,26 +229,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadActiveChangeCounts.IntroducedTypeCount,
                 Is.EqualTo(1),
                 "Precondition: the run must have activated its introduced type.");
+            return result;
         }
 
         private static void ActivateArtifactWithOneType()
+        {
+            ActivateArtifact(CreateDescriptor("Fixture.HeldType"));
+        }
+
+        // Why one artifact carrying both: an artifact assembly may be activated once, and a batch
+        // that compiles two declarations together produces exactly this shape.
+        private static int ReadTotalOfAnArtifactCarryingTwoTypes()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                ActivateArtifact(
+                    CreateDescriptor("Fixture.HeldType"),
+                    CreateDescriptor("Fixture.SecondHeldType"));
+                return HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount();
+            }
+        }
+
+        private static void ActivateArtifact(params HotReloadIntroducedTypeDescriptor[] descriptors)
         {
             HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
                 typeof(HotReloadIntroducedTypeHoldTests).Assembly,
                 "artifact.dll",
                 "artifact.pdb",
-                new List<HotReloadIntroducedTypeDescriptor>
-                {
-                    new HotReloadIntroducedTypeDescriptor(
-                        "Fixture.Assembly",
-                        "original-mvid",
-                        "Fixture.HeldType",
-                        "Assets/Tests/Fixture.cs",
-                        "fingerprint-held",
-                        "public class Held { }")
-                });
+                new List<HotReloadIntroducedTypeDescriptor>(descriptors));
             HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
             HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+        }
+
+        private static HotReloadIntroducedTypeDescriptor CreateDescriptor(string metadataName)
+        {
+            return new HotReloadIntroducedTypeDescriptor(
+                "Fixture.Assembly",
+                "original-mvid",
+                metadataName,
+                "Assets/Tests/Fixture.cs",
+                "fingerprint-" + metadataName,
+                "public class Held { }");
         }
 
         // Why the explicit zero: syncing against no change is the only way to release a hold
