@@ -97,6 +97,24 @@ skill at render time, and the embedded catalog (`cli/common/tools/default-tools.
 generated from those same tables. Descriptions are therefore edited in the skill and nowhere
 else.
 
+### Comparable skill file
+
+A file inside a skill directory that takes part in the installed-vs-source comparison deciding
+whether a skill is `installed` or `outdated`. Files in subdirectories (`references/`, scripts,
+and so on) are always comparable because the skill ships them. At the skill directory root only
+Markdown files (`.md`, case-insensitive) are comparable; other tools may place their own metadata
+files there and those must not make an up-to-date skill report as outdated. `.meta`, `.DS_Store`,
+and `.gitkeep` are excluded everywhere (Go: `shouldSkipSkillFile`, Editor:
+`SkillSetupFileExclusion`). `SKILL.md` is always compared.
+
+The rule lives in `SkillInstallLayout.IsComparableSkillFile` (Editor) and in
+`isComparableSkillFile` in `cli/dispatcher/internal/dispatcher/skills_display.go` (CLI target
+mode). Dir mode (`--output-dir`) walks only source-owned entries and is governed by
+`docs/adr/0004-dir-mode-evidence-gated-ownership.md` instead.
+
+Both implementations are verified against `tests/contracts/skill_status_contract.json`; change
+the contract first when the rule changes.
+
 ### Skill target
 
 A destination agent environment into which skills are installed (for example Claude Code,
