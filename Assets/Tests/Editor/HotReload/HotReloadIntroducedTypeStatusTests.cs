@@ -77,7 +77,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// What: --revert-all says the introduced types it could not unload stay loaded until the
-        /// next Domain Reload, and still reports the types as active afterwards.
+        /// next Domain Reload, and names each of them in a row so the caller can tell which types
+        /// the revert left behind.
         /// </summary>
         [Test]
         public void ExecuteRevertAll_WithActiveIntroducedTypes_SaysTheyStayUntilTheNextDomainReload()
@@ -92,6 +93,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(response.Message, Does.Contain("Domain Reload"));
                 Assert.That(response.Message, Does.Contain("2 introduced type"));
                 Assert.That(response.ActiveIntroducedTypeTotal, Is.EqualTo(2));
+                Assert.That(
+                    response.IntroducedTypes.Count,
+                    Is.EqualTo(2),
+                    "A total without the rows leaves the caller unable to name what stayed.");
+                Assert.That(FindRow(response, FirstMetadataName).Kind, Is.EqualTo("Active"));
             }
         }
 
@@ -109,6 +115,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
                 Assert.That(response.Message, Is.EqualTo("No active hot-reload changes to revert."));
                 Assert.That(response.ShouldSerializeActiveIntroducedTypeTotal(), Is.False);
+                Assert.That(response.ShouldSerializeIntroducedTypes(), Is.False);
             }
         }
 

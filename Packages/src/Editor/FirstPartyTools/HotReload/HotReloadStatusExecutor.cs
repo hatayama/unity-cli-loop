@@ -33,6 +33,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ActivePatchTotal = HotReloadPatcher.ActiveChangeCount,
                 AutoRefreshHeld = hold.Held,
                 Warnings = warnings,
+                // Why the rows too: a total without them names nothing, so a caller told that
+                // types stayed loaded could not tell which ones a revert left behind.
+                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(),
                 ActiveIntroducedTypeTotal = introducedTypeCount,
                 Message = HotReloadIntroducedTypeStatusSection.AppendRevertAllNote(
                     clearedCount == 0
