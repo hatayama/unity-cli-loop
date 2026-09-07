@@ -162,7 +162,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             // Captured before this method mutates editor state, so the warning reflects the
             // request-start snapshot the same way CompileUseCase does.
-            int activeHotReloadPatchCount = _domainReloadDropStateProvider.GetActiveHotReloadPatchCount();
+            int activeHotReloadChangeCount = _domainReloadDropStateProvider.GetActiveHotReloadChangeCount();
             int activePausePointCount = _domainReloadDropStateProvider.GetActivePausePointCount();
             bool isDomainReloadDisabledOnEnterPlayMode =
                 _domainReloadDropStateProvider.IsDomainReloadDisabledOnEnterPlayMode();
@@ -216,7 +216,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
                     wasPlaying,
                     isDomainReloadDisabledOnEnterPlayMode,
-                    activeHotReloadPatchCount,
+                    activeHotReloadChangeCount,
                     activePausePointCount));
             return ControlPlayModeActionResult.FromState(message, changed, false, resumedFromPause, warning);
         }

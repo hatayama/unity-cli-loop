@@ -7,12 +7,6 @@ namespace io.github.hatayama.UnityCliLoop.ToolContracts
     /// about to discard. The hot-reload tool lives in a sibling assembly those tools must not
     /// reference, so it publishes the count through a delegate wired at its own startup.
     /// </summary>
-    /// <remarks>
-    /// Why this is separate from <see cref="HotReloadPausePointCoordination"/>: that class
-    /// coordinates hot reload with the pause-point tool, which asks about method shims only. What
-    /// a domain reload discards is a different question with different consumers, and its answer
-    /// includes the types a reload introduced, which own no shim.
-    /// </remarks>
     public static class HotReloadRuntimeChangeCoordination
     {
         // Set by the hot-reload startup. Returns how many hot-reload changes the next domain

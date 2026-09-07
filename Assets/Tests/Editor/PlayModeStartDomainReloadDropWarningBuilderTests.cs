@@ -20,7 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: true,
                 isDomainReloadDisabledOnEnterPlayMode: false,
-                activeHotReloadPatchCount: 2,
+                activeHotReloadChangeCount: 2,
                 activePausePointCount: 3);
 
             Assert.That(warning, Is.Null);
@@ -35,7 +35,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: true,
-                activeHotReloadPatchCount: 2,
+                activeHotReloadChangeCount: 2,
                 activePausePointCount: 3);
 
             Assert.That(warning, Is.Null);
@@ -50,7 +50,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: false,
-                activeHotReloadPatchCount: 0,
+                activeHotReloadChangeCount: 0,
                 activePausePointCount: 0);
 
             Assert.That(warning, Is.Null);
@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: false,
-                activeHotReloadPatchCount: 2,
+                activeHotReloadChangeCount: 2,
                 activePausePointCount: 0);
 
             Assert.That(
@@ -83,7 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: false,
-                activeHotReloadPatchCount: 0,
+                activeHotReloadChangeCount: 0,
                 activePausePointCount: 3);
 
             Assert.That(
@@ -101,7 +101,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: false,
-                activeHotReloadPatchCount: 2,
+                activeHotReloadChangeCount: 2,
                 activePausePointCount: 3);
 
             Assert.That(

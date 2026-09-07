@@ -260,6 +260,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             " {0} introduced type(s) stay loaded until the next Domain Reload; a revert cannot "
             + "unload the assembly that carries them.";
 
+        // Why the revert answer says this: the hold stays armed for the types the revert left
+        // behind, so a caller told the revert succeeded would otherwise wait for a refresh that
+        // this session will not perform.
+        public const string ActiveIntroducedTypesRevertAllHoldNote =
+            " Auto Refresh stays held for them; run 'uloop compile' to release it.";
+
         // Format: how many types this run introduced.
         public const string IntroducedTypesOnlyApplyMessageFormat =
             "Hot reload introduced {0} type(s); no method body needed patching.";

@@ -41,7 +41,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     clearedCount == 0
                         ? "No active hot-reload changes to revert."
                         : "Reverted all active hot-reload changes.",
-                    introducedTypeCount)
+                    introducedTypeCount,
+                    hold.Held)
             };
         }
 

@@ -80,6 +80,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "A revert cannot unload the artifact assembly, so it must keep the hold.");
                 Assert.That(revert.Message, Does.Contain("Domain Reload"));
                 Assert.That(
+                    revert.Message,
+                    Does.Contain("Auto Refresh stays held"),
+                    "A revert that leaves the hold armed must say so and name the release.");
+                Assert.That(
+                    revert.Message,
+                    Does.Contain("uloop compile"),
+                    "The caller needs the command that actually releases the hold.");
+                Assert.That(
                     HotReloadAutoRefreshHoldConstants.NewlyArmedMessageSuffix,
                     Does.Not.Contain("or '--revert-all' to release it"),
                     "A revert that keeps the hold must not be offered as a way to release it.");
@@ -195,10 +203,36 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     Is.EqualTo(1),
                     "A type the reload introduced is discarded by the next Domain Reload too.");
 
+
+            }
+        }
+
+        /// <summary>
+        /// What: a run that both patches a method and introduces a type totals the two together,
+        /// so the count of what a domain reload discards adds the kinds up instead of reporting
+        /// whichever kind happens to be larger.
+        /// </summary>
+        [Test]
+        public async Task RunPatchingAMethodAndIntroducingAType_TotalsBothKindsOfChange()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadOrchestratorResult result = await RunPatchingABodyAndIntroducingATypeAsync();
+
                 Assert.That(
-                    ReadTotalOfAnArtifactCarryingTwoTypes(),
+                    result.ActivePatchTotal,
+                    Is.EqualTo(1),
+                    "Precondition: the run must have patched exactly one method.");
+                Assert.That(
+                    HotReloadActiveChangeCounts.IntroducedTypeCount,
+                    Is.EqualTo(1),
+                    "Precondition: the run must have introduced exactly one type.");
+                Assert.That(
+                    HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount(),
                     Is.EqualTo(2),
-                    "Every discarded change is counted, so the total is a sum and not a maximum.");
+                    "One patch and one type are two changes to lose, not one.");
+                Assert.That(HotReloadActiveChangeCounts.RuntimeChangeTotal, Is.EqualTo(2));
             }
         }
 
@@ -232,23 +266,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return result;
         }
 
+        private static async Task<HotReloadOrchestratorResult> RunPatchingABodyAndIntroducingATypeAsync()
+        {
+            string hostPath = FixturePath(HostFileName);
+            return await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeHoldAndPatchHost.cs",
+                    EditTheScaledBody(InsertIntroducedType(File.ReadAllText(hostPath)))),
+                CancellationToken.None);
+        }
+
+        private static string EditTheScaledBody(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(ScaledBodyAnchor), "Precondition: scaled body anchor must exist.");
+            return hostSource.Replace(ScaledBodyAnchor, "return factor * 4;", StringComparison.Ordinal);
+        }
+
         private static void ActivateArtifactWithOneType()
         {
             ActivateArtifact(CreateDescriptor("Fixture.HeldType"));
-        }
-
-        // Why one artifact carrying both: an artifact assembly may be activated once, and a batch
-        // that compiles two declarations together produces exactly this shape.
-        private static int ReadTotalOfAnArtifactCarryingTwoTypes()
-        {
-            using (HotReloadIntroducedTypeHolder.BeginReplacement())
-            {
-                HotReloadIntroducedTypeHolder.Initialize();
-                ActivateArtifact(
-                    CreateDescriptor("Fixture.HeldType"),
-                    CreateDescriptor("Fixture.SecondHeldType"));
-                return HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount();
-            }
         }
 
         private static void ActivateArtifact(params HotReloadIntroducedTypeDescriptor[] descriptors)
@@ -306,5 +343,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string HostFileName = "HotReloadCrossFileAddedMemberHost.cs";
 
         private const string HostTypeAnchor = "    public sealed class HotReloadCrossFileAddedMemberHost";
+
+        private const string ScaledBodyAnchor = "return factor;";
     }
 }

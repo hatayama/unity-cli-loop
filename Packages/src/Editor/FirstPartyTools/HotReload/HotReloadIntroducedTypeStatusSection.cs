@@ -40,19 +40,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         /// <summary>
         /// Adds what a revert leaves behind, so a caller told every change was reverted is not
-        /// left believing the introduced types went with them.
+        /// left believing the introduced types went with them, and says how the hold those types
+        /// keep armed is released.
         /// </summary>
-        internal static string AppendRevertAllNote(string message, int introducedTypeCount)
+        internal static string AppendRevertAllNote(
+            string message,
+            int introducedTypeCount,
+            bool autoRefreshHeld)
         {
             if (introducedTypeCount == 0)
             {
                 return message;
             }
 
-            return message + string.Format(
+            string note = message + string.Format(
                 CultureInfo.InvariantCulture,
                 HotReloadConstants.ActiveIntroducedTypesRevertAllNoteFormat,
                 introducedTypeCount);
+            if (!autoRefreshHeld)
+            {
+                return note;
+            }
+
+            return note + HotReloadConstants.ActiveIntroducedTypesRevertAllHoldNote;
         }
     }
 }

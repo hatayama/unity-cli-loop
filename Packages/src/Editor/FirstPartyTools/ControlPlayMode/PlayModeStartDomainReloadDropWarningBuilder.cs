@@ -11,31 +11,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public static string BuildWarning(
             bool wasPlayingAtRequestStart,
             bool isDomainReloadDisabledOnEnterPlayMode,
-            int activeHotReloadPatchCount,
+            int activeHotReloadChangeCount,
             int activePausePointCount)
         {
             if (wasPlayingAtRequestStart || isDomainReloadDisabledOnEnterPlayMode)
             {
                 return null;
             }
-            if (activeHotReloadPatchCount <= 0 && activePausePointCount <= 0)
+            if (activeHotReloadChangeCount <= 0 && activePausePointCount <= 0)
             {
                 return null;
             }
 
-            if (activeHotReloadPatchCount > 0 && activePausePointCount > 0)
+            if (activeHotReloadChangeCount > 0 && activePausePointCount > 0)
             {
                 return "Entering Play Mode triggers a domain reload that will discard "
-                    + activeHotReloadPatchCount
+                    + activeHotReloadChangeCount
                     + " active hot-reload change(s) and "
                     + activePausePointCount
                     + " enabled pause point(s). The new session runs the last compiled assemblies, so hot-reloaded edits that were never compiled are not in effect — run `uloop compile` before Play to keep them, or re-apply `uloop hot-reload` and re-enable pause points after Play Mode starts.";
             }
 
-            if (activeHotReloadPatchCount > 0)
+            if (activeHotReloadChangeCount > 0)
             {
                 return "Entering Play Mode triggers a domain reload that will discard "
-                    + activeHotReloadPatchCount
+                    + activeHotReloadChangeCount
                     + " active hot-reload change(s). The new session runs the last compiled assemblies, so hot-reloaded edits that were never compiled are not in effect — run `uloop compile` before Play to keep them, or re-apply `uloop hot-reload` after Play Mode starts.";
             }
 

@@ -335,6 +335,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             try
             {
                 HotReloadAutoRefreshHold.OverrideServiceForTesting = environment.CreateService();
+                // An introduced type is part of the ledger this reconcile reads, and only this
+                // Editor session can hold one, so say the empty ledger out loud.
+                Assert.That(
+                    HotReloadActiveChangeCounts.IntroducedTypeCount,
+                    Is.EqualTo(0),
+                    "Precondition: the ledger must be empty for the stale flag to be released.");
 
                 HotReloadAutoRefreshHold.ReconcileForTesting();
 

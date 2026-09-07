@@ -658,7 +658,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new StubCompilationFailureGate(false),
                 quietSaver,
                 editorState,
-                new StubDomainReloadDropStateProvider(patchCount: 2));
+                new StubDomainReloadDropStateProvider(changeCount: 2));
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
@@ -669,7 +669,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string dropWarning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: false,
-                activeHotReloadPatchCount: 2,
+                activeHotReloadChangeCount: 2,
                 activePausePointCount: 0);
             Assert.That(
                 response.Warning,
@@ -692,7 +692,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new StubCompilationFailureGate(false),
                 quietSaver,
                 editorState,
-                new StubDomainReloadDropStateProvider(patchCount: 2));
+                new StubDomainReloadDropStateProvider(changeCount: 2));
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
@@ -901,7 +901,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 ControlPlayModeDomainReloadDropStateService service =
                     new ControlPlayModeDomainReloadDropStateService();
 
-                Assert.That(service.GetActiveHotReloadPatchCount(), Is.EqualTo(1));
+                Assert.That(service.GetActiveHotReloadChangeCount(), Is.EqualTo(1));
             }
             finally
             {
@@ -912,23 +912,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
         private sealed class StubDomainReloadDropStateProvider : IControlPlayModeDomainReloadDropStateProvider
         {
-            private readonly int _patchCount;
+            private readonly int _changeCount;
             private readonly int _pausePointCount;
             private readonly bool _isDomainReloadDisabled;
 
             public StubDomainReloadDropStateProvider(
-                int patchCount = 0,
+                int changeCount = 0,
                 int pausePointCount = 0,
                 bool isDomainReloadDisabled = false)
             {
-                _patchCount = patchCount;
+                _changeCount = changeCount;
                 _pausePointCount = pausePointCount;
                 _isDomainReloadDisabled = isDomainReloadDisabled;
             }
 
-            public int GetActiveHotReloadPatchCount()
+            public int GetActiveHotReloadChangeCount()
             {
-                return _patchCount;
+                return _changeCount;
             }
 
             public int GetActivePausePointCount()

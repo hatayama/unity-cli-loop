@@ -17,7 +17,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// How many hot-reload changes the Play-start domain reload discards: patched methods,
         /// added members, and the types a reload introduced.
         /// </summary>
-        int GetActiveHotReloadPatchCount();
+        int GetActiveHotReloadChangeCount();
         int GetActivePausePointCount();
         bool IsDomainReloadDisabledOnEnterPlayMode();
     }
@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal sealed class ControlPlayModeDomainReloadDropStateService : IControlPlayModeDomainReloadDropStateProvider
     {
-        public int GetActiveHotReloadPatchCount()
+        public int GetActiveHotReloadChangeCount()
         {
             Func<int> getter = HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
             return getter?.Invoke() ?? 0;
