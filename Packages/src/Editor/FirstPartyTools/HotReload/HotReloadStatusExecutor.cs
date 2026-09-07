@@ -30,9 +30,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ActivePatchTotal = HotReloadPatcher.ActiveChangeCount,
                 AutoRefreshHeld = hold.Held,
                 Warnings = warnings,
-                Message = clearedCount == 0
-                    ? "No active hot-reload changes to revert."
-                    : "Reverted all active hot-reload changes."
+                ActiveIntroducedTypeTotal = HotReloadActiveChangeCounts.IntroducedTypeCount,
+                Message = HotReloadIntroducedTypeStatusSection.AppendRevertAllNote(
+                    clearedCount == 0
+                        ? "No active hot-reload changes to revert."
+                        : "Reverted all active hot-reload changes.",
+                    HotReloadActiveChangeCounts.IntroducedTypeCount)
             };
         }
 
@@ -114,6 +117,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Success = true,
                 Methods = methods,
                 Warnings = warnings,
+                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(),
+                ActiveIntroducedTypeTotal = HotReloadActiveChangeCounts.IntroducedTypeCount,
                 ActivePatchTotal = count,
                 AddedFieldTotal = addedFields.Count,
                 AutoRefreshHeld = hold.Held,

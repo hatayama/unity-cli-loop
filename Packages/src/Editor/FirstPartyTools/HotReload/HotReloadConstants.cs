@@ -252,6 +252,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Source is unchanged since the last applied hot reload; the existing patch stays active "
             + "and keeps its InvocationCount. Edit and reload again to apply new changes.";
 
+        public const string ActiveIntroducedTypeStatusKind = "Active";
+
+        // Format: how many introduced types a revert could not take away. Reverting undoes method
+        // patches, and an assembly this domain loaded can only leave it with a Domain Reload.
+        public const string ActiveIntroducedTypesRevertAllNoteFormat =
+            " {0} introduced type(s) stay loaded until the next Domain Reload; a revert cannot "
+            + "unload the assembly that carries them.";
+
         // Format: how many types this run introduced.
         public const string IntroducedTypesOnlyApplyMessageFormat =
             "Hot reload introduced {0} type(s); no method body needed patching.";
