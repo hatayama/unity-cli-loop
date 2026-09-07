@@ -22,7 +22,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// <remarks>
         /// Why per file: the shim assembly is shared, but a generation, an added-field ledger and
         /// an apply result all belong to a single file, and a file whose entries cannot be
-        /// resolved must not stop its siblings from being applied.
+        /// resolved must not stop its siblings from being applied. The whole group is prepared
+        /// (bound and resolved) first, so nothing is mutated while a sibling can still fail
+        /// preflight.
         /// </remarks>
         internal static IReadOnlyList<HotReloadFileProcessResult> ApplyGroupAndBuildResults(
             HotReloadApplyContext context,
@@ -33,39 +35,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(compileResult != null, "compileResult must not be null.");
             Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
 
-            Dictionary<string, List<TransformWorkerEntryDto>> entriesByFile =
-                HotReloadWorkerRowsByFile.GroupEntriesBySourceFile(entriesToPatch, context.ProjectRelativePaths);
-            // Why once for the group: every shim type of the group lives in this one assembly, so
-            // binding per file would re-run the same binders and hide which file first failed.
-            Dictionary<string, string> bindFailures = BindShimAccessors(compileResult.Assembly);
+            IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles =
+                HotReloadGroupEntryPreparation.PrepareGroup(context, compileResult, entriesToPatch);
             List<HotReloadFileProcessResult> results =
-                new List<HotReloadFileProcessResult>(context.Files.Count);
-            foreach (HotReloadGroupFile file in context.Files)
+                new List<HotReloadFileProcessResult>(preparedFiles.Count);
+            foreach (HotReloadPreparedGroupFile prepared in preparedFiles)
             {
-                if (file.SkipApply)
-                {
-                    results.Add(HotReloadFileEntryApplier.BuildUnappliedResult(file));
-                    continue;
-                }
-
-                List<TransformWorkerEntryDto> fileEntries = entriesByFile[file.ProjectRelativePath];
-                if (fileEntries.Count == 0)
-                {
-                    HotReloadFileEntryApplier.ClearFileGeneration(context, file);
-                    results.Add(HotReloadFileEntryApplier.BuildUnappliedResult(file));
-                    continue;
-                }
-
-                results.Add(
-                    HotReloadFileEntryApplier.ApplyFileAndBuildResult(
-                        context,
-                        file,
-                        compileResult,
-                        fileEntries.ToArray(),
-                        bindFailures));
+                results.Add(ApplyPreparedFile(context, compileResult, prepared));
             }
 
             return results;
+        }
+
+        private static HotReloadFileProcessResult ApplyPreparedFile(
+            HotReloadApplyContext context,
+            HotReloadShimCompileResult compileResult,
+            HotReloadPreparedGroupFile prepared)
+        {
+            HotReloadGroupFile file = prepared.File;
+            if (prepared.Kind == HotReloadGroupFilePreparationKind.SkippedByGroup)
+            {
+                return HotReloadFileEntryApplier.BuildUnappliedResult(file);
+            }
+
+            if (prepared.Kind == HotReloadGroupFilePreparationKind.NoEntriesToApply)
+            {
+                HotReloadFileEntryApplier.ClearFileGeneration(context, file);
+                return HotReloadFileEntryApplier.BuildUnappliedResult(file);
+            }
+
+            if (prepared.Kind == HotReloadGroupFilePreparationKind.ResolutionFailed)
+            {
+                return HotReloadFileEntryApplier.BuildResolutionFailedResult(
+                    context, file, prepared.Resolution);
+            }
+
+            return HotReloadFileEntryApplier.ApplyResolvedFileAndBuildResult(
+                context, file, compileResult, prepared.Entries, prepared.Resolution);
         }
 
         // Why only here and the empty-entries deactivation: a failed worker or shim compile

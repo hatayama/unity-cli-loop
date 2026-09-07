@@ -14,31 +14,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class HotReloadFileEntryApplier
     {
-        // Why preflight before BeginFileGeneration: a match/bind/CheckPatchable failure
-        // must not replace this file's shim or added-member generation.
-        internal static HotReloadFileProcessResult ApplyFileAndBuildResult(
+        // Why the resolution is passed in: preflight for the whole group runs before any file
+        // is mutated, so a match/bind/CheckPatchable failure cannot replace this file's shim or
+        // added-member generation.
+        internal static HotReloadFileProcessResult ApplyResolvedFileAndBuildResult(
             HotReloadApplyContext context,
             HotReloadGroupFile file,
             HotReloadShimCompileResult compileResult,
             TransformWorkerEntryDto[] fileEntries,
-            Dictionary<string, string> bindFailures)
+            HotReloadEntryResolution.Result resolution)
         {
             Debug.Assert(context != null, "context must not be null.");
             Debug.Assert(file != null, "file must not be null.");
             Debug.Assert(fileEntries.Length > 0, "An applied file must hold an entry.");
-
-            HotReloadFileSinks sinks = file.Sinks;
-            HotReloadEntryResolution.Result resolution = HotReloadEntryResolution.ResolveEntries(
-                context.AssemblyName,
-                file.AssemblyResolvePath,
-                compileResult.Assembly,
-                fileEntries,
-                bindFailures);
-            if (!resolution.AllResolved)
-            {
-                sinks.Outcomes.AddRange(resolution.FailureOutcomes);
-                return FinishFileResult(context, file, patchedCount: 0, applied: false);
-            }
+            Debug.Assert(resolution != null && resolution.AllResolved, "resolution must be resolved.");
 
             HotReloadFileGenerations.BeginFileGeneration(
                 file.ProjectRelativePath,
@@ -55,6 +44,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 inlineRiskMethodLabels);
 
             return FinishFileResult(context, file, patchedCount, applied: true, inlineRiskMethodLabels);
+        }
+
+        /// <summary>
+        /// The result of a file whose preflight resolution failed: its failure outcomes are
+        /// reported and nothing of this file is applied.
+        /// </summary>
+        internal static HotReloadFileProcessResult BuildResolutionFailedResult(
+            HotReloadApplyContext context,
+            HotReloadGroupFile file,
+            HotReloadEntryResolution.Result resolution)
+        {
+            Debug.Assert(context != null, "context must not be null.");
+            Debug.Assert(file != null, "file must not be null.");
+            Debug.Assert(resolution != null, "resolution must not be null.");
+
+            file.Sinks.Outcomes.AddRange(resolution.FailureOutcomes);
+            return FinishFileResult(context, file, patchedCount: 0, applied: false);
         }
 
         /// <summary>
