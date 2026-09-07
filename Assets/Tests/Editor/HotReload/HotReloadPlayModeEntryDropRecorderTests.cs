@@ -32,17 +32,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
             _previousApply = HotReloadTool.RunApplyAsyncForTesting;
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(0);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
-        // Why reverting and releasing here: one test applies a real patch and introduces a type,
-        // and the Auto Refresh hold flag is shared by the whole run.
+        // Why syncing rather than releasing: one test applies a real patch and introduces a type,
+        // the Auto Refresh hold flag is shared by the whole run, and by this point the live
+        // registry is back, which may hold introduced types of its own that still warrant a hold.
         [TearDown]
         public void TearDown()
         {
             HotReloadTool.RunApplyAsyncForTesting = _previousApply;
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(0);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
             _ledgerSessionScope.Restore();
         }
 
