@@ -92,6 +92,70 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a declaration this stage cannot introduce is reported as a warning of the
+        /// file that declares it and leaves the run successful, because the declaration stays in
+        /// the source and only a compile can make it available.
+        /// </summary>
+        [Test]
+        public async Task Build_DeclarationCannotBeIntroduced_WarnsWithoutFailingTheRun()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                string hostPath = FixturePath(HostFileName);
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { hostPath },
+                    HotReloadTestSourceWriter.WriteEditedSource(
+                        "IntroducedTypeNoticeHost.cs",
+                        InsertUnintroducibleDeclaration(File.ReadAllText(hostPath))),
+                    CancellationToken.None);
+                HotReloadResponse response = HotReloadApplyResponseBuilder.Build(result, null);
+
+                Assert.That(
+                    response.Success,
+                    Is.True,
+                    "A declaration that is simply not introduced must not fail the reload.");
+                Assert.That(
+                    response.IntroducedTypes.Count,
+                    Is.EqualTo(0),
+                    "Nothing was introduced, so there is no type row to report.");
+                Assert.That(
+                    FindWarning(response, "requires a compile"),
+                    Is.Not.Null,
+                    "The run must say why the declaration is not available. "
+                        + string.Join(" | ", response.Warnings));
+                Assert.That(
+                    FindWarning(response, "requires a compile"),
+                    Does.Contain(HostFileName),
+                    "The warning must name the file that declares it.");
+            }
+        }
+
+        private static string FindWarning(HotReloadResponse response, string fragment)
+        {
+            foreach (string warning in response.Warnings)
+            {
+                if (warning.Contains(fragment, StringComparison.Ordinal))
+                {
+                    return warning;
+                }
+            }
+
+            return null;
+        }
+
+        // A delegate declaration is a type this stage does not introduce, and the worker reports
+        // it without refusing the run.
+        private static string InsertUnintroducibleDeclaration(string hostSource)
+        {
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            return hostSource.Replace(
+                HostTypeAnchor,
+                "    public delegate int HotReloadCrossFileIntroducedDelegate(int value);\n\n" + HostTypeAnchor,
+                StringComparison.Ordinal);
+        }
+
+        /// <summary>
         /// Verifies that a type failure fails the run and reports the type instead of a generic
         /// method row, so the response says which declaration the reload refused.
         /// </summary>

@@ -80,6 +80,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // artifact introduces nothing, so no artifact of this run publishes it, and a run
             // whose only change is such a declaration never reaches an activation at all.
             HotReloadIntroducedTypeOutcomeSink.Append(files, preparation.AlreadyActiveTypes);
+            HotReloadIntroducedTypeOutcomeSink.AppendNotices(files, preparation.Notices);
 
             if (preparation.Prepared == null)
             {

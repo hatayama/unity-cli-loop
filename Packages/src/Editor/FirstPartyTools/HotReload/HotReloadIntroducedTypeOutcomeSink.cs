@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Routes type outcomes to the per-file buffer of the file that declares them.
+    /// Routes type outcomes and type notices to the per-file buffers of the file they belong to.
     /// </summary>
     /// <remarks>
     /// Why routed rather than kept per run: the run result is merged from the per-file results, so
@@ -26,6 +26,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             foreach (HotReloadIntroducedTypeOutcome outcome in outcomes)
             {
                 FindCarrier(files, outcome.OwnerProjectRelativePath).Sinks.IntroducedTypes.Add(outcome);
+            }
+        }
+
+        /// <summary>
+        /// Appends the notices to the warnings of the file that declares them, each prefixed with
+        /// that file so a run over several files says which one the notice is about.
+        /// </summary>
+        internal static void AppendNotices(
+            IReadOnlyList<HotReloadGroupFile> files,
+            IReadOnlyList<HotReloadIntroducedTypeNotice> notices)
+        {
+            if (notices == null || notices.Count == 0)
+            {
+                return;
+            }
+
+            foreach (HotReloadIntroducedTypeNotice notice in notices)
+            {
+                HotReloadGroupFile carrier = FindCarrier(files, notice.OwnerProjectRelativePath);
+                carrier.Sinks.Warnings.Add(
+                    string.IsNullOrEmpty(notice.OwnerProjectRelativePath)
+                        ? notice.Text
+                        : notice.OwnerProjectRelativePath + ": " + notice.Text);
             }
         }
 

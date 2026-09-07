@@ -44,10 +44,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             List<HotReloadIntroducedTypeOutcome> alreadyActiveTypes =
                 CollectAlreadyActiveTypes(prepareResult.Output);
+            List<HotReloadIntroducedTypeNotice> notices = CollectNotices(prepareResult.Output);
             List<HotReloadIntroducedTypeDescriptor> descriptors = CollectDescriptors(prepareResult.Output);
             if (descriptors.Count == 0)
             {
-                return HotReloadIntroducedTypePreparationResult.NoIntroducedTypes(alreadyActiveTypes);
+                return HotReloadIntroducedTypePreparationResult.NoIntroducedTypes(alreadyActiveTypes, notices);
             }
 
             List<HotReloadIntroducedTypeOutcome> doubleDeclarations =
@@ -88,7 +89,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 new HotReloadPreparedIntroducedTypes(
                     compileResult.Artifact,
                     CollectOwnerSourceHashes(prepareResult.Output, descriptors)),
-                alreadyActiveTypes);
+                alreadyActiveTypes,
+                notices);
         }
 
         // Why the active artifacts as well: a declaration this run introduces may name a type an
@@ -158,6 +160,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // introduced, and the source that declares it stays in the tree. A declaration this domain
         // already retains an assembly for is taken out of the tree either way, so continuing would
         // bind callers against the retained definition the edited source no longer declares.
+        // Why every diagnostic but the redefinition one: those declarations are simply not
+        // introduced and their source stays in the tree, so the run continues and only has to
+        // say what will keep not working until a compile.
+        private static List<HotReloadIntroducedTypeNotice> CollectNotices(TransformWorkerOutputDto output)
+        {
+            List<HotReloadIntroducedTypeNotice> notices = new List<HotReloadIntroducedTypeNotice>();
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                foreach (string diagnostic in file.introducedTypeDiagnostics)
+                {
+                    if (diagnostic == null
+                        || diagnostic.StartsWith(
+                            HotReloadConstants.ChangedIntroducedTypeDiagnosticPrefix,
+                            StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    notices.Add(new HotReloadIntroducedTypeNotice(file.projectRelativePath, diagnostic));
+                }
+            }
+
+            return notices;
+        }
+
         private static List<HotReloadIntroducedTypeOutcome> CollectRedefinedTypeFailures(
             TransformWorkerOutputDto output,
             string targetAssemblyName)

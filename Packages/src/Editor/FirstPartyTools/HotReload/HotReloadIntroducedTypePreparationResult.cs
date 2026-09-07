@@ -14,13 +14,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPreparedIntroducedTypes prepared,
             string errorMessage,
             IReadOnlyList<HotReloadIntroducedTypeOutcome> alreadyActiveTypes,
-            IReadOnlyList<HotReloadIntroducedTypeOutcome> failures)
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> failures,
+            IReadOnlyList<HotReloadIntroducedTypeNotice> notices)
         {
             Success = success;
             Prepared = prepared;
             ErrorMessage = errorMessage;
             AlreadyActiveTypes = alreadyActiveTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
             Failures = failures ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
+            Notices = notices ?? Array.Empty<HotReloadIntroducedTypeNotice>();
         }
 
         public bool Success { get; }
@@ -40,6 +42,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public IReadOnlyList<HotReloadIntroducedTypeOutcome> Failures { get; }
 
         /// <summary>
+        /// What the preparation observed without refusing the run, carried even when the run
+        /// introduced nothing: a declaration this stage does not introduce is exactly such a run.
+        /// </summary>
+        public IReadOnlyList<HotReloadIntroducedTypeNotice> Notices { get; }
+
+        /// <summary>
         /// The declarations this run bound from an artifact the domain already retains. Reported
         /// even when the run introduced nothing, because binding a retained type is a run with no
         /// type of its own to prepare.
@@ -47,15 +55,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public IReadOnlyList<HotReloadIntroducedTypeOutcome> AlreadyActiveTypes { get; }
 
         public static HotReloadIntroducedTypePreparationResult NoIntroducedTypes(
-            IReadOnlyList<HotReloadIntroducedTypeOutcome> alreadyActiveTypes = null)
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> alreadyActiveTypes = null,
+            IReadOnlyList<HotReloadIntroducedTypeNotice> notices = null)
         {
             return new HotReloadIntroducedTypePreparationResult(
-                true, null, string.Empty, alreadyActiveTypes, null);
+                true, null, string.Empty, alreadyActiveTypes, null, notices);
         }
 
         public static HotReloadIntroducedTypePreparationResult WithPrepared(
             HotReloadPreparedIntroducedTypes prepared,
-            IReadOnlyList<HotReloadIntroducedTypeOutcome> alreadyActiveTypes = null)
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> alreadyActiveTypes = null,
+            IReadOnlyList<HotReloadIntroducedTypeNotice> notices = null)
         {
             if (prepared == null)
             {
@@ -63,7 +73,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return new HotReloadIntroducedTypePreparationResult(
-                true, prepared, string.Empty, alreadyActiveTypes, null);
+                true, prepared, string.Empty, alreadyActiveTypes, null, notices);
         }
 
         /// <summary>
@@ -78,7 +88,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentException("A preparation failure must carry a reason.", nameof(errorMessage));
             }
 
-            return new HotReloadIntroducedTypePreparationResult(false, null, errorMessage, null, null);
+            return new HotReloadIntroducedTypePreparationResult(
+                false, null, errorMessage, null, null, null);
         }
 
         /// <summary>
@@ -93,7 +104,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentException("A type failure must carry a refused declaration.", nameof(failures));
             }
 
-            return new HotReloadIntroducedTypePreparationResult(false, null, string.Empty, null, failures);
+            return new HotReloadIntroducedTypePreparationResult(
+                false, null, string.Empty, null, failures, null);
         }
     }
 }
