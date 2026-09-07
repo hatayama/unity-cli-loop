@@ -92,7 +92,12 @@ func (r *TokenResolver) resolveFromGhCLI(ctx context.Context) string {
 	if err != nil {
 		return ""
 	}
-	ghCtx, cancel := context.WithTimeout(ctx, ghTokenTimeout)
+	// Why the parent's cancellation is dropped: inheriting it would let the first
+	// caller's context decide the result for the whole process. A canceled ctx, or
+	// one with a deadline shorter than ghTokenTimeout, makes the lookup fail, and
+	// once caches that empty token — every later API request would then go out
+	// anonymously. The five-second bound is the real contract here, and it stays.
+	ghCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ghTokenTimeout)
 	defer cancel()
 	output, err := r.run(ghCtx, ghPath, "auth", "token")
 	if err != nil {

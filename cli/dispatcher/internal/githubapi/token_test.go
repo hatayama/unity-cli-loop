@@ -157,3 +157,22 @@ func TestStaticTokenSourceReturnsConfiguredToken(t *testing.T) {
 		t.Fatalf("expected no token, got %q", token)
 	}
 }
+
+// Verifies a canceled caller cannot poison the cached token for the rest of the process.
+func TestTokenResolverIgnoresCallerCancellation(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+	resolver := newTokenResolverWithCommands(foundGhPath, func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("the gh CLI context must not be canceled by the caller: %v", err)
+			return nil, nil
+		}
+		return []byte("gho_fake\n"), nil
+	})
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if token := resolver.Resolve(canceled); token != "gho_fake" {
+		t.Fatalf("token mismatch: got %q", token)
+	}
+}
