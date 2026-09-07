@@ -1,0 +1,132 @@
+{
+  "comment": "Defines which files inside an installed skill directory take part in the installed-vs-source comparison, and the resulting status. Files in subdirectories are always compared; at the skill directory root only Markdown files are compared, so metadata files placed there by other tools never make an up-to-date skill report as outdated. SKILL.md is always compared. Both the Go dispatcher (target mode) and the Unity Editor derive the same status from these cases. Directory layout is out of scope: each side asks its own layout function where the installed skill lives.",
+  "skillFileContent": "---\nname: uloop-sample\n---\n\n# sample\n",
+  "cases": [
+    {
+      "id": "identical-copy",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "installed": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "expected": "installed"
+    },
+    {
+      "id": "root-level-non-markdown-file-is-ignored",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "installed": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n",
+        "apm.yml": "name: sample\n"
+      },
+      "expected": "installed"
+    },
+    {
+      "id": "root-level-non-markdown-file-with-uppercase-extension-is-ignored",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "installed": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n",
+        "manifest.YML": "name: sample\n"
+      },
+      "expected": "installed"
+    },
+    {
+      "id": "extra-root-level-markdown-file-is-outdated",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "installed": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n",
+        "EXTRA.md": "extra\n"
+      },
+      "expected": "outdated"
+    },
+    {
+      "id": "extra-file-in-subdirectory-is-outdated",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "installed": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n",
+        "references/extra.txt": "extra\n"
+      },
+      "expected": "outdated"
+    },
+    {
+      "id": "missing-reference-file-is-outdated",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "installed": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n"
+      },
+      "expected": "outdated"
+    },
+    {
+      "id": "changed-skill-file-is-outdated",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "installed": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# changed\n",
+        "references/note.md": "note\n"
+      },
+      "expected": "outdated"
+    },
+    {
+      "id": "meta-file-is-ignored",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "installed": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n",
+        "SKILL.md.meta": "fileFormatVersion: 2\n"
+      },
+      "expected": "installed"
+    },
+    {
+      "id": "source-only-root-level-non-markdown-file-is-ignored",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n",
+        "tool.yml": "name: sample\n"
+      },
+      "installed": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "expected": "installed"
+    },
+    {
+      "id": "gitkeep-in-subdirectory-is-ignored",
+      "source": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n"
+      },
+      "installed": {
+        "SKILL.md": "---\nname: uloop-sample\n---\n\n# sample\n",
+        "references/note.md": "note\n",
+        "references/.gitkeep": ""
+      },
+      "expected": "installed"
+    }
+  ]
+}
