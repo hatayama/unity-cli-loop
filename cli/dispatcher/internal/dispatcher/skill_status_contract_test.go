@@ -14,9 +14,8 @@ import (
 const skillStatusContractPath = "tests/contracts/skill_status_contract.json"
 
 type skillStatusContractFile struct {
-	Comment          string                    `json:"comment"`
-	SkillFileContent string                    `json:"skillFileContent"`
-	Cases            []skillStatusContractCase `json:"cases"`
+	Comment string                    `json:"comment"`
+	Cases   []skillStatusContractCase `json:"cases"`
 }
 
 type skillStatusContractCase struct {

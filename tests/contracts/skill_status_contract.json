@@ -1,6 +1,5 @@
 {
   "comment": "Defines which files inside an installed skill directory take part in the installed-vs-source comparison, and the resulting status. Files in subdirectories are always compared; at the skill directory root only Markdown files are compared, so metadata files placed there by other tools never make an up-to-date skill report as outdated. SKILL.md is always compared. Both the Go dispatcher (target mode) and the Unity Editor derive the same status from these cases. Directory layout is out of scope: each side asks its own layout function where the installed skill lives.",
-  "skillFileContent": "---\nname: uloop-sample\n---\n\n# sample\n",
   "cases": [
     {
       "id": "identical-copy",
