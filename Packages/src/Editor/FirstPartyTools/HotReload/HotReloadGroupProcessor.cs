@@ -92,7 +92,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             HotReloadIntroducedTypeArtifact artifact = prepared.Artifact;
             HotReloadIntroducedTypeRegistry registry = HotReloadIntroducedTypeHolder.Registry;
-            registry.RegisterPrepared(artifact);
             List<TransformWorkerIntroducedTypeArtifactDto> records =
                 new List<TransformWorkerIntroducedTypeArtifactDto>(workerInput.introducedTypeArtifacts);
             records.Add(HotReloadIntroducedTypeArtifactRecords.CreateRecord(artifact));
@@ -104,6 +103,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 try
                 {
+                    // Why inside the scope and first in the try: the finally below is what drops
+                    // the membership again, so registering anywhere the finally does not cover
+                    // would leave the run's membership behind when the scope itself throws.
+                    registry.RegisterPrepared(artifact);
                     return await TransformAndApplyGroupAsync(files, workerInput, prepared, correlationId, ct)
                         .ConfigureAwait(false);
                 }
