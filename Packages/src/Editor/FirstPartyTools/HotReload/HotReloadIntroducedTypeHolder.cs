@@ -4,6 +4,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
     /// Owns the single introduced type registry and assembly resolver pair of the current domain.
+    /// A replacement scope disposes the resolver it takes over from and rebuilds one over the
+    /// original registry when it closes.
     /// </summary>
     internal static class HotReloadIntroducedTypeHolder
     {
@@ -29,16 +31,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Detaches the current pair and returns a scope that disposes whatever replaced it and
-        /// restores the original one.
+        /// Stops the current resolver from answering binds and returns a scope that restores a
+        /// resolver over the original registry when it closes.
         /// </summary>
+        /// <remarks>
+        /// Why the current resolver is disposed rather than only detached from the fields: its
+        /// AppDomain.AssemblyResolve subscription lives in the resolver itself, so leaving it
+        /// alive would let two resolvers answer the same bind and leak the original registry's
+        /// artifacts into whatever the caller installs.
+        /// </remarks>
         public static IDisposable BeginReplacement()
         {
             HotReloadIntroducedTypeRegistry originalRegistry = registry;
-            HotReloadIntroducedTypeAssemblyResolver originalResolver = resolver;
+            resolver?.Dispose();
             registry = null;
             resolver = null;
-            return new ReplacementScope(originalRegistry, originalResolver);
+            return new ReplacementScope(originalRegistry);
         }
 
         private static T RequireInitialized<T>(T instance)
@@ -58,15 +66,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private sealed class ReplacementScope : IDisposable
         {
             private readonly HotReloadIntroducedTypeRegistry originalRegistry;
-            private readonly HotReloadIntroducedTypeAssemblyResolver originalResolver;
             private bool restored;
 
-            public ReplacementScope(
-                HotReloadIntroducedTypeRegistry originalRegistry,
-                HotReloadIntroducedTypeAssemblyResolver originalResolver)
+            public ReplacementScope(HotReloadIntroducedTypeRegistry originalRegistry)
             {
                 this.originalRegistry = originalRegistry;
-                this.originalResolver = originalResolver;
             }
 
             public void Dispose()
@@ -79,13 +83,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 restored = true;
                 // The replacement resolver stays subscribed to AppDomain.AssemblyResolve until it
                 // is disposed, so leaving it attached would keep answering binds after the scope.
-                if (resolver != null && !ReferenceEquals(resolver, originalResolver))
-                {
-                    resolver.Dispose();
-                }
-
+                resolver?.Dispose();
                 registry = originalRegistry;
-                resolver = originalResolver;
+                // Why a new resolver over the original registry: the original one was disposed
+                // when the scope opened, and a disposed resolver no longer answers binds.
+                resolver = originalRegistry == null
+                    ? null
+                    : new HotReloadIntroducedTypeAssemblyResolver(originalRegistry);
             }
         }
     }

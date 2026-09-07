@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 
 using NUnit.Framework;
@@ -54,6 +55,53 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 HotReloadIntroducedTypeHolder.Resolver.ResolveExact(artifact.AssemblyFullName),
                 Is.Null);
+        }
+
+        /// <summary>
+        /// Verifies that opening a replacement scope stops the resolver it took over from
+        /// answering binds, and that closing the scope makes the original registry resolvable
+        /// again through a live resolver.
+        /// </summary>
+        [Test]
+        public void Holder_ReplacementScopeOpen_OnlyTheReplacementResolverAnswersBinds()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadIntroducedTypeRegistry outerRegistry = HotReloadIntroducedTypeHolder.Registry;
+                HotReloadIntroducedTypeAssemblyResolver outerResolver = HotReloadIntroducedTypeHolder.Resolver;
+
+                using (HotReloadIntroducedTypeHolder.BeginReplacement())
+                {
+                    HotReloadIntroducedTypeHolder.Initialize();
+                    HotReloadIntroducedTypeAssemblyResolver innerResolver = HotReloadIntroducedTypeHolder.Resolver;
+                    int innerBefore = innerResolver.ResolutionCount;
+                    int outerBefore = outerResolver.ResolutionCount;
+
+                    RequestUnknownAssembly();
+
+                    Assert.That(innerResolver.ResolutionCount, Is.GreaterThan(innerBefore));
+                    Assert.That(
+                        outerResolver.ResolutionCount,
+                        Is.EqualTo(outerBefore),
+                        "The taken-over resolver must be unsubscribed, or two resolvers answer one bind.");
+                }
+
+                Assert.That(HotReloadIntroducedTypeHolder.Registry, Is.SameAs(outerRegistry));
+                HotReloadIntroducedTypeAssemblyResolver restoredResolver = HotReloadIntroducedTypeHolder.Resolver;
+                int restoredBefore = restoredResolver.ResolutionCount;
+
+                RequestUnknownAssembly();
+
+                Assert.That(restoredResolver.ResolutionCount, Is.GreaterThan(restoredBefore));
+            }
+        }
+
+        private static void RequestUnknownAssembly()
+        {
+            Assert.Throws<FileNotFoundException>(() => Assembly.Load(
+                new AssemblyName("MissingIntroducedTypeDependency" + Guid.NewGuid().ToString("N")
+                    + ", Version=1.0.0.0, Culture=neutral, PublicKeyToken=null")));
         }
 
         private static HotReloadIntroducedTypeArtifact CreateArtifact()
