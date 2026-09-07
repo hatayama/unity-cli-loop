@@ -98,9 +98,12 @@ recovery: the types stay loaded whatever the methods did, so a re-apply is not a
 - Auto Refresh stays held while any introduced type is active, so returning focus to the Editor
   does not recompile. `--revert-all` releases the hold only when no introduced type remains;
   `uloop compile` always releases it.
-- Entering Play Mode reloads the domain, which discards the introduced types along with the
-  patches. They are counted in `DroppedByPlayModeEntryCount` on the next `--status`, and
-  re-applying the same declaration clears that record.
+- When Domain Reload is enabled on Play entry (the default), entering Play Mode reloads the
+  domain, which discards the introduced types along with the patches. They are counted in
+  `DroppedByPlayModeEntryCount` on the next `--status`, and re-applying the same declaration
+  clears that record. With Enter Play Mode Options set to disable Domain Reload, Play entry
+  reloads nothing: the active changes and the introduced types survive it, and nothing is
+  recorded as dropped.
 - **Values are not preserved.** Nothing carries the state of an introduced type's instances
   across the domain reload that ends its life, and this stage makes no attempt to. Treat an
   introduced type as an Editor-session illusion, exactly like an added member.

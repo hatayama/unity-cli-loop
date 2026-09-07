@@ -52,8 +52,10 @@ Editor.
 `--revert-all` reverts patches and added members but cannot unload an introduced type; the
 response says how many stayed. Auto Refresh stays held while any introduced type is active —
 `uloop compile` always releases it, `--revert-all` only when no introduced type remains.
-Entering Play Mode reloads the domain and discards the types with the patches; they are counted
-in `DroppedByPlayModeEntryCount` until a later apply re-introduces them.
+With Domain Reload enabled on Play entry (the default), entering Play Mode reloads the domain and
+discards the types with the patches; they are counted in `DroppedByPlayModeEntryCount` until a
+later apply re-introduces them. With Enter Play Mode Options set to disable Domain Reload, the
+active changes and the introduced types survive Play entry and nothing is recorded as dropped.
 
 Values are not preserved across the reload that ends a type's life, and editing the body of a
 method **of** an introduced type is out of scope for this stage.
