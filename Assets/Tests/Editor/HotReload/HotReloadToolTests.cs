@@ -648,7 +648,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.RecommendedNextAction,
                 Is.EqualTo(
-                    "Partially applied. Fix the failed methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches."));
+                    "Partially applied. Fix the failed declarations or methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches."));
             Assert.That(response.ShouldSerializeRecommendedNextAction(), Is.True);
         }
 
@@ -674,7 +674,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.RecommendedNextAction,
                 Is.EqualTo(
-                    "Partially applied. Fix the failed methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches."));
+                    "Partially applied. Fix the failed declarations or methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches."));
             Assert.That(response.ShouldSerializeRecommendedNextAction(), Is.True);
         }
 
@@ -698,7 +698,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             Assert.That(
                 response.RecommendedNextAction,
-                Is.EqualTo("Fix the failed methods and rerun, or run 'uloop compile'."));
+                Is.EqualTo("Fix the failed declarations or methods and rerun, or run 'uloop compile'."));
             Assert.That(response.ShouldSerializeRecommendedNextAction(), Is.True);
         }
 

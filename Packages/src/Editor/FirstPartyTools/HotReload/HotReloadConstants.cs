@@ -370,8 +370,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string SourceFileNotInCompiledAssemblyReasonFormat =
             "'{0}' is not part of the last compiled assembly '{1}' (a newly added script). New files require a real compile; run 'uloop compile' first.";
 
+        // Why "declarations or methods": a run can fail on a refused type declaration alone, and
+        // Methods is then empty, so a next action naming only methods would send the reader to a
+        // section with nothing in it.
         public const string PartialApplyRecommendedNextAction =
-            "Partially applied. Fix the failed methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches.";
+            "Partially applied. Fix the failed declarations or methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches.";
 
         public const string AtomicFileSkipReason =
             "Skipped: hot reload applies each file all-or-nothing, and another method in this file failed. Nothing from this file was applied; patches from earlier reloads are untouched. Fix the failed methods and rerun, or run 'uloop compile'.";
@@ -382,7 +385,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "A Harmony patch failed after {0} method(s) in this file were already applied by this run; the file is partially applied. Run 'uloop hot-reload --revert-all' and re-apply your edits, or run 'uloop compile'.";
 
         public const string FailedWithNoApplyRecommendedNextAction =
-            "Fix the failed methods and rerun, or run 'uloop compile'.";
+            "Fix the failed declarations or methods and rerun, or run 'uloop compile'.";
 
         // SessionState key for method identities discarded by the Play-entry domain reload.
         // SessionState survives that reload and is cleared when the Editor process exits.

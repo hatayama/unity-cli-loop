@@ -136,7 +136,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     hasFailure,
                     result.PatchedTotal,
                     CountAddedOutcomes(result),
-                    HotReloadIntroducedTypeResponseSection.CountCommittedTypes(result.IntroducedTypes))
+                    HotReloadIntroducedTypeResponseSection.CountIntroducedTypes(result.IntroducedTypes))
             };
         }
 

@@ -177,6 +177,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a run whose only type outcome is a declaration bound from an assembly an
+        /// earlier reload retained is not called a partial apply: this run activated nothing, so
+        /// there is nothing of it to keep or discard.
+        /// </summary>
+        [Test]
+        public async Task Build_MethodFailsWhileOnlyRetainedTypesWereBound_RecommendsNoPartialApply()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateAlreadyActiveWithFailingApplyDependencies()))
+                {
+                    HotReloadResponse response = await RunEditingOnlyABodyAsync();
+
+                    Assert.That(response.Success, Is.False);
+                    Assert.That(
+                        response.PatchedTotal,
+                        Is.EqualTo(0),
+                        "Precondition: no method was patched, which is what makes the type count decide.");
+                    Assert.That(
+                        CountTypeRows(response, "AlreadyActive"),
+                        Is.EqualTo(1),
+                        "Precondition: the run has to carry the retained declaration. " + response.Message);
+                    Assert.That(
+                        response.RecommendedNextAction,
+                        Is.EqualTo(HotReloadConstants.FailedWithNoApplyRecommendedNextAction),
+                        "A run that activated nothing of its own applied no part of what was asked.");
+                }
+            }
+        }
+
+        /// <summary>
         /// Verifies that a reload which introduces no type keeps both type fields off the wire, so
         /// the response shape of the vast majority of reloads does not change.
         /// </summary>
@@ -218,6 +251,52 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     EditTheScaledBody(InsertIntroducedType(File.ReadAllText(hostPath)))),
                 CancellationToken.None);
             return HotReloadApplyResponseBuilder.Build(result, null);
+        }
+
+        // A run that reaches the apply stage without introducing a type of its own.
+        private static async Task<HotReloadResponse> RunEditingOnlyABodyAsync()
+        {
+            string callerPath = FixturePath(CallerFileName);
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { callerPath },
+                HotReloadTestSourceWriter.WriteEditedSource(
+                    "RetainedTypeOnlyCaller.cs",
+                    EditTheCallerBody(File.ReadAllText(callerPath))),
+                CancellationToken.None);
+            return HotReloadApplyResponseBuilder.Build(result, null);
+        }
+
+        // The production pipeline with the preparation reporting one retained declaration and the
+        // apply stage failing, so the run carries a type row it did not activate itself.
+        private static HotReloadGroupProcessorDependencies CreateAlreadyActiveWithFailingApplyDependencies()
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                (files, input, ct) => Task.FromResult(
+                    HotReloadIntroducedTypePreparationResult.NoIntroducedTypes(
+                        new[]
+                        {
+                            HotReloadIntroducedTypeOutcome.AlreadyActive(
+                                "Example.RetainedType",
+                                "SomeAssembly",
+                                files[0].ProjectRelativePath)
+                        })),
+                TransformWorkerClient.RunAsync,
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                (context, compile, preparedFiles) =>
+                {
+                    foreach (HotReloadGroupFile file in context.Files)
+                    {
+                        file.Sinks.Outcomes.Add(
+                            HotReloadMethodOutcome.Failed(
+                                "InjectedMethod",
+                                "The injected apply stage failed this method.",
+                                file.ProjectRelativePath));
+                    }
+
+                    return HotReloadFileEntryApplier.BuildUnappliedGroupResults(context.Files);
+                });
         }
 
         private static string EditTheScaledBody(string hostSource)

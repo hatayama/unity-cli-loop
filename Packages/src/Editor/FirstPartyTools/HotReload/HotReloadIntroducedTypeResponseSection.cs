@@ -26,13 +26,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// How many types this run left active: the ones it introduced plus the ones it bound from
-        /// an assembly the domain already retained. Both stay loaded until the next Domain Reload.
+        /// How many types this run itself activated, which is what a partial apply is measured in.
         /// </summary>
-        internal static int CountCommittedTypes(IReadOnlyList<HotReloadIntroducedTypeOutcome> outcomes)
+        /// <remarks>
+        /// Why the retained declarations are left out: an AlreadyActive row was activated by an
+        /// earlier reload, so this run has nothing of its own to keep or discard for it — the same
+        /// reason an AlreadyActive method is not counted as patched.
+        /// </remarks>
+        internal static int CountIntroducedTypes(IReadOnlyList<HotReloadIntroducedTypeOutcome> outcomes)
         {
-            return CountOfKind(outcomes, HotReloadIntroducedTypeOutcomeKind.Introduced)
-                + CountOfKind(outcomes, HotReloadIntroducedTypeOutcomeKind.AlreadyActive);
+            return CountOfKind(outcomes, HotReloadIntroducedTypeOutcomeKind.Introduced);
         }
 
         /// <summary>
