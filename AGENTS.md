@@ -210,8 +210,11 @@ not work.
 
 ## Unity Freeze Prevention
 
-Unity EditMode tests can freeze the Editor. Never run multiple `uloop run-tests` commands in
-parallel — Unity Test Runner is single-flight only. Before adding or modifying Unity EditMode
+Unity EditMode tests can freeze the Editor. `uloop` is single-flight per Editor: a command sent
+while another is still running is rejected with a BUSY error after a bounded retry, so two
+`uloop run-tests` runs never overlap in one Editor. When you see BUSY, wait for the running
+command to finish and run yours once — do not retry in a loop. Separate Unity projects run in
+separate Editors and do not block each other. Before adding or modifying Unity EditMode
 tests (especially anything touching async execution, cancellation, threads, or dynamic-code
 runtime paths), read `docs/unity-editmode-test-guardrails.md` and follow its rules. If a new
 test makes `uloop run-tests` stall, remove or disable it instead of retrying the suite. If

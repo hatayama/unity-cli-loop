@@ -6,7 +6,7 @@ async execution, cancellation, threads, or dynamic-code runtime paths.
 
 ## Hard rules
 
-- Never run multiple `uloop run-tests` commands in parallel. Treat Unity Test Runner as single-flight only.
+- `uloop` is single-flight per Editor: a `run-tests` sent while another command runs is rejected with BUSY after a bounded retry, so runs never overlap. On BUSY, wait for the running command and run once; do not retry in a loop.
 - Do not add tests that rely on infinite waits, long-lived `TaskCompletionSource`, background fire-and-forget work, or cancellation handoff across domain reload boundaries.
 - Avoid tests that intentionally cancel linked `CancellationTokenSource` instances while Unity may still dispose them during reload or teardown.
 - Do not add Unity EditMode tests that use `Task.Run`, raw `Thread` work, or cross-thread coordination primitives such as `ManualResetEventSlim` unless the test is explicitly reviewed as unavoidable.
