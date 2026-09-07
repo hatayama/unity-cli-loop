@@ -24,7 +24,7 @@ const (
 
 // tokenNextAction tells the user how to move from the shared anonymous quota
 // to their own authenticated one.
-const tokenNextAction = "Set GH_TOKEN (or GITHUB_TOKEN) to a GitHub token so uloop uses your authenticated API quota, then retry."
+const tokenNextAction = "Set GH_TOKEN (or GITHUB_TOKEN) to a GitHub token, or run `gh auth login` so uloop can use the gh CLI's token, then retry."
 
 // RateLimitError reports that GitHub refused a REST API request because the
 // caller's request quota is exhausted. Anonymous quota is shared by every

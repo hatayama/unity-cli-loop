@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
 	"time"
 
@@ -27,8 +26,6 @@ func setGithubAPIBase(url string) { githubAPIBaseURL = url }
 
 const (
 	githubReleaseBaseURL   = "https://github.com/%s/releases/download/%s/%s"
-	envAuthTokenPrimary    = "GITHUB_TOKEN"
-	envAuthTokenSecondary  = "GH_TOKEN"
 	acceptHeaderGitHubJSON = "application/vnd.github+json"
 	apiVersionHeaderValue  = "2022-11-28"
 )
@@ -119,7 +116,7 @@ func fetchGitRef(ctx context.Context, apiURL string) (string, string, error) {
 	}
 	req.Header.Set("Accept", acceptHeaderGitHubJSON)
 	req.Header.Set("X-GitHub-Api-Version", apiVersionHeaderValue)
-	authenticated := setAuthorizationIfAvailable(req)
+	authenticated := setAuthorizationIfAvailable(ctx, req)
 	resp, err := DefaultHTTPClient.Do(req)
 	if err != nil {
 		return "", "", fmt.Errorf("%w: %v", ErrTagRefFetch, err)
@@ -148,11 +145,8 @@ func tagRefStatusError(resp *http.Response, apiURL string, authenticated bool) e
 
 // setAuthorizationIfAvailable reports whether a token was attached, so a
 // later rate-limit refusal can skip the "set a token" guidance.
-func setAuthorizationIfAvailable(req *http.Request) bool {
-	token := os.Getenv(envAuthTokenPrimary)
-	if token == "" {
-		token = os.Getenv(envAuthTokenSecondary)
-	}
+func setAuthorizationIfAvailable(ctx context.Context, req *http.Request) bool {
+	token := githubapi.DefaultTokenSource.Resolve(ctx)
 	if token == "" {
 		return false
 	}

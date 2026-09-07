@@ -148,3 +148,52 @@ func TestFetchDispatcherReleasePageReportsRateLimit(t *testing.T) {
 		t.Fatalf("expected list releases prefix, got: %v", err)
 	}
 }
+
+// installAuthorizationRecordingReleaseServer serves an empty release page and
+// records the Authorization header the request carried.
+func installAuthorizationRecordingReleaseServer(t *testing.T, recorded *string) (*httptest.Server, func()) {
+	t.Helper()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*recorded = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]githubReleaseListEntry{})
+	})
+	server := httptest.NewServer(handler)
+	previousBase := dispatcherAPIBaseURL
+	dispatcherAPIBaseURL = server.URL
+	return server, func() {
+		dispatcherAPIBaseURL = previousBase
+	}
+}
+
+// Verifies the release listing authenticates with the token the shared source resolved.
+func TestFetchDispatcherReleasePageSendsResolvedTokenAsBearer(t *testing.T) {
+	useTokenSource(t, "resolved-token")
+	var recorded string
+	server, restoreBase := installAuthorizationRecordingReleaseServer(t, &recorded)
+	defer server.Close()
+	defer restoreBase()
+
+	if _, err := fetchDispatcherReleasePage(context.Background(), 1); err != nil {
+		t.Fatalf("fetchDispatcherReleasePage failed: %v", err)
+	}
+	if recorded != "Bearer resolved-token" {
+		t.Fatalf("authorization header mismatch: got %q", recorded)
+	}
+}
+
+// Verifies the release listing stays anonymous when no token is available, instead of sending an empty bearer.
+func TestFetchDispatcherReleasePageOmitsAuthorizationWithoutToken(t *testing.T) {
+	useTokenSource(t, "")
+	var recorded string
+	server, restoreBase := installAuthorizationRecordingReleaseServer(t, &recorded)
+	defer server.Close()
+	defer restoreBase()
+
+	if _, err := fetchDispatcherReleasePage(context.Background(), 1); err != nil {
+		t.Fatalf("fetchDispatcherReleasePage failed: %v", err)
+	}
+	if recorded != "" {
+		t.Fatalf("expected no authorization header, got %q", recorded)
+	}
+}

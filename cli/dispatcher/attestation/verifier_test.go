@@ -473,9 +473,6 @@ func TestFetchTagCommitSHA_ServerError(t *testing.T) {
 // Verifies FetchTagCommitSHA surfaces an exhausted GitHub quota as a typed
 // rate-limit error while still failing closed under ErrTagRefFetch.
 func TestFetchTagCommitSHA_RateLimited(t *testing.T) {
-	// Why clear both: a token in the developer's shell would turn this into the authenticated case.
-	t.Setenv(envAuthTokenPrimary, "")
-	t.Setenv(envAuthTokenSecondary, "")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-RateLimit-Remaining", "0")
 		w.Header().Set("X-RateLimit-Reset", "1790000000")
@@ -506,7 +503,7 @@ func TestFetchTagCommitSHA_RateLimited(t *testing.T) {
 // Verifies a rate limit hit with a token in the environment is reported as authenticated
 // so the guidance does not ask for a token that is already set.
 func TestFetchTagCommitSHA_RateLimitedWithToken(t *testing.T) {
-	t.Setenv(envAuthTokenPrimary, "test-token")
+	useTokenSource(t, "test-token")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-RateLimit-Remaining", "0")
 		http.Error(w, `{"message":"API rate limit exceeded"}`, http.StatusForbidden)
@@ -524,5 +521,33 @@ func TestFetchTagCommitSHA_RateLimitedWithToken(t *testing.T) {
 	}
 	if !rateLimit.Authenticated {
 		t.Fatalf("expected an authenticated rate limit error, got: %+v", rateLimit)
+	}
+}
+
+// Verifies tag-to-commit resolution authenticates with the token the shared source resolved.
+func TestFetchTagCommitSHASendsResolvedTokenAsBearer(t *testing.T) {
+	useTokenSource(t, "resolved-token")
+	commitSHA := "1234567890abcdef1234567890abcdef12345678"
+	var recorded string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recorded = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"object":{"sha":%q,"type":"commit"}}`, commitSHA)
+	}))
+	defer server.Close()
+
+	original := githubAPIBase()
+	setGithubAPIBase(server.URL)
+	defer setGithubAPIBase(original)
+
+	sha, err := FetchTagCommitSHA(context.Background(), "hatayama/unity-cli-loop", "any")
+	if err != nil {
+		t.Fatalf("FetchTagCommitSHA failed: %v", err)
+	}
+	if sha != commitSHA {
+		t.Fatalf("commit SHA mismatch: got %q", sha)
+	}
+	if recorded != "Bearer resolved-token" {
+		t.Fatalf("authorization header mismatch: got %q", recorded)
 	}
 }

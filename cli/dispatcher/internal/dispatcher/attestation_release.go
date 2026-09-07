@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/hatayama/unity-cli-loop/dispatcher/attestation"
@@ -101,7 +100,7 @@ func fetchDispatcherReleasePage(ctx context.Context, page int) ([]githubReleaseL
 	}
 	request.Header.Set("Accept", "application/vnd.github+json")
 	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	token := lookupGitHubAPIToken()
+	token := githubapi.DefaultTokenSource.Resolve(ctx)
 	if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -196,16 +195,4 @@ func fetchAttestationSubjectManifest(ctx context.Context, releaseTag string) (st
 		return "", fmt.Errorf("%w: subject manifest was empty after filtering", attestation.ErrVerificationFailed)
 	}
 	return builder.String(), nil
-}
-
-// lookupGitHubAPIToken reads the ambient GitHub token from the environment.
-// GITHUB_TOKEN wins over GH_TOKEN so CI environments that set both behave
-// consistently with attestation.setAuthorizationIfAvailable in fetcher.go.
-func lookupGitHubAPIToken() string {
-	for _, env := range []string{"GITHUB_TOKEN", "GH_TOKEN"} {
-		if value := os.Getenv(env); value != "" {
-			return value
-		}
-	}
-	return ""
 }
