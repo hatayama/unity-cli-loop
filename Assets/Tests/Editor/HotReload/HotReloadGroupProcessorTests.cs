@@ -305,7 +305,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [Test]
         public async Task ResolveInputFile_WhenNewSourceIsPlanned_PreservesEvidenceForPreRevertRevalidation()
         {
-            HotReloadRunAccumulator run = new HotReloadRunAccumulator();
+            HotReloadRunAccumulator run = new HotReloadRunAccumulator(autoRefreshHeldAtStart: false);
             HotReloadFileProcessResult[] resultSlots = new HotReloadFileProcessResult[1];
             string[] resultPaths = new string[1];
             HotReloadGroupFile[] groupFiles = new HotReloadGroupFile[1];

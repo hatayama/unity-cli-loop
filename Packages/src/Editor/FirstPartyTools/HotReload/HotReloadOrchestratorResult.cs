@@ -38,7 +38,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int revertedUnchangedTotal = 0,
             HotReloadAutoRefreshHoldSyncResult autoRefreshHold = null,
             IReadOnlyList<string> reappliedSiblingPaths = null,
-            IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null)
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null,
+            bool autoRefreshHoldNewlyArmed = false)
         {
             Methods = methods;
             Warnings = warnings;
@@ -51,7 +52,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AddedConsts = addedConsts ?? Array.Empty<string>();
             RevertedUnchangedTotal = revertedUnchangedTotal;
             AutoRefreshHeld = autoRefreshHold != null && autoRefreshHold.Held;
-            AutoRefreshHoldNewlyArmed = autoRefreshHold != null && autoRefreshHold.NewlyArmed;
+            // Why a separate argument and not autoRefreshHold.NewlyArmed: only the caller knows
+            // whether the hold was already armed before its run, and one Sync call cannot tell a
+            // run that armed the hold from one that found the reconcile had.
+            AutoRefreshHoldNewlyArmed = autoRefreshHoldNewlyArmed;
             AutoRefreshHoldReleaseDeferred = autoRefreshHold != null && autoRefreshHold.ReleaseDeferred;
             AutoRefreshHoldSceneRefreshWarning =
                 autoRefreshHold != null ? autoRefreshHold.SceneRefreshWarning : null;
