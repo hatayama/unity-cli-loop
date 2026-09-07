@@ -23,6 +23,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Why this assembly: it is always compiled alongside the test assembly and is smaller, so
         // it can be zero-padded to the test assembly's length for the module identity test.
         private const string OtherAssemblyName = "UnityCLILoop.Tests.Editor.HotReload.CallSiteCrossAssembly";
+        // Why a write time the test chooses: SetLastWriteTimeUtc stores microseconds while
+        // GetLastWriteTimeUtc reports 100 ns ticks, so a write time read back from a file cannot be
+        // restored exactly unless it happens to fall on a microsecond. Tests that restore the write
+        // time to isolate another field would otherwise leave it shifted by a few ticks.
+        private static readonly DateTime PinnedWriteTimeUtc = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         private string _tempDirectory;
         private HotReloadCompiledCallSiteCache _cache;
@@ -354,6 +359,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             string destinationPath = Path.Combine(_tempDirectory, fileName);
             File.Copy(sourceDllPath, destinationPath);
+            File.SetLastWriteTimeUtc(destinationPath, PinnedWriteTimeUtc);
+            Assert.That(
+                File.GetLastWriteTimeUtc(destinationPath),
+                Is.EqualTo(PinnedWriteTimeUtc),
+                "The copy's write time must be settable exactly, or restoring it later shifts the fingerprint.");
             return destinationPath;
         }
     }
