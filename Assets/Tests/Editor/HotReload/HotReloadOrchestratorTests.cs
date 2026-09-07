@@ -2552,6 +2552,55 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a reload that introduces no type peels the patch an earlier reload left on a
+        /// method that is unchanged again before it compiles its shim, so the peel survives a
+        /// shim-compile failure in a sibling method of the same file.
+        /// </summary>
+        [Test]
+        public async Task Run_NoIntroducedType_PeelsUnchangedPatchBeforeAFailingShimCompile()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string patchedPath = WriteEditedSource(
+                "PreCompileRevertPatched.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                patchedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+
+            string failingPath = WriteEditedSource(
+                "PreCompileRevertFailing.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    callsMissingHelperMethod:
+                    "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }"));
+
+            HotReloadOrchestratorResult failed = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                failingPath,
+                CancellationToken.None);
+
+            Assert.That(
+                failed.ActivePatchTotal,
+                Is.EqualTo(0),
+                "A run without introduced types must peel the unchanged method before the shim "
+                + "compile it then fails on.\n" + FormatOutcomes(failed));
+            Assert.That(
+                fixture.ComputeWithPrivate(5),
+                Is.EqualTo(15),
+                "15 means the compiled body runs again; 115 means the peel never happened.");
+        }
+
+        /// <summary>
         /// What: a shim compile error in one method isolates that failure (Failed with its own
         /// compiler error, new-member hint, and original-file line) and skips every survivor
         /// in the file instead of patching them.

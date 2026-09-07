@@ -461,6 +461,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that activating the same artifact a second time is rejected and publishes
+        /// nothing again, so a reload that re-introduces a type it already introduced keeps
+        /// resolving through the one active artifact instead of activating a second one.
+        /// </summary>
+        [Test]
+        public void Activate_SameArtifactTwice_RejectsWithoutSecondPublication()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            HotReloadIntroducedTypeArtifact artifact = CreateArtifact("already-active");
+            registry.RegisterPrepared(artifact);
+            registry.Activate(artifact);
+
+            Assert.Throws<InvalidOperationException>(() => registry.Activate(artifact));
+
+            Assert.That(registry.ActiveCount, Is.EqualTo(1));
+            Assert.That(registry.PreparedCount, Is.EqualTo(0));
+            Assert.That(
+                registry.TryFindActive(artifact.Descriptors, out HotReloadIntroducedTypeArtifact found),
+                Is.True);
+            Assert.That(found, Is.SameAs(artifact));
+        }
+
+        /// <summary>
         /// Verifies that activating an artifact that was never prepared is rejected before any
         /// mutation and leaves both lifecycle counts and the existing active mapping unchanged.
         /// </summary>
