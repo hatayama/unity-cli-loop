@@ -148,7 +148,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return $"Exact match found nothing for name pattern '{parameters.NamePattern}'. " +
-                   "Try --search-mode Contains or Regex for partial matching.";
+                   "Try --search-mode contains or regex for partial matching.";
         }
 
         /// <summary>

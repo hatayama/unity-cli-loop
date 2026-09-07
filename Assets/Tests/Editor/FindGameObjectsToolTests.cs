@@ -107,7 +107,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(response.TotalFound, Is.EqualTo(0));
             Assert.That(response.Message, Is.Not.Null);
             Assert.That(response.Message, Does.Contain("Exact match found nothing"));
-            Assert.That(response.Message, Does.Contain("--search-mode Contains"));
+            Assert.That(response.Message, Does.Contain("--search-mode contains"));
         }
 
         [Test]
