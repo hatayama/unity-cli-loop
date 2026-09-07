@@ -54,8 +54,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             return activeHotReloadChangeCount
                 + " active hot-reload change(s) were live when this compile was requested. "
-                + "A successful compile reloads the domain and drops every hot-reload patch; "
-                + "the edited source files are compiled in, so the behavior stays without re-applying them.";
+                + "A successful compile reloads the domain and drops every hot-reload change, "
+                + "introduced types included; the edited source files are compiled in, so the "
+                + "behavior stays without re-applying them.";
         }
     }
 }

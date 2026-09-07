@@ -160,6 +160,42 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// What: a source of a snapshotted assembly that has no snapshot file of its own is left out
+        /// of the changed set, so a file the Editor has never compiled is never selected by default.
+        /// </summary>
+        [Test]
+        public void DetectFromSnapshotDirectories_WhenASourceHasNoSnapshotFile_LeavesItOutOfTheChangedSet()
+        {
+            string projectRoot = CreateTempProjectRoot();
+            try
+            {
+                string compiledPath = "Assets/Compiled.cs";
+                string neverCompiledPath = "Assets/NeverCompiled.cs";
+                WriteChangedSource(projectRoot, "Assembly-mvid", compiledPath);
+                WriteProjectFile(projectRoot, neverCompiledPath, "public class NeverCompiled { }");
+
+                HotReloadChangedFileAggregationResult result =
+                    HotReloadChangedFileAggregator.DetectFromSnapshotDirectories(
+                        projectRoot,
+                        new[]
+                        {
+                            new HotReloadSnapshotAssembly(
+                                "Assembly-mvid",
+                                new[] { compiledPath, neverCompiledPath })
+                        });
+
+                Assert.That(result.HasBaseline, Is.True);
+                Assert.That(result.ChangedProjectRelativePaths, Is.EqualTo(new[] { compiledPath }));
+                Assert.That(result.ChangedProjectRelativePaths, Does.Not.Contain(neverCompiledPath));
+                Assert.That(result.ScanLimitWarnings, Is.Empty);
+            }
+            finally
+            {
+                Directory.Delete(projectRoot, recursive: true);
+            }
+        }
+
         private static string CreateTempProjectRoot()
         {
             string projectRoot = Path.Combine(

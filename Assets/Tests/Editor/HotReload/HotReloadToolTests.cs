@@ -27,14 +27,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
             _ledgerSessionScope.Restore();
         }
 
@@ -72,7 +72,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     response.Message,
                     Is.EqualTo(
-                        "No compile snapshots exist yet. Run 'uloop compile' first or pass project-relative .cs paths with --files."));
+                        "No compile snapshots exist yet. Run 'uloop compile' first or pass project-relative "
+                        + ".cs paths with --files. Files that have never been compiled are not selected "
+                        + "automatically; pass them (and any other path) with --files."));
                 Assert.That(response.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.FilesRequired));
                 Assert.That(
                     response.NextActions,
@@ -80,7 +82,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         new[]
                         {
                             "Run 'uloop compile' to create source snapshots.",
-                            "Pass project-relative .cs paths with --files."
+                            "Pass project-relative .cs paths with --files (required for new files that have "
+                            + "not been compiled yet)."
                         }));
             }
             finally
@@ -157,14 +160,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(
                     response.Message,
                     Is.EqualTo(
-                        "No .cs files changed since the last compile were found; pass explicit paths with --files."));
+                        "No .cs files changed since the last compile were found. Files that have never been "
+                        + "compiled are not selected automatically; pass them (and any other path) with "
+                        + "--files."));
                 Assert.That(
                     response.NextActions,
                     Is.EqualTo(
                         new[]
                         {
                             "Save the edited .cs files to disk, then run 'uloop hot-reload' again.",
-                            "Pass project-relative .cs paths with --files."
+                            "Pass project-relative .cs paths with --files (required for new files that have "
+                            + "not been compiled yet)."
                         }));
             }
             finally
@@ -926,7 +932,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     nameof(HotReloadCoreFixture.ReplaceableCompute),
                     BindingFlags.Instance | BindingFlags.Public,
                     nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
                 Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.True);
 
                 HotReloadTool tool = new HotReloadTool();
@@ -943,7 +949,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 HotReloadPatcher.RevertAll();
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
             }
         }
 
@@ -1066,7 +1072,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 HotReloadAutoRefreshHold.OverrideServiceForTesting = previous;
                 HotReloadPatcher.RevertAll();
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
             }
         }
 

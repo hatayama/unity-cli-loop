@@ -211,9 +211,12 @@ Wire details:
 
 ## Known Limits (documented, not worked around)
 
-- New types; added members referenced from another assembly or from a file that is
-  neither passed to this reload nor already hot-reloaded; changed field initializers or
-  `const` values — all require `uloop compile`.
+- New top-level `public` classes, structs, enums, and interfaces of the same assembly are
+  introduced by the reload that declares them; every other new-type shape, and any use of an
+  introduced type from another assembly or through Unity, still requires `uloop compile`
+  (`docs/hot-reload-introduced-types.md`). Added members referenced from another assembly or
+  from a file that is neither passed to this reload nor already hot-reloaded, and changed
+  field initializers or `const` values — all require `uloop compile`.
   Added fields, methods, and properties themselves apply, and are visible to the bodies
   edited in any file of the same assembly passed to the same reload. An added
   auto-property is backed by the added-field store, so its value shares that lifetime.

@@ -16,17 +16,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class HotReloadSchema : UnityCliLoopToolSchema
     {
         /// <summary>
-        /// Project-relative source file paths to hot-reload. Omitted or empty apply values select sources changed since the last compile snapshot; --status rejects a nonempty value and --revert-all ignores it.
+        /// Project-relative source file paths to hot-reload. Omitted or empty apply values select sources changed since the last compile snapshot; a file that has never been compiled has no snapshot and is not selected, so pass it explicitly. --status rejects a nonempty value and --revert-all ignores it.
         /// </summary>
         public string[] Files { get; set; } = Array.Empty<string>();
 
         /// <summary>
-        /// When true, removes every active hot-reload transplant and ignores Files.
+        /// When true, removes every active patch and added member and ignores Files; introduced types stay loaded until the next domain reload.
         /// </summary>
         public bool RevertAll { get; set; }
 
         /// <summary>
-        /// When true, lists the currently patched methods without applying or reverting anything.
+        /// When true, lists the active changes (patched methods, added members, introduced types) without applying or reverting anything.
         /// </summary>
         public bool Status { get; set; }
     }
@@ -292,13 +292,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(failure != null, "failure must not be null.");
             int activePatchTotal = HotReloadPatcher.ActiveChangeCount;
+            // Why two numbers: the suffix warns that the refusal left something live, and an
+            // introduced type is live even when nothing is patched. ActivePatchTotal stays a patch
+            // count because callers read it against PatchedTotal.
+            int runtimeChangeTotal = HotReloadActiveChangeCounts.RuntimeChangeTotal;
             string message = failure.Message;
             string[] nextActions = failure.NextActions;
-            if (activePatchTotal > 0)
+            if (runtimeChangeTotal > 0)
             {
                 message += string.Format(
                     HotReloadConstants.ValidationFailureActiveChangesSuffixFormat,
-                    activePatchTotal);
+                    runtimeChangeTotal);
                 nextActions = AppendNextAction(
                     nextActions,
                     HotReloadConstants.ValidationFailureInspectOrRevertNextAction);

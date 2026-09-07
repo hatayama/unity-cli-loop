@@ -393,6 +393,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string FailedWithNoApplyRecommendedNextAction =
             "Fix the failed declarations or methods and rerun, or run 'uloop compile'.";
 
+        // Why one sentence in one place: the same rule has to reach the caller from the skill, the
+        // docs, and every selection response, and two wordings of it read as two rules.
+        public const string NewFilesNotAutoSelectedSentence =
+            "Files that have never been compiled are not selected automatically; pass them (and any "
+            + "other path) with --files.";
+
+        public const string NoCompileSnapshotsMessage =
+            "No compile snapshots exist yet. Run 'uloop compile' first or pass project-relative .cs "
+            + "paths with --files. " + NewFilesNotAutoSelectedSentence;
+
+        public const string NoChangedFilesMessage =
+            "No .cs files changed since the last compile were found. " + NewFilesNotAutoSelectedSentence;
+
+        public const string PassExplicitFilesNextAction =
+            "Pass project-relative .cs paths with --files (required for new files that have not been "
+            + "compiled yet).";
+
+        // Appended to the selection message so a caller reading a short list knows what it leaves out.
+        public const string DefaultSelectionNewFilesNote =
+            " New files that have never been compiled are not selected automatically.";
+
         // SessionState key for the change identities (patched methods, added members, introduced
         // types) discarded by the Play-entry domain reload.
         // SessionState survives that reload and is cleared when the Editor process exits.

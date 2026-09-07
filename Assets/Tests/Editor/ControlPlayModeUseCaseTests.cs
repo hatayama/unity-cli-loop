@@ -888,12 +888,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void DomainReloadDropStateService_ReportsTheRuntimeChangeCountNotThePatchCount()
         {
-            // The patch-count port answers zero so only the runtime-change port can produce the
-            // count: a service still reading the old port would report nothing to drop.
-            Func<int> originalPatchCount = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
             Func<int> originalRuntimeChangeCount =
                 HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
-            HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = () => 0;
             HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = () => 1;
 
             try
@@ -905,7 +901,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = originalPatchCount;
                 HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = originalRuntimeChangeCount;
             }
         }

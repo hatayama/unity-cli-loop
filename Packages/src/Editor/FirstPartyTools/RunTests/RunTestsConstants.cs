@@ -58,6 +58,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: active hot-reload change count at test-run start. Policy-form because
         // response construction was measured to run before any deferred domain reload.
         public const string HotReloadDiscardWarningFormat =
-            "{0} active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards active patches - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in.";
+            "{0} active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards every active hot-reload change, including introduced types - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in.";
     }
 }

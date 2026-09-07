@@ -130,12 +130,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
 
                     Assert.That(response.ActivePatchTotal, Is.EqualTo(0), "Arrange: no method is patched.");
-                    // Why the drop sentence and not the heading: this branch only decides whether
-                    // the drop Message replaces the active-count Message, and the heading's own
-                    // count is still method-only.
+                    // Why the heading counts one while ActivePatchTotal is zero: the heading reports
+                    // every runtime change, and an introduced type is one; ActivePatchTotal stays a
+                    // patch count.
                     Assert.That(
                         response.Message,
-                        Is.EqualTo("0 change(s) currently active."),
+                        Is.EqualTo("1 change(s) currently active."),
                         "A domain that still holds an introduced type has not lost everything.");
                     Assert.That(
                         response.Message,

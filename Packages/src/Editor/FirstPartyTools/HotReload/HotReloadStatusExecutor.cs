@@ -93,7 +93,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadAddedFieldDescription> addedFields =
                 HotReloadAddedFieldRegistry.DescribeAll();
             AppendAddedFieldStatusRows(methods, addedFields);
-            string message = $"{count} change(s) currently active.";
+            // Why one snapshot for the heading, the drop decision, and the reported total: a
+            // domain still holding an introduced type has not lost it, and a caller told three
+            // different numbers for "what is active" cannot tell which one answers the question.
+            int introducedTypeCount = HotReloadActiveChangeCounts.IntroducedTypeCount;
+            int runtimeChangeTotal = count + introducedTypeCount;
+            string message = $"{runtimeChangeTotal} change(s) currently active.";
             if (neverInvokedCount > 0)
             {
                 message += " " + string.Format(
@@ -102,12 +107,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             int droppedCount = HotReloadPlayModeEntryDropLedger.Count;
-            // Why one snapshot for both: the drop Message only replaces the active-count Message
-            // when nothing is active, and a domain still holding an introduced type has not lost
-            // it, so the same number has to decide the Message and the reported total.
-            int introducedTypeCount = HotReloadActiveChangeCounts.IntroducedTypeCount;
             string dropMessage = HotReloadPlayModeEntryDropStatusMessageBuilder.Build(
-                count + introducedTypeCount,
+                runtimeChangeTotal,
                 droppedCount);
             if (dropMessage != null)
             {

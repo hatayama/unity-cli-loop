@@ -66,12 +66,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Array.Empty<string>(),
                     string.Empty,
                     new HotReloadValidationFailure(
-                        "No compile snapshots exist yet. Run 'uloop compile' first or pass project-relative .cs paths with --files.",
+                        HotReloadConstants.NoCompileSnapshotsMessage,
                         HotReloadValidationErrorCodes.FilesRequired,
                         new[]
                         {
                             "Run 'uloop compile' to create source snapshots.",
-                            "Pass project-relative .cs paths with --files."
+                            HotReloadConstants.PassExplicitFilesNextAction
                         }));
             }
 
@@ -82,12 +82,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     Array.Empty<string>(),
                     string.Empty,
                     new HotReloadValidationFailure(
-                        "No .cs files changed since the last compile were found; pass explicit paths with --files.",
+                        HotReloadConstants.NoChangedFilesMessage,
                         HotReloadValidationErrorCodes.NoChangedFiles,
                         new[]
                         {
                             "Save the edited .cs files to disk, then run 'uloop hot-reload' again.",
-                            "Pass project-relative .cs paths with --files."
+                            HotReloadConstants.PassExplicitFilesNextAction
                         }));
             }
 
@@ -95,7 +95,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 + changedFiles.ChangedProjectRelativePaths.Count
                 + " changed file(s) since the last compile were selected: "
                 + string.Join(", ", changedFiles.ChangedProjectRelativePaths)
-                + ".";
+                + "."
+                + HotReloadConstants.DefaultSelectionNewFilesNote;
             return new HotReloadDefaultFileSelection(
                 changedFiles.ChangedProjectRelativePaths,
                 changedFiles.ScanLimitWarnings,

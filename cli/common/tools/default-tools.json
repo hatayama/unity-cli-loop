@@ -740,24 +740,24 @@
     },
     {
       "name": "hot-reload",
-      "description": "Hot reload applies method-body edits and can add new methods and fields (added members are visible to edited code in the same reload within the same assembly); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New types, or members referenced from other assemblies or from files that are neither passed to the reload nor already hot-reloaded, require 'uloop compile'.",
+      "description": "Hot reload applies method-body edits and can add new methods and fields (added members are visible to edited code in the same reload within the same assembly); it can also change signatures: a return-type change applies only when the same reload (or an earlier one) covers the old signature's compiled callers, while a rename or parameter change applies as an added method and warns about compiled callers it leaves on the old signature. New top-level public types (class/struct/enum/interface/static helper) of the same assembly are introduced by the reload that declares them; other new-type shapes, use from another assembly or through Unity, asmdef changes, and members referenced from other assemblies or from files that are neither passed to the reload nor already hot-reloaded require 'uloop compile'.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "Files": {
             "type": "array",
-            "description": "Project-relative .cs paths whose method bodies should be hot-reloaded. When omitted or empty on apply, selects the .cs sources whose bytes changed since the last compile snapshot, capped at 50 changed files per assembly with a warning when the cap trims the list; run uloop compile first when no snapshot exists, or pass explicit paths when no changed source is found",
+            "description": "Project-relative .cs paths to hot-reload (method bodies, added members, and new top-level types). When omitted or empty on apply, selects compiled snapshot sources only — those whose bytes changed since the last compile snapshot, capped at 50 changed files per assembly with a warning when the cap trims the list; a file that has never been compiled is never selected and must be passed explicitly; run uloop compile first when no snapshot exists, or pass explicit paths when no changed source is found",
             "items": {
               "type": "string"
             }
           },
           "RevertAll": {
             "type": "boolean",
-            "description": "Remove every active hot-reload patch and clear the patch ledger. When set, --files is ignored"
+            "description": "Remove every active hot-reload patch and added member and clear the ledger; introduced types stay loaded until the next domain reload. When set, --files is ignored"
           },
           "Status": {
             "type": "boolean",
-            "description": "Lists the currently active changes (patched methods and added members) without applying or reverting anything."
+            "description": "Lists the currently active changes (patched methods, added members, and introduced types) without applying or reverting anything."
           }
         }
       }
