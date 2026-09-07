@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.5.0](https://github.com/hatayama/unity-cli-loop/compare/v3.4.0...v3.5.0) (2026-09-07)
+
+
+### Features
+
+* Record the Game View to video while Play Mode runs ([#2487](https://github.com/hatayama/unity-cli-loop/issues/2487)) ([7cadda9](https://github.com/hatayama/unity-cli-loop/commit/7cadda9d1fb451d0fcafe33d8f32929049937d16))
+
+
+### Bug Fixes
+
+* find-game-objects and replay-input now document their option values in lowercase like the other single-word options ([#2659](https://github.com/hatayama/unity-cli-loop/issues/2659)) ([07fd55c](https://github.com/hatayama/unity-cli-loop/commit/07fd55cbd484ee7235160c246078ca166622c6f3))
+* Hot reload no longer pays a process start for every worker run ([#2648](https://github.com/hatayama/unity-cli-loop/issues/2648)) ([0adfbb2](https://github.com/hatayama/unity-cli-loop/commit/0adfbb2bb6e4834d73bd531ef722bf1f843ee635))
+* Hot reload no longer re-scans an unchanged assembly for callers on every run ([#2642](https://github.com/hatayama/unity-cli-loop/issues/2642)) ([318884c](https://github.com/hatayama/unity-cli-loop/commit/318884c5015b596d177fda4b353b342e3aea107b))
+
 ## [3.4.0](https://github.com/hatayama/unity-cli-loop/compare/v3.3.0...v3.4.0) (2026-09-06)
 
 

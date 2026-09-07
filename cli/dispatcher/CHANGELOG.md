@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.4.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.3.1...dispatcher-v3.4.0) (2026-09-07)
+
+
+### Features
+
+* Record the Game View to video while Play Mode runs ([#2487](https://github.com/hatayama/unity-cli-loop/issues/2487)) ([7cadda9](https://github.com/hatayama/unity-cli-loop/commit/7cadda9d1fb451d0fcafe33d8f32929049937d16))
+* uloop now uses your GitHub CLI login for GitHub API calls ([#2656](https://github.com/hatayama/unity-cli-loop/issues/2656)) ([7634898](https://github.com/hatayama/unity-cli-loop/commit/76348988f4b82a61b0225384e890c5023f5ec9a0))
+
+
+### Bug Fixes
+
+* find-game-objects and replay-input now document their option values in lowercase like the other single-word options ([#2659](https://github.com/hatayama/unity-cli-loop/issues/2659)) ([07fd55c](https://github.com/hatayama/unity-cli-loop/commit/07fd55cbd484ee7235160c246078ca166622c6f3))
+* uloop update now explains how to recover from a GitHub API rate limit ([#2655](https://github.com/hatayama/unity-cli-loop/issues/2655)) ([a112f15](https://github.com/hatayama/unity-cli-loop/commit/a112f15e85b9150e58b34147300fb16b4fdeb19a))
+
 ## [3.3.1](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.3.0...dispatcher-v3.3.1) (2026-09-06)
 
 

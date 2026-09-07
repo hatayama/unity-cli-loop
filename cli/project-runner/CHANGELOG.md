@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.3.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.2.1...uloop-project-runner-v3.3.0) (2026-09-07)
+
+
+### Features
+
+* Record the Game View to video while Play Mode runs ([#2487](https://github.com/hatayama/unity-cli-loop/issues/2487)) ([7cadda9](https://github.com/hatayama/unity-cli-loop/commit/7cadda9d1fb451d0fcafe33d8f32929049937d16))
+
+
+### Bug Fixes
+
+* find-game-objects and replay-input now document their option values in lowercase like the other single-word options ([#2659](https://github.com/hatayama/unity-cli-loop/issues/2659)) ([07fd55c](https://github.com/hatayama/unity-cli-loop/commit/07fd55cbd484ee7235160c246078ca166622c6f3))
+
 ## [3.2.1](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.2.0...uloop-project-runner-v3.2.1) (2026-09-06)
 
 
