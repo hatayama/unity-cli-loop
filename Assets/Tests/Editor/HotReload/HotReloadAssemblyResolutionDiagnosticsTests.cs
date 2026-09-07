@@ -22,6 +22,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             "Assets/Tests/Editor/HotReload/HotReloadToolTests.cs";
         private const string HotReloadTestAssemblyName = "UnityCLILoop.Tests.Editor.HotReload";
 
+        private Func<HotReloadEditorStateSnapshot> _previousSnapshotProvider;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _previousSnapshotProvider = HotReloadEditorStateSnapshotProvider.CaptureForTesting;
+            HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
+                new HotReloadEditorStateSnapshot(false, false, false);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
+        }
+
         /// <summary>
         /// What: a resolved assembly that is absent from CompilationPipeline gets the
         /// compile-first reason that names the fallback predefined-assembly behavior.
@@ -61,11 +77,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a path that Unity resolves to a compiled assembly but that is not in that
-        /// assembly's last compiled source list gets the newly-added-script reason.
+        /// A path that Unity resolves to a compiled assembly is deferred to new-source
+        /// membership validation instead of being rejected only because its source list is stale.
         /// </summary>
         [Test]
-        public void TryGetAssemblyResolutionFailureReason_WhenSourceFilesDoNotContainPath_ReturnsNewScriptReason()
+        public void TryGetAssemblyResolutionFailureReason_WhenSourceFilesDoNotContainPath_ReturnsNull()
         {
             UnityCompilationAssembly compilationAssembly = FindCompilationAssembly(HotReloadTestAssemblyName);
             Assert.That(compilationAssembly, Is.Not.Null);
@@ -76,10 +92,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 MissingHotReloadScriptPath,
                 false);
 
-            Assert.That(
-                reason,
-                Is.EqualTo(
-                    "'Assets/Tests/Editor/HotReload/UncompiledNewScript.cs' is not part of the last compiled assembly 'UnityCLILoop.Tests.Editor.HotReload' (a newly added script). New files require a real compile; run 'uloop compile' first."));
+            Assert.That(reason, Is.Null);
         }
 
         /// <summary>
@@ -153,12 +166,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: ResolvePatchTarget fails with the newly-added-script reason when
-        /// CompilationPipeline maps a missing path onto an existing asmdef whose compiled
-        /// source list does not contain that path.
+        /// ResolvePatchTarget admits a new source when the imported assembly definition
+        /// still matches its disk boundary and compiled assembly.
         /// </summary>
         [Test]
-        public void ResolvePatchTarget_WhenScriptIsNotInCompiledAssemblySourceFiles_ReturnsFailedReason()
+        public void ResolvePatchTarget_WhenScriptIsNotInCompiledAssemblySourceFiles_ReturnsMembershipEvidence()
         {
             List<HotReloadMethodOutcome> outcomes = new List<HotReloadMethodOutcome>();
             List<string> warnings = new List<string>();
@@ -169,7 +181,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 UnityCompilationAssembly compilationAssembly,
                 string targetDllPath,
                 string projectRoot,
-                HotReloadUnchangedSourceDecision unchangedDecision) = HotReloadPatchTargetSupport.ResolvePatchTarget(
+                HotReloadUnchangedSourceDecision unchangedDecision,
+                HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence) = HotReloadPatchTargetSupport.ResolvePatchTarget(
                 MissingHotReloadScriptPath,
                 MissingHotReloadScriptPath,
                 outcomes,
@@ -177,19 +190,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "assembly-resolution-wiring",
                 new List<HotReloadMethodOutcome>());
 
-            Assert.That(earlyResult, Is.Not.Null);
-            Assert.That(earlyResult.Outcomes.Count, Is.EqualTo(1));
-            Assert.That(earlyResult.Outcomes[0].Kind, Is.EqualTo(HotReloadMethodOutcomeKind.Failed));
-            Assert.That(
-                earlyResult.Outcomes[0].Reason,
-                Is.EqualTo(
-                    "'Assets/Tests/Editor/HotReload/UncompiledNewScript.cs' is not part of the last compiled assembly 'UnityCLILoop.Tests.Editor.HotReload' (a newly added script). New files require a real compile; run 'uloop compile' first."));
-            Assert.That(projectRelativePath, Is.Null);
-            Assert.That(assemblyName, Is.Null);
-            Assert.That(compilationAssembly, Is.Null);
-            Assert.That(targetDllPath, Is.Null);
-            Assert.That(projectRoot, Is.Null);
+            Assert.That(earlyResult, Is.Null);
+            Assert.That(projectRelativePath, Is.EqualTo(MissingHotReloadScriptPath));
+            Assert.That(assemblyName, Is.EqualTo(HotReloadTestAssemblyName));
+            Assert.That(compilationAssembly, Is.Not.Null);
+            Assert.That(targetDllPath, Is.Not.Null.And.Not.Empty);
+            Assert.That(projectRoot, Is.Not.Null.And.Not.Empty);
             Assert.That(unchangedDecision, Is.EqualTo(HotReloadUnchangedSourceDecision.NotUnchanged));
+            Assert.That(newSourceMembershipEvidence, Is.Not.Null);
         }
 
         private static UnityCompilationAssembly FindCompilationAssembly(string assemblyName)

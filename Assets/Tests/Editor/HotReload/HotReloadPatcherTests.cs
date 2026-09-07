@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -424,6 +425,64 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a Harmony rebuild failure while reverting is contained as that method's failure
+        /// and keeps the still-patched method in the ledger, and a later revert of the same
+        /// method succeeds once the rebuild works again.
+        /// </summary>
+        [Test]
+        public void Revert_WhenHarmonyCannotRebuild_ContainsTheFailureAndKeepsRevertingOthers()
+        {
+            MethodInfo failing = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
+            MethodInfo failingShim = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
+            MethodInfo surviving = AccessTools.Method(
+                typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.StaticPing));
+            MethodInfo survivingShim = AccessTools.Method(
+                typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.StaticPing__shim0));
+            string failingKey = HotReloadMethodKeys.FormatMethodLabel(failing);
+            Assert.That(
+                HotReloadPatcher.Apply(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                Is.True);
+            Assert.That(
+                HotReloadPatcher.Apply(surviving, survivingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
+                Is.True);
+            Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(2));
+
+            HotReloadRevertOutcome failedOutcome;
+            string failureReason;
+            HotReloadPatcher.UnpatchForTesting = _ => throw new InvalidOperationException("rebuild failed");
+            try
+            {
+                failedOutcome = HotReloadPatcher.Revert(failing, out failureReason);
+            }
+            finally
+            {
+                HotReloadPatcher.UnpatchForTesting = null;
+            }
+
+            Assert.That(failedOutcome, Is.EqualTo(HotReloadRevertOutcome.UnpatchFailed));
+            Assert.That(failureReason, Does.Contain("rebuild failed"));
+            Assert.That(
+                HotReloadPatcher.ActivePatchCount,
+                Is.EqualTo(2),
+                "The transpiler is still live, so the ledger must keep describing it.");
+            Assert.That(
+                HotReloadPatcher.DescribeActivePatches().Select(patch => patch.MethodKey),
+                Does.Contain(failingKey),
+                "Status has to keep reporting a patch Harmony could not remove.");
+            Assert.That(
+                HotReloadPatcher.Revert(failing, out string _),
+                Is.EqualTo(HotReloadRevertOutcome.Reverted),
+                "Once the rebuild works, the retained entry must revert instead of reporting NotPatched.");
+            Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(1));
+            Assert.That(
+                HotReloadPatcher.Revert(surviving, out string _),
+                Is.EqualTo(HotReloadRevertOutcome.Reverted),
+                "A contained revert failure must not stop the remaining methods from reverting.");
+        }
+
+        /// <summary>
         /// What: Revert(method) clears that method's invocation count (RevertAll is not required).
         /// </summary>
         [Test]
@@ -442,7 +501,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(47));
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(1L));
 
-            Assert.That(HotReloadPatcher.Revert(original), Is.True);
+            Assert.That(
+                HotReloadPatcher.Revert(original, out string _),
+                Is.EqualTo(HotReloadRevertOutcome.Reverted));
             Assert.That(HotReloadInvocationRegistry.GetCount(methodKey), Is.EqualTo(0L));
             Assert.That(fixture.ReplaceableCompute(5), Is.EqualTo(-5));
         }

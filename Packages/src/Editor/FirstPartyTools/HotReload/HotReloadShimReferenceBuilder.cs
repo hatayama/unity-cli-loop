@@ -56,6 +56,74 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return paths.ToArray();
         }
 
+        /// <summary>
+        /// Collects the reference paths of the retained introduced-type assemblies a run may bind
+        /// against, one path per record and never the same file twice. One place assembles them so
+        /// every compilation of a run — the shim compile, its retries and the introduced-type
+        /// compile — references exactly the assemblies the worker was told about.
+        /// </summary>
+        internal static List<string> CollectIntroducedTypeArtifactReferencePaths(
+            TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts)
+        {
+            List<string> paths = new List<string>();
+            if (introducedTypeArtifacts == null)
+            {
+                return paths;
+            }
+
+            foreach (TransformWorkerIntroducedTypeArtifactDto artifact in introducedTypeArtifacts)
+            {
+                if (artifact == null || string.IsNullOrEmpty(artifact.referencePath))
+                {
+                    continue;
+                }
+
+                AppendIfMissingByFullPath(paths, Path.GetFullPath(artifact.referencePath));
+            }
+
+            return paths;
+        }
+
+        /// <summary>
+        /// Adds the retained introduced-type assemblies to a reference list, keeping one entry per
+        /// file so a compilation never holds the same assembly identity twice.
+        /// </summary>
+        internal static void AppendIntroducedTypeArtifactReferences(
+            List<string> references,
+            TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts)
+        {
+            Debug.Assert(references != null, "references must not be null.");
+
+            foreach (string path in CollectIntroducedTypeArtifactReferencePaths(introducedTypeArtifacts))
+            {
+                AppendIfMissingByFullPath(references, path);
+            }
+        }
+
+        // Why full path (not file name, as the optional shim assemblies use): an artifact assembly
+        // is never publicized, so no second copy of it exists, and two artifacts of one run can
+        // share a file name while being different assemblies.
+        private static void AppendIfMissingByFullPath(List<string> references, string fullPath)
+        {
+            foreach (string reference in references)
+            {
+                if (string.IsNullOrEmpty(reference))
+                {
+                    continue;
+                }
+
+                if (string.Equals(
+                    Path.GetFullPath(reference),
+                    fullPath,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            references.Add(fullPath);
+        }
+
         internal static bool NeedsHarmonyReference(TransformWorkerOutputDto output)
         {
             return HasDelegationEntry(output.entries) || output.hasAccessorDelegates;
@@ -155,7 +223,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCompilationAssembly compilationAssembly,
             string targetDllPath,
             bool includeHarmonyReference,
-            bool includeAddedFieldStoreReference)
+            bool includeAddedFieldStoreReference,
+            TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts)
         {
             // Why catch only AssemblyResolutionException: publicize fails when Cecil cannot
             // resolve engine/netstandard types during Write; that is a per-file hot-reload
@@ -167,7 +236,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         compilationAssembly,
                         targetDllPath,
                         includeHarmonyReference,
-                        includeAddedFieldStoreReference),
+                        includeAddedFieldStoreReference,
+                        introducedTypeArtifacts),
                     null);
             }
             catch (AssemblyResolutionException resolutionException)
@@ -189,7 +259,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCompilationAssembly compilationAssembly,
             string targetDllPath,
             bool includeHarmonyReference,
-            bool includeAddedFieldStoreReference)
+            bool includeAddedFieldStoreReference,
+            TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts)
         {
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string scriptAssembliesDirectory = Path.GetFullPath(
@@ -210,6 +281,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 references,
                 includeHarmonyReference,
                 includeAddedFieldStoreReference);
+            // Why here: the shim binds against the retained types the worker bound against, and a
+            // shim that cannot see them fails to compile the bodies that use them.
+            AppendIntroducedTypeArtifactReferences(references, introducedTypeArtifacts);
 
             if (compilationAssembly.allReferences == null)
             {

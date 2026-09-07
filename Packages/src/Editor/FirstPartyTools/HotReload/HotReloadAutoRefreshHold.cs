@@ -33,6 +33,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return ResolveService().Sync(activeChangeCount);
         }
 
+        /// <summary>
+        /// Syncs the hold against everything the next Domain Reload would discard.
+        /// </summary>
+        /// <remarks>
+        /// Why callers do not pass the count: the hold is synced from four places, and a caller
+        /// that counted for itself could count patches alone while another counted types too,
+        /// leaving Auto Refresh free to unload a type between two of them.
+        /// </remarks>
+        internal static HotReloadAutoRefreshHoldSyncResult SyncToActiveChanges()
+        {
+            return Sync(HotReloadActiveChangeCounts.RuntimeChangeTotal);
+        }
+
         internal static HotReloadAutoRefreshHoldSyncResult FlushDeferredRefresh()
         {
             return ResolveService().FlushDeferredRefresh();
@@ -78,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static void ReconcileNow()
         {
-            Sync(HotReloadPatcher.ActiveChangeCount);
+            SyncToActiveChanges();
         }
 
         private static void HandlePlayModeStateChanged(PlayModeStateChange state)

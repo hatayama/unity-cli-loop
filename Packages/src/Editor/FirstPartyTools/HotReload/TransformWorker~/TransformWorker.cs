@@ -104,7 +104,7 @@ public static class TransformWorkerProgram
     {
         WorkerInput input = ReadInput(inputJsonPath);
         WorkerOutput invalidSources = TryCreateInvalidSourcesOutput(input);
-        WorkerOutput output = invalidSources ?? WorkerGroupPipeline.Transform(input);
+        WorkerOutput output = invalidSources ?? WorkerGroupPipeline.Run(input);
         WriteOutput(outputJsonPath, output);
         return 0;
     }
@@ -165,6 +165,15 @@ public static class TransformWorkerProgram
         input.ExcludedAddedMethodKeys ??= Array.Empty<string>();
         input.AssemblySourcePaths ??= Array.Empty<string>();
         input.ChangedSiblingSourcePaths ??= Array.Empty<string>();
+        input.IntroducedTypeArtifacts ??= Array.Empty<WorkerIntroducedTypeArtifact>();
+        foreach (WorkerIntroducedTypeArtifact artifact in input.IntroducedTypeArtifacts)
+        {
+            if (artifact != null)
+            {
+                artifact.Types ??= Array.Empty<WorkerIntroducedTypeArtifactType>();
+            }
+        }
+
         return input;
     }
 

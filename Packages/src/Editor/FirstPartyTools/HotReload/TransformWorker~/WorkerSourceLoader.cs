@@ -50,6 +50,9 @@ internal static class WorkerSourceLoader
         unit.SyntaxTree = syntaxTree;
         unit.Root = syntaxTree.GetCompilationUnitRoot();
         unit.PlainRoot = plainRoot;
+        // Until a caller removes retained declarations, the binding tree is the loaded tree.
+        unit.BindingSyntaxTree = syntaxTree;
+        unit.BindingRoot = unit.Root;
         return unit;
     }
 

@@ -85,7 +85,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 return null;
             };
-            HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = () => ActiveChangeCount;
             HotReloadPausePointCoordination.GetTransplantLocals = method =>
                 TransplantLocalsByMethod.TryGetValue(method, out IReadOnlyList<LocalBuilder> locals)
                     ? locals
@@ -253,18 +252,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        // Set by tests only. A Harmony rebuild failure cannot be provoked from outside, and the
+        // contained-failure contract of Revert has to be pinned by a test. Production leaves it
+        // null and reverts through Harmony.
+        internal static Action<MethodBase> UnpatchForTesting;
+
         /// <summary>
         /// Removes the hot-reload patch on <paramref name="method"/> when one is recorded.
-        /// Returns false when the method was not patched.
         /// </summary>
-        public static bool Revert(MethodBase method)
+        public static HotReloadRevertOutcome Revert(MethodBase method, out string failureReason)
         {
             Debug.Assert(method != null, "method must not be null.");
 
-            if (!ShimByMethod.Remove(method))
+            failureReason = null;
+            if (!ShimByMethod.TryGetValue(method, out MethodInfo recordedShim))
             {
-                return false;
+                return HotReloadRevertOutcome.NotPatched;
             }
+
+            // Kept for the failure path: status, the Auto Refresh hold and the next apply's
+            // "unpatch the previous transpiler first" decision all read these two, so a rebuild
+            // failure that leaves the patch live must leave them describing that patch.
+            string recordedFilePath = FilePathByMethod.TryGetValue(method, out string filePathValue)
+                ? filePathValue
+                : null;
+            ShimByMethod.Remove(method);
 
             // Why Remove before Unpatch: Harmony rebuilds the method during Unpatch, and the
             // pause-point guard sees GetActiveShimForMethod == null so surviving markers are
@@ -279,9 +291,65 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why here, not only RevertAll: RevertUnchangedPatches uses this path, and a
             // later apply of the same compiled key must not inherit a stale superseded Reason.
             HotReloadSupersededSignatureRegistry.Remove(methodKey);
-            HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
+            try
+            {
+                Unpatch(method);
+            }
+            catch (Exception exception)
+            {
+                // Same approved exception as the apply path: a Harmony rebuild failure cannot be
+                // pre-validated, and an escaping exception would abort the run while leaving the
+                // other methods of the group unreverted. Unlike the apply path, which converges
+                // on "no ledger entry, no patch" through its own cleanup Unpatch, a failed
+                // rebuild here can leave the transpiler live: restore the ledger entry in that
+                // case only, so status and the next apply still see the patch that is there.
+                failureReason = "Reverting '" + methodKey + "' failed: " + exception.Message;
+                HotReloadOrchestratorLog.LogHotReloadRevertFailed(methodKey, exception);
+                if (HasLiveHotReloadTranspiler(method))
+                {
+                    ShimByMethod[method] = recordedShim;
+                    FilePathByMethod[method] = recordedFilePath ?? string.Empty;
+                    return HotReloadRevertOutcome.UnpatchFailed;
+                }
+
+                HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
+                return HotReloadRevertOutcome.UnpatchFailed;
+            }
+
             HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
-            return true;
+            return HotReloadRevertOutcome.Reverted;
+        }
+
+        // Whether Harmony still holds this hot-reload transpiler, which decides if a failed
+        // rebuild left the patch live.
+        private static bool HasLiveHotReloadTranspiler(MethodBase method)
+        {
+            Patches patchInfo = Harmony.GetPatchInfo(method);
+            if (patchInfo == null || patchInfo.Transpilers == null)
+            {
+                return false;
+            }
+
+            foreach (Patch transpiler in patchInfo.Transpilers)
+            {
+                if (string.Equals(transpiler.owner, HotReloadConstants.HarmonyId, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void Unpatch(MethodBase method)
+        {
+            if (UnpatchForTesting != null)
+            {
+                UnpatchForTesting(method);
+                return;
+            }
+
+            HarmonyInstance.Unpatch(method, HarmonyPatchType.Transpiler, HotReloadConstants.HarmonyId);
         }
 
         /// <summary>

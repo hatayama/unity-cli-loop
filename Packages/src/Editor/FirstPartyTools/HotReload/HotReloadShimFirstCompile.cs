@@ -25,15 +25,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(context != null, "context must not be null.");
             Debug.Assert(gateResult != null, "gateResult must not be null.");
 
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            if (!HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(context.Files))
+            {
+                return HotReloadGroupCompileResult.Failed();
+            }
+
             if (gateResult.UsedWorkerRetry)
             {
                 AdoptRetryAddedMemberNames(context.Files, gateResult.Isolation.RetryFiles);
                 if (gateResult.Isolation.RetryEntries.Length == 0)
                 {
-                    return HotReloadGroupCompileResult.NothingToApply();
+                    return HotReloadGroupCompileResult.Failed();
                 }
 
-                return HotReloadGroupCompileResult.Apply(
+                return HotReloadGroupCompileResult.ReadyWithMethods(
                     gateResult.Isolation.RetryEntries,
                     gateResult.Isolation.RetryCompileResult);
             }
@@ -42,17 +48,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 || context.WorkerOutput.entries == null
                 || context.WorkerOutput.entries.Length == 0)
             {
-                // Why only on this success path: deleting an added method and restoring callers
-                // yields empty entries, so the post-shim-compile BeginFileGeneration never runs.
-                // Worker failure and shim-compile failure return earlier or later without
-                // clearing — same as leaving existing Harmony patches in place when apply does
-                // not succeed.
-                foreach (HotReloadGroupFile file in context.Files)
+                // Why only on this success path: worker failure and shim-compile failure return
+                // earlier or later without clearing — same as leaving existing Harmony patches in
+                // place when apply does not succeed.
+                // Why a run that commits types skips it: clearing a generation here would mutate
+                // the domain before the commit boundary, which a failed recheck could then no
+                // longer undo, so such a run clears at the boundary instead.
+                if (!HotReloadGroupCommitStage.CommitsIntroducedTypes(
+                        context.PreparedIntroducedTypes,
+                        context.AssemblyName))
                 {
-                    HotReloadFileEntryApplier.ClearFileGeneration(context, file);
+                    HotReloadGroupCommitStage.ClearEmptyFileGenerations(context);
                 }
 
-                return HotReloadGroupCompileResult.NothingToApply();
+                return HotReloadGroupCompileResult.ReadyWithoutMethods();
             }
 
             return await CompileShimForGroupAsync(context, ct).ConfigureAwait(false);
@@ -77,14 +86,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context.CompilationAssembly,
                 context.TargetDllPath,
                 includeHarmonyReference,
-                includeAddedFieldStoreReference);
+                includeAddedFieldStoreReference,
+                context.WorkerInput.introducedTypeArtifacts);
             if (shimReferencePaths.ErrorMessage != null)
             {
                 HotReloadGroupOutcomeRouter.AppendGroupFailure(
                     context.Files,
                     "(file)",
                     shimReferencePaths.ErrorMessage);
-                return HotReloadGroupCompileResult.NothingToApply();
+                return HotReloadGroupCompileResult.Failed();
             }
 
             HotReloadShimCompileResult compileResult = await HotReloadShimCompiler.CompileAndLoadAsync(
@@ -96,7 +106,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (compileResult.Success)
             {
                 AdoptFirstPassAddedMemberNames(context.Files);
-                return HotReloadGroupCompileResult.Apply(workerOutput.entries, compileResult);
+                return HotReloadGroupCompileResult.ReadyWithMethods(workerOutput.entries, compileResult);
             }
 
             HotReloadOrchestratorLog.LogHotReloadShimCompileFailed(
@@ -121,7 +131,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (isolation == null)
             {
                 AppendUnattributableCompileFailure(context, compileResult);
-                return HotReloadGroupCompileResult.NothingToApply();
+                return HotReloadGroupCompileResult.Failed();
             }
 
             context.Files[0].Sinks.SiblingDerivedWarnings.AddRange(isolation.SiblingConstDriftWarnings);
@@ -178,7 +188,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadGroupOutcomeRouter.AppendByFilePath(
                     context.Files,
                     BuildAtomicFileSkipOutcomes(isolation.RetryEntries, context.GroupFilePaths));
-                return HotReloadGroupCompileResult.NothingToApply();
+                return HotReloadGroupCompileResult.Failed();
             }
 
             HotReloadGroupOutcomeRouter.AppendByFilePath(
@@ -196,10 +206,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AdoptRetryAddedMemberNames(context.Files, isolation.RetryFiles);
             if (isolation.RetryEntries.Length == 0)
             {
-                return HotReloadGroupCompileResult.NothingToApply();
+                return HotReloadGroupCompileResult.Failed();
             }
 
-            return HotReloadGroupCompileResult.Apply(isolation.RetryEntries, isolation.RetryCompileResult);
+            return HotReloadGroupCompileResult.ReadyWithMethods(isolation.RetryEntries, isolation.RetryCompileResult);
         }
 
         private static List<HotReloadMethodOutcome> BuildAtomicFileSkipOutcomes(

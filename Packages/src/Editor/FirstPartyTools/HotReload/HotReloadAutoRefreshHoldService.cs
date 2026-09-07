@@ -5,7 +5,7 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Pure policy for holding Auto Refresh while hot-reload patches are active.
+    /// Pure policy for holding Auto Refresh while hot-reload changes are active.
     /// Unity AssetDatabase calls are injected so EditMode tests can record them.
     /// </summary>
     internal sealed class HotReloadAutoRefreshHoldService
@@ -61,7 +61,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal bool IsHeld => _getHeld();
 
         /// <summary>
-        /// Aligns the Auto Refresh hold with the live patch ledger. Idempotent when already aligned.
+        /// Aligns the Auto Refresh hold with the live change ledger. Idempotent when already aligned.
         /// </summary>
         internal HotReloadAutoRefreshHoldSyncResult Sync(int activeChangeCount)
         {
@@ -91,7 +91,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _refreshDeferred = false;
             _logVibeInfo(
                 HotReloadAutoRefreshHoldConstants.VibeArmed,
-                "Auto Refresh hold armed while hot-reload patches are active",
+                "Auto Refresh hold armed while hot-reload changes are active",
                 new { held = true, isPlaying = _isPlaying(), isFocused = _isEditorFocused() });
             return new HotReloadAutoRefreshHoldSyncResult(true, true, false);
         }
@@ -111,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _setHeld(false);
             _logVibeInfo(
                 HotReloadAutoRefreshHoldConstants.VibeReleased,
-                "Auto Refresh hold released because no hot-reload patches remain",
+                "Auto Refresh hold released because no hot-reload changes remain",
                 new { held = false, isPlaying = _isPlaying(), isFocused = _isEditorFocused() });
             return RefreshAfterRelease();
         }

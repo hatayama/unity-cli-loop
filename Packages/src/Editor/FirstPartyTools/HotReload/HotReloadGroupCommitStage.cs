@@ -1,0 +1,162 @@
+using System;
+using System.Collections.Generic;
+
+using UnityEngine;
+
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
+namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
+{
+    /// <summary>
+    /// The commit point of a group run: the last refusal a run can still take without having
+    /// changed the domain, and everything the run does once it is past that point.
+    /// </summary>
+    internal static class HotReloadGroupCommitStage
+    {
+        internal static bool HoldsUnresolvedFile(IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
+        {
+            foreach (HotReloadPreparedGroupFile prepared in preparedFiles)
+            {
+                if (prepared.Kind == HotReloadGroupFilePreparationKind.ResolutionFailed)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // The group result of a run the preflight refused: the file that failed reports the same
+        // resolution failure the apply step would have reported for it, and every sibling is left
+        // unapplied because the group is atomic on this side of the commit point.
+        internal static List<HotReloadFileProcessResult> BuildResolutionFailedResults(
+            HotReloadApplyContext context,
+            IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
+        {
+            List<HotReloadFileProcessResult> results =
+                new List<HotReloadFileProcessResult>(preparedFiles.Count);
+            foreach (HotReloadPreparedGroupFile prepared in preparedFiles)
+            {
+                if (prepared.Kind == HotReloadGroupFilePreparationKind.ResolutionFailed)
+                {
+                    results.Add(HotReloadFileEntryApplier.BuildResolutionFailedResult(
+                        context, prepared.File, prepared.Resolution));
+                    continue;
+                }
+
+                results.Add(HotReloadFileEntryApplier.BuildUnappliedResult(prepared.File));
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// The commit point of a group run and everything that follows it: the introduced types
+        /// become active, the patches this run supersedes are peeled, and the resolved entries are
+        /// applied. A failure after the commit point leaves the types active and fails methods.
+        /// </summary>
+        internal static IReadOnlyList<HotReloadFileProcessResult> Commit(
+            HotReloadApplyContext context,
+            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
+            HotReloadGroupCompileResult compile,
+            IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
+        {
+            IReadOnlyList<HotReloadGroupFile> files = context.Files;
+            HotReloadPreparedIntroducedTypes prepared = context.PreparedIntroducedTypes;
+            if (prepared != null)
+            {
+                HotReloadIntroducedTypeHolder.Registry.Activate(prepared.Artifact);
+                // Why after the activation and not at preparation: only a type the boundary
+                // published is introduced, so a run that never reached here must report none.
+                HotReloadIntroducedTypeOutcomeSink.Append(files, BuildIntroducedRows(prepared.Artifact));
+            }
+
+            bool commitsIntroducedTypes = CommitsIntroducedTypes(prepared, files[0].AssemblyName);
+            if (commitsIntroducedTypes)
+            {
+                HotReloadEntryApplier.RevertUnchangedPatchesPerFile(
+                    files,
+                    HotReloadWorkerRowsByFile.Build(context.WorkerOutput, context.ProjectRelativePaths));
+            }
+
+            if (preparedFiles == null)
+            {
+                // The empty-entries generation clear a run that commits types deferred past the
+                // commit point, because clearing it before the boundary would mutate the domain
+                // a failed recheck can no longer undo. A run without types already cleared.
+                if (commitsIntroducedTypes)
+                {
+                    ClearEmptyFileGenerations(context);
+                }
+
+                return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
+            }
+
+            HotReloadGroupProcessorDependencies dependencies = HotReloadGroupProcessorDependencies.Current;
+            IReadOnlyList<HotReloadFileProcessResult> results = dependencies.ApplyPreparedEntries(
+                context,
+                compile.CompileResult,
+                preparedFiles);
+            RecordSupersededSignaturesAfterApply(context, gateResult.GatedReplacementMethodKeys);
+            return results;
+        }
+
+        private static List<HotReloadIntroducedTypeOutcome> BuildIntroducedRows(
+            HotReloadIntroducedTypeArtifact artifact)
+        {
+            List<HotReloadIntroducedTypeOutcome> rows =
+                new List<HotReloadIntroducedTypeOutcome>(artifact.Descriptors.Count);
+            foreach (HotReloadIntroducedTypeDescriptor descriptor in artifact.Descriptors)
+            {
+                rows.Add(
+                    HotReloadIntroducedTypeOutcome.Introduced(
+                        descriptor.MetadataName,
+                        descriptor.OriginalAssemblyName,
+                        descriptor.OwnerProjectRelativePath));
+            }
+
+            return rows;
+        }
+
+        // A run whose introduced types become active at the commit boundary: the reload either
+        // introduces a type itself, or the assembly it targets already owns one this domain
+        // introduced, in which case its patches resolve through the artifact assemblies too.
+        internal static bool CommitsIntroducedTypes(
+            HotReloadPreparedIntroducedTypes prepared,
+            string targetAssemblyName)
+        {
+            return prepared != null
+                || HotReloadIntroducedTypeHolder.Registry.HasActiveTypesForOriginalAssembly(targetAssemblyName);
+        }
+
+        // Deleting an added method and restoring its callers yields empty entries, so the
+        // post-shim-compile BeginFileGeneration never runs and the previous run's generation would
+        // otherwise stay live.
+        internal static void ClearEmptyFileGenerations(HotReloadApplyContext context)
+        {
+            foreach (HotReloadGroupFile file in context.Files)
+            {
+                HotReloadFileEntryApplier.ClearFileGeneration(context, file);
+            }
+        }
+
+        // Why per file: a group applies file by file, so only the rows that actually reached
+        // Harmony may claim their removed signatures were superseded. A partly applied file
+        // patches some rows and leaves the rest failed or file-atomically skipped.
+        private static void RecordSupersededSignaturesAfterApply(
+            HotReloadApplyContext context,
+            IReadOnlyCollection<string> gatedReplacementMethodKeys)
+        {
+            for (int index = 0; index < context.Files.Count; index++)
+            {
+                HotReloadGroupFile file = context.Files[index];
+                Debug.Assert(file.FileOutput != null, "Every file must carry its worker output row.");
+                HotReloadSupersededSignatureRecorder.RecordFromAppliedEntries(
+                    file.Sinks.AppliedEntries,
+                    file.FileOutput.removedMethodSignatures
+                        ?? Array.Empty<TransformWorkerRemovedMethodSignatureDto>(),
+                    gatedReplacementMethodKeys);
+            }
+        }
+    }
+}

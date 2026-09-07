@@ -94,7 +94,7 @@ internal static class ConstDriftCollector
                     continue;
                 }
 
-                if (Equals(sourceField.ConstantValue, compiledField.ConstantValue))
+                if (HasSameConstantValue(sourceField.ConstantValue, compiledField.ConstantValue))
                 {
                     continue;
                 }
@@ -110,6 +110,17 @@ internal static class ConstDriftCollector
         }
 
         return warnings;
+    }
+
+    /// <summary>
+    /// Compares an edited-source const value with the value compiled into the target assembly.
+    /// </summary>
+    // Why one helper: the transform warns about a drifted const and planning refuses an
+    // introduced type that reads one. Two comparison rules would let a value count as changed in
+    // one path and unchanged in the other.
+    internal static bool HasSameConstantValue(object sourceValue, object compiledValue)
+    {
+        return Equals(sourceValue, compiledValue);
     }
 
     /// <summary>

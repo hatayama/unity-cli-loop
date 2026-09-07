@@ -7,8 +7,9 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Stores method identities discarded by the Play-entry domain reload in SessionState
-    /// so --status can still name them after the in-memory patch ledger is gone.
+    /// Stores the change identities discarded by the Play-entry domain reload (patched methods,
+    /// added members, introduced types) in SessionState so --status can still count them after
+    /// the in-memory ledgers are gone.
     /// </summary>
     internal static class HotReloadPlayModeEntryDropLedger
     {

@@ -756,7 +756,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.Warning,
                 Is.EqualTo(
-                    "2 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards active patches - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."));
+                    "2 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards every active hot-reload change, including introduced types - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."));
         }
 
         /// <summary>
@@ -810,14 +810,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: the default getter path reads HotReloadPausePointCoordination.GetActiveHotReloadPatchCount
-        /// into the exact policy-form Warning (stubs keep this from nesting Test Runner).
+        /// What: the default getter path reads HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount
+        /// into the exact policy-form Warning, so a run reports the introduced types a deferred
+        /// domain reload discards as well as the patches (stubs keep this from nesting Test Runner).
         /// </summary>
         [Test]
         public async Task ExecuteAsync_WhenDefaultCoordinationGetterReturnsThree_AssignsExactPolicyFormWarning()
         {
-            Func<int> originalGetter = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
-            HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = () => 3;
+            Func<int> originalGetter = HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
+            HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = () => 3;
             try
             {
                 StubTestExecutionService executionService = new StubTestExecutionService();
@@ -835,11 +836,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 Assert.That(
                     response.Warning,
                     Is.EqualTo(
-                        "3 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards active patches - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."));
+                        "3 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards every active hot-reload change, including introduced types - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."));
             }
             finally
             {
-                HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = originalGetter;
+                HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = originalGetter;
             }
         }
 
@@ -870,7 +871,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(
                 response.Warning,
                 Is.EqualTo(
-                    "2 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards active patches - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."));
+                    "2 active hot-reload change(s) were live during this test run. If script changes were imported during the run, the deferred domain reload that follows it discards every active hot-reload change, including introduced types - check 'uloop hot-reload --status' and re-apply, or run 'uloop compile' to bake them in."));
         }
 
         /// <summary>

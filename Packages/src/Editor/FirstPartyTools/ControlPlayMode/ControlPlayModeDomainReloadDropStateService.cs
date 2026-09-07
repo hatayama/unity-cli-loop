@@ -13,20 +13,24 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public interface IControlPlayModeDomainReloadDropStateProvider
     {
-        int GetActiveHotReloadPatchCount();
+        /// <summary>
+        /// How many hot-reload changes the Play-start domain reload discards: patched methods,
+        /// added members, and the types a reload introduced.
+        /// </summary>
+        int GetActiveHotReloadChangeCount();
         int GetActivePausePointCount();
         bool IsDomainReloadDisabledOnEnterPlayMode();
     }
 
     /// <summary>
-    /// Reads live hot-reload patch count, armed pause-point count, and Enter Play Mode
-    /// Domain Reload options for the Play-start drop warning.
+    /// Reads the live hot-reload runtime-change count, the armed pause-point count, and the
+    /// Enter Play Mode Domain Reload options for the Play-start drop warning.
     /// </summary>
     internal sealed class ControlPlayModeDomainReloadDropStateService : IControlPlayModeDomainReloadDropStateProvider
     {
-        public int GetActiveHotReloadPatchCount()
+        public int GetActiveHotReloadChangeCount()
         {
-            Func<int> getter = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
+            Func<int> getter = HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
             return getter?.Invoke() ?? 0;
         }
 

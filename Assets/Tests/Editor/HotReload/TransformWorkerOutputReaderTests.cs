@@ -40,7 +40,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string directoryAsOutputPath = Path.Combine(_tempDirectory, "output.json");
             Directory.CreateDirectory(directoryAsOutputPath);
 
-            TransformWorkerOutputDto output = TransformWorkerOutputReader.TryRead(directoryAsOutputPath, 1, out string error);
+            TransformWorkerOutputDto output = TransformWorkerOutputReader.TryRead(directoryAsOutputPath, out string error);
 
             Assert.That(output, Is.Null);
             Assert.That(error, Does.Contain("could not be read"));

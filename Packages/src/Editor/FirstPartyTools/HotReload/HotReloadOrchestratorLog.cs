@@ -104,6 +104,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId);
         }
 
+        internal static void LogHotReloadRevertFailed(string methodKey, Exception exception)
+        {
+            VibeLogger.LogWarning(
+                HotReloadConstants.VibeLogRevertFailed,
+                "Hot reload could not restore a method's original body.",
+                new
+                {
+                    method = methodKey,
+                    error = exception.Message
+                });
+        }
+
         internal static void LogHotReloadApplySummary(
             int patchedCount,
             int failedCount,

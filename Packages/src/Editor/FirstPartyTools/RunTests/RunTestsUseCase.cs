@@ -314,7 +314,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private static int ReadActiveHotReloadChangeCount()
         {
-            Func<int> getter = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
+            Func<int> getter = HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
             if (getter == null)
             {
                 return 0;

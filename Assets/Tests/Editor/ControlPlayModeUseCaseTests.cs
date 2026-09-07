@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -5,6 +6,7 @@ using UnityEditor;
 using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -656,7 +658,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new StubCompilationFailureGate(false),
                 quietSaver,
                 editorState,
-                new StubDomainReloadDropStateProvider(patchCount: 2));
+                new StubDomainReloadDropStateProvider(changeCount: 2));
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
@@ -667,7 +669,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string dropWarning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: false,
-                activeHotReloadPatchCount: 2,
+                activeHotReloadChangeCount: 2,
                 activePausePointCount: 0);
             Assert.That(
                 response.Warning,
@@ -690,7 +692,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 new StubCompilationFailureGate(false),
                 quietSaver,
                 editorState,
-                new StubDomainReloadDropStateProvider(patchCount: 2));
+                new StubDomainReloadDropStateProvider(changeCount: 2));
             ControlPlayModeSchema schema = new ControlPlayModeSchema
             {
                 Action = PlayModeAction.Play,
@@ -879,25 +881,49 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: the live drop-state service reads the runtime-change port, so a Play-start
+        /// warning counts the introduced types the entry domain reload discards.
+        /// </summary>
+        [Test]
+        public void DomainReloadDropStateService_ReportsTheRuntimeChangeCountNotThePatchCount()
+        {
+            Func<int> originalRuntimeChangeCount =
+                HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
+            HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = () => 1;
+
+            try
+            {
+                ControlPlayModeDomainReloadDropStateService service =
+                    new ControlPlayModeDomainReloadDropStateService();
+
+                Assert.That(service.GetActiveHotReloadChangeCount(), Is.EqualTo(1));
+            }
+            finally
+            {
+                HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = originalRuntimeChangeCount;
+            }
+        }
+
         private sealed class StubDomainReloadDropStateProvider : IControlPlayModeDomainReloadDropStateProvider
         {
-            private readonly int _patchCount;
+            private readonly int _changeCount;
             private readonly int _pausePointCount;
             private readonly bool _isDomainReloadDisabled;
 
             public StubDomainReloadDropStateProvider(
-                int patchCount = 0,
+                int changeCount = 0,
                 int pausePointCount = 0,
                 bool isDomainReloadDisabled = false)
             {
-                _patchCount = patchCount;
+                _changeCount = changeCount;
                 _pausePointCount = pausePointCount;
                 _isDomainReloadDisabled = isDomainReloadDisabled;
             }
 
-            public int GetActiveHotReloadPatchCount()
+            public int GetActiveHotReloadChangeCount()
             {
-                return _patchCount;
+                return _changeCount;
             }
 
             public int GetActivePausePointCount()

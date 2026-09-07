@@ -33,14 +33,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void SetUp()
         {
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
             VibeLogger.ClearMemoryLogs();
         }
 
@@ -1957,6 +1957,79 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: an unchanged re-request against an assembly that owns an introduced type still
+        /// enters group processing through the production entry instead of short-circuiting.
+        /// </summary>
+        [Test]
+        public async Task Run_UnchangedSourceWithActiveIntroducedType_StillEntersGroupProcessing()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string editedPath = WriteEditedSource(
+                "UnchangedSourceWithActiveIntroducedType.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult first = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                editedPath,
+                CancellationToken.None);
+            AssertNoFileLevelFailure(first);
+            AssertHasPatched(first, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+
+            int membershipValidations = 0;
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                ActivateIntroducedTypeForFixtureAssembly(fixturePath);
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    HotReloadGroupProcessorDependencies.Create(
+                        files =>
+                        {
+                            membershipValidations++;
+                            return HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(files);
+                        },
+                        HotReloadIntroducedTypePreparation.PrepareAsync,
+                        TransformWorkerClient.RunAsync,
+                        HotReloadGroupProcessor.GateAndCompileAsync,
+                        HotReloadGroupEntryPreparation.PrepareGroup,
+                        HotReloadEntryApplier.ApplyPreparedEntries)))
+                {
+                    await HotReloadOrchestrator.RunAsync(
+                        new[] { fixturePath },
+                        editedPath,
+                        CancellationToken.None);
+                }
+            }
+
+            Assert.That(
+                membershipValidations,
+                Is.GreaterThanOrEqualTo(1),
+                "An assembly that owns an introduced type must reach group processing even when its source is unchanged.");
+        }
+
+        private static void ActivateIntroducedTypeForFixtureAssembly(string fixturePath)
+        {
+            string projectRelativePath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(fixturePath);
+            string assemblyName = Path.GetFileNameWithoutExtension(
+                UnityEditor.Compilation.CompilationPipeline.GetAssemblyNameFromScriptPath(projectRelativePath));
+            HotReloadIntroducedTypeDescriptor descriptor = new HotReloadIntroducedTypeDescriptor(
+                assemblyName,
+                "original-mvid",
+                "Example.Introduced",
+                projectRelativePath,
+                "fingerprint",
+                "public class Introduced { }");
+            HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
+                typeof(HotReloadOrchestratorTests).Assembly,
+                "artifact.dll",
+                "artifact.pdb",
+                new List<HotReloadIntroducedTypeDescriptor> { descriptor });
+            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
+            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+        }
+
+        /// <summary>
         /// What: reloading the same edited source a second time reports AlreadyActive and
         /// leaves the existing Harmony patch in place so InvocationCount is preserved.
         /// </summary>
@@ -2479,6 +2552,59 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a reload that introduces no type peels the patch an earlier reload left on a
+        /// method that is unchanged again before it compiles its shim, so the peel survives a
+        /// shim-compile failure in a sibling method of the same file.
+        /// </summary>
+        [Test]
+        public async Task Run_NoIntroducedType_PeelsUnchangedPatchBeforeAFailingShimCompile()
+        {
+            string fixturePath = ResolveE2EFixturePath();
+            string patchedPath = WriteEditedSource(
+                "PreCompileRevertPatched.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta + 100;\n        }"));
+
+            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                patchedPath,
+                CancellationToken.None);
+
+            AssertNoFileLevelFailure(patched);
+            AssertHasPatched(patched, nameof(HotReloadE2EFixture.ComputeWithPrivate));
+            HotReloadE2EFixture fixture = new HotReloadE2EFixture();
+            Assert.That(fixture.ComputeWithPrivate(5), Is.EqualTo(115));
+
+            string failingPath = WriteEditedSource(
+                "PreCompileRevertFailing.cs",
+                BuildFixtureSource(
+                    computeWithPrivateMethod:
+                    "public int ComputeWithPrivate(int delta)\n        {\n            return _secret + delta;\n        }",
+                    callsMissingHelperMethod:
+                    "public int CallsMissingHelper(int value)\n        {\n            return MissingHelperAddedByEdit(value);\n        }"));
+
+            HotReloadOrchestratorResult failed = await HotReloadOrchestrator.RunAsync(
+                new[] { fixturePath },
+                failingPath,
+                CancellationToken.None);
+
+            // Why the Failed outcome as well: no active patch alone would also hold for a run
+            // that never reached the shim compile, and the position under test is only pinned by
+            // a run that reached it and failed there.
+            AssertHasFailed(failed, nameof(HotReloadE2EFixture.CallsMissingHelper));
+            Assert.That(
+                failed.ActivePatchTotal,
+                Is.EqualTo(0),
+                "A run without introduced types must peel the unchanged method before the shim "
+                + "compile it then fails on.\n" + FormatOutcomes(failed));
+            Assert.That(
+                fixture.ComputeWithPrivate(5),
+                Is.EqualTo(15),
+                "15 means the compiled body runs again; 115 means the peel never happened.");
+        }
+
+        /// <summary>
         /// What: a shim compile error in one method isolates that failure (Failed with its own
         /// compiler error, new-member hint, and original-file line) and skips every survivor
         /// in the file instead of patching them.
@@ -2639,7 +2765,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
 
             HotReloadFileProcessResult fileResult =
-                HotReloadEntryApplier.ApplyGroupAndBuildResults(
+                ApplyGroupForTest(
                     CreateApplyContext(
                         typeof(HotReloadE2EFixture).Assembly.GetName().Name,
                         projectRelativePath,
@@ -2908,7 +3034,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             try
             {
                 IReadOnlyList<HotReloadFileProcessResult> results =
-                    HotReloadEntryApplier.ApplyGroupAndBuildResults(
+                    ApplyGroupForTest(
                         context,
                         HotReloadShimCompileResult.SuccessResult(
                             typeof(HotReloadOrchestratorTests).Assembly,
@@ -2993,7 +3119,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 }
             };
-            return HotReloadEntryApplier.ApplyGroupAndBuildResults(
+            return ApplyGroupForTest(
                 CreateApplyContext(
                     typeof(HotReloadCoreFixture).Assembly.GetName().Name,
                     projectRelativePath,
@@ -3013,6 +3139,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// assembly name, the group's single file and the worker output; the remaining fields
         /// exist to satisfy the context's own preconditions.
         /// </summary>
+        private static IReadOnlyList<HotReloadFileProcessResult> ApplyGroupForTest(
+            HotReloadApplyContext context,
+            HotReloadShimCompileResult compileResult,
+            TransformWorkerEntryDto[] entriesToPatch)
+        {
+            return HotReloadEntryApplier.ApplyPreparedEntries(
+                context,
+                compileResult,
+                HotReloadGroupEntryPreparation.PrepareGroup(context, compileResult, entriesToPatch));
+        }
+
         private static HotReloadApplyContext CreateApplyContext(
             string assemblyName,
             string projectRelativePath,
@@ -3072,7 +3209,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 },
                 workerOutput,
-                new[] { file });
+                new[] { file },
+                null);
         }
 
         private static HotReloadOrchestratorResult ToOrchestratorResult(

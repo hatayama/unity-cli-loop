@@ -16,19 +16,40 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     public class HotReloadSchema : UnityCliLoopToolSchema
     {
         /// <summary>
-        /// Project-relative source file paths to hot-reload. Omitted or empty apply values select sources changed since the last compile snapshot; --status rejects a nonempty value and --revert-all ignores it.
+        /// Project-relative source file paths to hot-reload. Omitted or empty apply values select sources changed since the last compile snapshot; a file that has never been compiled has no snapshot and is not selected, so pass it explicitly. --status rejects a nonempty value and --revert-all ignores it.
         /// </summary>
         public string[] Files { get; set; } = Array.Empty<string>();
 
         /// <summary>
-        /// When true, removes every active hot-reload transplant and ignores Files.
+        /// When true, removes every active patch and added member and ignores Files; introduced types stay loaded until the next domain reload.
         /// </summary>
         public bool RevertAll { get; set; }
 
         /// <summary>
-        /// When true, lists the currently patched methods without applying or reverting anything.
+        /// When true, lists the active changes (patched methods, added members, introduced types) without applying or reverting anything.
         /// </summary>
         public bool Status { get; set; }
+    }
+
+    /// <summary>
+    /// One per-type outcome from a hot-reload apply run, or one active type on --status.
+    /// </summary>
+    public class HotReloadIntroducedTypeResult
+    {
+        /// <summary>
+        /// "Introduced", "AlreadyActive" or "Failed" on an apply run; "Active" on --status.
+        /// </summary>
+        public string Kind { get; set; } = string.Empty;
+
+        public string TypeName { get; set; } = string.Empty;
+
+        /// <summary>The compiled assembly the declaration belongs to.</summary>
+        public string AssemblyName { get; set; } = string.Empty;
+
+        /// <summary>The file that declares the type; empty when the run cannot attribute it.</summary>
+        public string FilePath { get; set; } = string.Empty;
+
+        public string Reason { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -66,6 +87,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public IReadOnlyList<string> Warnings { get; set; } = Array.Empty<string>();
 
+        /// <summary>
+        /// The type declarations of this run, reported apart from the methods because a type is
+        /// not a patched body. On --status, the types this domain holds.
+        /// </summary>
+        public IReadOnlyList<HotReloadIntroducedTypeResult> IntroducedTypes { get; set; } =
+            Array.Empty<HotReloadIntroducedTypeResult>();
+
+        /// <summary>
+        /// How many introduced types this domain holds, counted as types and not as the artifact
+        /// assemblies that carry them.
+        /// </summary>
+        public int ActiveIntroducedTypeTotal { get; set; }
+
         public int PatchedTotal { get; set; }
 
         public int ActivePatchTotal { get; set; }
@@ -89,8 +123,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string RecommendedNextAction { get; set; } = string.Empty;
 
         /// <summary>
-        /// Remaining method identities discarded by the last Play-entry domain reload
-        /// that have not been recovered by apply, revert-all, or a successful compile.
+        /// Remaining patched-method, added-member, and introduced-type identities discarded by
+        /// the last Play-entry domain reload that have not been recovered by apply
+        /// (<c>Patched</c> / <c>Added</c> methods, <c>Introduced</c> / <c>AlreadyActive</c>
+        /// types), revert-all, or a successful compile.
         /// </summary>
         public int DroppedByPlayModeEntryCount { get; set; }
 
@@ -119,6 +155,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeDroppedByPlayModeEntryCount()
         {
             return DroppedByPlayModeEntryCount > 0;
+        }
+
+        // Why omit empty: the vast majority of reloads introduce no type, and their response
+        // shape must not grow two fields that only ever say "none".
+        public bool ShouldSerializeIntroducedTypes()
+        {
+            return IntroducedTypes != null && IntroducedTypes.Count > 0;
+        }
+
+        public bool ShouldSerializeActiveIntroducedTypeTotal()
+        {
+            return ActiveIntroducedTypeTotal > 0;
         }
     }
 
@@ -187,7 +235,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
             // Why switch back: SessionState for Play-entry drop recovery is a Unity Editor API.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(result.Methods);
+            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                result.Methods,
+                result.IntroducedTypes);
 
             HotReloadResponse response = BuildApplyResponse(result, selection.ScanLimitWarnings);
             if (!string.IsNullOrEmpty(selection.SelectionMessage))
@@ -242,13 +292,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(failure != null, "failure must not be null.");
             int activePatchTotal = HotReloadPatcher.ActiveChangeCount;
+            // Why two numbers: the suffix warns that the refusal left something live, and an
+            // introduced type is live even when nothing is patched. ActivePatchTotal stays a patch
+            // count because callers read it against PatchedTotal.
+            int runtimeChangeTotal = HotReloadActiveChangeCounts.RuntimeChangeTotal;
             string message = failure.Message;
             string[] nextActions = failure.NextActions;
-            if (activePatchTotal > 0)
+            if (runtimeChangeTotal > 0)
             {
                 message += string.Format(
                     HotReloadConstants.ValidationFailureActiveChangesSuffixFormat,
-                    activePatchTotal);
+                    runtimeChangeTotal);
                 nextActions = AppendNextAction(
                     nextActions,
                     HotReloadConstants.ValidationFailureInspectOrRevertNextAction);

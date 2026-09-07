@@ -194,7 +194,8 @@ internal static class AddedPropertyClassifier
                 symbol,
                 typeState.TypeSymbol,
                 semanticModel,
-                targetTypesAssemblySymbol);
+                targetTypesAssemblySymbol,
+                typeState.SourceUnit.ArtifactMap);
         }
 
         AddedPropertyBinding binding = new AddedPropertyBinding
@@ -364,14 +365,16 @@ internal static class AddedPropertyClassifier
         IPropertySymbol symbol,
         INamedTypeSymbol hostType,
         SemanticModel semanticModel,
-        IAssemblySymbol targetTypesAssemblySymbol)
+        IAssemblySymbol targetTypesAssemblySymbol,
+        IntroducedTypeArtifactMap artifactMap)
     {
         string storeReason = AddedFieldClassifier.EvaluateStoreAvailability(
             hostType,
             semanticModel,
             targetTypesAssemblySymbol,
             symbol.Type,
-            declaration.Initializer?.Value);
+            declaration.Initializer?.Value,
+            artifactMap);
         if (storeReason == null)
         {
             return null;

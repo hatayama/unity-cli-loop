@@ -46,6 +46,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     });
             }
 
+            // Why kept apart: the messages a type failure reports differ depending on whether the
+            // methods failed too, so the method verdict has to survive the fold below.
+            bool hasMethodFailure = hasFailure;
+
+            // Why folded in here: the type rows are a failure section of their own, and a run
+            // whose only failure was a refused declaration would otherwise answer Success.
+            hasFailure = hasFailure || HotReloadIntroducedTypeResponseSection.HoldsFailure(result.IntroducedTypes);
+
             List<string> warnings = new List<string>(result.Warnings);
             if (additionalWarnings != null)
             {
@@ -102,6 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string message = BuildApplyMessage(
                 result,
                 hasFailure,
+                hasMethodFailure,
                 warnings.Count,
                 appendCompileResolution: orchestratorWarningCount >= 2
                     && orchestratorWarningCount == warningCountBeforeHold);
@@ -110,6 +119,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Success = !hasFailure,
                 Methods = methods,
                 Warnings = warnings,
+                IntroducedTypes = HotReloadIntroducedTypeResponseSection.BuildRows(result.IntroducedTypes),
+                ActiveIntroducedTypeTotal = HotReloadActiveChangeCounts.IntroducedTypeCount,
                 PatchedTotal = result.PatchedTotal,
                 ActivePatchTotal = result.ActivePatchTotal,
                 AddedFieldTotal = HotReloadAddedFieldRegistry.DescribeAll().Count,
@@ -124,7 +135,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 RecommendedNextAction = HotReloadRecommendedNextAction.Resolve(
                     hasFailure,
                     result.PatchedTotal,
-                    CountAddedOutcomes(result))
+                    CountAddedOutcomes(result),
+                    HotReloadIntroducedTypeResponseSection.CountIntroducedTypes(result.IntroducedTypes))
             };
         }
 
@@ -178,9 +190,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static string BuildApplyMessage(
             HotReloadOrchestratorResult result,
             bool hasFailure,
+            bool hasMethodFailure,
             int warningCount,
             bool appendCompileResolution)
         {
+            // Why asked first: the file a run introduces a type into usually holds untouched
+            // methods as well, and every message below would then report the methods only.
+            if (HotReloadIntroducedTypeResponseSection.TryBuildMessage(
+                    result.IntroducedTypes,
+                    hasMethodFailure,
+                    result.PatchedTotal + CountAddedOutcomes(result),
+                    out string typeMessage))
+            {
+                return AppendWarningCount(typeMessage, warningCount, appendCompileResolution);
+            }
+
             // Why: when every method was left untouched, the empty Methods list is intentional —
             // report the unchanged count instead of the generic "no patchable bodies" message.
             if (!hasFailure && result.Methods.Count == 0 && result.UnchangedTotal > 0)
@@ -195,6 +219,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             string message = BuildApplyOutcomeMessage(result, hasFailure);
             message = AppendUnchangedAndLifecycleNotes(message, result);
+            message = HotReloadIntroducedTypeResponseSection.AppendTypeSummary(
+                message,
+                result.IntroducedTypes);
 
             return AppendWarningCount(message, warningCount, appendCompileResolution);
         }

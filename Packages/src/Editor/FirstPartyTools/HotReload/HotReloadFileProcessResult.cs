@@ -19,6 +19,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] AddedFieldNames { get; }
         public string[] AddedConstNames { get; }
         public string SourceContentSha256 { get; }
+        public IReadOnlyList<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
         public HotReloadFileProcessResult(
             List<HotReloadMethodOutcome> outcomes,
@@ -31,7 +32,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] addedFieldNames = null,
             string sourceContentSha256 = null,
             string[] addedConstNames = null,
-            int revertedUnchangedCount = 0)
+            int revertedUnchangedCount = 0,
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null)
         {
             Outcomes = outcomes;
             Warnings = warnings;
@@ -44,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SourceContentSha256 = sourceContentSha256;
             AddedConstNames = addedConstNames ?? Array.Empty<string>();
             RevertedUnchangedCount = revertedUnchangedCount;
+            IntroducedTypes = introducedTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
         }
     }
 }

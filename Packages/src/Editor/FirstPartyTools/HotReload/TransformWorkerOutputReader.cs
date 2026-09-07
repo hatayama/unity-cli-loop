@@ -7,12 +7,17 @@ using Newtonsoft.Json;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Reads and validates a worker output file. Null with a reason when the file is missing,
-    /// unreadable as JSON, or does not carry one per-file row per source.
+    /// Reads a worker output file as the worker wrote it. Null with a reason when the file is
+    /// missing, unreadable, or not deserializable JSON.
     /// </summary>
+    /// <remarks>
+    /// Why nothing else is checked here: the document's content is judged by
+    /// TransformWorkerClient.InterpretOutput, which needs the omissions intact and in one order.
+    /// Coalescing or counting rows here would either hide them or duplicate that order.
+    /// </remarks>
     internal static class TransformWorkerOutputReader
     {
-        public static TransformWorkerOutputDto TryRead(string outputJsonPath, int expectedFileCount, out string error)
+        public static TransformWorkerOutputDto TryRead(string outputJsonPath, out string error)
         {
             error = null;
             // Why Directory.Exists too: a directory sitting at the output path is not a missing file,
@@ -42,6 +47,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return null;
             }
 
+            return TryDeserialize(outputJson, out error);
+        }
+
+        /// <summary>
+        /// Deserializes one worker output document. Null with a reason when the text is not JSON
+        /// the worker output shape can be read from.
+        /// </summary>
+        // Why shared instead of a second JsonConvert call site: the process path and the callers
+        // that hand in the document directly must fail on the same text for the same reason.
+        public static TransformWorkerOutputDto TryDeserialize(string outputJson, out string error)
+        {
+            error = null;
             TransformWorkerOutputDto output;
             try
             {
@@ -56,13 +73,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (output == null)
             {
                 error = "worker output JSON deserialized to null";
-                return null;
-            }
-
-            TransformWorkerClient.CoalesceOutput(output);
-            if (output.parseErrors.Length == 0 && output.files.Length != expectedFileCount)
-            {
-                error = "worker output carried " + output.files.Length + " file rows for " + expectedFileCount + " sources";
                 return null;
             }
 

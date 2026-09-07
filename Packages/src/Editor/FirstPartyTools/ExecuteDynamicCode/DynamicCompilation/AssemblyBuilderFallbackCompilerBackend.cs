@@ -11,6 +11,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class AssemblyBuilderFallbackCompilerBackend
     {
+        private static Func<
+            string,
+            string,
+            List<string>,
+            CancellationToken,
+            Action,
+            Action,
+            Action,
+            Task<DynamicCompilationBackendResult>> compilerOverride;
+
         public static async Task<DynamicCompilationBackendResult> CompileAsync(
             string sourcePath,
             string dllPath,
@@ -20,6 +30,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Action markBuildFinished,
             Action incrementBuildCount)
         {
+            if (compilerOverride != null)
+            {
+                return await compilerOverride(
+                    sourcePath,
+                    dllPath,
+                    references,
+                    ct,
+                    markBuildStarted,
+                    markBuildFinished,
+                    incrementBuildCount).ConfigureAwait(false);
+            }
+
             TaskCompletionSource<CompilerMessage[]> taskCompletionSource = new();
             ct.ThrowIfCancellationRequested();
             incrementBuildCount();
@@ -63,6 +85,38 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new DynamicCompilationBackendResult(
                 messages,
                 DynamicCompilationBackendKind.AssemblyBuilderFallback);
+        }
+
+        internal static Func<
+            string,
+            string,
+            List<string>,
+            CancellationToken,
+            Action,
+            Action,
+            Action,
+            Task<DynamicCompilationBackendResult>> SwapCompilerForTests(
+            Func<
+                string,
+                string,
+                List<string>,
+                CancellationToken,
+                Action,
+                Action,
+                Action,
+                Task<DynamicCompilationBackendResult>> replacement)
+        {
+            Func<
+                string,
+                string,
+                List<string>,
+                CancellationToken,
+                Action,
+                Action,
+                Action,
+                Task<DynamicCompilationBackendResult>> previous = compilerOverride;
+            compilerOverride = replacement;
+            return previous;
         }
 
         internal static async Task<CompilerMessage[]> AwaitBuildCompletionAsync(

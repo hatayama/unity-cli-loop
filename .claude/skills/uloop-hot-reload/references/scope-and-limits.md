@@ -154,10 +154,10 @@ diagnosing or tuning, keep every edit inside existing method bodies — inline a
 helper's logic at its call site for now instead of extracting it. New helper methods
 and fields can now be explored directly with hot reload, across the files of one
 assembly: pass the files you edited; unchanged files that already hold active
-patches are re-applied with that group. When the
-change needs a new type, visibility from another assembly or from a file outside the
-reload, runtime name-based lookup, or serialization, collect those and run `uloop compile`
-once: every compile triggers a domain reload that drops all active patches and pause points
+patches are re-applied with that group. A top-level `public` class, struct, enum, or interface declared in an
+edited file is introduced by that reload too (`introduced-types.md`). When the change needs
+another new-type shape, visibility from another assembly or from a file outside the reload,
+runtime name-based lookup, or serialization, collect those and run `uloop compile` once: every compile triggers a domain reload that drops all active patches and pause points
 and resets the running PlayMode session, so compiling member-by-member pays that cost
 repeatedly. After the one compile, re-enter PlayMode and continue exploring on the freshly
 compiled code.
@@ -244,7 +244,7 @@ stay `Skipped`.
 | Body contains a `base.` call | `base` cannot be expressed from outside the type |
 | Private/internal access inside an async/iterator/closure body has no accessor-delegate shape | Conditional access (`?.`), `??=`, indexers, static field writes, initializer member assignments, compound writes whose receiver could be evaluated twice, assignments whose value is consumed, and calls with `ref`/`out`/`in`, named, optional, or `params` arguments (or to extension/generic/by-ref-returning methods) cannot be rewritten to accessor delegates |
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
-| A declared return or parameter type cannot be resolved (an uncompiled new type, a missing using, or a typo) | Skipped; add the missing type, add the required `using`, or fix the typo, then run `uloop compile` |
+| A declared return or parameter type cannot be resolved (a new type this reload could not introduce, a missing using, or a typo) | Skipped; a supported new type declared in an edited file of the same assembly is introduced by this reload, so check `Warnings` for the refusal reason (`introduced-types.md`); otherwise add the type or the `using`, or fix the typo, then run `uloop compile` |
 | Edited setter, init, or indexer accessor of a *compiled* property | Accessor patching covers getters only; `uloop compile` applies these edits. Accessors of a property added in this edit are emitted instead |
 | Constructor (instance or static), operator, conversion operator, or explicit event accessor (add/remove) | Out of scope for v1; `uloop compile` applies these edits |
 | Method raises or reads a field-like event that has no reachable backing field | Custom `add`/`remove` accessors, an `abstract`/`extern`/interface event, a delegate type that is not visible outside the assembly, or an event added in this edit leave nothing for the shim's Harmony accessor to bind |

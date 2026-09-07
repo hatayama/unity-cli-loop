@@ -15,7 +15,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPatcher.RevertAll();
             HotReloadPlayModeEntryDropRecorder.NotifyRevertAll();
             HotReloadAutoRefreshHoldSyncResult hold =
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
             List<string> warnings = new List<string>();
             HotReloadAutoRefreshHoldResponseEnricher.AppendDeferredWarning(
                 warnings,
@@ -23,6 +23,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadAutoRefreshHoldResponseEnricher.AppendSceneRefreshWarning(
                 warnings,
                 hold.SceneRefreshWarning);
+            // Why one snapshot: the total and the sentence that names it must agree, and a second
+            // read could answer after another reload activated a type.
+            int introducedTypeCount = HotReloadActiveChangeCounts.IntroducedTypeCount;
             return new HotReloadResponse
             {
                 Success = true,
@@ -30,9 +33,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ActivePatchTotal = HotReloadPatcher.ActiveChangeCount,
                 AutoRefreshHeld = hold.Held,
                 Warnings = warnings,
-                Message = clearedCount == 0
-                    ? "No active hot-reload changes to revert."
-                    : "Reverted all active hot-reload changes."
+                // Why the rows too: a total without them names nothing, so a caller told that
+                // types stayed loaded could not tell which ones a revert left behind.
+                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(),
+                ActiveIntroducedTypeTotal = introducedTypeCount,
+                Message = HotReloadIntroducedTypeStatusSection.AppendRevertAllNote(
+                    clearedCount == 0
+                        ? "No active hot-reload changes to revert."
+                        : "Reverted all active hot-reload changes.",
+                    introducedTypeCount,
+                    hold.Held)
             };
         }
 
@@ -83,7 +93,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyList<HotReloadAddedFieldDescription> addedFields =
                 HotReloadAddedFieldRegistry.DescribeAll();
             AppendAddedFieldStatusRows(methods, addedFields);
-            string message = $"{count} change(s) currently active.";
+            // Why one snapshot for the heading, the drop decision, and the reported total: a
+            // domain still holding an introduced type has not lost it, and a caller told three
+            // different numbers for "what is active" cannot tell which one answers the question.
+            int introducedTypeCount = HotReloadActiveChangeCounts.IntroducedTypeCount;
+            int runtimeChangeTotal = count + introducedTypeCount;
+            string message = $"{runtimeChangeTotal} change(s) currently active.";
             if (neverInvokedCount > 0)
             {
                 message += " " + string.Format(
@@ -93,7 +108,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             int droppedCount = HotReloadPlayModeEntryDropLedger.Count;
             string dropMessage = HotReloadPlayModeEntryDropStatusMessageBuilder.Build(
-                count,
+                runtimeChangeTotal,
                 droppedCount);
             if (dropMessage != null)
             {
@@ -101,7 +116,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             HotReloadAutoRefreshHoldSyncResult hold =
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
             List<string> warnings = new List<string>();
             HotReloadAutoRefreshHoldResponseEnricher.AppendDeferredWarning(
                 warnings,
@@ -114,6 +129,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Success = true,
                 Methods = methods,
                 Warnings = warnings,
+                IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(),
+                ActiveIntroducedTypeTotal = introducedTypeCount,
                 ActivePatchTotal = count,
                 AddedFieldTotal = addedFields.Count,
                 AutoRefreshHeld = hold.Held,

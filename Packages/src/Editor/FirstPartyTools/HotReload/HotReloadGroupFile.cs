@@ -26,7 +26,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             UnityCompilationAssembly compilationAssembly,
             string targetDllPath,
             string projectRoot,
-            HotReloadFileSinks sinks)
+            HotReloadFileSinks sinks,
+            HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null)
         {
             Debug.Assert(!string.IsNullOrEmpty(assemblyResolvePath), "assemblyResolvePath must not be empty.");
             Debug.Assert(!string.IsNullOrEmpty(workerSourcePath), "workerSourcePath must not be empty.");
@@ -45,6 +46,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             TargetDllPath = targetDllPath;
             ProjectRoot = projectRoot;
             Sinks = sinks;
+            NewSourceMembershipEvidence = newSourceMembershipEvidence;
         }
 
         internal static HotReloadGroupFile ForActiveSibling(
@@ -62,7 +64,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 template.CompilationAssembly,
                 template.TargetDllPath,
                 template.ProjectRoot,
-                sinks);
+                sinks,
+                null);
         }
 
         // The path the caller asked to reload, used as the outcome file path.
@@ -82,6 +85,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal string ProjectRoot { get; }
 
         internal HotReloadFileSinks Sinks { get; }
+
+        // Null for a source already present in CompilationPipeline.sourceFiles.
+        internal HotReloadNewSourceMembershipEvidence NewSourceMembershipEvidence { get; }
 
         // Verified snapshot text of this file, or null when it has no baseline.
         internal string SnapshotSource { get; set; }

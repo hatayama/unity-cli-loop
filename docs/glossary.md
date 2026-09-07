@@ -24,6 +24,10 @@ match the current glossary:
 - Several first-party tool UseCases implement `IUnityCliLoop*Service` interfaces. The names
   are preserved because renaming public identifiers is outside terminology cleanup; removing
   the pass-through interfaces would be a separate structural refactor.
+- `HotReloadResponse.ActivePatchTotal` counts patched methods and added members only. Types a
+  reload introduced are live changes but are reported separately in
+  `ActiveIntroducedTypeTotal`, because callers read `ActivePatchTotal` against `PatchedTotal`.
+  The `--status` heading and the "still active" refusal suffix count both kinds.
 
 ## Terms
 

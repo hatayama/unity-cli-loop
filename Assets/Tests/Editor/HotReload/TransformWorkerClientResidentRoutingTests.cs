@@ -122,6 +122,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(_host.LaunchCount, Is.EqualTo(0));
         }
 
+        /// <summary>
+        /// A resident run whose output omits the mandatory preparation fields is rejected, so the
+        /// resident path meets the same output checks the one-shot path does.
+        /// </summary>
+        [Test]
+        public async Task RunAsync_ResidentCompletesWithoutPreparationOutput_ReturnsFailure()
+        {
+            _factory.Enqueue(ScriptStep.Succeed);
+            TransformWorkerInputDto input = new TransformWorkerInputDto
+            {
+                operation = "prepareIntroducedTypes",
+                targetAssemblyName = "Assembly",
+                targetAssemblyMvid = "mvid",
+                sources = new[]
+                {
+                    new TransformWorkerSourceDto { projectRelativePath = "Assets/Edited.cs" }
+                }
+            };
+
+            TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input, CancellationToken.None);
+
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("introducedTypes"));
+            Assert.That(_host.LaunchCount, Is.EqualTo(1));
+        }
+
         private void UseHost(int responseTimeoutMilliseconds)
         {
             _host = new TransformWorkerHost(ResolveFakeTargetAsync, _factory.Start, responseTimeoutMilliseconds);

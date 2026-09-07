@@ -364,7 +364,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static (bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActiveHotReloadChangeCount)
             CaptureLivePlayModeStopWarningInputs()
         {
-            Func<int> getter = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
+            Func<int> getter = HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
             int count = getter == null ? 0 : getter();
             return (EditorApplication.isPlaying, UloopPausePointRegistry.GetActiveCount(), count);
         }

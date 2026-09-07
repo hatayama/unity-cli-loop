@@ -25,6 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             SuppressedPausePointIds = new List<string>();
             RetargetedPausePointIds = new List<string>();
             AppliedEntries = new List<TransformWorkerEntryDto>();
+            IntroducedTypes = new List<HotReloadIntroducedTypeOutcome>();
             SiblingDerivedWarnings = siblingDerivedWarnings;
             OneShotCallerNoteCandidates = oneShotCallerNoteCandidates;
         }
@@ -41,6 +42,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // derived from the outcomes: a partly applied file reports Patched rows next to Failed
         // and file-atomic Skipped rows, so only the apply loop knows which row reached Harmony.
         internal List<TransformWorkerEntryDto> AppliedEntries { get; }
+
+        // The type declarations this file's stages reported on. Why the same per-file buffer as
+        // the method outcomes: both builders of HotReloadFileProcessResult read this object, so a
+        // group that ends unapplied still carries the rows the commit boundary wrote.
+        internal List<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
         // Shared across the whole run so sibling-derived text can be deduped once at the end.
         internal List<string> SiblingDerivedWarnings { get; }

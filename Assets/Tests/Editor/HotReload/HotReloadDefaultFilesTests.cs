@@ -83,7 +83,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "--files was omitted; 1 changed file(s) since the last compile were selected: Assets/Selected.cs. "
+                    "--files was omitted; 1 changed file(s) since the last compile were selected: Assets/Selected.cs."
+                    + " New files that have never been compiled are not selected automatically. "
                     + "Hot reload applied. PatchedTotal=1, ActivePatchTotal=1. 2 warning(s). See Warnings. "
                     + "A single 'uloop compile' clears all of them at once."));
             Assert.That(
@@ -110,7 +111,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 response.Message,
                 Is.EqualTo(
-                    "No .cs files changed since the last compile were found; pass explicit paths with --files."));
+                    "No .cs files changed since the last compile were found. Files that have never been "
+                    + "compiled are not selected automatically; pass them (and any other path) with --files."));
             Assert.That(response.ErrorCode, Is.EqualTo(HotReloadValidationErrorCodes.NoChangedFiles));
             Assert.That(
                 response.NextActions,
@@ -118,7 +120,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     new[]
                     {
                         "Save the edited .cs files to disk, then run 'uloop hot-reload' again.",
-                        "Pass project-relative .cs paths with --files."
+                        "Pass project-relative .cs paths with --files (required for new files that have not "
+                        + "been compiled yet)."
                     }));
         }
 

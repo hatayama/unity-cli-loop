@@ -21,6 +21,23 @@ using Microsoft.CodeAnalysis.Text;
 // edited in one file call a member added in another.
 internal static class WorkerGroupPipeline
 {
+    internal const string PrepareIntroducedTypesOperation = "prepareIntroducedTypes";
+
+    internal static WorkerOutput Run(WorkerInput input)
+    {
+        if (string.Equals(input.Operation, PrepareIntroducedTypesOperation, StringComparison.Ordinal))
+        {
+            return IntroducedTypePreparation.Prepare(input);
+        }
+
+        if (!string.IsNullOrEmpty(input.Operation))
+        {
+            return CreateRunFailureOutput("Unknown worker operation: " + input.Operation);
+        }
+
+        return Transform(input);
+    }
+
     internal static WorkerOutput Transform(WorkerInput input)
     {
         CSharpParseOptions parseOptions = new CSharpParseOptions(
@@ -33,16 +50,12 @@ internal static class WorkerGroupPipeline
         }
 
         List<WorkerSourceUnit> loadedUnits = new List<WorkerSourceUnit>(units.Count);
-        List<SyntaxTree> syntaxTrees = new List<SyntaxTree>(units.Count);
         foreach (WorkerSourceUnit unit in units)
         {
-            if (unit.SyntaxTree == null)
+            if (unit.SyntaxTree != null)
             {
-                continue;
+                loadedUnits.Add(unit);
             }
-
-            loadedUnits.Add(unit);
-            syntaxTrees.Add(unit.SyntaxTree);
         }
 
         // Why every loaded unit reports it: a missing reference is a problem of the whole assembly,
@@ -57,14 +70,30 @@ internal static class WorkerGroupPipeline
             loadedUnit.ParseErrors.AddRange(referenceParseErrors);
         }
 
+        // Why a run-level failure and not a per-file diagnostic: the orchestrator advances to
+        // revert, gating and compile whenever the run succeeds, so a run that could not trust its
+        // retained artifacts has to stop the whole group rather than transform against a binding
+        // that is missing a type or attributing it to the wrong assembly.
+        string artifactFailure = PrepareBindingTrees(input, loadedUnits, references, targetTypesReference, parseOptions);
+        if (artifactFailure != null)
+        {
+            return CreateRunFailureOutput(artifactFailure);
+        }
+
+        List<SyntaxTree> bindingTrees = new List<SyntaxTree>(loadedUnits.Count);
+        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        {
+            bindingTrees.Add(loadedUnit.BindingSyntaxTree);
+        }
+
         CSharpCompilation compilation = CSharpCompilation.Create(
             assemblyName: "UloopHotReloadTransformWorkerCompilation",
-            syntaxTrees: syntaxTrees,
+            syntaxTrees: bindingTrees,
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         foreach (WorkerSourceUnit unit in loadedUnits)
         {
-            unit.SemanticModel = compilation.GetSemanticModel(unit.SyntaxTree, ignoreAccessibility: true);
+            unit.SemanticModel = compilation.GetSemanticModel(unit.BindingSyntaxTree, ignoreAccessibility: true);
         }
 
         IAssemblySymbol targetTypesAssemblySymbol = ResolveTargetTypesAssemblySymbol(
@@ -158,6 +187,15 @@ internal static class WorkerGroupPipeline
 
         foreach (WorkerSourceUnit unit in loadedUnits)
         {
+            // Why registered here and not where the type is planned: planning is a separate
+            // worker operation, so by the time this run transforms the file the type is served
+            // from a retained artifact. The drift check reads the unmodified edited root, where
+            // the declaration is still visible, and would call an applied type an unapplied edit.
+            foreach (string metadataName in unit.RetainedIntroducedTypeMetadataNames)
+            {
+                addedMethodCatalog.AddAddedTypeSyntaxKey(metadataName);
+            }
+
             AppendOutsideMethodBodyDriftWarnings(unit, addedMethodCatalog, addedFieldCatalog);
         }
 
@@ -169,6 +207,115 @@ internal static class WorkerGroupPipeline
             unchangedMethods,
             siblingConstDriftWarnings,
             addedFieldCatalog);
+    }
+
+    // Removes from each unit's binding tree the declarations a retained artifact already serves,
+    // and reports why the artifacts could not be used at all. Returns null when the run has no
+    // artifact to bind against, which is every run until introduced types are in play.
+    private static string PrepareBindingTrees(
+        WorkerInput input,
+        List<WorkerSourceUnit> loadedUnits,
+        List<MetadataReference> references,
+        MetadataReference targetTypesReference,
+        CSharpParseOptions parseOptions)
+    {
+        if (input.IntroducedTypeArtifacts.Length == 0)
+        {
+            return null;
+        }
+
+        List<string> artifactErrors = new List<string>();
+        List<(WorkerIntroducedTypeArtifact Artifact, MetadataReference Reference)> artifactReferences =
+            IntroducedTypeArtifactReferences.Collect(input, references, artifactErrors);
+        if (artifactErrors.Count > 0)
+        {
+            return artifactErrors[0];
+        }
+
+        List<SyntaxTree> editedTrees = new List<SyntaxTree>(loadedUnits.Count);
+        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        {
+            editedTrees.Add(loadedUnit.SyntaxTree);
+        }
+
+        // The declarations are verified against the edited text, so this compilation binds the
+        // trees as written; the binding compilation is built from what survives the removal.
+        CSharpCompilation verificationCompilation = CSharpCompilation.Create(
+            assemblyName: "UloopHotReloadRetainedDeclarationVerification",
+            syntaxTrees: editedTrees,
+            references: references,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        IAssemblySymbol targetAssembly = ResolveTargetTypesAssemblySymbol(
+            verificationCompilation,
+            targetTypesReference);
+
+        // A record is only valid for the assembly generation it was planned against, and the
+        // recorded identities are what the fingerprint is rebuilt from. Binding against an
+        // assembly the request cannot name would rebuild them from an empty identity, no
+        // declaration would match its record, and every retained type would quietly bind from
+        // source again.
+        if (!IntroducedTypeTargetIdentity.MatchesRequest(input, targetAssembly))
+        {
+            return "Retained introduced types require the assembly identity the records were planned against.";
+        }
+
+        if (!IntroducedTypeArtifactMap.TryBuild(
+                verificationCompilation, artifactReferences, out IntroducedTypeArtifactMap artifactMap, out string artifactError))
+        {
+            return artifactError;
+        }
+
+        foreach (WorkerSourceUnit loadedUnit in loadedUnits)
+        {
+            loadedUnit.ArtifactMap = artifactMap;
+        }
+        Dictionary<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> retainedDeclarations =
+            IntroducedTypeDeclarationVerifier.FindRetainedDeclarations(
+                loadedUnits, verificationCompilation, input, targetAssembly, artifactMap);
+        List<string> bindingParseErrors = new List<string>();
+        foreach (KeyValuePair<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> entry in retainedDeclarations)
+        {
+            // Recorded before the removal, because the rewriter replaces the unit's tree and
+            // these declarations belong to the tree it replaces. Built from the syntax rather
+            // than the symbol: the drift check strips by the syntax key of the edited root.
+            foreach (BaseTypeDeclarationSyntax declaration in entry.Value)
+            {
+                if (declaration is TypeDeclarationSyntax typeDeclaration)
+                {
+                    entry.Key.RetainedIntroducedTypeMetadataNames.Add(
+                        WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration));
+                }
+                else if (declaration is EnumDeclarationSyntax enumDeclaration)
+                {
+                    entry.Key.RetainedIntroducedTypeMetadataNames.Add(
+                        WorkerSyntaxIndex.BuildEnumMetadataNameFromSyntax(enumDeclaration));
+                }
+            }
+
+            IntroducedTypeBindingRewriter.RemoveRetainedDeclarations(
+                entry.Key, entry.Value, parseOptions, bindingParseErrors);
+        }
+
+        if (bindingParseErrors.Count > 0)
+        {
+            return bindingParseErrors[0];
+        }
+
+        return null;
+    }
+
+    private static WorkerOutput CreateRunFailureOutput(string parseError)
+    {
+        return new WorkerOutput
+        {
+            ShimSource = string.Empty,
+            Entries = Array.Empty<WorkerEntry>(),
+            Skipped = Array.Empty<WorkerSkipped>(),
+            Files = Array.Empty<WorkerFileOutput>(),
+            ParseErrors = new[] { parseError },
+            SiblingConstDriftWarnings = Array.Empty<string>(),
+            UnchangedMethods = Array.Empty<WorkerUnchangedMethod>()
+        };
     }
 
     // Everything one unit contributes before the group-wide guard and emit: its drift warnings,
@@ -190,14 +337,14 @@ internal static class WorkerGroupPipeline
     {
         unit.DeclarationDriftWarnings.AddRange(
             ConstDriftCollector.CollectConstDriftWarnings(
-                unit.Root,
+                unit.BindingRoot,
                 unit.SemanticModel,
                 targetTypesAssemblySymbol));
         // Why here: a compiled property/event can disappear or change kind with no
         // touched body, so the generic outside-body warning would bury the name.
         unit.KindChangeSyntaxKeys =
             CompiledMemberKindChangeWarnings.AppendCompiledPropertyOrEventKindChangeWarnings(
-                unit.Root,
+                unit.BindingRoot,
                 unit.SemanticModel,
                 targetTypesAssemblySymbol,
                 unit.DeclarationDriftWarnings);
@@ -251,7 +398,7 @@ internal static class WorkerGroupPipeline
             unit.KindChangeSyntaxKeys.EventSyntaxKeys);
     }
 
-    private static (List<MetadataReference> References, MetadataReference TargetTypesReference)
+    internal static (List<MetadataReference> References, MetadataReference TargetTypesReference)
         CollectMetadataReferences(WorkerInput input, List<string> parseErrors)
     {
         string targetTypesFullPath =
@@ -290,8 +437,7 @@ internal static class WorkerGroupPipeline
 
         return (references, targetTypesReference);
     }
-
-    private static IAssemblySymbol ResolveTargetTypesAssemblySymbol(
+    internal static IAssemblySymbol ResolveTargetTypesAssemblySymbol(
         CSharpCompilation compilation,
         MetadataReference targetTypesReference)
     {
@@ -364,7 +510,10 @@ internal static class WorkerGroupPipeline
             RemovedMembers = unit.RemovedMembers.ToArray(),
             RemovedMethodSignatures = unit.RemovedMethodSignatures.ToArray(),
             AddedFieldNames = addedFieldCatalog.ListRewrittenAddedFieldDisplayNames(projectRelativePath),
-            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath)
+            AddedConstNames = addedFieldCatalog.ListFoldedConstDisplayNames(projectRelativePath),
+            IntroducedTypes = unit.IntroducedTypes.ToArray(),
+            IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),
+            IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray()
         };
     }
 }

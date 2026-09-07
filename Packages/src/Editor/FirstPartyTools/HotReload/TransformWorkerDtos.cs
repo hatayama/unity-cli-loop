@@ -8,6 +8,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     [Serializable]
     internal sealed class TransformWorkerInputDto
     {
+        // Null/empty retains the existing transform operation for callers that predate planning.
+        public string operation;
+
         // Edited files this worker run must transform together. One or more; every source must
         // belong to the same compilation assembly so a single shim assembly can host them all.
         // Keep in sync with TransformWorker~/WorkerInput.cs.
@@ -16,6 +19,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string[] defines;
         public string[] referencePaths;
         public string targetTypesAssemblyPath;
+        public string targetAssemblyName;
+        public string targetAssemblyMvid;
 
         // Method keys (see HotReloadMethodKeys.BuildMethodKey) already reported Failed from a
         // first compile round; the retry worker run drops these methods entirely.
@@ -34,6 +39,54 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // The worker scans these for const drift the edited file's syntax tree cannot see.
         // Null/omitted is treated as empty.
         public string[] changedSiblingSourcePaths;
+
+        // Retained introduced-type assemblies the worker may bind against. Each record carries the
+        // complete identity and the reference path together, so the worker can confirm the file it
+        // resolved really is the assembly the record claims before it normalizes anything through
+        // it. Null/omitted is treated as empty.
+        public TransformWorkerIntroducedTypeArtifactDto[] introducedTypeArtifacts;
+    }
+
+    /// <summary>
+    /// One retained introduced-type assembly a worker run may bind against.
+    /// </summary>
+    // Keep in sync with TransformWorker~/WorkerIntroducedTypeArtifact.cs.
+    [Serializable]
+    internal sealed class TransformWorkerIntroducedTypeArtifactDto
+    {
+        // Complete assembly identity display name of the artifact assembly, not a simple name.
+        // The worker rejects the record when the assembly it resolves from referencePath reports
+        // a different identity, so a self-reported name alone can never drive normalization.
+        public string assemblyFullName;
+
+        // Absolute path the artifact assembly is referenced from.
+        public string referencePath;
+
+        // Types this artifact holds, with the original identity each one must normalize back to.
+        public TransformWorkerIntroducedTypeArtifactTypeDto[] types;
+    }
+
+    /// <summary>
+    /// One retained type inside an introduced-type artifact assembly.
+    /// </summary>
+    // Keep in sync with TransformWorker~/WorkerIntroducedTypeArtifactType.cs.
+    [Serializable]
+    internal sealed class TransformWorkerIntroducedTypeArtifactTypeDto
+    {
+        // Metadata name of the type as it exists inside the artifact assembly.
+        public string metadataName;
+
+        // Assembly the type is attributed to once normalized: the assembly its source belongs to.
+        public string originalAssemblyName;
+
+        public string originalAssemblyMvid;
+
+        // Project-relative forward-slash path of the source the retained type was planned from.
+        public string ownerProjectRelativePath;
+
+        // Fingerprint the retained type was planned with. A declaration may only be removed from
+        // the tree the transform binds against when the source still produces this value.
+        public string declarationFingerprint;
     }
 
     /// <summary>
@@ -92,6 +145,45 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Source-level names of added consts folded into edited bodies as literals.
         // Null/omitted deserializes as empty after client coalesce.
         public string[] addedConstNames;
+
+        public TransformWorkerIntroducedTypeDto[] introducedTypes;
+
+        public string[] introducedTypeDiagnostics;
+
+        // The declarations this run did not introduce because the domain already retains an
+        // assembly for them. Reported so a reload can name the types it bound from an active
+        // artifact; introducing them again is what the transform refuses.
+        public TransformWorkerIntroducedTypeReuseDto[] introducedTypeReuses;
+    }
+
+    /// <summary>
+    /// One declaration a preparation run bound from an already active artifact instead of
+    /// introducing it a second time.
+    /// </summary>
+    // Keep in sync with TransformWorker~/WorkerIntroducedTypeReuse.cs.
+    [Serializable]
+    internal sealed class TransformWorkerIntroducedTypeReuseDto
+    {
+        public string metadataName;
+
+        public string originalAssemblyName;
+
+        public string originalAssemblyMvid;
+    }
+
+    /// <summary>
+    /// One top-level type declaration prepared by the transform worker for an artifact assembly.
+    /// </summary>
+    // Keep in sync with TransformWorker~/WorkerIntroducedType.cs.
+    [Serializable]
+    internal sealed class TransformWorkerIntroducedTypeDto
+    {
+        public string originalAssemblyName;
+        public string originalAssemblyMvid;
+        public string metadataName;
+        public string ownerProjectRelativePath;
+        public string declarationFingerprint;
+        public string source;
     }
 
     /// <summary>

@@ -686,22 +686,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         // Returns false when the scripted worker "died".
         private bool Perform(ScriptStep step, string inputPath, string outputPath)
         {
-            int sourceCount = CountSources(inputPath);
+            string[] sourcePaths = ReadSourcePaths(inputPath);
             switch (step)
             {
                 case ScriptStep.Succeed:
-                    WriteOutput(outputPath, sourceCount, Array.Empty<string>());
+                    WriteOutput(outputPath, sourcePaths, Array.Empty<string>());
                     WriteFrame(0, "ok");
                     return true;
                 case ScriptStep.SucceedWithParseErrors:
-                    WriteOutput(outputPath, 0, new[] { "run-level problem" });
+                    WriteOutput(outputPath, Array.Empty<string>(), new[] { "run-level problem" });
                     WriteFrame(0, "ok");
                     return true;
                 case ScriptStep.SucceedWithoutOutput:
                     WriteFrame(0, "forgot the file");
                     return true;
                 case ScriptStep.SucceedWrongFileCount:
-                    WriteOutput(outputPath, sourceCount + 1, Array.Empty<string>());
+                    WriteOutput(outputPath, AppendExtraRowPath(sourcePaths), Array.Empty<string>());
                     WriteFrame(0, "ok");
                     return true;
                 case ScriptStep.Fail:
@@ -721,23 +721,45 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
-        private static int CountSources(string inputPath)
+        // Why the paths and not just a count: the client checks that output rows echo the input
+        // sources in order, so a faithful fake has to carry each source's project relative path.
+        private static string[] ReadSourcePaths(string inputPath)
         {
             if (!File.Exists(inputPath))
             {
-                return 0;
+                return Array.Empty<string>();
             }
 
             TransformWorkerInputDto input = JsonConvert.DeserializeObject<TransformWorkerInputDto>(File.ReadAllText(inputPath));
-            return input?.sources?.Length ?? 0;
+            if (input?.sources == null)
+            {
+                return Array.Empty<string>();
+            }
+
+            string[] paths = new string[input.sources.Length];
+            for (int index = 0; index < input.sources.Length; index++)
+            {
+                paths[index] = input.sources[index]?.projectRelativePath;
+            }
+
+            return paths;
         }
 
-        private static void WriteOutput(string outputPath, int fileCount, string[] parseErrors)
+        // Produces one row more than the request carried, which the host must reject.
+        private static string[] AppendExtraRowPath(string[] sourcePaths)
         {
-            TransformWorkerFileOutputDto[] files = new TransformWorkerFileOutputDto[fileCount];
-            for (int index = 0; index < fileCount; index++)
+            string[] paths = new string[sourcePaths.Length + 1];
+            Array.Copy(sourcePaths, paths, sourcePaths.Length);
+            paths[sourcePaths.Length] = "Assets/UnexpectedExtraRow.cs";
+            return paths;
+        }
+
+        private static void WriteOutput(string outputPath, string[] rowPaths, string[] parseErrors)
+        {
+            TransformWorkerFileOutputDto[] files = new TransformWorkerFileOutputDto[rowPaths.Length];
+            for (int index = 0; index < rowPaths.Length; index++)
             {
-                files[index] = new TransformWorkerFileOutputDto();
+                files[index] = new TransformWorkerFileOutputDto { projectRelativePath = rowPaths[index] };
             }
 
             TransformWorkerOutputDto output = new TransformWorkerOutputDto { files = files, parseErrors = parseErrors };

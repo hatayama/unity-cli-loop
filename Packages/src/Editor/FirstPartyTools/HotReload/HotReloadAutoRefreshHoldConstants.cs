@@ -8,8 +8,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal const string SessionStateKey =
             "io.github.hatayama.UnityCliLoop.HotReloadAutoRefreshHold.Held";
 
+        // Why compile is the unconditional release: a revert cannot unload the assembly that
+        // carries an introduced type, so a run that introduced one stays held after --revert-all.
         internal const string NewlyArmedMessageSuffix =
-            "Auto Refresh is held while patches are active, so returning focus to the Editor will not recompile; run 'uloop compile' or '--revert-all' to release it.";
+            "Auto Refresh is held while hot-reload changes are active, so returning focus to the Editor will not recompile; run 'uloop compile' to release it ('--revert-all' releases it only when no introduced type remains).";
 
         internal const string ReleaseDeferredWarning =
             "Auto Refresh hold released; pending script edits import on the next focus return or 'uloop compile'.";

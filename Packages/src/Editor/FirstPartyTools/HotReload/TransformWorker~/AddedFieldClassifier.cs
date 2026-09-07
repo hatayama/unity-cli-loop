@@ -118,7 +118,8 @@ internal static class AddedFieldClassifier
             semanticModel,
             targetTypesAssemblySymbol,
             fieldSymbol,
-            binding);
+            binding,
+            typeState.SourceUnit.ArtifactMap);
 
         if (binding.UnavailableReason != null)
         {
@@ -140,7 +141,8 @@ internal static class AddedFieldClassifier
         SemanticModel semanticModel,
         IAssemblySymbol targetTypesAssemblySymbol,
         IFieldSymbol fieldSymbol,
-        AddedFieldBinding binding)
+        AddedFieldBinding binding,
+        IntroducedTypeArtifactMap artifactMap)
     {
         if (fieldSymbol.IsConst)
         {
@@ -159,7 +161,8 @@ internal static class AddedFieldClassifier
             semanticModel,
             targetTypesAssemblySymbol,
             fieldSymbol.Type,
-            binding.Initializer);
+            binding.Initializer,
+            artifactMap);
     }
 
     /// <summary>
@@ -171,7 +174,8 @@ internal static class AddedFieldClassifier
         SemanticModel semanticModel,
         IAssemblySymbol targetTypesAssemblySymbol,
         ITypeSymbol valueType,
-        ExpressionSyntax initializer)
+        ExpressionSyntax initializer,
+        IntroducedTypeArtifactMap artifactMap)
     {
         if (hostType.TypeKind == TypeKind.Struct)
         {
@@ -198,7 +202,8 @@ internal static class AddedFieldClassifier
                 initializer,
                 semanticModel,
                 hostType,
-                targetTypesAssemblySymbol))
+                targetTypesAssemblySymbol,
+                artifactMap))
         {
             return AddedFieldSkipReasons.InitializerNotLiteralOrExternalStatic;
         }
@@ -390,7 +395,8 @@ internal static class AddedFieldClassifier
         ExpressionSyntax initializer,
         SemanticModel semanticModel,
         INamedTypeSymbol hostType,
-        IAssemblySymbol targetTypesAssemblySymbol)
+        IAssemblySymbol targetTypesAssemblySymbol,
+        IntroducedTypeArtifactMap artifactMap)
     {
         foreach (SyntaxNode node in initializer.DescendantNodesAndSelf())
         {
@@ -404,6 +410,19 @@ internal static class AddedFieldClassifier
                 return true;
             }
 
+            // Why object creation is decided on its own: the constructor of an introduced type
+            // is the one instance member the lambda can call, and an inaccessible constructor
+            // leaves GetSymbolInfo without a symbol, so the general check would let it through.
+            if (node is ObjectCreationExpressionSyntax creation)
+            {
+                if (!IsIntroducedTypeConstruction(creation, semanticModel, artifactMap))
+                {
+                    return true;
+                }
+
+                continue;
+            }
+
             if (HasDisallowedInitializerSymbol(
                 semanticModel.GetSymbolInfo(node).Symbol,
                 hostType,
@@ -415,6 +434,54 @@ internal static class AddedFieldClassifier
         }
 
         return false;
+    }
+
+    // The three conditions a construction has to meet: it names a constructor, the constructor is
+    // public, and the constructed type is exactly the (assembly, metadata name) pair the verified
+    // mapping holds. The shim compilation references that artifact assembly, so such a type is
+    // reachable from the lambda; anything else is not.
+    private static bool IsIntroducedTypeConstruction(
+        ObjectCreationExpressionSyntax creation,
+        SemanticModel semanticModel,
+        IntroducedTypeArtifactMap artifactMap)
+    {
+        if (artifactMap == null)
+        {
+            return false;
+        }
+
+        SymbolInfo symbolInfo = semanticModel.GetSymbolInfo(creation);
+        IMethodSymbol constructor = symbolInfo.Symbol as IMethodSymbol;
+        if (constructor == null)
+        {
+            // A constructor the shim assembly cannot reach is reported as a candidate rather
+            // than as the symbol, and it still has to be refused rather than ignored.
+            foreach (ISymbol candidate in symbolInfo.CandidateSymbols)
+            {
+                constructor = candidate as IMethodSymbol;
+                if (constructor != null)
+                {
+                    break;
+                }
+            }
+        }
+
+        if (constructor == null
+            || constructor.MethodKind != MethodKind.Constructor
+            || constructor.DeclaredAccessibility != Accessibility.Public)
+        {
+            return false;
+        }
+
+        INamedTypeSymbol constructedType = constructor.ContainingType;
+        if (constructedType == null || constructedType.ContainingAssembly == null)
+        {
+            return false;
+        }
+
+        return artifactMap.FindNormalizedIdentity(
+            constructedType.ContainingAssembly,
+            CecilTypeNames.ToMetadataName(constructedType.OriginalDefinition)) != null;
     }
 
     internal static bool HasDisallowedInitializerSymbol(

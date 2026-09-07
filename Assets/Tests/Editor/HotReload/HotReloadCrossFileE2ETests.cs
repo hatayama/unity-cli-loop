@@ -1,12 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
 using NUnit.Framework;
 
 using UnityEngine;
+
+using Mono.Cecil;
+using CecilTypeAttributes = Mono.Cecil.TypeAttributes;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
 using io.github.hatayama.UnityCliLoop.ToolContracts;
@@ -40,18 +44,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string SiblingRebindFailedWarningNeedle =
             "pulled in to re-bind its active patches but this reload failed for it";
 
+        private const string IntroducedTypeMetadataName = "Example.CrossFileIntroduced";
+
+        private const string IntroducedTypeArtifactAssemblyName = "UloopCrossFileIntroducedArtifact";
+
+        // No declaration of the type can produce this, so the record always reads as one whose
+        // declaration changed - the refusal this test needs.
+        private const string StaleDeclarationFingerprint =
+            "0000000000000000000000000000000000000000000000000000000000000000";
+
+        private const string IntroducedTypeDeclaration =
+            "\n\nnamespace Example\n{\n    public class CrossFileIntroduced\n    {\n    }\n}\n";
+
         [SetUp]
         public void SetUp()
         {
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
             VibeLogger.ClearMemoryLogs();
         }
 
@@ -286,7 +302,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertKind(applied, HotReloadMethodOutcomeKind.Patched, "CalledFromCrossAssembly");
 
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
 
             HotReloadOrchestratorResult isolated = await HotReloadOrchestrator.RunAsync(
                 new[] { hostPath, crossAssemblyPath },
@@ -850,6 +866,126 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(
                 new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
                 Is.EqualTo(5));
+        }
+
+        /// <summary>
+        /// What: when a refused type declaration stops the reload before anything is re-applied,
+        /// the sibling pulled in to re-bind its active patches is told those patches are
+        /// unchanged, instead of being sent to rows this run never wrote.
+        /// </summary>
+        [Test]
+        public async Task Run_SiblingPulledInByARefusedTypeDeclaration_SaysItsPatchesAreUnchanged()
+        {
+            string hostPath = FixturePath(HostFileName);
+            string callerPath = FixturePath(CallerFileName);
+            string callerEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RefusedTypeSiblingCaller.cs",
+                ReplaceCallerBody(CallerOtherBodyAnchor, "return 8;"));
+            HotReloadOrchestratorResult patched = await HotReloadOrchestrator.RunAsync(
+                new[] { callerPath },
+                contentPathOverride: null,
+                CancellationToken.None,
+                new Dictionary<string, string> { [callerPath] = callerEditPath });
+            FindOutcomeForFile(
+                patched,
+                callerPath,
+                HotReloadMethodOutcomeKind.Patched,
+                "Other");
+
+            // Arranged in this order on purpose: the type has to be active before the host
+            // declares it again, or the run would introduce it instead of refusing it.
+            string hostEditPath = HotReloadTestSourceWriter.WriteEditedSource(
+                "RefusedTypeSiblingHost.cs",
+                ReadFixture(HostFileName) + IntroducedTypeDeclaration);
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                ActivateStaleIntroducedTypeFor(hostPath);
+                HotReloadOrchestratorResult refused = await HotReloadOrchestrator.RunAsync(
+                    new[] { hostPath },
+                    contentPathOverride: null,
+                    CancellationToken.None,
+                    new Dictionary<string, string>
+                    {
+                        [hostPath] = hostEditPath,
+                        [callerPath] = callerEditPath
+                    });
+
+                Assert.That(
+                    CountWarningsContaining(refused, SiblingRebindFailedWarningNeedle),
+                    Is.EqualTo(0),
+                    string.Join("\n", refused.Warnings));
+                Assert.That(
+                    refused.Warnings,
+                    Does.Contain(
+                        string.Format(
+                            HotReloadConstants.ActiveSiblingRebindSkippedWarningFormat,
+                            CallerProjectRelativePath())),
+                    string.Join("\n", refused.Warnings));
+            }
+        }
+
+        // A record for a type this domain already retains, carrying a fingerprint no declaration
+        // can produce, so the reload reports the host's declaration as changed and stops.
+        private static void ActivateStaleIntroducedTypeFor(string hostPath)
+        {
+            string projectRelativePath = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(hostPath);
+            string assemblyName = Path.GetFileNameWithoutExtension(
+                UnityEditor.Compilation.CompilationPipeline.GetAssemblyNameFromScriptPath(projectRelativePath));
+            string artifactPath = WriteIntroducedTypeArtifact();
+            HotReloadIntroducedTypeDescriptor descriptor = new HotReloadIntroducedTypeDescriptor(
+                assemblyName,
+                HotReloadSourceSnapshotter.ReadAssemblyMvid(
+                    typeof(HotReloadCrossFileE2ETests).Assembly.Location),
+                IntroducedTypeMetadataName,
+                projectRelativePath,
+                StaleDeclarationFingerprint,
+                "public class CrossFileIntroduced { }");
+            HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
+                Assembly.LoadFrom(artifactPath),
+                artifactPath,
+                Path.ChangeExtension(artifactPath, ".pdb"),
+                new List<HotReloadIntroducedTypeDescriptor> { descriptor });
+            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
+            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
+        }
+
+        // The retained assembly the record points at. Written once per session and loaded from
+        // disk, because the worker resolves the record through this file and the registry
+        // resolves it through the loaded assembly, and the two have to be the same identity.
+        private static string WriteIntroducedTypeArtifact()
+        {
+            string directory = Path.Combine(
+                Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
+                "Library",
+                "UloopHotReload",
+                "TestSources",
+                "CrossFileIntroducedArtifact");
+            Directory.CreateDirectory(directory);
+            string path = Path.Combine(directory, IntroducedTypeArtifactAssemblyName + ".dll");
+            if (File.Exists(path))
+            {
+                return path;
+            }
+
+            AssemblyNameDefinition assemblyNameDefinition = new AssemblyNameDefinition(
+                IntroducedTypeArtifactAssemblyName,
+                new Version(1, 0, 0, 0));
+            using (AssemblyDefinition assembly = AssemblyDefinition.CreateAssembly(
+                assemblyNameDefinition,
+                IntroducedTypeArtifactAssemblyName,
+                ModuleKind.Dll))
+            {
+                assembly.MainModule.Types.Add(
+                    new TypeDefinition(
+                        "Example",
+                        "CrossFileIntroduced",
+                        CecilTypeAttributes.Public | CecilTypeAttributes.Class,
+                        assembly.MainModule.TypeSystem.Object));
+                assembly.Write(path);
+            }
+
+            return path;
         }
 
         /// <summary>

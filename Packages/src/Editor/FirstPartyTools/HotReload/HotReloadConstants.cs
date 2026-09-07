@@ -66,6 +66,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             + "neither passed to this reload nor already hot-reloaded, still require a real compile "
             + "(uloop compile).";
 
+        // Keep in sync with IntroducedTypePlanner.IsAlreadyIntroduced in the transform worker,
+        // which emits the diagnostic this prefix identifies. The preparation stage turns that one
+        // diagnostic into a run failure, because proceeding would bind callers against the
+        // retained definition the source no longer declares.
+        public const string ChangedIntroducedTypeDiagnosticPrefix =
+            "Changed introduced type requires a compile: ";
+
         public const string ActiveSiblingsRebindWarningFormat =
             "Also re-applied {0} unchanged file(s) with active patches in assembly '{1}' so their "
             + "patches bind to this reload's shim: {2}.";
@@ -73,6 +80,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string ActiveSiblingChangedSinceApplyWarningFormat =
             "'{0}' has active patches but its source changed since they were applied, so it was "
             + "not re-applied; pass it to hot-reload to update it.";
+
+        // Why a second wording: the failed-rebind sentence sends the reader to the sibling's own
+        // rows, and a reload that stopped before re-applying anything wrote none. Pointing at
+        // rows that do not exist reads as a lost report rather than as a run that changed nothing.
+        public const string ActiveSiblingRebindSkippedWarningFormat =
+            "'{0}' was pulled in to re-bind its active patches, but this reload stopped before "
+            + "re-applying them, so its active patches are unchanged. Fix the refused declaration "
+            + "and rerun, or run uloop compile to clear the run.";
 
         public const string ActiveSiblingRebindFailedWarningFormat =
             "'{0}' was pulled in to re-bind its active patches but this reload failed for it; "
@@ -245,6 +260,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Source is unchanged since the last applied hot reload; the existing patch stays active "
             + "and keeps its InvocationCount. Edit and reload again to apply new changes.";
 
+        public const string ActiveIntroducedTypeStatusKind = "Active";
+
+        // Format: how many introduced types a revert could not take away. Reverting undoes method
+        // patches, and an assembly this domain loaded can only leave it with a Domain Reload.
+        public const string ActiveIntroducedTypesRevertAllNoteFormat =
+            " {0} introduced type(s) stay loaded until the next Domain Reload; a revert cannot "
+            + "unload the assembly that carries them.";
+
+        // Why the revert answer says this: the hold stays armed for the types the revert left
+        // behind, so a caller told the revert succeeded would otherwise wait for a refresh that
+        // this session will not perform.
+        public const string ActiveIntroducedTypesRevertAllHoldNote =
+            " Auto Refresh stays held for them; run 'uloop compile' to release it.";
+
+        // Format: how many types this run introduced.
+        public const string IntroducedTypesOnlyApplyMessageFormat =
+            "Hot reload introduced {0} type(s); no method body needed patching.";
+
+        // Format: how many declarations this run bound from an assembly it already retained.
+        public const string AlreadyActiveIntroducedTypesOnlyApplyMessageFormat =
+            "Hot reload bound {0} introduced type(s) this domain already holds; no method body "
+            + "needed patching.";
+
+        // Format: how many type rows the response carries. Appended to a message that already
+        // reports what the methods did.
+        public const string IntroducedTypesApplyMessageSuffixFormat = " IntroducedTypes={0}.";
+
+        public const string IntroducedTypeFailureApplyMessage =
+            "Hot reload refused one or more type declarations. See IntroducedTypes.";
+
+        public const string IntroducedTypeAndMethodFailureApplyMessage =
+            "Hot reload finished with one or more Failed outcomes. See Methods and IntroducedTypes.";
+
+        public const string AlreadyActiveIntroducedTypeReason =
+            "This declaration is bound from an assembly an earlier hot reload retained, so this "
+            + "reload introduced nothing for it. It stays loaded until the next Domain Reload.";
+
         public const string AddedMemberNotInstrumentedReason =
             "Added-member calls are not instrumented, so InvocationCount is always 0 for this row.";
 
@@ -310,6 +362,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string VibeLogShimCompileFailed = "hot_reload_shim_compile_failed";
         public const string VibeLogIsolationRetry = "hot_reload_isolation_retry";
         public const string VibeLogEmptyEntriesClear = "hot_reload_empty_entries_clear";
+        public const string VibeLogRevertFailed = "hot_reload_revert_failed";
         public const string VibeLogApplySummary = "hot_reload_apply_summary";
         public const string VibeLogShimCompileStageFirstPass = "first_pass";
         public const string VibeLogShimCompileStageRetry = "retry";
@@ -331,8 +384,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string SourceFileNotInCompiledAssemblyReasonFormat =
             "'{0}' is not part of the last compiled assembly '{1}' (a newly added script). New files require a real compile; run 'uloop compile' first.";
 
+        // Why "declarations or methods": a run can fail on a refused type declaration alone, and
+        // Methods is then empty, so a next action naming only methods would send the reader to a
+        // section with nothing in it.
         public const string PartialApplyRecommendedNextAction =
-            "Partially applied. Fix the failed methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches.";
+            "Partially applied. Fix the failed declarations or methods and rerun, run 'uloop compile' to apply every edit, or run 'uloop hot-reload --revert-all' to discard the applied patches.";
 
         public const string AtomicFileSkipReason =
             "Skipped: hot reload applies each file all-or-nothing, and another method in this file failed. Nothing from this file was applied; patches from earlier reloads are untouched. Fix the failed methods and rerun, or run 'uloop compile'.";
@@ -343,9 +399,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "A Harmony patch failed after {0} method(s) in this file were already applied by this run; the file is partially applied. Run 'uloop hot-reload --revert-all' and re-apply your edits, or run 'uloop compile'.";
 
         public const string FailedWithNoApplyRecommendedNextAction =
-            "Fix the failed methods and rerun, or run 'uloop compile'.";
+            "Fix the failed declarations or methods and rerun, or run 'uloop compile'.";
 
-        // SessionState key for method identities discarded by the Play-entry domain reload.
+        // Why one sentence in one place: the same rule has to reach the caller from the skill, the
+        // docs, and every selection response, and two wordings of it read as two rules.
+        public const string NewFilesNotAutoSelectedSentence =
+            "Files that have never been compiled are not selected automatically; pass them (and any "
+            + "other path) with --files.";
+
+        public const string NoCompileSnapshotsMessage =
+            "No compile snapshots exist yet. Run 'uloop compile' first or pass project-relative .cs "
+            + "paths with --files. " + NewFilesNotAutoSelectedSentence;
+
+        public const string NoChangedFilesMessage =
+            "No .cs files changed since the last compile were found. " + NewFilesNotAutoSelectedSentence;
+
+        public const string PassExplicitFilesNextAction =
+            "Pass project-relative .cs paths with --files (required for new files that have not been "
+            + "compiled yet).";
+
+        // Appended to the selection message so a caller reading a short list knows what it leaves out.
+        public const string DefaultSelectionNewFilesNote =
+            " New files that have never been compiled are not selected automatically.";
+
+        // SessionState key for the change identities (patched methods, added members, introduced
+        // types) discarded by the Play-entry domain reload.
         // SessionState survives that reload and is cleared when the Editor process exits.
         public const string PlayModeEntryDropSessionStateKey =
             "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIdentities";

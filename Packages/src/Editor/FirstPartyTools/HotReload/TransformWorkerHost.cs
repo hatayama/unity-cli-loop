@@ -366,7 +366,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + "\nstderr:\n" + channel.ReadStandardErrorTail()));
             }
 
-            TransformWorkerOutputDto output = TransformWorkerOutputReader.TryRead(outputJsonPath, expectedFileCount, out string readError);
+            TransformWorkerOutputDto output = TransformWorkerOutputReader.TryRead(outputJsonPath, out string readError);
             if (output == null)
             {
                 // Why broken and not WorkerFailed: exit 0 without a usable output file means the
@@ -375,14 +375,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return ConversationOutcome.Broken(readError);
             }
 
-            if (output.parseErrors.Length > 0)
+            if (HasRunLevelParseErrors(output))
             {
                 return ConversationOutcome.Final(TransformWorkerHostResult.Failure(
                     TransformWorkerHostResultKind.WorkerFailed,
                     string.Join("\n", output.parseErrors)));
             }
 
+            // Why the row count is judged here and not only by the client: a request answered with
+            // a row count it cannot match means the frame and the file system disagree, the same
+            // class of trouble as a missing file, and only a fresh process can rule it out. A run
+            // that reported parse errors is the one case where a different count is expected, and
+            // that case already returned above.
+            int fileRowCount = output.files == null ? 0 : output.files.Length;
+            if (fileRowCount != expectedFileCount)
+            {
+                DiscardChannel(channel);
+                return ConversationOutcome.Broken(
+                    "worker output carried " + fileRowCount + " file rows for " + expectedFileCount + " sources");
+            }
+
             return ConversationOutcome.Final(TransformWorkerHostResult.Completed(output));
+        }
+
+        // The output is still as the worker wrote it, so an omitted array reads as null here.
+        private static bool HasRunLevelParseErrors(TransformWorkerOutputDto output)
+        {
+            return output.parseErrors != null && output.parseErrors.Length > 0;
         }
 
         private async Task<ConversationOutcome> HandleMissingLineAsync(
