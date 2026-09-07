@@ -179,7 +179,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .Current
                 .GateAndCompile(context, ct)
                 .ConfigureAwait(false);
-            if (!gateAndCompile.HasEntriesToApply)
+            if (gateAndCompile.Outcome == HotReloadGroupGateAndCompileOutcome.Failed)
             {
                 return BuildUnappliedResults(files);
             }
@@ -222,7 +222,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     files,
                     "(signature-change-gate)",
                     gateResult.FailureMessage);
-                return HotReloadGroupGateAndCompileResult.NothingToApply();
+                return HotReloadGroupGateAndCompileResult.Failed();
             }
 
             HotReloadGroupOutcomeRouter.AppendByFilePath(files, gateResult.SkippedOutcomes);
@@ -234,9 +234,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 context,
                 gateResult,
                 ct).ConfigureAwait(false);
-            if (!compile.HasEntriesToApply)
+            if (compile.Outcome == HotReloadGroupCompileOutcome.Failed)
             {
-                return HotReloadGroupGateAndCompileResult.NothingToApply();
+                return HotReloadGroupGateAndCompileResult.Failed();
+            }
+
+            // Why a run with no entry still goes on: a reload whose only change is a new type
+            // declaration produces no method to patch, and ending here would leave the type it
+            // prepared unactivated — the very case new-file support exists for.
+            if (compile.Outcome == HotReloadGroupCompileOutcome.ReadyWithoutMethods)
+            {
+                return HotReloadGroupGateAndCompileResult.ReadyWithoutEntries(gateResult, compile);
             }
 
             return HotReloadGroupGateAndCompileResult.Ready(gateResult, compile);
@@ -252,7 +260,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadGroupCompileResult compile,
             CancellationToken ct)
         {
-            if (gateResult.DidScan && !AppendSignatureChangeCoverageNotices(context, gateResult, compile))
+            // Why coverage only with entries: it checks that every gated replacement the scan
+            // found has an entry to patch, and a run the compile left no entry for has no
+            // replacement to cover — it reaches the boundary only to commit its types.
+            if (compile.HasEntriesToApply
+                && gateResult.DidScan
+                && !AppendSignatureChangeCoverageNotices(context, gateResult, compile))
             {
                 return BuildUnappliedResults(context.Files);
             }
@@ -272,10 +285,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return BuildUnappliedResults(context.Files);
             }
 
-            HotReloadGroupProcessorDependencies dependencies = HotReloadGroupProcessorDependencies.Current;
             // Why the whole group is resolved before any file is mutated: a file whose entries
             // cannot be resolved must not leave the files applied before it half patched. It is
-            // also the last failure a run can take without having activated anything.
+            // also the last failure a run can take without having activated anything. A run with
+            // no entry has nothing to bind or resolve, so it goes straight to the commit point.
+            if (!compile.HasEntriesToApply)
+            {
+                return CommitPreparedGroup(context, gateResult, compile, null);
+            }
+
+            HotReloadGroupProcessorDependencies dependencies = HotReloadGroupProcessorDependencies.Current;
             IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles = dependencies.PrepareGroupEntries(
                 context,
                 compile.CompileResult,
@@ -301,11 +320,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadIntroducedTypeHolder.Registry.Activate(prepared.Artifact);
             }
 
-            if (CommitsIntroducedTypes(prepared, files[0].AssemblyName))
+            bool commitsIntroducedTypes = CommitsIntroducedTypes(prepared, files[0].AssemblyName);
+            if (commitsIntroducedTypes)
             {
                 RevertUnchangedPatchesPerFile(
                     files,
                     HotReloadWorkerRowsByFile.Build(context.WorkerOutput, context.ProjectRelativePaths));
+            }
+
+            if (preparedFiles == null)
+            {
+                // The empty-entries generation clear a run that commits types deferred past the
+                // commit point, because clearing it before the boundary would mutate the domain
+                // a failed recheck can no longer undo. A run without types already cleared.
+                if (commitsIntroducedTypes)
+                {
+                    ClearEmptyFileGenerations(context);
+                }
+
+                return BuildUnappliedResults(files);
             }
 
             HotReloadGroupProcessorDependencies dependencies = HotReloadGroupProcessorDependencies.Current;
@@ -320,12 +353,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // A run whose introduced types become active at the commit boundary: the reload either
         // introduces a type itself, or the assembly it targets already owns one this domain
         // introduced, in which case its patches resolve through the artifact assemblies too.
-        private static bool CommitsIntroducedTypes(
+        internal static bool CommitsIntroducedTypes(
             HotReloadPreparedIntroducedTypes prepared,
             string targetAssemblyName)
         {
             return prepared != null
                 || HotReloadIntroducedTypeHolder.Registry.HasActiveTypesForOriginalAssembly(targetAssemblyName);
+        }
+
+        // Deleting an added method and restoring its callers yields empty entries, so the
+        // post-shim-compile BeginFileGeneration never runs and the previous run's generation would
+        // otherwise stay live.
+        internal static void ClearEmptyFileGenerations(HotReloadApplyContext context)
+        {
+            foreach (HotReloadGroupFile file in context.Files)
+            {
+                HotReloadFileEntryApplier.ClearFileGeneration(context, file);
+            }
         }
 
         internal static bool TryAppendNewSourceMembershipFailure(IReadOnlyList<HotReloadGroupFile> files)

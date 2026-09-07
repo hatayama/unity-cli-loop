@@ -293,6 +293,51 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a reload whose only change is a new type declaration still reaches the
+        /// commit boundary and activates the type, instead of ending unapplied because the run
+        /// has no method to patch.
+        /// </summary>
+        [Test]
+        public async Task Run_OnlyATypeIsIntroduced_ActivatesTheTypeWithoutAnyMethodToPatch()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            HotReloadIntroducedTypeArtifact preparedArtifact = null;
+            HotReloadOrchestratorResult result;
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateArtifactCapturingDependencies(artifact => preparedArtifact = artifact)))
+                {
+                    result = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath },
+                        HotReloadTestSourceWriter.WriteEditedSource(
+                            "IntroducedTypeOnlyHost.cs",
+                            InsertIntroducedType(File.ReadAllText(hostPath))),
+                        CancellationToken.None);
+                }
+
+                Assert.That(preparedArtifact, Is.Not.Null, "The run had to prepare the introduced type.");
+                Assert.That(
+                    FindFailureReason(result, string.Empty),
+                    Is.Null,
+                    "A reload that only introduces a type must not fail any method.");
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    Is.EqualTo(0),
+                    "The commit boundary must move the prepared membership, not leave it prepared.");
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.TryFindActive(
+                        preparedArtifact.Descriptors,
+                        out HotReloadIntroducedTypeArtifact activeArtifact),
+                    Is.True,
+                    "A run with no method to patch must still activate the type it introduced.");
+                Assert.That(activeArtifact, Is.SameAs(preparedArtifact));
+            }
+        }
+
+        /// <summary>
         /// Verifies that an Editor that becomes busy after the shim compile stops the run at the
         /// commit boundary, leaving no type active and no patch applied.
         /// </summary>

@@ -48,14 +48,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 || context.WorkerOutput.entries == null
                 || context.WorkerOutput.entries.Length == 0)
             {
-                // Why only on this success path: deleting an added method and restoring callers
-                // yields empty entries, so the post-shim-compile BeginFileGeneration never runs.
-                // Worker failure and shim-compile failure return earlier or later without
-                // clearing — same as leaving existing Harmony patches in place when apply does
-                // not succeed.
-                foreach (HotReloadGroupFile file in context.Files)
+                // Why only on this success path: worker failure and shim-compile failure return
+                // earlier or later without clearing — same as leaving existing Harmony patches in
+                // place when apply does not succeed.
+                // Why a run that commits types skips it: clearing a generation here would mutate
+                // the domain before the commit boundary, which a failed recheck could then no
+                // longer undo, so such a run clears at the boundary instead.
+                if (!HotReloadGroupProcessor.CommitsIntroducedTypes(
+                        context.PreparedIntroducedTypes,
+                        context.AssemblyName))
                 {
-                    HotReloadFileEntryApplier.ClearFileGeneration(context, file);
+                    HotReloadGroupProcessor.ClearEmptyFileGenerations(context);
                 }
 
                 return HotReloadGroupCompileResult.ReadyWithoutMethods();
