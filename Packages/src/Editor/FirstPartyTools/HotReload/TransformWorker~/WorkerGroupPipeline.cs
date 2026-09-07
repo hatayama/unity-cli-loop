@@ -187,6 +187,15 @@ internal static class WorkerGroupPipeline
 
         foreach (WorkerSourceUnit unit in loadedUnits)
         {
+            // Why registered here and not where the type is planned: planning is a separate
+            // worker operation, so by the time this run transforms the file the type is served
+            // from a retained artifact. The drift check reads the unmodified edited root, where
+            // the declaration is still visible, and would call an applied type an unapplied edit.
+            foreach (string metadataName in unit.RetainedIntroducedTypeMetadataNames)
+            {
+                addedMethodCatalog.AddAddedTypeSyntaxKey(metadataName);
+            }
+
             AppendOutsideMethodBodyDriftWarnings(unit, addedMethodCatalog, addedFieldCatalog);
         }
 
@@ -266,6 +275,18 @@ internal static class WorkerGroupPipeline
         List<string> bindingParseErrors = new List<string>();
         foreach (KeyValuePair<WorkerSourceUnit, List<BaseTypeDeclarationSyntax>> entry in retainedDeclarations)
         {
+            // Recorded before the removal, because the rewriter replaces the unit's tree and
+            // these declarations belong to the tree it replaces. Built from the syntax rather
+            // than the symbol: the drift check strips by the syntax key of the edited root.
+            foreach (BaseTypeDeclarationSyntax declaration in entry.Value)
+            {
+                if (declaration is TypeDeclarationSyntax typeDeclaration)
+                {
+                    entry.Key.RetainedIntroducedTypeMetadataNames.Add(
+                        WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration));
+                }
+            }
+
             IntroducedTypeBindingRewriter.RemoveRetainedDeclarations(
                 entry.Key, entry.Value, parseOptions, bindingParseErrors);
         }
