@@ -29,6 +29,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return "The Editor became busy before the reload could be applied: " + notReadyReason;
             }
 
+            string targetAssemblyDrift = DescribeTargetAssemblyDrift(context);
+            if (targetAssemblyDrift != null)
+            {
+                return targetAssemblyDrift;
+            }
+
             string preparationDrift = DescribePreparationDrift(context);
             if (preparationDrift != null)
             {
@@ -36,6 +42,65 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return DescribeRequestSourceDrift(context.Files);
+        }
+
+        /// <summary>
+        /// The target assembly that was rebuilt after this run read it, which every introduced
+        /// type of the run was normalized against.
+        /// </summary>
+        /// <remarks>
+        /// Why only for a run that commits types: an ordinary patch of a rebuilt assembly is
+        /// already refused by the guard the patcher applies per method, while an artifact
+        /// assembly carries the module version id of the generation it was compiled for and
+        /// stays active for the rest of the domain's life.
+        /// </remarks>
+        private static string DescribeTargetAssemblyDrift(HotReloadApplyContext context)
+        {
+            if (!HotReloadGroupCommitStage.CommitsIntroducedTypes(
+                    context.PreparedIntroducedTypes,
+                    context.AssemblyName))
+            {
+                return null;
+            }
+
+            string currentMvid = TryReadTargetAssemblyMvid(context.TargetDllPath);
+            if (currentMvid == null)
+            {
+                return "The target assembly could not be read again before the reload was applied.";
+            }
+
+            if (string.Equals(
+                currentMvid,
+                context.WorkerInput.targetAssemblyMvid,
+                StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return "The target assembly was rebuilt after this run read it, so the types it"
+                + " prepared belong to a generation the domain no longer has.";
+        }
+
+        // Why a failed read is drift rather than a throw: the same rebuild this check exists for
+        // replaces the file, so the read can land while it is half written or locked.
+        private static string TryReadTargetAssemblyMvid(string targetDllPath)
+        {
+            try
+            {
+                return HotReloadSourceSnapshotter.ReadAssemblyMvid(targetDllPath);
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
+            catch (BadImageFormatException)
+            {
+                return null;
+            }
         }
 
         /// <summary>

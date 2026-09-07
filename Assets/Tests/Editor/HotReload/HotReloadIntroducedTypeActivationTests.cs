@@ -619,6 +619,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a run whose target assembly no longer has the module version id the run
+        /// read is stopped at the commit boundary, so a reload never activates a type normalized
+        /// against a generation the domain has replaced.
+        /// </summary>
+        [Test]
+        public async Task Run_TargetAssemblyRebuiltBeforeTheCommitBoundary_ActivatesNothing()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateDependenciesWithRebuiltTargetAfterWorker()))
+                {
+                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateIntroducedTypeEdits(hostPath, callerPath, "TargetRebuilt"));
+
+                    AssertNothingWasCommitted(result, "was rebuilt");
+                }
+            }
+        }
+
+        /// <summary>
         /// Verifies that an owner rewritten between the preparation run and the transform run
         /// stops the run at the commit boundary, because the artifact assembly no longer describes
         /// the source the transform read.
@@ -891,6 +919,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 prepared.File,
                 prepared.Entries,
                 HotReloadEntryResolution.Result.Failed(failureOutcomes));
+        }
+
+        // The window between the transform run and the commit boundary, in which the target
+        // assembly can be rebuilt.
+        //
+        // Why the run's recorded module version id is changed instead of the file on disk: the
+        // target assembly is loaded into this domain, and overwriting a mapped assembly file
+        // could take the Editor down. The check under test compares the two, so making them
+        // differ from this side observes the same condition. The change is made after the worker
+        // has run, so nothing the worker decided is affected by it.
+        private static HotReloadGroupProcessorDependencies CreateDependenciesWithRebuiltTargetAfterWorker()
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                HotReloadIntroducedTypePreparation.PrepareAsync,
+                async (input, ct) =>
+                {
+                    TransformWorkerClientResult workerResult =
+                        await TransformWorkerClient.RunAsync(input, ct);
+                    input.targetAssemblyMvid = Guid.NewGuid().ToString("N");
+                    return workerResult;
+                },
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadEntryApplier.ApplyPreparedEntries);
         }
 
         // The edited caller returns the introduced type's value plus the compiled host's value.
