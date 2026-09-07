@@ -65,6 +65,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
+            // Why here and not at the commit boundary: a declaration bound from a retained
+            // artifact introduces nothing, so no artifact of this run publishes it, and a run
+            // whose only change is such a declaration never reaches an activation at all.
+            HotReloadIntroducedTypeOutcomeSink.Append(files, preparation.AlreadyActiveTypes);
+
             if (preparation.Prepared == null)
             {
                 return await TransformAndApplyGroupAsync(files, workerInput, null, correlationId, ct)

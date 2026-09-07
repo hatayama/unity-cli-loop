@@ -32,6 +32,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     }
 
     /// <summary>
+    /// One per-type outcome from a hot-reload apply run, or one active type on --status.
+    /// </summary>
+    public class HotReloadIntroducedTypeResult
+    {
+        /// <summary>"Introduced", "AlreadyActive", or "Active" on --status.</summary>
+        public string Kind { get; set; } = string.Empty;
+
+        public string TypeName { get; set; } = string.Empty;
+
+        /// <summary>The compiled assembly the declaration belongs to.</summary>
+        public string AssemblyName { get; set; } = string.Empty;
+
+        /// <summary>The file that declares the type; empty when the run cannot attribute it.</summary>
+        public string FilePath { get; set; } = string.Empty;
+
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// One per-method outcome from a hot-reload apply run.
     /// </summary>
     public class HotReloadMethodResult
@@ -65,6 +84,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Array.Empty<HotReloadMethodResult>();
 
         public IReadOnlyList<string> Warnings { get; set; } = Array.Empty<string>();
+
+        /// <summary>
+        /// The type declarations of this run, reported apart from the methods because a type is
+        /// not a patched body. On --status, the types this domain holds.
+        /// </summary>
+        public IReadOnlyList<HotReloadIntroducedTypeResult> IntroducedTypes { get; set; } =
+            Array.Empty<HotReloadIntroducedTypeResult>();
+
+        /// <summary>
+        /// How many introduced types this domain holds, counted as types and not as the artifact
+        /// assemblies that carry them.
+        /// </summary>
+        public int ActiveIntroducedTypeTotal { get; set; }
 
         public int PatchedTotal { get; set; }
 
@@ -119,6 +151,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool ShouldSerializeDroppedByPlayModeEntryCount()
         {
             return DroppedByPlayModeEntryCount > 0;
+        }
+
+        // Why omit empty: the vast majority of reloads introduce no type, and their response
+        // shape must not grow two fields that only ever say "none".
+        public bool ShouldSerializeIntroducedTypes()
+        {
+            return IntroducedTypes != null && IntroducedTypes.Count > 0;
+        }
+
+        public bool ShouldSerializeActiveIntroducedTypeTotal()
+        {
+            return ActiveIntroducedTypeTotal > 0;
         }
     }
 

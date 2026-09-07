@@ -110,6 +110,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Success = !hasFailure,
                 Methods = methods,
                 Warnings = warnings,
+                IntroducedTypes = HotReloadIntroducedTypeResponseSection.BuildRows(result.IntroducedTypes),
+                ActiveIntroducedTypeTotal = HotReloadActiveChangeCounts.IntroducedTypeCount,
                 PatchedTotal = result.PatchedTotal,
                 ActivePatchTotal = result.ActivePatchTotal,
                 AddedFieldTotal = HotReloadAddedFieldRegistry.DescribeAll().Count,

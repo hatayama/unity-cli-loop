@@ -119,7 +119,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 sinks.RetargetedPausePointIds,
                 addedFieldNames: file.ClearedAddedFieldNames,
                 sourceContentSha256: file.FileOutput != null ? file.FileOutput.sourceContentSha256 : null,
-                revertedUnchangedCount: file.RevertedUnchangedCount);
+                revertedUnchangedCount: file.RevertedUnchangedCount,
+                introducedTypes: sinks.IntroducedTypes);
         }
 
         /// <summary>
@@ -165,7 +166,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 applied ? file.AddedFieldNames : null,
                 file.FileOutput.sourceContentSha256,
                 applied ? file.AddedConstNames : null,
-                file.RevertedUnchangedCount);
+                file.RevertedUnchangedCount,
+                sinks.IntroducedTypes);
         }
 
         private static int ApplyResolvedEntries(

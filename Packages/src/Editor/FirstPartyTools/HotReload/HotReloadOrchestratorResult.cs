@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public bool AutoRefreshHoldReleaseDeferred { get; }
         public string AutoRefreshHoldSceneRefreshWarning { get; }
         public IReadOnlyList<string> ReappliedSiblingPaths { get; }
+        public IReadOnlyList<HotReloadIntroducedTypeOutcome> IntroducedTypes { get; }
 
         public HotReloadOrchestratorResult(
             IReadOnlyList<HotReloadMethodOutcome> methods,
@@ -36,7 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] addedConsts = null,
             int revertedUnchangedTotal = 0,
             HotReloadAutoRefreshHoldSyncResult autoRefreshHold = null,
-            IReadOnlyList<string> reappliedSiblingPaths = null)
+            IReadOnlyList<string> reappliedSiblingPaths = null,
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes = null)
         {
             Methods = methods;
             Warnings = warnings;
@@ -54,6 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             AutoRefreshHoldSceneRefreshWarning =
                 autoRefreshHold != null ? autoRefreshHold.SceneRefreshWarning : null;
             ReappliedSiblingPaths = reappliedSiblingPaths ?? Array.Empty<string>();
+            IntroducedTypes = introducedTypes ?? Array.Empty<HotReloadIntroducedTypeOutcome>();
         }
     }
 

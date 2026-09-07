@@ -252,6 +252,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Source is unchanged since the last applied hot reload; the existing patch stays active "
             + "and keeps its InvocationCount. Edit and reload again to apply new changes.";
 
+        public const string AlreadyActiveIntroducedTypeReason =
+            "This declaration is bound from an assembly an earlier hot reload retained, so this "
+            + "reload introduced nothing for it. It stays loaded until the next Domain Reload.";
+
         public const string AddedMemberNotInstrumentedReason =
             "Added-member calls are not instrumented, so InvocationCount is always 0 for this row.";
 

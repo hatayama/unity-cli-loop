@@ -294,8 +294,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
         /// <summary>
         /// Verifies that a later reload which declares a type this domain already introduced
-        /// reuses the active type instead of introducing it again: the run succeeds, no second
-        /// artifact becomes active, and the caller it patches still reads through the one type.
+        /// reuses the active type instead of introducing it again: the run succeeds, reports the
+        /// declaration as already active, no second artifact becomes active, and the caller it
+        /// patches still reads through the one type.
         /// </summary>
         [Test]
         public async Task Run_SameTypeDeclaredAgainByALaterReload_ReusesTheActiveTypeWithoutIntroducingItAgain()
@@ -339,6 +340,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         Is.Null,
                         "A reload that declares an already introduced type must not fail.");
                     AssertCallerIsPatched(second);
+
+                    HotReloadResponse response = HotReloadApplyResponseBuilder.Build(second, null);
+                    Assert.That(
+                        response.IntroducedTypes.Count,
+                        Is.EqualTo(1),
+                        "The second run bound one declaration from the active artifact.");
+                    Assert.That(
+                        response.IntroducedTypes[0].Kind,
+                        Is.EqualTo("AlreadyActive"),
+                        "A declaration bound from an active artifact was not introduced by this run.");
+                    Assert.That(
+                        response.IntroducedTypes[0].TypeName,
+                        Is.EqualTo(IntroducedTypeMetadataName));
                 }
 
                 Assert.That(

@@ -40,10 +40,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadIntroducedTypePreparationResult.Failure(refusedDeclaration);
             }
 
+            List<HotReloadIntroducedTypeOutcome> alreadyActiveTypes =
+                CollectAlreadyActiveTypes(prepareResult.Output);
             List<HotReloadIntroducedTypeDescriptor> descriptors = CollectDescriptors(prepareResult.Output);
             if (descriptors.Count == 0)
             {
-                return HotReloadIntroducedTypePreparationResult.NoIntroducedTypes();
+                return HotReloadIntroducedTypePreparationResult.NoIntroducedTypes(alreadyActiveTypes);
             }
 
             string doubleDeclaration = FindDoubleDeclaredType(descriptors);
@@ -73,7 +75,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return HotReloadIntroducedTypePreparationResult.WithPrepared(
                 new HotReloadPreparedIntroducedTypes(
                     compileResult.Artifact,
-                    CollectOwnerSourceHashes(prepareResult.Output, descriptors)));
+                    CollectOwnerSourceHashes(prepareResult.Output, descriptors)),
+                alreadyActiveTypes);
         }
 
         // Why the active artifacts as well: a declaration this run introduces may name a type an
@@ -186,6 +189,27 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return null;
+        }
+
+        // Why the owner comes from the file row and not the reuse row: the worker records a reuse
+        // on the unit whose source declares it, so the row that holds it is the attribution.
+        private static List<HotReloadIntroducedTypeOutcome> CollectAlreadyActiveTypes(
+            TransformWorkerOutputDto output)
+        {
+            List<HotReloadIntroducedTypeOutcome> outcomes = new List<HotReloadIntroducedTypeOutcome>();
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                foreach (TransformWorkerIntroducedTypeReuseDto reuse in file.introducedTypeReuses)
+                {
+                    outcomes.Add(
+                        HotReloadIntroducedTypeOutcome.AlreadyActive(
+                            reuse.metadataName,
+                            reuse.originalAssemblyName,
+                            file.projectRelativePath));
+                }
+            }
+
+            return outcomes;
         }
 
         private static List<HotReloadIntroducedTypeDescriptor> CollectDescriptors(

@@ -66,6 +66,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             if (prepared != null)
             {
                 HotReloadIntroducedTypeHolder.Registry.Activate(prepared.Artifact);
+                // Why after the activation and not at preparation: only a type the boundary
+                // published is introduced, so a run that never reached here must report none.
+                HotReloadIntroducedTypeOutcomeSink.Append(files, BuildIntroducedRows(prepared.Artifact));
             }
 
             bool commitsIntroducedTypes = CommitsIntroducedTypes(prepared, files[0].AssemblyName);
@@ -96,6 +99,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 preparedFiles);
             RecordSupersededSignaturesAfterApply(context, gateResult.GatedReplacementMethodKeys);
             return results;
+        }
+
+        private static List<HotReloadIntroducedTypeOutcome> BuildIntroducedRows(
+            HotReloadIntroducedTypeArtifact artifact)
+        {
+            List<HotReloadIntroducedTypeOutcome> rows =
+                new List<HotReloadIntroducedTypeOutcome>(artifact.Descriptors.Count);
+            foreach (HotReloadIntroducedTypeDescriptor descriptor in artifact.Descriptors)
+            {
+                rows.Add(
+                    HotReloadIntroducedTypeOutcome.Introduced(
+                        descriptor.MetadataName,
+                        descriptor.OriginalAssemblyName,
+                        descriptor.OwnerProjectRelativePath));
+            }
+
+            return rows;
         }
 
         // A run whose introduced types become active at the commit boundary: the reload either

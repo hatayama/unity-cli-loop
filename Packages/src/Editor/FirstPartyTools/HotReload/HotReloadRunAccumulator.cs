@@ -23,6 +23,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly List<string> _addedConsts = new List<string>();
         private readonly List<string> _siblingDerivedWarnings = new List<string>();
         private readonly List<string> _reappliedSiblingPaths = new List<string>();
+        // Why appended without deduplication: one row per declaration is what the report means,
+        // and two files declaring the same type is a mistake the run has to report against both.
+        private readonly List<HotReloadIntroducedTypeOutcome> _introducedTypes =
+            new List<HotReloadIntroducedTypeOutcome>();
         private readonly List<HotReloadOneShotCallerNoteEnricher.Candidate> _oneShotCallerNoteCandidates =
             new List<HotReloadOneShotCallerNoteEnricher.Candidate>();
         // Why staged (not recorded per file): duplicate paths in one run must still apply
@@ -60,6 +64,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _revertedUnchangedTotal += fileResult.RevertedUnchangedCount;
             _addedFields.AddRange(fileResult.AddedFieldNames);
             _addedConsts.AddRange(fileResult.AddedConstNames);
+            _introducedTypes.AddRange(fileResult.IntroducedTypes);
             HotReloadAppliedSourceLifecycle.StageAppliedSourceHash(
                 _appliedSourceHashByPath,
                 projectRelativePath,
@@ -125,7 +130,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 _addedConsts.ToArray(),
                 _revertedUnchangedTotal,
                 autoRefreshHold,
-                _reappliedSiblingPaths.ToArray());
+                _reappliedSiblingPaths.ToArray(),
+                _introducedTypes);
         }
 
         private void AppendInlineRiskWarning()
