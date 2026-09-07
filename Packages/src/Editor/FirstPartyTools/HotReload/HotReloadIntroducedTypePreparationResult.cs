@@ -10,20 +10,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private HotReloadIntroducedTypePreparationResult(
             bool success,
-            HotReloadIntroducedTypeArtifact artifact,
+            HotReloadPreparedIntroducedTypes prepared,
             string errorMessage)
         {
             Success = success;
-            Artifact = artifact;
+            Prepared = prepared;
             ErrorMessage = errorMessage;
         }
 
         public bool Success { get; }
 
         /// <summary>
-        /// The artifact this run prepared, or null when the run introduced no type at all.
+        /// What this run prepared, or null when the run introduced no type at all.
         /// </summary>
-        public HotReloadIntroducedTypeArtifact Artifact { get; }
+        public HotReloadPreparedIntroducedTypes Prepared { get; }
 
         public string ErrorMessage { get; }
 
@@ -32,15 +32,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new HotReloadIntroducedTypePreparationResult(true, null, string.Empty);
         }
 
-        public static HotReloadIntroducedTypePreparationResult Prepared(
-            HotReloadIntroducedTypeArtifact artifact)
+        public static HotReloadIntroducedTypePreparationResult WithPrepared(
+            HotReloadPreparedIntroducedTypes prepared)
         {
-            if (artifact == null)
+            if (prepared == null)
             {
-                throw new ArgumentNullException(nameof(artifact));
+                throw new ArgumentNullException(nameof(prepared));
             }
 
-            return new HotReloadIntroducedTypePreparationResult(true, artifact, string.Empty);
+            return new HotReloadIntroducedTypePreparationResult(true, prepared, string.Empty);
         }
 
         public static HotReloadIntroducedTypePreparationResult Failure(string errorMessage)

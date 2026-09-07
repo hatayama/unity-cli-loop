@@ -18,9 +18,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadIntroducedTypeActivationTests
     {
+        private Func<HotReloadEditorStateSnapshot> _previousSnapshotProvider;
+
         [SetUp]
         public void SetUp()
         {
+            _previousSnapshotProvider = HotReloadEditorStateSnapshotProvider.CaptureForTesting;
             HotReloadPatcher.RevertAll();
             HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
         }
@@ -31,6 +34,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         [TearDown]
         public void TearDown()
         {
+            HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
             HotReloadPatcher.RevertAll();
             HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
         }
@@ -146,7 +150,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             ownerAssemblyName = files[0].AssemblyName;
                             HotReloadIntroducedTypePreparationResult preparation =
                                 await HotReloadIntroducedTypePreparation.PrepareAsync(files, input, ct);
-                            preparedArtifact = preparation.Artifact;
+                            preparedArtifact = preparation.Prepared?.Artifact;
                             return preparation;
                         },
                         async (input, ct) =>
@@ -241,6 +245,243 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.Empty,
                 "A run must not be offered an artifact bound to another generation of its assembly.");
         }
+
+        /// <summary>
+        /// Verifies that a run introducing a type commits it: the prepared membership becomes
+        /// active, and the caller patched in the same reload reads a value through the introduced
+        /// type at runtime, which only resolves once the artifact assembly is active.
+        /// </summary>
+        [Test]
+        public async Task Run_TypeIntroducedWithItsCaller_ActivatesTheTypeAndTheCallerReadsThroughIt()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+            HotReloadIntroducedTypeArtifact preparedArtifact = null;
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateArtifactCapturingDependencies(artifact => preparedArtifact = artifact)))
+                {
+                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateIntroducedTypeEdits(hostPath, callerPath, "Activation"));
+
+                    AssertCallerIsPatched(result);
+                }
+
+                Assert.That(preparedArtifact, Is.Not.Null, "The run had to prepare the introduced type.");
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    Is.EqualTo(0),
+                    "The commit boundary must move the prepared membership, not leave it prepared.");
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.TryFindActive(
+                        preparedArtifact.Descriptors,
+                        out HotReloadIntroducedTypeArtifact activeArtifact),
+                    Is.True,
+                    "The committed run must leave the introduced type active.");
+                Assert.That(activeArtifact, Is.SameAs(preparedArtifact));
+                Assert.That(
+                    new HotReloadCrossFileAddedMemberCaller().Call(new HotReloadCrossFileAddedMemberHost()),
+                    Is.EqualTo(IntroducedValueThroughCaller),
+                    "The patched caller must read its value through the introduced type.");
+            }
+        }
+
+        /// <summary>
+        /// Verifies that an Editor that becomes busy after the shim compile stops the run at the
+        /// commit boundary, leaving no type active and no patch applied.
+        /// </summary>
+        [Test]
+        public async Task Run_EditorBecomesBusyBeforeTheCommitBoundary_ActivatesNothing()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+            HotReloadOrchestratorResult result;
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateDependenciesWithAfterGateAction(
+                        () => HotReloadEditorStateSnapshotProvider.CaptureForTesting =
+                            () => new HotReloadEditorStateSnapshot(true, false, false))))
+                {
+                    result = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateIntroducedTypeEdits(hostPath, callerPath, "EditorBusy"));
+                }
+
+                AssertNothingWasCommitted(result, "The Editor became busy");
+            }
+        }
+
+        /// <summary>
+        /// Verifies that an owner rewritten between the preparation run and the transform run
+        /// stops the run at the commit boundary, because the artifact assembly no longer describes
+        /// the source the transform read.
+        /// </summary>
+        [Test]
+        public async Task Run_OwnerRewrittenBetweenPreparationAndTransform_ActivatesNothing()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+            Dictionary<string, string> edits = CreateIntroducedTypeEdits(hostPath, callerPath, "OwnerDrift");
+            HotReloadOrchestratorResult result;
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateDependenciesWithBeforeWorkerAction(() => AppendMarkerComment(edits[hostPath]))))
+                {
+                    result = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        edits);
+                }
+
+                AssertNothingWasCommitted(result, "between preparation and transform");
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a request source rewritten after the transform run stops the run at the
+        /// commit boundary, so a reload never applies code compiled from bytes that are gone.
+        /// </summary>
+        [Test]
+        public async Task Run_RequestSourceRewrittenAfterTransform_ActivatesNothing()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+            Dictionary<string, string> edits = CreateIntroducedTypeEdits(hostPath, callerPath, "RequestDrift");
+            HotReloadOrchestratorResult result;
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateDependenciesWithAfterGateAction(() => AppendMarkerComment(edits[callerPath]))))
+                {
+                    result = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        edits);
+                }
+
+                AssertNothingWasCommitted(result, "changed after it was transformed");
+            }
+        }
+
+        // A comment keeps the file compilable while changing every byte-derived hash of it.
+        private static void AppendMarkerComment(string editedSourcePath)
+        {
+            File.AppendAllText(editedSourcePath, "\n// rewritten before the commit boundary\n");
+        }
+
+        private static void AssertNothingWasCommitted(
+            HotReloadOrchestratorResult result,
+            string reasonFragment)
+        {
+            Assert.That(
+                FindFailureReason(result, reasonFragment),
+                Is.Not.Null,
+                "The run must report why it stopped at the commit boundary.");
+            Assert.That(
+                HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                Is.EqualTo(0),
+                "A run stopped at the commit boundary must leave no prepared membership.");
+            Assert.That(
+                HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                Is.EqualTo(0),
+                "A run stopped at the commit boundary must activate no type.");
+            Assert.That(
+                HotReloadPatcher.ActivePatchCount,
+                Is.EqualTo(0),
+                "A run stopped at the commit boundary must apply no patch.");
+        }
+
+        private static string FindFailureReason(HotReloadOrchestratorResult result, string reasonFragment)
+        {
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Reason != null
+                    && outcome.Reason.Contains(reasonFragment, StringComparison.Ordinal))
+                {
+                    return outcome.Reason;
+                }
+            }
+
+            return null;
+        }
+
+        private static HotReloadGroupProcessorDependencies CreateArtifactCapturingDependencies(
+            Action<HotReloadIntroducedTypeArtifact> captureArtifact)
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                async (files, input, ct) =>
+                {
+                    HotReloadIntroducedTypePreparationResult preparation =
+                        await HotReloadIntroducedTypePreparation.PrepareAsync(files, input, ct);
+                    captureArtifact(preparation.Prepared?.Artifact);
+                    return preparation;
+                },
+                TransformWorkerClient.RunAsync,
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadEntryApplier.ApplyPreparedEntries);
+        }
+
+        // The window between the preparation run and the transform run, which is where an owner
+        // rewrite makes the prepared artifact stale.
+        private static HotReloadGroupProcessorDependencies CreateDependenciesWithBeforeWorkerAction(
+            Action beforeWorker)
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                HotReloadIntroducedTypePreparation.PrepareAsync,
+                (input, ct) =>
+                {
+                    beforeWorker();
+                    return TransformWorkerClient.RunAsync(input, ct);
+                },
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadEntryApplier.ApplyPreparedEntries);
+        }
+
+        // The window between the shim compile and the commit boundary, which is the last instant
+        // an external change can invalidate a run that has mutated nothing yet.
+        private static HotReloadGroupProcessorDependencies CreateDependenciesWithAfterGateAction(
+            Action afterGate)
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                HotReloadIntroducedTypePreparation.PrepareAsync,
+                TransformWorkerClient.RunAsync,
+                async (context, ct) =>
+                {
+                    HotReloadGroupGateAndCompileResult gateAndCompile =
+                        await HotReloadGroupProcessor.GateAndCompileAsync(context, ct);
+                    afterGate();
+                    return gateAndCompile;
+                },
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadEntryApplier.ApplyPreparedEntries);
+        }
+
+        // The edited caller returns the introduced type's value plus the compiled host's value.
+        private const int IntroducedValueThroughCaller = 8;
 
         private const string ValidateStage = "validate-membership";
 

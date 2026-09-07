@@ -58,7 +58,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     "Introduced-type compilation failed: " + compileResult.ErrorMessage);
             }
 
-            return HotReloadIntroducedTypePreparationResult.Prepared(compileResult.Artifact);
+            return HotReloadIntroducedTypePreparationResult.WithPrepared(
+                new HotReloadPreparedIntroducedTypes(
+                    compileResult.Artifact,
+                    CollectOwnerSourceHashes(prepareResult.Output, descriptors)));
         }
 
         // Why the same sources and references: preparation asks the worker which declarations of
@@ -79,6 +82,37 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 changedSiblingSourcePaths = transformInput.changedSiblingSourcePaths,
                 introducedTypeArtifacts = transformInput.introducedTypeArtifacts
             };
+        }
+
+        // Why only the owners: the commit boundary compares what the artifact was compiled from
+        // against what the transform run read, and only the files that declare an introduced type
+        // took part in that compilation.
+        private static Dictionary<string, string> CollectOwnerSourceHashes(
+            TransformWorkerOutputDto output,
+            IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors)
+        {
+            HashSet<string> ownerPaths = new HashSet<string>(StringComparer.Ordinal);
+            foreach (HotReloadIntroducedTypeDescriptor descriptor in descriptors)
+            {
+                ownerPaths.Add(descriptor.OwnerProjectRelativePath);
+            }
+
+            Dictionary<string, string> hashesByOwnerPath =
+                new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                if (!ownerPaths.Contains(file.projectRelativePath))
+                {
+                    continue;
+                }
+
+                hashesByOwnerPath[file.projectRelativePath] = file.sourceContentSha256;
+            }
+
+            Debug.Assert(
+                hashesByOwnerPath.Count == ownerPaths.Count,
+                "Every owner of an introduced type must have a row in the preparation output.");
+            return hashesByOwnerPath;
         }
 
         private static List<HotReloadIntroducedTypeDescriptor> CollectDescriptors(

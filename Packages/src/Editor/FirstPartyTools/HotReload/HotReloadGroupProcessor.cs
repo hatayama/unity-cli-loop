@@ -65,7 +65,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return BuildUnappliedResults(files);
             }
 
-            if (preparation.Artifact == null)
+            if (preparation.Prepared == null)
             {
                 return await TransformAndApplyGroupAsync(files, workerInput, null, correlationId, ct)
                     .ConfigureAwait(false);
@@ -74,7 +74,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return await TransformAndApplyPreparedGroupAsync(
                 files,
                 workerInput,
-                preparation.Artifact,
+                preparation.Prepared,
                 correlationId,
                 ct).ConfigureAwait(false);
         }
@@ -86,10 +86,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static async Task<IReadOnlyList<HotReloadFileProcessResult>> TransformAndApplyPreparedGroupAsync(
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerInputDto workerInput,
-            HotReloadIntroducedTypeArtifact artifact,
+            HotReloadPreparedIntroducedTypes prepared,
             string correlationId,
             CancellationToken ct)
         {
+            HotReloadIntroducedTypeArtifact artifact = prepared.Artifact;
             HotReloadIntroducedTypeRegistry registry = HotReloadIntroducedTypeHolder.Registry;
             registry.RegisterPrepared(artifact);
             List<TransformWorkerIntroducedTypeArtifactDto> records =
@@ -103,14 +104,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 try
                 {
-                    return await TransformAndApplyGroupAsync(files, workerInput, artifact, correlationId, ct)
+                    return await TransformAndApplyGroupAsync(files, workerInput, prepared, correlationId, ct)
                         .ConfigureAwait(false);
                 }
                 finally
                 {
-                    // The commit boundary that activates a successful run is a later stage; until
-                    // it exists the prepared membership is dropped here as well. The discard of a
-                    // failed run stays in place once activation replaces the successful path.
+                    // A run the commit boundary activated no longer holds a prepared membership,
+                    // so this only drops what a run that never reached activation left behind.
                     registry.DiscardPrepared(artifact);
                 }
             }
@@ -119,7 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static async Task<IReadOnlyList<HotReloadFileProcessResult>> TransformAndApplyGroupAsync(
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerInputDto workerInput,
-            HotReloadIntroducedTypeArtifact preparedArtifact,
+            HotReloadPreparedIntroducedTypes prepared,
             string correlationId,
             CancellationToken ct)
         {
@@ -152,7 +152,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Why before the empty-entries return: all-unchanged runs exit there, and those are
             // exactly the runs that must peel leftover patches so behavior converges to compiled IL.
-            if (!await RevalidateBeforeRevertAsync(
+            // Why a run that commits types skips it: peeling a patch here would mutate the domain
+            // before the commit boundary, which a failed recheck could then no longer undo, so
+            // such a run reverts at the boundary instead.
+            if (!CommitsIntroducedTypes(prepared, files[0].AssemblyName)
+                && !await RevalidateBeforeRevertAsync(
                     files,
                     ct,
                     () => RevertUnchangedPatchesPerFile(files, rows)).ConfigureAwait(false))
@@ -170,7 +174,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 workerInput,
                 workerOutput,
                 files,
-                preparedArtifact);
+                prepared);
             HotReloadGroupGateAndCompileResult gateAndCompile = await HotReloadGroupProcessorDependencies
                 .Current
                 .GateAndCompile(context, ct)
@@ -261,19 +265,67 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             ct.ThrowIfCancellationRequested();
+            string staleReason = HotReloadGroupCommitBoundary.DescribeStaleReason(context);
+            if (staleReason != null)
+            {
+                HotReloadGroupOutcomeRouter.AppendGroupFailure(context.Files, "(file)", staleReason);
+                return BuildUnappliedResults(context.Files);
+            }
+
             HotReloadGroupProcessorDependencies dependencies = HotReloadGroupProcessorDependencies.Current;
             // Why the whole group is resolved before any file is mutated: a file whose entries
-            // cannot be resolved must not leave the files applied before it half patched.
+            // cannot be resolved must not leave the files applied before it half patched. It is
+            // also the last failure a run can take without having activated anything.
             IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles = dependencies.PrepareGroupEntries(
                 context,
                 compile.CompileResult,
                 compile.EntriesToPatch);
+            return CommitPreparedGroup(context, gateResult, compile, preparedFiles);
+        }
+
+        /// <summary>
+        /// The commit point of a group run and everything that follows it: the introduced types
+        /// become active, the patches this run supersedes are peeled, and the resolved entries are
+        /// applied. A failure after the commit point leaves the types active and fails methods.
+        /// </summary>
+        private static IReadOnlyList<HotReloadFileProcessResult> CommitPreparedGroup(
+            HotReloadApplyContext context,
+            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
+            HotReloadGroupCompileResult compile,
+            IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
+        {
+            IReadOnlyList<HotReloadGroupFile> files = context.Files;
+            HotReloadPreparedIntroducedTypes prepared = context.PreparedIntroducedTypes;
+            if (prepared != null)
+            {
+                HotReloadIntroducedTypeHolder.Registry.Activate(prepared.Artifact);
+            }
+
+            if (CommitsIntroducedTypes(prepared, files[0].AssemblyName))
+            {
+                RevertUnchangedPatchesPerFile(
+                    files,
+                    HotReloadWorkerRowsByFile.Build(context.WorkerOutput, context.ProjectRelativePaths));
+            }
+
+            HotReloadGroupProcessorDependencies dependencies = HotReloadGroupProcessorDependencies.Current;
             IReadOnlyList<HotReloadFileProcessResult> results = dependencies.ApplyPreparedEntries(
                 context,
                 compile.CompileResult,
                 preparedFiles);
             RecordSupersededSignaturesAfterApply(context, gateResult.GatedReplacementMethodKeys);
             return results;
+        }
+
+        // A run whose introduced types become active at the commit boundary: the reload either
+        // introduces a type itself, or the assembly it targets already owns one this domain
+        // introduced, in which case its patches resolve through the artifact assemblies too.
+        private static bool CommitsIntroducedTypes(
+            HotReloadPreparedIntroducedTypes prepared,
+            string targetAssemblyName)
+        {
+            return prepared != null
+                || HotReloadIntroducedTypeHolder.Registry.HasActiveTypesForOriginalAssembly(targetAssemblyName);
         }
 
         internal static bool TryAppendNewSourceMembershipFailure(IReadOnlyList<HotReloadGroupFile> files)
