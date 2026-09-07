@@ -153,8 +153,18 @@ internal static class IntroducedTypePlanner
         {
             unit.IntroducedTypeDiagnostics.Add(
                 "Changed introduced type requires a compile: " + metadataName);
+            return true;
         }
 
+        // Why recorded: the run binds this declaration from the active artifact, and without a
+        // record the reload could not tell that from a run that never saw the declaration.
+        unit.IntroducedTypeReuses.Add(
+            new WorkerIntroducedTypeReuse
+            {
+                MetadataName = metadataName,
+                OriginalAssemblyName = targetAssemblyName ?? string.Empty,
+                OriginalAssemblyMvid = targetAssemblyMvid ?? string.Empty
+            });
         return true;
     }
 

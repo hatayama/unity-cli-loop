@@ -144,7 +144,8 @@ internal static class IntroducedTypePreparation
                 AddedFieldNames = Array.Empty<string>(),
                 AddedConstNames = Array.Empty<string>(),
                 IntroducedTypes = unit.IntroducedTypes.ToArray(),
-                IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray()
+                IntroducedTypeDiagnostics = unit.IntroducedTypeDiagnostics.ToArray(),
+                IntroducedTypeReuses = unit.IntroducedTypeReuses.ToArray()
             };
         }
 

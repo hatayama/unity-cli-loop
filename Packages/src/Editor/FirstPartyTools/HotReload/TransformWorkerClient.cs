@@ -331,6 +331,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 fileOutput.addedConstNames ??= Array.Empty<string>();
                 fileOutput.introducedTypes ??= Array.Empty<TransformWorkerIntroducedTypeDto>();
                 fileOutput.introducedTypeDiagnostics ??= Array.Empty<string>();
+                fileOutput.introducedTypeReuses ??= Array.Empty<TransformWorkerIntroducedTypeReuseDto>();
             }
 
             foreach (TransformWorkerEntryDto entry in output.entries)
@@ -434,6 +435,51 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 {
                     return false;
                 }
+            }
+
+            // Why omission is refused rather than coalesced: an omitted list reads the same as a
+            // run that reused nothing, and a reload would then report a type it bound from an
+            // active artifact as introduced by no one.
+            if (file.introducedTypeReuses == null)
+            {
+                errorMessage = "Preparation output must contain introducedTypeReuses.";
+                return false;
+            }
+
+            foreach (TransformWorkerIntroducedTypeReuseDto reuse in file.introducedTypeReuses)
+            {
+                if (!TryValidatePreparationReuse(reuse, input, out errorMessage))
+                {
+                    return false;
+                }
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static bool TryValidatePreparationReuse(
+            TransformWorkerIntroducedTypeReuseDto reuse,
+            TransformWorkerInputDto input,
+            out string errorMessage)
+        {
+            if (reuse == null)
+            {
+                errorMessage = "Preparation output must not contain a null introduced type reuse.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(reuse.metadataName))
+            {
+                errorMessage = "Preparation reuse must name the type it bound.";
+                return false;
+            }
+
+            if (reuse.originalAssemblyName != input.targetAssemblyName
+                || reuse.originalAssemblyMvid != input.targetAssemblyMvid)
+            {
+                errorMessage = "Preparation reuse assembly identity must match its input.";
+                return false;
             }
 
             errorMessage = string.Empty;

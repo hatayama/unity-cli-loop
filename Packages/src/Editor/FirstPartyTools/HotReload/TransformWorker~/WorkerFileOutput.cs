@@ -44,4 +44,7 @@ internal sealed class WorkerFileOutput
 
     // Keep in sync with TransformWorkerDtos.cs TransformWorkerFileOutputDto.introducedTypeDiagnostics.
     public string[] IntroducedTypeDiagnostics { get; set; }
+
+    // Keep in sync with TransformWorkerDtos.cs TransformWorkerFileOutputDto.introducedTypeReuses.
+    public WorkerIntroducedTypeReuse[] IntroducedTypeReuses { get; set; }
 }

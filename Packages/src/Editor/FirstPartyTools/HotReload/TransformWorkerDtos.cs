@@ -149,6 +149,26 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public TransformWorkerIntroducedTypeDto[] introducedTypes;
 
         public string[] introducedTypeDiagnostics;
+
+        // The declarations this run did not introduce because the domain already retains an
+        // assembly for them. Reported so a reload can name the types it bound from an active
+        // artifact; introducing them again is what the transform refuses.
+        public TransformWorkerIntroducedTypeReuseDto[] introducedTypeReuses;
+    }
+
+    /// <summary>
+    /// One declaration a preparation run bound from an already active artifact instead of
+    /// introducing it a second time.
+    /// </summary>
+    // Keep in sync with TransformWorker~/WorkerIntroducedTypeReuse.cs.
+    [Serializable]
+    internal sealed class TransformWorkerIntroducedTypeReuseDto
+    {
+        public string metadataName;
+
+        public string originalAssemblyName;
+
+        public string originalAssemblyMvid;
     }
 
     /// <summary>

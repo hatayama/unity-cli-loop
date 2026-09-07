@@ -466,6 +466,83 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             return count;
         }
 
+        /// <summary>
+        /// Verifies that a declaration whose fingerprint matches a retained artifact is reported as
+        /// a reuse of the active type instead of being introduced again, so a run can tell the
+        /// reader which types it bound from what this domain already holds.
+        /// </summary>
+        [Test]
+        public async Task PrepareIntroducedTypes_DeclarationMatchesActiveArtifact_ReportsReuse()
+        {
+            BindingFixture fixture = CreateFixture("DeclarationMatchesActive", DirectDependentSource);
+
+            TransformWorkerClientResult sourceDeclared = await TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: true,
+                    Array.Empty<TransformWorkerIntroducedTypeArtifactDto>(),
+                    Array.Empty<string>()),
+                CancellationToken.None);
+            Assert.That(sourceDeclared.Success, Is.True, sourceDeclared.ErrorMessage);
+            string activeFingerprint = FindFingerprint(sourceDeclared, "Example.Retained");
+
+            TransformWorkerClientResult reloaded = await TransformWorkerClient.RunAsync(
+                CreateInput(
+                    fixture,
+                    includeRetainedSource: true,
+                    new[] { CreateRetainedArtifactMatching(fixture, activeFingerprint) },
+                    Array.Empty<string>()),
+                CancellationToken.None);
+
+            Assert.That(reloaded.Success, Is.True, reloaded.ErrorMessage);
+            Assert.That(
+                CollectMetadataNames(reloaded.Output),
+                Does.Not.Contain("Example.Retained"),
+                "A type this domain already holds must not be introduced a second time.");
+            Assert.That(
+                CollectReusedMetadataNames(reloaded.Output),
+                Is.EqualTo(new[] { "Example.Retained" }));
+        }
+
+        private static List<string> CollectMetadataNames(TransformWorkerOutputDto output)
+        {
+            List<string> names = new List<string>();
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                foreach (TransformWorkerIntroducedTypeDto introducedType in file.introducedTypes)
+                {
+                    names.Add(introducedType.metadataName);
+                }
+            }
+
+            return names;
+        }
+
+        private static List<string> CollectReusedMetadataNames(TransformWorkerOutputDto output)
+        {
+            List<string> names = new List<string>();
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                foreach (TransformWorkerIntroducedTypeReuseDto reuse in file.introducedTypeReuses)
+                {
+                    names.Add(reuse.metadataName);
+                }
+            }
+
+            return names;
+        }
+
+        // Overloads are forbidden, so this distinct name builds the record with the fingerprint the
+        // planner computed for the live declaration instead of the placeholder one.
+        private static TransformWorkerIntroducedTypeArtifactDto CreateRetainedArtifactMatching(
+            BindingFixture fixture,
+            string declarationFingerprint)
+        {
+            TransformWorkerIntroducedTypeArtifactDto artifact = CreateRetainedArtifact(fixture);
+            artifact.types[0].declarationFingerprint = declarationFingerprint;
+            return artifact;
+        }
+
         private static string FindFingerprint(TransformWorkerClientResult result, string metadataName)
         {
             foreach (TransformWorkerFileOutputDto file in result.Output.files)

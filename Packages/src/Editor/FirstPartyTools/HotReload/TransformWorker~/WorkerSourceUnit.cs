@@ -71,6 +71,9 @@ internal sealed class WorkerSourceUnit
 
     public List<string> IntroducedTypeDiagnostics { get; } = new List<string>();
 
+    public List<WorkerIntroducedTypeReuse> IntroducedTypeReuses { get; } =
+        new List<WorkerIntroducedTypeReuse>();
+
     public CompiledMemberKindChangeWarnings.SyntaxKeys KindChangeSyntaxKeys { get; set; }
 
     public List<TypeEmitState> TypeEmitStates { get; set; } = new List<TypeEmitState>();
