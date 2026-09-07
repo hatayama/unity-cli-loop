@@ -15,7 +15,8 @@ continues, and `Warnings` carries `<file>: <reason>: <type>` where the reason is
 `Record introduced type requires a compile` · `Non-public introduced type requires a compile` ·
 `Ref-like introduced type requires a compile` · `Unsafe introduced type requires a compile` ·
 `Unity object introduced type requires a compile` · `Serializable introduced type requires a compile` ·
-`Module initializer introduced type requires a compile` · `Unsupported introduced type requires a compile` ·
+`Module initializer introduced type requires a compile` · `Delegate introduced type requires a compile` ·
+`Unsupported introduced type requires a compile` ·
 `Nested type requires a compile` · `Nested declaration inside an introduced type requires a compile`
 
 Three conditions produce a `Failed` row in `IntroducedTypes` instead, and a `Failed` row makes

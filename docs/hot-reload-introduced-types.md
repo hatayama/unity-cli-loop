@@ -36,7 +36,8 @@ declares it stays in the tree, the rest of the reload continues, and the respons
 | Type deriving from `UnityEngine.Object` | `Unity object introduced type requires a compile: <type>` |
 | Type marked `[Serializable]` | `Serializable introduced type requires a compile: <type>` |
 | Type declaring a `[ModuleInitializer]` method | `Module initializer introduced type requires a compile: <type>` |
-| Delegate, or any other type kind | `Unsupported introduced type requires a compile: <type>` |
+| Delegate | `Delegate introduced type requires a compile: <type>` |
+| Any other type kind | `Unsupported introduced type requires a compile: <type>` |
 | Nested type | `Nested type requires a compile: <type>` |
 | Type that itself declares a nested type | `Nested declaration inside an introduced type requires a compile: <type>/<nested>` |
 
