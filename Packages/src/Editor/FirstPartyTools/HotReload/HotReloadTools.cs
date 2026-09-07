@@ -123,8 +123,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public string RecommendedNextAction { get; set; } = string.Empty;
 
         /// <summary>
-        /// Remaining method identities discarded by the last Play-entry domain reload
-        /// that have not been recovered by apply, revert-all, or a successful compile.
+        /// Remaining patched-method, added-member, and introduced-type identities discarded by
+        /// the last Play-entry domain reload that have not been recovered by apply
+        /// (<c>Patched</c> / <c>Added</c> methods, <c>Introduced</c> / <c>AlreadyActive</c>
+        /// types), revert-all, or a successful compile.
         /// </summary>
         public int DroppedByPlayModeEntryCount { get; set; }
 
@@ -233,7 +235,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
             // Why switch back: SessionState for Play-entry drop recovery is a Unity Editor API.
             await MainThreadSwitcher.SwitchToMainThread(ct);
-            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(result.Methods);
+            HotReloadPlayModeEntryDropRecorder.NotifyApplyRecovered(
+                result.Methods,
+                result.IntroducedTypes);
 
             HotReloadResponse response = BuildApplyResponse(result, selection.ScanLimitWarnings);
             if (!string.IsNullOrEmpty(selection.SelectionMessage))

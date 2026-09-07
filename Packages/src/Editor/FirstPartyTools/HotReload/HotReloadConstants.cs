@@ -393,7 +393,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string FailedWithNoApplyRecommendedNextAction =
             "Fix the failed declarations or methods and rerun, or run 'uloop compile'.";
 
-        // SessionState key for method identities discarded by the Play-entry domain reload.
+        // SessionState key for the change identities (patched methods, added members, introduced
+        // types) discarded by the Play-entry domain reload.
         // SessionState survives that reload and is cleared when the Editor process exits.
         public const string PlayModeEntryDropSessionStateKey =
             "io.github.hatayama.uloop.hot-reload.playModeEntryDroppedIdentities";

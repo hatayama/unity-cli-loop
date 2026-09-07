@@ -7,7 +7,8 @@ using UnityEngine;
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Records Play-entry domain-reload drops and clears them on successful compile,
+    /// Records Play-entry domain-reload drops of every kind of hot-reload change (patched
+    /// methods, added members, introduced types) and clears them on successful compile,
     /// revert-all, or recovered apply outcomes. Event handlers stay thin; decisions are
     /// tested through the Notify/Should methods.
     /// </summary>
@@ -65,9 +66,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             HotReloadPlayModeEntryDropLedger.Clear();
         }
 
-        internal static void NotifyApplyRecovered(IReadOnlyList<HotReloadMethodOutcome> methods)
+        internal static void NotifyApplyRecovered(
+            IReadOnlyList<HotReloadMethodOutcome> methods,
+            IReadOnlyList<HotReloadIntroducedTypeOutcome> introducedTypes)
         {
             Debug.Assert(methods != null, "methods must not be null");
+            Debug.Assert(introducedTypes != null, "introducedTypes must not be null");
             List<string> recoveredIdentities = new List<string>();
             for (int index = 0; index < methods.Count; index++)
             {
@@ -79,6 +83,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 recoveredIdentities.Add(outcome.Method);
+            }
+
+            for (int index = 0; index < introducedTypes.Count; index++)
+            {
+                HotReloadIntroducedTypeOutcome outcome = introducedTypes[index];
+                // Why AlreadyActive counts as recovered too: a type the domain still holds was
+                // not discarded, so a ledger row naming it is a stale record of an earlier drop.
+                if (outcome.Kind != HotReloadIntroducedTypeOutcomeKind.Introduced
+                    && outcome.Kind != HotReloadIntroducedTypeOutcomeKind.AlreadyActive)
+                {
+                    continue;
+                }
+
+                recoveredIdentities.Add(HotReloadPlayModeEntryDropIdentity.ForType(
+                    outcome.OriginalAssemblyName,
+                    outcome.MetadataName));
             }
 
             HotReloadPlayModeEntryDropLedger.Remove(recoveredIdentities);
@@ -175,7 +195,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             NotifyCompilationFinished(_currentCompilationErrorCount);
         }
 
-        private static IReadOnlyList<string> CollectActiveIdentities()
+        /// <summary>
+        /// Every hot-reload change the next domain reload would discard, in ledger identity form:
+        /// patched methods, added members, and the types this domain introduced.
+        /// </summary>
+        internal static IReadOnlyList<string> CollectActiveIdentities()
         {
             IReadOnlyList<HotReloadActivePatchInfo> patches = HotReloadPatcher.DescribeActivePatches();
             IReadOnlyList<HotReloadAddedMemberInfo> addedMembers = HotReloadAddedMemberRegistry.Describe();
@@ -188,6 +212,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             for (int index = 0; index < addedMembers.Count; index++)
             {
                 identities.Add(addedMembers[index].MethodKey);
+            }
+
+            // Why the types belong here: they live in artifact assemblies only a domain reload
+            // unloads, so Play entry discards them exactly as it discards a patch.
+            IReadOnlyList<HotReloadIntroducedTypeDescriptor> introducedTypes =
+                HotReloadIntroducedTypeHolder.Registry.DescribeActive();
+            for (int index = 0; index < introducedTypes.Count; index++)
+            {
+                HotReloadIntroducedTypeDescriptor descriptor = introducedTypes[index];
+                identities.Add(HotReloadPlayModeEntryDropIdentity.ForType(
+                    descriptor.OriginalAssemblyName,
+                    descriptor.MetadataName));
             }
 
             return identities;

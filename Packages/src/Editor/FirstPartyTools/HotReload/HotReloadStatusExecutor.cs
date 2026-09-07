@@ -102,8 +102,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             int droppedCount = HotReloadPlayModeEntryDropLedger.Count;
+            // Why one snapshot for both: the drop Message only replaces the active-count Message
+            // when nothing is active, and a domain still holding an introduced type has not lost
+            // it, so the same number has to decide the Message and the reported total.
+            int introducedTypeCount = HotReloadActiveChangeCounts.IntroducedTypeCount;
             string dropMessage = HotReloadPlayModeEntryDropStatusMessageBuilder.Build(
-                count,
+                count + introducedTypeCount,
                 droppedCount);
             if (dropMessage != null)
             {
@@ -125,7 +129,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Methods = methods,
                 Warnings = warnings,
                 IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(),
-                ActiveIntroducedTypeTotal = HotReloadActiveChangeCounts.IntroducedTypeCount,
+                ActiveIntroducedTypeTotal = introducedTypeCount,
                 ActivePatchTotal = count,
                 AddedFieldTotal = addedFields.Count,
                 AutoRefreshHeld = hold.Held,

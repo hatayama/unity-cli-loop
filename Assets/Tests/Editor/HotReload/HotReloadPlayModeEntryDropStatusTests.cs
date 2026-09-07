@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -102,6 +103,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(response.DroppedByPlayModeEntryCount, Is.EqualTo(1));
             Assert.That(response.ShouldSerializeDroppedByPlayModeEntryCount(), Is.True);
             Assert.That(json.Value<int>("DroppedByPlayModeEntryCount"), Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// What: --status in a domain that still holds an introduced type keeps the active-count
+        /// Message instead of claiming that nothing is active, while still reporting the leftover
+        /// drop count.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_Status_WhenAnIntroducedTypeIsActiveAndDropsRemain_KeepsTheActiveMessage()
+        {
+            HotReloadPlayModeEntryDropLedger.Record(new[] { "Type.Dropped()" });
+
+            try
+            {
+                using (HotReloadIntroducedTypeHolder.BeginReplacement())
+                {
+                    HotReloadIntroducedTypeHolder.Initialize();
+                    ActivateArtifactWithOneType();
+
+                    Assert.That(
+                        HotReloadActiveChangeCounts.IntroducedTypeCount,
+                        Is.EqualTo(1),
+                        "Arrange: the domain must hold exactly one introduced type.");
+
+                    HotReloadResponse response = await ExecuteStatusAsync(CancellationToken.None);
+
+                    Assert.That(response.ActivePatchTotal, Is.EqualTo(0), "Arrange: no method is patched.");
+                    // Why the drop sentence and not the heading: this branch only decides whether
+                    // the drop Message replaces the active-count Message, and the heading's own
+                    // count is still method-only.
+                    Assert.That(
+                        response.Message,
+                        Is.EqualTo("0 change(s) currently active."),
+                        "A domain that still holds an introduced type has not lost everything.");
+                    Assert.That(
+                        response.Message,
+                        Does.Not.Contain("were discarded by the domain reload"),
+                        "The drop Message must not claim the reload took what the domain still holds.");
+                    Assert.That(response.DroppedByPlayModeEntryCount, Is.EqualTo(1));
+                    Assert.That(response.ShouldSerializeDroppedByPlayModeEntryCount(), Is.True);
+                }
+            }
+            finally
+            {
+                // Why here: the status query armed the Auto Refresh hold against the replacement
+                // registry, and that flag is shared by every test of the run.
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
+            }
+        }
+
+        private static void ActivateArtifactWithOneType()
+        {
+            HotReloadIntroducedTypeDescriptor descriptor = new HotReloadIntroducedTypeDescriptor(
+                "Fixture.Assembly",
+                "original-mvid",
+                "Fixture.DroppedStatusType",
+                "Assets/Tests/Fixture.cs",
+                "fingerprint-dropped-status",
+                "public class Held { }");
+            HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
+                typeof(HotReloadPlayModeEntryDropStatusTests).Assembly,
+                "artifact.dll",
+                "artifact.pdb",
+                new List<HotReloadIntroducedTypeDescriptor> { descriptor });
+            HotReloadIntroducedTypeHolder.Registry.RegisterPrepared(artifact);
+            HotReloadIntroducedTypeHolder.Registry.Activate(artifact);
         }
 
         private static async Task<HotReloadResponse> ExecuteStatusAsync(CancellationToken ct)
