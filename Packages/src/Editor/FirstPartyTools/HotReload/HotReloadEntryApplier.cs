@@ -146,6 +146,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// Peels every file's leftover patches on the methods the worker reported unchanged, and
+        /// records per file how many patches that removed.
+        /// </summary>
+        internal static void RevertUnchangedPatchesPerFile(
+            IReadOnlyList<HotReloadGroupFile> files,
+            HotReloadWorkerRowsByFile rows)
+        {
+            foreach (HotReloadGroupFile file in files)
+            {
+                IReadOnlyList<TransformWorkerUnchangedMethodDto> fileUnchanged =
+                    rows.UnchangedFor(file.ProjectRelativePath);
+                TransformWorkerUnchangedMethodDto[] unchangedMethods =
+                    new TransformWorkerUnchangedMethodDto[fileUnchanged.Count];
+                for (int index = 0; index < fileUnchanged.Count; index++)
+                {
+                    unchangedMethods[index] = fileUnchanged[index];
+                }
+
+                file.RevertedUnchangedCount = RevertUnchangedPatches(
+                    file.AssemblyName,
+                    unchangedMethods,
+                    file.Sinks.Outcomes,
+                    file.AssemblyResolvePath);
+            }
+        }
+        /// <summary>
         /// Invokes each shim type's binder (emitted when the type carries at least one accessor
         /// delegate) once, before any patch is applied, so no delegation shim or added-method
         /// accessor rewrite can run with unbound accessor delegates. Returns bind failures keyed

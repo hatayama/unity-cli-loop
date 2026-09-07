@@ -426,6 +426,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that a file whose entries the group preflight could not resolve stops the run
+        /// before the commit point, so a group that will patch nothing activates no introduced
+        /// type and leaves the failed file's own resolution failure as the reported outcome.
+        /// </summary>
+        [Test]
+        public async Task Run_OneFileFailsTheGroupPreflight_ActivatesNothing()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateDependenciesWithFailedResolutionFor(Path.GetFileName(callerPath))))
+                {
+                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateIntroducedTypeEdits(hostPath, callerPath, "PreflightFailure"));
+
+                    AssertNothingWasCommitted(result, UnresolvableEntryReason);
+                }
+            }
+        }
+
+        /// <summary>
         /// Verifies that a reload whose only change is a new type declaration still reaches the
         /// commit boundary and activates the type, instead of ending unapplied because the run
         /// has no method to patch.
@@ -695,6 +723,68 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 },
                 HotReloadGroupEntryPreparation.PrepareGroup,
                 HotReloadEntryApplier.ApplyPreparedEntries);
+        }
+
+        // The reason of the preflight failure this test injects at the PrepareGroupEntries seam.
+        private const string UnresolvableEntryReason = "An entry of this file could not be resolved.";
+
+        // Why the failure is injected: an entry that cannot be resolved against a shim assembly
+        // the same run has just compiled from the same source cannot be produced from a fixture,
+        // and what is under test is that the commit point is not reached, not how resolution
+        // decides a file has failed.
+        private static HotReloadGroupProcessorDependencies CreateDependenciesWithFailedResolutionFor(
+            string failingFileName)
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                HotReloadIntroducedTypePreparation.PrepareAsync,
+                TransformWorkerClient.RunAsync,
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                (context, compileResult, entriesToPatch) =>
+                {
+                    IReadOnlyList<HotReloadPreparedGroupFile> prepared =
+                        HotReloadGroupEntryPreparation.PrepareGroup(context, compileResult, entriesToPatch);
+                    List<HotReloadPreparedGroupFile> replaced =
+                        new List<HotReloadPreparedGroupFile>(prepared.Count);
+                    bool failedOne = false;
+                    foreach (HotReloadPreparedGroupFile preparedFile in prepared)
+                    {
+                        HotReloadPreparedGroupFile candidate =
+                            FailResolutionOfMatchingFile(preparedFile, failingFileName);
+                        failedOne = failedOne || !ReferenceEquals(candidate, preparedFile);
+                        replaced.Add(candidate);
+                    }
+
+                    Assert.That(
+                        failedOne,
+                        Is.True,
+                        "Precondition: the group had to resolve " + failingFileName + " to fail it.");
+                    return replaced;
+                },
+                HotReloadEntryApplier.ApplyPreparedEntries);
+        }
+
+        private static HotReloadPreparedGroupFile FailResolutionOfMatchingFile(
+            HotReloadPreparedGroupFile prepared,
+            string failingFileName)
+        {
+            if (prepared.Kind != HotReloadGroupFilePreparationKind.Resolved
+                || !prepared.File.ProjectRelativePath.EndsWith(failingFileName, StringComparison.Ordinal))
+            {
+                return prepared;
+            }
+
+            List<HotReloadMethodOutcome> failureOutcomes = new List<HotReloadMethodOutcome>
+            {
+                HotReloadMethodOutcome.Failed(
+                    prepared.File.ProjectRelativePath,
+                    UnresolvableEntryReason,
+                    prepared.File.AssemblyResolvePath)
+            };
+            return HotReloadPreparedGroupFile.ResolutionFailed(
+                prepared.File,
+                prepared.Entries,
+                HotReloadEntryResolution.Result.Failed(failureOutcomes));
         }
 
         // The edited caller returns the introduced type's value plus the compiled host's value.

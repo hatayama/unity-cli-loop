@@ -122,6 +122,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 revertedUnchangedCount: file.RevertedUnchangedCount);
         }
 
+        /// <summary>
+        /// The results of a group no file of which was applied, one unapplied result per file.
+        /// </summary>
+        internal static List<HotReloadFileProcessResult> BuildUnappliedGroupResults(
+            IReadOnlyList<HotReloadGroupFile> files)
+        {
+            List<HotReloadFileProcessResult> results =
+                new List<HotReloadFileProcessResult>(files.Count);
+            foreach (HotReloadGroupFile file in files)
+            {
+                results.Add(BuildUnappliedResult(file));
+            }
+
+            return results;
+        }
         private static HotReloadFileProcessResult FinishFileResult(
             HotReloadApplyContext context,
             HotReloadGroupFile file,
