@@ -46,6 +46,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadIntroducedTypePreparationResult.NoIntroducedTypes();
             }
 
+            string doubleDeclaration = FindDoubleDeclaredType(descriptors);
+            if (doubleDeclaration != null)
+            {
+                return HotReloadIntroducedTypePreparationResult.Failure(doubleDeclaration);
+            }
+
             HotReloadIntroducedTypeArtifactPaths paths =
                 new HotReloadIntroducedTypeArtifactPathFactory(files[0].ProjectRoot, SessionId).Create();
             HotReloadIntroducedTypeCompilerResult compileResult =
@@ -151,6 +157,32 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         return diagnostic;
                     }
                 }
+            }
+
+            return null;
+        }
+
+        // Why refused here and not by the artifact batch: two files of one group declaring the
+        // same type is an editing mistake the reload has to report against both files, while the
+        // batch's uniqueness rule is an internal contract whose violation would throw out of the
+        // run and leave the group with no result at all.
+        private static string FindDoubleDeclaredType(
+            IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors)
+        {
+            Dictionary<string, string> ownerPathByIdentity =
+                new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (HotReloadIntroducedTypeDescriptor descriptor in descriptors)
+            {
+                string identity = descriptor.BuildIdentity();
+                if (!ownerPathByIdentity.TryGetValue(identity, out string firstOwnerPath))
+                {
+                    ownerPathByIdentity[identity] = descriptor.OwnerProjectRelativePath;
+                    continue;
+                }
+
+                return "Introduced type " + descriptor.MetadataName
+                    + " is declared in more than one file of the group: "
+                    + firstOwnerPath + " and " + descriptor.OwnerProjectRelativePath + ".";
             }
 
             return null;

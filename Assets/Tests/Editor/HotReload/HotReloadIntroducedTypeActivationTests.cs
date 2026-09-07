@@ -549,6 +549,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that two files of one group declaring the same introduced type fail the run
+        /// with a reported reason naming the type, instead of letting the artifact batch's
+        /// uniqueness contract throw out of the reload.
+        /// </summary>
+        [Test]
+        public async Task Run_SameTypeDeclaredByTwoFilesOfAGroup_FailsWithoutThrowing()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                    new[] { hostPath, callerPath },
+                    contentPathOverride: null,
+                    CancellationToken.None,
+                    CreateDoubleDeclaringEdits(hostPath, callerPath));
+
+                Assert.That(
+                    FindFailureReason(result, "more than one file"),
+                    Is.Not.Null,
+                    "The run must report which type two files of the group declare. "
+                        + DescribeOutcomes(result));
+                Assert.That(
+                    CountFailures(result, "more than one file"),
+                    Is.EqualTo(2),
+                    "Both files of the refused group must report the refusal.");
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    Is.EqualTo(0),
+                    "A refused group must activate no type.");
+                Assert.That(
+                    HotReloadPatcher.ActivePatchCount,
+                    Is.EqualTo(0),
+                    "A refused group must apply no patch.");
+            }
+        }
+
+        /// <summary>
         /// Verifies that an Editor that becomes busy after the shim compile stops the run at the
         /// commit boundary, leaving no type active and no patch applied.
         /// </summary>
@@ -675,6 +715,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return description.ToString();
+        }
+
+        private static int CountFailures(HotReloadOrchestratorResult result, string reasonFragment)
+        {
+            int count = 0;
+            foreach (HotReloadMethodOutcome outcome in result.Methods)
+            {
+                if (outcome.Kind == HotReloadMethodOutcomeKind.Failed
+                    && outcome.Reason != null
+                    && outcome.Reason.Contains(reasonFragment, StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static string FindFailureReason(HotReloadOrchestratorResult result, string reasonFragment)
@@ -1347,6 +1403,40 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         CallerBodyAnchor,
                         "return new HotReloadCrossFileIntroducedDerived().Doubled() + host.Value();",
                         StringComparison.Ordinal));
+        }
+
+        // Both files of the group declare the same type, which is what makes the group offer the
+        // artifact batch two records of one identity.
+        private static Dictionary<string, string> CreateDoubleDeclaringEdits(
+            string hostPath,
+            string callerPath)
+        {
+            string callerSource = File.ReadAllText(callerPath);
+            Assert.That(
+                callerSource,
+                Does.Contain(CallerTypeAnchor),
+                "Precondition: caller type anchor must exist.");
+            string introduced =
+                "    public sealed class HotReloadCrossFileDoubleDeclared\n"
+                + "    {\n"
+                + "        public int Read()\n"
+                + "        {\n"
+                + "            return 7;\n"
+                + "        }\n"
+                + "    }\n"
+                + "\n";
+            string hostSource = File.ReadAllText(hostPath);
+            Assert.That(hostSource, Does.Contain(HostTypeAnchor), "Precondition: host type anchor must exist.");
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeDoubleDeclaredHost.cs",
+                    hostSource.Replace(HostTypeAnchor, introduced + HostTypeAnchor, StringComparison.Ordinal)),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeDoubleDeclaredCaller.cs",
+                    callerSource.Replace(
+                        CallerTypeAnchor, introduced + CallerTypeAnchor, StringComparison.Ordinal))
+            };
         }
 
         private static string CallIntroducedType(string callerSource)
