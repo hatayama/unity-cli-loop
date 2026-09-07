@@ -34,6 +34,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        // The number of active introduced types, which is not the number of active artifacts:
+        // one artifact carries every type of the batch that compiled it. A report that counted
+        // artifacts would name two types and total them as one.
+        public int ActiveTypeCount
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return activeByTypeIdentity.Count;
+                }
+            }
+        }
+
         public int PreparedCount
         {
             get
@@ -166,6 +180,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
+        /// A snapshot of every active introduced type, for reporting what this domain holds.
+        /// </summary>
+        /// <remarks>
+        /// Why a copy taken under the gate: a caller that reported straight off the live
+        /// dictionaries would race a concurrent activation, and the resolver takes the same gate.
+        /// Ordered so a report built from it is stable across runs.
+        /// </remarks>
+        public IReadOnlyList<HotReloadIntroducedTypeDescriptor> DescribeActive()
+        {
+            List<HotReloadIntroducedTypeDescriptor> descriptors =
+                new List<HotReloadIntroducedTypeDescriptor>();
+            lock (gate)
+            {
+                foreach (HotReloadIntroducedTypeArtifact artifact in activeByAssemblyIdentity.Values)
+                {
+                    descriptors.AddRange(artifact.Descriptors);
+                }
+            }
+
+            descriptors.Sort(CompareForReport);
+            return descriptors;
+        }
+
+        /// <summary>
         /// Answers whether a compiled assembly still owns a type this domain introduced.
         /// </summary>
         public bool HasActiveTypesForOriginalAssembly(string originalAssemblyName)
@@ -243,6 +281,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return activeByAssemblyIdentity.TryGetValue(requestedAssemblyFullName, out artifact);
             }
+        }
+
+        private static int CompareForReport(
+            HotReloadIntroducedTypeDescriptor left,
+            HotReloadIntroducedTypeDescriptor right)
+        {
+            int byAssembly = string.Compare(
+                left.OriginalAssemblyName,
+                right.OriginalAssemblyName,
+                StringComparison.Ordinal);
+            if (byAssembly != 0)
+            {
+                return byAssembly;
+            }
+
+            return string.Compare(left.MetadataName, right.MetadataName, StringComparison.Ordinal);
         }
 
         private void ValidateActivation(HotReloadIntroducedTypeArtifact artifact)

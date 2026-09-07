@@ -795,6 +795,37 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             assembly.Dispose();
         }
 
+        /// <summary>
+        /// Verifies that the active type count and the active descriptor snapshot report every
+        /// type of one artifact, so a report built from them cannot collapse two types into one.
+        /// </summary>
+        [Test]
+        public void DescribeActive_OneArtifactWithTwoDescriptors_ReportsBothTypes()
+        {
+            HotReloadIntroducedTypeRegistry registry = new HotReloadIntroducedTypeRegistry();
+            List<HotReloadIntroducedTypeDescriptor> descriptors =
+                new List<HotReloadIntroducedTypeDescriptor>
+                {
+                    CreateOtherDescriptor("second"),
+                    CreateDescriptor("first")
+                };
+            HotReloadIntroducedTypeArtifact artifact = new HotReloadIntroducedTypeArtifact(
+                typeof(HotReloadIntroducedTypeRegistryTests).Assembly,
+                "artifact.dll",
+                "artifact.pdb",
+                descriptors);
+            registry.RegisterPrepared(artifact);
+            registry.Activate(artifact);
+
+            IReadOnlyList<HotReloadIntroducedTypeDescriptor> active = registry.DescribeActive();
+
+            Assert.That(registry.ActiveCount, Is.EqualTo(1), "The artifact count must stay one artifact.");
+            Assert.That(registry.ActiveTypeCount, Is.EqualTo(2), "Both introduced types must be counted.");
+            Assert.That(active.Count, Is.EqualTo(2));
+            Assert.That(active[0].MetadataName, Is.EqualTo("Example.Introduced"), "The snapshot must be ordered.");
+            Assert.That(active[1].MetadataName, Is.EqualTo("Example.OtherIntroduced"));
+        }
+
         private static HotReloadIntroducedTypeArtifact CreateArtifact(string fingerprint)
         {
             Assembly assembly = typeof(HotReloadIntroducedTypeRegistryTests).Assembly;
