@@ -1990,7 +1990,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             return HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(files);
                         },
                         HotReloadIntroducedTypePreparation.PrepareAsync,
-                        TransformWorkerClient.RunAsync)))
+                        TransformWorkerClient.RunAsync,
+                        HotReloadGroupProcessor.GateAndCompileAsync,
+                        HotReloadGroupEntryPreparation.PrepareGroup,
+                        HotReloadEntryApplier.ApplyPreparedEntries)))
                 {
                     await HotReloadOrchestrator.RunAsync(
                         new[] { fixturePath },
@@ -2709,7 +2712,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
 
             HotReloadFileProcessResult fileResult =
-                HotReloadEntryApplier.ApplyGroupAndBuildResults(
+                ApplyGroupForTest(
                     CreateApplyContext(
                         typeof(HotReloadE2EFixture).Assembly.GetName().Name,
                         projectRelativePath,
@@ -2978,7 +2981,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             try
             {
                 IReadOnlyList<HotReloadFileProcessResult> results =
-                    HotReloadEntryApplier.ApplyGroupAndBuildResults(
+                    ApplyGroupForTest(
                         context,
                         HotReloadShimCompileResult.SuccessResult(
                             typeof(HotReloadOrchestratorTests).Assembly,
@@ -3063,7 +3066,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 }
             };
-            return HotReloadEntryApplier.ApplyGroupAndBuildResults(
+            return ApplyGroupForTest(
                 CreateApplyContext(
                     typeof(HotReloadCoreFixture).Assembly.GetName().Name,
                     projectRelativePath,
@@ -3083,6 +3086,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// assembly name, the group's single file and the worker output; the remaining fields
         /// exist to satisfy the context's own preconditions.
         /// </summary>
+        private static IReadOnlyList<HotReloadFileProcessResult> ApplyGroupForTest(
+            HotReloadApplyContext context,
+            HotReloadShimCompileResult compileResult,
+            TransformWorkerEntryDto[] entriesToPatch)
+        {
+            return HotReloadEntryApplier.ApplyPreparedEntries(
+                context,
+                compileResult,
+                HotReloadGroupEntryPreparation.PrepareGroup(context, compileResult, entriesToPatch));
+        }
+
         private static HotReloadApplyContext CreateApplyContext(
             string assemblyName,
             string projectRelativePath,
@@ -3142,7 +3156,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 },
                 workerOutput,
-                new[] { file });
+                new[] { file },
+                null);
         }
 
         private static HotReloadOrchestratorResult ToOrchestratorResult(

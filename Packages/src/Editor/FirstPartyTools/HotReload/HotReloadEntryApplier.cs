@@ -16,27 +16,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal static class HotReloadEntryApplier
     {
         /// <summary>
-        /// Applies the group's entries file by file against the one compiled shim assembly, and
-        /// returns one result per file in the order the files were sent to the worker.
+        /// Applies the group's prepared files against the one compiled shim assembly, and returns
+        /// one result per file in the order the files were sent to the worker.
         /// </summary>
         /// <remarks>
         /// Why per file: the shim assembly is shared, but a generation, an added-field ledger and
         /// an apply result all belong to a single file, and a file whose entries cannot be
         /// resolved must not stop its siblings from being applied. The whole group is prepared
-        /// (bound and resolved) first, so nothing is mutated while a sibling can still fail
-        /// preflight.
+        /// (bound and resolved) by an earlier stage, so nothing is mutated while a sibling can
+        /// still fail preflight.
         /// </remarks>
-        internal static IReadOnlyList<HotReloadFileProcessResult> ApplyGroupAndBuildResults(
+        internal static IReadOnlyList<HotReloadFileProcessResult> ApplyPreparedEntries(
             HotReloadApplyContext context,
             HotReloadShimCompileResult compileResult,
-            TransformWorkerEntryDto[] entriesToPatch)
+            IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles)
         {
             Debug.Assert(context != null, "context must not be null.");
             Debug.Assert(compileResult != null, "compileResult must not be null.");
-            Debug.Assert(entriesToPatch != null, "entriesToPatch must not be null.");
+            Debug.Assert(preparedFiles != null, "preparedFiles must not be null.");
 
-            IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles =
-                HotReloadGroupEntryPreparation.PrepareGroup(context, compileResult, entriesToPatch);
             List<HotReloadFileProcessResult> results =
                 new List<HotReloadFileProcessResult>(preparedFiles.Count);
             foreach (HotReloadPreparedGroupFile prepared in preparedFiles)

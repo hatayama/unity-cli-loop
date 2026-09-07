@@ -67,7 +67,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             if (preparation.Artifact == null)
             {
-                return await TransformAndApplyGroupAsync(files, workerInput, correlationId, ct).ConfigureAwait(false);
+                return await TransformAndApplyGroupAsync(files, workerInput, null, correlationId, ct)
+                    .ConfigureAwait(false);
             }
 
             return await TransformAndApplyPreparedGroupAsync(
@@ -102,7 +103,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 try
                 {
-                    return await TransformAndApplyGroupAsync(files, workerInput, correlationId, ct)
+                    return await TransformAndApplyGroupAsync(files, workerInput, artifact, correlationId, ct)
                         .ConfigureAwait(false);
                 }
                 finally
@@ -118,6 +119,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static async Task<IReadOnlyList<HotReloadFileProcessResult>> TransformAndApplyGroupAsync(
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerInputDto workerInput,
+            HotReloadIntroducedTypeArtifact preparedArtifact,
             string correlationId,
             CancellationToken ct)
         {
@@ -167,13 +169,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 firstFile.CompilationAssembly.defines ?? Array.Empty<string>(),
                 workerInput,
                 workerOutput,
-                files);
-            return await ApplyGroupAsync(context, firstFile, ct).ConfigureAwait(false);
+                files,
+                preparedArtifact);
+            HotReloadGroupGateAndCompileResult gateAndCompile = await HotReloadGroupProcessorDependencies
+                .Current
+                .GateAndCompile(context, ct)
+                .ConfigureAwait(false);
+            if (!gateAndCompile.HasEntriesToApply)
+            {
+                return BuildUnappliedResults(files);
+            }
+
+            return await CompleteApplyAfterCoverageAsync(
+                context,
+                gateAndCompile.Gate,
+                gateAndCompile.Compile,
+                ct).ConfigureAwait(false);
         }
 
-        private static async Task<IReadOnlyList<HotReloadFileProcessResult>> ApplyGroupAsync(
+        /// <summary>
+        /// Runs the signature-change gate and the first shim compile of the group, which together
+        /// decide whether there is anything left to apply.
+        /// </summary>
+        internal static async Task<HotReloadGroupGateAndCompileResult> GateAndCompileAsync(
             HotReloadApplyContext context,
-            HotReloadGroupFile gateWarningSink,
             CancellationToken ct)
         {
             // The worker-bound continuation after the pre-revert check is not guaranteed to
@@ -181,6 +200,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
             ct.ThrowIfCancellationRequested();
             IReadOnlyList<HotReloadGroupFile> files = context.Files;
+            HotReloadGroupFile gateWarningSink = files[0];
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = await HotReloadSignatureChangeGate.TryApplySignatureChangeGateAsync(
                 context,
                 ct).ConfigureAwait(false);
@@ -198,7 +218,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     files,
                     "(signature-change-gate)",
                     gateResult.FailureMessage);
-                return BuildUnappliedResults(files);
+                return HotReloadGroupGateAndCompileResult.NothingToApply();
             }
 
             HotReloadGroupOutcomeRouter.AppendByFilePath(files, gateResult.SkippedOutcomes);
@@ -212,33 +232,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ct).ConfigureAwait(false);
             if (!compile.HasEntriesToApply)
             {
-                return BuildUnappliedResults(files);
+                return HotReloadGroupGateAndCompileResult.NothingToApply();
             }
 
-            return await CompleteApplyAfterCoverageAsync(
-                context,
-                gateResult,
-                compile,
-                ct,
-                () =>
-                {
-                    IReadOnlyList<HotReloadFileProcessResult> results = HotReloadEntryApplier.ApplyGroupAndBuildResults(
-                        context,
-                        compile.CompileResult,
-                        compile.EntriesToPatch);
-                    RecordSupersededSignaturesAfterApply(context, gateResult.GatedReplacementMethodKeys);
-                    return Task.FromResult(results);
-                }).ConfigureAwait(false);
+            return HotReloadGroupGateAndCompileResult.Ready(gateResult, compile);
         }
 
-        // Why inject only the post-coverage continuation: coverage failure must use the real
-        // group failure routing, while tests must not invoke Harmony or main-thread work.
+        /// <summary>
+        /// Turns a gated and compiled group into applied patches: coverage, the last membership
+        /// check, the group-wide preflight that resolves every file, and only then the mutation.
+        /// </summary>
         internal static async Task<IReadOnlyList<HotReloadFileProcessResult>> CompleteApplyAfterCoverageAsync(
             HotReloadApplyContext context,
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
             HotReloadGroupCompileResult compile,
-            CancellationToken ct,
-            Func<Task<IReadOnlyList<HotReloadFileProcessResult>>> continueAfterCoverage)
+            CancellationToken ct)
         {
             if (gateResult.DidScan && !AppendSignatureChangeCoverageNotices(context, gateResult, compile))
             {
@@ -253,7 +261,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             ct.ThrowIfCancellationRequested();
-            return await continueAfterCoverage().ConfigureAwait(false);
+            HotReloadGroupProcessorDependencies dependencies = HotReloadGroupProcessorDependencies.Current;
+            // Why the whole group is resolved before any file is mutated: a file whose entries
+            // cannot be resolved must not leave the files applied before it half patched.
+            IReadOnlyList<HotReloadPreparedGroupFile> preparedFiles = dependencies.PrepareGroupEntries(
+                context,
+                compile.CompileResult,
+                compile.EntriesToPatch);
+            IReadOnlyList<HotReloadFileProcessResult> results = dependencies.ApplyPreparedEntries(
+                context,
+                compile.CompileResult,
+                preparedFiles);
+            RecordSupersededSignaturesAfterApply(context, gateResult.GatedReplacementMethodKeys);
+            return results;
         }
 
         internal static bool TryAppendNewSourceMembershipFailure(IReadOnlyList<HotReloadGroupFile> files)

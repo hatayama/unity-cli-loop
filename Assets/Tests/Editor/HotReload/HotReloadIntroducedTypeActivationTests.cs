@@ -18,6 +18,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
     /// </summary>
     public class HotReloadIntroducedTypeActivationTests
     {
+        [SetUp]
+        public void SetUp()
+        {
+            HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+        }
+
+        // Why reverting here as well: a run of this class patches a fixture caller against an
+        // artifact assembly that only lives while the run's prepared scope is open, so leaving
+        // the patch active would fail the first later test that calls the fixture.
+        [TearDown]
+        public void TearDown()
+        {
+            HotReloadPatcher.RevertAll();
+            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+        }
+
         /// <summary>
         /// Verifies that the resolver the production holder exposes resolves what the registry it
         /// exposes activated, so both sides of the pair are the same instance.
@@ -138,7 +155,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                             TransformWorkerClientResult result = await TransformWorkerClient.RunAsync(input, ct);
                             transformOutput = result.Output;
                             return result;
-                        })))
+                        },
+                        HotReloadGroupProcessor.GateAndCompileAsync,
+                        HotReloadGroupEntryPreparation.PrepareGroup,
+                        HotReloadEntryApplier.ApplyPreparedEntries)))
                 {
                     HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
                         new[] { hostPath, callerPath },
@@ -198,7 +218,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         {
                             transformInput = input;
                             return TransformWorkerClient.RunAsync(input, ct);
-                        })))
+                        },
+                        HotReloadGroupProcessor.GateAndCompileAsync,
+                        HotReloadGroupEntryPreparation.PrepareGroup,
+                        HotReloadEntryApplier.ApplyPreparedEntries)))
                 {
                     await HotReloadOrchestrator.RunAsync(
                         new[] { callerPath },
@@ -217,6 +240,263 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 transformInput.introducedTypeArtifacts,
                 Is.Empty,
                 "A run must not be offered an artifact bound to another generation of its assembly.");
+        }
+
+        private const string ValidateStage = "validate-membership";
+
+        private const string PrepareStage = "prepare-introduced-types";
+
+        private const string WorkerStage = "run-worker";
+
+        private const string GateStage = "gate-and-compile";
+
+        private const string PreflightStage = "prepare-group-entries";
+
+        private const string ApplyStage = "apply-prepared-entries";
+
+        /// <summary>
+        /// Verifies that a run introducing a type walks its stages in the one order the design
+        /// requires: owner membership validation, type preparation, the transform run, the gate
+        /// and shim compile, the group-wide preflight, and only then the apply that mutates.
+        /// </summary>
+        [Test]
+        public async Task Run_TypeIntroducedWithItsCaller_WalksTheGroupStagesInOrder()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+            List<string> stages = new List<string>();
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateRecordingDependencies(stages)))
+                {
+                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateIntroducedTypeEdits(hostPath, callerPath, "StageOrder"));
+
+                    AssertCallerIsPatched(result);
+                }
+
+                // The commit boundary that activates a run is a later stage, so the prepared
+                // membership the run registered must be gone again once the run ends.
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    Is.EqualTo(0),
+                    "A finished run must leave no prepared membership behind.");
+            }
+
+            Assert.That(
+                stages,
+                Is.EqualTo(new[]
+                {
+                    ValidateStage,
+                    PrepareStage,
+                    WorkerStage,
+                    GateStage,
+                    PreflightStage,
+                    ApplyStage
+                }),
+                "The group pipeline must reach its commit boundary only through this order.");
+        }
+
+        /// <summary>
+        /// Verifies that a group whose files no longer belong to the assembly they were resolved
+        /// against is dropped before any type is compiled into an artifact.
+        /// </summary>
+        [Test]
+        public async Task Run_OwnerMembershipValidationFails_DoesNotPrepareIntroducedTypes()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+            List<string> stages = new List<string>();
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateFailingMembershipDependencies(stages)))
+                {
+                    await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateIntroducedTypeEdits(hostPath, callerPath, "MembershipFailure"));
+                }
+
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    Is.EqualTo(0),
+                    "A group dropped at owner validation must leave no prepared membership.");
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    Is.EqualTo(0),
+                    "A group dropped at owner validation must activate no type.");
+            }
+
+            Assert.That(
+                stages,
+                Is.EqualTo(new[] { ValidateStage }),
+                "Owner validation failure must stop the run before the type preparation.");
+        }
+
+        /// <summary>
+        /// Verifies that a failed type preparation stops the run before the transform worker and
+        /// leaves the patch ledger and the introduced-type ledgers exactly as it found them.
+        /// </summary>
+        [Test]
+        public async Task Run_IntroducedTypePreparationFails_DoesNotRunTheWorkerAndLeavesLedgersUnchanged()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+            List<string> stages = new List<string>();
+            int patchesBefore = HotReloadPatcher.ActivePatchCount;
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateFailingPreparationDependencies(stages)))
+                {
+                    await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateIntroducedTypeEdits(hostPath, callerPath, "PreparationFailure"));
+                }
+
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.PreparedCount,
+                    Is.EqualTo(0),
+                    "A failed preparation must leave no prepared membership behind.");
+                Assert.That(
+                    HotReloadIntroducedTypeHolder.Registry.ActiveCount,
+                    Is.EqualTo(0),
+                    "A failed preparation must activate no type.");
+            }
+
+            Assert.That(
+                stages,
+                Is.EqualTo(new[] { ValidateStage, PrepareStage }),
+                "A failed preparation must stop the run before the transform worker.");
+            Assert.That(
+                HotReloadPatcher.ActivePatchCount,
+                Is.EqualTo(patchesBefore),
+                "A failed preparation must leave the patch ledger unchanged.");
+        }
+
+        private static Dictionary<string, string> CreateIntroducedTypeEdits(
+            string hostPath,
+            string callerPath,
+            string label)
+        {
+            return new Dictionary<string, string>
+            {
+                [hostPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedType" + label + "Host.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath))),
+                [callerPath] = HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedType" + label + "Caller.cs",
+                    CallIntroducedType(File.ReadAllText(callerPath)))
+            };
+        }
+
+        // Why every stage delegates to production: the order under test is the production order,
+        // so a recording decorator must not stand in for any stage of it.
+        private static HotReloadGroupProcessorDependencies CreateRecordingDependencies(List<string> stages)
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                files =>
+                {
+                    stages.Add(ValidateStage);
+                    return HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(files);
+                },
+                (files, input, ct) =>
+                {
+                    stages.Add(PrepareStage);
+                    return HotReloadIntroducedTypePreparation.PrepareAsync(files, input, ct);
+                },
+                (input, ct) =>
+                {
+                    stages.Add(WorkerStage);
+                    return TransformWorkerClient.RunAsync(input, ct);
+                },
+                (context, ct) =>
+                {
+                    stages.Add(GateStage);
+                    return HotReloadGroupProcessor.GateAndCompileAsync(context, ct);
+                },
+                (context, compileResult, entriesToPatch) =>
+                {
+                    stages.Add(PreflightStage);
+                    return HotReloadGroupEntryPreparation.PrepareGroup(context, compileResult, entriesToPatch);
+                },
+                (context, compileResult, preparedFiles) =>
+                {
+                    stages.Add(ApplyStage);
+                    return HotReloadEntryApplier.ApplyPreparedEntries(context, compileResult, preparedFiles);
+                });
+        }
+
+        // Why the failure is injected instead of provoked: a group whose sources left their
+        // assembly cannot be produced from a compiled fixture, and the stage under test is
+        // "nothing runs after the refusal", not how the refusal is decided.
+        private static HotReloadGroupProcessorDependencies CreateFailingMembershipDependencies(List<string> stages)
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                files =>
+                {
+                    stages.Add(ValidateStage);
+                    HotReloadGroupOutcomeRouter.AppendGroupFailure(
+                        files,
+                        "(file)",
+                        "The compiled assembly changed while the group was being processed.");
+                    return false;
+                },
+                (files, input, ct) =>
+                {
+                    stages.Add(PrepareStage);
+                    return HotReloadIntroducedTypePreparation.PrepareAsync(files, input, ct);
+                },
+                (input, ct) =>
+                {
+                    stages.Add(WorkerStage);
+                    return TransformWorkerClient.RunAsync(input, ct);
+                },
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadEntryApplier.ApplyPreparedEntries);
+        }
+
+        // Why the failure is injected: an artifact compile failure cannot be provoked from a
+        // fixture the repository keeps compiling, and the stage under test is that the run stops
+        // before the worker with every ledger untouched.
+        private static HotReloadGroupProcessorDependencies CreateFailingPreparationDependencies(List<string> stages)
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                files =>
+                {
+                    stages.Add(ValidateStage);
+                    return HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(files);
+                },
+                (files, input, ct) =>
+                {
+                    stages.Add(PrepareStage);
+                    return Task.FromResult(
+                        HotReloadIntroducedTypePreparationResult.Failure(
+                            "The introduced type artifact could not be compiled."));
+                },
+                (input, ct) =>
+                {
+                    stages.Add(WorkerStage);
+                    return TransformWorkerClient.RunAsync(input, ct);
+                },
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadEntryApplier.ApplyPreparedEntries);
         }
 
         private static HotReloadIntroducedTypeArtifact CreateArtifactForTarget(

@@ -26,7 +26,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string[] defines,
             TransformWorkerInputDto workerInput,
             TransformWorkerOutputDto workerOutput,
-            IReadOnlyList<HotReloadGroupFile> files)
+            IReadOnlyList<HotReloadGroupFile> files,
+            HotReloadIntroducedTypeArtifact preparedIntroducedTypeArtifact)
         {
             Debug.Assert(!string.IsNullOrEmpty(projectRoot), "projectRoot must not be empty.");
             Debug.Assert(!string.IsNullOrEmpty(assemblyName), "assemblyName must not be empty.");
@@ -46,6 +47,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             WorkerInput = workerInput;
             WorkerOutput = workerOutput;
             Files = files;
+            PreparedIntroducedTypeArtifact = preparedIntroducedTypeArtifact;
 
             List<(string ProjectRelativePath, string AssemblyResolvePath)> filePaths =
                 new List<(string ProjectRelativePath, string AssemblyResolvePath)>(files.Count);
@@ -77,6 +79,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal UnityCompilationAssembly CompilationAssembly { get; }
 
         internal string TargetDllPath { get; }
+
+        /// <summary>
+        /// The artifact this run prepared, or null when the run introduced no type. It is prepared
+        /// but not yet active, so a stage that publishes it has to activate it first.
+        /// </summary>
+        internal HotReloadIntroducedTypeArtifact PreparedIntroducedTypeArtifact { get; }
 
         internal string[] Defines { get; }
 

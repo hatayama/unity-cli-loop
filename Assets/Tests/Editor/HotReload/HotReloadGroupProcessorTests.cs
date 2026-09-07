@@ -40,31 +40,25 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// A two-file coverage loss fails both files before the application continuation runs.
+        /// A two-file coverage loss fails both files before the apply stage runs.
         /// </summary>
         [Test]
-        public async Task CompleteApplyAfterCoverageAsync_DroppedSourceLiveCaller_FailsEveryFileWithoutContinuation()
+        public async Task CompleteApplyAfterCoverageAsync_DroppedSourceLiveCaller_FailsEveryFileWithoutApplying()
         {
             HotReloadApplyContext context = CreateContext();
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = CreateGateResultWithoutExemptions();
             HotReloadGroupCompileResult compile = CreateCompile(target);
-            int continuationCalls = 0;
+            ApplyRecorder applyRecorder = new ApplyRecorder();
 
             IReadOnlyList<HotReloadFileProcessResult> results =
-                await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                await CompleteApplyWithRecorder(applyRecorder,
                     context,
                     gateResult,
                     compile,
-                    CancellationToken.None,
-                    () =>
-                    {
-                        continuationCalls++;
-                        return Task.FromResult<IReadOnlyList<HotReloadFileProcessResult>>(
-                            Array.Empty<HotReloadFileProcessResult>());
-                    });
+                    CancellationToken.None);
 
-            Assert.That(continuationCalls, Is.EqualTo(0));
+            Assert.That(applyRecorder.Calls, Is.EqualTo(0));
             Assert.That(results, Has.Count.EqualTo(2));
             string[] expectedPaths = { "Assets/CoverageCaller.cs", "Assets/CoverageTarget.cs" };
             for (int index = 0; index < results.Count; index++)
@@ -80,33 +74,29 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// A final source-live caller permits the continuation and preserves its returned results.
+        /// A final source-live caller permits the apply stage and preserves its returned results.
         /// </summary>
         [Test]
-        public async Task CompleteApplyAfterCoverageAsync_RetainedCaller_InvokesContinuationAndReturnsItsResults()
+        public async Task CompleteApplyAfterCoverageAsync_RetainedCaller_AppliesAndReturnsItsResults()
         {
             HotReloadApplyContext context = CreateContext();
             TransformWorkerEntryDto caller = CreateCallerEntry("Assets/CoverageCaller.cs");
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
             HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult = CreateGateResultWithoutExemptions();
             HotReloadGroupCompileResult compile = CreateCompile(caller, target);
-            int continuationCalls = 0;
+            ApplyRecorder applyRecorder = new ApplyRecorder();
             IReadOnlyList<HotReloadFileProcessResult> expected =
                 new[] { new HotReloadFileProcessResult(new List<HotReloadMethodOutcome>(), new List<string>(), 1) };
+            applyRecorder.Results = expected;
 
             IReadOnlyList<HotReloadFileProcessResult> results =
-                await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                await CompleteApplyWithRecorder(applyRecorder,
                     context,
                     gateResult,
                     compile,
-                    CancellationToken.None,
-                    () =>
-                    {
-                        continuationCalls++;
-                        return Task.FromResult(expected);
-                    });
+                    CancellationToken.None);
 
-            Assert.That(continuationCalls, Is.EqualTo(1));
+            Assert.That(applyRecorder.Calls, Is.EqualTo(1));
             Assert.That(results, Is.SameAs(expected));
         }
 
@@ -114,57 +104,47 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// A deletion exemption carried by the gate covers a caller absent from final entries.
         /// </summary>
         [Test]
-        public async Task CompleteApplyAfterCoverageAsync_DeletedCallerExemption_InvokesContinuationAndReturnsItsResults()
+        public async Task CompleteApplyAfterCoverageAsync_DeletedCallerExemption_AppliesAndReturnsItsResults()
         {
             HotReloadApplyContext context = CreateContext();
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
             HotReloadGroupCompileResult compile = CreateCompile(target);
-            int continuationCalls = 0;
+            ApplyRecorder applyRecorder = new ApplyRecorder();
             IReadOnlyList<HotReloadFileProcessResult> expected =
                 new[] { new HotReloadFileProcessResult(new List<HotReloadMethodOutcome>(), new List<string>(), 1) };
+            applyRecorder.Results = expected;
 
             IReadOnlyList<HotReloadFileProcessResult> results =
-                await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                await CompleteApplyWithRecorder(applyRecorder,
                     context,
                     CreateGateResultWithDeletedCallerExemption(),
                     compile,
-                    CancellationToken.None,
-                    () =>
-                    {
-                        continuationCalls++;
-                        return Task.FromResult(expected);
-                    });
+                    CancellationToken.None);
 
-            Assert.That(continuationCalls, Is.EqualTo(1));
+            Assert.That(applyRecorder.Calls, Is.EqualTo(1));
             Assert.That(results, Is.SameAs(expected));
         }
 
         /// <summary>
-        /// Membership evidence that changes after the worker prevents the production apply continuation from running.
+        /// Membership evidence that changes after the worker prevents the production apply stage from running.
         /// </summary>
         [Test]
-        public async Task CompleteApplyAfterCoverageAsync_WhenNewSourceMembershipChanges_DoesNotInvokeContinuation()
+        public async Task CompleteApplyAfterCoverageAsync_WhenNewSourceMembershipChanges_DoesNotApply()
         {
             HotReloadApplyContext context = CreateContext(CreateChangedMembershipEvidence());
             TransformWorkerEntryDto caller = CreateCallerEntry("Assets/CoverageCaller.cs");
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
             HotReloadGroupCompileResult compile = CreateCompile(caller, target);
-            int continuationCalls = 0;
+            ApplyRecorder applyRecorder = new ApplyRecorder();
 
             IReadOnlyList<HotReloadFileProcessResult> results =
-                await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                await CompleteApplyWithRecorder(applyRecorder,
                     context,
                     CreateGateResultWithoutExemptions(),
                     compile,
-                    CancellationToken.None,
-                    () =>
-                    {
-                        continuationCalls++;
-                        return Task.FromResult<IReadOnlyList<HotReloadFileProcessResult>>(
-                            Array.Empty<HotReloadFileProcessResult>());
-                    });
+                    CancellationToken.None);
 
-            Assert.That(continuationCalls, Is.EqualTo(0));
+            Assert.That(applyRecorder.Calls, Is.EqualTo(0));
             Assert.That(results, Has.Count.EqualTo(2));
             for (int index = 0; index < results.Count; index++)
             {
@@ -175,37 +155,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// A ready Editor state permits the final production continuation after revalidating actual membership evidence.
+        /// A ready Editor state permits the production apply stage after revalidating actual membership evidence.
         /// </summary>
         [Test]
-        public async Task CompleteApplyAfterCoverageAsync_WhenMembershipEvidenceStaysReady_InvokesContinuation()
+        public async Task CompleteApplyAfterCoverageAsync_WhenMembershipEvidenceStaysReady_Applies()
         {
             HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
             HotReloadApplyContext context = CreateContext(evidence);
             TransformWorkerEntryDto caller = CreateCallerEntry("Assets/CoverageCaller.cs");
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
-            int continuationCalls = 0;
+            ApplyRecorder applyRecorder = new ApplyRecorder();
 
-            await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+            await CompleteApplyWithRecorder(applyRecorder,
                 context,
                 CreateGateResultWithoutExemptions(),
                 CreateCompile(caller, target),
-                CancellationToken.None,
-                () =>
-                {
-                    continuationCalls++;
-                    return Task.FromResult<IReadOnlyList<HotReloadFileProcessResult>>(
-                        Array.Empty<HotReloadFileProcessResult>());
-                });
+                CancellationToken.None);
 
-            Assert.That(continuationCalls, Is.EqualTo(1));
+            Assert.That(applyRecorder.Calls, Is.EqualTo(1));
         }
 
         /// <summary>
-        /// An Editor state that becomes unsafe after evidence capture blocks the final production continuation.
+        /// An Editor state that becomes unsafe after evidence capture blocks the production apply stage.
         /// </summary>
         [Test]
-        public async Task CompleteApplyAfterCoverageAsync_WhenEditorBecomesUnsafe_DoesNotInvokeContinuation()
+        public async Task CompleteApplyAfterCoverageAsync_WhenEditorBecomesUnsafe_DoesNotApply()
         {
             HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
             HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
@@ -213,66 +187,54 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadApplyContext context = CreateContext(evidence);
             TransformWorkerEntryDto caller = CreateCallerEntry("Assets/CoverageCaller.cs");
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
-            int continuationCalls = 0;
+            ApplyRecorder applyRecorder = new ApplyRecorder();
 
             IReadOnlyList<HotReloadFileProcessResult> results =
-                await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                await CompleteApplyWithRecorder(applyRecorder,
                     context,
                     CreateGateResultWithoutExemptions(),
                     CreateCompile(caller, target),
-                    CancellationToken.None,
-                    () =>
-                    {
-                        continuationCalls++;
-                        return Task.FromResult<IReadOnlyList<HotReloadFileProcessResult>>(
-                            Array.Empty<HotReloadFileProcessResult>());
-                    });
+                    CancellationToken.None);
 
-            Assert.That(continuationCalls, Is.EqualTo(0));
+            Assert.That(applyRecorder.Calls, Is.EqualTo(0));
             Assert.That(results, Has.Count.EqualTo(2));
             Assert.That(results[0].Outcomes[0].Reason, Does.Contain("compiling"));
         }
 
         /// <summary>
-        /// Cancellation before the final main-thread revalidation prevents the production continuation.
+        /// Cancellation before the final main-thread revalidation prevents the production apply stage.
         /// </summary>
         [Test]
-        public void CompleteApplyAfterCoverageAsync_WhenCancelled_DoesNotInvokeContinuation()
+        public void CompleteApplyAfterCoverageAsync_WhenCancelled_DoesNotApply()
         {
             HotReloadApplyContext context = CreateContext();
             TransformWorkerEntryDto caller = CreateCallerEntry("Assets/CoverageCaller.cs");
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
-            int continuationCalls = 0;
+            ApplyRecorder applyRecorder = new ApplyRecorder();
             using CancellationTokenSource cancellation = new CancellationTokenSource();
             cancellation.Cancel();
 
             Assert.ThrowsAsync<TaskCanceledException>(async () =>
-                await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                await CompleteApplyWithRecorder(applyRecorder,
                     context,
                     CreateGateResultWithoutExemptions(),
                     CreateCompile(caller, target),
-                    cancellation.Token,
-                    () =>
-                    {
-                        continuationCalls++;
-                        return Task.FromResult<IReadOnlyList<HotReloadFileProcessResult>>(
-                            Array.Empty<HotReloadFileProcessResult>());
-                    }));
+                    cancellation.Token));
 
-            Assert.That(continuationCalls, Is.EqualTo(0));
+            Assert.That(applyRecorder.Calls, Is.EqualTo(0));
         }
 
         /// <summary>
-        /// Cancellation that arrives during synchronous membership revalidation prevents the final continuation.
+        /// Cancellation that arrives during synchronous membership revalidation prevents the apply stage.
         /// </summary>
         [Test]
-        public void CompleteApplyAfterCoverageAsync_WhenCancelledDuringRevalidation_DoesNotInvokeContinuation()
+        public void CompleteApplyAfterCoverageAsync_WhenCancelledDuringRevalidation_DoesNotApply()
         {
             HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
             HotReloadApplyContext context = CreateContext(evidence);
             TransformWorkerEntryDto caller = CreateCallerEntry("Assets/CoverageCaller.cs");
             TransformWorkerEntryDto target = CreateTargetEntry("Assets/CoverageTarget.cs");
-            int continuationCalls = 0;
+            ApplyRecorder applyRecorder = new ApplyRecorder();
             using CancellationTokenSource cancellation = new CancellationTokenSource();
             HotReloadEditorStateSnapshotProvider.CaptureForTesting = () =>
             {
@@ -281,19 +243,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             };
 
             Assert.ThrowsAsync<TaskCanceledException>(async () =>
-                await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                await CompleteApplyWithRecorder(applyRecorder,
                     context,
                     CreateGateResultWithoutExemptions(),
                     CreateCompile(caller, target),
-                    cancellation.Token,
-                    () =>
-                    {
-                        continuationCalls++;
-                        return Task.FromResult<IReadOnlyList<HotReloadFileProcessResult>>(
-                            Array.Empty<HotReloadFileProcessResult>());
-                    }));
+                    cancellation.Token));
 
-            Assert.That(continuationCalls, Is.EqualTo(0));
+            Assert.That(applyRecorder.Calls, Is.EqualTo(0));
         }
 
         /// <summary>
@@ -433,6 +389,56 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(file.ClearedAddedFieldNames, Is.Not.Null);
         }
 
+        /// <summary>
+        /// Runs the production post-coverage stage with the apply stage of the dependency bundle
+        /// replaced by a recorder, so a test observes whether the group reached its commit
+        /// boundary without patching anything.
+        /// </summary>
+        private static async Task<IReadOnlyList<HotReloadFileProcessResult>> CompleteApplyWithRecorder(
+            ApplyRecorder recorder,
+            HotReloadApplyContext context,
+            HotReloadSignatureChangeGate.SignatureChangeGateResult gateResult,
+            HotReloadGroupCompileResult compile,
+            CancellationToken ct)
+        {
+            using (recorder.Install())
+            {
+                return await HotReloadGroupProcessor.CompleteApplyAfterCoverageAsync(
+                    context,
+                    gateResult,
+                    compile,
+                    ct);
+            }
+        }
+
+        /// <summary>
+        /// Counts the calls of the bundle's apply stage and hands back the results a test expects.
+        /// </summary>
+        private sealed class ApplyRecorder
+        {
+            internal int Calls { get; private set; }
+
+            internal IReadOnlyList<HotReloadFileProcessResult> Results { get; set; } =
+                Array.Empty<HotReloadFileProcessResult>();
+
+            internal IDisposable Install()
+            {
+                return HotReloadGroupProcessorDependencies.BeginReplacement(
+                    HotReloadGroupProcessorDependencies.Create(
+                        HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                        HotReloadIntroducedTypePreparation.PrepareAsync,
+                        TransformWorkerClient.RunAsync,
+                        HotReloadGroupProcessor.GateAndCompileAsync,
+                        (context, compileResult, entriesToPatch) =>
+                            Array.Empty<HotReloadPreparedGroupFile>(),
+                        (context, compileResult, preparedFiles) =>
+                        {
+                            Calls++;
+                            return Results;
+                        }));
+            }
+        }
+
         private static HotReloadSignatureChangeGate.SignatureChangeGateResult CreateGateResultWithoutExemptions()
         {
             return HotReloadSignatureChangeGate.SignatureChangeGateResult.WarningsOnly(
@@ -524,7 +530,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     }
                 },
                 workerOutput,
-                new[] { callerFile, targetFile });
+                new[] { callerFile, targetFile },
+                null);
         }
 
         private static HotReloadApplyContext CreateEmptyEntriesContext(
@@ -549,7 +556,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 context.Defines,
                 context.WorkerInput,
                 emptyWorkerOutput,
-                context.Files);
+                context.Files,
+                null);
         }
 
         private static Assembly FindCompilationAssembly()

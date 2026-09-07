@@ -17,13 +17,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Func<IReadOnlyList<HotReloadGroupFile>, bool> validateNewSourceMembership,
             Func<IReadOnlyList<HotReloadGroupFile>, TransformWorkerInputDto, CancellationToken,
                 Task<HotReloadIntroducedTypePreparationResult>> prepareIntroducedTypes,
-            Func<TransformWorkerInputDto, CancellationToken, Task<TransformWorkerClientResult>> runWorker)
+            Func<TransformWorkerInputDto, CancellationToken, Task<TransformWorkerClientResult>> runWorker,
+            Func<HotReloadApplyContext, CancellationToken, Task<HotReloadGroupGateAndCompileResult>> gateAndCompile,
+            Func<HotReloadApplyContext, HotReloadShimCompileResult, TransformWorkerEntryDto[],
+                IReadOnlyList<HotReloadPreparedGroupFile>> prepareGroupEntries,
+            Func<HotReloadApplyContext, HotReloadShimCompileResult, IReadOnlyList<HotReloadPreparedGroupFile>,
+                IReadOnlyList<HotReloadFileProcessResult>> applyPreparedEntries)
         {
             ValidateNewSourceMembership = validateNewSourceMembership
                 ?? throw new ArgumentNullException(nameof(validateNewSourceMembership));
             PrepareIntroducedTypes = prepareIntroducedTypes
                 ?? throw new ArgumentNullException(nameof(prepareIntroducedTypes));
             RunWorker = runWorker ?? throw new ArgumentNullException(nameof(runWorker));
+            GateAndCompile = gateAndCompile ?? throw new ArgumentNullException(nameof(gateAndCompile));
+            PrepareGroupEntries = prepareGroupEntries
+                ?? throw new ArgumentNullException(nameof(prepareGroupEntries));
+            ApplyPreparedEntries = applyPreparedEntries
+                ?? throw new ArgumentNullException(nameof(applyPreparedEntries));
         }
 
         internal static HotReloadGroupProcessorDependencies Current => current;
@@ -44,24 +54,53 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal Func<TransformWorkerInputDto, CancellationToken, Task<TransformWorkerClientResult>> RunWorker { get; }
 
+        /// <summary>
+        /// Runs the signature-change gate and the group's shim compile.
+        /// </summary>
+        internal Func<HotReloadApplyContext, CancellationToken, Task<HotReloadGroupGateAndCompileResult>>
+            GateAndCompile { get; }
+
+        /// <summary>
+        /// Resolves every file of the group against the compiled shim before anything is mutated.
+        /// </summary>
+        internal Func<HotReloadApplyContext, HotReloadShimCompileResult, TransformWorkerEntryDto[],
+            IReadOnlyList<HotReloadPreparedGroupFile>> PrepareGroupEntries { get; }
+
+        /// <summary>
+        /// Applies the resolved files: the commit boundary of a group run.
+        /// </summary>
+        internal Func<HotReloadApplyContext, HotReloadShimCompileResult, IReadOnlyList<HotReloadPreparedGroupFile>,
+            IReadOnlyList<HotReloadFileProcessResult>> ApplyPreparedEntries { get; }
+
         internal static HotReloadGroupProcessorDependencies CreateProduction()
         {
             return new HotReloadGroupProcessorDependencies(
                 HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
                 HotReloadIntroducedTypePreparation.PrepareAsync,
-                TransformWorkerClient.RunAsync);
+                TransformWorkerClient.RunAsync,
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadEntryApplier.ApplyPreparedEntries);
         }
 
         internal static HotReloadGroupProcessorDependencies Create(
             Func<IReadOnlyList<HotReloadGroupFile>, bool> validateNewSourceMembership,
             Func<IReadOnlyList<HotReloadGroupFile>, TransformWorkerInputDto, CancellationToken,
                 Task<HotReloadIntroducedTypePreparationResult>> prepareIntroducedTypes,
-            Func<TransformWorkerInputDto, CancellationToken, Task<TransformWorkerClientResult>> runWorker)
+            Func<TransformWorkerInputDto, CancellationToken, Task<TransformWorkerClientResult>> runWorker,
+            Func<HotReloadApplyContext, CancellationToken, Task<HotReloadGroupGateAndCompileResult>> gateAndCompile,
+            Func<HotReloadApplyContext, HotReloadShimCompileResult, TransformWorkerEntryDto[],
+                IReadOnlyList<HotReloadPreparedGroupFile>> prepareGroupEntries,
+            Func<HotReloadApplyContext, HotReloadShimCompileResult, IReadOnlyList<HotReloadPreparedGroupFile>,
+                IReadOnlyList<HotReloadFileProcessResult>> applyPreparedEntries)
         {
             return new HotReloadGroupProcessorDependencies(
                 validateNewSourceMembership,
                 prepareIntroducedTypes,
-                runWorker);
+                runWorker,
+                gateAndCompile,
+                prepareGroupEntries,
+                applyPreparedEntries);
         }
 
         /// <summary>
