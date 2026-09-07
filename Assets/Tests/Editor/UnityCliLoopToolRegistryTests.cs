@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -600,7 +601,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
             string[] references = asmdef["references"]?.Values<string>().ToArray() ?? new string[0];
-            return references.Select(ResolveAsmdefReference).ToArray();
+            // Why build once here: resolving each reference on its own used to rescan the whole
+            // project tree per reference, which cost seconds on asmdefs with many references.
+            Dictionary<string, string> guidToAssemblyName = AsmdefGuidNameMap.Build();
+            return references
+                .Select(reference => AsmdefGuidNameMap.Resolve(reference, guidToAssemblyName))
+                .ToArray();
         }
 
         private static void AssertThirdPartyTool(System.Type toolType, bool expected)
@@ -608,32 +614,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(toolType, Is.Not.Null);
             string assemblyName = toolType.Assembly.GetName().Name;
             Assert.That(ToolAssemblyClassifier.IsThirdPartyAssembly(assemblyName), Is.EqualTo(expected));
-        }
-
-        private static string ResolveAsmdefReference(string reference)
-        {
-            const string guidPrefix = "GUID:";
-            if (!reference.StartsWith(guidPrefix, System.StringComparison.Ordinal))
-            {
-                return reference;
-            }
-
-            string guid = reference.Substring(guidPrefix.Length);
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            foreach (string metaPath in Directory.GetFiles(projectRoot, "*.asmdef.meta", SearchOption.AllDirectories))
-            {
-                string meta = File.ReadAllText(metaPath);
-                if (!meta.Contains($"guid: {guid}"))
-                {
-                    continue;
-                }
-
-                string resolvedAsmdefPath = metaPath.Substring(0, metaPath.Length - ".meta".Length);
-                JObject asmdef = JObject.Parse(File.ReadAllText(resolvedAsmdefPath));
-                return asmdef["name"]?.Value<string>() ?? reference;
-            }
-
-            return reference;
         }
 
         [Test]

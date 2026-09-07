@@ -111,7 +111,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ProjectAsmdefFileNames_WhenLoaded_UseUnityCliLoopName()
         {
             // Tests that tracked asmdef asset filenames no longer expose the legacy project name.
-            string[] legacyFileNames = ReadProjectAsmdefPaths()
+            string[] legacyFileNames = AsmdefGuidNameMap.ReadProjectAsmdefPaths()
                 .Select(Path.GetFileName)
                 .Where(fileName => fileName.IndexOf("uLoopMCP", StringComparison.Ordinal) >= 0)
                 .OrderBy(fileName => fileName)
@@ -124,8 +124,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ProjectAsmdefNames_WhenLoaded_UseUnityCliLoopName()
         {
             // Tests that tracked asmdef assembly names no longer expose the legacy project name.
-            string[] legacyAssemblyNames = ReadProjectAsmdefPaths()
-                .Select(ReadAsmdefName)
+            string[] legacyAssemblyNames = AsmdefGuidNameMap.ReadProjectAsmdefPaths()
+                .Select(AsmdefGuidNameMap.ReadAsmdefName)
                 .Where(assemblyName => assemblyName.IndexOf("uLoopMCP", StringComparison.Ordinal) >= 0)
                 .OrderBy(assemblyName => assemblyName)
                 .ToArray();
@@ -137,9 +137,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ProjectAsmdefs_WhenLoaded_AutoReferenceOnlyPublicAssemblies()
         {
             // Tests that internal assemblies require explicit asmdef references while public API assemblies stay reachable.
-            string[] offendingAssemblyNames = ReadProjectAsmdefPaths()
+            string[] offendingAssemblyNames = AsmdefGuidNameMap.ReadProjectAsmdefPaths()
                 .Where(ReadAutoReferencedFromAbsolutePath)
-                .Select(ReadAsmdefName)
+                .Select(AsmdefGuidNameMap.ReadAsmdefName)
                 .Where(assemblyName => !IsPublicAutoReferencedAssembly(assemblyName))
                 .OrderBy(assemblyName => assemblyName)
                 .ToArray();
@@ -153,14 +153,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             // Tests that assemblies depending on package editor code stay out of player builds.
             HashSet<string> editorOnlyPackageAssemblyNames = ReadProductionPackageAsmdefPaths()
                 .Where(IsEditorOnlyAsmdef)
-                .Select(ReadAsmdefName)
+                .Select(AsmdefGuidNameMap.ReadAsmdefName)
                 .ToHashSet(StringComparer.Ordinal);
 
-            string[] offendingAssemblyNames = ReadProjectAsmdefPaths()
+            Dictionary<string, string> guidToAssemblyName = AsmdefGuidNameMap.Build();
+            string[] offendingAssemblyNames = AsmdefGuidNameMap.ReadProjectAsmdefPaths()
                 .Where(path => !IsUnityIncludeTestsAsmdef(path))
                 .Where(path => !IsEditorOnlyAsmdef(path))
-                .Where(path => ReadResolvedReferencesFromAbsolutePath(path).Any(editorOnlyPackageAssemblyNames.Contains))
-                .Select(ReadAsmdefName)
+                .Where(path => ReadResolvedReferencesFromAbsolutePath(path, guidToAssemblyName)
+                    .Any(editorOnlyPackageAssemblyNames.Contains))
+                .Select(AsmdefGuidNameMap.ReadAsmdefName)
                 .OrderBy(assemblyName => assemblyName)
                 .ToArray();
 
@@ -813,10 +815,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ProductionAsmdefs_WhenLoaded_DoNotReferenceCompositionRootExceptCompositionRootItself()
         {
             // Tests that composition root dependencies do not leak back into production assemblies.
+            Dictionary<string, string> guidToAssemblyName = AsmdefGuidNameMap.Build();
             string[] offendingAssemblyNames = ReadProductionAsmdefPaths()
-                .Where(path => ReadAsmdefName(path) != CompositionRootAssemblyName)
-                .Where(path => ReadResolvedReferencesFromAbsolutePath(path).Contains(CompositionRootAssemblyName))
-                .Select(ReadAsmdefName)
+                .Where(path => AsmdefGuidNameMap.ReadAsmdefName(path) != CompositionRootAssemblyName)
+                .Where(path => ReadResolvedReferencesFromAbsolutePath(path, guidToAssemblyName)
+                    .Contains(CompositionRootAssemblyName))
+                .Select(AsmdefGuidNameMap.ReadAsmdefName)
                 .OrderBy(assemblyName => assemblyName)
                 .ToArray();
 
@@ -937,9 +941,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void ProjectAsmdefs_WhenLoaded_DoNotReferenceRemovedSharedAssemblyGuid()
         {
             // Tests that removed module asmdefs do not leave stale GUID references in dependent asmdefs.
-            string[] offendingReferences = ReadProjectAsmdefPaths()
+            string[] offendingReferences = AsmdefGuidNameMap.ReadProjectAsmdefPaths()
                 .Where(path => ReadRawReferences(path).Contains(RemovedSharedAssemblyGuidReference))
-                .Select(path => $"{ReadAsmdefName(path)} references removed shared assembly")
+                .Select(path => $"{AsmdefGuidNameMap.ReadAsmdefName(path)} references removed shared assembly")
                 .OrderBy(reference => reference)
                 .ToArray();
 
@@ -1232,7 +1236,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static string[] ReadResolvedReferences(string relativeAsmdefPath)
         {
             string asmdefPath = Path.Combine(UnityCliLoopPathResolver.GetProjectRoot(), relativeAsmdefPath);
-            return ReadResolvedReferencesFromAbsolutePath(asmdefPath);
+            return ReadResolvedReferencesFromAbsolutePath(asmdefPath, AsmdefGuidNameMap.Build());
         }
 
         private static bool IsPublicAutoReferencedAssembly(string assemblyName)
@@ -1244,15 +1248,16 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                    string.Equals(assemblyName, PausePointsRuntimeAssemblyName, StringComparison.Ordinal);
         }
 
-        private static string[] ReadResolvedReferencesFromAbsolutePath(string asmdefPath)
+        private static string[] ReadResolvedReferencesFromAbsolutePath(
+            string asmdefPath,
+            Dictionary<string, string> guidToAssemblyName)
         {
-            Dictionary<string, string> guidToAssemblyNameMap = BuildGuidToAssemblyNameMap();
             string[] rawReferences = ReadRawReferences(asmdefPath);
             List<string> resolvedReferences = new();
 
             foreach (string rawReference in rawReferences)
             {
-                resolvedReferences.Add(ResolveReference(rawReference, guidToAssemblyNameMap));
+                resolvedReferences.Add(AsmdefGuidNameMap.Resolve(rawReference, guidToAssemblyName));
             }
 
             return resolvedReferences
@@ -1417,92 +1422,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private static string NormalizeRelativePath(string path)
         {
             return path.Replace(Path.DirectorySeparatorChar, '/');
-        }
-
-        private static Dictionary<string, string> BuildGuidToAssemblyNameMap()
-        {
-            string[] asmdefPaths = ReadProjectAsmdefPaths();
-            Dictionary<string, string> guidToAssemblyNameMap = new();
-
-            foreach (string asmdefPath in asmdefPaths)
-            {
-                string metaPath = asmdefPath + ".meta";
-                if (!File.Exists(metaPath))
-                {
-                    continue;
-                }
-
-                string guid = ReadMetaGuid(metaPath);
-                if (string.IsNullOrEmpty(guid))
-                {
-                    continue;
-                }
-
-                guidToAssemblyNameMap[guid] = ReadAsmdefName(asmdefPath);
-            }
-
-            return guidToAssemblyNameMap;
-        }
-
-        private static string[] ReadProjectAsmdefPaths()
-        {
-            string projectRoot = UnityCliLoopPathResolver.GetProjectRoot();
-            List<string> asmdefPaths = new();
-            string assetsPath = Path.Combine(projectRoot, "Assets");
-            string packagesSrcPath = Path.Combine(projectRoot, "Packages", "src");
-
-            if (Directory.Exists(assetsPath))
-            {
-                asmdefPaths.AddRange(Directory.GetFiles(assetsPath, "*.asmdef", SearchOption.AllDirectories));
-            }
-
-            if (Directory.Exists(packagesSrcPath))
-            {
-                asmdefPaths.AddRange(Directory.GetFiles(packagesSrcPath, "*.asmdef", SearchOption.AllDirectories));
-            }
-
-            return asmdefPaths.ToArray();
-        }
-
-        private static string ResolveReference(string reference, Dictionary<string, string> guidToAssemblyNameMap)
-        {
-            const string guidReferencePrefix = "GUID:";
-            if (!reference.StartsWith(guidReferencePrefix))
-            {
-                return reference;
-            }
-
-            string guid = reference.Substring(guidReferencePrefix.Length);
-            if (!guidToAssemblyNameMap.ContainsKey(guid))
-            {
-                return reference;
-            }
-
-            return guidToAssemblyNameMap[guid];
-        }
-
-        private static string ReadMetaGuid(string metaPath)
-        {
-            string[] lines = File.ReadAllLines(metaPath);
-
-            foreach (string line in lines)
-            {
-                string trimmedLine = line.Trim();
-                if (!trimmedLine.StartsWith("guid:"))
-                {
-                    continue;
-                }
-
-                return trimmedLine.Substring("guid:".Length).Trim();
-            }
-
-            return string.Empty;
-        }
-
-        private static string ReadAsmdefName(string asmdefPath)
-        {
-            JObject asmdef = JObject.Parse(File.ReadAllText(asmdefPath));
-            return asmdef["name"]?.Value<string>() ?? string.Empty;
         }
     }
 }
