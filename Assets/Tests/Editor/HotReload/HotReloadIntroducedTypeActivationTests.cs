@@ -25,7 +25,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             _previousSnapshotProvider = HotReloadEditorStateSnapshotProvider.CaptureForTesting;
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         // Why reverting here as well: a run of this class patches a fixture caller against an
@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         /// <summary>

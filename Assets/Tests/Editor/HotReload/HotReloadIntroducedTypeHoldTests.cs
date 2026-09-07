@@ -135,8 +135,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: an introduced type is not counted as a patch — neither the pause-point patch
-        /// count nor the reported active patch total moves when a type becomes active.
+        /// What: an introduced type is not counted as a patch — the reported active patch total
+        /// does not move when a type becomes active.
         /// </summary>
         [Test]
         public void ActiveIntroducedType_LeavesThePatchCountsAtZero()
@@ -147,10 +147,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 ActivateArtifactWithOneType();
 
                 Assert.That(HotReloadActiveChangeCounts.IntroducedTypeCount, Is.EqualTo(1));
-                Assert.That(
-                    ReadPausePointPatchCount(),
-                    Is.EqualTo(0),
-                    "The pause-point side asks for shims, which a type declaration never adds.");
                 Assert.That(
                     HotReloadStatusExecutor.ExecuteStatus().ActivePatchTotal,
                     Is.EqualTo(0),
@@ -234,13 +230,6 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     "One patch and one type are two changes to lose, not one.");
                 Assert.That(HotReloadActiveChangeCounts.RuntimeChangeTotal, Is.EqualTo(2));
             }
-        }
-
-        private static int ReadPausePointPatchCount()
-        {
-            Func<int> reader = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
-            Assert.That(reader, Is.Not.Null, "Precondition: the pause-point count must be wired.");
-            return reader();
         }
 
         // The production route of an apply run: the orchestrator run, then the accumulator's

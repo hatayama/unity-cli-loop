@@ -27,14 +27,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             _ledgerSessionScope = new HotReloadPlayModeEntryDropLedgerSessionScope();
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
             _ledgerSessionScope.Restore();
         }
 
@@ -932,7 +932,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     nameof(HotReloadCoreFixture.ReplaceableCompute),
                     BindingFlags.Instance | BindingFlags.Public,
                     nameof(HotReloadHandwrittenShims.ReplaceableCompute__shim0));
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
                 Assert.That(HotReloadAutoRefreshHold.IsHeld, Is.True);
 
                 HotReloadTool tool = new HotReloadTool();
@@ -949,7 +949,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 HotReloadPatcher.RevertAll();
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
             }
         }
 
@@ -1072,7 +1072,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             {
                 HotReloadAutoRefreshHold.OverrideServiceForTesting = previous;
                 HotReloadPatcher.RevertAll();
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
             }
         }
 

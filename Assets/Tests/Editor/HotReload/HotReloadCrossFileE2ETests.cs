@@ -44,14 +44,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void SetUp()
         {
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
             VibeLogger.ClearMemoryLogs();
         }
 
@@ -286,7 +286,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             AssertKind(applied, HotReloadMethodOutcomeKind.Patched, "CalledFromCrossAssembly");
 
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
 
             HotReloadOrchestratorResult isolated = await HotReloadOrchestrator.RunAsync(
                 new[] { hostPath, crossAssemblyPath },

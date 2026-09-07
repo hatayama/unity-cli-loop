@@ -350,7 +350,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 HotReloadAutoRefreshHold.OverrideServiceForTesting = previous;
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
             }
         }
 
@@ -385,7 +385,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             finally
             {
                 HotReloadAutoRefreshHold.OverrideServiceForTesting = previous;
-                HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+                HotReloadAutoRefreshHold.SyncToActiveChanges();
             }
         }
 

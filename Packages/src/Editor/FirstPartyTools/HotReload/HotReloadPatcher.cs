@@ -85,7 +85,6 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                 return null;
             };
-            HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = () => ActiveChangeCount;
             HotReloadPausePointCoordination.GetTransplantLocals = method =>
                 TransplantLocalsByMethod.TryGetValue(method, out IReadOnlyList<LocalBuilder> locals)
                     ? locals

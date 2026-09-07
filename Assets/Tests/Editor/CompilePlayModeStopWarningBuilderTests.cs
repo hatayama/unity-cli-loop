@@ -71,6 +71,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 activeHotReloadChangeCount: 3);
 
             Assert.That(warning, Does.Contain("3 active hot-reload change(s)"));
+            Assert.That(
+                warning,
+                Does.Contain("drops every hot-reload change, introduced types included"),
+                "A caller must not read the warning as covering patched methods only.");
             Assert.That(warning, Does.Not.Contain("Play Mode"));
         }
 

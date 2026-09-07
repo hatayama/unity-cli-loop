@@ -1,4 +1,8 @@
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
+using Newtonsoft.Json.Linq;
 
 using NUnit.Framework;
 
@@ -22,14 +26,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         public void SetUp()
         {
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         [TearDown]
         public void TearDown()
         {
             HotReloadPatcher.RevertAll();
-            HotReloadAutoRefreshHold.Sync(HotReloadPatcher.ActiveChangeCount);
+            HotReloadAutoRefreshHold.SyncToActiveChanges();
         }
 
         /// <summary>
@@ -116,6 +120,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(response.Message, Is.EqualTo("No active hot-reload changes to revert."));
                 Assert.That(response.ShouldSerializeActiveIntroducedTypeTotal(), Is.False);
                 Assert.That(response.ShouldSerializeIntroducedTypes(), Is.False);
+            }
+        }
+
+        /// <summary>
+        /// What: a refused apply warns that changes are still active when the only thing this
+        /// domain holds is an introduced type, and still reports zero patches.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenAnIntroducedTypeIsActiveAndTheApplyIsRefused_WarnsThatChangesRemain()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                ActivateArtifactWithTwoTypes();
+
+                HotReloadTool tool = new HotReloadTool();
+                JObject parameters = new JObject
+                {
+                    ["Status"] = true,
+                    ["Files"] = new JArray("Assets/Scripts/Player.cs")
+                };
+
+                UnityCliLoopToolResponse baseResponse =
+                    await tool.ExecuteAsync(parameters, CancellationToken.None);
+                HotReloadResponse response = baseResponse as HotReloadResponse;
+
+                Assert.That(response, Is.Not.Null);
+                Assert.That(response.Success, Is.False);
+                Assert.That(response.ActivePatchTotal, Is.EqualTo(0), "Arrange: no method is patched.");
+                Assert.That(
+                    response.Message,
+                    Does.EndWith("2 hot-reload change(s) are still active."),
+                    "A refusal must not tell the caller the domain is clean while it holds two types.");
             }
         }
 

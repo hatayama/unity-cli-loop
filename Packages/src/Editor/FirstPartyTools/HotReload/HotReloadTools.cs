@@ -292,13 +292,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(failure != null, "failure must not be null.");
             int activePatchTotal = HotReloadPatcher.ActiveChangeCount;
+            // Why two numbers: the suffix warns that the refusal left something live, and an
+            // introduced type is live even when nothing is patched. ActivePatchTotal stays a patch
+            // count because callers read it against PatchedTotal.
+            int runtimeChangeTotal = HotReloadActiveChangeCounts.RuntimeChangeTotal;
             string message = failure.Message;
             string[] nextActions = failure.NextActions;
-            if (activePatchTotal > 0)
+            if (runtimeChangeTotal > 0)
             {
                 message += string.Format(
                     HotReloadConstants.ValidationFailureActiveChangesSuffixFormat,
-                    activePatchTotal);
+                    runtimeChangeTotal);
                 nextActions = AppendNextAction(
                     nextActions,
                     HotReloadConstants.ValidationFailureInspectOrRevertNextAction);
