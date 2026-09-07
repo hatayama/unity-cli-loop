@@ -285,6 +285,11 @@ internal static class WorkerGroupPipeline
                     entry.Key.RetainedIntroducedTypeMetadataNames.Add(
                         WorkerSyntaxIndex.BuildTypeMetadataNameFromSyntax(typeDeclaration));
                 }
+                else if (declaration is EnumDeclarationSyntax enumDeclaration)
+                {
+                    entry.Key.RetainedIntroducedTypeMetadataNames.Add(
+                        WorkerSyntaxIndex.BuildEnumMetadataNameFromSyntax(enumDeclaration));
+                }
             }
 
             IntroducedTypeBindingRewriter.RemoveRetainedDeclarations(

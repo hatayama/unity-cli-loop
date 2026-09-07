@@ -46,6 +46,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string CompiledDependentSnapshotSource =
             "namespace Example { public class Dependent { public int Value() { return 1; } } }";
 
+        // The same file after an edit that changes a method body and introduces an enum beside
+        // the compiled type. An enum is a supported introduced type but not a class declaration,
+        // and the two travel through different syntax nodes.
+        private const string EditedSourceIntroducingAnEnum =
+            "namespace Example { public class Dependent { public int Value() { return 2; } } "
+            + "public enum IntroducedChoice { First } }";
+
         // The same file after an edit that changes a method body and introduces a type beside
         // the compiled one.
         private const string EditedSourceIntroducingAType =
@@ -320,6 +327,31 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CollectDriftWarnings(result),
                 Is.Empty,
                 "The reload applied the introduced type, so nothing about it requires a compile.");
+        }
+
+        /// <summary>
+        /// What: an enum this reload introduced into an edited compiled file is not reported as an
+        /// edit outside a method body either. An enum is a supported introduced type, and it
+        /// reaches the drift check through a declaration node no type-declaration rewrite visits.
+        /// </summary>
+        [Test]
+        public async Task Transform_WhenTheEditIntroducesAnEnum_DoesNotWarnAboutEditsOutsideMethodBodies()
+        {
+            BindingFixture fixture = CreateFixture(
+                "IntroducedEnumDrift",
+                EditedSourceIntroducingAnEnum,
+                includeCompiledDependent: true);
+
+            TransformWorkerClientResult result = await RunTransformAfterIntroducingAsync(
+                fixture,
+                CompiledDependentSnapshotSource,
+                "Example.IntroducedChoice");
+
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(
+                CollectDriftWarnings(result),
+                Is.Empty,
+                "The reload applied the introduced enum, so nothing about it requires a compile.");
         }
 
         // The production two-step: one run plans the new type and reports the fingerprint the
