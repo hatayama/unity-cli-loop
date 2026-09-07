@@ -266,10 +266,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Debug.Assert(method != null, "method must not be null.");
 
             failureReason = null;
-            if (!ShimByMethod.Remove(method))
+            if (!ShimByMethod.TryGetValue(method, out MethodInfo recordedShim))
             {
                 return HotReloadRevertOutcome.NotPatched;
             }
+
+            // Kept for the failure path: status, the Auto Refresh hold and the next apply's
+            // "unpatch the previous transpiler first" decision all read these two, so a rebuild
+            // failure that leaves the patch live must leave them describing that patch.
+            string recordedFilePath = FilePathByMethod.TryGetValue(method, out string filePathValue)
+                ? filePathValue
+                : null;
+            ShimByMethod.Remove(method);
 
             // Why Remove before Unpatch: Harmony rebuilds the method during Unpatch, and the
             // pause-point guard sees GetActiveShimForMethod == null so surviving markers are
@@ -292,16 +300,46 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 // Same approved exception as the apply path: a Harmony rebuild failure cannot be
                 // pre-validated, and an escaping exception would abort the run while leaving the
-                // other methods of the group unreverted. The ledger entry is already gone, which
-                // is the asymmetry the apply path's failure contract has as well.
+                // other methods of the group unreverted. Unlike the apply path, which converges
+                // on "no ledger entry, no patch" through its own cleanup Unpatch, a failed
+                // rebuild here can leave the transpiler live: restore the ledger entry in that
+                // case only, so status and the next apply still see the patch that is there.
                 failureReason = "Reverting '" + methodKey + "' failed: " + exception.Message;
                 HotReloadOrchestratorLog.LogHotReloadRevertFailed(methodKey, exception);
+                if (HasLiveHotReloadTranspiler(method))
+                {
+                    ShimByMethod[method] = recordedShim;
+                    FilePathByMethod[method] = recordedFilePath ?? string.Empty;
+                    return HotReloadRevertOutcome.UnpatchFailed;
+                }
+
                 HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
                 return HotReloadRevertOutcome.UnpatchFailed;
             }
 
             HotReloadPausePointCoordination.OnHotReloadPatchStateChanged?.Invoke(method, false);
             return HotReloadRevertOutcome.Reverted;
+        }
+
+        // Whether Harmony still holds this hot-reload transpiler, which decides if a failed
+        // rebuild left the patch live.
+        private static bool HasLiveHotReloadTranspiler(MethodBase method)
+        {
+            Patches patchInfo = Harmony.GetPatchInfo(method);
+            if (patchInfo == null || patchInfo.Transpilers == null)
+            {
+                return false;
+            }
+
+            foreach (Patch transpiler in patchInfo.Transpilers)
+            {
+                if (string.Equals(transpiler.owner, HotReloadConstants.HarmonyId, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static void Unpatch(MethodBase method)

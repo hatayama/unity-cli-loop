@@ -425,8 +425,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: a Harmony rebuild failure while reverting is contained as that method's failure,
-        /// drops it from the patch ledger anyway, and lets the next revert continue.
+        /// What: a Harmony rebuild failure while reverting is contained as that method's failure
+        /// and keeps the still-patched method in the ledger, and a later revert of the same
+        /// method succeeds once the rebuild works again.
         /// </summary>
         [Test]
         public void Revert_WhenHarmonyCannotRebuild_ContainsTheFailureAndKeepsRevertingOthers()
@@ -439,6 +440,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.StaticPing));
             MethodInfo survivingShim = AccessTools.Method(
                 typeof(HotReloadHandwrittenShims), nameof(HotReloadHandwrittenShims.StaticPing__shim0));
+            string failingKey = HotReloadMethodKeys.FormatMethodLabel(failing);
             Assert.That(
                 HotReloadPatcher.Apply(failing, failingShim, HotReloadPatchShape.Transplant, "Assets/Tests/Fixture.cs").Success,
                 Is.True);
@@ -463,8 +465,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(failureReason, Does.Contain("rebuild failed"));
             Assert.That(
                 HotReloadPatcher.ActivePatchCount,
-                Is.EqualTo(1),
-                "The ledger entry must be gone even though Harmony could not restore the body.");
+                Is.EqualTo(2),
+                "The transpiler is still live, so the ledger must keep describing it.");
+            Assert.That(
+                HotReloadPatcher.DescribeActivePatches().Select(patch => patch.MethodKey),
+                Does.Contain(failingKey),
+                "Status has to keep reporting a patch Harmony could not remove.");
+            Assert.That(
+                HotReloadPatcher.Revert(failing, out string _),
+                Is.EqualTo(HotReloadRevertOutcome.Reverted),
+                "Once the rebuild works, the retained entry must revert instead of reporting NotPatched.");
+            Assert.That(HotReloadPatcher.ActivePatchCount, Is.EqualTo(1));
             Assert.That(
                 HotReloadPatcher.Revert(surviving, out string _),
                 Is.EqualTo(HotReloadRevertOutcome.Reverted),
