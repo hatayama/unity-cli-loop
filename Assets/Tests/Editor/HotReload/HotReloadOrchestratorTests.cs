@@ -2589,6 +2589,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 failingPath,
                 CancellationToken.None);
 
+            // Why the Failed outcome as well: no active patch alone would also hold for a run
+            // that never reached the shim compile, and the position under test is only pinned by
+            // a run that reached it and failed there.
+            AssertHasFailed(failed, nameof(HotReloadE2EFixture.CallsMissingHelper));
             Assert.That(
                 failed.ActivePatchTotal,
                 Is.EqualTo(0),
