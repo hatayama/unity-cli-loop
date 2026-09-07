@@ -91,6 +91,126 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// Verifies that a type failure fails the run and reports the type instead of a generic
+        /// method row, so the response says which declaration the reload refused.
+        /// </summary>
+        [Test]
+        public async Task Build_TypePreparationReportsATypeFailure_FailsTheRunWithATypeRow()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreatePreparationDependencies(
+                        HotReloadIntroducedTypePreparationResult.TypeFailures(
+                            new[]
+                            {
+                                HotReloadIntroducedTypeOutcome.Failed(
+                                    IntroducedTypeMetadataName,
+                                    "SomeAssembly",
+                                    "Assets/Example.cs",
+                                    InjectedTypeFailureReason)
+                            }))))
+                {
+                    HotReloadResponse response = await RunAgainstTheHostAsync();
+
+                    Assert.That(
+                        response.Success,
+                        Is.False,
+                        "A refused type declaration must fail the run.");
+                    Assert.That(response.IntroducedTypes.Count, Is.EqualTo(1));
+                    Assert.That(response.IntroducedTypes[0].Kind, Is.EqualTo("Failed"));
+                    Assert.That(response.IntroducedTypes[0].Reason, Is.EqualTo(InjectedTypeFailureReason));
+                    Assert.That(
+                        response.RecommendedNextAction,
+                        Is.Not.Empty,
+                        "A failed run must recommend what to do next.");
+                    Assert.That(
+                        CountMethodFailures(response, InjectedTypeFailureReason),
+                        Is.EqualTo(0),
+                        "A type failure must not be reported a second time as a method row.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a preparation worker that fails to run is reported as the run-level
+        /// failure it is, not as a type outcome: the preparation runs for every reload, including
+        /// the ones that declare no type at all.
+        /// </summary>
+        [Test]
+        public async Task Build_PreparationWorkerFails_ReportsTheFailureWithoutAnyTypeRow()
+        {
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreatePreparationDependencies(
+                        HotReloadIntroducedTypePreparationResult.WorkerFailure(InjectedWorkerFailureReason))))
+                {
+                    HotReloadResponse response = await RunAgainstTheHostAsync();
+
+                    Assert.That(response.Success, Is.False, "A failed preparation must fail the run.");
+                    Assert.That(
+                        response.IntroducedTypes.Count,
+                        Is.EqualTo(0),
+                        "A worker that never ran refused no declaration, so there is no type to report.");
+                    Assert.That(
+                        CountMethodFailures(response, InjectedWorkerFailureReason),
+                        Is.GreaterThan(0),
+                        "The run-level failure must still be reported against the files of the group.");
+                }
+            }
+        }
+
+        // The production pipeline with only the preparation stage replaced, which is the one stage
+        // whose two failure kinds cannot both be provoked from a fixture the repository compiles.
+        private static HotReloadGroupProcessorDependencies CreatePreparationDependencies(
+            HotReloadIntroducedTypePreparationResult preparationResult)
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                (files, input, ct) => Task.FromResult(preparationResult),
+                TransformWorkerClient.RunAsync,
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadEntryApplier.ApplyPreparedEntries);
+        }
+
+        private static async Task<HotReloadResponse> RunAgainstTheHostAsync()
+        {
+            string hostPath = FixturePath(HostFileName);
+            HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                new[] { hostPath },
+                HotReloadTestSourceWriter.WriteEditedSource(
+                    "IntroducedTypeFailureHost.cs",
+                    InsertIntroducedType(File.ReadAllText(hostPath))),
+                CancellationToken.None);
+            return HotReloadApplyResponseBuilder.Build(result, null);
+        }
+
+        private static int CountMethodFailures(HotReloadResponse response, string reasonFragment)
+        {
+            int count = 0;
+            foreach (HotReloadMethodResult method in response.Methods)
+            {
+                if (string.Equals(method.Kind, "Failed", StringComparison.Ordinal)
+                    && method.Reason.Contains(reasonFragment, StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private const string InjectedTypeFailureReason =
+            "The introduced type artifact could not be compiled.";
+
+        private const string InjectedWorkerFailureReason =
+            "Introduced-type preparation failed: the worker did not answer.";
+
         // The production route of an apply run: the orchestrator run, then the response builder
         // the tool calls with its result.
         private static async Task<HotReloadResponse> RunIntroducingOnlyATypeAsync()

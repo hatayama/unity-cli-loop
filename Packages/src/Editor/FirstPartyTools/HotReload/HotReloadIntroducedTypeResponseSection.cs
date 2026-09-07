@@ -11,6 +11,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </remarks>
     internal static class HotReloadIntroducedTypeResponseSection
     {
+        internal static bool HoldsFailure(IReadOnlyList<HotReloadIntroducedTypeOutcome> outcomes)
+        {
+            foreach (HotReloadIntroducedTypeOutcome outcome in outcomes)
+            {
+                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Failed)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         internal static List<HotReloadIntroducedTypeResult> BuildRows(
             IReadOnlyList<HotReloadIntroducedTypeOutcome> outcomes)
         {

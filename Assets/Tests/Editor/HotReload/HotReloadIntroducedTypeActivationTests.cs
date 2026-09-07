@@ -416,10 +416,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         CreateRedefiningEdits(hostPath, callerPath));
 
                     Assert.That(
-                        FindFailureReason(second, "requires a compile"),
-                        Is.Not.Null,
+                        CountTypeFailures(second, "requires a compile"),
+                        Is.EqualTo(1),
                         "A redefined introduced type must fail the reload with a compile hint.\n"
                         + DescribeOutcomes(second));
+                    Assert.That(
+                        FindTypeFailureOwner(second, "requires a compile"),
+                        Does.EndWith(Path.GetFileName(hostPath)),
+                        "The refusal must name the file that redefines the type.");
+                    Assert.That(
+                        CountFailures(second, "requires a compile"),
+                        Is.EqualTo(0),
+                        "A type failure must not be reported a second time as a method row.");
                 }
 
                 Assert.That(
@@ -583,14 +591,14 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     CreateDoubleDeclaringEdits(hostPath, callerPath));
 
                 Assert.That(
-                    FindFailureReason(result, "more than one file"),
-                    Is.Not.Null,
-                    "The run must report which type two files of the group declare. "
+                    CountTypeFailures(result, "more than one file"),
+                    Is.EqualTo(2),
+                    "Each file that declares the type must report the refusal. "
                         + DescribeOutcomes(result));
                 Assert.That(
                     CountFailures(result, "more than one file"),
-                    Is.EqualTo(2),
-                    "Both files of the refused group must report the refusal.");
+                    Is.EqualTo(0),
+                    "A type failure must not be reported a second time as a method row.");
                 Assert.That(
                     HotReloadIntroducedTypeHolder.Registry.ActiveCount,
                     Is.EqualTo(0),
@@ -829,6 +837,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
 
             return count;
+        }
+
+        private static int CountTypeFailures(HotReloadOrchestratorResult result, string reasonFragment)
+        {
+            int count = 0;
+            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
+            {
+                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Failed
+                    && outcome.Reason.Contains(reasonFragment, StringComparison.Ordinal))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private static string FindTypeFailureOwner(HotReloadOrchestratorResult result, string reasonFragment)
+        {
+            foreach (HotReloadIntroducedTypeOutcome outcome in result.IntroducedTypes)
+            {
+                if (outcome.Kind == HotReloadIntroducedTypeOutcomeKind.Failed
+                    && outcome.Reason.Contains(reasonFragment, StringComparison.Ordinal))
+                {
+                    return outcome.OwnerProjectRelativePath;
+                }
+            }
+
+            return null;
         }
 
         private static string FindFailureReason(HotReloadOrchestratorResult result, string reasonFragment)
@@ -1348,8 +1385,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 {
                     stages.Add(PrepareStage);
                     return Task.FromResult(
-                        HotReloadIntroducedTypePreparationResult.Failure(
-                            "The introduced type artifact could not be compiled."));
+                        HotReloadIntroducedTypePreparationResult.TypeFailures(
+                            new[]
+                            {
+                                HotReloadIntroducedTypeOutcome.Failed(
+                                    string.Empty,
+                                    string.Empty,
+                                    string.Empty,
+                                    "The introduced type artifact could not be compiled.")
+                            }));
                 },
                 (input, ct) =>
                 {

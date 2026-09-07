@@ -65,11 +65,31 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ownerProjectRelativePath,
                 HotReloadConstants.AlreadyActiveIntroducedTypeReason);
         }
+
+        /// <summary>
+        /// A declaration this run refused: it redefines a type the domain retains, two files of
+        /// the group declare it, or its artifact did not compile. A run-level failure of the
+        /// preparation itself is not one of these, because it refused no declaration.
+        /// </summary>
+        public static HotReloadIntroducedTypeOutcome Failed(
+            string metadataName,
+            string originalAssemblyName,
+            string ownerProjectRelativePath,
+            string reason)
+        {
+            return new HotReloadIntroducedTypeOutcome(
+                HotReloadIntroducedTypeOutcomeKind.Failed,
+                metadataName,
+                originalAssemblyName,
+                ownerProjectRelativePath,
+                reason);
+        }
     }
 
     internal enum HotReloadIntroducedTypeOutcomeKind
     {
         Introduced = 0,
-        AlreadyActive = 1
+        AlreadyActive = 1,
+        Failed = 2
     }
 }

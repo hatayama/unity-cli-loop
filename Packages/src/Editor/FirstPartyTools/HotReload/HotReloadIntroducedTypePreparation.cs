@@ -30,14 +30,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ct).ConfigureAwait(false);
             if (!prepareResult.Success)
             {
-                return HotReloadIntroducedTypePreparationResult.Failure(
+                return HotReloadIntroducedTypePreparationResult.WorkerFailure(
                     "Introduced-type preparation failed: " + prepareResult.ErrorMessage);
             }
 
-            string refusedDeclaration = FindChangedIntroducedTypeDiagnostic(prepareResult.Output);
-            if (refusedDeclaration != null)
+            List<HotReloadIntroducedTypeOutcome> refusedDeclarations = CollectRedefinedTypeFailures(
+                prepareResult.Output,
+                transformInput.targetAssemblyName);
+            if (refusedDeclarations.Count > 0)
             {
-                return HotReloadIntroducedTypePreparationResult.Failure(refusedDeclaration);
+                return HotReloadIntroducedTypePreparationResult.TypeFailures(refusedDeclarations);
             }
 
             List<HotReloadIntroducedTypeOutcome> alreadyActiveTypes =
@@ -48,10 +50,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return HotReloadIntroducedTypePreparationResult.NoIntroducedTypes(alreadyActiveTypes);
             }
 
-            string doubleDeclaration = FindDoubleDeclaredType(descriptors);
-            if (doubleDeclaration != null)
+            List<HotReloadIntroducedTypeOutcome> doubleDeclarations =
+                CollectDoubleDeclaredTypeFailures(descriptors, transformInput.targetAssemblyName);
+            if (doubleDeclarations.Count > 0)
             {
-                return HotReloadIntroducedTypePreparationResult.Failure(doubleDeclaration);
+                return HotReloadIntroducedTypePreparationResult.TypeFailures(doubleDeclarations);
             }
 
             HotReloadIntroducedTypeArtifactPaths paths =
@@ -68,8 +71,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     .ConfigureAwait(false);
             if (!compileResult.Success)
             {
-                return HotReloadIntroducedTypePreparationResult.Failure(
-                    "Introduced-type compilation failed: " + compileResult.ErrorMessage);
+                // Why one unattributed row: the batch compiles every declaration of the run at
+                // once, so a failure of it belongs to no single owner.
+                return HotReloadIntroducedTypePreparationResult.TypeFailures(
+                    new[]
+                    {
+                        HotReloadIntroducedTypeOutcome.Failed(
+                            string.Empty,
+                            transformInput.targetAssemblyName,
+                            string.Empty,
+                            "Introduced-type compilation failed: " + compileResult.ErrorMessage)
+                    });
             }
 
             return HotReloadIntroducedTypePreparationResult.WithPrepared(
@@ -146,31 +158,46 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // introduced, and the source that declares it stays in the tree. A declaration this domain
         // already retains an assembly for is taken out of the tree either way, so continuing would
         // bind callers against the retained definition the edited source no longer declares.
-        private static string FindChangedIntroducedTypeDiagnostic(TransformWorkerOutputDto output)
+        private static List<HotReloadIntroducedTypeOutcome> CollectRedefinedTypeFailures(
+            TransformWorkerOutputDto output,
+            string targetAssemblyName)
         {
+            List<HotReloadIntroducedTypeOutcome> failures = new List<HotReloadIntroducedTypeOutcome>();
             foreach (TransformWorkerFileOutputDto file in output.files)
             {
                 foreach (string diagnostic in file.introducedTypeDiagnostics)
                 {
-                    if (diagnostic != null
-                        && diagnostic.StartsWith(
+                    if (diagnostic == null
+                        || !diagnostic.StartsWith(
                             HotReloadConstants.ChangedIntroducedTypeDiagnosticPrefix,
                             StringComparison.Ordinal))
                     {
-                        return diagnostic;
+                        continue;
                     }
+
+                    failures.Add(
+                        HotReloadIntroducedTypeOutcome.Failed(
+                            diagnostic
+                                .Substring(HotReloadConstants.ChangedIntroducedTypeDiagnosticPrefix.Length)
+                                .Trim(),
+                            targetAssemblyName,
+                            file.projectRelativePath,
+                            diagnostic));
                 }
             }
 
-            return null;
+            return failures;
         }
 
         // Why refused here and not by the artifact batch: two files of one group declaring the
         // same type is an editing mistake the reload has to report against both files, while the
         // batch's uniqueness rule is an internal contract whose violation would throw out of the
         // run and leave the group with no result at all.
-        private static string FindDoubleDeclaredType(
-            IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors)
+        // Why one row per owner: the mistake is in both files, and a report that named only one
+        // of them would send the reader to a file that is correct on its own.
+        private static List<HotReloadIntroducedTypeOutcome> CollectDoubleDeclaredTypeFailures(
+            IReadOnlyList<HotReloadIntroducedTypeDescriptor> descriptors,
+            string targetAssemblyName)
         {
             Dictionary<string, string> ownerPathByIdentity =
                 new Dictionary<string, string>(StringComparer.Ordinal);
@@ -183,12 +210,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                return "Introduced type " + descriptor.MetadataName
+                string reason = "Introduced type " + descriptor.MetadataName
                     + " is declared in more than one file of the group: "
                     + firstOwnerPath + " and " + descriptor.OwnerProjectRelativePath + ".";
+                return new List<HotReloadIntroducedTypeOutcome>
+                {
+                    HotReloadIntroducedTypeOutcome.Failed(
+                        descriptor.MetadataName, targetAssemblyName, firstOwnerPath, reason),
+                    HotReloadIntroducedTypeOutcome.Failed(
+                        descriptor.MetadataName,
+                        targetAssemblyName,
+                        descriptor.OwnerProjectRelativePath,
+                        reason)
+                };
             }
 
-            return null;
+            return new List<HotReloadIntroducedTypeOutcome>();
         }
 
         // Why the owner comes from the file row and not the reuse row: the worker records a reuse

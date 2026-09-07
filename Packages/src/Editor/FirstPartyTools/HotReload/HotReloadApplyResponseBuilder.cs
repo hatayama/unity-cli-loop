@@ -46,6 +46,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     });
             }
 
+            // Why folded in here: the type rows are a failure section of their own, and a run
+            // whose only failure was a refused declaration would otherwise answer Success.
+            hasFailure = hasFailure || HotReloadIntroducedTypeResponseSection.HoldsFailure(result.IntroducedTypes);
+
             List<string> warnings = new List<string>(result.Warnings);
             if (additionalWarnings != null)
             {

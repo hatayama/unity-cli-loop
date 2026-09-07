@@ -61,7 +61,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 .ConfigureAwait(false);
             if (!preparation.Success)
             {
-                HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", preparation.ErrorMessage);
+                // Why the two failures part ways here: a refused declaration is reported as the
+                // type it refused, while a preparation that could not run at all refused no
+                // declaration and stays a run-level failure of every file of the group.
+                if (preparation.Failures.Count > 0)
+                {
+                    HotReloadIntroducedTypeOutcomeSink.Append(files, preparation.Failures);
+                }
+                else
+                {
+                    HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", preparation.ErrorMessage);
+                }
+
                 return HotReloadFileEntryApplier.BuildUnappliedGroupResults(files);
             }
 
