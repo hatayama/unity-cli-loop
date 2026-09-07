@@ -330,6 +330,72 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// What: the production capture path reads the runtime-change port, so a compile warns
+        /// about the introduced types a domain reload discards and not about patches alone.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_WithRuntimeChangesLive_WarnsWithTheCountTheRuntimeChangePortReports()
+        {
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService =
+                new(
+                    UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository(),
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+            // The patch-count port answers zero so only the runtime-change port can produce the
+            // warning: a capture still reading the old port would report nothing at all.
+            Func<int> originalPatchCount = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
+            Func<int> originalRuntimeChangeCount =
+                HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
+            HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = () => 0;
+            HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = () => 1;
+
+            try
+            {
+                CompileUseCase useCase = new(
+                    compileSessionLifecycleService,
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+                useCase.SetCompilationStateValidationForTesting(() =>
+                    ValidationResult.FailureWithErrorCode(
+                        "Compilation is already in progress. Please wait for the current compilation to finish.",
+                        CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                {
+                    throw new InvalidOperationException("validation failure must not start compilation");
+                });
+
+                CompileResponse response = await useCase.CompileAsync(
+                    new CompileSchema
+                    {
+                        WaitForDomainReload = false,
+                        RequestId = "compile_runtime_change_warning",
+                        ForceRecompile = false,
+                        ReloadExternalSceneChanges = true
+                    },
+                    CancellationToken.None);
+
+                Assert.That(
+                    response.Warning,
+                    Is.Not.Null,
+                    "A compile that would discard a runtime change must warn about it.");
+                Assert.That(response.Warning, Does.Contain("1 active hot-reload change(s)"));
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = originalPatchCount;
+                HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = originalRuntimeChangeCount;
+                originalSnapshot.Restore();
+            }
+        }
+
         private static CompileResult CreateSuccessfulCompileResult()
         {
             CompilerMessage warning = new()

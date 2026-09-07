@@ -810,14 +810,19 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: the default getter path reads HotReloadPausePointCoordination.GetActiveHotReloadPatchCount
-        /// into the exact policy-form Warning (stubs keep this from nesting Test Runner).
+        /// What: the default getter path reads HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount
+        /// into the exact policy-form Warning, so a run reports the introduced types a deferred
+        /// domain reload discards as well as the patches (stubs keep this from nesting Test Runner).
         /// </summary>
         [Test]
         public async Task ExecuteAsync_WhenDefaultCoordinationGetterReturnsThree_AssignsExactPolicyFormWarning()
         {
-            Func<int> originalGetter = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
-            HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = () => 3;
+            // The patch-count port answers zero so only the runtime-change port can produce the
+            // Warning: a default getter still reading the old port would report nothing.
+            Func<int> originalPatchCount = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
+            Func<int> originalGetter = HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
+            HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = () => 0;
+            HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = () => 3;
             try
             {
                 StubTestExecutionService executionService = new StubTestExecutionService();
@@ -839,7 +844,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             }
             finally
             {
-                HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = originalGetter;
+                HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = originalPatchCount;
+                HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = originalGetter;
             }
         }
 

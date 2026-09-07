@@ -1,5 +1,7 @@
 using UnityEditor;
 
+using io.github.hatayama.UnityCliLoop.ToolContracts;
+
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     // Keeps hot-reload startup wiring inside the hot-reload assembly so the composition
@@ -23,6 +25,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // subscription is lost on every domain reload, so the pair is rebuilt here rather than
             // on first use.
             HotReloadIntroducedTypeHolder.Initialize();
+            // Why here and not in a static constructor of the counting side: a static constructor
+            // runs when something first touches that type, which a domain that only introduced a
+            // type may never do, and the tools that warn about a domain reload would then read a
+            // null delegate as "nothing to lose".
+            HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount =
+                () => HotReloadActiveChangeCounts.RuntimeChangeTotal;
             EditorApplication.update += CaptureOnFirstUpdateTick;
             HotReloadPlayModeEntryDropRecorder.Initialize();
             HotReloadAutoRefreshHold.Initialize();

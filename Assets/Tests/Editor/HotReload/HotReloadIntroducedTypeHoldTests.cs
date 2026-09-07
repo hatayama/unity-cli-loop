@@ -152,6 +152,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             }
         }
 
+        /// <summary>
+        /// What: the runtime-change port the domain-reload warnings read is wired at hot-reload
+        /// startup and answers with the introduced types, not with the patch count alone.
+        /// </summary>
+        [Test]
+        public void RuntimeChangePort_ReportsTheIntroducedTypesOfThisDomain()
+        {
+            Func<int> reader = HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
+            Assert.That(
+                reader,
+                Is.Not.Null,
+                "The hot-reload startup must publish the runtime-change count for the other tools.");
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+
+                Assert.That(reader(), Is.EqualTo(0), "An empty domain discards nothing.");
+
+                ActivateArtifactWithOneType();
+
+                Assert.That(
+                    reader(),
+                    Is.EqualTo(1),
+                    "A type the reload introduced is discarded by the next Domain Reload too.");
+            }
+        }
+
         private static int ReadPausePointPatchCount()
         {
             Func<int> reader = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;

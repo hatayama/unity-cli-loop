@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -5,6 +6,7 @@ using UnityEditor;
 using UnityEditor.Compilation;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 {
@@ -876,6 +878,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public void Step()
             {
                 StepCallCount++;
+            }
+        }
+
+        /// <summary>
+        /// What: the live drop-state service reads the runtime-change port, so a Play-start
+        /// warning counts the introduced types the entry domain reload discards.
+        /// </summary>
+        [Test]
+        public void DomainReloadDropStateService_ReportsTheRuntimeChangeCountNotThePatchCount()
+        {
+            // The patch-count port answers zero so only the runtime-change port can produce the
+            // count: a service still reading the old port would report nothing to drop.
+            Func<int> originalPatchCount = HotReloadPausePointCoordination.GetActiveHotReloadPatchCount;
+            Func<int> originalRuntimeChangeCount =
+                HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
+            HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = () => 0;
+            HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = () => 1;
+
+            try
+            {
+                ControlPlayModeDomainReloadDropStateService service =
+                    new ControlPlayModeDomainReloadDropStateService();
+
+                Assert.That(service.GetActiveHotReloadPatchCount(), Is.EqualTo(1));
+            }
+            finally
+            {
+                HotReloadPausePointCoordination.GetActiveHotReloadPatchCount = originalPatchCount;
+                HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount = originalRuntimeChangeCount;
             }
         }
 
