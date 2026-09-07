@@ -1988,7 +1988,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                         {
                             membershipValidations++;
                             return HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure(files);
-                        })))
+                        },
+                        HotReloadIntroducedTypePreparation.PrepareAsync,
+                        TransformWorkerClient.RunAsync)))
                 {
                     await HotReloadOrchestrator.RunAsync(
                         new[] { fixturePath },

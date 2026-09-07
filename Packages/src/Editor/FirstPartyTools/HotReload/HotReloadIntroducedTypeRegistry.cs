@@ -192,6 +192,51 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        /// <summary>
+        /// Collects the active artifacts whose types belong to one generation of one compiled
+        /// assembly, which is the only generation a run may normalize its declarations back to.
+        /// </summary>
+        public IReadOnlyList<HotReloadIntroducedTypeArtifact> CollectActiveArtifactsForTarget(
+            string originalAssemblyName,
+            string originalAssemblyMvid)
+        {
+            List<HotReloadIntroducedTypeArtifact> matches = new List<HotReloadIntroducedTypeArtifact>();
+            if (string.IsNullOrEmpty(originalAssemblyName) || string.IsNullOrEmpty(originalAssemblyMvid))
+            {
+                return matches;
+            }
+
+            lock (gate)
+            {
+                foreach (HotReloadIntroducedTypeArtifact artifact in activeByAssemblyIdentity.Values)
+                {
+                    if (HasTypeOfTarget(artifact, originalAssemblyName, originalAssemblyMvid))
+                    {
+                        matches.Add(artifact);
+                    }
+                }
+            }
+
+            return matches;
+        }
+
+        private static bool HasTypeOfTarget(
+            HotReloadIntroducedTypeArtifact artifact,
+            string originalAssemblyName,
+            string originalAssemblyMvid)
+        {
+            foreach (HotReloadIntroducedTypeDescriptor descriptor in artifact.Descriptors)
+            {
+                if (string.Equals(descriptor.OriginalAssemblyName, originalAssemblyName, StringComparison.Ordinal)
+                    && string.Equals(descriptor.OriginalAssemblyMvid, originalAssemblyMvid, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public bool TryResolveActiveAssembly(string requestedAssemblyFullName, out HotReloadIntroducedTypeArtifact artifact)
         {
             lock (gate)

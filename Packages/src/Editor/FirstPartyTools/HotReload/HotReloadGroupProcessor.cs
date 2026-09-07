@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -50,8 +51,81 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             TransformWorkerInputDto workerInput = BuildWorkerInput(files, siblingScan);
-            TransformWorkerClientResult workerResult =
-                await TransformWorkerClient.RunAsync(workerInput, ct).ConfigureAwait(false);
+            workerInput.introducedTypeArtifacts = HotReloadIntroducedTypeArtifactRecords.CollectActive(
+                HotReloadIntroducedTypeHolder.Registry,
+                workerInput.targetAssemblyName,
+                workerInput.targetAssemblyMvid).ToArray();
+            HotReloadIntroducedTypePreparationResult preparation = await HotReloadGroupProcessorDependencies
+                .Current
+                .PrepareIntroducedTypes(files, workerInput, ct)
+                .ConfigureAwait(false);
+            if (!preparation.Success)
+            {
+                HotReloadGroupOutcomeRouter.AppendGroupFailure(files, "(file)", preparation.ErrorMessage);
+                return BuildUnappliedResults(files);
+            }
+
+            if (preparation.Artifact == null)
+            {
+                return await TransformAndApplyGroupAsync(files, workerInput, correlationId, ct).ConfigureAwait(false);
+            }
+
+            return await TransformAndApplyPreparedGroupAsync(
+                files,
+                workerInput,
+                preparation.Artifact,
+                correlationId,
+                ct).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Runs the group against the artifact this run prepared, so the transform and the shim
+        /// compilation bind the introduced types from the loaded assembly.
+        /// </summary>
+        private static async Task<IReadOnlyList<HotReloadFileProcessResult>> TransformAndApplyPreparedGroupAsync(
+            IReadOnlyList<HotReloadGroupFile> files,
+            TransformWorkerInputDto workerInput,
+            HotReloadIntroducedTypeArtifact artifact,
+            string correlationId,
+            CancellationToken ct)
+        {
+            HotReloadIntroducedTypeRegistry registry = HotReloadIntroducedTypeHolder.Registry;
+            registry.RegisterPrepared(artifact);
+            List<TransformWorkerIntroducedTypeArtifactDto> records =
+                new List<TransformWorkerIntroducedTypeArtifactDto>(workerInput.introducedTypeArtifacts);
+            records.Add(HotReloadIntroducedTypeArtifactRecords.CreateRecord(artifact));
+            workerInput.introducedTypeArtifacts = records.ToArray();
+
+            // The scope answers binds for the prepared assembly while nothing has activated it, so
+            // the shim compilation and the reflection it drives can already reach the new types.
+            using (IDisposable preparedScope = HotReloadIntroducedTypeHolder.Resolver.RegisterPrepared(artifact))
+            {
+                try
+                {
+                    return await TransformAndApplyGroupAsync(files, workerInput, correlationId, ct)
+                        .ConfigureAwait(false);
+                }
+                finally
+                {
+                    // The commit boundary that activates a successful run is a later stage; until
+                    // it exists the prepared membership is dropped here as well. The discard of a
+                    // failed run stays in place once activation replaces the successful path.
+                    registry.DiscardPrepared(artifact);
+                }
+            }
+        }
+
+        private static async Task<IReadOnlyList<HotReloadFileProcessResult>> TransformAndApplyGroupAsync(
+            IReadOnlyList<HotReloadGroupFile> files,
+            TransformWorkerInputDto workerInput,
+            string correlationId,
+            CancellationToken ct)
+        {
+            HotReloadGroupFile firstFile = files[0];
+            TransformWorkerClientResult workerResult = await HotReloadGroupProcessorDependencies
+                .Current
+                .RunWorker(workerInput, ct)
+                .ConfigureAwait(false);
             HotReloadOrchestratorLog.LogHotReloadWorkerResult(workerResult, correlationId);
             if (!workerResult.Success)
             {
@@ -326,6 +400,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     firstFile.CompilationAssembly,
                     firstFile.TargetDllPath),
                 targetTypesAssemblyPath = Path.GetFullPath(firstFile.TargetDllPath),
+                // The retained records normalize an introduced type back to the generation of the
+                // assembly that owns its source, so every run has to name that generation even
+                // before it carries a record of its own.
+                targetAssemblyName = firstFile.AssemblyName,
+                targetAssemblyMvid = HotReloadSourceSnapshotter.ReadAssemblyMvid(firstFile.TargetDllPath),
                 assemblySourcePaths = HotReloadPatchTargetSupport.BuildAssemblySourcePaths(
                     firstFile.ProjectRoot,
                     firstFile.CompilationAssembly.sourceFiles),

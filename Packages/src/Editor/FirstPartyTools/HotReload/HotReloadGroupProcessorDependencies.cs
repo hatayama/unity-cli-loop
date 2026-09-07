@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
@@ -12,10 +14,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private static HotReloadGroupProcessorDependencies current = CreateProduction();
 
         private HotReloadGroupProcessorDependencies(
-            Func<IReadOnlyList<HotReloadGroupFile>, bool> validateNewSourceMembership)
+            Func<IReadOnlyList<HotReloadGroupFile>, bool> validateNewSourceMembership,
+            Func<IReadOnlyList<HotReloadGroupFile>, TransformWorkerInputDto, CancellationToken,
+                Task<HotReloadIntroducedTypePreparationResult>> prepareIntroducedTypes,
+            Func<TransformWorkerInputDto, CancellationToken, Task<TransformWorkerClientResult>> runWorker)
         {
             ValidateNewSourceMembership = validateNewSourceMembership
                 ?? throw new ArgumentNullException(nameof(validateNewSourceMembership));
+            PrepareIntroducedTypes = prepareIntroducedTypes
+                ?? throw new ArgumentNullException(nameof(prepareIntroducedTypes));
+            RunWorker = runWorker ?? throw new ArgumentNullException(nameof(runWorker));
         }
 
         internal static HotReloadGroupProcessorDependencies Current => current;
@@ -25,15 +33,35 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         internal Func<IReadOnlyList<HotReloadGroupFile>, bool> ValidateNewSourceMembership { get; }
 
+        /// <summary>
+        /// Compiles the types this run introduces into a retained artifact before the transform run.
+        /// </summary>
+        internal Func<IReadOnlyList<HotReloadGroupFile>, TransformWorkerInputDto, CancellationToken,
+            Task<HotReloadIntroducedTypePreparationResult>> PrepareIntroducedTypes { get; }
+
+        /// <summary>
+        /// Runs the transform worker for the group.
+        /// </summary>
+        internal Func<TransformWorkerInputDto, CancellationToken, Task<TransformWorkerClientResult>> RunWorker { get; }
+
         internal static HotReloadGroupProcessorDependencies CreateProduction()
         {
-            return new HotReloadGroupProcessorDependencies(HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure);
+            return new HotReloadGroupProcessorDependencies(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                HotReloadIntroducedTypePreparation.PrepareAsync,
+                TransformWorkerClient.RunAsync);
         }
 
         internal static HotReloadGroupProcessorDependencies Create(
-            Func<IReadOnlyList<HotReloadGroupFile>, bool> validateNewSourceMembership)
+            Func<IReadOnlyList<HotReloadGroupFile>, bool> validateNewSourceMembership,
+            Func<IReadOnlyList<HotReloadGroupFile>, TransformWorkerInputDto, CancellationToken,
+                Task<HotReloadIntroducedTypePreparationResult>> prepareIntroducedTypes,
+            Func<TransformWorkerInputDto, CancellationToken, Task<TransformWorkerClientResult>> runWorker)
         {
-            return new HotReloadGroupProcessorDependencies(validateNewSourceMembership);
+            return new HotReloadGroupProcessorDependencies(
+                validateNewSourceMembership,
+                prepareIntroducedTypes,
+                runWorker);
         }
 
         /// <summary>
