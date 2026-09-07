@@ -118,9 +118,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             Dictionary<string, string> transformHashesByPath = CollectTransformHashes(context.WorkerOutput);
             foreach (KeyValuePair<string, string> ownerHash in prepared.OwnerSourceHashes)
             {
-                if (!transformHashesByPath.TryGetValue(ownerHash.Key, out string transformHash))
+                // Why fail-closed: a comparison this side cannot make is not a window it has
+                // shown to be closed, and the run is about to publish an assembly compiled from
+                // the very source whose staleness is in question.
+                if (!transformHashesByPath.TryGetValue(ownerHash.Key, out string transformHash)
+                    || string.IsNullOrEmpty(transformHash)
+                    || string.IsNullOrEmpty(ownerHash.Value))
                 {
-                    continue;
+                    return "The introduced type owner '" + ownerHash.Key
+                        + "' has no transform hash, so its staleness cannot be verified.";
                 }
 
                 if (string.Equals(ownerHash.Value, transformHash, StringComparison.Ordinal))
@@ -145,7 +151,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 if (file.FileOutput == null || string.IsNullOrEmpty(file.FileOutput.sourceContentSha256))
                 {
-                    continue;
+                    return "The request source '" + file.ProjectRelativePath
+                        + "' has no transform hash, so its staleness cannot be verified.";
                 }
 
                 string currentHash = TryComputeCurrentHash(file.WorkerSourcePath);

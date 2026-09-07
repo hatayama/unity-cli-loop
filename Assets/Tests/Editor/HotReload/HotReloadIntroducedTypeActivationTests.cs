@@ -677,6 +677,62 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// Verifies that an introduced type owner the transform run reported no row for stops the
+        /// run at the commit boundary, because a staleness window that cannot be compared has not
+        /// been shown to be closed.
+        /// </summary>
+        [Test]
+        public async Task Run_OwnerHasNoTransformRow_ActivatesNothing()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateDependenciesWithUnverifiableOwner()))
+                {
+                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateIntroducedTypeEdits(hostPath, callerPath, "OwnerWithoutRow"));
+
+                    AssertNothingWasCommitted(result, "cannot be verified");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a request source whose transform run reported no source hash stops the
+        /// run at the commit boundary as well, so no file of a group is applied on the strength of
+        /// a comparison that never happened.
+        /// </summary>
+        [Test]
+        public async Task Run_RequestSourceHasNoTransformHash_ActivatesNothing()
+        {
+            string hostPath = FixturePath("HotReloadCrossFileAddedMemberHost.cs");
+            string callerPath = FixturePath("HotReloadCrossFileAddedMemberCaller.cs");
+
+            using (HotReloadIntroducedTypeHolder.BeginReplacement())
+            {
+                HotReloadIntroducedTypeHolder.Initialize();
+                using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                    CreateDependenciesWithBlankedHashFor(Path.GetFileName(callerPath))))
+                {
+                    HotReloadOrchestratorResult result = await HotReloadOrchestrator.RunAsync(
+                        new[] { hostPath, callerPath },
+                        contentPathOverride: null,
+                        CancellationToken.None,
+                        CreateIntroducedTypeEdits(hostPath, callerPath, "RequestWithoutHash"));
+
+                    AssertNothingWasCommitted(result, "request source");
+                }
+            }
+        }
+
+        /// <summary>
         /// Verifies that a request source rewritten after the transform run stops the run at the
         /// commit boundary, so a reload never applies code compiled from bytes that are gone.
         /// </summary>
@@ -944,6 +1000,83 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 HotReloadGroupProcessor.GateAndCompileAsync,
                 HotReloadGroupEntryPreparation.PrepareGroup,
                 HotReloadEntryApplier.ApplyPreparedEntries);
+        }
+
+        // An artifact whose owner hash is keyed by a path the transform run reported no row for,
+        // which is the shape the boundary cannot compare its two windows across.
+        private static HotReloadGroupProcessorDependencies CreateDependenciesWithUnverifiableOwner()
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                async (files, input, ct) =>
+                {
+                    HotReloadIntroducedTypePreparationResult preparation =
+                        await HotReloadIntroducedTypePreparation.PrepareAsync(files, input, ct);
+                    if (preparation.Prepared == null)
+                    {
+                        return preparation;
+                    }
+
+                    return HotReloadIntroducedTypePreparationResult.WithPrepared(
+                        new HotReloadPreparedIntroducedTypes(
+                            preparation.Prepared.Artifact,
+                            RekeyOwnerHashesToUnreportedPaths(preparation.Prepared.OwnerSourceHashes)));
+                },
+                TransformWorkerClient.RunAsync,
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadEntryApplier.ApplyPreparedEntries);
+        }
+
+        private static Dictionary<string, string> RekeyOwnerHashesToUnreportedPaths(
+            IReadOnlyDictionary<string, string> ownerSourceHashes)
+        {
+            Dictionary<string, string> rekeyed = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (KeyValuePair<string, string> ownerHash in ownerSourceHashes)
+            {
+                rekeyed[ownerHash.Key + ".unreported.cs"] = ownerHash.Value;
+            }
+
+            return rekeyed;
+        }
+
+        // A worker output row that carries no source hash, which is what the transform client's
+        // own coalescing leaves behind when the worker omits the field.
+        private static HotReloadGroupProcessorDependencies CreateDependenciesWithBlankedHashFor(
+            string fileName)
+        {
+            return HotReloadGroupProcessorDependencies.Create(
+                HotReloadGroupProcessor.TryAppendNewSourceMembershipFailure,
+                HotReloadIntroducedTypePreparation.PrepareAsync,
+                async (input, ct) =>
+                {
+                    TransformWorkerClientResult workerResult =
+                        await TransformWorkerClient.RunAsync(input, ct);
+                    BlankSourceHashOf(workerResult.Output, fileName);
+                    return workerResult;
+                },
+                HotReloadGroupProcessor.GateAndCompileAsync,
+                HotReloadGroupEntryPreparation.PrepareGroup,
+                HotReloadEntryApplier.ApplyPreparedEntries);
+        }
+
+        private static void BlankSourceHashOf(TransformWorkerOutputDto output, string fileName)
+        {
+            if (output == null)
+            {
+                return;
+            }
+
+            foreach (TransformWorkerFileOutputDto file in output.files)
+            {
+                if (file.projectRelativePath.EndsWith(fileName, StringComparison.Ordinal))
+                {
+                    file.sourceContentSha256 = string.Empty;
+                    return;
+                }
+            }
+
+            Assert.Fail("The worker output must hold a row for " + fileName + ".");
         }
 
         // The edited caller returns the introduced type's value plus the compiled host's value.

@@ -580,13 +580,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assembly compilationAssembly,
             HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null)
         {
+            // Why a real worker source with its hash: the commit boundary verifies each request
+            // source still hashes to what the transform run reported, and refuses a file it
+            // cannot compare.
+            string workerSourcePath = HotReloadTestSourceWriter.WriteEditedSource(
+                Path.GetFileName(path),
+                "// " + path + "\n");
             HotReloadGroupFile file = new HotReloadGroupFile(
-                path, path, path, AssemblyName, compilationAssembly,
+                path, workerSourcePath, path, AssemblyName, compilationAssembly,
                 Path.Combine(projectRoot, "Library", "ScriptAssemblies", AssemblyName + ".dll"),
                 projectRoot, new HotReloadFileSinks(new List<string>(), null), newSourceMembershipEvidence);
             file.FileOutput = new TransformWorkerFileOutputDto
             {
                 projectRelativePath = path,
+                sourceContentSha256 = HotReloadAppliedSourceLedger.ComputeContentHash(
+                    File.ReadAllBytes(workerSourcePath)),
                 removedMethodSignatures = Array.Empty<TransformWorkerRemovedMethodSignatureDto>()
             };
             file.SnapshotLabels = new HashSet<string>();
