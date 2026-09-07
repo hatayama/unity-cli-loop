@@ -31,6 +31,12 @@ runner, pin, protocol version, skill, and pause point all have exact meanings th
 internal identifier conflicts with the glossary, rename the identifier; when a public one does,
 keep it and record the mismatch in the glossary instead.
 
+Enum-valued CLI parameters keep the casing of the C# enum member behind them. Members that
+name a Unity concept keep Unity's spelling (`EditMode`, `KeyDown`, `GameView`); an enum whose
+members are all single-word CLI-own values uses lowercase members (`start`, `low`, `exact`);
+an enum with any multi-word or Unity-derived member keeps PascalCase throughout. Go-only
+options use lowercase kebab-case. Rules and rationale: `docs/adr/0006-enum-value-casing.md`.
+
 Comments in the code, commit messages, PR titles, and PR descriptions must all be written in English.
 
 Every test method must have a short comment that states what behavior the test verifies.
