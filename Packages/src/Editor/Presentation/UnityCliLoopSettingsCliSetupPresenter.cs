@@ -441,6 +441,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool cliIsDispatcher = _cliSetupApplicationService.GetCachedCliIsDispatcher();
             string cliExecutablePath = _cliSetupApplicationService.GetCachedCliExecutablePath();
             string requiredCliVersion = _cliSetupApplicationService.GetMinimumRequiredCliVersion();
+            string installTargetCliVersion = _cliSetupApplicationService.GetCliInstallTargetVersion();
 
             bool isCliInstalled = !string.IsNullOrEmpty(cliVersion) || needsCliPathSetup;
             bool canUninstallCli = _cliSetupApplicationService.IsPackageOwnedCurrentUserInstallPath(
@@ -467,6 +468,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 isCliInstalled,
                 cliVersion,
                 requiredCliVersion,
+                installTargetCliVersion,
                 state.NeedsUpdate,
                 canUninstallCli,
                 needsCliPathSetup,

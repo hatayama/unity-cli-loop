@@ -67,6 +67,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             string cliVersion,
             bool cliIsDispatcher,
             string requiredCliVersion,
+            string installTargetCliVersion,
             bool isInstallingCli,
             bool needsCliPathSetup,
             ManagedCliKind managedCliKind)
@@ -83,7 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 needsCliPathSetup,
                 managedCliKind,
                 cliVersion,
-                requiredCliVersion);
+                installTargetCliVersion);
             bool cliVersionMatched = state.IsCompatible && cliInstalled;
             bool buttonEnabled = IsCliButtonEnabledForSetupWizard(
                 cliInstalled,
@@ -157,7 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsCliPathSetup,
             ManagedCliKind managedCliKind,
             string cliVersion,
-            string requiredCliVersion)
+            string installTargetCliVersion)
         {
             if (isChecking)
             {
@@ -188,7 +189,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (needsUpdate)
             {
-                return CliSetupLabelFormatter.GetCliReplacementButtonText("Update", cliVersion, requiredCliVersion);
+                return CliSetupLabelFormatter.GetCliReplacementButtonText("Update", cliVersion, installTargetCliVersion);
             }
 
             if (needsCliPathSetup)

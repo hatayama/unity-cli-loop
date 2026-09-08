@@ -72,14 +72,14 @@ namespace io.github.hatayama.UnityCliLoop.Application
                 + upgradeCommand;
         }
 
-        public static string GetCliReplacementButtonText(string action, string cliVersion, string requiredCliVersion)
+        public static string GetCliReplacementButtonText(string action, string cliVersion, string targetCliVersion)
         {
-            if (ShouldShowRequiredVersionText(cliVersion, requiredCliVersion))
+            if (ShouldShowRequiredVersionText(cliVersion, targetCliVersion))
             {
-                return $"{action} CLI (v{requiredCliVersion} required)";
+                return $"{action} CLI (v{targetCliVersion} required)";
             }
 
-            return $"{action} CLI (v{cliVersion} \u2192 v{requiredCliVersion})";
+            return $"{action} CLI (v{cliVersion} \u2192 v{targetCliVersion})";
         }
 
         public static bool ShouldShowRequiredVersionText(string cliVersion, string requiredCliVersion)

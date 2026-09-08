@@ -163,6 +163,28 @@ namespace io.github.hatayama.UnityCliLoop.Application
             return _cliPinReader.LoadMinimumDispatcherVersionOrThrow();
         }
 
+        /// <summary>
+        /// Returns the CLI version an install would actually put in place.
+        /// </summary>
+        public string GetCliInstallTargetVersion()
+        {
+            // Why: the update button must name the version the pinned dispatcher release tag installs, not the
+            // minimum required version. When the bootstrap pin cannot be read the install itself surfaces the
+            // error, so the label falls back to the minimum version instead of blocking the whole view.
+            DispatcherBootstrapPinLoadResult bootstrapPin = _cliPinReader.LoadDispatcherBootstrapPin();
+            if (!bootstrapPin.Success)
+            {
+                return GetMinimumRequiredCliVersion();
+            }
+
+            if (!DispatcherReleaseTagVersion.TryParse(bootstrapPin.DispatcherReleaseTag, out string version))
+            {
+                return GetMinimumRequiredCliVersion();
+            }
+
+            return version;
+        }
+
         public bool IsPackageOwnedCurrentUserInstallPath(
             string cliExecutablePath,
             RuntimePlatform platform)

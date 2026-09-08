@@ -84,6 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliVersion,
                 cliIsDispatcher,
                 requiredCliVersion,
+                GetCliInstallTargetVersion(),
                 _isInstallingCli,
                 _needsCliPathSetup,
                 ResolveManagedCliKind());
@@ -139,6 +140,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliVersion: null,
                 cliIsDispatcher: false,
                 requiredCliVersion: GetMinimumRequiredCliVersion(),
+                installTargetCliVersion: GetCliInstallTargetVersion(),
                 isInstallingCli: _isInstallingCli,
                 needsCliPathSetup: _needsCliPathSetup,
                 managedCliKind: ResolveManagedCliKind());
@@ -211,6 +213,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 cliVersion: _cliSetupApplicationService.GetCachedCliVersion(),
                 cliIsDispatcher: _cliSetupApplicationService.GetCachedCliIsDispatcher(),
                 requiredCliVersion: GetMinimumRequiredCliVersion(),
+                installTargetCliVersion: GetCliInstallTargetVersion(),
                 isInstallingCli: _isInstallingCli,
                 needsCliPathSetup: _needsCliPathSetup,
                 managedCliKind: ResolveManagedCliKind());
@@ -261,6 +264,11 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         private string GetMinimumRequiredCliVersion()
         {
             return _cliSetupApplicationService.GetMinimumRequiredCliVersion();
+        }
+
+        private string GetCliInstallTargetVersion()
+        {
+            return _cliSetupApplicationService.GetCliInstallTargetVersion();
         }
 
         private static bool IsCliInstalled(string cliVersion)

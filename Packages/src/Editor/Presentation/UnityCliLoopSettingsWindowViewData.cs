@@ -83,6 +83,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
         public readonly bool IsCliInstalled;
         public readonly string CliVersion;
         public readonly string RequiredCliVersion;
+        public readonly string InstallTargetCliVersion;
         public readonly bool NeedsUpdate;
         public readonly bool CanUninstallCli;
         public readonly bool NeedsCliPathSetup;
@@ -104,6 +105,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool isCliInstalled,
             string cliVersion,
             string requiredCliVersion,
+            string installTargetCliVersion,
             bool needsUpdate,
             bool canUninstallCli,
             bool needsCliPathSetup,
@@ -124,6 +126,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             IsCliInstalled = isCliInstalled;
             CliVersion = cliVersion;
             RequiredCliVersion = requiredCliVersion;
+            InstallTargetCliVersion = installTargetCliVersion;
             NeedsUpdate = needsUpdate;
             CanUninstallCli = canUninstallCli;
             NeedsCliPathSetup = needsCliPathSetup;
