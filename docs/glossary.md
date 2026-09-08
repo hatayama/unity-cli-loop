@@ -161,9 +161,9 @@ clipped any evidence.
 One C# expression registered with `enable-watch` and evaluated once per paused frame, whose
 bounded value history is read back with `get-watch-values`. Watch expressions are stored in
 Editor session state and are restored — recompiled and re-registered — after a domain reload,
-including the reload a `uloop compile` or a Play entry causes; they are lost when the Editor
-process exits. Value history does not cross a reload: a restored watch starts from a new
-baseline.
+including the reload a `uloop compile` or a Play entry with Domain Reload enabled
+causes; they are lost when the Editor process exits. Value history does not cross a
+reload: a restored watch starts from a new baseline.
 
 ### Hot reload
 

@@ -39,7 +39,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return WatchRestoreReport.Empty;
             }
 
-            List<string> warnings = new();
+            RestorePass pass = new();
             int restoredCount = 0;
             // Sequential, not parallel: the registry evaluates watches in registration order and
             // the restored order has to match the order the user registered them in.
@@ -53,7 +53,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 bool restored;
                 try
                 {
-                    restored = await TryRestoreAsync(record, warnings, ct);
+                    restored = await TryRestoreAsync(record, pass, ct);
                 }
                 catch (OperationCanceledException)
                 {
@@ -80,8 +80,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Overwrite with what actually made it back, so a watch that no longer compiles is
             // reported once instead of failing again on every later reload.
-            _store.Save(SnapshotRegistry());
-            return new WatchRestoreReport(restoredCount, warnings);
+            _store.Save(SnapshotRegistry(pass.RetainForRetry));
+            return new WatchRestoreReport(restoredCount, pass.Warnings);
         }
 
         // Why no Save here: the only thing that cancels a restore is a clear the user asked for,
@@ -94,7 +94,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         private async Task<bool> TryRestoreAsync(
             WatchPersistedRecord record,
-            List<string> warnings,
+            RestorePass pass,
             CancellationToken ct)
         {
             WatchCompilationResult compiled;
@@ -109,9 +109,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
             catch (Exception exception)
             {
-                // The compiler propagates its own failures; one bad expression must not stop the
-                // remaining watches from coming back.
-                AddDroppedWarning(warnings, record, exception.Message);
+                // An exception is the compiler failing, not the expression being invalid, so the
+                // watch stays in the store and is retried after the next reload. One such failure
+                // must not stop the remaining watches from coming back either.
+                AddDroppedWarning(pass.Warnings, record, exception.Message);
+                pass.RetainForRetry.Add(record);
                 return false;
             }
 
@@ -120,7 +122,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             await MainThreadSwitcher.SwitchToMainThread(ct);
             if (!compiled.Success)
             {
-                AddDroppedWarning(warnings, record, DescribeCompilationFailure(compiled));
+                // A compilation result failure is the user's expression being invalid, so the
+                // record is dropped rather than retried.
+                AddDroppedWarning(pass.Warnings, record, DescribeCompilationFailure(compiled));
                 return false;
             }
 
@@ -171,10 +175,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return compiled.ErrorMessage;
         }
 
-        private IReadOnlyList<WatchPersistedRecord> SnapshotRegistry()
+        private IReadOnlyList<WatchPersistedRecord> SnapshotRegistry(
+            IReadOnlyList<WatchPersistedRecord> retainForRetry)
         {
             IReadOnlyList<WatchExpressionEntry> entries = _registry.GetEntries();
-            List<WatchPersistedRecord> records = new(entries.Count);
+            List<WatchPersistedRecord> records = new(entries.Count + retainForRetry.Count);
             foreach (WatchExpressionEntry entry in entries)
             {
                 records.Add(new WatchPersistedRecord
@@ -185,7 +190,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 });
             }
 
+            foreach (WatchPersistedRecord record in retainForRetry)
+            {
+                // The user may have registered this id themselves while restore was compiling;
+                // their version is already in the snapshot and must not be duplicated.
+                if (IsRegistered(record.Id))
+                {
+                    continue;
+                }
+
+                records.Add(record);
+            }
+
             return records;
+        }
+
+        /// <summary>
+        /// Carries what one restore pass accumulated across its records: the warnings to report
+        /// and the records whose failure was ours rather than the expression's.
+        /// </summary>
+        private sealed class RestorePass
+        {
+            public List<string> Warnings { get; } = new();
+
+            public List<WatchPersistedRecord> RetainForRetry { get; } = new();
         }
     }
 }

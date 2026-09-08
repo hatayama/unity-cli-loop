@@ -103,7 +103,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
-        /// What: a compile that throws becomes that record's warning and the rest still restore.
+        /// What: a compile that throws becomes that record's warning and the rest still restore,
+        /// and the thrown-on record stays in the store because the failure was the compiler's,
+        /// not the expression's.
         /// </summary>
         [UnityTest]
         public IEnumerator RestoreAsync_WhenTheCompilerThrows_ReportsThatRecordAndKeepsGoing()
@@ -125,7 +127,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             Assert.That(report.Warnings[0], Does.Contain("throwing"));
             Assert.That(report.Warnings[0], Does.Contain("the compiler process died"));
             Assert.That(IdsOf(registry), Is.EqualTo(new[] { "kept" }));
-            Assert.That(IdsOf(store.Saved), Is.EqualTo(new[] { "kept" }));
+            Assert.That(
+                IdsOf(store.Saved),
+                Is.EqualTo(new[] { "kept", "throwing" }),
+                "A compiler exception must not erase the user's watch; it is retried after the next reload.");
         }
 
         /// <summary>
