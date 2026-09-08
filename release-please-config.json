@@ -1,5 +1,6 @@
 {
   "pull-request-header": "Release components:\n\n- `unity-package`: Unity Package Manager/OpenUPM package (`v<version>` tags).\n- `uloop-project-runner`: native project runner binaries (`uloop-project-runner-v<version>` tags).\n- `dispatcher`: native dispatcher binaries (`dispatcher-v<version>` tags).",
+  "separate-pull-requests": true,
   "packages": {
     "Packages/src": {
       "component": "unity-package",
