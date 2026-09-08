@@ -10,6 +10,7 @@ using UnityEditor.Compilation;
 using UnityEngine;
 
 using io.github.hatayama.UnityCliLoop.FirstPartyTools;
+using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 {
@@ -25,6 +26,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private const string PersistedAddedMemberKey = "Coverage.Host::Persisted()";
         private const string BrokenSourcePath = "Assets/Tests/Editor/HotReload/BrokenNoticeSource.cs";
         private const string HealthySourcePath = "Assets/Tests/Editor/HotReload/HealthyNoticeSource.cs";
+        private const string CoverageCallerPath = "Assets/CoverageCaller.cs";
         private const string ParseErrorText =
             "BrokenNoticeSource.cs(3,1): error CS1022: Type or namespace definition, or end-of-file expected";
 
@@ -41,6 +43,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             HotReloadEditorStateSnapshotProvider.CaptureForTesting = _previousSnapshotProvider;
             HotReloadAddedMemberRegistry.Clear();
+            // The added-field ledger is global, so a committed name would outlive this class.
+            HotReloadAddedFieldRegistry.ReplaceForFile(CoverageCallerPath, Array.Empty<string>());
         }
 
         /// <summary>
@@ -431,6 +435,180 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(CountFileFailedRows(brokenFile), Is.EqualTo(1));
             Assert.That(healthyFile.SkipApply, Is.False);
             Assert.That(CountFileFailedRows(healthyFile), Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a file already skipped for parse errors stays skipped when the isolation plan
+        /// does not name it, and a file the plan names becomes skipped. The stage accumulates,
+        /// it never clears an earlier decision.
+        /// </summary>
+        [Test]
+        public void AccumulateAtomicSkipApply_WhenPlanDoesNotNameAnAlreadySkippedFile_KeepsItSkipped()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            Assembly compilationAssembly = FindCompilationAssembly();
+            HotReloadGroupFile parseErrorFile = CreateFile(BrokenSourcePath, projectRoot, compilationAssembly);
+            HotReloadGroupFile isolationFailedFile = CreateFile(HealthySourcePath, projectRoot, compilationAssembly);
+            parseErrorFile.SkipApply = true;
+            TransformWorkerEntryDto brokenEntry = CreateAtomicEntry(HealthySourcePath);
+            HotReloadFileAtomicIsolationPlan plan = HotReloadFileAtomicIsolationPlan.Build(
+                new[] { CreateAtomicEntry(BrokenSourcePath), brokenEntry },
+                CreateAtomicAttribution(brokenEntry),
+                Array.Empty<TransformWorkerSkippedDto>(),
+                CreateAtomicGroupFilePaths(BrokenSourcePath, HealthySourcePath),
+                new[] { BrokenSourcePath, HealthySourcePath });
+
+            HotReloadShimFirstCompile.AccumulateAtomicSkipApply(
+                new[] { parseErrorFile, isolationFailedFile },
+                plan);
+
+            Assert.That(plan.IsFailedFile(BrokenSourcePath), Is.False);
+            Assert.That(parseErrorFile.SkipApply, Is.True);
+            Assert.That(isolationFailedFile.SkipApply, Is.True);
+        }
+
+        /// <summary>
+        /// What: the isolation retry's per-file rows replace the first pass's added field and
+        /// const names, so the apply commits what the retry re-classified.
+        /// </summary>
+        [Test]
+        public void AdoptRetryAddedMemberNames_WhenRetryReturnsOtherNames_ReplacesTheFirstPassNames()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            Assembly compilationAssembly = FindCompilationAssembly();
+            HotReloadGroupFile file = CreateFile(BrokenSourcePath, projectRoot, compilationAssembly);
+            file.AddedFieldNames = new[] { "Sample.Host.firstPassField" };
+            file.AddedConstNames = new[] { "Sample.Host.FirstPassConst" };
+            TransformWorkerFileOutputDto retryFile = new TransformWorkerFileOutputDto
+            {
+                projectRelativePath = BrokenSourcePath,
+                addedFieldNames = new[] { "Sample.Host.retryField" },
+                addedConstNames = new[] { "Sample.Host.RetryConst" }
+            };
+
+            HotReloadShimFirstCompile.AdoptRetryAddedMemberNames(new[] { file }, new[] { retryFile });
+
+            Assert.That(file.AddedFieldNames, Is.EqualTo(new[] { "Sample.Host.retryField" }));
+            Assert.That(file.AddedConstNames, Is.EqualTo(new[] { "Sample.Host.RetryConst" }));
+        }
+
+        /// <summary>
+        /// What: a file the run left with no entry commits the worker row's added field names
+        /// when no retry replaced them.
+        /// </summary>
+        [Test]
+        public async Task ResolveEntriesToPatchAsync_WhenNoRetryReplacedTheNames_ClearsWithTheWorkerRowNames()
+        {
+            HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
+            HotReloadApplyContext context = CreateEmptyEntriesContext(evidence);
+            HotReloadGroupFile file = context.Files[0];
+            file.FileOutput.addedFieldNames = new[] { "Sample.Host.workerField" };
+            file.AddedFieldNames = null;
+
+            HotReloadGroupCompileResult result = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                context,
+                CreateEmptyGateResult(),
+                CancellationToken.None);
+
+            Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
+            Assert.That(file.ClearedAddedFieldNames, Is.EqualTo(new[] { "Sample.Host.workerField" }));
+        }
+
+        /// <summary>
+        /// What: a retry's added field names win over the worker row when the run leaves the file
+        /// with no entry, so a field the retry no longer emits is not resurrected.
+        /// </summary>
+        [Test]
+        public async Task ResolveEntriesToPatchAsync_WhenARetryReplacedTheNames_ClearsWithTheRetryNames()
+        {
+            HotReloadNewSourceMembershipEvidence evidence = CaptureCurrentMembershipEvidence();
+            HotReloadApplyContext context = CreateEmptyEntriesContext(evidence);
+            HotReloadGroupFile file = context.Files[0];
+            file.FileOutput.addedFieldNames = new[] { "Sample.Host.workerField" };
+            file.AddedFieldNames = new[] { "Sample.Host.retryField" };
+
+            HotReloadGroupCompileResult result = await HotReloadShimFirstCompile.ResolveEntriesToPatchAsync(
+                context,
+                CreateEmptyGateResult(),
+                CancellationToken.None);
+
+            Assert.That(result.Outcome, Is.EqualTo(HotReloadGroupCompileOutcome.ReadyWithoutMethods));
+            Assert.That(file.ClearedAddedFieldNames, Is.EqualTo(new[] { "Sample.Host.retryField" }));
+        }
+
+        /// <summary>
+        /// What: a group whose transform worker fails returns unapplied results built from files
+        /// that never received a worker output row, so the result's SourceContentSha256 is null.
+        /// This is the worker-failure path (HotReloadGroupProcessor returns before the stage that
+        /// assigns FileOutput), which is why the unapplied result still has to guard that read.
+        /// </summary>
+        [Test]
+        public async Task ProcessGroupAsync_WhenTheWorkerFails_BuildsUnappliedResultsWithoutAWorkerRow()
+        {
+            string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            Assembly compilationAssembly = FindCompilationAssembly();
+            HotReloadGroupFile file = CreateFile(BrokenSourcePath, projectRoot, compilationAssembly);
+            // The stage that assigns it is the one this run never reaches.
+            file.FileOutput = null;
+
+            IReadOnlyList<HotReloadFileProcessResult> results;
+            using (HotReloadGroupProcessorDependencies.BeginReplacement(
+                HotReloadGroupProcessorDependencies.Create(
+                    files => true,
+                    (files, input, ct) => Task.FromResult(
+                        HotReloadIntroducedTypePreparationResult.NoIntroducedTypes()),
+                    (input, ct) => Task.FromResult(
+                        TransformWorkerClientResult.Failure("transform worker failed")),
+                    HotReloadGroupProcessor.GateAndCompileAsync,
+                    HotReloadGroupEntryPreparation.PrepareGroup,
+                    HotReloadEntryApplier.ApplyPreparedEntries)))
+            {
+                results = await HotReloadGroupProcessor.ProcessGroupAsync(
+                    new[] { file },
+                    "worker-failure-test",
+                    CancellationToken.None);
+            }
+
+            Assert.That(results, Has.Count.EqualTo(1));
+            Assert.That(results[0].SourceContentSha256, Is.Null);
+            Assert.That(results[0].PatchedCount, Is.EqualTo(0));
+            Assert.That(CountFileFailedRows(file), Is.EqualTo(1));
+        }
+
+        private static TransformWorkerEntryDto CreateAtomicEntry(string projectRelativePath)
+        {
+            return new TransformWorkerEntryDto
+            {
+                sourceProjectRelativePath = projectRelativePath,
+                typeMetadataName = "Sample.Host",
+                methodName = "Body",
+                parameterTypeFullNames = Array.Empty<string>(),
+                genericArity = 0,
+                patchKind = HotReloadConstants.PatchKindDelegation
+            };
+        }
+
+        private static HotReloadShimErrorAttribution.ShimCompileErrorAttribution CreateAtomicAttribution(
+            TransformWorkerEntryDto failedEntry)
+        {
+            Dictionary<TransformWorkerEntryDto, List<string>> errorMessagesByEntry =
+                new Dictionary<TransformWorkerEntryDto, List<string>>
+                {
+                    { failedEntry, new List<string> { "CS0103: name not found (line 12)" } }
+                };
+            return new HotReloadShimErrorAttribution.ShimCompileErrorAttribution(errorMessagesByEntry);
+        }
+
+        private static HotReloadGroupFilePaths CreateAtomicGroupFilePaths(params string[] projectRelativePaths)
+        {
+            List<(string ProjectRelativePath, string AssemblyResolvePath)> files =
+                new List<(string ProjectRelativePath, string AssemblyResolvePath)>();
+            foreach (string projectRelativePath in projectRelativePaths)
+            {
+                files.Add((projectRelativePath, projectRelativePath));
+            }
+
+            return new HotReloadGroupFilePaths(files);
         }
 
         /// <summary>

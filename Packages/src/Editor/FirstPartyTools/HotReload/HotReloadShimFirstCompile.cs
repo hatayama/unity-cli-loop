@@ -196,15 +196,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadFileAtomicIsolationPlan.CollectOutcomes(
                     isolation.Plan.AtomicSkipOutcomesByFile,
                     context.ProjectRelativePaths));
-            foreach (HotReloadGroupFile file in context.Files)
-            {
-                // Why not apply: the file's generations must keep the previous run's patches, so
-                // the apply loop skips it entirely instead of clearing it.
-                // Why OR: a file already skipped for parse errors must stay skipped, and the
-                // isolation plan only knows about the files its own retry failed on.
-                file.SkipApply = file.SkipApply || isolation.Plan.IsFailedFile(file.ProjectRelativePath);
-            }
-
+            AccumulateAtomicSkipApply(context.Files, isolation.Plan);
             AdoptRetryAddedMemberNames(context.Files, isolation.RetryFiles);
             if (isolation.RetryEntries.Length == 0)
             {
@@ -244,9 +236,25 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
         }
 
+        // Why not apply: a file the isolation retry failed on must keep the previous run's
+        // patches, so the apply loop skips it entirely instead of clearing it.
+        // Why OR: a file already skipped for parse errors must stay skipped, and the isolation
+        // plan only knows about the files its own retry failed on.
+        // internal so a test can pin that accumulation without running a shim compile.
+        internal static void AccumulateAtomicSkipApply(
+            IReadOnlyList<HotReloadGroupFile> files,
+            HotReloadFileAtomicIsolationPlan plan)
+        {
+            foreach (HotReloadGroupFile file in files)
+            {
+                file.SkipApply = file.SkipApply || plan.IsFailedFile(file.ProjectRelativePath);
+            }
+        }
+
         // Why the retry rows win: the retry re-classified every declaration with the exclusions
         // in place, so its per-file added fields and consts are the ones the apply commits.
-        private static void AdoptRetryAddedMemberNames(
+        // internal so a test can pin the overwrite without running a shim compile.
+        internal static void AdoptRetryAddedMemberNames(
             IReadOnlyList<HotReloadGroupFile> files,
             TransformWorkerFileOutputDto[] retryFiles)
         {
