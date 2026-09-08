@@ -20,6 +20,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             "Play Mode view RenderTexture is not available. Open the Game View and make sure a camera renders.";
         internal const string FrameSizeTooSmallMessage =
             "Play Mode view size is too small to record after rounding to even encoder dimensions.";
+        internal const string WindowLayoutTimedOutMessage =
+            "Timed out waiting for the window to lay out; retry after focusing the Editor.";
         internal const string NoRecordingMessage = "No recording is in progress.";
         internal const string InvalidActionMessage = "Action must be Start, Stop, or Status.";
         internal const string StartedMessage = "Recording started.";

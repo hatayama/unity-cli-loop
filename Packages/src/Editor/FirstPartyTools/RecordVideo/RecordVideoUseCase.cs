@@ -14,6 +14,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     public sealed class RecordVideoUseCase
     {
+        private const int WindowLayoutWaitFrames = 2;
+
         public Task<RecordVideoResponse> ExecuteAsync(RecordVideoSchema parameters, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -35,10 +37,13 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return Task.FromResult(ExecuteStatus());
             }
 
-            return Task.FromResult(ExecuteStart(parameters, isLinux));
+            return ExecuteStartAsync(parameters, isLinux, ct);
         }
 
-        private static RecordVideoResponse ExecuteStart(RecordVideoSchema parameters, bool isLinux)
+        private static async Task<RecordVideoResponse> ExecuteStartAsync(
+            RecordVideoSchema parameters,
+            bool isLinux,
+            CancellationToken ct)
         {
             bool isWindowRecording = !string.IsNullOrEmpty(parameters.WindowName);
             // A window recording paints through the Editor loop, so it does not need Play Mode.
@@ -74,11 +79,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             RecordVideoSourceResolution source = isWindowRecording
-                ? ResolveWindowSource(parameters)
+                ? await ResolveWindowSourceAsync(parameters, ct)
                 : ResolvePlayModeViewSource(parameters);
             if (source.FailureMessage != null)
             {
                 return CreateFailure(RecordVideoAction.start, source.FailureMessage);
+            }
+
+            // Re-checked because the window path awaits editor frames, during which another
+            // command can start its own recording.
+            if (RecordVideoService.IsRecording)
+            {
+                return CreateResponse(
+                    false,
+                    RecordVideoConstants.AlreadyRecordingMessage,
+                    RecordVideoAction.start,
+                    RecordVideoService.GetSnapshot());
             }
 
             (int width, int height) size = VideoFrameSizePolicy.Resolve(
@@ -116,28 +132,49 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 snapshot);
         }
 
-        private static RecordVideoSourceResolution ResolveWindowSource(RecordVideoSchema parameters)
+        private static async Task<RecordVideoSourceResolution> ResolveWindowSourceAsync(
+            RecordVideoSchema parameters,
+            CancellationToken ct)
         {
             EditorWindow[] windows = EditorWindowFinder.FindWindowsByName(
                 parameters.WindowName,
                 parameters.MatchMode);
             if (windows.Length == 0)
             {
-                string openWindows = string.Join(", ", EditorWindowFinder.GetOpenWindowNames());
-                return RecordVideoSourceResolution.Failure(
-                    $"Window '{parameters.WindowName}' not found (MatchMode: {parameters.MatchMode}). Open windows: {openWindows}");
+                return RecordVideoSourceResolution.Failure(WindowNotFoundMessage(parameters));
             }
 
             EditorWindow window = windows[0];
-            // Shown before measuring: a background tab is never painted, and bringing it to the
-            // front can change its layout.
             window.ShowTab();
+            // A background tab keeps its old position until the layout settles, and measuring it
+            // then fixes the encoder to a size no later frame matches, which skips every frame.
+            bool laidOut = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
+                WindowLayoutWaitFrames,
+                UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
+                ct);
+            await MainThreadSwitcher.SwitchToMainThread(ct);
+            if (!laidOut)
+            {
+                return RecordVideoSourceResolution.Failure(RecordVideoConstants.WindowLayoutTimedOutMessage);
+            }
+
+            if (window == null)
+            {
+                return RecordVideoSourceResolution.Failure(WindowNotFoundMessage(parameters));
+            }
+
             float pixelsPerPoint = EditorGUIUtility.pixelsPerPoint;
             return RecordVideoSourceResolution.Success(
                 new EditorWindowFrameSource(window, parameters.ResolutionScale),
                 Mathf.RoundToInt(window.position.width * pixelsPerPoint),
                 Mathf.RoundToInt(window.position.height * pixelsPerPoint),
                 RecordVideoConstants.DefaultWindowFileNamePrefix);
+        }
+
+        private static string WindowNotFoundMessage(RecordVideoSchema parameters)
+        {
+            string openWindows = string.Join(", ", EditorWindowFinder.GetOpenWindowNames());
+            return $"Window '{parameters.WindowName}' not found (MatchMode: {parameters.MatchMode}). Open windows: {openWindows}";
         }
 
         private static RecordVideoSourceResolution ResolvePlayModeViewSource(RecordVideoSchema parameters)
