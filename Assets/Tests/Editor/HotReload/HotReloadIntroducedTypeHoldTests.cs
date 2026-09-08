@@ -78,15 +78,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     HotReloadAutoRefreshHold.IsHeld,
                     Is.True,
                     "A revert cannot unload the artifact assembly, so it must keep the hold.");
-                Assert.That(revert.Message, Does.Contain("Domain Reload"));
                 Assert.That(
                     revert.Message,
-                    Does.Contain("Auto Refresh stays held"),
-                    "A revert that leaves the hold armed must say so and name the release.");
-                Assert.That(
-                    revert.Message,
-                    Does.Contain("uloop compile"),
-                    "The caller needs the command that actually releases the hold.");
+                    Is.EqualTo(
+                        "No active hot-reload changes to revert. 1 introduced type(s) stay loaded "
+                        + "until the next Domain Reload; a revert cannot unload the assembly that "
+                        + "carries them. Auto Refresh stays held for them; run 'uloop compile' to "
+                        + "release it."),
+                    "A revert that leaves the hold armed must say so, name what stayed, and name "
+                    + "the command that releases it.");
                 Assert.That(
                     HotReloadAutoRefreshHoldConstants.NewlyArmedMessageSuffix,
                     Does.Not.Contain("or '--revert-all' to release it"),

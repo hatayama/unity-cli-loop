@@ -121,7 +121,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(response.ActivePatchTotal, Is.EqualTo(1));
                 Assert.That(
                     response.Message,
-                    Does.EndWith("1 hot-reload change(s) are still active."));
+                    Is.EqualTo(
+                        "No .cs files changed since the last compile were found. Files that have "
+                        + "never been compiled are not selected automatically; pass them (and any "
+                        + "other path) with --files. 1 hot-reload change(s) are still active."));
                 Assert.That(
                     response.NextActions[response.NextActions.Length - 1],
                     Is.EqualTo(
@@ -947,6 +950,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Assert.That(response.Success, Is.True);
                 Assert.That(response.ActivePatchTotal, Is.EqualTo(0));
                 Assert.That(response.AutoRefreshHeld, Is.False);
+                Assert.That(response.ClearedCount, Is.EqualTo(1));
+                Assert.That(
+                    response.Message,
+                    Is.EqualTo("Reverted all active hot-reload changes."));
             }
             finally
             {
