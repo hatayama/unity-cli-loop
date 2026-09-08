@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.1](https://github.com/hatayama/unity-cli-loop/compare/v3.6.0...v3.6.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* Hot reload now works for scripts inside packages ([#2713](https://github.com/hatayama/unity-cli-loop/issues/2713)) ([80c40a4](https://github.com/hatayama/unity-cli-loop/commit/80c40a4a83b8d7aabcb0185d37df21e8681a22bc))
+
 ## [3.6.0](https://github.com/hatayama/unity-cli-loop/compare/v3.5.0...v3.6.0) (2026-09-08)
 
 
