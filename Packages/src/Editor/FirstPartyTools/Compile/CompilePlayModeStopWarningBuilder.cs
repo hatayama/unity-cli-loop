@@ -1,10 +1,10 @@
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 {
     /// <summary>
-    /// Builds the compile Warning text when Play Mode was active or hot-reload changes were live
-    /// at the moment compile was requested: the compile stops Play Mode and the following
-    /// domain reload discards the Play session state, every pause-point Harmony patch when any
-    /// are enabled, and every active hot-reload patch.
+    /// Builds the compile Warning text for the state that the compile is about to discard:
+    /// the Play session when Play Mode was active, every pause-point Harmony patch when any are
+    /// enabled (in Play Mode and in Edit Mode alike, because the compile reloads the domain
+    /// either way), and every active hot-reload patch.
     /// </summary>
     internal static class CompilePlayModeStopWarningBuilder
     {
@@ -13,28 +13,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             int activePausePointCount,
             int activeHotReloadChangeCount)
         {
-            string playWarning = BuildPlayModeStopWarning(wasPlayingAtRequestStart, activePausePointCount);
+            string primaryWarning = wasPlayingAtRequestStart
+                ? BuildPlayModeStopWarning(activePausePointCount)
+                : BuildEditModePausePointDropWarning(activePausePointCount);
             string hotReloadWarning = BuildHotReloadDropWarning(activeHotReloadChangeCount);
-            if (playWarning == null)
+            return Join(primaryWarning, hotReloadWarning);
+        }
+
+        private static string Join(string primaryWarning, string hotReloadWarning)
+        {
+            if (primaryWarning == null)
             {
                 return hotReloadWarning;
             }
 
             if (hotReloadWarning == null)
             {
-                return playWarning;
+                return primaryWarning;
             }
 
-            return playWarning + " " + hotReloadWarning;
+            return primaryWarning + " " + hotReloadWarning;
         }
 
-        private static string BuildPlayModeStopWarning(bool wasPlayingAtRequestStart, int activePausePointCount)
+        private static string BuildPlayModeStopWarning(int activePausePointCount)
         {
-            if (!wasPlayingAtRequestStart)
-            {
-                return null;
-            }
-
             if (activePausePointCount > 0)
             {
                 return "Play Mode was active with " + activePausePointCount + " enabled pause point(s). "
@@ -43,6 +45,22 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return "Play Mode was active when this compile was requested. The compile stops Play Mode and the domain reload discards the Play session state — re-establish your runtime state before continuing verification.";
+        }
+
+        /// <summary>
+        /// An Edit Mode compile keeps no Play session to lose, but its domain reload still drops
+        /// every pause point patch, so the caller has to be told the patches are gone.
+        /// </summary>
+        private static string BuildEditModePausePointDropWarning(int activePausePointCount)
+        {
+            if (activePausePointCount <= 0)
+            {
+                return null;
+            }
+
+            return activePausePointCount + " enabled pause point(s) were armed when this compile was requested. "
+                + "A successful compile reloads the domain and drops every pause point patch — "
+                + "re-enable them after the compile completes.";
         }
 
         private static string BuildHotReloadDropWarning(int activeHotReloadChangeCount)

@@ -267,6 +267,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a validation failure in Edit Mode with enabled pause points returns and stores the drop Warning.
+        /// </summary>
+        [Test]
+        public async Task CompileAsync_WhenValidationFailsInEditModeWithActivePausePoints_SetsPausePointDropWarningOnImmediateAndStoredResponses()
+        {
+            UnityCliLoopCompileResultSessionRepository compileResultSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreateCompileResultSessionRepository();
+            UnityCliLoopPendingCompileSessionRepository pendingCompileSessionRepository =
+                UnityCliLoopEditorSessionStateTestFactory.CreatePendingCompileSessionRepository();
+            UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService =
+                new(
+                    UnityCliLoopEditorSessionStateTestFactory.CreateSessionFlagsRepository(),
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+            UnityCliLoopEditorSessionStateSnapshot originalSnapshot =
+                UnityCliLoopEditorSessionStateTestFactory.CaptureSnapshot();
+            UnityCliLoopEditorSessionStateTestFactory.ClearAll();
+
+            try
+            {
+                CompileUseCase useCase = new(
+                    compileSessionLifecycleService,
+                    compileResultSessionRepository,
+                    pendingCompileSessionRepository);
+                useCase.SetPlayModeStopWarningInputsForTesting(
+                    wasPlayingAtRequestStart: false,
+                    activePausePointCount: 1,
+                    activeHotReloadChangeCount: 0);
+                useCase.SetCompilationStateValidationForTesting(() =>
+                    ValidationResult.FailureWithErrorCode(
+                        "Compilation is already in progress. Please wait for the current compilation to finish.",
+                        CompileStateValidationErrorCodes.AlreadyInProgressErrorCodeText));
+                useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
+                {
+                    throw new InvalidOperationException("validation failure must not start compilation");
+                });
+
+                CompileResponse response = await useCase.CompileAsync(
+                    new CompileSchema
+                    {
+                        WaitForDomainReload = true,
+                        RequestId = "compile_validation_edit_mode_pause_point_warning",
+                        ForceRecompile = false,
+                        ReloadExternalSceneChanges = true
+                    },
+                    CancellationToken.None);
+
+                UnityCliLoopStoredCompileResult storedResult =
+                    compileResultSessionRepository.GetCompileResult("compile_validation_edit_mode_pause_point_warning");
+                CompileResponse storedResponse = JsonConvert.DeserializeObject<CompileResponse>(
+                    storedResult.ResultJson,
+                    UnityCliLoopJsonResponseSerializerSettings.Settings);
+
+                Assert.That(response.Warning, Does.Contain("1 enabled pause point(s)"));
+                Assert.That(response.Warning, Does.Not.Contain("Play Mode was active"));
+                Assert.That(storedResult.HasResult, Is.True);
+                Assert.That(storedResponse.Warning, Does.Contain("1 enabled pause point(s)"));
+            }
+            finally
+            {
+                originalSnapshot.Restore();
+            }
+        }
+
+        /// <summary>
         /// What: a successful compile with live hot-reload changes passes the drop Warning into compilation execution.
         /// </summary>
         [Test]
