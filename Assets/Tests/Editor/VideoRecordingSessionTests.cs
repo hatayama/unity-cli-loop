@@ -169,6 +169,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a destroyed frame texture stops the session instead of throwing on every tick.
+        /// </summary>
+        [Test]
+        public void Tick_WhenFrameTextureDestroyed_StopsWithFrameTextureLostReason()
+        {
+            UnityEngine.Object.DestroyImmediate(_session.FrameTextureForTests);
+            _now = 0.5;
+
+            Assert.DoesNotThrow(() => _session.Tick());
+
+            VideoRecordingSnapshot snapshot = _session.Snapshot();
+            Assert.That(snapshot.IsRecording, Is.False);
+            Assert.That(snapshot.StoppedBy, Is.EqualTo("frame-texture-lost"));
+            Assert.That(_encoder.AddFrameCallCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
         /// What: a second Stop is a no-op so the encoder is disposed only once.
         /// </summary>
         [Test]

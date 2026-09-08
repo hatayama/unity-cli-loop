@@ -11,6 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal const string StoppedByAssemblyReload = "assembly-reload";
         internal const string StoppedByEditorQuit = "editor-quit";
         internal const string StoppedByWindowClosed = "window-closed";
+        internal const string StoppedByFrameTextureLost = "frame-texture-lost";
         internal const string WebmExtension = ".webm";
         internal const string DefaultWindowFileNamePrefix = "window_";
 
