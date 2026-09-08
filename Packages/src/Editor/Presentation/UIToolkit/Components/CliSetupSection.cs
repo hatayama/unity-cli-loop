@@ -145,7 +145,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
                 data.NeedsCliPathSetup,
                 data.ManagedCliKind,
                 data.CliVersion,
-                data.RequiredCliVersion);
+                data.InstallTargetCliVersion);
             bool enabled = IsInstallCliButtonEnabled(
                 data.IsInstallingCli,
                 data.IsChecking,
@@ -207,7 +207,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
             bool needsCliPathSetup,
             ManagedCliKind managedCliKind,
             string cliVersion,
-            string requiredCliVersion)
+            string installTargetCliVersion)
         {
             if (isChecking)
             {
@@ -239,7 +239,7 @@ namespace io.github.hatayama.UnityCliLoop.Presentation
 
             if (needsUpdate)
             {
-                return CliSetupLabelFormatter.GetCliReplacementButtonText("Update", cliVersion, requiredCliVersion);
+                return CliSetupLabelFormatter.GetCliReplacementButtonText("Update", cliVersion, installTargetCliVersion);
             }
 
             if (needsCliPathSetup)

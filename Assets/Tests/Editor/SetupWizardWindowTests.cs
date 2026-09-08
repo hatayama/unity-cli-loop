@@ -485,6 +485,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(true, false, false, true, false, ManagedCliKind.None, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
         [TestCase(true, false, false, true, true, ManagedCliKind.None, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
         [TestCase(true, false, false, true, false, ManagedCliKind.None, "3.0.0", "3.0.0", "Update CLI (v3.0.0 required)")]
+        [TestCase(true, false, false, true, false, ManagedCliKind.None, "2.1.6", "3.4.0", "Update CLI (v2.1.6 \u2192 v3.4.0)")]
         [TestCase(true, true, false, false, false, ManagedCliKind.None, "3.0.0", "3.0.0", "Installing...")]
         [TestCase(true, true, false, false, true, ManagedCliKind.None, "3.0.0", "3.0.0", "Fixing PATH...")]
         [TestCase(false, false, true, false, false, ManagedCliKind.None, null, "3.0.0", "Checking...")]
@@ -502,7 +503,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool needsCliPathSetup,
             ManagedCliKind managedCliKind,
             string cliVersion,
-            string requiredCliVersion,
+            string installTargetCliVersion,
             string expectedLabel)
         {
             string label = SetupWizardCliStepPresenter.GetCliButtonTextForSetupWizard(
@@ -513,7 +514,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 needsCliPathSetup,
                 managedCliKind,
                 cliVersion,
-                requiredCliVersion);
+                installTargetCliVersion);
 
             Assert.That(label, Is.EqualTo(expectedLabel));
         }
@@ -600,6 +601,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 cliVersion,
                 cliIsDispatcher,
                 requiredCliVersion: "3.0.0",
+                installTargetCliVersion: "3.0.0",
                 isInstallingCli: false,
                 needsCliPathSetup: false,
                 managedCliKind);
@@ -608,6 +610,34 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 homebrewUpgradeMessage.ClassListContains("setup-warning-message--visible"),
                 Is.EqualTo(expectedVisible));
             Assert.That(homebrewUpgradeMessage.text, Is.EqualTo(expectedText));
+        }
+
+        [Test]
+        public void Update_WhenUpdateIsNeeded_ShowsInstallTargetVersionInsteadOfMinimumVersion()
+        {
+            // Verifies the wizard update button is wired to the install target version, not the minimum required one.
+            VisualElement statusIcon = new();
+            Label statusLabel = new();
+            Label homebrewUpgradeMessage = new() { name = "cli-homebrew-upgrade-message" };
+            Button installButton = new();
+            SetupWizardCliStepPresenter presenter = new(
+                statusIcon,
+                statusLabel,
+                homebrewUpgradeMessage,
+                installButton,
+                () => { });
+
+            presenter.Update(
+                cliInstalled: true,
+                cliVersion: "2.1.6",
+                cliIsDispatcher: true,
+                requiredCliVersion: "3.0.0-beta.31",
+                installTargetCliVersion: "3.4.0",
+                isInstallingCli: false,
+                needsCliPathSetup: false,
+                managedCliKind: ManagedCliKind.None);
+
+            Assert.That(installButton.text, Is.EqualTo("Update CLI (v2.1.6 \u2192 v3.4.0)"));
         }
 
         [TestCase(false, false, false, false, false, ManagedCliKind.None, true)]

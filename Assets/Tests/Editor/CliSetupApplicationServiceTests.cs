@@ -49,6 +49,32 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         [Test]
+        public void GetCliInstallTargetVersion_UsesDispatcherReleaseTagVersion()
+        {
+            // Verifies the install target version shown in the update button comes from the pinned release tag.
+            CliSetupApplicationService service = new(
+                new FakeCliInstallationDetector(new string[] { null }),
+                new FakeNativeCliInstaller(),
+                new StubBootstrapPinReader("dispatcher-v3.4.0", "3.0.0-beta.31"));
+
+            Assert.That(service.GetCliInstallTargetVersion(), Is.EqualTo("3.4.0"));
+        }
+
+        [Test]
+        public void GetCliInstallTargetVersion_WhenBootstrapPinIsUnavailableFallsBackToMinimumVersion()
+        {
+            // Verifies an unreadable bootstrap pin still renders a label by falling back to the minimum version.
+            CliSetupApplicationService service = new(
+                new FakeCliInstallationDetector(new string[] { null }),
+                new FakeNativeCliInstaller(),
+                new FailingBootstrapPinReader());
+
+            Assert.That(
+                service.GetCliInstallTargetVersion(),
+                Is.EqualTo(service.GetMinimumRequiredCliVersion()));
+        }
+
+        [Test]
         public void GetGlobalCliInstallCommand_UsesPinnedDispatcherReleaseTag()
         {
             // Verifies fallback manual commands use the immutable dispatcher tag from the bootstrap pin.
@@ -151,6 +177,33 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public string LoadMinimumDispatcherVersionOrThrow()
             {
                 return "3.0.1";
+            }
+        }
+
+        private sealed class StubBootstrapPinReader : ICliPinReader
+        {
+            private readonly string _dispatcherReleaseTag;
+            private readonly string _minimumDispatcherVersion;
+
+            public StubBootstrapPinReader(string dispatcherReleaseTag, string minimumDispatcherVersion)
+            {
+                _dispatcherReleaseTag = dispatcherReleaseTag;
+                _minimumDispatcherVersion = minimumDispatcherVersion;
+            }
+
+            public CliPinLoadResult LoadPackagePin()
+            {
+                return CliPinLoadResult.FromFailure("not used by these tests");
+            }
+
+            public DispatcherBootstrapPinLoadResult LoadDispatcherBootstrapPin()
+            {
+                return DispatcherBootstrapPinLoadResult.FromSuccess(_dispatcherReleaseTag, "manifest");
+            }
+
+            public string LoadMinimumDispatcherVersionOrThrow()
+            {
+                return _minimumDispatcherVersion;
             }
         }
 

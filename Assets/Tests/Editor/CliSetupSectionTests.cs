@@ -23,6 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [TestCase(true, false, false, true, true, false, ManagedCliKind.None, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
         [TestCase(true, false, false, true, true, true, ManagedCliKind.None, "2.9.0", "3.0.0", "Update CLI (v2.9.0 \u2192 v3.0.0)")]
         [TestCase(true, false, false, true, true, false, ManagedCliKind.None, "3.0.0", "3.0.0", "Update CLI (v3.0.0 required)")]
+        [TestCase(true, false, false, true, true, false, ManagedCliKind.None, "2.1.6", "3.4.0", "Update CLI (v2.1.6 \u2192 v3.4.0)")]
         [TestCase(true, true, false, false, true, false, ManagedCliKind.None, "3.0.0", "3.0.0", "Uninstalling...")]
         [TestCase(true, true, false, false, true, true, ManagedCliKind.None, "3.0.0", "3.0.0", "Fixing PATH...")]
         [TestCase(false, true, false, false, false, false, ManagedCliKind.None, null, "3.0.0", "Installing...")]
@@ -43,7 +44,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             bool needsCliPathSetup,
             ManagedCliKind managedCliKind,
             string cliVersion,
-            string requiredCliVersion,
+            string installTargetCliVersion,
             string expectedText)
         {
             string text = CliSetupSection.GetInstallCliButtonText(
@@ -55,7 +56,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 needsCliPathSetup,
                 managedCliKind,
                 cliVersion,
-                requiredCliVersion);
+                installTargetCliVersion);
 
             Assert.That(text, Is.EqualTo(expectedText));
         }
@@ -99,6 +100,27 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 cliVersion);
 
             Assert.That(text, Is.EqualTo(expectedText));
+        }
+
+        [Test]
+        public void Update_WhenUpdateIsNeeded_ShowsInstallTargetVersionInsteadOfMinimumVersion()
+        {
+            // Verifies the Settings update button is wired to the install target version, not the minimum required one.
+            VisualElement root = CreateRootElement();
+            CliSetupSection section = new(root);
+            CliSetupData data = CreateData(
+                isCliInstalled: true,
+                isChecking: false,
+                selectedTargetInstallState: SkillInstallState.Installed,
+                needsUpdate: true,
+                cliVersion: "2.1.6",
+                requiredCliVersion: "3.0.0-beta.31",
+                installTargetCliVersion: "3.4.0");
+
+            section.Update(data);
+
+            Button installCliButton = root.Q<Button>("install-cli-button");
+            Assert.That(installCliButton.text, Is.EqualTo("Update CLI (v2.1.6 \u2192 v3.4.0)"));
         }
 
         [Test]
@@ -596,12 +618,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             ManagedCliKind managedCliKind = ManagedCliKind.None,
             bool needsUpdate = false,
             string cliVersion = "3.0.0",
-            bool needsCliPathSetup = false)
+            bool needsCliPathSetup = false,
+            string requiredCliVersion = "3.0.0",
+            string installTargetCliVersion = "3.0.0")
         {
             return new CliSetupData(
                 isCliInstalled,
                 cliVersion,
-                requiredCliVersion: "3.0.0",
+                requiredCliVersion,
+                installTargetCliVersion,
                 needsUpdate,
                 canUninstallCli: true,
                 needsCliPathSetup,
