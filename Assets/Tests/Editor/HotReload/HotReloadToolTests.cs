@@ -571,7 +571,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HotReloadResponse response = HotReloadTool.BuildApplyResponse(result);
 
             Assert.That(response.Success, Is.False);
-            Assert.That(response.Message, Does.Contain("Stale=1"));
+            Assert.That(
+                response.Message,
+                Is.EqualTo("Hot reload finished with one or more Failed method outcomes. See Methods. Stale=1."));
         }
 
         /// <summary>
