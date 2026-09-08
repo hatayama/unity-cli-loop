@@ -3061,7 +3061,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// source even when its compiled identity is otherwise correct.
         /// </summary>
         [Test]
-        public void TryValidateOutput_PrepareDescriptorOwnerMismatch_ReturnsFailure()
+        public void InterpretOutput_PrepareDescriptorOwnerMismatch_ReturnsFailure()
         {
             TransformWorkerInputDto input = new TransformWorkerInputDto
             {
@@ -3097,10 +3097,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
 
-            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutput(input, output);
 
-            Assert.That(valid, Is.False);
-            Assert.That(errorMessage, Does.Contain("owner"));
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("owner"));
         }
 
         /// <summary>
@@ -3108,7 +3108,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// its owner and assembly MVID match the input row.
         /// </summary>
         [Test]
-        public void TryValidateOutput_PrepareDescriptorAssemblyNameMismatch_ReturnsFailure()
+        public void InterpretOutput_PrepareDescriptorAssemblyNameMismatch_ReturnsFailure()
         {
             TransformWorkerInputDto input = CreatePreparationValidationInput();
             TransformWorkerOutputDto output = CreatePreparationValidationOutput(
@@ -3116,10 +3116,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "mvid",
                 "Assets/Edited.cs");
 
-            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutput(input, output);
 
-            Assert.That(valid, Is.False);
-            Assert.That(errorMessage, Does.Contain("assembly identity"));
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("assembly identity"));
         }
 
         /// <summary>
@@ -3127,7 +3127,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// its owner and assembly name match the input row.
         /// </summary>
         [Test]
-        public void TryValidateOutput_PrepareDescriptorAssemblyMvidMismatch_ReturnsFailure()
+        public void InterpretOutput_PrepareDescriptorAssemblyMvidMismatch_ReturnsFailure()
         {
             TransformWorkerInputDto input = CreatePreparationValidationInput();
             TransformWorkerOutputDto output = CreatePreparationValidationOutput(
@@ -3135,10 +3135,10 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "other-mvid",
                 "Assets/Edited.cs");
 
-            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutput(input, output);
 
-            Assert.That(valid, Is.False);
-            Assert.That(errorMessage, Does.Contain("assembly identity"));
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("assembly identity"));
         }
 
         /// <summary>
@@ -3146,7 +3146,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         /// identity match the input row.
         /// </summary>
         [Test]
-        public void TryValidateOutput_PrepareDescriptorMatchingOwnerAndIdentity_ReturnsSuccess()
+        public void InterpretOutput_PrepareDescriptorMatchingOwnerAndIdentity_ReturnsSuccess()
         {
             TransformWorkerInputDto input = CreatePreparationValidationInput();
             TransformWorkerOutputDto output = CreatePreparationValidationOutput(
@@ -3154,9 +3154,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "mvid",
                 "Assets/Edited.cs");
 
-            bool valid = TransformWorkerClient.TryValidateOutput(input, output, out string errorMessage);
+            TransformWorkerClientResult result = TransformWorkerClient.InterpretOutput(input, output);
 
-            Assert.That(valid, Is.True, errorMessage);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
         }
 
         /// <summary>
