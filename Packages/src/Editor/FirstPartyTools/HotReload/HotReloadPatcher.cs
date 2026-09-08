@@ -203,8 +203,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Removes every hot-reload patch owned by this patcher and clears the patch,
-        /// added-member, and applied-source ledgers.
+        /// Removes every hot-reload patch owned by this patcher and clears every
+        /// domain-scoped store.
         /// </summary>
         public static void RevertAll()
         {
@@ -215,12 +215,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // so GetActiveShimForMethod / GetShimLookupForFile agree during rebuild.
             List<MethodBase> revertedMethods = Ledger.ListMethods();
             Ledger.Clear();
-            HotReloadFileGenerations.ClearAll();
-            HotReloadAddedFieldStore.Clear();
-            HotReloadAddedFieldRegistry.ClearAll();
-            HotReloadInvocationRegistry.Clear();
-            HotReloadAppliedSourceLedger.ClearAll();
-            HotReloadSupersededSignatureRegistry.ClearAll();
+            HotReloadDomainStores.ResetForRevertAll();
             _pendingShimMethod = null;
             _pendingOriginalMethod = null;
             HarmonyInstance.UnpatchAll(HotReloadConstants.HarmonyId);
