@@ -23,15 +23,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // is one resolve stage and kept the method over CA1502. Unchanged-source
         // short-circuit is decided here but applied by the orchestrator so a changed
         // sibling in the same assembly can still pull the file into the group.
-        internal static (
-            HotReloadFileProcessResult EarlyResult,
-            string ProjectRelativePath,
-            string AssemblyName,
-            UnityCompilationAssembly CompilationAssembly,
-            string TargetDllPath,
-            string ProjectRoot,
-            HotReloadUnchangedSourceDecision UnchangedDecision,
-            HotReloadNewSourceMembershipEvidence NewSourceMembershipEvidence) ResolvePatchTarget(
+        internal static HotReloadPatchTargetResolution ResolvePatchTarget(
             string assemblyResolvePath,
             string workerSourcePath,
             List<HotReloadMethodOutcome> outcomes,
@@ -53,15 +45,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "Script path is not part of any compiled assembly (Assets/Packages paths only): "
                         + assemblyResolvePath,
                         assemblyResolvePath));
-                return (
-                    new HotReloadFileProcessResult(outcomes, warnings, 0),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    HotReloadUnchangedSourceDecision.NotUnchanged,
-                    null);
+                return HotReloadPatchTargetResolution.EarlyExit(
+                    new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
 
             string assemblyName = Path.GetFileNameWithoutExtension(rawAssemblyName);
@@ -85,15 +70,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "(file)",
                         resolutionFailureReason,
                         assemblyResolvePath));
-                return (
-                    new HotReloadFileProcessResult(outcomes, warnings, 0),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    HotReloadUnchangedSourceDecision.NotUnchanged,
-                    null);
+                return HotReloadPatchTargetResolution.EarlyExit(
+                    new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
 
             bool isNewSource = !HotReloadAssemblyResolutionDiagnostics.ContainsProjectRelativeSourceFile(
@@ -106,15 +84,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (notReadyReason != null)
                 {
                     outcomes.Add(HotReloadMethodOutcome.Failed("(file)", notReadyReason, assemblyResolvePath));
-                    return (
-                        new HotReloadFileProcessResult(outcomes, warnings, 0),
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        HotReloadUnchangedSourceDecision.NotUnchanged,
-                        null);
+                    return HotReloadPatchTargetResolution.EarlyExit(
+                        new HotReloadFileProcessResult(outcomes, warnings, 0));
                 }
             }
 
@@ -131,30 +102,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         "(file)",
                         "Compiled assembly not found at '" + targetDllPath + "'. Compile the project first.",
                         assemblyResolvePath));
-                return (
-                    new HotReloadFileProcessResult(outcomes, warnings, 0),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    HotReloadUnchangedSourceDecision.NotUnchanged,
-                    null);
+                return HotReloadPatchTargetResolution.EarlyExit(
+                    new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
 
             string mvidGuardError = CheckMvidGuard(assemblyName, targetDllPath);
             if (mvidGuardError != null)
             {
                 outcomes.Add(HotReloadMethodOutcome.Failed("(file)", mvidGuardError, assemblyResolvePath));
-                return (
-                    new HotReloadFileProcessResult(outcomes, warnings, 0),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    HotReloadUnchangedSourceDecision.NotUnchanged,
-                    null);
+                return HotReloadPatchTargetResolution.EarlyExit(
+                    new HotReloadFileProcessResult(outcomes, warnings, 0));
             }
 
             HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence = null;
@@ -170,15 +127,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 if (membershipFailure != null)
                 {
                     outcomes.Add(HotReloadMethodOutcome.Failed("(file)", membershipFailure, assemblyResolvePath));
-                    return (
-                        new HotReloadFileProcessResult(outcomes, warnings, 0),
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        HotReloadUnchangedSourceDecision.NotUnchanged,
-                        null);
+                    return HotReloadPatchTargetResolution.EarlyExit(
+                        new HotReloadFileProcessResult(outcomes, warnings, 0));
                 }
             }
 
@@ -204,8 +154,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                         projectRelativePath));
             }
 
-            return (
-                null,
+            return HotReloadPatchTargetResolution.Resolved(
                 projectRelativePath,
                 assemblyName,
                 compilationAssembly,

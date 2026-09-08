@@ -178,28 +178,21 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 run.OneShotCallerNoteCandidates);
             List<HotReloadMethodOutcome> alreadyActiveOutcomes = new List<HotReloadMethodOutcome>();
 
-            (HotReloadFileProcessResult earlyResolve,
-                string projectRelativePath,
-                string assemblyName,
-                UnityCompilationAssembly compilationAssembly,
-                string targetDllPath,
-                string projectRoot,
-                HotReloadUnchangedSourceDecision unchangedDecision,
-                HotReloadNewSourceMembershipEvidence newSourceMembershipEvidence) = HotReloadPatchTargetSupport.ResolvePatchTarget(
+            HotReloadPatchTargetResolution resolution = HotReloadPatchTargetSupport.ResolvePatchTarget(
                 filePath,
                 workerSourcePath,
                 sinks.Outcomes,
                 sinks.Warnings,
                 correlationId,
                 alreadyActiveOutcomes);
-            if (earlyResolve != null)
+            if (resolution.IsEarlyExit)
             {
-                resultSlots[index] = earlyResolve;
+                resultSlots[index] = resolution.EarlyResult;
                 resultPaths[index] = HotReloadPatchTargetSupport.ToProjectRelativeScriptPath(filePath);
                 return;
             }
 
-            if (unchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
+            if (resolution.UnchangedDecision == HotReloadUnchangedSourceDecision.ShortCircuited)
             {
                 deferredAlreadyActive[index] = alreadyActiveOutcomes;
             }
@@ -207,15 +200,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             groupFiles[index] = new HotReloadGroupFile(
                 filePath,
                 workerSourcePath,
-                projectRelativePath,
-                assemblyName,
-                compilationAssembly,
-                targetDllPath,
-                projectRoot,
+                resolution.ProjectRelativePath,
+                resolution.AssemblyName,
+                resolution.CompilationAssembly,
+                resolution.TargetDllPath,
+                resolution.ProjectRoot,
                 sinks,
-                newSourceMembershipEvidence);
-            resultPaths[index] = projectRelativePath;
-            plannerInput.Add((index, assemblyName, projectRelativePath));
+                resolution.NewSourceMembershipEvidence);
+            resultPaths[index] = resolution.ProjectRelativePath;
+            plannerInput.Add((index, resolution.AssemblyName, resolution.ProjectRelativePath));
         }
 
         private static bool[] ClassifyAllDeferredPlans(
