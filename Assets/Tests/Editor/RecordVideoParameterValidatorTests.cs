@@ -22,7 +22,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 outputPath,
                 isLinux,
                 1.0f,
-                RecordVideoQuality.medium);
+                RecordVideoQuality.medium,
+                WindowMatchMode.exact);
         }
 
         /// <summary>
@@ -182,7 +183,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs0_1_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.1f, RecordVideoQuality.medium);
+            ValidationResult result = RecordVideoParameterValidator.Validate(
+                30, 60, "", false, 0.1f, RecordVideoQuality.medium, WindowMatchMode.exact);
 
             Assert.That(result.IsValid, Is.True);
         }
@@ -193,7 +195,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs1_IsValid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.0f, RecordVideoQuality.medium);
+            ValidationResult result = RecordVideoParameterValidator.Validate(
+                30, 60, "", false, 1.0f, RecordVideoQuality.medium, WindowMatchMode.exact);
 
             Assert.That(result.IsValid, Is.True);
         }
@@ -205,7 +208,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Validate_WhenResolutionScaleIsNaN_IsInvalid()
         {
             ValidationResult result = RecordVideoParameterValidator.Validate(
-                30, 60, "", false, float.NaN, RecordVideoQuality.medium);
+                30, 60, "", false, float.NaN, RecordVideoQuality.medium, WindowMatchMode.exact);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Does.Contain("ResolutionScale"));
@@ -218,10 +221,23 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void Validate_WhenQualityIsUndefined_IsInvalid()
         {
             ValidationResult result = RecordVideoParameterValidator.Validate(
-                30, 60, "", false, 1.0f, (RecordVideoQuality)3);
+                30, 60, "", false, 1.0f, (RecordVideoQuality)3, WindowMatchMode.exact);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(result.ErrorMessage, Is.EqualTo("Quality must be Low, Medium, or High."));
+        }
+
+        /// <summary>
+        /// What: an undefined match mode (for example numeric JSON input 99) is rejected.
+        /// </summary>
+        [Test]
+        public void Validate_UndefinedMatchMode_Fails()
+        {
+            ValidationResult result = RecordVideoParameterValidator.Validate(
+                30, 60, "", false, 1.0f, RecordVideoQuality.medium, (WindowMatchMode)99);
+
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("MatchMode"));
         }
 
         /// <summary>
@@ -230,7 +246,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs0_09_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 0.09f, RecordVideoQuality.medium);
+            ValidationResult result = RecordVideoParameterValidator.Validate(
+                30, 60, "", false, 0.09f, RecordVideoQuality.medium, WindowMatchMode.exact);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(
@@ -244,7 +261,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         [Test]
         public void Validate_WhenResolutionScaleIs1_01_IsInvalid()
         {
-            ValidationResult result = RecordVideoParameterValidator.Validate(30, 60, "", false, 1.01f, RecordVideoQuality.medium);
+            ValidationResult result = RecordVideoParameterValidator.Validate(
+                30, 60, "", false, 1.01f, RecordVideoQuality.medium, WindowMatchMode.exact);
 
             Assert.That(result.IsValid, Is.False);
             Assert.That(

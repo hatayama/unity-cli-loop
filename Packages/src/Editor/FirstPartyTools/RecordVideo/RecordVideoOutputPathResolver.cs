@@ -12,19 +12,20 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const string Mp4Extension = "mp4";
         private const string WebmExtension = "webm";
-        private const string DefaultFileNamePrefix = "gameview_";
+        internal const string DefaultFileNamePrefix = "gameview_";
         private const string TimestampFormat = "yyyyMMdd_HHmmss_fff";
 
         internal static string Resolve(
             string requestedPath,
             string projectRoot,
             DateTime now,
-            bool isLinux)
+            bool isLinux,
+            string fileNamePrefix)
         {
             if (string.IsNullOrEmpty(requestedPath))
             {
                 string extension = isLinux ? WebmExtension : Mp4Extension;
-                string fileName = $"{DefaultFileNamePrefix}{now.ToString(TimestampFormat)}.{extension}";
+                string fileName = $"{fileNamePrefix}{now.ToString(TimestampFormat)}.{extension}";
                 return Path.Combine(
                     projectRoot,
                     UnityCliLoopConstants.OUTPUT_ROOT_DIR,

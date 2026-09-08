@@ -8,5 +8,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     internal interface IGameViewFrameSource
     {
         bool TryReadFrame(Texture2D destination);
+
+        /// <summary>
+        /// True once the source can never produce another frame (for example the target window was destroyed).
+        /// </summary>
+        bool IsSourceClosed { get; }
     }
 }

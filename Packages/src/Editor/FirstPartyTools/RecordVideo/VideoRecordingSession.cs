@@ -60,6 +60,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return;
             }
 
+            // Checked after max-duration so a run that hits both still reports max-duration,
+            // and before FramesDue so a closed window's frames are not counted as skips.
+            if (_frameSource.IsSourceClosed)
+            {
+                Stop(RecordVideoConstants.StoppedByWindowClosed);
+                return;
+            }
+
             int due = VideoRecordingFramePacer.FramesDue(
                 elapsed,
                 _frameRate,

@@ -16,6 +16,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _resolutionScale = resolutionScale;
         }
 
+        public bool IsSourceClosed => false;
+
         public bool TryReadFrame(Texture2D destination)
         {
             RenderTexture renderTexture = GameViewBridge.GetRenderTexture();

@@ -137,6 +137,38 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a closed frame source stops the session with the window-closed reason and encodes nothing.
+        /// </summary>
+        [Test]
+        public void Tick_WhenSourceClosed_StopsWithWindowClosedReason()
+        {
+            _frameSource.IsSourceClosed = true;
+            _now = 0.5;
+
+            _session.Tick();
+
+            VideoRecordingSnapshot snapshot = _session.Snapshot();
+            Assert.That(snapshot.IsRecording, Is.False);
+            Assert.That(snapshot.StoppedBy, Is.EqualTo("window-closed"));
+            Assert.That(_encoder.AddFrameCallCount, Is.EqualTo(0));
+            Assert.That(snapshot.SkippedFrameCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: max duration wins over a closed source so the existing stop reason does not change.
+        /// </summary>
+        [Test]
+        public void Tick_WhenSourceClosedAfterMaxDuration_StopsWithMaxDurationReason()
+        {
+            _frameSource.IsSourceClosed = true;
+            _now = 60.0;
+
+            _session.Tick();
+
+            Assert.That(_session.Snapshot().StoppedBy, Is.EqualTo("max-duration"));
+        }
+
+        /// <summary>
         /// What: a second Stop is a no-op so the encoder is disposed only once.
         /// </summary>
         [Test]
@@ -212,6 +244,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         private sealed class FakeGameViewFrameSource : IGameViewFrameSource
         {
             internal bool ReadSucceeds { get; set; } = true;
+
+            public bool IsSourceClosed { get; set; }
 
             public bool TryReadFrame(Texture2D destination)
             {
