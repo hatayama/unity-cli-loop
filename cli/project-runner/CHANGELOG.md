@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.4.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.3.0...uloop-project-runner-v3.4.0) (2026-09-08)
+
+
+### Features
+
+* enable-pause-point --persist re-arms the pause point after a domain reload ([#2681](https://github.com/hatayama/unity-cli-loop/issues/2681)) ([9c0f195](https://github.com/hatayama/unity-cli-loop/commit/9c0f195354785295e2d1e1d8887d0ad37c6c4414))
+* record-video can now record any Editor window, not just the Game View ([#2680](https://github.com/hatayama/unity-cli-loop/issues/2680)) ([902cb03](https://github.com/hatayama/unity-cli-loop/commit/902cb034ca57ceea7c18fc794cc09bd005471a05))
+
+
+### Bug Fixes
+
+* enable-pause-point --await no longer waits out the timeout when its trigger is refused by a marker that was not hit ([#2683](https://github.com/hatayama/unity-cli-loop/issues/2683)) ([97710aa](https://github.com/hatayama/unity-cli-loop/commit/97710aa78951a5d9174698836e12f1a4ef9211e0))
+* pause point no longer suggests the raw capture API as a way to recover a clipped at-line value ([#2700](https://github.com/hatayama/unity-cli-loop/issues/2700)) ([30432ef](https://github.com/hatayama/unity-cli-loop/commit/30432ef76b15b6dea1242814d99be99c22d28a38))
+
 ## [3.3.0](https://github.com/hatayama/unity-cli-loop/compare/uloop-project-runner-v3.2.1...uloop-project-runner-v3.3.0) (2026-09-07)
 
 

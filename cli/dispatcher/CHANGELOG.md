@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.5.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.4.0...dispatcher-v3.5.0) (2026-09-08)
+
+
+### Features
+
+* enable-pause-point --persist re-arms the pause point after a domain reload ([#2681](https://github.com/hatayama/unity-cli-loop/issues/2681)) ([9c0f195](https://github.com/hatayama/unity-cli-loop/commit/9c0f195354785295e2d1e1d8887d0ad37c6c4414))
+* record-video can now record any Editor window, not just the Game View ([#2680](https://github.com/hatayama/unity-cli-loop/issues/2680)) ([902cb03](https://github.com/hatayama/unity-cli-loop/commit/902cb034ca57ceea7c18fc794cc09bd005471a05))
+
+
+### Bug Fixes
+
+* skills list no longer reports installed skills as outdated when other tools leave files beside SKILL.md ([#2664](https://github.com/hatayama/unity-cli-loop/issues/2664)) ([dcffdb7](https://github.com/hatayama/unity-cli-loop/commit/dcffdb787d18532d12385a17985ff29fed955a37))
+
 ## [3.4.0](https://github.com/hatayama/unity-cli-loop/compare/dispatcher-v3.3.1...dispatcher-v3.4.0) (2026-09-07)
 
 
