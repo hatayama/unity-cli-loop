@@ -15,11 +15,8 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-internal sealed class AddedMethodCatalog
+internal sealed class AddedMethodCatalog : AddedMemberCatalog<AddedMethodBinding>
 {
-    private readonly Dictionary<string, AddedMethodBinding> _byKey =
-        new Dictionary<string, AddedMethodBinding>(StringComparer.Ordinal);
-    private readonly HashSet<string> _classifiedAddedKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _addedSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _addedTypeSyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly HashSet<string> _addedPropertySyntaxKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -33,23 +30,9 @@ internal sealed class AddedMethodCatalog
 
     public IReadOnlyCollection<string> RemovedSyntaxKeys => _removedSyntaxKeys;
 
-    public void Register(AddedMethodBinding binding)
+    protected override string KeyOf(AddedMethodBinding binding)
     {
-        _byKey[binding.MethodKey] = binding;
-        MarkClassifiedAdded(binding.MethodKey);
-    }
-
-    public void MarkClassifiedAdded(string methodKey)
-    {
-        if (methodKey != null)
-        {
-            _classifiedAddedKeys.Add(methodKey);
-        }
-    }
-
-    public bool IsClassifiedAdded(string methodKey)
-    {
-        return methodKey != null && _classifiedAddedKeys.Contains(methodKey);
+        return binding.MethodKey;
     }
 
     public bool IsUnavailableAdded(string methodKey)
@@ -83,21 +66,6 @@ internal sealed class AddedMethodCatalog
         _removedSyntaxKeys.Add(syntaxKey);
     }
 
-    public bool Contains(string methodKey)
-    {
-        return methodKey != null && _byKey.ContainsKey(methodKey);
-    }
-
-    public AddedMethodBinding FindOrNull(string methodKey)
-    {
-        if (methodKey == null)
-        {
-            return null;
-        }
-
-        return _byKey.TryGetValue(methodKey, out AddedMethodBinding binding) ? binding : null;
-    }
-
     // A metadata receiver cannot bind to a source-only added method, so the rewriter
     // matches on type name, method name, and argument count when GetSymbolInfo is unbound.
     public AddedMethodBinding FindUniqueByReceiverOrNull(
@@ -111,7 +79,7 @@ internal sealed class AddedMethodCatalog
         string prefix = typeMetadataName + "::" + methodName + "(";
         AddedMethodBinding unique = null;
         int matches = 0;
-        foreach (AddedMethodBinding binding in _byKey.Values)
+        foreach (AddedMethodBinding binding in RegisteredBindings)
         {
             if (binding.MethodKey == null
                 || !binding.MethodKey.StartsWith(prefix, StringComparison.Ordinal)
@@ -131,11 +99,12 @@ internal sealed class AddedMethodCatalog
         return matches == 1 ? unique : null;
     }
 
+    // Why the classified key stays: IsUnavailableAdded reads "classified but not registered".
     public void Unregister(string methodKey)
     {
         if (methodKey != null)
         {
-            _byKey.Remove(methodKey);
+            RemoveRegistered(methodKey);
         }
     }
 }

@@ -18,43 +18,13 @@ using Microsoft.CodeAnalysis.Text;
 /// <summary>
 /// Added-property bindings indexed by property and accessor identity for classification and rewrite.
 /// </summary>
-internal sealed class AddedPropertyCatalog
+internal sealed class AddedPropertyCatalog : AddedMemberCatalog<AddedPropertyBinding>
 {
-    private readonly Dictionary<string, AddedPropertyBinding> _byPropertyKey =
-        new Dictionary<string, AddedPropertyBinding>(StringComparer.Ordinal);
-    private readonly HashSet<string> _classifiedAddedKeys = new HashSet<string>(StringComparer.Ordinal);
+    public IEnumerable<AddedPropertyBinding> Bindings => RegisteredBindings;
 
-    public IEnumerable<AddedPropertyBinding> Bindings => _byPropertyKey.Values;
-
-    public void MarkClassifiedAdded(string propertyKey)
+    protected override string KeyOf(AddedPropertyBinding binding)
     {
-        if (propertyKey != null)
-        {
-            _classifiedAddedKeys.Add(propertyKey);
-        }
-    }
-
-    public bool IsClassifiedAdded(string propertyKey)
-    {
-        return propertyKey != null && _classifiedAddedKeys.Contains(propertyKey);
-    }
-
-    public void Register(AddedPropertyBinding binding)
-    {
-        Debug.Assert(binding != null, "binding must not be null.");
-        Debug.Assert(!string.IsNullOrEmpty(binding.PropertyKey), "binding.PropertyKey must not be null or empty.");
-        _byPropertyKey[binding.PropertyKey] = binding;
-        MarkClassifiedAdded(binding.PropertyKey);
-    }
-
-    public AddedPropertyBinding FindOrNull(string propertyKey)
-    {
-        if (propertyKey == null)
-        {
-            return null;
-        }
-
-        return _byPropertyKey.TryGetValue(propertyKey, out AddedPropertyBinding binding) ? binding : null;
+        return binding.PropertyKey;
     }
 
     public AddedPropertyBinding FindBySymbolOrNull(IPropertySymbol propertySymbol)
