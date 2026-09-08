@@ -139,6 +139,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a window whose title text is null is skipped instead of throwing.
+        /// </summary>
+        [Test]
+        public void FindWindowsByName_WhenAWindowHasNullTitleText_DoesNotThrow()
+        {
+            EditorWindowFinderProbeWindow nullTitled =
+                ScriptableObject.CreateInstance<EditorWindowFinderProbeWindow>();
+            nullTitled.titleContent = new GUIContent { text = null };
+            try
+            {
+                EditorWindow[] result = EditorWindowFinder.FindWindowsByName(
+                    "uloopfinderprobe",
+                    WindowMatchMode.prefix);
+
+                Assert.That(Array.IndexOf(result, nullTitled), Is.LessThan(0));
+                Assert.That(Array.IndexOf(result, _probe), Is.GreaterThanOrEqualTo(0));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(nullTitled);
+            }
+        }
+
+        /// <summary>
         /// Titled placeholder window used only to exercise the matching modes.
         /// </summary>
         private sealed class EditorWindowFinderProbeWindow : EditorWindow

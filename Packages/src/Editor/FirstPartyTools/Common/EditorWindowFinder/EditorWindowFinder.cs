@@ -35,7 +35,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     continue;
                 }
 
-                string title = window.titleContent.text;
+                // GUIContent.text can be assigned null by a window, and every match branch
+                // below calls an instance method on it.
+                string title = window.titleContent.text ?? string.Empty;
                 bool isMatch = matchMode switch
                 {
                     WindowMatchMode.exact => title.Equals(windowName, StringComparison.OrdinalIgnoreCase),
