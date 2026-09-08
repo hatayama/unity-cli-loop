@@ -1682,7 +1682,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             string onDisk = File.ReadAllText(ResolveHostPath());
             string edited = onDisk.Replace(
-                "        public int PartialRemoved()\n        {\n            return 2;\n        }\n",
+                "        [MethodImpl(MethodImplOptions.NoInlining)]\n"
+                + "        public int PartialRemoved()\n        {\n            return 2;\n        }\n",
                 string.Empty,
                 StringComparison.Ordinal);
             string sourcePath = WriteEdited("PartialMethodDeletion.cs", edited);
