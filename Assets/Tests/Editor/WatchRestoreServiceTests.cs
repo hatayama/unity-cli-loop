@@ -174,6 +174,30 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a cancellation that lands after the record compiled but before it is registered
+        /// still keeps the watch out of the registry the clear just emptied.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator RestoreAsync_WhenCancelledAfterCompiling_RegistersNothing()
+        {
+            WatchExpressionRegistry registry = CreateRegistry();
+            InMemoryWatchPersistenceStore store = new(
+                Record("first", "1 + 1", 20),
+                Record("second", "2 + 2", 20));
+            CancellationTokenSource cancellation = new();
+            FakeWatchExpressionCompiler compiler = new();
+            compiler.CancelAfterCompile(cancellation);
+            WatchRestoreService service = new(registry, compiler, store, () => { });
+
+            Task<WatchRestoreReport> task = service.RestoreAsync(cancellation.Token);
+            yield return WaitFor(task);
+
+            Assert.That(registry.GetEntries(), Is.Empty);
+            Assert.That(store.SaveCount, Is.EqualTo(0));
+            Assert.That(compiler.CompileCount, Is.EqualTo(1), "Cancellation must stop the loop, not just the current record.");
+        }
+
+        /// <summary>
         /// What: an empty store compiles nothing and leaves the store untouched.
         /// </summary>
         [UnityTest]
@@ -268,6 +292,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             private readonly Dictionary<string, string> _throwsByExpression = new(StringComparer.Ordinal);
             private CancellationTokenSource _cancelOnCompile;
 
+            private CancellationTokenSource _cancelAfterCompile;
+
             public int CompileCount { get; private set; }
 
             public void FailFor(string expression, string errorMessage)
@@ -286,6 +312,13 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _cancelOnCompile = cancellation;
             }
 
+            // Cancels once the compile task itself has completed, so the restore observes the
+            // cancellation between CompileAsync and the registry call rather than before either.
+            public void CancelAfterCompile(CancellationTokenSource cancellation)
+            {
+                _cancelAfterCompile = cancellation;
+            }
+
             public Task<WatchCompilationResult> CompileAsync(string expression, CancellationToken ct)
             {
                 CompileCount++;
@@ -302,8 +335,21 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                         new List<CompilationError> { new() { Line = 1, Column = 1, Message = errorMessage, ErrorCode = "CS0103" } }));
                 }
 
-                return Task.FromResult(
+                Task<WatchCompilationResult> compiled = Task.FromResult(
                     WatchCompilationResult.SuccessResult(new ConstantWatchExpressionEvaluator(1)));
+                if (_cancelAfterCompile == null)
+                {
+                    return compiled;
+                }
+
+                CancellationTokenSource cancelAfterCompile = _cancelAfterCompile;
+                return compiled.ContinueWith(
+                    completed =>
+                    {
+                        cancelAfterCompile.Cancel();
+                        return completed.Result;
+                    },
+                    TaskScheduler.Default);
             }
         }
 
