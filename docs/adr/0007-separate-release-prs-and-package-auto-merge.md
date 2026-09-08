@@ -14,6 +14,12 @@ newly published dispatcher tag, leave draft, and show a successful run of every
 required workflow for its exact head commit, then merges it with
 `--match-head-commit`.
 
+The config also sets `always-update: true`. release-please otherwise pushes a
+release branch only when the pull request body changes, and the pin stamp is a
+`chore` commit that reaches no changelog; the unity-package pull request would
+never move onto the stamp, and would keep the `.release-please-manifest.json`
+conflict that merging the dispatcher release pull request creates.
+
 `check-package-pin-consistency` makes the rule enforceable rather than
 advisory. It fails any ref whose `.release-please-manifest.json` releases a
 different dispatcher than `Packages/src/project-runner-pin.json` records, and
@@ -82,6 +88,10 @@ would never be tagged.
   **Contents: Read and write**, and the permission change must be approved on
   the installation. Without it the merge step fails with 403; the stamp has
   already landed at that point, so recovery is merging the pull request by hand.
+- `always-update: true` rebases every pending release pull request on each push
+  to `main`, so their checks are re-dispatched each time. That is more CI work
+  per push, accepted because without it the package release pull request never
+  reaches a mergeable state at all.
 - A failed check on the package release pull request stops the automation with a
   non-zero exit rather than waiting. That is deliberate: only a person can fix a
   failing check, and waiting would hide it until the timeout.

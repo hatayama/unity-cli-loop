@@ -47,6 +47,16 @@ anything — that commit's manifest and pin agree, so the release is valid — b
 the package then ships the *previous* dispatcher, which is the lag this order
 exists to remove.
 
+The config sets `always-update: true` alongside `separate-pull-requests`. Without
+it release-please pushes a release branch only when the pull request body
+changes, and the pin stamp is a `chore` commit that appears in no changelog: the
+unity-package release pull request would never move onto the stamp, so its head
+would keep the old pin and the automatic merge would time out. It would also
+keep the `.release-please-manifest.json` conflict that merging the dispatcher
+release pull request creates, since both components' entries sit on adjacent
+lines. The cost is that every push to `main` rebases each pending release pull
+request and re-dispatches its checks.
+
 `check-package-pin-consistency` enforces the rule rather than trusting it. It
 runs as the `check-package-release-pin` job on the unity-package release branch,
 and again inside `sync-release-please-package-releases.sh` before the package
