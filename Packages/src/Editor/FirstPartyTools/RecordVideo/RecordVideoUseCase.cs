@@ -79,8 +79,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             RecordVideoSourceResolution source = isWindowRecording
-                ? await ResolveWindowSourceAsync(parameters, ct)
+                ? await ResolveWindowSourceAsync(parameters, ct).ConfigureAwait(false)
                 : ResolvePlayModeViewSource(parameters);
+            if (isWindowRecording)
+            {
+                // ConfigureAwait(false) above leaves the continuation off Unity's context, and
+                // everything below touches Editor state.
+                await MainThreadSwitcher.SwitchToMainThread(ct);
+            }
+
             if (source.FailureMessage != null)
             {
                 return CreateFailure(RecordVideoAction.start, source.FailureMessage);
@@ -151,7 +158,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             bool laidOut = await EditorFrameWaiter.WaitFramesOrTimeoutAsync(
                 WindowLayoutWaitFrames,
                 UnityCliLoopConstants.EDITOR_FRAME_WAIT_TIMEOUT_MS,
-                ct);
+                ct).ConfigureAwait(false);
             await MainThreadSwitcher.SwitchToMainThread(ct);
             if (!laidOut)
             {
