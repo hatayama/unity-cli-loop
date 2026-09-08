@@ -111,6 +111,7 @@ jobs:
           cache-dependency-path: '**/go.sum'
 
       - name: Dispatch release PR checks
+        id: release_pr_checks
         if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true'
         working-directory: cli/release-automation
         env:
@@ -118,3 +119,41 @@ jobs:
           TARGET_BRANCH: ${{ steps.target.outputs.branch }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: go run ./cmd/dispatch-release-please-pr-checks
+
+      # A merge made with GITHUB_TOKEN starts no follow-up workflow run, so the
+      # package release would never be tagged; the App token is what makes the
+      # merge observable to release-please
+      # (docs/adr/0007-separate-release-prs-and-package-auto-merge.md).
+      # The dispatch step above fails when any component's checks fail, and a
+      # failing runner release must not strand a package-only release, so these
+      # steps also run after that failure. The merge helper verifies the package
+      # head's own runs, so another component's failure cannot make it merge
+      # something unchecked.
+      - name: Mint package release merge token
+        id: package-merge-token
+        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true' && !cancelled() && (steps.release_pr_checks.outcome == 'success' || steps.release_pr_checks.outcome == 'failure')
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.DISPATCHER_PIN_APP_ID }}
+          private-key: ${{ secrets.DISPATCHER_PIN_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      # This step leaves the package release pull request draft while a
+      # dispatcher release pull request is open, and while the pin at its head
+      # still disagrees with the dispatcher version the base branch manifest
+      # releases. Both windows would otherwise ship a package that pins an
+      # older dispatcher than the one main is about to release.
+      - name: Merge the Unity package release pull request when no dispatcher release is pending
+        if: steps.target.outputs.branch == 'main' && steps.release_commit.outputs.skip != 'true' && steps.package_release_sync.outputs.ready != 'false' && steps.release.outputs.prs_created == 'true' && !cancelled() && (steps.release_pr_checks.outcome == 'success' || steps.release_pr_checks.outcome == 'failure')
+        working-directory: cli/release-automation
+        env:
+          GH_TOKEN: ${{ steps.package-merge-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TARGET_BRANCH: ${{ steps.target.outputs.branch }}
+        run: >-
+          go run ./cmd/merge-package-release-pr
+          --repo "${GITHUB_REPOSITORY}"
+          --base-branch "${TARGET_BRANCH}"
+          --require-no-open-dispatcher-pr
+          --no-wait

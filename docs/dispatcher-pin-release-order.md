@@ -31,21 +31,38 @@ any later push to `main`.
 ## Release pull requests
 
 release-please opens **one release pull request per component**: `unity-package`,
-`dispatcher`, and `uloop-project-runner`. Merge order matters for the first two.
+`dispatcher`, and `uloop-project-runner`. The **unity-package** one stays draft
+and is merged only by automation; the other two are the ones people merge.
 
 1. Merge the **dispatcher** release pull request and approve the `cli-release`
    environment. Publishing the dispatcher is the only human decision.
-2. `post-publish` stamps the pin on `main` and then merges the **unity-package**
-   release pull request itself, once that pull request's head records the
-   dispatcher tag just published, is out of draft, and has a successful run of
-   every required workflow for that exact head commit.
-3. The **project runner** release pull request carries no cross-component
+2. `post-publish` stamps the pin on `main`, then marks the **unity-package**
+   release pull request ready and merges it, once that pull request's head
+   records the dispatcher tag just published and has a successful run of every
+   required workflow for that exact head commit.
+3. A package release that carries no dispatcher bump never reaches step 2, so
+   `release-please.yml` merges it instead: after the release PR checks, it
+   marks the package pull request ready and merges it, but only while no
+   dispatcher release pull request is open **and** the pin at the package head
+   already records the dispatcher version `main`'s manifest releases. Otherwise
+   it leaves the pull request draft and reconsiders on the next push to `main`.
+4. The **project runner** release pull request carries no cross-component
    ordering constraint and can be merged at any time.
 
-Merging the package pull request before the dispatcher one does not break
-anything — that commit's manifest and pin agree, so the release is valid — but
-the package then ships the *previous* dispatcher, which is the lag this order
-exists to remove.
+Merging the package pull request before the dispatcher one would ship the
+*previous* dispatcher, which is the lag this order exists to remove, so it is
+not offered: the pull request is left in draft and the merge button is not
+available. Doing it anyway takes two deliberate actions — "Ready for review",
+then merge — rather than one misplaced click.
+
+Both automated paths reason about the pin at the pull request head, never about
+the draft flag. "No dispatcher release pull request is open" alone does not mean
+the stamp landed: the pull request disappears from the open list the moment it
+merges, while the stamp arrives 15–25 minutes later. That window is why the
+`release-please.yml` path also requires the head pin to match `main`'s manifest.
+The `post-publish` path deliberately does *not* require the absence of an open
+dispatcher pull request, because the next cycle's dispatcher release can already
+be pending by the time the stamp lands.
 
 The config sets `always-update: true` alongside `separate-pull-requests`. Without
 it release-please pushes a release branch only when the pull request body
@@ -74,13 +91,24 @@ says nothing about the pull request. Before merging, confirm all four:
 - the pin freshness gate on `main` is green, so the stamp reached `main`;
 - the pull request's head commit records the dispatcher tag just published in
   `Packages/src/project-runner-pin.json`;
-- the pull request is not a draft;
+- no dispatcher release pull request is open, or the one that is open belongs to
+  the *next* cycle and the head pin already records the dispatcher `main`
+  releases;
 - every required workflow has a completed successful run for that exact head
   SHA — not for an earlier head.
 
 Merging without those is how a stale or unvalidated package release gets
 published, which is the failure this whole order exists to prevent. Decision
 record: `docs/adr/0007-separate-release-prs-and-package-auto-merge.md`.
+
+Once all four hold, take the pull request out of draft yourself ("Ready for
+review") and merge it. A **pre-release** dispatcher is never stamped, so a
+package release waiting on one stays draft indefinitely: publish a stable
+dispatcher, or merge by hand as above.
+
+When the stamp itself fails, the package pull request simply stays draft. Re-run
+the `post-publish` job of the `dispatcher-publish` run: it stamps the new tip and
+merges the pull request in the same job.
 
 ## Why the stamp is pushed without a pull request
 

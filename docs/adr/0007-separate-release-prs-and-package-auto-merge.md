@@ -113,3 +113,46 @@ becomes reproducible so the pin's asset digests can be computed before the
 release exists. In either case the components can share a release pull request
 again and the wait-and-merge step becomes unnecessary. Finding three release
 pull requests noisier than one is not a reversal condition.
+
+## Amendment (2026-09-08)
+
+The original decision left the Unity package release pull request mergeable by
+hand: the release PR check automation marked every component's pull request
+ready once its checks passed. That reopened the lag this ADR removes — a person
+could merge the package release before the dispatcher one — and it also exposed
+a narrower window in which `check-package-release-pin` is green on a head that
+predates the dispatcher merge, so merging there would ship an already stale pin.
+
+**Decision.** The unity-package release pull request stays draft. Only
+automation merges it, and each path lifts the draft immediately before merging:
+
+- `release-please.yml`, after the release PR checks, merges it only while **no
+  dispatcher release pull request is open** and the pin at the package head
+  records the dispatcher version `main`'s manifest releases. Otherwise it leaves
+  the pull request draft and reconsiders on the next push. This is the path a
+  package release with no dispatcher bump takes.
+- `dispatcher-publish.yml`'s `post-publish`, after the pin stamp, merges it when
+  the head pin records the tag it just published. It does **not** require the
+  absence of an open dispatcher pull request: by then the next cycle's
+  dispatcher release can already be pending, and requiring its absence would
+  make the step wait out its timeout on every second release.
+
+Neither path treats the draft flag as evidence. What proves a head was checked
+is a successful run of every required workflow for that exact head SHA, held to
+that head by `--match-head-commit`.
+
+**Why the two conditions differ.** An open dispatcher pull request disappearing
+is not proof the stamp landed: the pull request closes on merge, the stamp
+arrives 15–25 minutes later, and in between `main`'s manifest names the new
+dispatcher while the package head still pins the old one. Requiring the pin to
+match the manifest closes that window; requiring only "no open dispatcher pull
+request" would not.
+
+**Limits.** This prevents a misplaced click, not a determined one. Anyone with
+write access can press "Ready for review" and merge. It is a guard rail, not
+access control; the enforcement of correctness stays with
+`check-package-pin-consistency`, which fails the release commit itself.
+
+`release-please.yml` therefore mints the same GitHub App token
+`post-publish` uses. A merge made with `GITHUB_TOKEN` starts no follow-up
+workflow run, so the package release would never be tagged.

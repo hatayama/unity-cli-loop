@@ -237,6 +237,17 @@ func finalizeReleasePRChecks(
 		return 0
 	}
 
+	// Readying the Unity package release PR would let a person merge it before
+	// the dispatcher it must ship is released and stamped. It stays draft, and
+	// the merge automation lifts the draft itself right before merging
+	// (docs/dispatcher-pin-release-order.md).
+	if releasePRCheckComponentFromHeadRef(releasePR.HeadRefName, config.targetBranch) == mergePackageReleasePRComponent {
+		writeReleasePRCheckLine(stdout, fmt.Sprintf(
+			"Leaving release PR #%d in draft: the Unity package release pull request is merged only by automation (docs/dispatcher-pin-release-order.md).",
+			releasePR.Number))
+		return 0
+	}
+
 	err = markReleasePRCheckReady(ctx, config, releasePR, deps)
 	if err != nil {
 		writeReleasePRCheckLine(stderr, err)

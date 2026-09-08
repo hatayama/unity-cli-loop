@@ -870,8 +870,8 @@ func multiReleasePRCheckHeadSHA(commandLine string) string {
 	return "dispatcher123"
 }
 
-// Verifies that every pending per-component release PR is drafted, checked, and marked ready.
-func TestReleasePRChecksMarkEveryComponentPullRequestReady(t *testing.T) {
+// Verifies that the dispatcher release PR is marked ready after its checks pass while the Unity package one stays draft, so only automation can merge the package release.
+func TestReleasePRChecksLeaveUnityPackagePullRequestDraft(t *testing.T) {
 	prListJSON := `[` +
 		`{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
 		`{"number":2002,"headRefName":"release-please--branches--main--components--unity-package","headRefOid":"package123","title":"chore(main): release 3.6.0","url":"https://example.test/pr/2002"}` +
@@ -883,13 +883,14 @@ func TestReleasePRChecksMarkEveryComponentPullRequestReady(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", exitCode, stderr)
 	}
 	assertReleasePRCheckLogContains(t, stdout, "Marked release PR #2001 as ready after checks passed.")
-	assertReleasePRCheckLogContains(t, stdout, "Marked release PR #2002 as ready after checks passed.")
+	assertReleasePRCheckLogContains(t, stdout, "Leaving release PR #2002 in draft: the Unity package release pull request is merged only by automation")
+	assertReleasePRCheckLogDoesNotContain(t, stdout, "Marked release PR #2002 as ready after checks passed.")
 	commandLogText := strings.Join(stub.commandLog, "\n")
 	assertReleasePRCheckLogContainsLine(t, commandLogText, "gh pr ready 2001 --repo owner/repository")
-	assertReleasePRCheckLogContainsLine(t, commandLogText, "gh pr ready 2002 --repo owner/repository")
+	assertReleasePRCheckLogDoesNotContainLine(t, commandLogText, "gh pr ready 2002 --repo owner/repository")
 }
 
-// Verifies that one component's failing checks still let the other component's release PR be marked ready, and the command reports the failure.
+// Verifies that one component's failing checks still let the other component's release PR be finalized, and the command reports the failure.
 func TestReleasePRChecksContinueAfterOneComponentFails(t *testing.T) {
 	prListJSON := `[` +
 		`{"number":2001,"headRefName":"release-please--branches--main--components--dispatcher","headRefOid":"dispatcher123","title":"chore(main): release dispatcher 3.6.0","url":"https://example.test/pr/2001"},` +
@@ -902,10 +903,9 @@ func TestReleasePRChecksContinueAfterOneComponentFails(t *testing.T) {
 		t.Fatalf("expected exit code 1, got %d\nstderr: %s", exitCode, stderr)
 	}
 	assertReleasePRCheckLogContains(t, stderr, "gh run watch 11 failed")
-	assertReleasePRCheckLogContains(t, stdout, "Marked release PR #2002 as ready after checks passed.")
+	assertReleasePRCheckLogContains(t, stdout, "Leaving release PR #2002 in draft")
 	commandLogText := strings.Join(stub.commandLog, "\n")
 	assertReleasePRCheckLogDoesNotContainLine(t, commandLogText, "gh pr ready 2001 --repo owner/repository")
-	assertReleasePRCheckLogContainsLine(t, commandLogText, "gh pr ready 2002 --repo owner/repository")
 }
 
 // Verifies that a non-package component's release PR body is left alone, so its bare version summary is not relabeled as the Unity package.
