@@ -288,10 +288,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public const string IntroducedTypesApplyMessageSuffixFormat = " IntroducedTypes={0}.";
 
         public const string IntroducedTypeFailureApplyMessage =
-            "Hot reload refused one or more type declarations. See IntroducedTypes.";
+            "Hot reload refused one or more type declarations; no method body was applied in the "
+            + "files that share an assembly with a refused declaration. See IntroducedTypes.";
 
         public const string IntroducedTypeAndMethodFailureApplyMessage =
-            "Hot reload finished with one or more Failed outcomes. See Methods and IntroducedTypes.";
+            "Hot reload finished with one or more Failed outcomes; no method body was applied in the "
+            + "files that share an assembly with a refused declaration. See Methods and IntroducedTypes.";
 
         public const string AlreadyActiveIntroducedTypeReason =
             "This declaration is bound from an assembly an earlier hot reload retained, so this "

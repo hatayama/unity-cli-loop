@@ -81,7 +81,7 @@ changed are patched (`UnchangedTotal` counts the rest). Details:
   other outside-body edits never change runtime behavior (drift is warned where
   detectable).
 - A reload applies each file all-or-nothing: any `Failed` method leaves that file unapplied,
-  while other files still apply.
+  while other files still apply; a `Failed` type leaves all files of its assembly unapplied.
 
 Full rules and the `Skipped`/`Failed` condition tables: `references/scope-and-limits.md`.
 

@@ -42,7 +42,9 @@ declares it stays in the tree, the rest of the reload continues, and the respons
 | Type that itself declares a nested type | `Nested declaration inside an introduced type requires a compile: <type>/<nested>` |
 
 Three conditions are reported as `Failed` rows in `IntroducedTypes` instead, because the run
-cannot proceed as if the declaration were absent:
+cannot proceed as if the declaration were absent. A `Failed` row stops that assembly before any
+of its method bodies is transformed: the files sharing the assembly report no `Methods` rows and
+nothing from them is applied, while files in other assemblies still apply.
 
 | Condition | `Reason` |
 |---|---|
@@ -70,7 +72,7 @@ and still fail a method. The three shapes a caller has to be able to read:
 |---|---|---|---|---|
 | Only a new type, nothing to patch | `true` | one `Introduced` row | empty | `Hot reload introduced 1 type(s); no method body needed patching.` |
 | The declaration was already introduced by an earlier reload | `true` | one `AlreadyActive` row | empty | `Hot reload bound 1 introduced type(s) this domain already holds; no method body needed patching.` |
-| A type became active, then a method failed | `false` | one `Introduced` row | one `Failed` row | `Hot reload finished with one or more Failed outcomes. See Methods and IntroducedTypes.` |
+| A type became active, then a method failed | `false` | one `Introduced` row | one `Failed` row | `Hot reload finished with one or more Failed method outcomes. See Methods. IntroducedTypes=1.` |
 
 `ActiveIntroducedTypeTotal` always reports how many types the domain holds after the run,
 whatever the methods did. In the third shape the recommended next action is a partial-apply
