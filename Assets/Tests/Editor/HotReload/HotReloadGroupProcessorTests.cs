@@ -723,7 +723,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     {
                         CallerAssemblyName = AssemblyName,
                         CallerMethodKey = CallerKey,
-                        CallerTypeMetadataName = "Coverage.Host",
+                        CallerTypeMetadataName = new HotReloadMetadataTypeName("Coverage.Host"),
                         CallerMethodName = "Caller",
                         CallerParameterTypeFullNames = Array.Empty<string>(),
                         TargetMethodKey = TargetKey
@@ -755,7 +755,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                     {
                         CallerAssemblyName = AssemblyName,
                         CallerMethodKey = CallerKey,
-                        CallerTypeMetadataName = "Coverage.Host",
+                        CallerTypeMetadataName = new HotReloadMetadataTypeName("Coverage.Host"),
                         CallerMethodName = "Caller",
                         CallerParameterTypeFullNames = Array.Empty<string>(),
                         TargetMethodKey = TargetKey

@@ -60,8 +60,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            Type callerType = assembly.GetType(
-                new HotReloadMetadataTypeName(hit.CallerTypeMetadataName).ToReflectionName().Value);
+            Type callerType = assembly.GetType(hit.CallerTypeMetadataName.ToReflectionName().Value);
             if (callerType == null || !typeof(MonoBehaviour).IsAssignableFrom(callerType))
             {
                 return false;
@@ -122,7 +121,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 foreach (Candidate candidate in pair.Value)
                 {
                     string targetKey = HotReloadMethodKeys.BuildMethodKeyParts(
-                        candidate.Identity.TypeMetadataName,
+                        candidate.Identity.TypeMetadataName.Value,
                         candidate.Identity.MethodName,
                         candidate.Identity.ParameterTypeFullNames,
                         candidate.Identity.GenericArity);

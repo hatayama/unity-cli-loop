@@ -110,7 +110,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 rows.Add(
                     HotReloadIntroducedTypeOutcome.Introduced(
-                        descriptor.MetadataName,
+                        descriptor.MetadataName.Value,
                         descriptor.OriginalAssemblyName,
                         descriptor.OwnerProjectRelativePath));
             }

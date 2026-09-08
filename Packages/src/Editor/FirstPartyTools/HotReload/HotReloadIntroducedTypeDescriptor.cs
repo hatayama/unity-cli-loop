@@ -11,7 +11,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string OriginalAssemblyMvid { get; }
 
-        public string MetadataName { get; }
+        public HotReloadMetadataTypeName MetadataName { get; }
 
         public string OwnerProjectRelativePath { get; }
 
@@ -36,7 +36,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             RequireValue(declarationFingerprint, nameof(declarationFingerprint));
             OriginalAssemblyName = originalAssemblyName;
             OriginalAssemblyMvid = originalAssemblyMvid;
-            MetadataName = metadataName;
+            MetadataName = new HotReloadMetadataTypeName(metadataName);
             OwnerProjectRelativePath = ownerProjectRelativePath;
             DeclarationFingerprint = declarationFingerprint;
             Source = source;
@@ -52,7 +52,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
         public string BuildIdentity()
         {
-            return OriginalAssemblyName + "|" + OriginalAssemblyMvid + "|" + MetadataName;
+            return OriginalAssemblyName + "|" + OriginalAssemblyMvid + "|" + MetadataName.Value;
         }
 
         public bool HasSameDefinition(HotReloadIntroducedTypeDescriptor other)

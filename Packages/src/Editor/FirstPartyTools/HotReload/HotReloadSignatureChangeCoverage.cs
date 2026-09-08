@@ -165,7 +165,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             Debug.Assert(hit != null, "hit must not be null.");
             return HotReloadMethodKeys.FormatMethodLabelParts(
-                new HotReloadMetadataTypeName(hit.CallerTypeMetadataName),
+                hit.CallerTypeMetadataName,
                 hit.CallerMethodName,
                 hit.CallerParameterTypeFullNames ?? Array.Empty<string>(),
                 ReadGenericArityFromWireMethodKey(hit.CallerMethodKey, hit.CallerMethodName));

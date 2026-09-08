@@ -822,8 +822,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             Assert.That(registry.ActiveCount, Is.EqualTo(1), "The artifact count must stay one artifact.");
             Assert.That(registry.ActiveTypeCount, Is.EqualTo(2), "Both introduced types must be counted.");
             Assert.That(active.Count, Is.EqualTo(2));
-            Assert.That(active[0].MetadataName, Is.EqualTo("Example.Introduced"), "The snapshot must be ordered.");
-            Assert.That(active[1].MetadataName, Is.EqualTo("Example.OtherIntroduced"));
+            Assert.That(active[0].MetadataName.Value, Is.EqualTo("Example.Introduced"), "The snapshot must be ordered.");
+            Assert.That(active[1].MetadataName.Value, Is.EqualTo("Example.OtherIntroduced"));
         }
 
         private static HotReloadIntroducedTypeArtifact CreateArtifact(string fingerprint)

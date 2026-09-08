@@ -277,14 +277,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 ownerPaths.Add(declaration.OwnerProjectRelativePath);
             }
 
-            string reason = "Introduced type " + declarations[0].MetadataName
+            string reason = "Introduced type " + declarations[0].MetadataName.Value
                 + " is declared in more than one file of the group: "
                 + string.Join(", ", ownerPaths) + ".";
             foreach (HotReloadIntroducedTypeDescriptor declaration in declarations)
             {
                 failures.Add(
                     HotReloadIntroducedTypeOutcome.Failed(
-                        declaration.MetadataName,
+                        declaration.MetadataName.Value,
                         targetAssemblyName,
                         declaration.OwnerProjectRelativePath,
                         reason));

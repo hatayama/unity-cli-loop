@@ -28,7 +28,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     new HotReloadIntroducedTypeResult
                     {
                         Kind = HotReloadConstants.ActiveIntroducedTypeStatusKind,
-                        TypeName = descriptor.MetadataName,
+                        TypeName = descriptor.MetadataName.Value,
                         AssemblyName = descriptor.OriginalAssemblyName,
                         FilePath = descriptor.OwnerProjectRelativePath ?? string.Empty,
                         Reason = string.Empty

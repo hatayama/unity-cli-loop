@@ -296,7 +296,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return byAssembly;
             }
 
-            return string.Compare(left.MetadataName, right.MetadataName, StringComparison.Ordinal);
+            return string.Compare(left.MetadataName.Value, right.MetadataName.Value, StringComparison.Ordinal);
         }
 
         private void ValidateActivation(HotReloadIntroducedTypeArtifact artifact)

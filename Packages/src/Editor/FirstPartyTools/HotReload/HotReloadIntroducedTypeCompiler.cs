@@ -124,7 +124,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             IReadOnlyCollection<string> emittedTypeNames = environment.ReadDefinedTypeNames(request.DllPath);
             foreach (HotReloadIntroducedTypeDescriptor descriptor in request.Descriptors)
             {
-                if (!emittedTypeNames.Contains(descriptor.MetadataName))
+                if (!emittedTypeNames.Contains(descriptor.MetadataName.Value))
                 {
                     return HotReloadIntroducedTypeCompilerResult.Failure(
                         "Introduced-type artifact does not define every requested type.");

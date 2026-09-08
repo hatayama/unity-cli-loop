@@ -87,7 +87,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 foreach (HotReloadIntroducedTypeDescriptor descriptor
                     in HotReloadIntroducedTypeHolder.Registry.DescribeActive())
                 {
-                    expected.Add(descriptor.MetadataName);
+                    expected.Add(descriptor.MetadataName.Value);
                 }
 
                 Assert.That(describe(), Is.EqualTo(expected));
@@ -1685,7 +1685,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         {
             foreach (HotReloadIntroducedTypeDescriptor descriptor in artifact.Descriptors)
             {
-                if (string.Equals(descriptor.MetadataName, metadataName, StringComparison.Ordinal))
+                if (string.Equals(descriptor.MetadataName.Value, metadataName, StringComparison.Ordinal))
                 {
                     return descriptor;
                 }

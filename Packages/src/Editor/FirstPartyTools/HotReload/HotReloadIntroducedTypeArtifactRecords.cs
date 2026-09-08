@@ -41,7 +41,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 HotReloadIntroducedTypeDescriptor descriptor = artifact.Descriptors[index];
                 types[index] = new TransformWorkerIntroducedTypeArtifactTypeDto
                 {
-                    metadataName = descriptor.MetadataName,
+                    metadataName = descriptor.MetadataName.Value,
                     originalAssemblyName = descriptor.OriginalAssemblyName,
                     originalAssemblyMvid = descriptor.OriginalAssemblyMvid,
                     ownerProjectRelativePath = descriptor.OwnerProjectRelativePath,
