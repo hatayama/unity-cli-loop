@@ -103,6 +103,77 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a compile that throws becomes that record's warning and the rest still restore.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator RestoreAsync_WhenTheCompilerThrows_ReportsThatRecordAndKeepsGoing()
+        {
+            WatchExpressionRegistry registry = CreateRegistry();
+            InMemoryWatchPersistenceStore store = new(
+                Record("throwing", "boom", 20),
+                Record("kept", "1 + 1", 20));
+            FakeWatchExpressionCompiler compiler = new();
+            compiler.ThrowFor("boom", "the compiler process died");
+            WatchRestoreService service = new(registry, compiler, store, () => { });
+
+            Task<WatchRestoreReport> task = service.RestoreAsync(CancellationToken.None);
+            yield return WaitFor(task);
+
+            WatchRestoreReport report = task.Result;
+            Assert.That(report.RestoredCount, Is.EqualTo(1));
+            Assert.That(report.Warnings, Has.Count.EqualTo(1));
+            Assert.That(report.Warnings[0], Does.Contain("throwing"));
+            Assert.That(report.Warnings[0], Does.Contain("the compiler process died"));
+            Assert.That(IdsOf(registry), Is.EqualTo(new[] { "kept" }));
+            Assert.That(IdsOf(store.Saved), Is.EqualTo(new[] { "kept" }));
+        }
+
+        /// <summary>
+        /// What: a record whose id the user re-registered meanwhile is not reported as dropped,
+        /// even when its stored expression no longer compiles - the watch is not gone.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator RestoreAsync_WhenAFailingRecordsIdWasRegisteredMeanwhile_ReportsNothing()
+        {
+            WatchExpressionRegistry registry = CreateRegistry();
+            registry.Register("first", "999", new ConstantWatchExpressionEvaluator(999), 20);
+            InMemoryWatchPersistenceStore store = new(Record("first", "MissingType.Value", 20));
+            FakeWatchExpressionCompiler compiler = new();
+            compiler.FailFor("MissingType.Value", "The name 'MissingType' does not exist");
+            WatchRestoreService service = new(registry, compiler, store, () => { });
+
+            Task<WatchRestoreReport> task = service.RestoreAsync(CancellationToken.None);
+            yield return WaitFor(task);
+
+            Assert.That(task.Result.Warnings, Is.Empty);
+            Assert.That(store.Saved[0].Expression, Is.EqualTo("999"));
+        }
+
+        /// <summary>
+        /// What: a restore cancelled mid-flight registers nothing further and must not write the
+        /// store, because the clear that cancelled it already wrote the authoritative empty store.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator RestoreAsync_WhenCancelledWhileCompiling_LeavesTheStoreToTheClearThatCancelledIt()
+        {
+            WatchExpressionRegistry registry = CreateRegistry();
+            InMemoryWatchPersistenceStore store = new(
+                Record("first", "1 + 1", 20),
+                Record("second", "2 + 2", 20));
+            CancellationTokenSource cancellation = new();
+            FakeWatchExpressionCompiler compiler = new();
+            compiler.CancelOnCompile(cancellation);
+            WatchRestoreService service = new(registry, compiler, store, () => { });
+
+            Task<WatchRestoreReport> task = service.RestoreAsync(cancellation.Token);
+            yield return WaitFor(task);
+
+            Assert.That(registry.GetEntries(), Is.Empty);
+            Assert.That(store.SaveCount, Is.EqualTo(0));
+            Assert.That(compiler.CompileCount, Is.EqualTo(1), "Cancellation must stop the loop, not just the current record.");
+        }
+
+        /// <summary>
         /// What: an empty store compiles nothing and leaves the store untouched.
         /// </summary>
         [UnityTest]
@@ -194,6 +265,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             private readonly Dictionary<string, string> _failuresByExpression = new(StringComparer.Ordinal);
 
+            private readonly Dictionary<string, string> _throwsByExpression = new(StringComparer.Ordinal);
+            private CancellationTokenSource _cancelOnCompile;
+
             public int CompileCount { get; private set; }
 
             public void FailFor(string expression, string errorMessage)
@@ -201,9 +275,26 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 _failuresByExpression[expression] = errorMessage;
             }
 
+            public void ThrowFor(string expression, string exceptionMessage)
+            {
+                _throwsByExpression[expression] = exceptionMessage;
+            }
+
+            /// <summary>Mimics a clear-watch --all arriving while the first record is compiling.</summary>
+            public void CancelOnCompile(CancellationTokenSource cancellation)
+            {
+                _cancelOnCompile = cancellation;
+            }
+
             public Task<WatchCompilationResult> CompileAsync(string expression, CancellationToken ct)
             {
                 CompileCount++;
+                _cancelOnCompile?.Cancel();
+                if (_throwsByExpression.TryGetValue(expression, out string exceptionMessage))
+                {
+                    throw new InvalidOperationException(exceptionMessage);
+                }
+
                 if (_failuresByExpression.TryGetValue(expression, out string errorMessage))
                 {
                     return Task.FromResult(WatchCompilationResult.FailureResult(

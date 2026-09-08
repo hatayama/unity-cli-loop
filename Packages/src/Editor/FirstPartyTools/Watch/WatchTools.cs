@@ -273,6 +273,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             if (parameters.All)
             {
+                // Stop any in-flight restore first: otherwise it would keep re-registering the
+                // watches this call is clearing and save them back over the empty store.
+                WatchExpressionServices.CancelPendingRestore();
                 int clearedCount = WatchExpressionServices.Registry.ClearAll();
                 WatchExpressionServices.SaveRegistrySnapshot();
                 return new WatchResponse
@@ -305,7 +308,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 entries = entries.Where(entry => entry.Id == parameters.Id).ToList();
                 if (entries.Count == 0)
                 {
-                    return CreateFailure($"Watch expression '{parameters.Id}' was not found.");
+                    // Asking for exactly the watch the reload dropped is the one moment the caller
+                    // most needs the restore report, so the failure carries it too.
+                    WatchResponse notFound = CreateFailure($"Watch expression '{parameters.Id}' was not found.");
+                    notFound.Warning = BuildRestoreWarning();
+                    return notFound;
                 }
             }
 
@@ -395,13 +402,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private static readonly UnityWatchEditorStateProvider StateProvider = new();
         private static readonly WatchExpressionRegistry RegistryValue = new(StateProvider);
-        private static readonly WatchExpressionCompiler CompilerValue = new(new DynamicCodeCompiler());
+        private static readonly WatchExpressionCompiler DefaultCompiler = new(new DynamicCodeCompiler());
+        private static IWatchExpressionCompiler _compiler = DefaultCompiler;
         private static readonly WatchExpressionStepMonitor Monitor = new(RegistryValue);
         private static readonly IWatchPersistenceStore DefaultStore = new WatchSessionStateStore();
         private static IWatchPersistenceStore _store = DefaultStore;
+        private static CancellationTokenSource _restoreCancellation;
 
         public static WatchExpressionRegistry Registry => RegistryValue;
-        public static IWatchExpressionCompiler Compiler => CompilerValue;
+        public static IWatchExpressionCompiler Compiler => _compiler;
         public static IWatchPersistenceStore Store => _store;
 
         /// <summary>
@@ -421,19 +430,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         public static void RestoreAfterDomainReload()
         {
-            _ = RestoreAfterDomainReloadAsync();
+            _restoreCancellation = new CancellationTokenSource();
+            _ = RestoreAfterDomainReloadAsync(_restoreCancellation.Token);
         }
 
-        private static async Task RestoreAfterDomainReloadAsync()
+        /// <summary>
+        /// Stops a restore that is still compiling. Without this, a clear issued mid-restore would
+        /// be undone: the restore would keep registering the records the clear just removed and
+        /// write them back over the empty store.
+        /// </summary>
+        public static void CancelPendingRestore()
+        {
+            _restoreCancellation?.Cancel();
+        }
+
+        private static async Task RestoreAfterDomainReloadAsync(CancellationToken ct)
         {
             try
             {
                 WatchRestoreService restoreService = new(
                     RegistryValue,
-                    CompilerValue,
+                    _compiler,
                     _store,
                     EnsureMonitorStarted);
-                LastRestoreReport = await restoreService.RestoreAsync(CancellationToken.None);
+                LastRestoreReport = await restoreService.RestoreAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // A cancelled restore is a clear the user asked for, not a failure.
             }
             catch (Exception exception)
             {
@@ -472,10 +496,17 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             _store = store ?? throw new ArgumentNullException(nameof(store));
         }
 
-        internal static void ResetStoreForTesting()
+        internal static void OverrideCompilerForTesting(IWatchExpressionCompiler compiler)
+        {
+            _compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
+        }
+
+        internal static void ResetForTesting()
         {
             _store = DefaultStore;
+            _compiler = DefaultCompiler;
             LastRestoreReport = null;
+            _restoreCancellation = null;
         }
 
         internal static void SetLastRestoreReportForTesting(WatchRestoreReport report)

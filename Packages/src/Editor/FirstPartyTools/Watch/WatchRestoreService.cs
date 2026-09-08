@@ -45,7 +45,29 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // the restored order has to match the order the user registered them in.
             foreach (WatchPersistedRecord record in records)
             {
-                if (await TryRestoreAsync(record, warnings, ct))
+                if (ct.IsCancellationRequested)
+                {
+                    return CancelledReport(restoredCount);
+                }
+
+                bool restored;
+                try
+                {
+                    restored = await TryRestoreAsync(record, warnings, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Cancellation is how clear-watch --all tells restore to stop; it is the
+                    // user's intent, not a failure to report.
+                    return CancelledReport(restoredCount);
+                }
+
+                if (ct.IsCancellationRequested)
+                {
+                    return CancelledReport(restoredCount);
+                }
+
+                if (restored)
                 {
                     restoredCount++;
                 }
@@ -62,20 +84,43 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             return new WatchRestoreReport(restoredCount, warnings);
         }
 
+        // Why no Save here: the only thing that cancels a restore is a clear the user asked for,
+        // and that clear already wrote the authoritative store. Saving the registry now would
+        // re-persist the records the clear just removed and silently undo it.
+        private static WatchRestoreReport CancelledReport(int restoredCount)
+        {
+            return new WatchRestoreReport(restoredCount, Array.Empty<string>());
+        }
+
         private async Task<bool> TryRestoreAsync(
             WatchPersistedRecord record,
             List<string> warnings,
             CancellationToken ct)
         {
-            WatchCompilationResult compiled = await _compiler.CompileAsync(record.Expression, ct);
+            WatchCompilationResult compiled;
+            try
+            {
+                compiled = await _compiler.CompileAsync(record.Expression, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancellation ends the whole restore, so it must not be turned into a warning here.
+                throw;
+            }
+            catch (Exception exception)
+            {
+                // The compiler propagates its own failures; one bad expression must not stop the
+                // remaining watches from coming back.
+                AddDroppedWarning(warnings, record, exception.Message);
+                return false;
+            }
+
             // Why switch back: CompileAsync resumes off-thread, but the registry evaluates the
             // expression on registration and must run on the Unity main thread.
             await MainThreadSwitcher.SwitchToMainThread(ct);
             if (!compiled.Success)
             {
-                warnings.Add(
-                    $"Watch '{record.Id}' was not restored after the domain reload because its "
-                    + $"expression no longer compiles: {DescribeCompilationFailure(compiled)}");
+                AddDroppedWarning(warnings, record, DescribeCompilationFailure(compiled));
                 return false;
             }
 
@@ -87,6 +132,33 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // A duplicate id means the user re-registered the watch while restore was compiling.
             // Their registration is the newer intent, so it wins and the skip stays silent.
             return registered.Success;
+        }
+
+        // Why check the registry first: if the user re-registered this id while restore was
+        // compiling, the watch is not gone and telling them it was dropped would be false.
+        private void AddDroppedWarning(List<string> warnings, WatchPersistedRecord record, string reason)
+        {
+            if (IsRegistered(record.Id))
+            {
+                return;
+            }
+
+            warnings.Add(
+                $"Watch '{record.Id}' was not restored after the domain reload because its "
+                + $"expression no longer compiles: {reason}");
+        }
+
+        private bool IsRegistered(string id)
+        {
+            foreach (WatchExpressionEntry entry in _registry.GetEntries())
+            {
+                if (string.Equals(entry.Id, id, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static string DescribeCompilationFailure(WatchCompilationResult compiled)

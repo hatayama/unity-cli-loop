@@ -30,7 +30,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         public void TearDown()
         {
             WatchExpressionServices.Registry.ClearAll();
-            WatchExpressionServices.ResetStoreForTesting();
+            WatchExpressionServices.ResetForTesting();
         }
 
         /// <summary>
@@ -75,6 +75,41 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
 
             Assert.That(task.Result.Success, Is.False);
             Assert.That(_store.SaveCount, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// What: a successful enable-watch persists the watch, so the next domain reload restores it.
+        /// </summary>
+        [Test]
+        public void EnableAsync_WhenRegistrationSucceeds_PersistsTheWatchForTheNextDomainReload()
+        {
+            WatchExpressionServices.OverrideCompilerForTesting(new StubWatchExpressionCompiler());
+
+            Task<WatchResponse> task = WatchUseCase.EnableAsync(
+                new EnableWatchSchema { Id = "speed", Expression = "1 + 2", MaxHistory = 9 },
+                CancellationToken.None);
+
+            Assert.That(task.IsCompletedSuccessfully, Is.True);
+            Assert.That(task.Result.Success, Is.True);
+            Assert.That(_store.Records, Has.Count.EqualTo(1));
+            Assert.That(_store.Records[0].Id, Is.EqualTo("speed"));
+            Assert.That(_store.Records[0].Expression, Is.EqualTo("1 + 2"));
+            Assert.That(_store.Records[0].MaxHistory, Is.EqualTo(9));
+        }
+
+        /// <summary>
+        /// What: asking for exactly the watch the reload dropped explains why it is gone.
+        /// </summary>
+        [Test]
+        public void GetValues_WhenTheRequestedWatchWasDroppedByTheRestore_ExplainsItInWarning()
+        {
+            WatchExpressionServices.SetLastRestoreReportForTesting(
+                new WatchRestoreReport(0, new[] { "Watch 'speed' was not restored." }));
+
+            WatchResponse response = WatchUseCase.GetValues(new GetWatchValuesSchema { Id = "speed" });
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Warning, Does.Contain("Watch 'speed' was not restored."));
         }
 
         /// <summary>
@@ -191,6 +226,15 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             {
                 SaveCount++;
                 Records = records;
+            }
+        }
+
+        private sealed class StubWatchExpressionCompiler : IWatchExpressionCompiler
+        {
+            public Task<WatchCompilationResult> CompileAsync(string expression, CancellationToken ct)
+            {
+                return Task.FromResult(
+                    WatchCompilationResult.SuccessResult(new ConstantWatchExpressionEvaluator(3)));
             }
         }
 
