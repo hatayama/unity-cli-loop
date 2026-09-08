@@ -477,6 +477,10 @@ jobs:
       # not earlier. The App token is required: a merge made with GITHUB_TOKEN
       # starts no follow-up workflow run, so the package release would never be
       # tagged (docs/adr/0007-separate-release-prs-and-package-auto-merge.md).
+      # The package release pull request stays draft until this step lifts the
+      # draft itself, so draft is not a reason to wait here. An already open
+      # release pull request for the next dispatcher cycle is not a reason to
+      # wait either: this package pin records the dispatcher published above.
       - name: Merge the Unity package release pull request now that the pin records this dispatcher
         if: needs.build.outputs.should_publish == 'true' && needs.build.outputs.release_prerelease != 'true'
         working-directory: cli/release-automation
