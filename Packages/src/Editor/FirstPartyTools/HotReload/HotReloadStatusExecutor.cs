@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 
+using UnityEngine;
+
 using io.github.hatayama.UnityCliLoop.ToolContracts;
 
 namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
@@ -25,23 +27,23 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 hold.SceneRefreshWarning);
             // Why one snapshot: the total and the sentence that names it must agree, and a second
             // read could answer after another reload activated a type.
-            int introducedTypeCount = HotReloadActiveChangeCounts.IntroducedTypeCount;
+            HotReloadActiveChangeSnapshot snapshot = HotReloadActiveChangeCounts.Capture();
             return new HotReloadResponse
             {
                 Success = true,
                 ClearedCount = clearedCount,
-                ActivePatchTotal = HotReloadPatcher.ActiveChangeCount,
+                ActivePatchTotal = snapshot.PatchAndAddedMemberCount,
                 AutoRefreshHeld = hold.Held,
                 Warnings = warnings,
                 // Why the rows too: a total without them names nothing, so a caller told that
                 // types stayed loaded could not tell which ones a revert left behind.
                 IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(),
-                ActiveIntroducedTypeTotal = introducedTypeCount,
+                ActiveIntroducedTypeTotal = snapshot.IntroducedTypeCount,
                 Message = HotReloadIntroducedTypeStatusSection.AppendRevertAllNote(
                     clearedCount == 0
                         ? "No active hot-reload changes to revert."
                         : "Reverted all active hot-reload changes.",
-                    introducedTypeCount,
+                    snapshot.IntroducedTypeCount,
                     hold.Held)
             };
         }
@@ -96,9 +98,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // Why one snapshot for the heading, the drop decision, and the reported total: a
             // domain still holding an introduced type has not lost it, and a caller told three
             // different numbers for "what is active" cannot tell which one answers the question.
-            int introducedTypeCount = HotReloadActiveChangeCounts.IntroducedTypeCount;
-            int runtimeChangeTotal = count + introducedTypeCount;
-            string message = $"{runtimeChangeTotal} change(s) currently active.";
+            HotReloadActiveChangeSnapshot snapshot = HotReloadActiveChangeCounts.Capture();
+            Debug.Assert(
+                count == snapshot.PatchAndAddedMemberCount,
+                "The rows built from the two ledgers must total what the snapshot counts.");
+            string message = $"{snapshot.RuntimeChangeTotal} change(s) currently active.";
             if (neverInvokedCount > 0)
             {
                 message += " " + string.Format(
@@ -108,7 +112,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             int droppedCount = HotReloadPlayModeEntryDropLedger.Count;
             string dropMessage = HotReloadPlayModeEntryDropStatusMessageBuilder.Build(
-                runtimeChangeTotal,
+                snapshot.RuntimeChangeTotal,
                 droppedCount);
             if (dropMessage != null)
             {
@@ -130,7 +134,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Methods = methods,
                 Warnings = warnings,
                 IntroducedTypes = HotReloadIntroducedTypeStatusSection.BuildActiveRows(),
-                ActiveIntroducedTypeTotal = introducedTypeCount,
+                ActiveIntroducedTypeTotal = snapshot.IntroducedTypeCount,
                 ActivePatchTotal = count,
                 AddedFieldTotal = addedFields.Count,
                 AutoRefreshHeld = hold.Held,
