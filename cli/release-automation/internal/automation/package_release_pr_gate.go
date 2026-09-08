@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -20,11 +21,13 @@ func githubFileContentAtRef(
 	path string,
 	ref string,
 ) ([]byte, error) {
+	// The ref is a query parameter, so an unescaped one would be cut short at
+	// the first & and read a different commit than the caller asked for.
 	output, err := runOutput(
 		ctx,
 		"gh",
 		"api",
-		"repos/"+repository+"/contents/"+path+"?ref="+ref,
+		"repos/"+repository+"/contents/"+path+"?ref="+url.QueryEscape(ref),
 		"--jq",
 		".content",
 	)
