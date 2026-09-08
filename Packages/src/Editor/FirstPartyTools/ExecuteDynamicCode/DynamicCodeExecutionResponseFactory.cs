@@ -364,43 +364,19 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // A missing type that hot reload introduced is a design limit of this tool, not a
             // spelling or using-directive problem, so it is explained before the generic hints.
-            IReadOnlyList<string> introducedTypeNames =
-                HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames?.Invoke();
-            if (IntroducedTypeDiagnosticHint.TryBuild(
-                    error.ErrorCode,
-                    error.Message,
-                    introducedTypeNames,
+            if (TryBuildIntroducedTypeHint(
+                    error,
+                    ambiguousCandidates,
                     out string introducedTypeHint,
                     out List<string> introducedTypeSuggestions))
             {
-                // The ambiguous candidates stay available behind the introduced-type ones: the
-                // diagnostic cannot tell which of the two the caller meant.
-                AppendAmbiguousCandidateSuggestions(error, ambiguousCandidates, introducedTypeSuggestions);
                 return (introducedTypeHint, introducedTypeSuggestions);
             }
 
             switch (error.ErrorCode)
             {
                 case "CS0246":
-                    string typeName = CompilationDiagnosticMessageParser.ExtractTypeNameFromMessage(error.Message);
-                    if (typeName != null
-                        && ambiguousCandidates != null
-                        && ambiguousCandidates.TryGetValue(typeName, out List<string> candidates))
-                    {
-                        string candidateList = string.Join(", ", candidates);
-                        hint = $"Auto-using resolution found multiple candidates for '{typeName}': {candidateList}. Use a fully-qualified name or add the correct using directive.";
-                        foreach (string ns in candidates)
-                        {
-                            suggestions.Add($"Use {ns}.{typeName}");
-                        }
-
-                        return (hint, suggestions);
-                    }
-
-                    hint = "Auto-using resolution was attempted but could not resolve this identifier. Use a fully-qualified name (e.g., UnityEngine.Mathf) or add the correct using directive.";
-                    suggestions.Add("Use fully-qualified name (e.g., UnityEngine.Mathf, System.Linq.Enumerable)");
-                    suggestions.Add("Add the appropriate using directive at the top of the snippet");
-                    return (hint, suggestions);
+                    return BuildTypeNotFoundHint(error, ambiguousCandidates);
 
                 case "CS0103":
                     string identifierName = CompilationDiagnosticMessageParser.ExtractTypeNameFromMessage(error.Message);
@@ -443,6 +419,57 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
                     return (hint, suggestions);
             }
+        }
+
+        private static (string hint, List<string> suggestions) BuildTypeNotFoundHint(
+            CompilationError error,
+            Dictionary<string, List<string>> ambiguousCandidates)
+        {
+            List<string> suggestions = new();
+            string typeName = CompilationDiagnosticMessageParser.ExtractTypeNameFromMessage(error.Message);
+            if (typeName != null
+                && ambiguousCandidates != null
+                && ambiguousCandidates.TryGetValue(typeName, out List<string> candidates))
+            {
+                string candidateList = string.Join(", ", candidates);
+                string ambiguousHint = $"Auto-using resolution found multiple candidates for '{typeName}': {candidateList}. Use a fully-qualified name or add the correct using directive.";
+                foreach (string ns in candidates)
+                {
+                    suggestions.Add($"Use {ns}.{typeName}");
+                }
+
+                return (ambiguousHint, suggestions);
+            }
+
+            suggestions.Add("Use fully-qualified name (e.g., UnityEngine.Mathf, System.Linq.Enumerable)");
+            suggestions.Add("Add the appropriate using directive at the top of the snippet");
+            return (
+                "Auto-using resolution was attempted but could not resolve this identifier. Use a fully-qualified name (e.g., UnityEngine.Mathf) or add the correct using directive.",
+                suggestions);
+        }
+
+        private static bool TryBuildIntroducedTypeHint(
+            CompilationError error,
+            Dictionary<string, List<string>> ambiguousCandidates,
+            out string hint,
+            out List<string> suggestions)
+        {
+            IReadOnlyList<string> introducedTypeNames =
+                HotReloadIntroducedTypeCoordination.DescribeActiveTypeNames?.Invoke();
+            if (!IntroducedTypeDiagnosticHint.TryBuild(
+                    error.ErrorCode,
+                    error.Message,
+                    introducedTypeNames,
+                    out hint,
+                    out suggestions))
+            {
+                return false;
+            }
+
+            // The ambiguous candidates stay available behind the introduced-type ones: the
+            // diagnostic cannot tell which of the two the caller meant.
+            AppendAmbiguousCandidateSuggestions(error, ambiguousCandidates, suggestions);
+            return true;
         }
 
         private static void AppendAmbiguousCandidateSuggestions(
