@@ -94,6 +94,13 @@ would never be tagged.
   to `main`, so their checks are re-dispatched each time. That is more CI work
   per push, accepted because without it the package release pull request never
   reaches a mergeable state at all.
+- release-please's pull request update path is known to fail with a 422
+  "a pull request already exists" in some repositories using separate release
+  pull requests (upstream issue 2773). Its reported cause is the existing-pull-request
+  lookup missing on a `head.label` mismatch; this repository's owner login
+  matches that label, and the same update path already refreshes the combined
+  release pull request on every push. The risk is recorded here rather than
+  mitigated: if `release-please.yml` starts failing with that 422, this is why.
 - A failed check on the package release pull request stops the automation with a
   non-zero exit rather than waiting. That is deliberate: only a person can fix a
   failing check, and waiting would hide it until the timeout.
