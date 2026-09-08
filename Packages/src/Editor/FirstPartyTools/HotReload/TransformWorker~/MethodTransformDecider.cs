@@ -259,7 +259,7 @@ internal static class MethodTransformDecider
                 AddedMethodSkipReasons.InaccessibleAccessNoRewrite
                 + MethodTransformSkipReasons.AccessorRewriteUnavailableInfix
                 + accessorRejectReason
-                + " Run 'uloop compile'.");
+                + " " + CompileCallToAction.Plain);
         }
 
         bool usesDelegation = feasibilityPlan.Entries.Count > 0;

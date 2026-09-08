@@ -23,7 +23,7 @@ internal static class AddedFieldSkipReasons
 {
     public const string StructHost =
         "Added fields on struct types are skipped; the store requires a reference-type instance. "
-        + "Run 'uloop compile' to add them.";
+        + CompileCallToAction.ToAddThem;
 
     public const string InitializerNotLiteralOrExternalStatic =
         "Added field initializer is not a literal or an externally visible static member "
@@ -35,41 +35,41 @@ internal static class AddedFieldSkipReasons
         + "Or run 'uloop compile'.";
 
     public const string FieldTypeNotExternallyVisible =
-        "Added field type is not visible to the shim assembly. Run 'uloop compile'.";
+        "Added field type is not visible to the shim assembly. " + CompileCallToAction.Plain;
 
     public const string FieldTypeUnresolvedFormat =
         "Added field type '{0}' could not be resolved; check for a missing using directive or a typo, fix the declaration, and rerun. Run 'uloop compile' if the type is new.";
 
     public const string IncrementNotNumeric =
         "Increment or decrement of an added field is skipped unless the type is a numeric "
-        + "primitive or enum. Run 'uloop compile'.";
+        + "primitive or enum. " + CompileCallToAction.Plain;
 
     public const string RefOutIn =
-        "Added fields cannot be passed by ref, out, or in. Run 'uloop compile'.";
+        "Added fields cannot be passed by ref, out, or in. " + CompileCallToAction.Plain;
 
     public const string ConsumedWrite =
         "The value of an assignment to an added field is consumed; the store write returns void. "
-        + "Run 'uloop compile'.";
+        + CompileCallToAction.Plain;
 
     public const string DoubleEvalReceiver =
         "Assignment to an added field would evaluate a receiver with possible side effects twice. "
-        + "Run 'uloop compile'.";
+        + CompileCallToAction.Plain;
 
     public const string ValueTypeMemberWrite =
         "Writes to members of an added value-type field, and instance method calls on that field, "
-        + "cannot be rewritten. Run 'uloop compile'.";
+        + "cannot be rewritten. " + CompileCallToAction.Plain;
 
     public const string UnavailableAddedField =
-        "Uses an added field that hot reload cannot emit. Run 'uloop compile'.";
+        "Uses an added field that hot reload cannot emit. " + CompileCallToAction.Plain;
 
     public const string FieldTypeChanged =
-        "Field '{0}' has a different type in the compiled assembly. Run 'uloop compile'.";
+        "Field '{0}' has a different type in the compiled assembly. " + CompileCallToAction.Plain;
 
     public const string FieldModifiersChanged =
-        "Field '{0}' changed its static or const modifier in the compiled assembly. Run 'uloop compile'.";
+        "Field '{0}' changed its static or const modifier in the compiled assembly. " + CompileCallToAction.Plain;
 
     public const string MemberKindChanged =
-        "Field '{0}' is declared as a property or an event in the compiled assembly. Run 'uloop compile'.";
+        "Field '{0}' is declared as a property or an event in the compiled assembly. " + CompileCallToAction.Plain;
 
     public const string SerializeWarningFormat =
         "Added field '{0}' has a serialization attribute, so it will not appear in the Inspector "
