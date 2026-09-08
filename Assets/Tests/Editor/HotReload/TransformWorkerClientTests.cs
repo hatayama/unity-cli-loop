@@ -1254,7 +1254,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string ExpectedExplicitAccessorSkipReason =
-            "Property setter, init, or indexer accessors are out of scope for v1; "
+            "Property setter, init, or indexer accessors are skipped; "
             + "run 'uloop compile' to apply accessor edits.";
 
         private const string ExpectedSetOnlyPropertySkipReason =
@@ -1886,7 +1886,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         private const string ExpectedUnsupportedMemberKindSkipReason =
-            "Constructors, operators, and event accessors are out of scope for v1; "
+            "Constructors, operators, and event accessors are skipped; "
             + "run 'uloop compile' to apply these edits.";
 
         // Keep in sync with OutsideMethodBodyDriftWarningFormat in

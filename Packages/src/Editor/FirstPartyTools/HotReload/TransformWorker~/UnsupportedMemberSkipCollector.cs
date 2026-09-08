@@ -18,11 +18,11 @@ using Microsoft.CodeAnalysis.Text;
 internal static class UnsupportedMemberSkipCollector
 {
     internal const string ExplicitAccessorSkipReason =
-        "Property setter, init, or indexer accessors are out of scope for v1; "
+        "Property setter, init, or indexer accessors are skipped; "
         + "run 'uloop compile' to apply accessor edits.";
 
     internal const string UnsupportedMemberKindSkipReason =
-        "Constructors, operators, and event accessors are out of scope for v1; "
+        "Constructors, operators, and event accessors are skipped; "
         + "run 'uloop compile' to apply these edits.";
 
     // What: reports each property/indexer accessor that has an explicit body as Skipped.

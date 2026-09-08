@@ -245,4 +245,4 @@ Wire details:
 - Transplant of methods with exception handlers (`try/finally`, `using`) rides on Harmony's
   standard `CodeInstruction` block round-trip; PR-3's end-to-end tests must include such a
   body.
-- Struct (value type) methods stay skipped in v1 (same restriction the prefix design had).
+- Struct (value type) methods stay skipped (same restriction the prefix design had).

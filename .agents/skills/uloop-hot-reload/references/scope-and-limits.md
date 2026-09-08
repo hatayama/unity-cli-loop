@@ -246,7 +246,7 @@ stay `Skipped`.
 | An async/iterator/closure body references a private/internal type | Accessor delegates rescue member access, not type references; the body still cannot JIT-compile from the shim assembly |
 | A declared return or parameter type cannot be resolved (a new type this reload could not introduce, a missing using, or a typo) | Skipped; a supported new type declared in an edited file of the same assembly is introduced by this reload, so check `Warnings` for the refusal reason (`introduced-types.md`); otherwise add the type or the `using`, or fix the typo, then run `uloop compile` |
 | Edited setter, init, or indexer accessor of a *compiled* property | Accessor patching covers getters only; `uloop compile` applies these edits. Accessors of a property added in this edit are emitted instead |
-| Constructor (instance or static), operator, conversion operator, or explicit event accessor (add/remove) | Out of scope for v1; `uloop compile` applies these edits |
+| Constructor (instance or static), operator, conversion operator, or explicit event accessor (add/remove) | Skipped; `uloop compile` applies these edits |
 | Method raises or reads a field-like event that has no reachable backing field | Custom `add`/`remove` accessors, an `abstract`/`extern`/interface event, a delegate type that is not visible outside the assembly, or an event added in this edit leave nothing for the shim's Harmony accessor to bind |
 | Method raises or reads a field-like event through a conditional receiver (`other?.E`) | The shim has no name for the conditional receiver to pass to the accessor call |
 | Method names a field-like event inside `nameof` | The shim is a different type and cannot keep the bare event name |
