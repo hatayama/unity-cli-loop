@@ -60,7 +60,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 return false;
             }
 
-            Type callerType = assembly.GetType(hit.CallerTypeMetadataName.Replace('/', '+'));
+            Type callerType = assembly.GetType(
+                new HotReloadMetadataTypeName(hit.CallerTypeMetadataName).ToReflectionName().Value);
             if (callerType == null || !typeof(MonoBehaviour).IsAssignableFrom(callerType))
             {
                 return false;

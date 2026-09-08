@@ -153,7 +153,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 TransformWorkerEntryDto soleEntry = entries[0];
                 failureMethodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                    soleEntry.typeMetadataName,
+                    new HotReloadMetadataTypeName(soleEntry.typeMetadataName),
                     soleEntry.methodName,
                     soleEntry.parameterTypeFullNames ?? Array.Empty<string>(),
                     soleEntry.genericArity);
@@ -216,7 +216,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 outcomes.Add(
                     HotReloadMethodOutcome.Skipped(
                         HotReloadMethodKeys.FormatMethodLabelParts(
-                            entry.typeMetadataName,
+                            new HotReloadMetadataTypeName(entry.typeMetadataName),
                             entry.methodName,
                             entry.parameterTypeFullNames ?? Array.Empty<string>(),
                             entry.genericArity),

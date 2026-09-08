@@ -55,12 +55,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 }
 
                 string oldKey = HotReloadMethodKeys.FormatMethodLabelParts(
-                    signature.typeMetadataName,
+                    new HotReloadMetadataTypeName(signature.typeMetadataName),
                     signature.methodName,
                     parameterTypeFullNames,
                     signature.genericArity);
                 string newDisplayName = HotReloadMethodKeys.FormatMethodLabelParts(
-                    replacement.typeMetadataName,
+                    new HotReloadMetadataTypeName(replacement.typeMetadataName),
                     replacement.methodName,
                     replacement.parameterTypeFullNames ?? Array.Empty<string>(),
                     replacement.genericArity);

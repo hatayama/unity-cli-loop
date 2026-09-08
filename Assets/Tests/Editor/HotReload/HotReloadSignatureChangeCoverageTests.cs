@@ -346,7 +346,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             HashSet<string> snapshotLabels = new HashSet<string>(StringComparer.Ordinal)
             {
                 HotReloadMethodKeys.FormatMethodLabelParts(
-                    "Example.Caller",
+                    new HotReloadMetadataTypeName("Example.Caller"),
                     "Call",
                     Array.Empty<string>(),
                     0)
@@ -494,6 +494,35 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CallerGenericArity = 0,
                 TargetMethodKey = ReplacementKey
             };
+        }
+
+        /// <summary>
+        /// What: a worker-shaped label spells a nested caller type the way reflection does, so a
+        /// row built before Resolve matches the label a resolved MethodBase would produce.
+        /// </summary>
+        [Test]
+        public void FormatMethodLabelParts_WithNestedMetadataTypeName_UsesTheReflectionSeparator()
+        {
+            string label = HotReloadMethodKeys.FormatMethodLabelParts(
+                new HotReloadMetadataTypeName("Example.Outer/Inner"),
+                "Call",
+                new[] { "Example.Outer/Argument" },
+                0);
+
+            Assert.That(label, Is.EqualTo("Example.Outer+Inner.Call(Example.Outer+Argument)"));
+        }
+
+        /// <summary>
+        /// What: the short caller name of a nested type keeps only the innermost type, because the
+        /// display form makes a nesting step indistinguishable from a namespace segment.
+        /// </summary>
+        [Test]
+        public void FormatCallerShortName_WithNestedMetadataTypeName_KeepsTheInnermostType()
+        {
+            string shortName = HotReloadSignatureChangeCoverage.FormatCallerShortName(
+                "Example.Outer/Inner::Call()");
+
+            Assert.That(shortName, Is.EqualTo("Inner.Call"));
         }
 
     }

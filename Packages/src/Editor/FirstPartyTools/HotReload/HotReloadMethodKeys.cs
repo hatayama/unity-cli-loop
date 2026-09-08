@@ -69,8 +69,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 genericArity = method.GetGenericArguments().Length;
             }
 
-            return FormatMethodLabelParts(
-                method.DeclaringType.FullName,
+            return FormatMethodLabelFromReflection(
+                new HotReloadReflectionTypeName(method.DeclaringType.FullName),
                 method.Name,
                 parameterTypeFullNames,
                 genericArity);
@@ -80,18 +80,34 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // as FormatMethodLabel. Cecil nested separators ('/') are normalized to reflection ('+').
         // Keep in sync with WorkerMethodKeys.FormatMethodLabelParts.
         internal static string FormatMethodLabelParts(
-            string typeMetadataName,
+            HotReloadMetadataTypeName typeMetadataName,
             string methodName,
             string[] parameterTypeFullNames,
             int genericArity)
         {
-            Debug.Assert(!string.IsNullOrEmpty(typeMetadataName), "typeMetadataName must not be null or empty.");
+            return FormatMethodLabelFromReflection(
+                typeMetadataName.ToReflectionName(),
+                methodName,
+                parameterTypeFullNames,
+                genericArity);
+        }
+
+        // What: the shared assembly of a label once every name it holds is in reflection form.
+        // Why a parameter type is converted here too: a worker row spells a nested parameter type
+        // in metadata form, while a resolved MethodBase already spells it as reflection does, so
+        // the conversion is a no-op on the reflection path and both paths produce one string.
+        private static string FormatMethodLabelFromReflection(
+            HotReloadReflectionTypeName typeReflectionName,
+            string methodName,
+            string[] parameterTypeFullNames,
+            int genericArity)
+        {
             Debug.Assert(!string.IsNullOrEmpty(methodName), "methodName must not be null or empty.");
             Debug.Assert(parameterTypeFullNames != null, "parameterTypeFullNames must not be null.");
             Debug.Assert(genericArity >= 0, "genericArity must not be negative.");
 
             StringBuilder builder = new StringBuilder();
-            builder.Append(NormalizeNestedTypeSeparators(typeMetadataName));
+            builder.Append(typeReflectionName.Value);
             builder.Append('.');
             builder.Append(methodName);
             if (genericArity > 0)
@@ -112,17 +128,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 Debug.Assert(
                     !string.IsNullOrEmpty(parameterTypeFullName),
                     "parameterTypeFullNames entries must not be null or empty.");
-                builder.Append(NormalizeNestedTypeSeparators(parameterTypeFullName));
+                builder.Append(new HotReloadMetadataTypeName(parameterTypeFullName).ToReflectionName().Value);
             }
 
             builder.Append(')');
             return builder.ToString();
-        }
-
-        // Why: Cecil metadata names use '/' for nested types; Type.FullName uses '+'.
-        private static string NormalizeNestedTypeSeparators(string metadataName)
-        {
-            return metadataName.Replace('/', '+');
         }
     }
 }

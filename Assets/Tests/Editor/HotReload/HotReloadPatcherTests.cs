@@ -400,7 +400,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 typeof(HotReloadCoreFixture), nameof(HotReloadCoreFixture.ReplaceableCompute));
             string fromMethod = HotReloadMethodKeys.FormatMethodLabel(original);
             string fromParts = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeof(HotReloadCoreFixture).FullName,
+                new HotReloadMetadataTypeName(typeof(HotReloadCoreFixture).FullName),
                 nameof(HotReloadCoreFixture.ReplaceableCompute),
                 new[] { typeof(int).ToString() },
                 genericArity: 0);
@@ -414,7 +414,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             string nestedFromMethod = HotReloadMethodKeys.FormatMethodLabel(nested);
             string cecilStyleTypeName = typeof(HotReloadNestedKeyFixture.Inner).FullName.Replace('+', '/');
             string nestedFromParts = HotReloadMethodKeys.FormatMethodLabelParts(
-                cecilStyleTypeName,
+                new HotReloadMetadataTypeName(cecilStyleTypeName),
                 nameof(HotReloadNestedKeyFixture.Inner.Ping),
                 System.Array.Empty<string>(),
                 genericArity: 0);

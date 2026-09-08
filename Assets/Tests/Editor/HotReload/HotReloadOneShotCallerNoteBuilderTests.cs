@@ -41,6 +41,22 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
+        /// What: a caller named in metadata form is still found by reflection, so a nested
+        /// MonoBehaviour whose name uses the metadata nesting separator is classified.
+        /// </summary>
+        [Test]
+        public void IsOneShotLifecycleCaller_NestedCallerInMetadataForm_ReturnsTrue()
+        {
+            string metadataTypeName = typeof(ValidLifecycleFixture).FullName.Replace('+', '/');
+
+            bool result = HotReloadOneShotCallerNoteEnricher.IsOneShotLifecycleCaller(
+                CreateHit(metadataTypeName, "Awake"));
+
+            Assert.That(metadataTypeName, Does.Contain("/"));
+            Assert.That(result, Is.True);
+        }
+
+        /// <summary>
         /// What: a parameterized caller does not match a separate parameterless lifecycle-named method.
         /// </summary>
         [Test]

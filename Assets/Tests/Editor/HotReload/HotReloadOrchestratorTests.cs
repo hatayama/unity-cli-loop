@@ -2525,7 +2525,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             int expectedOriginalLine = FindLineNumberContaining(editedSource, "MissingHelperAddedByEdit");
             Assert.That(expectedOriginalLine, Is.GreaterThan(0));
             string expectedMethodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeof(HotReloadE2EFixture).FullName,
+                new HotReloadMetadataTypeName(typeof(HotReloadE2EFixture).FullName),
                 nameof(HotReloadE2EFixture.CallsMissingHelper),
                 new[] { typeof(int).FullName },
                 genericArity: 0);
@@ -2719,7 +2719,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             const string missingMethodName = "DoesNotExistInCompiledAssembly";
             string typeName = typeof(HotReloadE2EFixture).FullName;
             string expectedFailedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeName,
+                new HotReloadMetadataTypeName(typeName),
                 missingMethodName,
                 new[] { typeof(int).FullName },
                 genericArity: 0);
@@ -2809,17 +2809,17 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
             const string missingMethodName = "DoesNotExistInCompiledAssembly";
             string typeName = typeof(HotReloadCoreFixture).FullName;
             string expectedPriorLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeName,
+                new HotReloadMetadataTypeName(typeName),
                 nameof(HotReloadCoreFixture.ReplaceableCompute),
                 new[] { typeof(int).FullName },
                 genericArity: 0);
             string expectedFailedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeName,
+                new HotReloadMetadataTypeName(typeName),
                 missingMethodName,
                 new[] { typeof(int).FullName },
                 genericArity: 0);
             string expectedTrailingLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeName,
+                new HotReloadMetadataTypeName(typeName),
                 nameof(HotReloadCoreFixture.StaticPing),
                 Array.Empty<string>(),
                 genericArity: 0);
@@ -3022,7 +3022,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 }
             };
             string removedMethodLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeName,
+                new HotReloadMetadataTypeName(typeName),
                 nameof(HotReloadCoreFixture.ReplaceableCompute),
                 replacedParameterTypeFullNames,
                 genericArity: 0);
@@ -4642,7 +4642,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
             AssertNoFileLevelFailure(second);
             string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeof(HotReloadSignatureChangeAlreadyActiveFixture).FullName,
+                new HotReloadMetadataTypeName(typeof(HotReloadSignatureChangeAlreadyActiveFixture).FullName),
                 nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target),
                 new[] { "System.Int32" },
                 0);
@@ -4694,7 +4694,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 CancellationToken.None);
 
             string expectedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeof(HotReloadSignatureChangeAlreadyActiveFixture).FullName,
+                new HotReloadMetadataTypeName(typeof(HotReloadSignatureChangeAlreadyActiveFixture).FullName),
                 nameof(HotReloadSignatureChangeAlreadyActiveFixture.Target),
                 new[] { "System.Int32" },
                 0);
@@ -5284,7 +5284,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
                 + ".HotReloadSignatureChangeUnchangedCallerFixture::Target(System.Int32)";
             string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                typeof(HotReloadSignatureChangeUnchangedCallerFixture).FullName,
+                new HotReloadMetadataTypeName(typeof(HotReloadSignatureChangeUnchangedCallerFixture).FullName),
                 nameof(HotReloadSignatureChangeUnchangedCallerFixture.StoreTarget),
                 new[] { "System.Int32" },
                 0);
@@ -5413,12 +5413,12 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 new[]
                 {
                     HotReloadMethodKeys.FormatMethodLabelParts(
-                        typeof(HotReloadSignatureChangeTwoCallerFixture).FullName,
+                        new HotReloadMetadataTypeName(typeof(HotReloadSignatureChangeTwoCallerFixture).FullName),
                         nameof(HotReloadSignatureChangeTwoCallerFixture.CallerAlpha),
                         new[] { "System.Int32" },
                         0),
                     HotReloadMethodKeys.FormatMethodLabelParts(
-                        typeof(HotReloadSignatureChangeTwoCallerFixture).FullName,
+                        new HotReloadMetadataTypeName(typeof(HotReloadSignatureChangeTwoCallerFixture).FullName),
                         nameof(HotReloadSignatureChangeTwoCallerFixture.CallerBeta),
                         new[] { "System.Int32" },
                         0)
@@ -5555,8 +5555,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 nameof(HotReloadSignatureChangeGenericCallerFixture.Target),
                 "The return type of");
             string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
-                + ".HotReloadSignatureChangeGenericCallerFixture",
+                new HotReloadMetadataTypeName(
+                    "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                    + ".HotReloadSignatureChangeGenericCallerFixture"),
                 "Caller",
                 new[] { "System.Int32" },
                 genericArity: 0);
@@ -5598,8 +5599,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertNoFileLevelFailure(patched);
             string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
-                + ".HotReloadSignatureChangeGenericCallerFixture",
+                new HotReloadMetadataTypeName(
+                    "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                    + ".HotReloadSignatureChangeGenericCallerFixture"),
                 "Caller",
                 new[] { "System.Int32" },
                 genericArity: 0);
@@ -5811,8 +5813,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 result,
                 nameof(HotReloadSignatureChangeMultiReplacementHost.TargetCovered));
             string expectedCallerLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
-                + ".HotReloadSignatureChangeMultiReplacementHost",
+                new HotReloadMetadataTypeName(
+                    "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                    + ".HotReloadSignatureChangeMultiReplacementHost"),
                 "CoveredCaller",
                 new[] { "System.Int32" },
                 genericArity: 0);
@@ -5847,8 +5850,9 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
 
             AssertNoFileLevelFailure(result);
             string expectedAddedLabel = HotReloadMethodKeys.FormatMethodLabelParts(
-                "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
-                + ".HotReloadSignatureChangeExternalHost",
+                new HotReloadMetadataTypeName(
+                    "io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload"
+                    + ".HotReloadSignatureChangeExternalHost"),
                 "ToDelete",
                 new[] { "System.Int32", "System.Int32" },
                 genericArity: 0);
@@ -7137,7 +7141,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string AddedPingMethodLabel()
         {
             return HotReloadMethodKeys.FormatMethodLabelParts(
-                typeof(HotReloadAddedMethodApplyFixture).FullName,
+                new HotReloadMetadataTypeName(typeof(HotReloadAddedMethodApplyFixture).FullName),
                 "AddedPing",
                 new[] { "System.Int32" },
                 0);
@@ -7146,7 +7150,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         private static string AddedPongMethodLabel()
         {
             return HotReloadMethodKeys.FormatMethodLabelParts(
-                typeof(HotReloadAddedMethodApplyFixture).FullName,
+                new HotReloadMetadataTypeName(typeof(HotReloadAddedMethodApplyFixture).FullName),
                 "AddedPong",
                 new[] { "System.Int32" },
                 0);
