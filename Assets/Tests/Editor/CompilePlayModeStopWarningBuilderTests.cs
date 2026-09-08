@@ -20,6 +20,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 activePausePointCount: 2,
+                activePersistedPausePointCount: 0,
                 activeHotReloadChangeCount: 0);
 
             Assert.That(warning, Is.Not.Null);
@@ -39,15 +40,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string pausePointOnly = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 activePausePointCount: 2,
+                activePersistedPausePointCount: 0,
                 activeHotReloadChangeCount: 0);
             string hotReloadOnly = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 activePausePointCount: 0,
+                activePersistedPausePointCount: 0,
                 activeHotReloadChangeCount: 3);
 
             string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 activePausePointCount: 2,
+                activePersistedPausePointCount: 0,
                 activeHotReloadChangeCount: 3);
 
             Assert.That(warning, Is.EqualTo(pausePointOnly + " " + hotReloadOnly));
@@ -62,6 +66,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: true,
                 activePausePointCount: 0,
+                activePersistedPausePointCount: 0,
                 activeHotReloadChangeCount: 0);
 
             Assert.That(
@@ -79,6 +84,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: true,
                 activePausePointCount: 2,
+                activePersistedPausePointCount: 0,
                 activeHotReloadChangeCount: 0);
 
             Assert.That(
@@ -96,6 +102,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 activePausePointCount: 0,
+                activePersistedPausePointCount: 0,
                 activeHotReloadChangeCount: 3);
 
             Assert.That(warning, Does.Contain("3 active hot-reload change(s)"));
@@ -115,6 +122,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: true,
                 activePausePointCount: 0,
+                activePersistedPausePointCount: 0,
                 activeHotReloadChangeCount: 2);
 
             Assert.That(warning, Does.Contain("Play Mode was active"));
@@ -130,9 +138,71 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart: false,
                 activePausePointCount: 0,
+                activePersistedPausePointCount: 0,
                 activeHotReloadChangeCount: 0);
 
             Assert.That(warning, Is.Null);
+        }
+
+        /// <summary>
+        /// What: pause points that all re-arm produce only the persistence notice in Edit Mode,
+        /// never the "re-enable them" sentence for pause points that are not actually lost.
+        /// </summary>
+        [Test]
+        public void BuildWarning_WhenEveryPausePointIsPersisted_ReportsOnlyTheReArmNotice()
+        {
+            string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                activePausePointCount: 2,
+                activePersistedPausePointCount: 2,
+                activeHotReloadChangeCount: 0);
+
+            Assert.That(warning, Is.EqualTo(
+                "2 persisted pause point(s) re-arm automatically after the reload; "
+                + "check pause-point-status for the re-arm result."));
+        }
+
+        /// <summary>
+        /// What: a mix reports only the non-persisted pause points as dropped, and appends the
+        /// re-arm notice for the rest.
+        /// </summary>
+        [Test]
+        public void BuildWarning_WhenSomePausePointsArePersisted_CountsOnlyTheDroppedOnes()
+        {
+            string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                activePausePointCount: 3,
+                activePersistedPausePointCount: 1,
+                activeHotReloadChangeCount: 0);
+
+            Assert.That(warning, Does.Contain("2 enabled pause point(s) were armed"));
+            Assert.That(warning, Does.Contain("1 persisted pause point(s) re-arm automatically"));
+            Assert.That(warning, Does.Not.Contain("3 enabled pause point(s)"));
+        }
+
+        /// <summary>
+        /// What: in Play Mode, persisted pause points do not inflate the dropped count, and the
+        /// Play session is still reported as discarded.
+        /// </summary>
+        [Test]
+        public void BuildWarning_WhenPlayingWithOnlyPersistedPausePoints_KeepsThePlainPlayStopWording()
+        {
+            string playOnly = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: true,
+                activePausePointCount: 0,
+                activePersistedPausePointCount: 0,
+                activeHotReloadChangeCount: 0);
+
+            string warning = CompilePlayModeStopWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: true,
+                activePausePointCount: 2,
+                activePersistedPausePointCount: 2,
+                activeHotReloadChangeCount: 0);
+
+            Assert.That(warning, Is.EqualTo(
+                playOnly
+                + " 2 persisted pause point(s) re-arm automatically after the reload; "
+                + "check pause-point-status for the re-arm result."));
         }
     }
 }

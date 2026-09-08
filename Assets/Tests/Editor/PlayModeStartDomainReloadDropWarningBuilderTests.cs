@@ -21,7 +21,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 wasPlayingAtRequestStart: true,
                 isDomainReloadDisabledOnEnterPlayMode: false,
                 activeHotReloadChangeCount: 2,
-                activePausePointCount: 3);
+                activePausePointCount: 3,
+                activePersistedPausePointCount: 0);
 
             Assert.That(warning, Is.Null);
         }
@@ -36,7 +37,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: true,
                 activeHotReloadChangeCount: 2,
-                activePausePointCount: 3);
+                activePausePointCount: 3,
+                activePersistedPausePointCount: 0);
 
             Assert.That(warning, Is.Null);
         }
@@ -51,7 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: false,
                 activeHotReloadChangeCount: 0,
-                activePausePointCount: 0);
+                activePausePointCount: 0,
+                activePersistedPausePointCount: 0);
 
             Assert.That(warning, Is.Null);
         }
@@ -66,7 +69,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: false,
                 activeHotReloadChangeCount: 2,
-                activePausePointCount: 0);
+                activePausePointCount: 0,
+                activePersistedPausePointCount: 0);
 
             Assert.That(
                 warning,
@@ -84,7 +88,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: false,
                 activeHotReloadChangeCount: 0,
-                activePausePointCount: 3);
+                activePausePointCount: 3,
+                activePersistedPausePointCount: 0);
 
             Assert.That(
                 warning,
@@ -102,12 +107,48 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: false,
                 activeHotReloadChangeCount: 2,
-                activePausePointCount: 3);
+                activePausePointCount: 3,
+                activePersistedPausePointCount: 0);
 
             Assert.That(
                 warning,
                 Is.EqualTo(
                     "Entering Play Mode triggers a domain reload that will discard 2 active hot-reload change(s) and 3 enabled pause point(s). The new session runs the last compiled assemblies, so hot-reloaded edits that were never compiled are not in effect — run `uloop compile` before Play to keep them, or re-apply `uloop hot-reload` and re-enable pause points after Play Mode starts."));
+        }
+
+        /// <summary>
+        /// What: pause points that all re-arm are not reported as discarded on Play entry.
+        /// </summary>
+        [Test]
+        public void BuildWarning_WhenEveryPausePointIsPersisted_ReportsOnlyTheReArmNotice()
+        {
+            string warning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                isDomainReloadDisabledOnEnterPlayMode: false,
+                activeHotReloadChangeCount: 0,
+                activePausePointCount: 2,
+                activePersistedPausePointCount: 2);
+
+            Assert.That(warning, Is.EqualTo(
+                "2 persisted pause point(s) re-arm automatically after the reload; "
+                + "check pause-point-status for the re-arm result."));
+        }
+
+        /// <summary>
+        /// What: a mix discards only the non-persisted pause points and appends the re-arm notice.
+        /// </summary>
+        [Test]
+        public void BuildWarning_WhenSomePausePointsArePersisted_CountsOnlyTheDroppedOnes()
+        {
+            string warning = PlayModeStartDomainReloadDropWarningBuilder.BuildWarning(
+                wasPlayingAtRequestStart: false,
+                isDomainReloadDisabledOnEnterPlayMode: false,
+                activeHotReloadChangeCount: 0,
+                activePausePointCount: 3,
+                activePersistedPausePointCount: 1);
+
+            Assert.That(warning, Does.Contain("discard 2 enabled pause point(s)"));
+            Assert.That(warning, Does.Contain("1 persisted pause point(s) re-arm automatically"));
         }
     }
 }

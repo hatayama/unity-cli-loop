@@ -670,10 +670,39 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 wasPlayingAtRequestStart: false,
                 isDomainReloadDisabledOnEnterPlayMode: false,
                 activeHotReloadChangeCount: 2,
-                activePausePointCount: 0);
+                activePausePointCount: 0,
+                activePersistedPausePointCount: 0);
             Assert.That(
                 response.Warning,
                 Is.EqualTo(ControlPlayModeUseCase.FreshPlayStartFromNewSessionWarning + " " + dropWarning));
+        }
+
+        /// <summary>
+        /// Verifies the persisted pause point count reaches the Play-start warning, so a pause
+        /// point armed with --persist is reported as re-arming rather than as discarded.
+        /// </summary>
+        [Test]
+        public async Task ExecuteAsync_WhenPlayStartsWithAPersistedPausePoint_ReportsTheReArmNotice()
+        {
+            FakeControlPlayModeEditorStateService editorState = new(isPlaying: false, isPaused: false);
+            StubEditorUnsavedChangesQuietSaver quietSaver = new(
+                saveFailures: System.Array.Empty<string>(),
+                remainingAfterSave: System.Array.Empty<string>());
+            ControlPlayModeUseCase useCase = new ControlPlayModeUseCase(
+                new StubCompilationFailureProvider(System.Array.Empty<ControlPlayModeCompileError>()),
+                new StubCompilationFailureGate(false),
+                quietSaver,
+                editorState,
+                new StubDomainReloadDropStateProvider(pausePointCount: 1, persistedPausePointCount: 1));
+            ControlPlayModeSchema schema = new ControlPlayModeSchema
+            {
+                Action = PlayModeAction.Play,
+            };
+
+            ControlPlayModeResponse response = await useCase.ExecuteAsync(schema, CancellationToken.None);
+
+            Assert.That(response.Warning, Does.Contain("1 persisted pause point(s) re-arm automatically"));
+            Assert.That(response.Warning, Does.Not.Contain("discard 1 enabled pause point(s)"));
         }
 
         /// <summary>
@@ -909,15 +938,18 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         {
             private readonly int _changeCount;
             private readonly int _pausePointCount;
+            private readonly int _persistedPausePointCount;
             private readonly bool _isDomainReloadDisabled;
 
             public StubDomainReloadDropStateProvider(
                 int changeCount = 0,
                 int pausePointCount = 0,
-                bool isDomainReloadDisabled = false)
+                bool isDomainReloadDisabled = false,
+                int persistedPausePointCount = 0)
             {
                 _changeCount = changeCount;
                 _pausePointCount = pausePointCount;
+                _persistedPausePointCount = persistedPausePointCount;
                 _isDomainReloadDisabled = isDomainReloadDisabled;
             }
 
@@ -929,6 +961,11 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
             public int GetActivePausePointCount()
             {
                 return _pausePointCount;
+            }
+
+            public int GetActivePersistedPausePointCount()
+            {
+                return _persistedPausePointCount;
             }
 
             public bool IsDomainReloadDisabledOnEnterPlayMode()

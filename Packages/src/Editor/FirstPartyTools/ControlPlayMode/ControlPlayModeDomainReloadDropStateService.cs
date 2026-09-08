@@ -19,6 +19,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         /// </summary>
         int GetActiveHotReloadChangeCount();
         int GetActivePausePointCount();
+
+        /// <summary>
+        /// How many of those pause points were enabled with --persist and so are re-armed after
+        /// the Play-start domain reload instead of being lost.
+        /// </summary>
+        int GetActivePersistedPausePointCount();
         bool IsDomainReloadDisabledOnEnterPlayMode();
     }
 
@@ -37,6 +43,11 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         public int GetActivePausePointCount()
         {
             return UloopPausePointRegistry.GetActiveCount();
+        }
+
+        public int GetActivePersistedPausePointCount()
+        {
+            return UloopPausePointRegistry.GetActivePersistedCount();
         }
 
         public bool IsDomainReloadDisabledOnEnterPlayMode()
