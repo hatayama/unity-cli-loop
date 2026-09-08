@@ -352,6 +352,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         // Format: skipped method identity, then the reason it could not be patched.
         public const string SkippedMethodWarningFormat = "Skipped {0}: {1}";
 
+        public const string SkippedMethodsCollapsedWarningFormat = "Skipped {0} methods: {1} ({2})";
+
         public const string VibeLogWorkerHostStarted = "hot_reload_worker_started";
         public const string VibeLogWorkerHostRestarted = "hot_reload_worker_restarted";
         public const string VibeLogWorkerHostShutdown = "hot_reload_worker_shutdown";

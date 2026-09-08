@@ -1692,17 +1692,20 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
         }
 
         /// <summary>
-        /// What: every Skipped outcome gets its own Warnings line, in Methods order.
+        /// What: Skipped outcomes sharing a reason collapse into one Warnings line naming every
+        /// method, a reason with a single method keeps its own line, and the lines follow the
+        /// order in which their reasons first appear in Methods.
         /// </summary>
         [Test]
-        public void BuildApplyResponse_MultipleSkipped_ListsEverySkippedMethod()
+        public void BuildApplyResponse_SkippedOutcomes_CollapseIntoOneWarningPerReason()
         {
             HotReloadOrchestratorResult result = new HotReloadOrchestratorResult(
                 new List<HotReloadMethodOutcome>
                 {
-                    HotReloadMethodOutcome.Skipped("T.First", "first reason", "file.cs"),
+                    HotReloadMethodOutcome.Skipped("A.Foo()", "first reason", "file.cs"),
+                    HotReloadMethodOutcome.Skipped("A.Bar()", "first reason", "file.cs"),
                     HotReloadMethodOutcome.Patched("Type.Method", "Assets/A.cs"),
-                    HotReloadMethodOutcome.Skipped("T.Second", "second reason", "file.cs")
+                    HotReloadMethodOutcome.Skipped("B.Baz()", "second reason", "file.cs")
                 },
                 new List<string>(),
                 patchedTotal: 1,
@@ -1715,8 +1718,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor.HotReload
                 Is.EqualTo(
                     new[]
                     {
-                        "Skipped T.First: first reason",
-                        "Skipped T.Second: second reason"
+                        "Skipped 2 methods: first reason (A.Foo(), A.Bar())",
+                        "Skipped B.Baz(): second reason"
                     }));
         }
 
