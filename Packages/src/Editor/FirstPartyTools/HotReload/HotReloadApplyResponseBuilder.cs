@@ -369,27 +369,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         }
 
         /// <summary>
-        /// Lists every Skipped method in Warnings so a reader who only checks Warnings still sees
+        /// Lists the Skipped methods in Warnings so a reader who only checks Warnings still sees
         /// that the edit was not applied.
         /// </summary>
         private static void AppendSkippedWarnings(
             List<string> warnings,
             IReadOnlyList<HotReloadMethodOutcome> methods)
         {
-            for (int index = 0; index < methods.Count; index++)
-            {
-                HotReloadMethodOutcome outcome = methods[index];
-                if (outcome.Kind != HotReloadMethodOutcomeKind.Skipped)
-                {
-                    continue;
-                }
-
-                warnings.Add(
-                    string.Format(
-                        HotReloadConstants.SkippedMethodWarningFormat,
-                        outcome.Method,
-                        outcome.Reason ?? string.Empty));
-            }
+            HotReloadSkippedWarningCollapser.Append(warnings, methods);
         }
 
         private static string AppendWarningCount(
