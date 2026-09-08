@@ -200,7 +200,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 // Why not apply: the file's generations must keep the previous run's patches, so
                 // the apply loop skips it entirely instead of clearing it.
-                file.SkipApply = isolation.Plan.IsFailedFile(file.ProjectRelativePath);
+                // Why OR: a file already skipped for parse errors must stay skipped, and the
+                // isolation plan only knows about the files its own retry failed on.
+                file.SkipApply = file.SkipApply || isolation.Plan.IsFailedFile(file.ProjectRelativePath);
             }
 
             AdoptRetryAddedMemberNames(context.Files, isolation.RetryFiles);

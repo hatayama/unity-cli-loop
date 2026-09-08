@@ -489,7 +489,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             };
         }
 
-        private static void AppendPerFileWorkerNotices(
+        // internal so a test can observe the per-file notices, including the SkipApply decision,
+        // without going through the apply stage the group tests replace wholesale.
+        internal static void AppendPerFileWorkerNotices(
             IReadOnlyList<HotReloadGroupFile> files,
             HotReloadWorkerRowsByFile rows)
         {
@@ -500,6 +502,10 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     + fileSkipped.Count
                     + rows.UnchangedFor(file.ProjectRelativePath).Count;
                 file.FileOutput = rows.FileOutputFor(file.ProjectRelativePath);
+                // Why SkipApply and not an empty entry list: only SkipApply leaves the file
+                // unapplied while keeping its generations, so the previous reload's patches stay
+                // active. The NoEntriesToApply path clears the generation instead.
+                file.SkipApply = file.FileOutput.parseErrors != null && file.FileOutput.parseErrors.Length > 0;
                 file.UnchangedMethodCount = rows.UnchangedFor(file.ProjectRelativePath).Count;
                 HotReloadWorkerNoticeAppender.AppendWorkerNotices(
                     file.FileOutput,

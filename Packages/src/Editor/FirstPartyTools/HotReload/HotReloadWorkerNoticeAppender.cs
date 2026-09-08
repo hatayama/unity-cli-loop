@@ -38,7 +38,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 projectRelativePath,
                 assemblyName,
                 warnings);
-            AppendAll(warnings, fileOutput.parseErrors);
+            // Why a Failed outcome and not a warning: a parse error is the file failing, not a
+            // remark about it. Under the all-or-nothing contract the Failed row is what leaves the
+            // file unapplied and makes the response's Success false.
+            if (fileOutput.parseErrors != null && fileOutput.parseErrors.Length > 0)
+            {
+                outcomes.Add(
+                    HotReloadMethodOutcome.Failed(
+                        "(file)",
+                        string.Join("\n", fileOutput.parseErrors),
+                        assemblyResolvePath));
+            }
+
             AppendSkippedOutcomes(fileSkipped, assemblyResolvePath, outcomes);
             // Surfaced before the empty-entries early return so const drift still reaches
             // the response when every method in the file is skipped or unchanged.

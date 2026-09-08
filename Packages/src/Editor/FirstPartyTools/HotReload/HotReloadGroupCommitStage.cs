@@ -136,6 +136,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         {
             foreach (HotReloadGroupFile file in context.Files)
             {
+                // A file left unapplied on purpose keeps the previous run's generation even with no
+                // entries: clearing it here would let a reload of broken source silently drop the
+                // added members the previous run applied.
+                if (file.SkipApply)
+                {
+                    continue;
+                }
+
                 HotReloadFileEntryApplier.ClearFileGeneration(context, file);
             }
         }
