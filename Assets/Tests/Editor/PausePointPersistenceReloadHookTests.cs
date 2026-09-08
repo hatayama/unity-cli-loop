@@ -58,6 +58,46 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
         }
 
         /// <summary>
+        /// What: a pause point whose capture window ran out without any status poll is expired at
+        /// snapshot time instead of being replayed with a fresh full timeout.
+        /// </summary>
+        [Test]
+        public void SnapshotNow_SavesNothingForAPausePointWhoseTimeoutElapsedUnobserved()
+        {
+            PausePointPersistRequestLedger.Upsert(RecordFor("jump"));
+            UloopPausePointRegistry.Enable("jump", 30);
+            _nowUtc = _nowUtc.AddSeconds(31);
+            InMemoryPausePointPersistenceStore store = new();
+
+            PausePointPersistenceReloadHook.SnapshotNow(store);
+
+            Assert.That(store.Saved, Is.Empty);
+            Assert.That(
+                UloopPausePointRegistry.GetStatus("jump").Status,
+                Is.EqualTo(UloopPausePointStatus.Expired));
+        }
+
+        /// <summary>
+        /// What: Initialize subscribes to the before-reload event, so firing the handler it
+        /// registered writes the armed persisted records out.
+        /// </summary>
+        [Test]
+        public void Initialize_SubscribesAHandlerThatSnapshotsTheArmedRecords()
+        {
+            PausePointPersistRequestLedger.Upsert(RecordFor("armed"));
+            UloopPausePointRegistry.Enable("armed", 30);
+            InMemoryPausePointPersistenceStore store = new();
+            AssemblyReloadEvents.AssemblyReloadCallback subscribed = null;
+
+            PausePointPersistenceReloadHook.Initialize(store, handler => subscribed = handler);
+
+            Assert.That(subscribed, Is.Not.Null, "Initialize must subscribe to the before-reload event.");
+            Assert.That(store.Saved, Is.Empty, "Nothing is written until the reload actually starts.");
+            subscribed();
+            Assert.That(RegistryIdsOf(store.Saved), Is.EqualTo(new[] { "armed" }));
+        }
+
+        /// <summary>
         /// What: a pause point the user cleared before the reload does not come back.
         /// </summary>
         [Test]

@@ -355,6 +355,30 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled;
         }
 
+        /// <summary>
+        /// Reports whether the marker is still armed once an elapsed capture window has been
+        /// applied. Expiry is lazy - IsArmed only reads the flag - so a marker whose timeout ran
+        /// out without a status poll still looks enabled to it. Callers that decide something
+        /// durable from "still armed" must use this instead.
+        /// </summary>
+        public static bool IsArmedAfterExpiry(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return false;
+            }
+
+            if (!Entries.TryGetValue(id, out UloopPausePointEntry entry))
+            {
+                return false;
+            }
+
+            // TryExpire, not ExpireIfNeeded: the pause-window freeze contract lives in TryExpire
+            // and a marker must not expire while a hit has the Editor paused.
+            TryExpire(entry, NowUtc());
+            return entry.IsEnabled;
+        }
+
         // Called from injected IL at method entry on whatever thread invokes the method. Entries
         // is a ConcurrentDictionary and the increment is Interlocked, so this is safe off the
         // main thread, like IsArmed. A concurrent clear may permit a few extra entries to be

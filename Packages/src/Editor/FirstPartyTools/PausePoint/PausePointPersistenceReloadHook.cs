@@ -11,18 +11,30 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     /// </summary>
     internal static class PausePointPersistenceReloadHook
     {
-        public static void Initialize(IPausePointPersistenceStore store)
+        // The subscription is injected rather than taken directly on AssemblyReloadEvents so a
+        // test can fire the handler it registered; a real domain reload cannot be driven from one.
+        public static void Initialize(
+            IPausePointPersistenceStore store,
+            Action<AssemblyReloadEvents.AssemblyReloadCallback> subscribeBeforeReload)
         {
             if (store == null)
             {
                 throw new ArgumentNullException(nameof(store));
             }
 
-            AssemblyReloadEvents.beforeAssemblyReload += () => SnapshotNow(store);
+            if (subscribeBeforeReload == null)
+            {
+                throw new ArgumentNullException(nameof(subscribeBeforeReload));
+            }
+
+            subscribeBeforeReload(() => SnapshotNow(store));
         }
 
-        // Why filtered by IsArmed rather than by the ledger alone: a pause point the user already
-        // cleared, or one that expired, must not come back after the reload.
+        // Why filtered against the registry rather than by the ledger alone: a pause point the
+        // user already cleared, or one whose capture window ran out, must not come back after the
+        // reload. IsArmedAfterExpiry rather than IsArmed because expiry is lazy: without a status
+        // poll an elapsed marker still reads as enabled, and the re-arm would hand it a fresh
+        // full timeout it never earned.
         internal static void SnapshotNow(IPausePointPersistenceStore store)
         {
             if (store == null)
@@ -30,7 +42,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 throw new ArgumentNullException(nameof(store));
             }
 
-            store.Save(PausePointPersistRequestLedger.CollectArmed(UloopPausePointRegistry.IsArmed));
+            store.Save(PausePointPersistRequestLedger.CollectArmed(UloopPausePointRegistry.IsArmedAfterExpiry));
         }
     }
 }

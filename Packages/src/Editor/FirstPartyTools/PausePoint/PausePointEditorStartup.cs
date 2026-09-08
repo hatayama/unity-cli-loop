@@ -14,19 +14,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             PausePointDomainReloadTracker.MarkDomainLoaded();
 
             IPausePointPersistenceStore store = new PausePointSessionStateStore();
-            PausePointPersistenceReloadHook.Initialize(store);
+            PausePointPersistenceReloadHook.Initialize(
+                store,
+                handler => AssemblyReloadEvents.beforeAssemblyReload += handler);
 
             // Why the first update tick rather than this call: re-arming applies Harmony patches
             // and reads CompilationPipeline.codeOptimization, both of which need a fully built
             // domain. Why not delayCall: Unity stops flushing it while the "Scripts have compiler
             // errors" dialog is up, which is exactly when a re-arm is expected.
-            void RearmOnFirstUpdateTick()
-            {
-                EditorApplication.update -= RearmOnFirstUpdateTick;
-                RearmAfterDomainReload(store);
-            }
-
-            EditorApplication.update += RearmOnFirstUpdateTick;
+            new PausePointRearmScheduler(
+                () => RearmAfterDomainReload(store),
+                handler => EditorApplication.update += handler,
+                handler => EditorApplication.update -= handler).Schedule();
         }
 
         private static void RearmAfterDomainReload(IPausePointPersistenceStore store)
