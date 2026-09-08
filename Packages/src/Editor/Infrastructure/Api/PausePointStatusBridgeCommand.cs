@@ -49,8 +49,15 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 PausePoints = pausePoints,
                 NextActions = count == 0
                     ? new string[] { EmptyListNextAction }
-                    : new string[] { NonEmptyListNextAction }
+                    : new string[] { NonEmptyListNextAction },
+                DomainReloadRearmReport = BuildDomainReloadRearmReportOrNull()
             };
+        }
+
+        private static IReadOnlyList<string> BuildDomainReloadRearmReportOrNull()
+        {
+            IReadOnlyList<string> report = UloopPausePointRegistry.DomainReloadRearmReport;
+            return report.Count == 0 ? null : report;
         }
 
         // Called once when await-pause-point starts waiting, so a marker enabled well before a
@@ -213,6 +220,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string ResolvedLineText { get; set; }
 
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool Persisted { get; set; }
+
         // Why null for empty: the status contract omits the field entirely when every parameter of
         // the resolved method can be captured, so a reader never sees an empty list to interpret.
         private static IReadOnlyList<string> NormalizeNotCapturableVariables(IReadOnlyList<string> values)
@@ -282,6 +292,7 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 // two must never see fewer topics than the other carries.
                 Warning = warnings == null ? null : string.Join(" ", warnings),
                 Warnings = warnings,
+                Persisted = snapshot.Persisted,
                 ResolvedLine = snapshot.ResolvedLine,
                 ResolvedLineText = string.IsNullOrEmpty(snapshot.ResolvedLineText)
                     ? null
@@ -335,6 +346,10 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
 
         [JsonProperty(Order = 4)]
         public IReadOnlyList<string> NextActions { get; set; } = Array.Empty<string>();
+
+        // Omitted when the last domain reload re-armed nothing, so the usual listing is unchanged.
+        [JsonProperty(Order = 5, NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<string> DomainReloadRearmReport { get; set; }
     }
 
     /// <summary>
@@ -347,6 +362,9 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
         public string Mode { get; set; } = string.Empty;
         public int HitCount { get; set; }
         public long RemainingMilliseconds { get; set; }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool Persisted { get; set; }
 
         internal static PausePointStatusListItemResponse FromSnapshot(UloopPausePointSnapshot snapshot)
         {
@@ -361,7 +379,8 @@ namespace io.github.hatayama.UnityCliLoop.Infrastructure
                 Status = snapshot.Status,
                 Mode = snapshot.Mode,
                 HitCount = snapshot.HitCount,
-                RemainingMilliseconds = snapshot.RemainingMilliseconds
+                RemainingMilliseconds = snapshot.RemainingMilliseconds,
+                Persisted = snapshot.Persisted
             };
         }
     }

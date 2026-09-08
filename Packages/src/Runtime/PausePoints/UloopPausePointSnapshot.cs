@@ -53,7 +53,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             string resolvedLineText,
             string hitWhen,
             int hitWhenSkippedCount,
-            string hitWhenErrorNote)
+            string hitWhenErrorNote,
+            bool persisted)
         {
             Debug.Assert(editorState != null, "editorState must not be null");
             // Why a precondition instead of a null coalesce: every writer already supplies a list
@@ -103,6 +104,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             HitWhen = NormalizeOptionalText(hitWhen);
             HitWhenSkippedCount = hitWhenSkippedCount;
             HitWhenErrorNote = NormalizeOptionalText(hitWhenErrorNote);
+            Persisted = persisted;
         }
 
         public string Id { get; }
@@ -148,6 +150,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public string HitWhen { get; }
         public int HitWhenSkippedCount { get; }
         public string HitWhenErrorNote { get; }
+        // True when the pause point was enabled with --persist and is re-armed after a domain reload.
+        public bool Persisted { get; }
 
         // Normalizes optional response text to the empty-string contract.
         private static string NormalizeOptionalText(string value)
@@ -203,7 +207,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 null,
                 string.Empty,
                 0,
-                string.Empty);
+                string.Empty,
+                false);
         }
     }
 }

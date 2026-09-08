@@ -355,6 +355,30 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
             return Entries.TryGetValue(id, out UloopPausePointEntry entry) && entry.IsEnabled;
         }
 
+        /// <summary>
+        /// Reports whether the marker is still armed once an elapsed capture window has been
+        /// applied. Expiry is lazy - IsArmed only reads the flag - so a marker whose timeout ran
+        /// out without a status poll still looks enabled to it. Callers that decide something
+        /// durable from "still armed" must use this instead.
+        /// </summary>
+        public static bool IsArmedAfterExpiry(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return false;
+            }
+
+            if (!Entries.TryGetValue(id, out UloopPausePointEntry entry))
+            {
+                return false;
+            }
+
+            // TryExpire, not ExpireIfNeeded: the pause-window freeze contract lives in TryExpire
+            // and a marker must not expire while a hit has the Editor paused.
+            TryExpire(entry, NowUtc());
+            return entry.IsEnabled;
+        }
+
         // Called from injected IL at method entry on whatever thread invokes the method. Entries
         // is a ConcurrentDictionary and the increment is Interlocked, so this is safe off the
         // main thread, like IsArmed. A concurrent clear may permit a few extra entries to be
@@ -435,6 +459,56 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         public static int GetActiveCount()
         {
             return UloopPausePointStatusSnapshotCollector.CountActiveEntries(Entries.Values);
+        }
+
+        /// <summary>
+        /// Marks whether this pause point is re-armed after a domain reload. A no-op for an
+        /// unknown id: the caller has already learned the enable failed from its own result.
+        /// </summary>
+        /// <summary>
+        /// What the re-arm pass after the last domain reload did, one line per persisted pause
+        /// point, so pause-point-status can show it. Plain strings because this Runtime assembly
+        /// cannot reference the Editor-side response types that produced them.
+        /// </summary>
+        public static IReadOnlyList<string> DomainReloadRearmReport { get; private set; } =
+            Array.Empty<string>();
+
+        public static void SetDomainReloadRearmReport(IReadOnlyList<string> lines)
+        {
+            if (lines == null)
+            {
+                throw new ArgumentNullException(nameof(lines));
+            }
+
+            DomainReloadRearmReport = lines;
+        }
+
+        public static void SetPersisted(string id, bool persisted)
+        {
+            Debug.Assert(!string.IsNullOrWhiteSpace(id), "id must not be null or empty");
+
+            if (Entries.TryGetValue(id, out UloopPausePointEntry entry))
+            {
+                entry.Persisted = persisted;
+            }
+        }
+
+        /// <summary>
+        /// Counts armed entries that will be re-armed after the next domain reload, so warnings
+        /// can separate the pause points that come back from the ones that are simply lost.
+        /// </summary>
+        public static int GetActivePersistedCount()
+        {
+            int count = 0;
+            foreach (UloopPausePointEntry entry in Entries.Values)
+            {
+                if (entry.IsEnabled && entry.Persisted)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static UloopPausePointSnapshot HitCore(
@@ -603,6 +677,7 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
 
         public static void ResetForTests()
         {
+            DomainReloadRearmReport = Array.Empty<string>();
             Entries.Clear();
             MethodEntryInstrumentedIds.Clear();
             _nextGeneration = 0;

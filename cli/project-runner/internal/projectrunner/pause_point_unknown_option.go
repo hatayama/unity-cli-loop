@@ -31,6 +31,7 @@ var pausePointCarriedOverEnableFlagNames = []string{
 	"hit-when",
 	"max-preview-elements",
 	"max-caller-frames",
+	"persist",
 	PausePointTimeoutFlagName,
 }
 

@@ -179,7 +179,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 null,
                 hitWhen,
                 hitWhenSkippedCount,
-                hitWhenErrorNote);
+                hitWhenErrorNote,
+                false);
         }
     }
 }

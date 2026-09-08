@@ -43,6 +43,7 @@ Enable a pause point so Unity pauses when that code path is reached, either by a
 | `--max-caller-frames` | integer | `2` | Maximum caller stack frames recorded per hit (0-8). 0 disables capture. Also caps later pause-point-status responses; status cannot change it. |
 | `--method` | string | - | Optional method simple name or `Type.Method`. When set, `--line` resolves only inside matching methods |
 | `--snapshot-timing` | enum | `pre-line` | pre-line captures before the resolved line runs; post-line captures after that line's statement finished, without arming the next line |
+| `--persist` | flag | - | Re-arm after a domain reload (compile, Play entry); re-arm result is reported in `pause-point-status` |
 
 ### clear-pause-point
 
@@ -90,9 +91,9 @@ On a wait timeout, `PAUSE_POINT_EXPIRED`, or an enable failure, read `Error.Deta
 
 ## Requirements & Safety
 
-- On the automatic Debug-switch warning: the pause point is already armed - do not interrupt or ask mid-flow. The switch reverts on every Editor restart, so at the next stopping point propose `uloop set-code-optimization debug --startup` (session-only without `--startup`); only if the user approves. See the troubleshooting reference.
+- On the automatic Debug-switch warning: the pause point is already armed - do not interrupt or ask mid-flow.
 
-- Patches do not survive compiles or domain reloads, including a Play entry with Domain Reload enabled (the enable response warns) — re-enable afterwards. `uloop compile` during PlayMode also resets the session.
+- Patches drop on every compile or domain reload (the compile / Play-entry responses warn). Pass `--persist` to re-arm automatically; see `references/persist.md`.
 - Physics message methods, their helpers, and pre-bound delegates can miss hits on pre-existing GameObjects; the enable response warns where detectable.
 - An `--id` marker waits on a hand-written `UloopPausePoint.Pause(id)` call; its hits record no `CapturedVariables`.
 - For scripts under `Packages/`, pass the package-id path form (`Packages/<package-id>/...`); physical checkout paths do not resolve.
@@ -108,4 +109,5 @@ Read the one whose trigger matches:
 - `references/watch-expressions.md` — watch rules.
 - `references/condition-triggered-pause.md` — runtime-condition pauses.
 - `references/fast-progressing-games.md` — freezing self-progressing games, `--resume-play`.
-- `references/troubleshooting.md` — timeouts, missed hits, hot reload, failure codes.
+- `references/persist.md` — what `--persist` restores, timeout restart, first-frame gap, reading the re-arm report.
+- `references/troubleshooting.md` — timeouts, missed hits, hot reload, Debug switch, failure codes.

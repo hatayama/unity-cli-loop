@@ -222,7 +222,8 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 null,
                 string.Empty,
                 0,
-                string.Empty);
+                string.Empty,
+                false);
         }
     }
 }

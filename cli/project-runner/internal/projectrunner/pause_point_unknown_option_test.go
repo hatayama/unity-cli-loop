@@ -128,6 +128,7 @@ func TestPausePointCarriedOverEnableFlagsAreVisibleInTheStatusResponse(t *testin
 		MaxPreviewElements: 5,
 		MaxCallerFrames:    4,
 		TimeoutSeconds:     30,
+		Persisted:          true,
 	})
 	if err != nil {
 		t.Fatalf("failed to marshal status response: %v", err)
@@ -139,6 +140,7 @@ func TestPausePointCarriedOverEnableFlagsAreVisibleInTheStatusResponse(t *testin
 		"hit-when":             "HitWhen",
 		"max-preview-elements": "MaxPreviewElements",
 		"max-caller-frames":    "MaxCallerFrames",
+		"persist":              "Persisted",
 		"timeout-seconds":      "TimeoutSeconds",
 	}
 	if len(carriedOverFields) != len(pausePointCarriedOverEnableFlagNames) {

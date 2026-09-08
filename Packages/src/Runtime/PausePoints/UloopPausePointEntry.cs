@@ -107,6 +107,10 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
         // Written by enable and by hot-reload retarget alongside ResolvedLine, and emptied
         // whenever the resolution behind it is discarded.
         public IReadOnlyList<string> NotCapturableVariables { get; set; }
+        // Set when the pause point was enabled with --persist, so the ledger keeps it across a
+        // domain reload. A re-enable builds a new entry, which resets this to false - that is how
+        // re-enabling without --persist takes persistence back off.
+        public bool Persisted { get; set; }
 
         public void IncrementMethodEntryCount()
         {
@@ -358,7 +362,8 @@ namespace io.github.hatayama.UnityCliLoop.Runtime
                 ResolvedLineText,
                 HitWhen,
                 hitWhenSkippedCount,
-                HitWhenErrorNote);
+                HitWhenErrorNote,
+                Persisted);
         }
 
         private long CalculateRemainingMilliseconds(DateTime nowUtc)

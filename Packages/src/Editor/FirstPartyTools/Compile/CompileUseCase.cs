@@ -24,7 +24,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         private readonly IPendingCompileSessionRepository _pendingCompileSessionRepository;
         private Func<CompileSchema, string, CancellationToken, Task<CompileResult>> _executeCompilationAsync;
         private Func<ValidationResult> _validateCompilationState;
-        private Func<(bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActiveHotReloadChangeCount)> _capturePlayModeStopWarningInputs;
+        private Func<(bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActivePersistedPausePointCount, int ActiveHotReloadChangeCount)>
+            _capturePlayModeStopWarningInputs;
 
         public CompileUseCase(
             UnityCliLoopCompileSessionLifecycleService compileSessionLifecycleService,
@@ -72,10 +73,14 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
         internal void SetPlayModeStopWarningInputsForTesting(
             bool wasPlayingAtRequestStart,
             int activePausePointCount,
+            int activePersistedPausePointCount,
             int activeHotReloadChangeCount)
         {
-            _capturePlayModeStopWarningInputs = () =>
-                (wasPlayingAtRequestStart, activePausePointCount, activeHotReloadChangeCount);
+            _capturePlayModeStopWarningInputs = () => (
+                wasPlayingAtRequestStart,
+                activePausePointCount,
+                activePersistedPausePointCount,
+                activeHotReloadChangeCount);
         }
 
         /// <summary>
@@ -97,10 +102,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             // Captured before PlayMode preparation can stop Play Mode, so the warning reflects
             // the state compile was actually requested in, not the state after this method mutates it.
-            (bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActiveHotReloadChangeCount)
+            (bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActivePersistedPausePointCount, int ActiveHotReloadChangeCount)
                 playModeStopWarningInputs = _capturePlayModeStopWarningInputs();
             bool wasPlayingAtRequestStart = playModeStopWarningInputs.WasPlayingAtRequestStart;
             int activePausePointCountAtRequestStart = playModeStopWarningInputs.ActivePausePointCount;
+            int activePersistedPausePointCountAtRequestStart =
+                playModeStopWarningInputs.ActivePersistedPausePointCount;
             int activeHotReloadChangeCountAtRequestStart = playModeStopWarningInputs.ActiveHotReloadChangeCount;
 
             DateTime utcNow = DateTime.UtcNow;
@@ -170,6 +177,7 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             string playModeStopWarning = CompilePlayModeStopWarningBuilder.BuildWarning(
                 wasPlayingAtRequestStart,
                 activePausePointCountAtRequestStart,
+                activePersistedPausePointCountAtRequestStart,
                 activeHotReloadChangeCountAtRequestStart);
 
             // 2. Compilation state validation
@@ -361,12 +369,16 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                 correlationId);
         }
 
-        private static (bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActiveHotReloadChangeCount)
+        private static (bool WasPlayingAtRequestStart, int ActivePausePointCount, int ActivePersistedPausePointCount, int ActiveHotReloadChangeCount)
             CaptureLivePlayModeStopWarningInputs()
         {
             Func<int> getter = HotReloadRuntimeChangeCoordination.GetActiveRuntimeChangeCount;
             int count = getter == null ? 0 : getter();
-            return (EditorApplication.isPlaying, UloopPausePointRegistry.GetActiveCount(), count);
+            return (
+                EditorApplication.isPlaying,
+                UloopPausePointRegistry.GetActiveCount(),
+                UloopPausePointRegistry.GetActivePersistedCount(),
+                count);
         }
 
         private static string ResolveCorrelationId(CompileSchema request)

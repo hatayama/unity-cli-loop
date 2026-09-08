@@ -164,6 +164,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             // request-start snapshot the same way CompileUseCase does.
             int activeHotReloadChangeCount = _domainReloadDropStateProvider.GetActiveHotReloadChangeCount();
             int activePausePointCount = _domainReloadDropStateProvider.GetActivePausePointCount();
+            int activePersistedPausePointCount =
+                _domainReloadDropStateProvider.GetActivePersistedPausePointCount();
             bool isDomainReloadDisabledOnEnterPlayMode =
                 _domainReloadDropStateProvider.IsDomainReloadDisabledOnEnterPlayMode();
 
@@ -217,7 +219,8 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
                     wasPlaying,
                     isDomainReloadDisabledOnEnterPlayMode,
                     activeHotReloadChangeCount,
-                    activePausePointCount));
+                    activePausePointCount,
+                    activePersistedPausePointCount));
             return ControlPlayModeActionResult.FromState(message, changed, false, resumedFromPause, warning);
         }
 

@@ -166,6 +166,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 useCase.SetPlayModeStopWarningInputsForTesting(
                     wasPlayingAtRequestStart: true,
                     activePausePointCount: 0,
+                    activePersistedPausePointCount: 0,
                     activeHotReloadChangeCount: 0);
                 useCase.SetCompilationStateValidationForTesting(() =>
                     ValidationResult.FailureWithErrorCode(
@@ -230,6 +231,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 useCase.SetPlayModeStopWarningInputsForTesting(
                     wasPlayingAtRequestStart: false,
                     activePausePointCount: 0,
+                    activePersistedPausePointCount: 0,
                     activeHotReloadChangeCount: 4);
                 useCase.SetCompilationStateValidationForTesting(() =>
                     ValidationResult.FailureWithErrorCode(
@@ -294,6 +296,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 useCase.SetPlayModeStopWarningInputsForTesting(
                     wasPlayingAtRequestStart: false,
                     activePausePointCount: 1,
+                    activePersistedPausePointCount: 0,
                     activeHotReloadChangeCount: 0);
                 useCase.SetCompilationStateValidationForTesting(() =>
                     ValidationResult.FailureWithErrorCode(
@@ -369,6 +372,7 @@ namespace io.github.hatayama.UnityCliLoop.Tests.Editor
                 useCase.SetPlayModeStopWarningInputsForTesting(
                     wasPlayingAtRequestStart: false,
                     activePausePointCount: 0,
+                    activePersistedPausePointCount: 0,
                     activeHotReloadChangeCount: 2);
                 string capturedPlayModeStopWarning = null;
                 useCase.SetCompilationExecutionForTesting((compileRequest, playModeStopWarning, ct) =>
