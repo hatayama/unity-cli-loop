@@ -153,8 +153,15 @@ internal sealed class IntroducedTypeDependencyWalker
             return;
         }
 
-        if (SymbolEqualityComparer.Default.Equals(containingAssembly, compilationAssembly)
-            || SymbolEqualityComparer.Default.Equals(containingAssembly, targetAssembly))
+        // Why the target assembly is compared by identity and not by symbol: it is resolved from a
+        // separate compilation (one with different metadata import options), so a type this
+        // compilation bound from the target's metadata carries a different assembly symbol than
+        // that one. Comparing symbols would make the same compiled type fingerprint differently
+        // depending on whether its source happened to be part of the run.
+        bool boundFromSource = SymbolEqualityComparer.Default.Equals(containingAssembly, compilationAssembly);
+        bool boundFromTarget = targetAssembly != null
+            && containingAssembly.Identity.Equals(targetAssembly.Identity);
+        if (boundFromSource || boundFromTarget)
         {
             dependencies.Add((targetAssemblyName ?? string.Empty)
                 + "|" + (targetAssemblyMvid ?? string.Empty)
