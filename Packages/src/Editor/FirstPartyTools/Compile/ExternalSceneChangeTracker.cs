@@ -17,9 +17,12 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
     {
         private const string SceneSnapshotsSessionStateKey =
             "io.github.hatayama.UnityCliLoop.ExternalSceneChangeTracker.SceneSnapshots";
+        private const string FocusReturnDeferredSessionStateKey =
+            "io.github.hatayama.UnityCliLoop.ExternalSceneChangeTracker.FocusReturnDeferred";
         private static readonly Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)> SceneSnapshots =
             new Dictionary<string, (bool Exists, DateTime LastWriteTimeUtc, long Length)>(StringComparer.Ordinal);
         private static bool _initialized;
+        private static ExternalSceneFocusReturnDeferral _focusReturnDeferral;
 
         public static void Initialize()
         {
@@ -35,6 +38,9 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
 
             bool restoredSceneSnapshots = !string.IsNullOrEmpty(SessionState.GetString(SceneSnapshotsSessionStateKey, ""));
             RestoreSnapshotsFromSessionState();
+            // The deferral must outlive the domain reload that leaving Play Mode can trigger.
+            _focusReturnDeferral = new ExternalSceneFocusReturnDeferral(
+                SessionState.GetBool(FocusReturnDeferredSessionStateKey, false));
 
             _initialized = true;
             EditorSceneManager.sceneOpened -= HandleSceneOpened;
@@ -46,11 +52,15 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             ExternalPrefabStageChangeTracker.RegisterEventHandlers();
             EditorApplication.focusChanged -= HandleFocusChanged;
             EditorApplication.focusChanged += HandleFocusChanged;
-            // Keep restored fingerprints only across a domain reload that happened while unfocused.
-            // The next focus-return preflight compares against those fingerprints so it can detect
-            // external changes that occurred before the reload. First launch still records a baseline
-            // even when the Editor starts unfocused.
-            if (EditorApplication.isFocused || !restoredSceneSnapshots)
+            EditorApplication.playModeStateChanged -= HandlePlayModeStateChanged;
+            EditorApplication.playModeStateChanged += HandlePlayModeStateChanged;
+            // Keep restored fingerprints only across a domain reload that happened while unfocused,
+            // or while a focus return is still deferred: the deferred preflight compares against those
+            // fingerprints so it can detect external changes that occurred before the reload. First
+            // launch still records a baseline even when the Editor starts unfocused.
+            if (_focusReturnDeferral.ShouldRecordBaselineOnInitialize(
+                EditorApplication.isFocused,
+                restoredSceneSnapshots))
             {
                 RecordOpenSceneSnapshots();
                 ExternalPrefabStageChangeTracker.RecordCurrent();
@@ -75,7 +85,48 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             {
                 return;
             }
+
+            if (!_focusReturnDeferral.ShouldResolveOnFocusReturn(EditorApplication.isPlayingOrWillChangePlaymode))
+            {
+                SessionState.SetBool(FocusReturnDeferredSessionStateKey, true);
+                VibeLogger.LogInfo(
+                    "external_scene_resolve_focus_return",
+                    "ResolveForFocusReturn deferred until Play Mode ends",
+                    new { phase = "deferred" },
+                    includeStackTrace: false);
+                return;
+            }
+
             ResolveForFocusReturn();
+        }
+
+        private static void HandlePlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state != PlayModeStateChange.EnteredEditMode)
+            {
+                return;
+            }
+
+            string[] prunedScenePaths = ExternalSceneSnapshotPruner.RemoveSnapshotsForScenesNotOpen(
+                SceneSnapshots,
+                GetOpenScenePaths());
+            if (prunedScenePaths.Length > 0)
+            {
+                SaveSceneSnapshotsToSessionState();
+            }
+
+            bool shouldResolve = _focusReturnDeferral.ConsumeOnEnteredEditMode();
+            SessionState.SetBool(FocusReturnDeferredSessionStateKey, false);
+            VibeLogger.LogInfo(
+                "external_scene_entered_edit_mode",
+                "Entered Edit Mode",
+                new { prunedScenePaths, shouldResolve },
+                includeStackTrace: false);
+            // An unfocused Editor gets the same preflight from its next focus return.
+            if (shouldResolve && EditorApplication.isFocused)
+            {
+                ResolveForFocusReturn();
+            }
         }
 
         private static void HandleSceneOpened(Scene scene, OpenSceneMode mode)
@@ -257,6 +308,18 @@ namespace io.github.hatayama.UnityCliLoop.FirstPartyTools
             }
 
             return scenes.ToArray();
+        }
+
+        private static string[] GetOpenScenePaths()
+        {
+            (string AssetPath, bool IsDirty)[] scenes = GetOpenSceneStates();
+            string[] scenePaths = new string[scenes.Length];
+            for (int i = 0; i < scenes.Length; i++)
+            {
+                scenePaths[i] = scenes[i].AssetPath;
+            }
+
+            return scenePaths;
         }
 
         private static bool IsTrackableScene(Scene scene)

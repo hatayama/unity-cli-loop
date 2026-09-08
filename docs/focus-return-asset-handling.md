@@ -31,6 +31,25 @@ in-memory state is treated as authoritative there. The decision is isolated in
 `ExternalAssetFocusReturnSavePolicy` so it can be unit-tested without Unity Scene APIs
 (`Assets/Tests/Editor/ExternalAssetFocusReturnSavePolicyTests.cs`).
 
+## Why the preflight is deferred during Play Mode
+
+While Play Mode is running (or about to change), a focus return records that the preflight
+was skipped and does nothing else. Two things make the table above inapplicable there:
+the open-Scene list comes from `SceneManager` and also contains Scenes loaded at runtime
+(for example additive loads), which are not open in the Editor at all, and
+`EditorSceneManager.RestoreSceneManagerSetup` throws `InvalidOperationException` in Play Mode,
+so the `clean + changed` row cannot be applied. Before this deferral existed the throw
+happened before the fingerprints were persisted, so the stale fingerprint of a runtime-loaded
+Scene kept the exception firing on every later focus return.
+
+On `PlayModeStateChange.EnteredEditMode` the tracker first drops fingerprints for Scenes that
+are no longer open in the Editor (runtime-loaded Scenes never get a lasting baseline), then
+runs the preflight once if a focus return was deferred and the Editor is focused. An unfocused
+Editor leaves it to the next focus return instead. The deferral flag lives in `SessionState`
+because leaving Play Mode can trigger a domain reload. The decision is isolated in
+`ExternalSceneFocusReturnDeferral` and `ExternalSceneSnapshotPruner`
+(`Assets/Tests/Editor/ExternalSceneFocusReturnDeferralTests.cs`).
+
 ## Why dirty-but-unchanged assets are never saved
 
 Through package 3.0.0 the preflight saved every dirty Scene and the dirty Prefab Stage on every focus
